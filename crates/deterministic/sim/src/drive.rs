@@ -1410,6 +1410,41 @@ fn arrive_or_rest(w: &mut World, id: ObjectId) {
     }
 }
 
+/// The driving wake of S-0207 claim 23: in a tick divisible by 10, a drive
+/// vehicle that is moving now, off a bridge deck, on a cell of land type
+/// water, creates one game-wide wake animation at its own position, if
+/// that animation is defined, with no draw of its own beyond the
+/// animation's creation draws. No underwater-type exclusion.
+pub fn driving_wake(w: &mut World, id: ObjectId) {
+    // spec: S-0207 claim 23 (ticks whose number is divisible by 10)
+    if w.tick % 10 != 0 {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    let Some(wake) = w.rules().wake.clone() else {
+        // spec: S-0207 claim 23 (only when the game-wide wake animation is defined)
+        return;
+    };
+    // spec: S-0207 claim 23 (moving now: body turning, or a heading point and current speed above 0).
+    // Open in Q-0600: the heading point is read as an active track and the current speed as the integer
+    // step s of the latest drive tick above 0 (the measure of S-0402 claim 5a).
+    let moving = o.body.turning(w.tick)
+        || o.drive
+            .as_ref()
+            .is_some_and(|d| d.track.is_some() && d.step > 0);
+    // spec: S-0207 claim 23 (off a bridge deck, on a cell whose land type is water)
+    let water = w
+        .cells
+        .cell(o.pos.cell())
+        .is_some_and(|c| c.land == land::WATER);
+    if !moving || o.layer == Layer::Deck || !water {
+        return;
+    }
+    let at = o.pos;
+    // spec: S-0207 claim 23 (one instance at its own position; only the animation's creation draws, S-0109 claim 3)
+    crate::combat::effects::anim(w, &wake, at);
+}
+
 /// A stop while on a track (S-0207 claim 11): the target fraction becomes
 /// min(ρₜ, F₀.₃) and the track is finished.
 pub fn stop(w: &mut World, id: ObjectId) {

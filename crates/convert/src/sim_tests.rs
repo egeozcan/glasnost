@@ -163,6 +163,15 @@ fn resource_glint_fields() {
     );
 }
 
+/// spec: S-0207 Import mapping ([General] Wake, the game-wide wake animation of claim 23; absent: none)
+#[test]
+fn general_wake() {
+    let (s, _) = sim("[Animations]\n1=Ripple\n[General]\nWake=Ripple\n", "", "");
+    assert_eq!(s.general.wake.as_deref(), Some("Ripple"));
+    let (s, _) = sim("[General]\nShipyard=Bgen\n", "", "");
+    assert_eq!(s.general.wake, None);
+}
+
 /// spec: S-0207 Import mapping (the teleporting locomotor's [General] keys, WarpOut, the [AudioVisual] and per-type chrono sounds) and F9 Edge cases (k = 0 with the trigger on: a warning)
 #[test]
 fn teleport_fields() {

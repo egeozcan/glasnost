@@ -483,6 +483,10 @@ pub struct General {
     /// e).
     #[serde(default)]
     pub warp_out: Option<String>,
+    /// `Wake`, the game-wide wake animation of driving wakes (S-0207 claim
+    /// 23; engine default none).
+    #[serde(default)]
+    pub wake: Option<String>,
     /// `[AudioVisual] ChronoOutSound`, the game-wide departure sound of a
     /// teleporting jump (S-0207 claim 20 e).
     #[serde(default)]

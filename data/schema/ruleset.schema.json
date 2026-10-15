@@ -4690,6 +4690,14 @@
             }
           ]
         },
+        "wake": {
+          "description": "`Wake`, the game-wide wake animation of driving wakes (S-0207 claim\n23; engine default none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "wall_tower": {
           "description": "`WallTower`: the wall tower type (S-0112).",
           "type": [

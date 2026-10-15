@@ -775,6 +775,8 @@ pub struct SimRules {
     /// The warp animation of a teleporting jump, if one is in force
     /// (S-0207 claim 20 e).
     pub warp_out: Option<String>,
+    /// The game-wide wake animation, if one is defined (S-0207 claim 23).
+    pub wake: Option<String>,
     /// The ruleset's `sim_rules_hash`.
     pub hash: String,
     /// The combat rules (M4).
@@ -1185,6 +1187,8 @@ impl SimRules {
             ore_twinkle: g.ore_twinkle.clone(),
             // spec: S-0207 Import mapping (WarpOut: with none in force, no animation is played)
             warp_out: g.warp_out.clone(),
+            // spec: S-0207 Import mapping ([General] Wake: engine default none)
+            wake: g.wake.clone(),
             base_units,
             // spec: S-0009 Terms and Import mapping (the game's tech level: the base rules' value, 10 when they omit it)
             game_tech_level: g.multiplayer_tech_level.unwrap_or(10),

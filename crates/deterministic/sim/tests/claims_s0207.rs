@@ -1856,3 +1856,83 @@ fn speed_estimate_nonzero_while_turning_in_place() {
     assert_eq!(next.pos, sn.pos);
     assert!(glasnost_sim::drive::speed_estimate(&w, id) > 0);
 }
+
+/// The animation effects named `name` in the world's pending effects.
+fn wakes(w: &World, name: &str) -> Vec<(i32, i32, i32)> {
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            glasnost_sim::combat::effects::Effect::Anim { name: n, pos } if n == name => {
+                Some((pos.x, pos.y, pos.z))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Runs ticks until the vehicle is on a track with a positive step.
+fn on_track(w: &mut World, id: ObjectId) {
+    for _ in 0..20 {
+        let d = w.obj(id).unwrap().drive.clone().unwrap();
+        if d.track.is_some() && d.step > 0 {
+            return;
+        }
+        tick::step(w);
+    }
+    panic!("never on a track with s > 0");
+}
+
+// spec: S-0207 claim 23 (a drive vehicle moving now, off a deck, on water, in a tick divisible by 10 creates one
+// wake at its own position, if the wake animation is defined; no underwater-type exclusion). Open in Q-0600:
+// moving now is read as a turning body or a track whose latest drive tick earned s > 0.
+#[test]
+fn claim_23_driving_wakes() {
+    let mut t = car(WHEEL, 30, false);
+    t.combat.underwater = Some(true);
+    let mut s = scene(t, 0);
+    s.ruleset.sim.general.wake = Some("TestWake".into());
+    let (mut w, id) = start(&s, &[N, N, N, N]);
+    on_track(&mut w, id);
+    let here = w.obj(id).unwrap().pos;
+    w.cells.grid.get_mut(here.cell()).unwrap().land = glasnost_map::terrain::land::WATER;
+    let wake_now = |w: &mut World| {
+        w.effects.clear();
+        glasnost_sim::drive::driving_wake(w, id);
+        wakes(w, "TestWake")
+    };
+    w.tick = (w.tick / 10 + 1) * 10;
+    assert_eq!(
+        wake_now(&mut w),
+        [(here.x, here.y, here.z)],
+        "underwater type included"
+    );
+    w.tick += 1;
+    assert!(wake_now(&mut w).is_empty(), "not divisible by 10");
+    w.tick += 9;
+    // Not moving now: s = 0 on the track and the body not turning.
+    w.obj_mut(id).unwrap().drive.as_mut().unwrap().step = 0;
+    assert!(wake_now(&mut w).is_empty());
+    w.obj_mut(id).unwrap().drive.as_mut().unwrap().step = 1;
+    // On a bridge deck: none.
+    w.obj_mut(id).unwrap().layer = glasnost_sim::world::Layer::Deck;
+    assert!(wake_now(&mut w).is_empty());
+    w.obj_mut(id).unwrap().layer = glasnost_sim::world::Layer::Ground;
+    assert_eq!(wake_now(&mut w).len(), 1);
+    // Off water: none.
+    w.cells.grid.get_mut(here.cell()).unwrap().land = glasnost_map::terrain::land::CLEAR;
+    assert!(wake_now(&mut w).is_empty());
+}
+
+// spec: S-0207 claim 23 (no wake when the game-wide wake animation is not defined)
+#[test]
+fn claim_23_no_wake_without_the_animation() {
+    let s = scene(car(WHEEL, 30, false), 0);
+    let (mut w, id) = start(&s, &[N, N, N, N]);
+    on_track(&mut w, id);
+    let here = w.obj(id).unwrap().pos;
+    w.cells.grid.get_mut(here.cell()).unwrap().land = glasnost_map::terrain::land::WATER;
+    w.tick = (w.tick / 10 + 1) * 10;
+    w.effects.clear();
+    glasnost_sim::drive::driving_wake(&mut w, id);
+    assert!(w.effects.is_empty());
+}

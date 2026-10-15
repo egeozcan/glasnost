@@ -644,6 +644,8 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
         Int,
     ),
     ("warp_out", b"General", "WarpOut", Ref(Kind::Animations)),
+    // spec: S-0207 Import mapping ([General] Wake, the game-wide wake animation of claim 23)
+    ("wake", b"General", "Wake", Ref(Kind::Animations)),
     ("chrono_out_sound", b"AudioVisual", "ChronoOutSound", Text),
     ("chrono_in_sound", b"AudioVisual", "ChronoInSound", Text),
     // spec: S-0213 Import mapping

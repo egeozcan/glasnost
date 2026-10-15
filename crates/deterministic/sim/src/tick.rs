@@ -121,7 +121,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
         .and_then(|o| w.rules().unit(o.kind, o.type_index))
         .map(|u| u.locomotor);
     let moved = match loco {
-        Some(Locomotor::Drive) => drive::tick(w, id),
+        Some(Locomotor::Drive) => {
+            let moved = drive::tick(w, id);
+            // spec: S-0207 claim 23 (a drive vehicle's wake; open in Q-0600: created right after its drive update)
+            drive::driving_wake(w, id);
+            moved
+        }
         Some(Locomotor::Walk) => walk::tick(w, id),
         // spec: S-0417 claim 5 (a tunnelling or teleporting vehicle drives temporarily for its factory exit)
         _ if crate::econ::release::temporary_drive(w, id) => drive::tick(w, id),
