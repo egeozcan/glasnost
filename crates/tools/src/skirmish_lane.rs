@@ -64,6 +64,8 @@ struct Game {
     index: usize,
     load_ms: u128,
     cells: usize,
+    /// Cells of land type water once the game is set up (a navy needs them).
+    water: usize,
     run_ms: u128,
     ticks: i32,
     over: bool,
@@ -299,6 +301,12 @@ fn play(
         &setup::skirmish(rules, &first, Settings::default(), 0, seed),
     )
     .map_err(|e| format!("{e:?}"))?;
+    g.water = probe
+        .cells
+        .grid
+        .iter()
+        .filter(|(_, c)| c.land == glasnost_map::terrain::land::WATER)
+        .count();
     for t in all_types(&probe) {
         if let Some(r) = role_of(&probe, t) {
             *g.types.entry(r).or_default() += 1;
@@ -551,7 +559,8 @@ fn play_ai(
 /// Notes the objects that show an M6 feature now: a spawner, a rocket in
 /// flight (S-0506), a parasite inside its host (S-0614), an aircraft on the
 /// map that is not a rocket (S-0501), a naval yard, a ship, a sinking ship
-/// (S-0504), and a building the script builds for no role (the tech climb).
+/// (S-0504), and a building the script builds for no role (the tech climb);
+/// the owned ones count for the player houses only.
 fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
     let r = w.rules();
     for (id, o) in &w.objects {
@@ -567,7 +576,8 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
         if glasnost_sim::parasite::host_of(w, *id).is_some() {
             note("parasites latched");
         }
-        if !o.on_map || o.owner.is_none() {
+        // The player houses only: a map's civilian buildings are not the climb.
+        if !o.on_map || o.owner.is_none_or(|h| usize::from(h.0) >= PLAYERS) {
             continue;
         }
         match o.kind {
@@ -657,8 +667,8 @@ fn report(
     for g in games {
         let _ = writeln!(
             s,
-            "map index {}: {} cells, inputs {} ms",
-            g.index, g.cells, g.load_ms
+            "map index {}: {} cells ({} water), inputs {} ms",
+            g.index, g.cells, g.water, g.load_ms
         );
         let types: Vec<String> = g
             .types
