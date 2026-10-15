@@ -1,0 +1,364 @@
+---
+id: S-0520
+title: Crates (placement, replacement, pickup and power-up effects)
+topic: economy
+revision: 1
+sources-class: [decomp, design]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-15
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0520: Crates (placement, replacement, pickup and power-up effects)
+
+## Summary
+
+How skirmish crates are placed at random, expire and are replaced, who picks them up and when, how a crate's power-up is chosen and which power-ups turn into money, and what each of the nineteen power-ups does. Crates created by deaths (S-0312 claims 14 and 20) and by the trigger action (S-0524 claim 4) are placed by those specs and collected by this one. The game-start crate count is S-0412 claim 10's. Campaigns and network games are out of scope.
+
+## Terms
+
+- **Crate.** A cell holding a crate overlay: an overlay type with the crate flag (Import mapping). The cell's overlay data value is the crate's **contents**: 0 … 18 name a fixed power-up, any other value means random contents (claim 8).
+- **Crate places.** The scenario's 256 crate records (S-0524 claim 4). Each free or occupied place holds at most one crate cell and that crate's lifetime timer.
+- **Wooden-crate overlay, water-crate overlay.** The two overlay types the rules name for land and water crates (S-0524 claim 4, Import mapping there).
+- **Power-up.** One of the nineteen effects a crate can give, numbered 0 … 18 in the order of the table in claim 8. Each has an imported weight, animation, water flag and argument *A* (a double). These four values make up the **power-up table**.
+- **Collector.** The object that picks up the crate (claim 6). Its house is the **collecting house**.
+- **R(*a*, *b*).** An inclusive ranged request from the scenario random stream under S-0202 claim 4. One request can consume multiple raw draws through rejection, or none for equal bounds. Raw draws below are from that same stream.
+- **Crate point *P*.** The centre of the crate's cell at its floor height: (256*x* + 128, 256*y* + 128, *h*), with *h* the terrain surface height at the cell centre (S-0106 claims 1 and 2), without a bridge-deck lift. Coordinates are integer leptons.
+- **Crate radius ρ.** A game-wide distance in leptons (Import mapping, F3).
+- **Crate area.** An object is inside the crate area when its distance *d* from *P* (F4) is less than ρ. For a building, the distance is measured to its reference point (S-0204 claim 4). For every other object it is measured to its position.
+- **Demolition warhead.** As in S-0524 claim 5.
+- **Flame warhead.** The rules' game-wide flame-damage warhead (Import mapping).
+- **Gas warhead.** The warhead the rules register under a fixed name (Import mapping).
+- **Crate ownership counts.** Counts of objects in existence, including objects off the map and in production (S-0414 claim 4). Types marked insignificant or not scored are excluded. The building count excludes buildings that count as vehicles (S-0414 claim 4). The vehicle count includes vehicles, ships and those buildings that count as vehicles. The infantry count excludes nominal survivors (S-0414 claim 4) and absorbed infantry (S-0312 claim 24). Type-specific base-unit, refinery and harvester counts count objects in existence of the named type, with the same type-flag exclusions; a deployed base unit is a building, not a vehicle of its former type.
+
+## Behaviour
+
+### Placement, lifetime and replacement
+
+1. **Crate places.** At most 256 crates placed through crate places exist at once. A placement that finds every place occupied does nothing and takes no draw. Removing a crate through pickup or expiry frees its place.
+   - Backing: `measurable` (scenario CR1)
+   - Confidence: high
+
+2. **Game-start crates.** With the crate setting on, S-0412 claim 10 fixes how many crates appear at game start. Each one is a random placement (claim 3), made one after the other, so their draws follow each other in that order.
+   - Backing: `measurable` (scenario CR1)
+   - Confidence: high
+
+3. **Random placement.** When no crate place is free, placement has no effect and takes no draw. Otherwise it makes at most 1000 candidate attempts, stopping if one succeeds. Each candidate is determined by two ranged requests, with *x* requested before *y* as specified by F5; a candidate outside the map's cell array is treated as ordinary land. Around that candidate, the game uses the single-cell nearby search and the settings stated in S-0212 claim 25 and the trigger-crate row of T5: *float* locomotion class for a *water* candidate and *track* otherwise, *normal* movement zone, no reach region, deck mode off, no height condition, no further test, no no-overlay condition, bridges allowed, and no reference cell. This search takes no draw and requires an empty occupancy record, so the selected cell cannot contain an object. The candidate attempt fails without further draws if the search finds no cell, or if its selected cell is outside the height-aware usable area or has an overlay. For the first attempt meeting all those conditions, the first free crate place receives random contents and a water-crate overlay on *water*, or a wooden-crate overlay otherwise. Any draws caused by overlay placement precede the lifetime request; the lifetime uses S-0524 claim 4's formula and bounds (half to twice the regeneration field, in game minutes) and begins at the current tick. Placement redraws the cell without revealing it to any house. If no attempt succeeds within the limit, no crate appears and no later retry occurs.
+   - Backing: `measurable` (scenario CR1)
+   - Confidence: high for the draws, the search and the overlay choice; medium for the out-of-array candidate
+
+4. **Expiry and replacement.** In a skirmish with the crate setting on, the crate update (S-0203 claim 1, tick-order row 16) visits the crate places in index order. For each occupied place whose elapsed time has reached its lifetime, it removes the crate and then makes one random placement (claim 3), which can fail. With the crate setting off, the update does nothing: no crate expires, including trigger crates (S-0524 claim 4, subject to that spec's optional expiry departure). Each expiry, like each pickup with the crate setting on (claim 11), removes one crate and adds at most one random crate. Only death crates (claim 5) and trigger crates raise the count, and a failed replacement lowers it.
+   - Backing: `measurable` (scenario CR2)
+   - Confidence: high
+
+5. **Other crate sources.** Crates from destroyed crate-carrying vehicles (S-0312 claim 14) have random contents. Crates from a building's crate beneath (S-0312 claim 20) hold the money power-up (0) when the type says so and random contents otherwise. Trigger crates hold the contents S-0524 claim 4 gives. All of them occupy crate places, expire and are collected by this spec's rules.
+   - Backing: `measurable` (scenario CR3)
+   - Confidence: high for the contents values; the placement rules are those specs'
+
+### Pickup
+
+6. **Who collects, and when.** A crate is collected by a ground mover when it commits to its next step into the crate's cell, before it arrives there. Ground movers are vehicles using the drive, ship, hover or walking-vehicle locomotor, and walking infantry. A jumpjet collects the crate of the cell it lands on, when it lands. The following never collect:
+   - aircraft.
+   - objects arriving by teleport or chronoshift.
+   - tunnelling, drop-pod or rocket movement.
+   - an object created on the cell or unloaded onto it.
+
+   A ground mover that is blocked by the pickup (claims 7 and 13) does not commit that step into the cell. Its next movement target is cleared; this does not guarantee that its standing order will never try again. A jumpjet's landing pickup is different: it has already landed, and the pickup does not undo that landing.
+   - Backing: `measurable` (scenario CR4), except the creation-only exclusion is `unmeasured`: no isolated legal fixture that creates an object directly on an existing crate has been established. It is inferred from the pickup entry points, not from a completed test.
+   - Confidence: high for the step timing of vehicles and infantry, jumpjet landing and aircraft exclusion; medium for the other exclusions
+
+7. **Pickup gates.** The table gives the outcome for a crate cell that a collector is about to enter. "Enters" means it moves on normally.
+
+   | Condition | Outcome |
+   |---|---|
+   | The cell's overlay lacks the crate flag | no pickup, the mover enters |
+   | The collecting house's country has the passive flag (skirmish) | no pickup, the crate stays, the mover enters |
+   | The overlay has the crate-trigger flag and the collector carries a tag | the tag is raised with the crate-pickup event (49), with the collector as causing object (S-0011 claim 18). If the collector is no longer alive afterwards, nothing more happens: the crate stays and the mover is blocked |
+   | The overlay has the crate-trigger flag and the pickup continues | the scenario's any-crate-picked-up mark is set, which satisfies the any-crate event (50) |
+   | Otherwise | the pickup continues (claim 8) |
+
+   The rows are tested top to bottom. The any-crate mark is set after the tagged raise and only when the pickup continues.
+   - Backing: `measurable` (scenario CR5)
+   - Confidence: high
+
+8. **Choosing the power-up.** If the crate's contents are 0 … 18, that is the power-up. Otherwise one ranged draw *r* = R(1, Σ*w*) picks it, where Σ*w* is the sum of the nineteen imported weights. The chosen power-up is the first in table order whose running weight total reaches *r* (F1). Claims 9 and 10 can then change it.
+
+   | No. | Power-up | No. | Power-up |
+   |---|---|---|---|
+   | 0 | money | 10 | speed |
+   | 1 | unit | 11 | firepower |
+   | 2 | heal all | 12 | nuclear missile |
+   | 3 | cloak | 13 | invulnerability |
+   | 4 | explosion | 14 | veteran |
+   | 5 | napalm | 15 | weather storm |
+   | 6 | squad | 16 | gas |
+   | 7 | darkness | 17 | resource |
+   | 8 | reveal | 18 | drop pod |
+   | 9 | armour | | |
+   - Backing: `measurable` (scenario CR6)
+   - Confidence: high
+
+9. **Forced base unit.** The power-up becomes *unit*, with a forced base unit, when all of these hold:
+   - the collecting house's crate building count is zero (Terms).
+   - its available credits (S-0404 claim 4) exceed 1500.
+   - its type-specific crate count for its base-unit type is zero: that type is the first entry of the game-wide base-unit list that its country may own.
+   - the bases setting is on.
+
+   This override applies even to crates with fixed contents. It comes before the conversions of claim 10, so it can still become money there.
+   - Backing: `measurable` (scenario CR7)
+   - Confidence: high for the conditions and building exclusions; medium for every off-map and production case
+
+10. **Conversions to money.** After claims 8 and 9, a power-up that cannot apply becomes *money* (0):
+
+    | Power-up | Becomes money when |
+    |---|---|
+    | unit | the house's crate vehicle count exceeds 50, or the crate cell's land type is *water* or *beach* |
+    | squad | the house's crate infantry count exceeds 100, or the crate cell's land type is *water* or *beach* |
+    | cloak | the collector's own cloak flag is already set |
+    | armour | the collector's armour multiplier is not exactly 1.0 |
+    | speed | the collector's speed multiplier is not exactly 1.0, or the collector is an aircraft |
+    | firepower | the collector's firepower multiplier is not exactly 1.0, or the collector has no primary weapon |
+    | veteran | the collector's type cannot gain experience, or the collector is elite |
+    | any power-up | the crate cell's land type is *water* and the power-up's water flag is off |
+
+    The last row is tested after the others, so it applies to every power-up that survives them, including money (which then stays money). These tests take no draws.
+    - Backing: `measurable` (scenario CR7)
+    - Confidence: high for the tests and type-flag exclusions; medium for off-map and nominal-survivor count cases
+
+11. **Pickup results and draw precedence.** After the power-up is settled:
+    - the crate is removed and its place freed.
+    - with the crate setting on, one random placement (claim 3) is made at once, so its draws precede every draw of the effect.
+    - squad (6) becomes money.
+    - the power-up's effect takes place (claims 12 to 24). Its argument *A* is the argument of the power-up as settled here, so squad and every power-up converted to money by claim 10 use the money argument.
+    - the power-up's imported animation, when it has one, is created at (256*x* + 128, 256*y* + 128, *h* + 200), with its creation draws (S-0202 claim 10). When a unit power-up places its unit, there is no animation (claim 13). A power-up turned into money shows the money animation.
+
+    A surviving ground collector may then enter the cell, except after a successful unit power-up (claim 13). A jumpjet has already landed (claim 6).
+    - Backing: `measurable` (scenarios CR6, CR8)
+    - Confidence: high
+
+### Effects
+
+12. **Money (0).** The collecting house receives *R*(*b*, *b* + 900) credits, one ranged draw, where *b* is the argument truncated to an integer (F2).
+    - Backing: `measurable` (scenario CR8)
+    - Confidence: high
+
+13. **Unit (1).** The selected type is determined by the first applicable rule in this priority order. A type named by the unit-crate field takes precedence, including over a forced base unit. Otherwise, a forced base unit uses the collecting house's base-unit type. Otherwise, when the house has a positive type-specific crate count for either of the first two types in the game-wide refinery list and zero counts for both of the first two types in the game-wide harvester list, the selected type is the first harvester-list type its country may own (`quirks.crate_harvester_list_prefix`, Edge cases). If that condition holds but no harvester-list type is ownable, selection instead uses the random rule. In every other case, including when none of those rules selects a type, each request R(0, *n* − 1) selects among the *n* vehicle types in rules order, and requests continue until a type is accepted. Acceptance requires the crate-goodie flag. A type in the base-unit list is refused when the bases setting is off and is accepted, subject to the crate-goodie requirement, when that setting is on.
+
+    The unit is created for the collecting house (with its creation draw, S-0202 claim 10), facing 0, and placed at the crate cell centre at ground height. If that fails, S-0212 claim 25's nearby search runs around the crate cell: the type's locomotion class, *normal* movement zone, no reach region, deck mode off, no height condition, no further test, no no-overlay condition, bridges allowed, no reference cell. The unit is placed at the centre of the found cell. If that also fails, the unit is deleted (its creation draw stays taken) and the power-up gives money: R(*b*, *b* + 900) credits as in claim 12, with the money animation, but with *b* the truncated argument of the *unit* power-up, not of money (`quirks.crate_unit_fallback_unit_argument`, Edge cases).
+
+    After a successful placement a ground collector does not commit its step into the crate cell (claim 6). A jumpjet's landing is not reversed. The new unit stands in the crate cell or nearby.
+
+    **In our engine** (a departure for AI houses). With the bases setting on, the original also refuses a base-unit-list type for a computer-controlled house unless the unit is forced. By the project lead's decision (glossary *AI house*), an AI house follows the rules for human-controlled houses, so our engine accepts the type for every player house. Neutral and special houses retain the original's non-human restriction. There is no switch. The original's rule is recorded for AI designers.
+    - Backing: `measurable` (scenario CR9)
+    - Confidence: high for the order of rules, the draws and the fallback to money; medium for the placement height
+
+14. **Heal all (2).** Every object taking simulation turns and owned by the collecting house, anywhere on the map, is offered a hit of (its health − its type's strength), in signed integer health points. The hit ignores defences, carries the no-escape marker, uses the demolition warhead, and has no attacker and no house (S-0302 claim 1). An ordinary damaged object is thereby restored to full strength, subject to S-0302 claims 7, 8 and 11: this is a healing hit, not an unconditional health assignment. Buildings, vehicles, infantry and aircraft are included. Passengers in ordinary closed transports or inside buildings are out of play and are not included. Passengers in open-topped transports remain in play and are included even though they are off the map (S-0203 claim 3).
+    - Backing: `measurable` (scenario CR10)
+    - Confidence: high for the hit and ordinary/open-topped transport distinction; medium for other off-map states
+
+15. **Cloak (3).** Every building, vehicle, infantry unit and aircraft on the map inside the crate area gets its own cloak flag set (S-0516 claim 2). Every owner is included, enemies too. Terrain objects, projectiles and objects outside the map are not affected.
+    - Backing: `measurable` (scenario CR11)
+    - Confidence: high
+
+16. **Explosion (4).** With *D* the argument truncated to an integer (F2), the collector first takes a hit of *D* that ignores defences, has no no-escape marker, uses the demolition warhead, and has neither attacker nor house. The effect also produces five blast points. For each point in their observable order, the game makes a ranged draw *r* = R(0, 512), obtains *Q* = N(*P*, *r*, *b*) using S-0312 claim 22's nearby-point formula (one raw draw, with no snapping to a cell centre), and deals area damage *D* at *Q* using the demolition warhead, no source or house, and allowing resource reduction (S-0303 claims 1 and 17). At that same point it creates the explosion animation selected by S-0303 claim 21's formula from *D* and the demolition warhead as if the land type were not *water*, so the splash case is not selected, and creates a drawing-only light flash. Each blast's damage and resulting deaths are resolved before the next blast's draws.
+    - Backing: `measurable` (scenario CR12)
+    - Confidence: high
+
+17. **Napalm (5).** Let *C* be the collector's position (its reference point for a building) and *M* the midpoint of *P* and *C* (F6). With *D* the argument truncated to an integer (F2):
+    - the animation at position 0 of the animation type list is created at *M*, with its creation draws.
+    - the collector takes a hit of *D* with the flame warhead. It ignores defences, has no no-escape marker, and has no attacker and no house.
+    - then area damage *D* at *M* with the flame warhead, no source and no house, resource reduction allowed.
+    - Backing: `measurable` (scenario CR12)
+    - Confidence: high
+
+18. **Darkness (7) and reveal (8).** Darkness re-covers the whole map for the collecting house. Reveal reveals the whole map for it (S-0409 claim 15).
+    - Backing: `measurable` (scenario CR13)
+    - Confidence: high
+
+19. **Armour (9) and firepower (11).** Every object inside the crate area whose armour multiplier (firepower multiplier) is exactly 1.0 has it multiplied by *A* in double-precision arithmetic (S-0302 claim 4). Buildings, vehicles, infantry and aircraft of every owner are included; terrain objects and projectiles are not. A multiplier that is not exactly 1.0 is left unchanged, so bonuses never stack. Objects outside the map are included when their last position lies inside the crate area (`quirks.crate_bonus_reaches_limbo`, Edge cases).
+    - Backing: `measurable` (scenario CR14)
+    - Confidence: high
+
+20. **Speed (10).** Every vehicle, infantry unit or ship inside the crate area whose speed multiplier is exactly 1.0 has it multiplied by *A* in double-precision arithmetic (S-0207 claim 13, S-0208 claim 7). Aircraft and buildings are never affected. Objects outside the map are treated as in claim 19.
+    - Backing: `measurable` (scenario CR14)
+    - Confidence: high
+
+21. **Nuclear missile (12).** If the rules hold a superweapon type of the nuclear-missile kind, the collecting house gets a one-time grant (S-0512 claim 12) of the first superweapon type, in rules order, whose action is the nuke action. If no type of that kind exists, nothing happens. A type of that kind with no nuke-action type is unsafe data (Edge cases).
+    - Backing: `measurable` (scenario CR15)
+    - Confidence: high
+
+22. **Veteran (14).** Only when *A* > 0: every building, vehicle, infantry unit and aircraft on the map inside the crate area whose type can gain experience goes up one veterancy level (S-0311 claim 1) ⌈*A*⌉ times (F7). Each step sets the experience to exactly the next level, so partial progress is lost. An elite object stays elite. Every owner is included.
+    - Backing: `measurable` (scenario CR16)
+    - Confidence: high
+
+23. **Gas (16).** With *D* the argument truncated to an integer (F2), area damage *D* with the gas warhead, no source, no house and resource reduction forbidden, happens at the crate cell's centre and then at the centre of each of its eight neighbour cells in step-direction order 0 through 7. That is nine detonations in turn.
+    - Backing: `measurable` (scenario CR17)
+    - Confidence: high
+
+24. **Resource (17).** A ranged draw selects resource type *t* = R(0, *k* − 1) from the *k* resource types in rules order. Position 1 is treated as position 0. The crate cell then gains one stage of *t*, according to the stage-increase rule below. A further ranged request *n* = R(10, 20) determines the number of additional stage-increase attempts. For each of those *n* attempts, the game draws *r* = R(0, 768), obtains *Q* = N(*P*, *r*, *b*) using S-0312 claim 22's nearby-point formula, snaps *Q* to the cell centre, and applies one stage increase of *t* to the cell containing that centre.
+
+    A stage increase has the following observable result. A germinable cell (S-0401 claim 10) becomes a new resource cell of *t* at stage 1, with S-0401 claim 11's draws. A cell already holding *t* gains one stage only when S-0401 claim 7's growth-step conditions hold; it is then offered to *t*'s spread list (S-0401 claim 8), receives no new growth-list entry from the crate, and retains any growth-list entry it already had. If *t*'s image run has at most one picture, the increase changes nothing. On an existing cell, the resulting stage cannot exceed one less than the image run's picture count. A cell holding another resource, and every other cell, remains unchanged.
+    - Backing: `measurable` (scenario CR18)
+    - Confidence: high for the draws; medium for the growth conditions
+
+25. **Power-ups with no dedicated effect.** Invulnerability (13), weather storm (15) and drop pod (18) only create their imported animation. Any effects of that animation still follow S-0109 claims 13–17. Squad (6) always gives money (claim 11).
+    - Backing: `measurable` (scenario CR6)
+    - Confidence: high
+
+26. **Sounds and announcements.** These are local-player feedback only. They take no scenario draws and change no game state.
+    - Money, reveal, firepower, armour, speed, unit and veteran each play their imported crate sound at *P* when the collector belongs to the local player. Heal all plays its own sound.
+    - Armour, speed and firepower also give the matching upgrade announcement when an affected object belongs to the local player.
+    - The nuclear missile adds its sidebar icon for the local player (S-0512 claim 12).
+    - Backing: `measurable` (scenario CR8)
+    - Confidence: medium
+
+27. **Observable draw order of one pickup.** The scenario-stream draws of one pickup come in this order:
+    - the tag raise's own draws (claim 7).
+    - the power-up draw (claim 8, only for random contents).
+    - with the crate setting on, the replacement placement's draws (claim 3).
+    - the effect's draws in the order its claim gives.
+    - the final animation's creation draws.
+
+    The unit power-up takes its type draws, then the creation draw, then any draws its placement causes. Area damage and death effects bring the draws of S-0303 claims 17–22 and S-0312 claims 1 and 4–23.
+    - Backing: `measurable` (scenario CR6, with the random-state recorder)
+    - Confidence: high for the order; medium for draws inside damage, deaths and animation creation, which those specs own
+
+## Formulas
+
+**F1. Power-up choice (claim 8).** With integer weights *w*₀ … *w*₁₈ and *W* = Σ *w*ᵢ, *r* = R(1, *W*). The power-up is the least *k* with *w*₀ + … + *w*ₖ ≥ *r*. Integer arithmetic with signed 32-bit wrap, no rounding. Without integer overflow, a zero or negative entry cannot itself be chosen: if its preceding total is below *r*, adding that entry cannot reach *r*. Negative entries can reduce later running totals. Summation uses signed 32-bit arithmetic (S-0205 claim 3); a non-positive total is unsafe data (Edge cases).
+
+**F2. Truncated argument (claims 12, 16, 17, 23).** *b* = trunc(*A*), the double-to-integer conversion toward zero of S-0205 claim 7 (its out-of-domain rules apply). Money: amount = R(*b*, *b* + 900), with *b* + 900 in signed 32-bit integer arithmetic.
+
+**F3. Crate radius (Import mapping).** For a read decimal *v* (double): if *v* = −1 exactly, ρ keeps its previous value. Otherwise ρ = trunc(*v* × 256), with the product rounded as S-0205 claim 5 says and the conversion of S-0205 claim 7. Units: *v* in cells, ρ in leptons.
+
+**F4. Crate-area distance.** With (*Δx*, *Δy*, *Δz*) the signed integer lepton differences between *P* and the object's measured point, the squared terms and their sum are calculated in double-precision floating point, rounded under S-0205 claim 5. Then *d* = trunc(√(*Δx*² + *Δy*² + *Δz*²)), using S-0204 claim 5's table square root (`quirks.table_root_distance`), with conversion toward zero under S-0205 claim 7. Inside means *d* < ρ, a strict integer comparison in leptons.
+
+**F5. Random candidate cell (claim 3).** With *W*ₘ and *H*ₘ the map width and map height of the map size (glossary): *x* = 1 + R(0, *W*ₘ + *H*ₘ − 2), then *y* = 1 + R(0, *W*ₘ + *H*ₘ − 2). Both lie in 1 … *W*ₘ + *H*ₘ − 1. Integers, exact.
+
+**F6. Napalm midpoint (claim 17).** *M* = (trunc((*P*ₓ + *C*ₓ) / 2), trunc((*P*ᵧ + *C*ᵧ) / 2), trunc((*P*_z + *C*_z) / 2)), signed integer division truncated toward zero. Units: leptons.
+
+**F7. Veteran steps (claim 22).** The number of steps is the count of integers *k* ≥ 0 with *k* < *A*, compared in double precision: ⌈*A*⌉ for *A* > 0, and 0 otherwise. One step maps an experience value *e* to 2.0 when 1.0 ≤ *e* < 2.0, to 1.0 when 0.0 ≤ *e* < 1.0, and to 0.0 when *e* < 0.0. An elite object (*e* ≥ 2.0) is unchanged.
+
+**F8. Multiplier update (claims 19, 20).** *m* ← *m* × *A* in double precision, rounded as S-0205 claim 5 says, applied only when *m* = 1.0 exactly. With *m* = 1.0 the product is exactly *A*.
+
+**Lifetime (claim 3).** S-0524 claim 4's trigger-crate lifetime formula applies unchanged: one draw R(0, 2147483646), bounds 450*C* and 1800*C* ticks, with *C* the regeneration field.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Crate capacity | 256 | crates | shared with S-0524 claim 4 |
+| Placement attempts | 1000 | attempts per random placement | claim 3 |
+| Power-up count | 19 | power-ups | numbered 0 … 18 |
+| Fixed-contents range | 0 … 18 | overlay data value | other values are random |
+| Forced-base-unit credit threshold | 1500 | credits | strictly more than |
+| Unit power-up vehicle limit | 50 | vehicles | more than this gives money |
+| Squad power-up infantry limit | 100 | infantry | more than this gives money |
+| Money spread | 900 | credits | R(*b*, *b* + 900) |
+| Animation height | 200 | leptons above *h* | claim 11 |
+| Explosion blasts | 5 | blasts | claim 16 |
+| Explosion spread | 0 … 512 | leptons | claim 16 |
+| Gas detonations | 9 | detonations | crate cell and 8 neighbours |
+| Resource repeats | 10 … 20 | cells | claim 24 |
+| Resource spread | 0 … 768 | leptons | claim 24 |
+| Crate radius default | 640 | leptons | absent key (2.5 cells) |
+| Regeneration default | 10 | game minutes | absent key; S-0524 claim 4 |
+
+## State and ordering
+
+| State | Event | Result |
+|---|---|---|
+| place free | random placement succeeds | place occupied, lifetime drawn and started |
+| place occupied | lifetime reached, crates on | crate removed, one random placement made |
+| place occupied | lifetime reached, crates off | nothing (crate remains) |
+| place occupied | collector commits to the step into the cell | claims 7 to 11 |
+| place occupied | pickup blocked by a dying tagged collector | crate remains, mover stops |
+| place occupied | passive-country collector | crate remains, mover enters |
+
+Ordering consequences:
+- The replacement crate of a pickup exists before the effect happens, and the effect sees it. For example, a resource stage increase that falls on the replacement crate's cell finds an overlay there, so that cell is not germinable (S-0401 claim 10).
+- The tag raise happens before the power-up is chosen. A trigger that kills the collector cancels the pickup and keeps the crate.
+- Expiry visits places in index order. A replacement can take a lower free place, which is not visited again in the same update.
+
+## Edge cases and quirks
+
+- **`quirks.crate_harvester_list_prefix`** (default on). The harvester rule of claim 13 tests only the first two entries of the refinery list and of the harvester list. A house whose only refinery is a later list entry gets no harvester from the rule. Off: every entry of both lists is tested, and the rule applies when the house owns any listed refinery and no listed harvester.
+- **`quirks.crate_unit_fallback_unit_argument`** (default on). When a unit power-up cannot place its unit (claim 13), the money it gives uses the unit power-up's argument as the base *b*. Off: it uses the money power-up's argument, exactly as a money crate would.
+- **`quirks.crate_bonus_reaches_limbo`** (default on). Armour, firepower and speed (claims 19, 20) do not require the object to be on the map. An object inside a transport, a building or other off-map state whose last recorded position lies inside the crate area is boosted. Off: only objects on the map are affected, as for cloak and veteran.
+- **Position-based picks.** The resource power-up replaces position 1 of the resource type list by position 0, and napalm uses position 0 of the animation type list. These picks go by list position, not by type. A mod that reorders those lists changes the result. Our engine reproduces this.
+- **Gas warhead by name.** When the rules define no warhead under the gas name, the original creates one with every warhead field at its default value and uses it. Our engine does the same.
+- **`quirks.crate_phantom_place`** (default on). If a selected cell passes the placement tests but a terrain object prevents its overlay appearing, the place still becomes occupied and takes its lifetime draw. It remains occupied until expiry. Off: the failed overlay placement takes no place or lifetime draw. The nearby search normally rejects these cells, so this conditional result is `unmeasured`: no reachable stock search result that exercises it has been identified; confidence medium.
+- **Multiplier exactly 1.0.** A collector whose multiplier was changed and is not exactly 1.0 converts the matching power-up to money. Other objects in the area are skipped individually.
+- **Unsafe data.** In each of the following cases our engine warns at import and the stated outcome applies:
+  - no vehicle type can be accepted by the unit power-up's draws: the original never stops redrawing. Our engine gives money instead.
+  - a nuclear-missile-kind superweapon type exists but no type has the nuke action: the original fails. Our engine gives no grant.
+  - a weight total of zero or less: our engine gives money.
+  - no base-unit-list type that the house's country may own, when claim 9 would test one: the original fails. Our engine treats the house as owning one, so the override does not apply.
+  - a missing flame warhead for napalm: our engine skips the hit and the area damage.
+
+## Import mapping
+
+| Key | Form | Concept | Default when absent |
+|---|---|---|---|
+| `[Powerups]` `Money`, `Unit`, `HealBase`, `Cloak`, `Explosion`, `Napalm`, `Squad`, `Darkness`, `Reveal`, `Armor`, `Speed`, `Firepower`, `ICBM`, `Invulnerability`, `Veteran`, `IonStorm`, `Gas`, `Tiberium`, `Pod` | list: weight (integer), animation type name, water flag (`yes` or `no`), argument (decimal; a value containing `%` anywhere is multiplied by 0.01) | power-ups 0 … 18 in this order | key absent while the section exists: weight 0, no animation, water flag and argument kept (S-0006 claim 5). No section: the table keeps its values in force. At a fresh program start: built-in weights 50, 20, 1, 3, 5, 5, 20, 1, 1, 10, 10, 10, 1, 3, 1, 1, 1, 1, 1 in power-up order, no animations, water flags off, arguments 0.0 |
+| `[CrateRules]` `CrateRadius` | decimal, cells | ρ (F3) | 640 leptons; a value of exactly −1 keeps the previous value |
+| `[CrateRules]` `CrateRegen` | double, game minutes | lifetime bounds | 10 (S-0524 claim 4) |
+| `[CrateRules]` `CrateMinimum`, `CrateMaximum` | integer | game-start count | S-0412 claim 10 |
+| `[CrateRules]` `UnitCrateType` | vehicle type name | unit-crate type (claim 13) | none |
+| `[CrateRules]` `WoodCrateImg`, `WaterCrateImg` | overlay type name | wooden-crate and water-crate overlays | S-0524 claim 4 |
+| `[CrateRules]` `HealCrateSound` | sound name | heal-all sound | none; an unknown name keeps the previous value |
+| `[CrateRules]` `FreeMCV` | boolean | read, no observed effect | ignored |
+| `[CrateRules]` `CrateImg`, `SoloCrateMoney`, `SilverCrate`, `WoodCrate`, `WaterCrate` | — | campaign only | ignored in a skirmish |
+| `[AudioVisual]` `CrateMoneySound`, `CrateRevealSound`, `CrateFireSound`, `CrateArmourSound`, `CrateSpeedSound`, `CrateUnitSound`, `CratePromoteSound` | sound name | crate sounds for money, reveal, firepower, armour, speed, unit, veteran | none; an unknown name keeps the previous value |
+| `[CombatDamage]` `C4Warhead` | warhead name | demolition warhead | none |
+| `[CombatDamage]` `FlameDamage` | warhead name | flame warhead | none (Edge cases) |
+| warhead section named `GAS` | warhead | gas warhead | created with defaults (Edge cases) |
+| `[General]` `BaseUnit` | list of vehicle types | base-unit list (claims 9, 13) | empty |
+| `[General]` `HarvesterUnit` | list of vehicle types | harvester list (claim 13) | empty |
+| `[AI]` `BuildRefinery` | list of building types | refinery list (claim 13) | empty |
+| vehicle type `CrateGoodie` | boolean | may come from a unit crate | no |
+| vehicle, infantry, aircraft and building type `Trainable` | boolean | can gain experience (claims 10, 22) | yes (S-0311 claim 8) |
+| type `Insignificant`, `DontScore` | boolean | exclusions from crate ownership counts (Terms, claims 9, 10 and 13) | no (S-0414 claim 4) |
+| building `UndeploysInto`, art `Foundation`, undeploy vehicle `Harvester` | vehicle reference, foundation shape, boolean | buildings counted as vehicles in crate ownership counts | S-0414 claim 4 |
+| country `MultiplayPassive` | boolean | passive country (claim 7) | no |
+| overlay type `Crate` | boolean | crate flag | no |
+| overlay type `CrateTrigger` | boolean | crate-trigger flag (claim 7) | no |
+| superweapon type `Type` | kind (the nuclear-missile kind name, S-0512 claim 1) | nuclear-missile kind (claim 21) | S-0512 claim 1 |
+| superweapon type `Action` = `Nuke` | action word | nuke action (claim 21) | no action |
+| lobby crate and bases settings | boolean | crate setting, bases setting | S-0412 claims 1 and 10 |
+
+## Measurement scenarios
+
+Use the glossary's measurement setup: stock data, director and mods off except the named test data below, a purpose-made skirmish map, one human and one bystander computer player, standard mode, 800 × 600, game-speed index 6. The observed area is the whole map for placement, shroud and heal-all tests; otherwise it is the test enclosure and its crate destinations. Keep the bystander separated, and apply its void rule. Use normal input or scripted mouse and keyboard input, tick-labelled captures, and read-only recording of credits, health, positions and random-stream state. Do not write a seed into the oracle. Repeat deterministic variants twice; use 30 independently started games for random variants unless a larger count is stated, recording each observed seed and state.
+
+**Named test data.** A test copy of `rulesmd.ini`, removed after each run, may change only the fields a scenario names by role: crate weights, arguments, animations, water flags, lifetime and count settings, the forced unit type, type eligibility flags and lists, and explicitly stated test-unit or warhead properties. A purpose-made map supplies trigger crates with fixed contents (S-0524 claim 4) and separated test enclosures. Prefer those fixed crates with the crate setting off to isolate effects. Keep a counted building and a base unit unless the scenario tests their absence, to prevent claim 9 masking the intended effect. Named data is an explicit exception to stock-data-only tests, not an engine modification.
+
+- **CR1 — placement (claims 1–3).** Use an open mixed-land-and-water map, then one with almost every cell blocked by objects or overlays. Set the starting count to a known positive *n*. Record loading draws, candidate cells predicted by F5, selected cells predicted by S-0212 claim 25 at that tick, and visible crate cells after a separate reveal. Expected: two ranged requests per attempted candidate, x then y, any overlay-placement draws on success, then one lifetime request. Count raw draws with S-0202 claim 4's rejection rules rather than assuming one raw draw per request. There are at most 1000 attempts per placement and no delayed retry for an exhausted placement. Each successful cell is empty of objects, uses the overlay for its land type, and placement itself explores no cells. With a count above 256 and enough room, the 257th placement takes no draw. Falsified by another candidate formula or search result, unexplained draws, a crate under an object, exploration from placement, or a 257th occupied place. Compare game-start counts with S-0412 claim 10, not the number of computer players.
+- **CR2 — expiry (claim 4).** Use a short positive regeneration argument and record each crate's appearance, predicted lifetime and disappearance tick. With crates on, each successful replacement appears in its predecessor's expiry tick, with draws predicted by claim 3. Compare simultaneous expiries with the crate-place order established by earlier trigger placements and freed places. Block all legal replacement destinations in a control: expiry lowers the count rather than retrying next tick. With crates off, trigger crates remain beyond twice the regeneration duration. A premature/late expiry, wrong replacement draw order, deferred retry or expiry with crates off falsifies the corresponding part.
+- **CR3 — death crates (claim 5).** Destroy a crate-carrying vehicle and buildings configured to leave money or random crates, with crates off. Use S-0312 claims 14 and 20's qualifying destruction fixtures. Collect each resulting crate with a house that cannot receive the base-unit override. Record credits, effect and stream state. Expected: vehicle and non-money building crates take the weighted choice request, while money building crates skip it and take the money request. Any different contents or draw signature falsifies the claim. Leave a second copy uncollected with crates on and test expiry as CR2.
+- **CR4 — pickup timing and movers (claim 6).** Put a money crate one step ahead of drive, ship, hover, walking-vehicle and infantry movers; separately land a jumpjet on a crate. Record position and credits each tick. Ground effects precede arrival at the centre; jumpjet effects occur on landing. For a successful unit crate, a ground mover must not commit that step, but a jumpjet's landing must remain completed. Test teleport arrival, tunnelling emergence, aircraft landing, parachute/drop arrival and unloading onto a crate cell where legal; none alone gives a pickup. Compare normal ground entry afterwards. An effect solely on an excluded arrival, no effect on an eligible entry, or arrival before the ground pickup falsifies its row. If ordinary placement cannot create an object directly on an existing crate, that creation-only exclusion remains a negative-call-site inference, not a completed measurement.
+- **CR5 — gates (claim 7).** Add a passive-country test house, distinct from the bystander, and order or trigger its unit across a crate: no effect and the crate stays. Compare a non-crate overlay. A tagged collector on a crate-trigger overlay raises event 49 with itself as the causing object. Configure that event to kill the collector: the crate remains, with no choice/effect draws and no event-50 mark. In a control with no killing action, event 50 becomes satisfied. A named test overlay with the crate-trigger flag off still gives an effect but no event 49 or mark. Record event outcomes, overlay survival and stream state. Any contrary result falsifies the corresponding gate.
+- **CR6 — choice and draw precedence (claims 8, 11, 25, 27).** Use two nonzero weights and 200 random-content pickups, recording the stream state. Predict each choice from its ranged value and F1, not frequency alone. In separate fixed-content runs test every number 0 … 18 and random codes 19, 20 and 255. Enable replacement for one run: its draws precede effect draws and the final animation draws. In a tagged control add a trigger that consumes a known ranged request: it precedes choice. Give visible, non-damaging animations to kinds 13, 15 and 18: only those animations occur; kind 6 gives money with the money argument and animation. Disable crates in controls. Wrong predicted effects, extra/missing requests or reversed draw groups falsify the relevant claim. Predict the final animation at terrain-centre height plus 200 leptons, including on a slope or bridge cell; a deck lift falsifies that height rule.
+- **CR7 — overrides and conversions (claims 9, 10).** Keep the house undefeated during the test. Compare no counted building, available credits above 1500, no base-unit type in existence and bases on, against controls changing exactly one condition, including credits exactly 1500 and a base unit waiting in production. Expected: only the qualifying case forces the base unit, even from fixed money contents. Repeat with an insignificant/not-scored building and with a building that counts as a vehicle: those do not block the override. For each row of claim 10, compare a qualifying collector with an eligible control, preventing other conversions. Use 50 versus 51 counted vehicles and 100 versus 101 counted infantry, including a ship, passenger and production item where relevant. Include buildings that count as vehicles and excluded type flags. Collect fixed unit and squad crates on beach and water. For the final water gate compare enabled/disabled water flags. Record effect, credits and draws: a failed eligibility test yields money with its argument, no extra choice request. An unchanged effect, wrong threshold, or wrong argument falsifies the corresponding row. The unarranged nominal-survivor subcase is listed in Open questions.
+- **CR8 — money and local feedback (claims 12, 26).** Give the money argument an invented fractional positive value and then a negative value within F2's conversion domain. For 100 pickups of each, record exact credit changes and the ranged values. Expected: each delta equals R(trunc(*A*), trunc(*A*) + 900), not merely a sampled minimum/maximum. Observe local and nonlocal collectors receiving each sound-producing power-up, with an allied local object inside an enemy collector's upgrade radius. Expected: crate sounds only for the local collector, upgrade announcements when any local object is boosted, and the nuclear icon as CR15 specifies. An amount mismatch, nonlocal collector sound, missing eligible announcement or scenario draw caused solely by feedback falsifies that part. Use audio/video recording for presentation; do not infer a missing sound from a muted run.
+- **CR9 — unit choice and placement (claim 13).** Use a refinery and no harvester, then a harvester present, a harvester in production, and a refinery only at list position 2. Expected: the first ownable harvester in the first case, no forced harvester in the controls. A named forced unit type overrides both harvester and base-unit choices. For random choice, record and replay acceptance of every type request against eligibility and the bases setting. Place a crate in a cell impassable for the awarded type but reachable by its collector, then make every fallback cell impassable: expected nearby placement in the first, deletion and money in the second. Distinct invented unit and money arguments distinguish the fallback's unit argument. Record created type, cell, first-placement height, collector step, credits, animation and stream state. Unexpected types, an accepted ineligible draw, a skipped creation request, a ground collector committing the blocked step, a unit animation on success, or fallback credits based on the money argument falsify the relevant part. Compare computer collectors separately: the original refuses a random base unit as stated in claim 13, while our AI-house departure is tested on our engine, not against the oracle.
+- **CR10 — heal all (claim 14).** Damage owned infantry, vehicles, aircraft and a building at widely separated positions, an enemy control, and two owned passengers before loading one into an ordinary closed transport and one into an open-topped transport. Collect a fixed heal-all crate and unload both passengers afterwards. Record health before/after. Expected: ordinary on-map owned objects and the open-topped passenger restored to strength, the enemy and closed-transport passenger unchanged. Add named test data for an immune bridge repair hut and an undemolishable building: resolve those hits by S-0302 claims 7 and 8 rather than expecting an unconditional reset. A different owner/range filter, healing of the closed-transport passenger, failure to heal the open-topped passenger, or health change contrary to those hit rules falsifies the claim. Other unusual off-map states remain open.
+- **CR11 — cloak and area boundary (claim 15, F4).** Put own and enemy infantry, vehicles, aircraft and buildings at predicted distances just below, exactly at and above ρ, including different heights and a multi-cell building whose reference point distinguishes it from its foundation corner. Include a loaded passenger and terrain object. Collect cloak, then observe cloaking after normal cloak delays. Expected: the own cloak flag applies only to on-map actor kinds with integer distance strictly below ρ, independent of owner. A boundary object, passenger or terrain object cloaking, or a qualifying object failing to cloak for reasons other than S-0516 claims 3–8's normal restrictions, falsifies that part. A fractional radius in named data tests F3's conversion.
+- **CR12 — explosion and napalm (claims 16, 17).** Use a durable collector, nearby friendly and enemy targets, and resource cells; record health, deaths, animations and stream state. Predict all five explosion points from the radius and raw draws, and the area hits using S-0303 claims 3–17; the collector's direct hit uses S-0302 claims 8 and 9 with defences ignored. Expected: exactly five blast requests, each blast's death draws preceding the next point's draws, and non-water damage-animation selection even for a water fixture allowed by its water flag. Napalm's first animation is at F6's midpoint, preceding the direct hit and area damage at that midpoint. Sloped/bridge fixtures distinguish terrain-centre height from deck height. Unexplained health loss, wrong points, house kill credit, splash-only selection on water, or wrong draw precedence falsifies the corresponding part. Predict resource reduction with S-0303 claim 17 rather than demanding that every blast destroy resources.
+- **CR13 — darkness and reveal (claim 18).** Explore a remote area, keep another remote area unexplored, and place current sight sources away from both. Collect darkness and reveal separately; record explored cells for the collector and an enemy. Expected: S-0409 claim 15's whole-map result for the collecting house only, subject to its ongoing sight rules. A radius-limited result or another house's exploration changing solely from this effect falsifies the claim.
+- **CR14 — armour, firepower and speed (claims 19, 20).** Use own and enemy actors just inside, exactly at and outside ρ, a building, an aircraft, an unarmed actor, and a loaded passenger whose last position is inside ρ. Use invented non-unit factors. Test armour with known incoming hits, firepower with outgoing hits, and speed with timed equal-distance movement, applying the owning specs' rounding. Unload the passenger for its tests. Expected: eligible factors initially equal to 1.0 become *A*; non-unit factors remain unchanged on another crate, and a factor of 1.0 remains eligible. Armour/firepower include buildings, aircraft and unarmed neighbours; speed excludes buildings and aircraft. Enemy objects and the passenger are boosted when otherwise eligible. Boundary mismatches, stacking, an owner filter or speed changes for excluded kinds falsify the relevant rule. Our engine separately tests the off state of the off-map bonus switch.
+- **CR15 — nuclear grant (claim 21).** Use a fixed nuclear crate without a prior grant. Record grant, sidebar, charge/readiness and consumption after firing against S-0512 claim 12. With named test data, make the first nuke-action type different from the nuclear-kind type, then remove all nuclear-kind types. Expected: the first action-matching type is granted only when a nuclear-kind type exists; the absent-kind case does nothing. The missing-action unsafe case is tested only for our engine's warning/no-grant departure. A repeatable grant, wrong type, or grant in the absent-kind case falsifies its part.
+- **CR16 — veteran (claim 22).** Use trainable own/enemy actors of each kind, an untrainable actor, an elite actor, a passenger, and actors at/inside/outside the radius. Named arguments 0, a negative value, 0.5, 1.0, 1.5 and 2.0 distinguish zero and ceiling step counts. Give some actors partial progress before pickup. Expected: F7's exact resulting levels, with partial progress reset, no owner restriction, no off-map or untrainable promotion, and no change at elite. Read ranks and progress read-only, or infer progress from subsequent controlled kills. Any other level, retained partial progress or wrong boundary falsifies the corresponding part.
+- **CR17 — gas (claim 23).** Use a durable ground collector and infantry spread over the nine cell centres, with resources and a bridge/slope control. Predict health changes using nine sequential area damages at terrain-centre heights, centre first and neighbour directions 0 … 7. Record stream state and destruction effects to distinguish death order where areas overlap. Resource quantities must not be reduced by these detonations. A different count/order, deck-height centres, attributed attacker/house or gas-caused resource reduction falsifies the relevant part. If individual detonations cannot be separated in stock data, use named small-spread gas-warhead data and durable targets to isolate the centres.
+- **CR18 — resource (claim 24).** Use a flat germinable enclosure, plus existing cells of the selected and another resource, blocked cells, a slope, and cells near the stage cap. Record stream values and resource cells immediately around pickup, separating ordinary growth turns. Predict the chosen type, initial-cell stage request and 10 … 20 further requests with S-0312 claim 22's nearby-point formula, including the snapped centres. Expected: 11 … 21 stage-increase requests, not necessarily that many changed cells; duplicates, blocked cells and stage caps can reduce the changes. Position 1 always maps to 0. Existing resource grows only under claim 24's conditions; germination takes its own draws. With the map growth switch off, existing cells do not grow, but germinable cells may still appear. A wrong selected type, point, request count, stage, or extra growth-list scheduling inferred from subsequent growth timing falsifies that part. Snapping can put a centre farther than 768 leptons from *P*, so that distance alone is not a failure.
+- **CR19 — import controls (claims 8–24, Import mapping).** In a fresh process, named rules copies omit the whole power-up section or individual entries, then layer entries with only weight and animation tokens. Record resulting fixed/random effects and draw signatures against the documented defaults and retained arguments/water flags. Use percent-bearing arguments and a radius of exactly −1 to distinguish their parse rules. Compare ignored skirmish fields while holding every effective field fixed. A changed outcome or scenario-stream request where the mapping predicts none falsifies the corresponding mapping. These are proposed tests, not completed measurements.
+
+## Open questions
+
+- Heal-all eligibility in unusual off-map states beyond ordinary closed transports, buildings and open-topped transports (claim 14). CR10 tests those ordinary cases; the broader state coverage remains `unmeasured` because no exhaustive set of reachable states has been established, confidence low.
+- Exact nominal-survivor crate-count behaviour beyond the common cases (claims 9 and 10). The exclusion is traced, but a reliable stock fixture that produces such survivors has not been identified (S-0414 claim 4); that subcase is `unmeasured`, confidence medium.
+- The final placement height of a fallback unit on slopes or bridges is not specified: only the first placement's terrain-centre height is established (claim 13). This subcase is `unmeasured` pending a trace of placement's height adjustment, confidence low.
+- The read-only free-unit flag of the crate rules shows no observable effect. If a measurement finds one, this spec needs a revision.
