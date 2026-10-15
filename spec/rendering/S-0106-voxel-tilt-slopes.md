@@ -2,7 +2,7 @@
 id: S-0106
 title: Slope shapes, terrain surface height and voxel tilt on slopes
 topic: rendering
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -140,7 +140,9 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    uphill direction, so the uphill end of the body is raised. The nominal tilt follows the surface
    as drawn: arctan(1/√6) radians for edge slopes and π/6 radians for corner, valley and steep
    slopes, with the table-trigonometry precision of F2. This is a presentation-only correction:
-   surface heights, movement, collision and firing calculations are unchanged. There is no switch.
+   surface heights, movement, collision and firing calculations are unchanged. In particular,
+   gas slope deflection retains the original transforms of table C4, not the corrected drawing
+   transforms (S-0613 claim 10). There is no switch for the drawing correction.
    The original used mismatched shape-dependent angles, making voxel bodies and shadows appear
    too steep on edge slopes and too shallow on corner and valley slopes.
    For oracle comparisons only, its angles were:
@@ -157,7 +159,8 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    identity tilt; unresolved saddle artwork does not define a replacement orientation.
    - Backing: `measurable` (T2: original transforms against the oracle, corrected transforms
      as engine conformance). Exact floating-point values that give the same captured pixels
-     are `unmeasured`: T2 cannot separate them. Unchanged game calculations are
+     are `unmeasured`: T2 cannot separate them. Gas deflection is `measurable` through
+     S-0613 claim 10's scenario G8, using its F3 with C4 unchanged. Other unchanged game calculations are
      `unmeasured` here: the scenario compares images, not every possible gameplay outcome.
    - Confidence: high for the original transforms and the correction's definition; medium
      for the surface-angle comparison, which uses S-0105 F2 and F3 and S-0101 claims 1 and 4
@@ -368,10 +371,12 @@ No integer rounding is applied to these angles. The rotation operations and sing
 still follow S-0105 F0 and F2. Thus the nominal angle matches the drawn terrain, subject only
 to the shared table-trigonometry resolution, rather than to the coarse arctangent grid.
 Flat and saddle shapes keep identity. Use these corrected angles for bodies, turrets, barrels,
-shadows and the construction of transition orientations alike; there is no mixed-angle mode.
-The original-angle column above and tables C3 and C4 below are historical oracle references,
-not corrected engine constants. Corrected orientations are defined by C3's construction rule
-with the corrected angles; corrected matrices are defined by this rotation formula.
+shadows and the construction of transition orientations alike; drawing never mixes the two
+angle conventions. This correction does not apply to simulation gas deflection (S-0613 claim 10),
+which uses the original transforms of C4. The original-angle column and C3's numeric rows are
+oracle references for drawing; C4 additionally remains a simulation constant table.
+Corrected drawing orientations are defined by C3's construction rule with the corrected angles.
+Corrected drawing matrices are defined by this rotation formula.
 
 For the original-angle references only, the two angles are values of the original's table
 arctangent arctan<sub>t</sub>, a tabulated
@@ -502,9 +507,10 @@ table square root of S-0105 F1, so a diagonal axis has components ±0.7071284 ra
 which is why the x and y entries of shapes 5 … 16 are not the half-angle sine divided by √2. Values to
 7 decimals; the original's are the single-precision numbers nearest to them.
 
-**C4. Original tilt transforms** (oracle references only), rows listed top to bottom,
-single precision, dimensionless. Corrected *R*<sub>s</sub> is F2 with claim 4's angles, not
-these numeric rows. Shapes
+**C4. Original tilt transforms** (drawing oracle references and simulation gas-deflection
+constants, S-0613 claim 10), rows listed top to bottom, single precision, dimensionless.
+Corrected drawing *R*<sub>s</sub> is F2 with claim 4's angles, not these numeric rows.
+Gas deflection retains these rows. Shapes
 9 … 12 equal 5 … 8; shapes 0 and 17 … 20 are the identity.
 
 | *s* | row 1 | row 2 | row 3 |
@@ -566,7 +572,9 @@ All switches default to the original behaviour.
 - **Shape-dependent angles.** Claim 4 corrects this drawing artefact unconditionally under
   the presentation-only bug policy. The reference is the terrain as drawn, not its angle in
   world leptons: the comparison concerns visual alignment in model space. F2 and C3 define
-  the corrected rendering; their historical values and C4 support oracle comparisons only.
+  the corrected rendering; their historical values and C4 support drawing oracle comparisons.
+  C4 also supplies the unchanged simulation gas deflection of S-0613 claim 10, so the drawing
+  correction must not replace that table's simulation values.
 - **`quirks.negative_level_floor_raised`.** Original: below level 0 the surface is 1 lepton higher
   than 104ℓ (claim 3). Fixed: *B*(ℓ) = 104ℓ for every level.
 - **Continuous restart.** Claim 6 removes the original's presentation-only restart jump
