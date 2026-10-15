@@ -2,7 +2,7 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -154,7 +154,7 @@ Two kinds of rule are kept apart throughout.
    - it is not a building and its stage is not 0, so a vehicle, infantry unit or aircraft that is
      uncloaking cannot turn back before its uncloak completes
    - its cloak delay is running
-   - it is held by a magnetic beam
+   - it is seized (S-0607 claims 5, 12 and 20)
    - its height above the ground is 1 lepton or more.
 
    The last condition means an aircraft can start cloaking only while landed, and a jumpjet only on
@@ -1024,7 +1024,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 |---|---|---|
 | 1, 7, 10 | Repeat CS1 with odd/even stage counts and several positive speeds. Hit during the first fading band; restore a field during uncloaking. Record bands and transition ticks. | F1/F2 hold. Interrupted cloaking still gives the full uncloak duration. Mobile objects finish uncloaking and wait out the delay rather than reversing. |
 | 2, 3, 16 | Compare placed/factory-created vehicles and infantry. Populate only the veteran, then only the elite cloak-ability list. Give cloak-stop to a crate-cloaked vehicle and move it while visible, then while cloaked. | Vehicles with the own flag begin cloaked, infantry do not. Elite accepts either list. Crates do not bypass cloak-stop on starting; movement does not break a full cloak. |
-| 4, 5 | Separately retain a rearm timer, an in-range target, a magnetic grip, positive height and war-factory contact on a self-cloaker. Remove each blocker. Compare out-of-range targets. | Each listed blocker prevents a start; full health and no blockers permit it. |
+| 4, 5 | Separately retain a rearm timer, an in-range target, the seized state, positive height and war-factory contact on a self-cloaker. Remove each blocker. Compare out-of-range targets. | Each listed blocker prevents a start; full health and no blockers permit it. |
 | 5, 8 | Collect 1000 eligible updates at, below and above the red ratio, and 1000 low-health updates in the abort band across restarts. Read the stream state and match ranged draws. | At/below red starts use one draw below 4, above red none. Aborts require one draw below 10 in the specified band only. |
 | 5, 6, 9, 17 | Compare own-flag and ability cloakers inside/outside a field under EMP, paralysis and warp. Give aircraft a crate or ability; compare landed and airborne starts, then take off after cloaking. | The disable gate bars own-flag starts outside a field, not ability/field starts when otherwise ready. Losing the last source breaks a full cloak. Airborne starts fail; takeoff alone does not break a full cloak. |
 | 11, 12, 15 | Repeat CS7 for each accepted and rejected hit category in claim 12. Record sounds and fade. Repeat a hit while already uncloaking. | Accepted hits and listed uncloak causes sound; rejected hits do not reveal. Repeated causes during uncloaking do not replay sound. |
