@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -296,9 +296,19 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | cloaked | the weapon needs the firer uncloaked and it is not |
    | out of range | the target is beyond the weapon's range (S-0307) |
    | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing and capture tests (their feature specs), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), or a sinking firer or target (S-0504 claim 5). S-0214, claim 6(e), defers to these for what the check refuses |
-   | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power or the firer is disabled, and similar |
+   | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power or the firer is disabled, a hidden target fails the test below (S-0516 claim 24), and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
    | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy test (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
+
+   **Hidden-target refusal (S-0516 claim 24).** A target hidden from the firer's house gives
+   *impossible* when the firer's mean weapon damage is above 0 or the target is not allied with
+   the firer. Hidden means fully cloaked without that house's sensor coverage; a building also
+   counts at fade levels 11 to 15 without coverage (S-0516 claim 18). Mean weapon damage is the
+   target-independent integer of S-0308 claim 15, including its ambient component and
+   truncation toward zero. It is not the selected weapon's damage or the shot damage after
+   firepower or armour scaling. The refusal applies even to a forced attack on an own object.
+   Allied hidden targets with mean weapon damage at or below 0 pass this test only; all other
+   firing restrictions still apply.
 
    Where more than one reason holds, the firer gets the answer of the highest rank below (rank 1
    is the highest):
@@ -308,7 +318,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | |
@@ -344,7 +354,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    has no firing check between its shots (S-0501 claim 12).
    - Backing: `measurable` (scenarios F7, F8 and F15; S-0506 scenarios R2 and R6 for spawner
      handoff and lockouts; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
-     N6 for sinking restrictions; S-0501 scenarios AC7 to AC9 for aircraft bursts).
+     N6 for sinking restrictions; S-0501 scenarios AC7 to AC9 for aircraft bursts, and
+     scenario F15 part f and S-0516 scenario CS9 part c for hidden targets).
      Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
      S-0504 claim 5. `unmeasured` for the order among ranks 1 to 4 when two of them hold at once (only
      contrived data gives such a firer, for instance a spawner vehicle that is also playing death
@@ -352,7 +363,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      S-0310) are not known to respond differently to *busy*, *illegal*, *impossible* and the early
      *rearming* cases, so no scenario could tell the orders apart)
    - Confidence: high (rearming before ammunition and range, facing and moving after them, and
-     *must deploy* before *not facing*); medium (the full membership of *illegal* and *impossible*,
+     *must deploy* before *not facing*, and the hidden-target refusal using mean weapon damage),
+     medium (the full membership of *illegal* and *impossible*,
      and the early *rearming* cases, which other specs own; only the ones relevant to this spec are
      listed; the tether and death-frame reasons); low (ranks 1 to 4 among themselves; rank 3, whose
      cause (S-0214) is itself low; rank 16)
@@ -985,6 +997,25 @@ is absent (the control).
   target well inside the weapon's range and everything else passing. Expected: the attempt is
   refused although the target is in range, so the vehicle does not make an ordinary shot and
   shows the behaviour S-0215 gives to *out of range*. Falsified if it makes an ordinary shot.
+
+- (f) Hidden targets (rank 4): a named test map, speed index 2, director and other mods off,
+  one allied and one enemy bystander computer player outside the observed area under the
+  glossary's void rule. Its override sections supply a self-cloaking target and an armed vehicle
+  with two ordinary weapons whose signed damage-plus-ambient sums give positive, zero and
+  negative mean weapon damage in separate runs (S-0308 claim 15). Keep the weapon being
+  attempted unchanged while changing only the other weapon's contribution. Attempt forced
+  attacks on an own hidden target, and attacks on allied and enemy targets, with and without
+  the firer's own sensor coverage; repeat each case three times. Where target selection is
+  unavailable, assign the target before cloaking and record target loss separately rather than
+  treating it as a firing refusal.
+  Expected: without sensing, no shot at the hidden own or allied target when the mean is
+  positive, and no shot at a hidden enemy whatever its sign. A nonpositive mean permits the
+  own or allied attempt if no other restriction holds. Sensing removes this refusal. Record
+  shot ticks, target retention and health changes by tick-labelled capture and a read-only
+  recorder. Falsified by a shot in a refused case or by a refusal that follows the unchanged
+  attempted weapon rather than the changed mean. A lost target makes that trial inconclusive.
+  Repeat with a building cloaking inside its own field: the refusal starts at fade level 11,
+  not only at level 15 (S-0516 claim 18).
 
 **F16. Delays at the edges.**
 - Setup: test rules file; a single-shot vehicle weapon, a target of high strength in range.
