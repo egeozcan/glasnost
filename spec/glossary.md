@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 35
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -63,7 +63,7 @@ not rules for implementing them.
   draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are approved. S-0503,
   S-0507, S-0511, S-0512, S-0513, S-0516, S-0522 and S-0524 are approved.
   S-0508, S-0509, S-0510, S-0515, S-0502, S-0514, S-0517 and S-0525 are approved.
-  S-0518, S-0519 and S-0520 are drafts in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
+  S-0603, S-0605, S-0606 and S-0607 are drafts in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
   change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
@@ -762,10 +762,11 @@ open-topped flag (S-0507 claim 14). Its passengers fire from inside it. S-0203 c
 their place in the update order; S-0507 claim 15 owns position and target hand-down, and
 S-0307, S-0308, S-0311 and S-0313 own its combat effects in their topics.
 
-**passenger order, position 1.** The order in which a transport holds its passengers.
-Boarding places a passenger at position 1, and passengers leave from that position, so the
-order is last-in first-out. A failed exit puts the passenger back at position 1
-(S-0507 claims 3 and 10).
+**passenger order, position 1.** The order in which a transport or absorbing building holds
+its passengers, most recent first. For a transport, boarding places a passenger at position 1,
+and passengers leave from there; a failed exit puts the passenger back there
+(S-0507 claims 3 and 10). For an absorbing building, each entrant becomes the front passenger
+and every release takes from the front (S-0605 claims 7, 8 and 11 to 14).
 
 **per-mille (‰).** An integer ratio where 1000 means a factor of 1.0.
 
@@ -1398,6 +1399,9 @@ S-0307 owns the term and its effects on approach-position searches (Terms, claim
 S-0215 uses the same flag for infantry in its close-range delay shortening (Formulas F3),
 whose separate weapon-range condition does not require the flag.
 
+**consumption.** The moment a recycling building takes in an entrant and removes it from the
+game: a removal, not a destruction. S-0603 claims 5 to 11 own the event and its effects.
+
 **current weapon.** The weapon in the slot of an object's weapon number when its type is a
 multi-weapon type, and the weapon in its slot 0 otherwise. See S-0309 (Terms), with S-0308 for
 the weapon number; S-0312 uses it.
@@ -1435,6 +1439,13 @@ passes. S-0302 turns each resulting *hit* into a health change.
 a *grappling parasite*; every other parasite is a *drone parasite*. S-0614 claims 6 and 10
 own their deliveries: drones use their weapon's rate of fire, grapplers a fixed strike
 cycle. S-0614 claim 11 owns a grappler's cull.
+
+**drop, dropped unit, dropper, dropper house.** In magnetic lift, a grip ending at a height
+above the surface of at least 1 lepton drops the gripped unit. It records the lifter as its
+dropper and the lifter's house as its dropper house for fall credit. S-0607 claims 13 and 14
+own the drop and those references; claims 17 and 18 own when the dropped state ends.
+Claim 9 gives the no-destination exception, which sets the unit down without a drop.
+This is distinct from a parachute drop or a carrying aircraft's drop attempt.
 
 **elevation level.** Of a cell: its height level, plus 4 height levels when it has the
 *elevation-deck mark*, whether an object stands on the deck or under it. S-0307 owns it
@@ -1490,6 +1501,11 @@ S-0309 and S-0310 give the answers of their own topics, and S-0206 and S-0215 us
 least one occupant is inside. S-0301 (Terms) defines it, and S-0302 (Terms) gives the same
 definition; S-0302, S-0307, S-0308, S-0311 and S-0313 give what it changes in their topics.
 S-0508 claims 1 to 17 own occupation, eviction and loss of occupants.
+
+**grip, lifter, gripped unit.** The link between a seizing firer, the lifter, and the unit it
+pulls, its gripped unit. Each has at most one such partner. A gripped unit is always seized,
+but a seized unit need not remain gripped. S-0607 claims 5 and 12 own making and ending the
+link.
 
 **healer, healer for acquisition.** An object whose *mean weapon damage* is below 0. S-0308 owns
 the mean weapon damage and the test (claim 15, where the object is called a *healer for
@@ -1605,6 +1621,19 @@ rocket-flight movement to a fixed aim point, not an ordinary projectile. S-0506 
 firing pass and a spy plane's overfly. It makes the aircraft not ready to change, subject
 to the spy-plane approach exception of S-0501 claim 31.
 
+**seized.** A unit's state from a successful locomotor seize until it gets its own locomotor
+back. It survives the end of a grip and a drop, and is distinct from parasite-held.
+S-0607 claims 5, 12 and 20 own the state and restoration.
+
+**seizing warhead.** A warhead with the imported locomotor flag, naming a temporary replacement
+for its target's own locomotor. S-0607 claim 1 owns its seizing hit; that spec covers the
+jumpjet replacement, not every possible named locomotor.
+
+**set down.** In magnetic lift, ending a grip at non-positive height above the surface, or a
+seized unit's touchdown at the end of descending flight. Being set down allows restoration
+of its own locomotor under S-0607 claims 13 and 20. Claim 9 also sets down a gripped unit
+given no destination, at any height, without dropping it.
+
 **silent removal.** For a parasite, immediate removal without death effects, wreck,
 survivor, experience or death sound. S-0614 claims 4, 13 and 15 use this outcome; its
 Terms take the definition from S-0315 claim 7. It is removal, not a killing hit.
@@ -1676,7 +1705,8 @@ S-0314 use the terms.
 
 **absorbing building.** A building whose type takes in infantry, vehicles or both as passengers
 that do not come out on their own (S-0312, Terms, *absorbed passengers*). S-0405 names it
-(Terms), and S-0408 (claim 8) uses it.
+(Terms); S-0605 claims 1 to 14 own entry, holding and voluntary release, and S-0408 claim 8
+owns release by sale.
 
 **adjacency.** A building type's adjacency field, in cells, and the placement condition that
 S-0406 builds on it. S-0406 owns both (Terms, claim 4); S-0415 uses the term.
@@ -1702,10 +1732,19 @@ and garrison attempts have the separate outcomes specified by S-0509 claim 1.
 **building ownership change.** A change of a building's owning house, whatever its cause.
 Giving it to the same house has no ownership-change effect (S-0509 claims 12 to 16).
 
+**bunker-eligible vehicle.** A vehicle whose type has the bunkerable and turret flags, that
+has a turret weapon, is not of the hover locomotion class and carries no parasite.
+S-0606 claim 1 owns the test, including which turret weapon is tested.
+
+**bunker link.** The two-way occupancy relation between a tank bunker and its one bunkered
+vehicle. The vehicle is bunkered exactly while it holds this link and is also the bunker's
+contact, not its passenger or garrison occupant. S-0606 claims 6 and 7 own establishing the
+link; claims 12 to 14 own its releases.
+
 **bunkered, tank bunker.** A *tank bunker* is a building that a vehicle can drive into for
-protection, and a vehicle inside one is *bunkered* (S-0206, Terms). S-0301, S-0302, S-0307 and
-S-0309 give what being bunkered changes in their topics; entering and leaving are left to the
-structures specs.
+protection, and a vehicle with a bunker link is *bunkered*. S-0606 claims 1 to 14 own entering,
+the bunkered state and leaving. S-0301, S-0302, S-0307 and S-0309 give what being bunkered
+changes in their topics.
 
 **cell test.** The test that a single cell passes or fails for a building type that is being
 placed. S-0406 owns it (Terms, claim 3); S-0415 (claim 3) uses it for deploying.
@@ -1765,6 +1804,10 @@ timed bomb or an expiring delayed-kill countdown (S-0511 claim 16).
 **inside fallback cell.** The foundation rectangle's cell with the largest x and y, used when
 an eviction allows inside fallback and no exit-ring cell qualifies (S-0508 claim 12).
 
+**link places.** The number of contacts a building can hold at once: max(*d*, 1), where *d*
+is its imported integer dock count. S-0605 claim 3 and F2 own the absorber use.
+S-0603 claim 2 uses it for recycling buildings.
+
 **lost-to-capture mark.** A house mark set when an engineer captures one of its buildings,
 never cleared during the game, and read by trigger event code 3 (S-0509 claim 11).
 
@@ -1790,6 +1833,9 @@ clear an enemy garrison, respectively. A type with both marks is an occupier onl
 **pier.** A bridge tile standing between two spans, in state 0 (intact) to 4 (collapsed), with
 a reference cell and a three-cell column across the bridge (S-0511 claim 6).
 
+**recycling building.** A building whose type turns entering units into credits. S-0214
+names it (Terms); S-0603 claims 1 to 11 own eligibility, consumption and payout.
+
 **smudge footprint.** The rectangle of cells a smudge type covers, starting at its placement
 cell (the *anchor cell*) and extending towards increasing map *x* and *y*. Its width counts cells
 along *x* and its height counts cells along *y*. S-0312 owns the term and the destruction-smudge
@@ -1806,6 +1852,10 @@ and civilian power plant. Their services are owned by the specs indexed in S-051
 **upgrade.** A building type that is added to an existing building instead of standing on its own
 cells, and a building of such a type. S-0405 names it (Terms), and S-0406 owns how it is placed
 (Terms, *upgrade type*, claim 12); S-0407 and S-0408 (claim 5) use it.
+
+**waiting in line.** An actor's standing intention to enter a building once a contact place
+is free. S-0605 claims 3 and 4 own this for absorbing buildings. S-0314 claim 23 owns the
+repair-depot case, which its Terms call *queued entry*.
 
 ### economy
 
@@ -1893,10 +1943,15 @@ aircraft type's dock types are the buildings it
 docks at (S-0404, claim 2; S-0408, Terms). A spec that uses "refinery" or "dock types" in a rule
 says in its Terms which it means.
 
-**refund.** Ambiguous on its own. S-0408 (Terms, claim 1) gives the refund for an object that a
-house sells, S-0404 (claim 6) the refund for a cancelled item, and the two are computed
-differently. S-0415 (Terms, *sale refund*) and S-0416 use them. Where the context does not tell,
-specs write "sale refund" or "cancel refund".
+**recycle payout.** The credits a recycling building's owner receives at a consumption.
+S-0603 claim 8 and F1 own the payout: S-0408 claim 1's refund formula, using each valued
+object's own current owner's factors while paying the building's owner.
+
+**refund.** Ambiguous on its own. S-0408 claim 1 gives the sale refund, S-0404 claim 6 the
+cancel refund, and S-0603 claim 8 the recycle payout. The cancel refund is computed
+differently from a sale refund; the recycle payout uses the sale formula with the ownership
+rules above. S-0415 and S-0416 use the sale and cancel contexts. Where context does not tell,
+specs write "sale refund", "cancel refund" or "recycle payout".
 
 **resource cell, stage of a resource cell.** A *resource cell* is a cell whose overlay type has
 the tiberium flag; its *stage* is its overlay data value, which sets how many *bales* it holds.
