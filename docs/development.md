@@ -280,7 +280,7 @@ Provisional rules of combat, each tied to a request:
 | `combat::damage` (berserk hit), `combat::fire`, `combat::acquire::friendly_exception`, `targeting::berserk` | the berserk code predates S-0610 and follows only S-0302 claim 10 and F3: a berserk hit sets `berserk_until` = now + *T*, read by the halved rearm and the friendly-target exception; `targeting::berserk` is still a seam (always false). Not built yet (S-0610 is wave 2): the firing refusals of berserk weapons (claim 3), dropping the target and queuing *hunt* on going berserk (claim 4), the countdown in the unit's own updates and the *guard* or *hunt* at expiry (claim 5), the order block and other while-berserk rules (claim 6); a hit with *T* ≤ 0 has no effect, which is the off state of `quirks.berserk_zero_duration` rather than its default | none (S-0610, wave 2) |
 | `combat::data` (type immunities) | an absent psychic-weapon or psionics immunity key is *no* for every type, buildings included (S-0302 Import mapping); S-0610 claim 1 gives buildings *yes* | Q-0661 |
 | (garrisons, not built) | nothing reads or resets the garrison occupant index yet; S-0311 Terms reset it whenever occupants leave or are killed, S-0308 claim 13 and S-0313 claim 6 only when the building is emptied | Q-0660 |
-| (gas clouds, not built) | the importer neither creates nor rejects a missing gas-cloud particle system (S-0004 claim 3 creates one, S-0613 claim 1 rejects the rules set) | Q-0662 |
+| `convert::layers` (`finish`) | a missing gas-cloud particle system is created at game start, reading no section (S-0004 claim 3), not rejected as S-0613 claim 1 says; gas clouds are not built | Q-0662 |
 
 ## Simulation (M5a: economy and base building)
 
