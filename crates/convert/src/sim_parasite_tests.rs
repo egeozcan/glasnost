@@ -102,7 +102,7 @@ fn parasite_coverage() {
     }
     assert_eq!(
         row("global:General", "Wake"),
-        (Field, "S-0614, S-0207, S-0312, S-0504".into())
+        (Field, "S-0614, S-0207, S-0312, S-0504, S-0503".into())
     );
     assert_eq!(row("vehicles", "Wake"), (Unsupported, "S-0312".into()));
 }

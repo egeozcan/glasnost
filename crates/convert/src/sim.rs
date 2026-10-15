@@ -2188,3 +2188,7 @@ mod parasite_tests;
 #[cfg(test)]
 #[path = "sim_naval_tests.rs"]
 mod naval_tests;
+
+#[cfg(test)]
+#[path = "sim_hover_tests.rs"]
+mod hover_tests;

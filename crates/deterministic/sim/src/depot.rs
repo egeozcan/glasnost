@@ -860,8 +860,8 @@ pub fn destination_given(w: &mut World, id: ObjectId) {
 }
 
 /// Whether a vehicle's locomotor is switched off by a depot's settling step
-/// (S-0314 claims 21 and 22). A seam for the hovering locomotor of S-0503:
-/// a hovering vehicle with its locomotor switched off cannot move
+/// (S-0314 claims 21 and 22). The hovering locomotor of S-0503 asks it
+/// (`hover::tick`): a hovering vehicle with its locomotor switched off cannot move
 /// (`quirks.depot_loss_strands_hover`); no such effect was found for other
 /// land locomotors, so the driving and ship locomotors ignore it.
 pub fn locomotor_off(w: &World, id: ObjectId) -> bool {

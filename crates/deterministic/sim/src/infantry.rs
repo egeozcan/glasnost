@@ -268,6 +268,8 @@ pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>)
     crate::teleport::take_destination(w, id);
     // spec: S-0314 claim 22 (a destination given while a depot or tank bunker occupies the cell switches the locomotor on)
     crate::depot::destination_given(w, id);
+    // spec: S-0503 claim 4 (the hovering locomotor takes a move: ρ = 1 when powered and not moving now)
+    crate::hover::take_destination(w, id);
     let Some(o) = w.obj(id) else { return };
     // spec: S-0107 claim 15 (clearing a destination makes no request)
     let Some(new) = o.dest else { return };

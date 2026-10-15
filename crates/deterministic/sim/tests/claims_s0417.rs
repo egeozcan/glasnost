@@ -801,3 +801,54 @@ fn edge_illegal_apron() {
         assert!(!release::tethered(&w, tank));
     }
 }
+
+// spec: S-0417 claim 5 (a hovering vehicle gets the destination (x0 + 4, y0 + 1) and moves by its own locomotor); S-0503 claim 4 (ρ = ½ after the exit instruction, kept until a listed reset); Q-0693 (interim: an arrival at a heading point is a cell-arrival update, so the factory gets its clear report and closes)
+#[test]
+fn hover_exit_reports_clear_and_factory_closes() {
+    let mut r = ruleset_with([3, 2]);
+    let hover = glasnost_rules::sim::UnitType {
+        locomotion_class: Some(glasnost_rules::sim::LocomotionClass::Hover),
+        locomotor: Some(glasnost_rules::sim::Locomotor::Hover),
+        ..wheel(700)
+    };
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("HOVR".into());
+    r.sim.vehicles.insert("HOVR".into(), hover);
+    let mut w = game(&r);
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let c = top_left(&w, k);
+    let h = new_unit(&mut w, Kind::Vehicle, "HOVR");
+    assert_eq!(release::release(&mut w, k, h), Outcome::Released);
+    let half = glasnost_sim::consts::HALF;
+    let mut sent = false;
+    let mut half_seen = false;
+    let mut report = false;
+    for _ in 0..1500 {
+        step(&mut w);
+        let u = w.obj(h).unwrap();
+        let dest = Some(Target::Cell(CellXY::new(c.x + 4, c.y + 1)));
+        if u.dest == dest {
+            sent = true;
+        }
+        if sent && u.hover.as_ref().unwrap().rho == half {
+            half_seen = true;
+        }
+        report |= u.contact.is_none();
+        let o = w.obj(k).unwrap();
+        if report && o.beh.current == Some(Behaviour::Guard) && o.beh.gate.door == Door::Closed {
+            break;
+        }
+    }
+    assert!(sent, "sent to (x0 + 4, y0 + 1)");
+    assert!(half_seen, "ρ = ½ after the exit instruction");
+    assert!(report, "the hover reports clear");
+    let o = w.obj(k).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "the factory closes");
+    assert_eq!(o.beh.gate.door, Door::Closed);
+    assert!(!release::tethered(&w, h));
+    // A second hover can leave after it.
+    let h2 = new_unit(&mut w, Kind::Vehicle, "HOVR");
+    assert_eq!(release::release(&mut w, k, h2), Outcome::Released);
+}

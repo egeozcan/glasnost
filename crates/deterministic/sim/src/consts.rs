@@ -59,6 +59,16 @@ pub const WALK_C2: F64 = F64(0xbf19_222d_989f_5e57);
 // spec: S-0208 F3 (`quirks.table_direction` off: −2π / 65536)
 pub const WALK_C: F64 = F64(0xbf19_21fb_5444_2d18);
 
+/// 2π of S-0503 F6's bob term: the double nearest 2π (Q-0690 interim, as
+/// S-0306 F7 forms it).
+// spec: S-0503 F6 (sin(ϱ × 2π / Pᵈ)); Q-0690 (interim: the double nearest 2π)
+pub const TWO_PI: F64 = F64(0x4019_21fb_5444_2d18);
+
+/// *m* = 1.1 of S-0503 F6 for an even object number: the double nearest 1.1
+/// (Q-0690 interim).
+// spec: S-0503 F6 (m = 1.1 for an even object number); Q-0690 (interim: the double nearest 1.1)
+pub const EVEN_BOB_FACTOR: F64 = F64(0x3ff1_9999_9999_999a);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +117,21 @@ mod tests {
         assert_eq!(WALK_C, nearest_double("-0.00009587379924285257"));
         assert_eq!(HALF, dec("0.5"));
         assert_eq!(THREE_QUARTERS, dec("0.75"));
+    }
+
+    // spec: S-0503 F6 (2π and m = 1.1 as the doubles nearest them, Q-0690 interim)
+    #[test]
+    fn hover_bob_constants() {
+        assert_eq!(
+            TWO_PI,
+            nearest_double("6.28318530717958647692528676655900576839")
+        );
+        assert_eq!(EVEN_BOB_FACTOR, nearest_double("1.1"));
+        // The same 2π as S-0306 F7's: four times the double-precision π/2.
+        let (c1, _) = glasnost_num::geom::direction_constants();
+        assert_eq!(
+            TWO_PI,
+            c1.mul(F64::from_i64(4, Rounding::TowardZero), Rounding::TowardZero)
+        );
     }
 }

@@ -256,6 +256,7 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             let kind = w.obj(actor).map(|ob| ob.kind);
             if kind == Some(Kind::Vehicle) {
                 crate::drive::stop(w, actor);
+                crate::hover::stop_order(w, actor);
                 if crate::econ::slaves::is_master(w, actor)
                     && !w.obj(actor).is_some_and(|ob| {
                         matches!(

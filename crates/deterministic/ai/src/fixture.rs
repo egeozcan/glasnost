@@ -19,6 +19,8 @@
 //! - Naval: NAVY (naval yard, 3 × 3, needs FACT) and BOAT (a gunboat with
 //!   the ship locomotor, float class and water zone); water is open only
 //!   to the float, hover and amphibious classes, ground closed to float.
+//! - Hover: HOVR (a gun hovercraft with the hovering locomotor and class
+//!   and the amphibious zone, built at FACT once NAVY and LAB stand; S-0503).
 //! - Map: a flat clear square of side [`SIZE`] (cell coordinates 0 … 2·SIZE
 //!   on both axes), start waypoints 0 and 1 on opposite sides of the
 //!   middle, and an ore field beside each; [`map_diagonal`] puts the starts
@@ -199,12 +201,25 @@ pub fn ruleset() -> Ruleset {
     boat.weight = dec("4");
     boat.combat.naval = Some(true);
     boat.combat.primary_fire_flh = Some([90, 0, 70]);
+    // A hovercraft (S-0503): the hovering locomotor and class, the
+    // amphibious movement zone, built at the land vehicle factory once the
+    // house has a naval yard (so only on maps with water) and a LAB (so the
+    // naval game still reaches its launchers before hovers join the army).
+    let mut hovr = vehicle(350, 8, 800);
+    hovr.econ.prerequisite = Some(vec!["NAVY".into(), "LAB".into()]);
+    hovr.locomotion_class = Some(LocomotionClass::Hover);
+    hovr.locomotor = Some(Locomotor::Hover);
+    hovr.movement_zone = Some(MovementZone::Amphibious);
+    hovr.primary = Some("Gun".into());
+    hovr.turret = Some(true);
+    hovr.combat.primary_fire_flh = Some([80, 0, 60]);
     for (n, u) in [
         ("MCV", mcv),
         ("MINR", minr),
         ("GUNR", gunr),
         ("LNCH", lnch),
         ("BOAT", boat),
+        ("HOVR", hovr),
     ] {
         r.sim.vehicles.insert(n.into(), u);
         push(&mut r, "vehicles", n);

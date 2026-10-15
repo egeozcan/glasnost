@@ -118,6 +118,7 @@ pub fn between_steps_or_chain(w: &World, id: ObjectId) -> bool {
     w.obj(id)
         .and_then(|o| o.drive.as_ref())
         .is_some_and(|d| d.between_steps)
+        || crate::hover::between_steps(w, id)
         || at_chain_point(w, id)
 }
 
@@ -145,6 +146,12 @@ pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
 /// Releases every vehicle-present claim of a vehicle.
 pub fn release_claims(w: &mut World, id: ObjectId) {
     let claims: Vec<(CellXY, Layer)> = match w.obj(id) {
+        // spec: S-0209 claim 1 and S-0503 claim 6 (a hovering vehicle clears the flags it set; their moments are Q-0691's interim rule)
+        Some(o) if o.hover.is_some() => o
+            .hover
+            .as_ref()
+            .map(|h| h.claims.clone())
+            .unwrap_or_default(),
         // spec: S-0209 claim 1 (a vehicle taken out of a cell's list while between steps clears that cell's flag; one without the driving locomotor never advanced)
         // spec: S-0207 claim 20 (a) and (e) (a teleporting vehicle's mark is on the cell of its landing point until the jump, in its reservation record; after it, the remembered reservation and any deck mark)
         Some(o) if o.drive.is_none() && o.kind == Kind::Vehicle => {
@@ -163,6 +170,9 @@ pub fn release_claims(w: &mut World, id: ObjectId) {
     if let Some(o) = w.obj_mut(id) {
         if let Some(d) = o.drive.as_mut() {
             d.claims.clear();
+        }
+        if let Some(h) = o.hover.as_mut() {
+            h.claims.clear();
         }
         if let Some(t) = o.teleport.as_mut() {
             // The released records are no longer held.
@@ -327,10 +337,19 @@ fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
 /// Progress per tick s (S-0207 claim 2, F2), with the speed fraction the
 /// vehicle holds now.
 pub(crate) fn progress(w: &World, id: ObjectId, u: &UnitRules) -> i32 {
+    let rho = w
+        .obj(id)
+        .and_then(|o| o.drive.as_ref())
+        .map_or(F64::ZERO, |d| d.rho);
+    progress_with(w, id, u, rho)
+}
+
+/// Progress per tick s (S-0207 claim 2, F2) with the speed fraction `rho`;
+/// the hovering locomotor's *s* (S-0503 claim 4) uses its own ρ.
+pub(crate) fn progress_with(w: &World, id: ObjectId, u: &UnitRules, rho: F64) -> i32 {
     let r = w.rules();
     let mode = r.mode;
     let Some(o) = w.obj(id) else { return 0 };
-    let rho = o.drive.as_ref().map_or(F64::ZERO, |d| d.rho);
     let kappa = o
         .owner
         .and_then(|h| r.countries.get(w.houses[usize::from(h.0)].country as usize))
@@ -420,7 +439,7 @@ fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
 }
 
 /// The cell one step from `c` in step direction `d`.
-fn neighbour(c: CellXY, d: u8) -> CellXY {
+pub(crate) fn neighbour(c: CellXY, d: u8) -> CellXY {
     let (dx, dy) = STEPS[usize::from(d % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
     CellXY::new(c.x + dx, c.y + dy)
 }
@@ -744,7 +763,7 @@ fn wait(w: &mut World, id: ObjectId) {
 }
 
 /// Discards the stored path.
-fn discard_path(w: &mut World, id: ObjectId) {
+pub(crate) fn discard_path(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.clear();
     }
@@ -810,7 +829,8 @@ fn first_cell_look(w: &mut World, id: ObjectId, u: &UnitRules) {
     if u.train || checked_outcome(w, id, u, here, cell) != Outcome::StationaryFriendly {
         return;
     }
-    let Some(near) = nearest_object(w, id, cell) else {
+    // spec: S-0207 claim 15 (the deck layer when z > H + 208 in exact integer leptons)
+    let Some(near) = nearest_object(w, id, cell, 208) else {
         return;
     };
     let near_owner = w.obj(near).and_then(|x| x.owner);
@@ -827,18 +847,23 @@ fn first_cell_look(w: &mut World, id: ObjectId, u: &UnitRules) {
 
 /// The nearest object of the look at a new path's first cell `c` (S-0207
 /// claim 15, F8), looked for in the deck layer when the vehicle's world
-/// height is more than 208 leptons above the surface height at the cell's
+/// height is more than `deck_above` leptons (208 for driving, 312 for
+/// hovering, S-0503 claim 12) above the surface height at the cell's
 /// centre, otherwise in the ground layer. Only infantry units, vehicles,
 /// aircraft and buildings take part; each one's distance dₙ is measured
 /// along the map from the top corner of the cell holding its position;
 /// the smallest dₙ wins, ties to the object listed first.
-fn nearest_object(w: &World, id: ObjectId, c: CellXY) -> Option<ObjectId> {
+pub(crate) fn nearest_object(
+    w: &World,
+    id: ObjectId,
+    c: CellXY,
+    deck_above: i32,
+) -> Option<ObjectId> {
     let o = w.obj(id)?;
     let cx = 256 * c.x + 128; // spec: S-0204 claim 3 (a cell centre: (256x + 128, 256y + 128))
     let cy = 256 * c.y + 128; // spec: S-0204 claim 3 (a cell centre)
     let h = w.surface_at(cx, cy);
-    // spec: S-0207 claim 15 (the deck layer when z > H + 208 in exact integer leptons)
-    let layer = if o.pos.z > h + 208 {
+    let layer = if o.pos.z > h + deck_above {
         Layer::Deck
     } else {
         Layer::Ground
@@ -881,7 +906,7 @@ pub fn nearest_distance(w: &World, x: i32, y: i32) -> u64 {
 
 /// The give-up test of S-0207 F7; `contact` adds the condition that the
 /// vehicle is in contact with nothing.
-fn give_up_test(w: &World, id: ObjectId, contact: bool) -> bool {
+pub(crate) fn give_up_test(w: &World, id: ObjectId, contact: bool) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let r = w.rules();
     let Some(dest) = path::heading_point(w, id) else {
@@ -910,7 +935,7 @@ fn give_up_test(w: &World, id: ObjectId, contact: bool) -> bool {
 /// Giving up the move (S-0207 Terms): no track on this tick; with approach
 /// destinations it stops and falls back to rest (S-0215 claim 13),
 /// otherwise its destination is removed.
-fn give_up(w: &mut World, id: ObjectId) {
+pub(crate) fn give_up(w: &mut World, id: ObjectId) {
     let approach = w.obj(id).is_some_and(|o| !o.queued_dests.is_empty());
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.clear();
@@ -930,7 +955,7 @@ fn give_up(w: &mut World, id: ObjectId) {
 /// The scatter request of a blocked vehicle (S-0207 claim 15): no threat
 /// point, forced and move-anywhere, to every object listed in the cell layer
 /// it drives on.
-fn request_scatter(w: &mut World, id: ObjectId, c: CellXY) {
+pub(crate) fn request_scatter(w: &mut World, id: ObjectId, c: CellXY) {
     let Some(o) = w.obj(id) else { return };
     let deck = w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
     let cell_level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
@@ -945,10 +970,14 @@ fn request_scatter(w: &mut World, id: ObjectId, c: CellXY) {
     if !w.rules().quirks.drive_duplicate_scatter_request {
         // spec: S-0207 Edge cases (quirks.drive_duplicate_scatter_request off: of one vehicle's requests to the same cell and layer in a tick only the earliest is sent)
         let tick = w.tick;
-        let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) else {
-            return;
+        let Some(o) = w.obj_mut(id) else { return };
+        // A hovering vehicle keeps its own record of the tick's requests (S-0503 claim 12).
+        let requests = match (o.drive.as_mut(), o.hover.as_mut()) {
+            (Some(d), _) => &mut d.requests,
+            (None, Some(h)) => &mut h.requests,
+            (None, None) => return,
         };
-        let sent = d.requests.get_or_insert_with(|| (tick, Vec::new()));
+        let sent = requests.get_or_insert_with(|| (tick, Vec::new()));
         if sent.0 != tick {
             *sent = (tick, Vec::new());
         }
@@ -974,7 +1003,7 @@ fn request_scatter(w: &mut World, id: ObjectId, c: CellXY) {
 /// vehicle's house is not allied with it, else, with no object listed, the
 /// cell's wall whatever its owner. It attacks by an override (S-0215 claim
 /// 10).
-fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
+pub(crate) fn attack_obstacle(w: &mut World, id: ObjectId, c: CellXY) {
     let Some(o) = w.obj(id).cloned() else { return };
     let r = w.rules_arc();
     let reference = occupancy::reference_level(w, id);
@@ -1063,9 +1092,9 @@ fn crush_mode(w: &World, id: ObjectId, u: &UnitRules, first: CellXY, second: Cel
     overlay_crush(second, true) || second_vehicle || overlay_crush(first, true)
 }
 
-/// A driving unit's next step is blocked by a moving blocker (S-0212 claim
-/// 22, S-0207 table T4).
-fn blocked_step(w: &mut World, id: ObjectId) {
+/// A driving, ship or hovering unit's next step is blocked by a moving
+/// blocker (S-0212 claim 22, S-0207 table T4, S-0503 table T1).
+pub(crate) fn blocked_step(w: &mut World, id: ObjectId) {
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else { return };
     let since = o.path.blocked_since.unwrap_or(t);

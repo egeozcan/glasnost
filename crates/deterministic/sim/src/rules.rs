@@ -66,6 +66,8 @@ pub enum Locomotor {
     Rocket,
     /// The ship locomotor of a vehicle (S-0504 Terms).
     Ship,
+    /// The hovering locomotor of a vehicle (S-0503 Terms).
+    Hover,
     /// Not moved in M3: every other locomotor, and a locomotor on a kind
     /// whose movement with it no spec gives (S-0207 Open questions).
     None,
@@ -503,6 +505,25 @@ pub struct GateTypes {
     pub tower: Option<u32>,
 }
 
+/// The hovering locomotor's game-wide values (S-0503 Import mapping).
+#[derive(Clone, Copy, Debug)]
+pub struct HoverRules {
+    /// The hover height field *H*ₕ, leptons (F6).
+    pub height: i32,
+    /// The bob field *q*, game minutes (F6).
+    pub bob: F64,
+    /// The boost factor (claim 3).
+    pub boost: F64,
+    /// The acceleration field *a*, game minutes (F2).
+    pub acceleration: F64,
+    /// The brake field *b*, game minutes (F2).
+    pub brake: F64,
+    /// The dampen field *k* (F6).
+    pub dampen: F64,
+    /// Gravity *g*, leptons per tick² (F6).
+    pub gravity: i32,
+}
+
 /// Game-wide values.
 #[derive(Clone, Copy, Debug)]
 pub struct GeneralRules {
@@ -567,6 +588,8 @@ pub struct GeneralRules {
     /// The engineer-capture health ratio c (S-0214 row I7), single
     /// precision widened.
     pub engineer_capture: F64,
+    /// The hovering locomotor's game-wide values (S-0503 Import mapping).
+    pub hover: HoverRules,
 }
 
 /// The behaviours of S-0215 table T1, in our order.
@@ -964,6 +987,22 @@ impl SimRules {
                 .engineer_capture_level
                 .as_ref()
                 .map_or(one, |d| d.single_value(mode)),
+            hover: HoverRules {
+                // spec: S-0503 Import mapping (HoverHeight absent: engine default 120 leptons)
+                height: g.hover_height.unwrap_or(120),
+                // spec: S-0503 Import mapping (HoverBob absent: 30.0; read as the key text, Q-0690)
+                bob: dec(&g.hover_bob, mode).unwrap_or_else(|| constant("30.0")),
+                // spec: S-0503 Import mapping (HoverBoost absent: 1.3; read as the key text, Q-0690)
+                boost: dec(&g.hover_boost, mode).unwrap_or_else(|| constant("1.3")),
+                // spec: S-0503 Import mapping (HoverAcceleration absent: 0.03; read as the key text, Q-0690)
+                acceleration: dec(&g.hover_acceleration, mode).unwrap_or_else(|| constant("0.03")),
+                // spec: S-0503 Import mapping (HoverBrake absent: 0.03; read as the key text, Q-0690)
+                brake: dec(&g.hover_brake, mode).unwrap_or_else(|| constant("0.03")),
+                // spec: S-0503 Import mapping (HoverDampen absent: 0.8; read as the key text, Q-0690)
+                dampen: dec(&g.hover_dampen, mode).unwrap_or_else(|| constant("0.8")),
+                // spec: S-0503 Import mapping and S-0306 Constants (Gravity absent: 3 leptons per tick²)
+                gravity: g.gravity.unwrap_or(3),
+            },
         };
         // spec: S-0211 claim 2 (start-up row: M = 0 for all eight classes, not buildable)
         let mut land = [LandRules {
@@ -1331,6 +1370,8 @@ fn unit_rules(
         (Kind::Aircraft, rs::Locomotor::Rocket) => Locomotor::Rocket,
         // spec: S-0504 Terms (a ship: a vehicle with the ship locomotor)
         (Kind::Vehicle, rs::Locomotor::Ship) => Locomotor::Ship,
+        // spec: S-0503 Terms and claim 1 (a hovering vehicle: a vehicle with the hovering locomotor; the locomotor alone chooses the model)
+        (Kind::Vehicle, rs::Locomotor::Hover) => Locomotor::Hover,
         _ => Locomotor::None,
     };
     let cells = |d: &Option<Decimal>| -> i32 {

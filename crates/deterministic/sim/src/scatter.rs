@@ -187,8 +187,10 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     let d = o.body.turning(t);
     // spec: S-0207 claim 16 (e): a destination and a request that is not move-anywhere
     let e = o.dest.is_some() && !req.anywhere;
-    // spec: S-0207 claim 16 (f) and (g): deployed, deploying or undeploying, and a locomotor switched off, have no state in M3
-    let (f, g) = (false, false);
+    // spec: S-0207 claim 16 (f): deployed, deploying or undeploying have no state yet
+    let f = false;
+    // spec: S-0207 claim 16 (g): a locomotor switched off (S-0503 claim 10, the hovering locomotor's)
+    let g = crate::hover::switched_off(w, id);
     if a || b || c || d || e || f || g {
         return false;
     }
@@ -197,7 +199,10 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
         .drive
         .as_ref()
         .and_then(|d| d.track.as_ref())
-        .map_or(o.pos.cell(), |t| t.target_cell);
+        .map(|t| t.target_cell)
+        // spec: S-0207 Terms (the vehicle scatter centre cell: a hovering vehicle's heading point's cell, S-0503 Terms)
+        .or_else(|| crate::hover::heading_cell(w, id))
+        .unwrap_or(o.pos.cell());
     let Some(threat) = req.threat else {
         // spec: S-0207 claim 16 (no threat point: no draw; the nearby-cell search's cell; behaviours unchanged)
         crate::regions::ensure(w);

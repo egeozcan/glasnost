@@ -1405,6 +1405,8 @@ fn send_out(w: &mut World, k: ObjectId, u: ObjectId) {
         // spec: S-0417 claims 5 and 6 and Constants (after the exit instruction K sets the speed fraction to 0.5)
         d.rho = crate::consts::HALF;
     }
+    // spec: S-0417 claims 5 and 6 (a hovering vehicle's speed fraction is set to 0.5 too); S-0503 claim 4 (it persists until a listed event)
+    crate::hover::set_exit_fraction(w, u);
 }
 
 /// Gives a tunnelling or teleporting vehicle driving locomotion for its

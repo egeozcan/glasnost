@@ -239,6 +239,9 @@ pub struct Object {
     /// Naval state of a vessel (S-0504).
     #[serde(default)]
     pub naval: Option<crate::naval::NavalState>,
+    /// Hover state of a vehicle with the hovering locomotor (S-0503).
+    #[serde(default)]
+    pub hover: Option<crate::hover::HoverState>,
     /// The crush-slowdown state (S-0210 claim 9).
     pub crush_slowdown: bool,
     /// Tick at which the targeting timer has run out (S-0215 claim 33).

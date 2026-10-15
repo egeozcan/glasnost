@@ -1293,15 +1293,15 @@ pub struct Quirks {
     // spec: S-0507 Edge cases
     #[serde(default = "on")]
     pub unload_failed_exit_gunner_handover: bool,
-    /// A braking step is floored at 0 and can cross below a positive goal; off: floored at the goal. Not implemented yet (wave 2).
+    /// A braking step is floored at 0 and can cross below a positive goal; off: floored at the goal.
     // spec: S-0503 F2, Edge cases
     #[serde(default = "on")]
     pub hover_brake_undershoot: bool,
-    /// A next heading point gains 416 leptons whenever the vehicle is 312 or more above its terrain, bridge or not; off: a high-bridge cell is needed too. Not implemented yet (wave 2).
+    /// A next heading point gains 416 leptons whenever the vehicle is 312 or more above its terrain, bridge or not; off: a high-bridge cell is needed too.
     // spec: S-0503 Edge cases
     #[serde(default = "on")]
     pub hover_elevated_heading_point: bool,
-    /// A zero step length while heading exactly at the heading point sets the throttle and fraction to 1 at once; off: no reset. Not implemented yet (wave 2).
+    /// A zero step length while heading exactly at the heading point sets the throttle and fraction to 1 at once; off: no reset.
     // spec: S-0503 Edge cases
     #[serde(default = "on")]
     pub hover_stalled_start_reset: bool,
@@ -1405,7 +1405,7 @@ pub struct Quirks {
     // spec: S-0314 claim 22 and Edge cases; S-0504 claim 14
     #[serde(default = "on")]
     pub depot_loss_leaves_sleep: bool,
-    /// A hovering vehicle whose depot is sold or destroyed after settling keeps its locomotor switched off and never moves again; off: losing contact with a depot switches its locomotor on. The depot cycle keeps the switched-off state (`depot::locomotor_off`); the hovering locomotor (S-0503) is not built yet, so nothing is stranded in play.
+    /// A hovering vehicle whose depot is sold or destroyed after settling keeps its locomotor switched off and never moves again; off: losing contact with a depot switches its locomotor on. The depot cycle keeps the switched-off state (`depot::locomotor_off`), which the hovering locomotor (S-0503) obeys.
     // spec: S-0314 claim 22 and Edge cases
     #[serde(default = "on")]
     pub depot_loss_strands_hover: bool,

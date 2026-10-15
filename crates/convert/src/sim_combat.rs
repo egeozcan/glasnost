@@ -702,7 +702,7 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         GENERAL,
         "Wake",
         Ref(Kind::Animations),
-        "S-0614, S-0207, S-0312, S-0504",
+        "S-0614, S-0207, S-0312, S-0504, S-0503",
     ),
     (
         "splash_list",
@@ -901,7 +901,7 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         Dec,
         "S-0309",
     ),
-    ("gravity", AUDIO_VISUAL, "Gravity", Int, "S-0306"),
+    ("gravity", AUDIO_VISUAL, "Gravity", Int, "S-0306, S-0503"),
     (
         "allied_wall_transparency",
         WALL_MODEL,
@@ -933,6 +933,19 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
     ("iq_repair_sell", IQ, "RepairSell", Int, "S-0314"),
     ("credit_reserve", AI, "CreditReserve", Int, "S-0314"),
     ("iq_sell_back", IQ, "SellBack", Int, "S-0314"),
+    // spec: S-0503 Import mapping (HoverHeight an integer; the other hover keys decimals, read as singles)
+    ("hover_height", GENERAL, "HoverHeight", Int, "S-0503"),
+    ("hover_bob", GENERAL, "HoverBob", Dec, "S-0503"),
+    ("hover_boost", GENERAL, "HoverBoost", Dec, "S-0503"),
+    (
+        "hover_acceleration",
+        GENERAL,
+        "HoverAcceleration",
+        Dec,
+        "S-0503",
+    ),
+    ("hover_brake", GENERAL, "HoverBrake", Dec, "S-0503"),
+    ("hover_dampen", GENERAL, "HoverDampen", Dec, "S-0503"),
 ];
 
 /// The crew types of `[General]` and our field names (S-0312 Import
@@ -2562,6 +2575,19 @@ impl Builder<'_> {
         self.each_int(gravity.as_ref(), |g| g == 0, |_| {
             "[AudioVisual] Gravity is 0: shot speeds and leads of zero-turn-rate projectiles are 0 (S-0306 claim 1)".to_owned()
         });
+        let bob = self.global(GENERAL, "HoverBob");
+        // spec: S-0503 Edge cases (a bob period trunc(m × q × 900) of 0 is taken as 1 tick; the importer warns; m = 1 gives the shorter period)
+        self.each(
+            bob.as_ref(),
+            |v| {
+                decimal_of(v).is_some_and(|q| {
+                    // spec: S-0503 F6 (900 ticks per game minute)
+                    let p = q.mul_rz(&Binary::from_i64(Format::Double, 900), Format::Double);
+                    Exact::of(&p).int == 0
+                })
+            },
+            |v| format!("[General] HoverBob {v} gives a bob period of 0 ticks: our engine takes it as 1 tick, with no bob (S-0503 Edge cases, a departure)"),
+        );
         let step = self.global(GENERAL, "RepairStep");
         // spec: S-0314 Edge cases (a building repair step below 1 is raised to 1; the importer warns)
         self.each_int(step.as_ref(), |s| s < 1, |v| {

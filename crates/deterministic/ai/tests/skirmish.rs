@@ -271,6 +271,12 @@ fn builds_a_navy_on_a_water_map() {
             "house {h} built ships: {m:?}"
         );
     }
+    // S-0503: the hovercraft is army of the land vehicle factory once a
+    // naval yard stands.
+    assert!(
+        most.iter().any(|m| m.get("HOVR").copied().unwrap_or(0) > 0),
+        "a house built a hovercraft: {most:?}"
+    );
     assert!(
         furthest.iter().any(|&d| d > 0),
         "a ship crossed towards the enemy: {furthest:?}"

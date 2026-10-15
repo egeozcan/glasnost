@@ -742,9 +742,27 @@ pub struct General {
     /// `[General] DisabledDisguiseDetectionPercent` (S-0309 claim 25 part g).
     #[serde(default)]
     pub disguise_detection_percent: Option<Vec<i32>>,
-    /// `[AudioVisual] Gravity` (S-0306 Terms).
+    /// `[AudioVisual] Gravity` (S-0306 Terms; *g* of S-0503 F6).
     #[serde(default)]
     pub gravity: Option<i32>,
+    /// `[General] HoverHeight` *H*ₕ, leptons (S-0503 F6).
+    #[serde(default)]
+    pub hover_height: Option<i32>,
+    /// `[General] HoverBob` *q*, game minutes (S-0503 F6).
+    #[serde(default)]
+    pub hover_bob: Option<Decimal>,
+    /// `[General] HoverBoost`, the boost factor (S-0503 claim 3).
+    #[serde(default)]
+    pub hover_boost: Option<Decimal>,
+    /// `[General] HoverAcceleration` *a*, game minutes (S-0503 F2).
+    #[serde(default)]
+    pub hover_acceleration: Option<Decimal>,
+    /// `[General] HoverBrake` *b*, game minutes (S-0503 F2).
+    #[serde(default)]
+    pub hover_brake: Option<Decimal>,
+    /// `[General] HoverDampen` *k* (S-0503 F6).
+    #[serde(default)]
+    pub hover_dampen: Option<Decimal>,
     /// `[WallModel] AlliedWallTransparency` (S-0306 claim 22).
     #[serde(default)]
     pub allied_wall_transparency: Option<bool>,
