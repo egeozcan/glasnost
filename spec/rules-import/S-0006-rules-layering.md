@@ -2,11 +2,11 @@
 id: S-0006
 title: Rules layering
 topic: rules-import
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0006, Q-0007]
 supersedes: []
@@ -86,7 +86,7 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
 
    An entry with no value after its separator, or with only spaces or a comment as its value, is absent: it creates no entry (S-0001, claim 11). In a layer it therefore keeps the held value exactly as a missing key does; it never resets the held value to the key's reset value or engine default. A section whose entries are all absent in this way, or that has no entries, does not exist in that layer (S-0001, claim 12). Claim 5's resets therefore do not apply to it, and a type that reads that layer finds no section there (claim 7).
 
-   Claim 5 lists the exceptions: keys that reset on override, values that are truncated when re-read, and an unset terrain type strength that takes the game-wide tree strength. The terrain strength's −1 is not a "not given" value: it requests that fill rather than keeping the held strength.
+   Claim 5 lists the exceptions: keys that reset on override, values that are truncated or rescaled when re-read, and an unset terrain type strength that takes the game-wide tree strength. The terrain strength's −1 is not a "not given" value: it requests that fill rather than keeping the held strength.
 
    The original's omitted infantry pip fields also drift on repeated section reads, as recorded in claim 5. In our engine both the passenger pip colour and occupant pip image frame keep the held value, with no quirk switch: this is a display-only correction, not another exception to retention (S-0003 claim 16; S-0111 claim 12).
 
@@ -107,7 +107,7 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
    - Backing: `measurable` (scenario A)
    - Confidence: high
 
-5. **Exceptions to keeping the held value.** There are four kinds: keys that reset to a fixed reset value, keys that reset to another key's value, values that are truncated when re-read, and an unset terrain type strength that is filled from a game-wide value.
+5. **Exceptions to keeping the held value.** There are five kinds: keys that reset to a fixed reset value, keys that reset to another key's value, values that are truncated when re-read, a support modifier rescaled when re-read, and an unset terrain type strength that is filled from a game-wide value.
 
    **Keys that reset on override.** In the following places, if a layer contains the section but omits the key, the value goes back to the reset value listed. It does not keep the held value. A reset value is not the key's engine default (Terms); where the two differ, the paragraph on the switch below says which one applies.
 
@@ -135,7 +135,7 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
 
    For the land-type rows, a movement multiplier that is given is capped at 100 %, and one further locomotion class not listed above, winged, is fixed at 100 % whenever a land-type section is read. A land type whose section has never been read has the startup row specified by the movement spec (S-0211 claim 2). Both rules belong to the movement spec (S-0211).
 
-   **The power-up rows.** A crate effect whose entry the power-up section omits gets weight 0 and no animation; its other two values (whether it can appear on water, and its argument) keep the held value. An effect with weight 0 is expected never to be drawn when a crate is picked up (the full crate draw is outside this spec), so a layer whose power-up section lists only some effects is expected to leave every other effect out of the crate draw.
+   **The power-up rows.** A crate effect whose entry the power-up section omits gets weight 0 and no animation; its other two values (whether it can appear on water, and its argument) keep the held value. With a positive weight total and no integer overflow, a zero-weight effect cannot be selected by the weighted draw (S-0520 claim 8). That does not exclude money as the final result: an effect ruled out by the eligibility conditions becomes money, without another selection draw (S-0520 claim 10). Full crate selection and effects belong to S-0520 claims 8 to 13.
 
    **The voxel-animation rows.** These rows apply to the base rules too. The two angular velocities have 0 as their "not given" value (claim 3) and reset to −1 when absent: a layer whose section omits either key sets that key to −1, and a layer whose section gives it as 0 keeps the held value. So the engine default before any reading (0 for the minimum, 10 in the written unit for the maximum), which differs from the reset value, remains only for a voxel animation that reads no section at all, or whose every section that it reads gives that key as 0. The sharing value is yes only when the layer's section gives at least one of the three sharing keys of the Import mapping as yes; otherwise it is no in that layer, whatever an earlier layer gave.
 
@@ -154,6 +154,8 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
 
    **Keys that reset to another key's value.** In every layer that has a section for a type with barrel recoil values (S-0105 draws them for buildings), each of its four barrel recoil values (travel, compress, hold and recover) that the layer omits is set to the turret's corresponding value as it stands after that layer, replacing any barrel value an earlier layer gave. S-0105, claim 27, owns this rule, its consequences and its quirk switch, `quirks.barrel_recoil_layer_reset`.
 
+   **Support modifier rescaled when re-read.** Each rules layer containing the general section re-reads the prism support modifier, even if that section omits its key. With the key absent, the held whole-number percentage is converted to double precision, multiplied by 100 in floating point, then truncated toward zero to a signed 32-bit integer; out-of-domain conversions follow S-0205 claim 7. A layer without the general section leaves it unchanged. Thus merely adding an unrelated general setting can change supported damage. S-0518 claim 16 owns this behaviour and `quirks.prism_modifier_reread_scale` (default on = rescale on omission; off = retain on omission), separately from `quirks.override_resets_keys`. Explicit values follow S-0518 F4 as referenced by claim 16.
+
    **Values truncated when re-read.** A building type's light intensity and its three light tints, and the three extra-light values of the audio-visual settings, are held in thousandths. When a layer contains the section but omits such a key, the held value is not kept: it becomes the value that a written value equal to its whole part would give (S-0104, claim 12), the whole part being the held value in whole units, truncated toward zero. For a held value of *t* thousandths, with *k* = trunc(*t* / 1000), the new value *t*′ is 1000 × *k* for the extra-light values; for the building values it is 1000 × *k* when *k* ≥ 0 and 1000 × *k* + 1 when *k* < 0 (Formulas). This is not a reset to a fixed default. A whole extra-light value, and a whole building value that is not negative, is unchanged. A negative building value loses up to a whole unit at every such layer: a written intensity of −3.0 is held as −2999 thousandths, and a later layer that restates the building without the key makes it −1999. For building types it can happen only in a layer after the one that created the type. For the audio-visual settings, which are game-wide, it happens in every layer that contains that section and omits the key, including the base rules of a later game when they omit it, since the held value then comes from the previous game (claim 10). S-0104, claims 12 and 13, owns these values and their quirk switch, `quirks.reread_truncates_light_values`.
    - Backing, row by row:
      - `measurable`: the warhead row (scenario C); the difficulty firepower multiplier (scenario D1); the difficulty rate-of-fire multiplier (scenario D9, which uses the effect that S-0301, claim 3, gives it); the land-type movement multipliers (scenario D2); the two particle-system rows (scenario D3); the particle row (scenario D5); the empty-named particle type reading a later layer's section with the empty name (scenario D4); the crate-effect weight reset (scenario D6); the voxel-animation angular velocities (scenario D7); the voxel-animation sharing row (scenario D8); and the application of the particle-system, voxel-animation and difficulty rows in the base rules layer (scenario D10).
@@ -166,7 +168,7 @@ Implementation requirements cover skirmish only. Campaign descriptions, includin
      - Which difficulty row a house takes is not decided here. In our engine every house, human or AI, takes the normal row by default (S-0301 and S-0302, claim 3; the glossary's *difficulty skill block*), so for the factors it uses a reset of the normal section matters in every game, and a reset of the easy or difficult section matters only to the optional per-player handicap setting. The original's choice of row by difficulty is set-up behaviour recorded in those claims.
      - The pip-colour omission bug is `measurable` by local AA, with high confidence; retention in our engine is a display-only departure tested against this spec, not an expected original-game result.
      - The terrain-strength fill is `measurable` by local V, with high confidence (S-0102 claim 23).
-     - The barrel and light parts are `measurable` by local W and X, including the negative building light value in P. The anti-air-rate reset is `measurable` by Z, with high confidence (S-0215 claim 21).
+     - The barrel and light parts are `measurable` by local W and X, including the negative building light value in P. The anti-air-rate reset is `measurable` by Z, with high confidence (S-0215 claim 21). The support-modifier rescaling is `measurable` by S-0518 scenario PS7, with high confidence (S-0518 claim 16).
    - Confidence: high that every row of the table resets as listed. Medium for the visible consequence of the parent-country reset, because it depends on where the parent country is used. Medium that the empty-named particle type reads a later layer's section with the empty name: this follows from the general rules of claim 7 and S-0001, claim 6, and was not checked for this type on its own. The barrel and light parts carry the confidence their own specs give; the +1 for a negative building light value was checked separately here, with high confidence. Medium for the visible consequences given for the power-up and voxel-animation rows, which depend on the crate and voxel-animation specs.
 
 6. **Later layers can add types but not remove or reorder them.** A later layer's type lists add new names at the end of each registry. Re-listing an existing name does nothing. Leaving a name out of a later layer's list does not remove the type. Order and indices follow S-0004, claims 2 to 4.
@@ -301,7 +303,7 @@ The layered value *v* of a key *k* in a section *s*, after layers *L₁ … Lₙ
 > | present | “not given” value | held value |
 > | present | absent | reset value |
 >
-> With `quirks.override_resets_keys` off, an absent key in a present section keeps the held value instead of taking its reset value. The held value at the start of layering is the value specified for *v₀* above. The switch does not change the “not given” rule or the separate barrel-recoil and light-value rules.
+> With `quirks.override_resets_keys` off, an absent key in a present section keeps the held value instead of taking its reset value. The held value at the start of layering is the value specified for *v₀* above. The switch does not change the “not given” rule or the separate barrel-recoil, light-value and prism-support-modifier rules.
 >
 > With `quirks.persist_tiberium_overrides` off, every tiberium is rebuilt from the layers at each game start: *v₀* for a tiberium key is the engine default of *k* in every game, whatever earlier games left; a tiberium first named by this game's layers is created in this game, the tiberiums of earlier games are deleted, and so are the tiberiums that only an earlier game's layers or a mission-named file added. The mission-named file does not enter *v₀* of a tiberium either (claim 14). The indices of the tiberiums then follow S-0004, claim 10, as in a session's first game.
 >
@@ -309,7 +311,7 @@ The layered value *v* of a key *k* in a section *s*, after layers *L₁ … Lₙ
 
 For a type section, the layers considered are only those in which the type reads its section (claim 7). For a tiberium, only the layers whose tiberium list has an entry for it count (S-0004, claim 10). Colour definitions follow S-0103 claim 5 instead of this formula: the first definition of a name wins by default (claim 2). The colour-adjustment table follows claims 2 and 12 instead of this formula, and so does the maximum number of players (base rules only). Terrain type strength follows claim 5's unset-strength fill instead: after any layer containing its section, a resulting integer strength of −1 health points becomes that layer's game-wide tree strength. This exact copy uses no arithmetic or rounding.
 
-Layering selects values. Its only arithmetic is the truncation of the light values in claim 5, where *t* is the held value in thousandths, an integer, and *k* = trunc(*t* / 1000) is an integer division rounding toward zero:
+Layering normally selects values. The prism support modifier instead follows S-0518 claim 16: on section-present omission its held integer percentage *h* becomes trunc(*h* × 100), with double-precision multiplication and signed integer conversion toward zero (S-0205 claim 7), unless its separate quirk is off. Explicit values use S-0518 F4 as referenced by claim 16. The light values follow claim 5's truncation, where *t* is the held value in thousandths, an integer, and *k* = trunc(*t* / 1000) is an integer division rounding toward zero:
 
 > *t*′ = 1000 × *k* for the extra-light values. For the building light values, *t*′ = 1000 × *k* when *k* ≥ 0 and *t*′ = 1000 × *k* + 1 when *k* < 0 (the conversion of a written value of S-0104, claim 12, applied to *k* whole units). Units: thousandths.
 
@@ -351,6 +353,7 @@ For the building light values, this formula assumes that S-0104 claim 12 convert
 | key given with its "not given" value (claim 3), section present, any key | layer applied | held value kept |
 | key absent, section present, reset-on-override key | layer applied | value set to its reset value (a fixed value, or the turret's value for a barrel value) |
 | key absent, section present, light value of claim 5 | layer applied | held value cut to a whole unit as claim 5 gives |
+| support modifier absent, general section present | layer applied | held percentage rescaled by 100 under S-0518 claim 16's separate quirk (claim 5) |
 | terrain type section present, strength is −1 after reading the layer's value | layer applied | strength becomes the game-wide tree strength in force in that layer, including any value that layer gives (claim 5; S-0102, claim 23) |
 | section absent | layer applied | everything in it kept |
 | any | program starts | the mode list is read and every listed mode's file contents are fixed for the session as they are then (claims 11 and 13) |
@@ -367,6 +370,7 @@ Observable ordering:
 
 - `quirks.colour_redefinition_ignored`: S-0103 claim 5 owns the colour-definition exception and both switch settings (claim 2).
 - `quirks.override_resets_keys`: claim 5.
+- `quirks.prism_modifier_reread_scale`: S-0518 claim 16 owns the support-modifier exception and both switch settings (claim 5).
 - Pip-colour omission: fixed without a switch as a display-only departure (claim 5); it is not controlled by `quirks.override_resets_keys`.
 - `quirks.persist_global_overrides`: claim 10.
 - `quirks.persist_tiberium_overrides`: claim 10; its effect on a tiberium's starting value is in the Formulas and on the mission-named file in claim 14.
@@ -420,6 +424,7 @@ Keys and sections named in this spec:
 | voxel-animation keys that reset (claim 5) | `MinAngularVelocity`, `MaxAngularVelocity` (−1 when absent); `ShareBodyData`, `ShareTurretData`, `ShareBarrelData`, read as flags with absent = no, and the voxel animation shares another model's data when at least one of them is yes |
 | barrel recoil values that reset to the turret's (S-0105, claim 27) | `BarrelTravel`, `BarrelCompressFrames`, `BarrelHoldFrames`, `BarrelRecoverFrames`, reset to `TurretTravel`, `TurretCompressFrames`, `TurretHoldFrames`, `TurretRecoverFrames` |
 | terrain strength and its game-wide fill (S-0102, claim 23) | `Strength` in a terrain type's section: integer health points, initially −1 (unset). When its section is read and the resulting strength is −1, it takes `[General]` `TreeStrength` as then held, an integer in health points. The latter's absent-key default and persistence are in S-0102, claim 23 |
+| prism support modifier rescaled on re-read (S-0518 claim 16) | `[General]` `PrismSupportModifier`: decimal/percent form, scaled and converted by S-0518 F4. Starting held value 100 whole-number percentage units. Section-present omission rescales the held value by 100 with the separate quirk on; absent section leaves it unchanged |
 | building light values truncated on re-read (S-0104, claim 12) | `LightIntensity`, `LightRedTint`, `LightGreenTint`, `LightBlueTint` in a building type's section |
 | extra-light values truncated on re-read (S-0104, claims 12 and 13) | `ExtraUnitLight`, `ExtraInfantryLight`, `ExtraAircraftLight` in `[AudioVisual]` |
 | mode-list sections, one per mode kind, in reading order (claim 13) | `[Battle]`, `[ManBattle]`, `[Siege]`, `[Unholy]`, `[FreeForAll]`, `[Cooperative]` in `MPModesMD.INI` |
@@ -427,6 +432,8 @@ Keys and sections named in this spec:
 | a mode-list entry (claim 13) | key: the mode number (decimal); value: up to five comma-separated items, name label, tooltip label, game-mode file name, map filter, flag (`false` = off) |
 
 ## Measurement scenarios
+
+The support-modifier exception in claim 5 uses S-0518 scenario PS7: its named maps compare an absent general section, section-present omission and an explicit modifier through supported area-damage input. Its setup, F4/F1 expectations and falsifier apply here; no completed measurement is claimed.
 
 The colour-definition exception in claim 2 uses S-0103 scenario PF: its named map, game-mode and valid language test files re-define the non-player houses' colour with exact and mixed-case names. Its pixel recording, reference-ramp expectation and falsifier apply here; no completed measurement is claimed.
 
@@ -482,10 +489,10 @@ Every scenario runs under the glossary's *measurement setup*, with stock rules, 
 - D5 observable: how the system's particles look and move, from a recording, and whether the game keeps running.
 - D5 expected: the particles differ from the control, because their type has no behaviour.
 - D5 falsified by: particles identical to the control. If the game stops instead, record that: the reset stands, but its visible consequence must be revised.
-- D6 setup: crates turned on in the game options. A test map whose power-up section gives one crate effect only, one whose result is easy to see (for example the money effect), with the same weight as in the base rules, and no other key. Control: a stock map. On each map, a unit picks up 20 crates, one at a time.
+- D6 setup: crates turned on in the game options. A test map whose power-up section gives only the money effect, with its base-rules weight, animation, water flag and argument, and no other key. Keep a counted building and a base unit to prevent S-0520 claim 9's forced-unit override; collect random-content crates on land. Control: a stock map. On each map, a unit picks up 20 crates, one at a time.
 - D6 observable: the effect of each crate (credits gained, a unit added, a speed change and so on), from a recording. This tests weights, not an omitted effect's animation or retained parameters.
-- D6 expected: on the test map every crate gives the listed effect; on the control map other effects appear as well.
-- D6 falsified by: any other effect on the test map. If the given effect never appears either, record that: the reset stands, but the crate spec must say what happens when other conditions rule an effect out.
+- D6 expected: on the test map every crate gives money; the control may also give other effects. A finite control sample containing only money is inconclusive, not a falsifier.
+- D6 falsified by: a non-money effect on the test map with the forced-unit override excluded. For a separate eligibility check, repeat with only the firepower effect listed, retaining its base-rules parameters. Compare an armed collector with firepower multiplier exactly 1.0 to an unarmed collector. Expect the effect for the eligible collector and money for the unarmed one under S-0520 claim 10, even though money has zero selection weight; a different result falsifies that conversion, not by itself the weight reset.
 - D7 setup: check the base rules and choose a voxel animation that gives both angular velocities with values other than −1 and 0 and is easy to cause (for example a piece of debris thrown by a destroyed vehicle). Test map 1 gives its section one unrelated key only. Test map 2 gives both angular velocities as 0. Test map 3 gives both as −1 explicitly. Control: a stock map. Use the same fixed seed and destruction event for each run, matching the debris piece.
 - D7 observable: how fast the piece spins while it flies, read with a recorder that reads the running game's state, or from a recording by counting frames per turn.
 - D7 expected: map 2 equals the control (0 is "not given"); map 1 matches map 3's spin rate (explicit −1), unlike the control.

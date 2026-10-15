@@ -44,7 +44,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 12 | approved | — |
 | [S-0001](rules-import/S-0001-ini-lexical-rules.md) | INI lexical rules | rules-import | 4 | approved | — |
 | [S-0413](simulation/S-0413-country-bonuses.md) | Country bonuses (what each country field does, which spec owns it, and the fields with no effect) | simulation | 4 | approved | — |
-| [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 16 | approved | — |
 | [S-0005](rules-import/S-0005-data-file-precedence.md) | Data file precedence (loose files, archive mount order, name lookup) | rules-import | 8 | approved | — |
 | [S-0014](formats/S-0014-game-font-layout.md) | Game bitmap font file layout | formats | 3 | approved | — |
 | [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 10 | approved | — |
@@ -122,3 +121,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 12 | approved | — |
 | [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 23 | approved | — |
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 20 | approved | — |
+| [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 17 | approved | — |
