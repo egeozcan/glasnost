@@ -267,7 +267,7 @@ fn sell_unit(w: &mut World, house: HouseId, id: ObjectId) {
     // spec: S-0408 claim 11 (removed at once, no animation, no survivors; its house receives the refund)
     crate::objects::remove(w, id);
     credit(w, house, amount);
-    // Q-0702 (interim: a sold transport's passengers are removed with it, in objects::remove)
+    // spec: S-0408 claim 11 and S-0507 claim 16 (a sold transport's remaining passengers die without attacker credit, in objects::remove)
     w.effects.push(Effect::Sound {
         sound: Sound::UnitSold,
         of: Some(t),

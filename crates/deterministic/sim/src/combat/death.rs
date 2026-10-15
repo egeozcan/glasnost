@@ -219,30 +219,12 @@ fn mark_killed(w: &mut World, id: ObjectId) {
 }
 
 /// Takes a dead object out of play (S-0203 claim 6). A transport's
-/// passengers still inside leave with it: they die when it is a vehicle
-/// whose type can crash (S-0312 claim 12, second row: on the ground it
-/// cannot crash), credited to no one (Q-0702 interim: the row names no
-/// credit), and are otherwise removed with it (Q-0702).
+/// passengers still inside die with no attacker credit (S-0507 claim 16):
+/// a crashable vehicle on the ground that cannot crash (S-0312 claim 12,
+/// second row) and an aircraft killed on the ground (S-0312 claim 15)
+/// among others.
 pub fn leave_play(w: &mut World, id: ObjectId) {
-    let crash_row = w.obj(id).is_some_and(|o| {
-        o.kind == Kind::Vehicle
-            && w.rules()
-                .unit(o.kind, o.type_index)
-                .is_some_and(|u| u.vehicle.crashable)
-    });
-    if crash_row && crate::transport::count(w, id) > 0 {
-        let none = Hit {
-            amount: 0,
-            warhead: None,
-            distance: 0,
-            attacker: None,
-            house: None,
-            ignore_defences: false,
-            no_escape: false,
-        };
-        // spec: S-0312 claim 12 (a type that can crash, on the ground: its passengers die when it leaves play)
-        crate::transport::kill_passengers(w, id, &none);
-    }
+    // spec: S-0312 claims 12 and 15 and S-0507 claim 16 (remaining passengers die at removal, without attacker credit)
     crate::transport::remove_passengers(w, id);
     crate::objects::remove(w, id);
 }

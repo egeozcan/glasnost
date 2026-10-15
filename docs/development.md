@@ -570,9 +570,9 @@ S-0507 (transports) is built in `glasnost_sim::transport`. The type fields (`Pas
   3. letting out from position 1, with a two-round exit search;
   4. the kept passenger of a turret count, then *guard*.
   
-  `may_unload` refuses water, bridges, decks, building cells and tunnel cells.
-- **Air transports (claim 13).** `process_air_unload` releases position 1 at its own cell once landed.
-- **Deaths and removal.** `combat::death` and `air` apply S-0312 claims 5, 12 and 16: the passengers die with an exploding or crashing carrier, or get out of a destroyed vehicle. `objects::remove` removes a removed transport's passengers with it.
+  `may_unload` refuses water, bridges, decks, building cells and tunnel cells (`transport::tunnel_cell`: a tunnel-marked cell or a tunnel edge, revision 4's Terms). Map tubes are not imported (`seams::tube_entrance`), so no cell is tunnel-marked yet. An infantry passenger takes S-0208 claim 3's centre-class choice at the serving neighbour; a vehicle passenger takes S-0212 claim 25's nearby search from it.
+- **Air transports (claim 13).** `process_air_unload` runs revision 4's five phases (`transport::air_phase`) in the *unload* progress count: selection, approach, stopped check, release and reselect. Release puts position 1 at the aircraft's exact position, facing the first clear neighbour in the order 4, 5, 3, 7, 1, 0, 6, 2, and queues *move* toward it. `air::replacement_search`, `air::landing_test` and `air::cruise_height` expose S-0501 claim 40's pieces to it.
+- **Deaths and removal.** `combat::death` and `air` apply S-0312 claims 5, 12 and 16: the passengers die with an exploding or crashing carrier, or get out of a destroyed vehicle, which is left out of their entry tests (list entry and vehicle-present flag). `objects::remove` kills a removed transport's remaining passengers without attacker credit (S-0507 claim 16, `transport::remove_passengers`): a sale, an aircraft killed on the ground, a crashable vehicle on the ground and the end of a sinking.
 - **Hooks.**
   - `combat::weapon` gives passengers their weapons (S-0308).
   - `air::passengers` is `transport::count` (S-0501, and the S-0301 empty-carrier answer).
@@ -586,7 +586,7 @@ S-0507 (transports) is built in `glasnost_sim::transport`. The type fields (`Pas
   - the bomb mark (`bomb_marked`, the special-abilities specs);
   - temporal beams (`temporal_hand_back`, S-0514).
   - The paradrop of S-0522 is not built.
-- **Quirks.** `quirks.unload_facing_gap_no_wrap`, `quirks.unload_second_round_skips_rear`, `quirks.unload_failed_exit_gunner_handover` and `quirks.transport_load_truncated` are implemented, each on by default.
+- **Quirks.** `quirks.air_unload_reselects_clear_destination`, `quirks.unload_facing_gap_no_wrap`, `quirks.unload_second_round_skips_rear`, `quirks.unload_failed_exit_gunner_handover` and `quirks.transport_load_truncated` are implemented, each on by default.
 - **Own AI.**
   - The brain ferries idle army infantry in its own transports (`Brain::ferry`). It builds the cheapest suitable type if it has none, and needs an amphibious hover when the goal lies across water.
   - It loads infantry by clicking the transport, drives to land near the goal, and unloads with the deploy click. It uses only orders, through `targeting::click` and `orders::issue`.
@@ -602,20 +602,16 @@ S-0507 (transports) is built in `glasnost_sim::transport`. The type fields (`Pas
 
   There is no deploy cursor with no passengers. A vehicle transport also has none on water, or on a bridge, a deck or a tunnel cell.
 
-  An air transport lets its passengers out once it has landed.
+  An air transport lets its passengers out once it has landed, or once it has stopped in the air with no destination.
 
 Provisional rules of M6b transports, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `transport::put_out` | an infantry unit takes the first free of the five positions, centre first; a vehicle goes to the centre of the serving cell; an air release keeps the transport's facing | Q-0700 |
-| `transport::shore` | the shore search is S-0212 claim 25's nearby-cell search from the transport's cell, for the wheel class in the normal zone, with no reach region | Q-0701 |
-| `transport::removing` | a transport removed without a death rule removes its passengers with it, nested passengers first | Q-0702 |
-| `transport::open_cell` | the occupant of claim 9's alliance test is the cell's infantry house | Q-0703 |
-| `transport::may_unload` | only cells of the tunnel land type refuse; there is no tunnel edge | Q-0704 |
-| `transport::process_air_unload` | an airborne dropship with no destination looks for the landing spot of S-0501 claim 41; otherwise an airborne air transport waits a standard delay while its flight approaches | Q-0705 |
-| `transport::process_unload` | the finished phase ends with the standard delay | Q-0706 |
-| `transport::escape` | the destroyed vehicle is not counted in its passengers' entry test; it is out of its cell's list while they get out | Q-0707 |
+| `transport::release_position` | a vehicle passenger of an air transport is put at the aircraft's exact horizontal position on the surface; an infantry passenger released while the aircraft is above surface height takes the surface choice in the cell below | Q-0672 |
+| `transport::selection` | with map waypoint 700 undefined, the replacement search is centred on cell (0, 0), as S-0011 claim 33's actions take an undefined waypoint | Q-0673 |
+
+The Q-0700 to Q-0707 rows are retired: S-0507 revision 4 answers Q-0700 (claim 10 placement), Q-0701 (claim 8 shore search), Q-0702 (claim 16 removal cleanup), Q-0703 (claim 9 alliance object), Q-0704 (the tunnel edge of Terms and claim 7), Q-0705 (claim 13 phases) and Q-0706 (claim 11 delay, already built), and S-0312 revision 26 answers Q-0707 (claim 12: the dying vehicle is left out of the escape entry tests, now with its vehicle-present flag as well).
 
 ## Own AI (M5b)
 

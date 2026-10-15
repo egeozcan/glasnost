@@ -1001,8 +1001,6 @@ fn firing_spot(w: &mut World, id: ObjectId, tg: Target) -> Option<CellXY> {
 /// Claim 40's destination selection for *move*: the destination retained,
 /// or a replacement cell, with its draws.
 fn move_destination(w: &mut World, id: ObjectId, d: Target) -> Target {
-    let mode = w.rules().mode;
-    let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0501 claim 40 (the cell at the destination's current position)
     let centre = crate::process::target_pos(w, d).cell();
     // spec: S-0501 claim 40 (retained when F7 accepts that cell, compared against the original destination, and the reservation test without self accepts the cell of its heading point)
@@ -1010,6 +1008,16 @@ fn move_destination(w: &mut World, id: ObjectId, d: Target) -> Target {
     {
         return d;
     }
+    // spec: S-0501 claim 40 (failure of all 32 radii retains the original destination)
+    replacement_search(w, id, centre).map_or(d, Target::Cell)
+}
+
+/// Claim 40's replacement-cell search around `centre`: the first cell
+/// accepted, with the search's draws, or `None` when all 32 radii fail.
+/// S-0507 claim 13 uses it around map waypoint 700.
+pub fn replacement_search(w: &mut World, id: ObjectId, centre: CellXY) -> Option<CellXY> {
+    let mode = w.rules().mode;
+    let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0501 claim 40 (radii 0 … 31 cells in increasing order)
     for r in 0..32 {
         // spec: S-0501 claim 40 (one U(0, 7) draw per radius: the first step direction)
@@ -1032,12 +1040,37 @@ fn move_destination(w: &mut World, id: ObjectId, d: Target) -> Target {
                 && landing_cell_ok(w, id, c, Target::Cell(c))
                 && reservation_ok(w, id, c, false)
             {
-                return Target::Cell(c);
+                return Some(c);
             }
         }
     }
-    // spec: S-0501 claim 40 (failure of all 32 radii retains the original destination)
-    d
+    None
+}
+
+/// F7, the landing test of claim 40, for destination `d` of aircraft `id`:
+/// the cell at the destination's current position, with the destination
+/// object used for the competing-aircraft comparison (S-0507 claim 13).
+pub fn landing_test(w: &World, id: ObjectId, d: Target) -> bool {
+    let c = crate::process::target_pos(w, d).cell();
+    landing_cell_ok(w, id, c, d)
+}
+
+/// The type's cruise height in leptons above the terrain (claims 5 and 6).
+pub fn cruise_height(w: &World, id: ObjectId) -> i32 {
+    ty(w, id).map_or(0, |t| t.cruise)
+}
+
+/// Sets aside an aircraft's object-present mark, as S-0507 claim 13's
+/// release does for the occupancy choice; returns whether it had one.
+pub fn set_aside_mark(w: &mut World, id: ObjectId) -> bool {
+    let had = st(w, id).mark.is_some();
+    clear_mark(w, id);
+    had
+}
+
+/// Restores a mark set aside by [`set_aside_mark`].
+pub fn restore_mark(w: &mut World, id: ObjectId) {
+    set_mark(w, id);
 }
 
 /// The landing direction (claim 25): the contact's body facing rounded to

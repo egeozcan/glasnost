@@ -11,12 +11,12 @@
 //! transport's unload phase is its *unload* behaviour's progress count,
 //! which every behaviour start sets to 0, settling (S-0215 claim 3).
 //!
-//! Interim rules tied to requests: where a let-out passenger is put
-//! (Q-0700), the shore search (Q-0701), passengers of a transport that
-//! leaves play without a rule for them (Q-0702), the occupant of claim 9's
-//! alliance test (Q-0703), the tunnel edge of claim 7 (Q-0704), an air
-//! transport's airborne unload (Q-0705) and the delay of the *finished*
-//! phase (Q-0706).
+//! An air transport's unload phase is likewise its *unload* behaviour's
+//! progress count, with [`air_phase`]'s numbering (claim 13).
+//!
+//! Interim rules tied to requests: an air transport's release placement
+//! away from surface height and of a vehicle passenger (Q-0672), and the
+//! replacement centre when map waypoint 700 is undefined (Q-0673).
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -59,6 +59,39 @@ pub mod phase {
     // nocite: our own numbering of table U's four phases, in table order
     pub const FINISHED: i32 = 3;
 }
+
+/// The phases of an air transport's ordinary passenger unloading (claim
+/// 13), kept in its *unload* behaviour's progress count.
+pub mod air_phase {
+    /// Selection, the initial phase.
+    // nocite: our own numbering of claim 13's five phases, in the claim's order (0 is the start value of S-0215 claim 3)
+    pub const SELECTION: i32 = 0;
+    /// Approach.
+    // nocite: our own numbering of claim 13's five phases, in the claim's order
+    pub const APPROACH: i32 = 1;
+    /// Stopped check.
+    // nocite: our own numbering of claim 13's five phases, in the claim's order
+    pub const STOPPED_CHECK: i32 = 2;
+    /// Release.
+    // nocite: our own numbering of claim 13's five phases, in the claim's order
+    pub const RELEASE: i32 = 3;
+    /// Reselect.
+    // nocite: our own numbering of claim 13's five phases, in the claim's order
+    pub const RESELECT: i32 = 4;
+}
+
+/// The step-direction preference of an air transport's release (claim 13).
+// spec: S-0507 claim 13 (step-direction preference 4, 5, 3, 7, 1, 0, 6, 2)
+const RELEASE_ORDER: [usize; 8] = [4, 5, 3, 7, 1, 0, 6, 2];
+/// The facing direction when no release neighbour is clear (claim 13).
+// spec: S-0507 claim 13 (if none is clear, direction 4 supplies the facing)
+const RELEASE_FALLBACK_FACING: usize = 4;
+/// The map waypoint at the centre of claim 13's replacement search.
+// spec: S-0507 claim 13 and Import mapping (map waypoint 700)
+const REPLACEMENT_WAYPOINT: u16 = 700;
+/// The phase delay of claim 13's stopped check and reselect.
+// spec: S-0507 claim 13 (stopped check and reselect return 1 tick)
+const AIR_STEP: i32 = 1;
 
 /// The settling wait (claim 8).
 // spec: S-0507 Constants (settling wait 10 ticks)
@@ -632,8 +665,8 @@ pub fn may_unload(w: &World, t: ObjectId) -> bool {
     let Some(cell) = w.cells.cell(c) else {
         return false;
     };
-    // spec: S-0507 claim 7 (a tunnel cell; Q-0704 interim: only cells of the tunnel land type, no tunnel edge)
-    if cell.land == land::TUNNEL {
+    // spec: S-0507 claim 7 (a tunnel-marked cell or a tunnel edge for unloading, Terms)
+    if tunnel_cell(w, c) {
         return false;
     }
     // spec: S-0507 claim 7 (disabled, or inside a tube)
@@ -667,6 +700,46 @@ pub fn may_unload(w: &World, t: ObjectId) -> bool {
         .iter()
         .any(|&b| w.obj(b).is_some_and(|x| x.kind == Kind::Building) && !tank_bunker(w, b));
     !building
+}
+
+/// Whether cell `c` is tunnel-marked (S-0507 Terms): its land type is
+/// tunnel and it is recorded as the entrance of an existing map tube
+/// (S-0212 claim 7). Tunnel land alone does not qualify.
+pub fn tunnel_marked(w: &World, c: CellXY) -> bool {
+    // spec: S-0507 Terms (tunnel-marked: tunnel land and a recorded tube entrance)
+    w.cells.cell(c).is_some_and(|x| x.land == land::TUNNEL) && crate::seams::tube_entrance(w, c)
+}
+
+/// The tunnel-edge predicate of S-0507 Terms for cell `c`, given which
+/// cells exist and which are tunnel-marked: in map north or map west,
+/// either the first neighbour is marked and the second is not, or the
+/// second is marked and the third is not, every cell of that sequence
+/// through the non-marked cell existing.
+pub fn tunnel_edge(
+    c: CellXY,
+    exists: impl Fn(CellXY) -> bool,
+    marked: impl Fn(CellXY) -> bool,
+) -> bool {
+    // spec: S-0507 Terms (map north and map west only; no south, east or diagonal test)
+    const NORTH: usize = 0; // spec: S-0204 Constants (step direction 0: map north)
+    const WEST: usize = 6; // spec: S-0204 Constants (step direction 6: map west)
+    [NORTH, WEST].iter().any(|&d| {
+        let (dx, dy) = STEPS[d];
+        let at = |k: i32| CellXY::new(c.x + k * dx, c.y + k * dy);
+        // spec: S-0507 Terms (first marked and second not, both existing)
+        let first = exists(at(1)) && exists(at(2)) && marked(at(1)) && !marked(at(2));
+        // spec: S-0507 Terms (second marked and third not, all three existing)
+        let second =
+            exists(at(1)) && exists(at(2)) && exists(at(3)) && marked(at(2)) && !marked(at(3));
+        first || second
+    })
+}
+
+/// Whether cell `c` is a tunnel cell for unloading and deploy readiness:
+/// tunnel-marked, or a tunnel edge (S-0507 claim 7 and Terms; S-0214
+/// Terms *tunnel cell*).
+pub fn tunnel_cell(w: &World, c: CellXY) -> bool {
+    tunnel_marked(w, c) || tunnel_edge(c, |x| w.cells.cell(x).is_some(), |x| tunnel_marked(w, x))
 }
 
 /// S-0214 table VD row VD7: a transport carrying passengers, not on a
@@ -745,8 +818,38 @@ fn open_cell(w: &World, t: ObjectId, c: CellXY) -> bool {
     if (0..POSITIONS).all(|p| rec.taken(p)) {
         return false;
     }
-    // spec: S-0507 claim 9 (the occupant used for the alliance test is allied from the transport owner's side); Q-0703 (interim: the cell's infantry house)
-    rec.house.is_none_or(|h| w.allied(o.owner, Some(h)))
+    // spec: S-0507 claim 9 (the selected object, if any, is allied from the transport owner's side; with none selected the condition passes)
+    alliance_object(w, c).is_none_or(|x| w.obj(x).is_some_and(|x| w.allied(o.owner, x.owner)))
+}
+
+/// The object claim 9's alliance test reads in cell `c`: the ground-layer
+/// infantry unit, vehicle, aircraft or building nearest the cell's top
+/// corner by its within-cell coordinates, ties to the one most recently
+/// added to the layer, a building after mobile objects.
+pub fn alliance_object(w: &World, c: CellXY) -> Option<ObjectId> {
+    let mut best: Option<(ObjectId, u128)> = None;
+    // spec: S-0507 claim 9 (ties favour the most recently added, a building following mobile objects: S-0209 claim 13's list order, non-buildings most recent first, then buildings)
+    for &x in w.cells.list(c, Layer::Ground) {
+        let Some(ob) = w.obj(x) else { continue };
+        // spec: S-0507 claim 9 (an infantry unit, vehicle, aircraft or building; terrain objects supply no owner)
+        if !matches!(
+            ob.kind,
+            Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+        ) {
+            continue;
+        }
+        // spec: S-0507 claim 9 (only the within-cell map coordinates), S-0204 claim 2 (0 … 255 per axis)
+        let (u, v) = (
+            u128::from(ob.pos.x.rem_euclid(256).unsigned_abs()),
+            u128::from(ob.pos.y.rem_euclid(256).unsigned_abs()),
+        );
+        // spec: S-0507 claim 9 (the Euclidean length from the top corner, truncated toward zero to integer leptons; for these exact integer sums the truncated double-precision root is the integer square root)
+        let d = glasnost_num::geom::isqrt(u * u + v * v);
+        if best.is_none_or(|(_, b)| d < b) {
+            best = Some((x, d));
+        }
+    }
+    best.map(|(x, _)| x)
 }
 
 /// Chooses the unloading cell (claim 9, F2): the step direction, or none.
@@ -826,7 +929,7 @@ pub fn process_unload(w: &mut World, t: ObjectId) -> i32 {
                 ob.beh.queue(Some(Behaviour::Guard));
                 ob.beh.allowance = true;
             }
-            // spec: S-0507 table U; Q-0706 (interim: the finished processing ends with the standard delay)
+            // spec: S-0507 claim 11 and table U (the finished processing ends with the standard delay, including its draw; not a 1-tick completion)
             crate::process::standard_delay(w, t)
         }
     }
@@ -845,16 +948,16 @@ fn settle(w: &mut World, t: ObjectId) -> i32 {
         .cell(o.pos.cell())
         .is_some_and(|c| c.land == land::WATER);
     if water && o.dest.is_none() {
-        // spec: S-0507 claim 8 and table U (on water with no destination: a nearby wheeled-standable location as destination; wait 10 ticks); Q-0701 (interim search)
-        if let Some(c) = shore(w, t) {
-            crate::econ::assign_destination(w, t, Some(Target::Cell(c)));
-            // A new destination starts a new path search (S-0212 claim 20).
-            if let Some(ob) = w.obj_mut(t) {
-                ob.path.steps.clear();
-                ob.path.retry_at = 0;
-            }
-            return SETTLE_WAIT;
+        // spec: S-0507 claim 8 and table U (on water with no destination: the nearby-cell search's cell as destination; wait 10 ticks)
+        // spec: S-0507 claim 8 and S-0212 claim 25 (with no result, the placeholder at map cell (0, 0) is still assigned, and the processing does not go on to claim 9)
+        let c = shore(w, t).unwrap_or(CellXY::new(0, 0));
+        crate::econ::assign_destination(w, t, Some(Target::Cell(c)));
+        // A new destination starts a new path search (S-0212 claim 20).
+        if let Some(ob) = w.obj_mut(t) {
+            ob.path.steps.clear();
+            ob.path.retry_at = 0;
         }
+        return SETTLE_WAIT;
     }
     let d = choose_direction(w, t);
     let n = count(w, t);
@@ -887,9 +990,8 @@ fn settle(w: &mut World, t: ObjectId) -> i32 {
     TURN_STEP
 }
 
-/// The shore search of claim 8 (Q-0701 interim): the nearby-cell search
-/// of S-0212 claim 25 from the transport's cell for the wheel class in
-/// zone normal, with no reach region.
+/// The shore search of claim 8: S-0212 claim 25's nearby-cell search from
+/// the transport's cell (its transport shore approach row).
 fn shore(w: &mut World, t: ObjectId) -> Option<CellXY> {
     crate::regions::ensure(w);
     let c = w.obj(t)?.pos.cell();
@@ -897,11 +999,12 @@ fn shore(w: &mut World, t: ObjectId) -> Option<CellXY> {
         w,
         c,
         crate::path::NearbyUse::Settings(crate::path::NearbySettings {
+            // spec: S-0507 claim 8 and S-0212 claim 25 (transport shore approach: wheel, zone normal, no reach region, ground mode, bridges allowed, no height, no-overlay condition or reference cell)
             class: Some(LocomotionClass::Wheel),
             zone: MovementZone::Normal,
             reach: None,
             deck: false,
-            height: true,
+            height: false,
             reference: None,
             no_bridges: false,
             no_overlay: false,
@@ -971,7 +1074,16 @@ fn let_out(w: &mut World, t: ObjectId) -> bool {
             }
         }
     }
-    let placed = exit.is_some_and(|(d, n, dest)| put_out(w, t, p, n, Some((d, dest))));
+    let at = exit.and_then(|(_, n, _)| exit_position(w, p, n));
+    let placed = match (exit, at) {
+        (Some((d, _, dest)), Some(at)) => {
+            // spec: S-0507 claim 10 (P is put on the map facing the exit direction)
+            let facing = (d as i32 * DIRECTION_FACING) as Facing;
+            put_out(w, t, p, at, facing, Some(dest));
+            true
+        }
+        _ => false,
+    };
     if !placed {
         // spec: S-0507 claim 10 (on failure the passenger stays inside at position 1; the next processing tries it again)
         if gunner(w, t) && w.rules().quirks.unload_failed_exit_gunner_handover {
@@ -983,40 +1095,56 @@ fn let_out(w: &mut World, t: ObjectId) -> bool {
     placed
 }
 
-/// Puts passenger `p` of transport `t` on the map in cell `n` (claims 10
-/// and 13; Q-0700 interim placement). With `exit`, the exit direction and
-/// the cell it then moves to. Returns whether it was placed.
-fn put_out(
-    w: &mut World,
-    t: ObjectId,
-    p: ObjectId,
-    n: CellXY,
-    exit: Option<(usize, CellXY)>,
-) -> bool {
-    let Some(po) = w.obj(p).cloned() else {
-        return false;
-    };
-    let Some(to) = w.obj(t).cloned() else {
-        return false;
-    };
-    let layer = Layer::Ground;
+/// Where passenger `p` is put on the map from serving neighbour `n` of a
+/// vehicle transport (claim 10), or `None` when an infantry unit finds no
+/// standing position.
+fn exit_position(w: &mut World, p: ObjectId, n: CellXY) -> Option<Pos> {
+    let po = w.obj(p)?.clone();
     let (x, y) = if po.kind == Kind::Infantry {
-        // spec: S-0507 claim 10 (an infantry unit in a free infantry position of that cell); Q-0700 (interim: the first free of the five positions, centre first, S-0208 table P)
-        let rec = w.cells.occ(n, layer).copied().unwrap_or_default();
-        let Some(k) = (0..POSITIONS).find(|&k| !rec.taken(k)) else {
-            return false;
-        };
+        // spec: S-0507 claim 10 and S-0208 claim 3 (the serving neighbour's centre as desired point: the centre class, one ranged draw over 0 … 3, right/left/bottom preferences; never centre or top; none available is a placement failure)
+        let k = crate::walk::choose_position(
+            w,
+            n,
+            Layer::Ground,
+            crate::cells::position::CENTRE,
+            false,
+        )?;
         let (u, v) = crate::walk::standing_point(k);
         (256 * n.x + u, 256 * n.y + v) // spec: S-0208 table P (a standing position within the cell)
     } else {
-        // spec: S-0507 claim 10 (a vehicle at a nearby location where it can stand, searched from that centre); Q-0700 (interim: the centre of the serving cell)
-        (256 * n.x + 128, 256 * n.y + 128) // spec: S-0207 Terms (a cell's centre: 128 leptons in from its corner)
+        crate::regions::ensure(w);
+        let class = w.rules().unit(po.kind, po.type_index).and_then(|u| u.class);
+        // spec: S-0507 claim 10 and S-0212 claim 25 (vehicle passenger exit: its own class, zone normal, no reach region, ground mode, bridges allowed, no height, no-overlay condition or reference cell)
+        let found = crate::path::nearby(
+            w,
+            n,
+            crate::path::NearbyUse::Settings(crate::path::NearbySettings {
+                class,
+                zone: MovementZone::Normal,
+                reach: None,
+                deck: false,
+                height: false,
+                reference: None,
+                no_bridges: false,
+                no_overlay: false,
+            }),
+        );
+        // spec: S-0507 claim 10 and S-0212 claim 25 (a failed search supplies the placeholder at cell (0, 0), not the serving neighbour's centre)
+        let c = found.unwrap_or(CellXY::new(0, 0));
+        (256 * c.x + 128, 256 * c.y + 128) // spec: S-0507 claim 10 (the selected cell's centre), S-0207 Terms (128 leptons in from its corner)
     };
-    let z = w.surface_at(x, y);
-    // spec: S-0507 claim 10 (facing the exit direction); claim 13 has none, the transport's facing is kept (Q-0700 interim)
-    let facing: Facing = match exit {
-        Some((d, _)) => (d as i32 * DIRECTION_FACING) as Facing,
-        None => to.body.value(w.tick),
+    // spec: S-0507 claim 10 (placement puts it on the surface: world height 0 adjusted by normal placement)
+    Some(Pos::new(x, y, w.surface_at(x, y)))
+}
+
+/// Puts passenger `p` of transport `t` on the map at `at` facing `facing`
+/// (claims 10 and 13), queuing *move* to `dest` when given.
+fn put_out(w: &mut World, t: ObjectId, p: ObjectId, at: Pos, facing: Facing, dest: Option<CellXY>) {
+    let Some(po) = w.obj(p).cloned() else {
+        return;
+    };
+    let Some(to) = w.obj(t).cloned() else {
+        return;
     };
     // spec: S-0507 claims 10 and 3 (P is no longer a passenger; it leaves from position 1)
     if let Some(tb) = w.obj_mut(t) {
@@ -1024,9 +1152,9 @@ fn put_out(
     }
     if let Some(ob) = w.obj_mut(p) {
         ob.transport.riding = None;
-        ob.layer = layer;
+        ob.layer = Layer::Ground;
     }
-    crate::objects::place(w, p, Pos::new(x, y, z), facing);
+    crate::objects::place(w, p, at, facing);
     if open_topped(w, t)
         && po.owner != to.owner
         && let Some(ob) = w.obj_mut(p)
@@ -1035,13 +1163,18 @@ fn put_out(
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
-    if let Some((_, dest)) = exit {
+    if let Some(dest) = dest {
         if let Some(ob) = w.obj_mut(p) {
-            // spec: S-0507 claim 10 (P queues move, to the far cell in the first round or the neighbour cell in the second)
+            // spec: S-0507 claim 10 (P queues move, to the far cell in the first round or the neighbour cell in the second) and claim 13 (move toward the chosen neighbour)
             ob.beh.queue(Some(Behaviour::Move));
         }
         crate::econ::assign_destination(w, p, Some(Target::Cell(dest)));
     }
+    passenger_left(w, t, p);
+}
+
+/// What follows a passenger leaving transport `t` (claims 10 and 13).
+fn passenger_left(w: &mut World, t: ObjectId, p: ObjectId) {
     // spec: S-0614 claim 12 (the host, a transport, lets a passenger out)
     crate::parasite::host_unloading(w, t);
     if count(w, t) == 0 && gunner(w, t) {
@@ -1049,7 +1182,6 @@ fn put_out(
         crate::combat::weapon::set_weapon_number(w, t, 0);
         temporal_hand_back(w, t, p);
     }
-    true
 }
 
 /// The temporal beam hand-back to the last passenger of a gunner vehicle
@@ -1058,8 +1190,14 @@ pub fn temporal_hand_back(w: &mut World, t: ObjectId, p: ObjectId) {
     let _ = (w, t, p);
 }
 
-/// The *unload* processing of an air transport (claim 13). Returns the
-/// delay.
+fn set_air_phase(w: &mut World, t: ObjectId, phase: i32) {
+    if let Some(ob) = w.obj_mut(t) {
+        ob.beh.progress = phase;
+    }
+}
+
+/// The *unload* processing of an air transport (claim 13): its phase
+/// table. Returns the delay.
 pub fn process_air_unload(w: &mut World, t: ObjectId) -> i32 {
     let Some(o) = w.obj(t).cloned() else {
         return crate::process::standard_delay(w, t);
@@ -1069,43 +1207,191 @@ pub fn process_air_unload(w: &mut World, t: ObjectId) -> i32 {
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.raw.carryall.unwrap_or(false));
     if carryall {
-        // spec: S-0507 claim 13 (a carrier aircraft carrying a vehicle uses different unloading, out of scope)
+        // spec: S-0507 claim 13 (a carrier aircraft lifting a vehicle uses different unloading, outside this claim)
         w.note("S-0507 claim 13: a carrier aircraft's unloading is not this spec's");
         return crate::process::standard_delay(w, t);
     }
-    if count(w, t) == 0 {
-        // spec: S-0507 claim 13 (no passengers left: it falls back to rest)
-        crate::process::fall_back(w, t, false);
-        return crate::process::standard_delay(w, t);
+    // spec: S-0507 claim 13 (F7: S-0501 claim 40's landing test, the destination object used for the competing-aircraft comparison)
+    let fails = |w: &World, d: Target| !crate::air::landing_test(w, t, d);
+    match o.beh.progress {
+        air_phase::APPROACH => {
+            if o.dest.is_some_and(|d| fails(w, d)) {
+                // spec: S-0507 claim 13 (approach: a destination failing F7 returns to selection, overriding the stopped transition)
+                set_air_phase(w, t, air_phase::SELECTION);
+            } else if crate::air::stopped(w, t) {
+                // spec: S-0507 claim 13 (approach: the locomotor reports stopped, S-0501 claim 40's test: stopped check)
+                set_air_phase(w, t, air_phase::STOPPED_CHECK);
+            }
+            // spec: S-0507 claim 13 (approach ends with S-0215 claim 6's standard delay)
+            crate::process::standard_delay(w, t)
+        }
+        air_phase::STOPPED_CHECK => {
+            if crate::air::stopped(w, t) {
+                // spec: S-0507 claim 13 (stopped check: stopped, release)
+                set_air_phase(w, t, air_phase::RELEASE);
+            }
+            // spec: S-0507 claim 13 and S-0215 claim 29 (stopped check: next processing in 1 tick, no delay draw)
+            AIR_STEP
+        }
+        air_phase::RESELECT => {
+            // spec: S-0507 claim 13 (reselect: selection, next processing in 1 tick)
+            set_air_phase(w, t, air_phase::SELECTION);
+            AIR_STEP
+        }
+        air_phase::RELEASE => {
+            release(w, t);
+            // spec: S-0507 claim 13 (the release processing ends with the standard delay)
+            crate::process::standard_delay(w, t)
+        }
+        _ => {
+            selection(w, t);
+            // spec: S-0507 claim 13 (selection ends with the standard delay)
+            crate::process::standard_delay(w, t)
+        }
     }
-    let here = o.pos.cell();
-    let at_dest = match o.dest {
-        None => true,
-        Some(d) => crate::process::target_pos(w, d).cell() == here,
+}
+
+/// Claim 13's *selection* phase.
+fn selection(w: &mut World, t: ObjectId) {
+    let Some(o) = w.obj(t).cloned() else { return };
+    let h = crate::air::height(w, t);
+    // spec: S-0507 claim 13 (height above ground 0 leptons and forward pitch 0, which is not modelled, S-0501 claim 38)
+    let grounded = h == 0;
+    let at_dest = o
+        .dest
+        .is_none_or(|d| crate::process::target_pos(w, d) == o.pos);
+    if grounded && at_dest {
+        // spec: S-0507 claim 13 (no destination, or exact world-position equality with it: release at a later processing)
+        set_air_phase(w, t, air_phase::RELEASE);
+        return;
+    }
+    let dropship = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.dropship);
+    let Some(d) = o.dest else {
+        if h > 0 && dropship {
+            // spec: S-0507 claim 13 (above ground, no destination, a dropship type: an own usable dock by S-0501 claim 21's pad selection, else S-0501 claim 41's landing spot, as destination; selection stays)
+            let to = match crate::air::find_pad(w, t) {
+                Some(k) => Some(Target::Object(k)),
+                None => crate::air::landing_spot(w, t).map(Target::Cell),
+            };
+            crate::econ::assign_destination(w, t, to);
+        } else {
+            // spec: S-0507 claim 13 (no destination otherwise: stopped check; no landing-spot search)
+            set_air_phase(w, t, air_phase::STOPPED_CHECK);
+        }
+        return;
     };
-    if crate::air::on_ground(w, t) && at_dest {
-        if !crate::econ::tethered(w, t) {
-            // spec: S-0507 claim 13 (landed at its destination or with none: release position 1 at its own cell, unless tethered); Q-0700 (interim placement; a failure keeps it inside)
-            let p = o.transport.passengers[0];
-            put_out(w, t, p, here, None);
-        }
-        // spec: S-0507 claim 13 (passenger-release processing ends with the standard delay)
-        return crate::process::standard_delay(w, t);
+    let passes = crate::air::landing_test(w, t, d);
+    // spec: S-0507 claim 13 and Edge cases (quirks.air_unload_reselects_clear_destination: a passing destination is replaced; off, a failing one)
+    let replace = passes == w.rules().quirks.air_unload_reselects_clear_destination;
+    if replace {
+        // spec: S-0507 claim 13 (no original-team membership: map waypoint 700 is the centre); Q-0673 (interim: an undefined waypoint stands for cell (0, 0), as S-0011 claim 33's actions)
+        let centre = w
+            .triggers
+            .waypoints
+            .get(&REPLACEMENT_WAYPOINT)
+            .map_or(CellXY::new(0, 0), |&(x, y)| {
+                CellXY::new(i32::from(x), i32::from(y))
+            });
+        // spec: S-0507 claim 13 (S-0501 claim 40's replacement-cell search, radii 0 … 31; the waypoint cell itself is retained if it fails)
+        let c = crate::air::replacement_search(w, t, centre).unwrap_or(centre);
+        crate::econ::assign_destination(w, t, Some(Target::Cell(c)));
+        return;
     }
-    if !crate::air::on_ground(w, t) && o.dest.is_none() {
-        let dropship = w
-            .rules()
-            .unit(o.kind, o.type_index)
-            .is_some_and(|u| u.dropship);
-        if dropship {
-            // spec: S-0507 claim 13 (in the air with no destination, a dropship type searches for a landing spot); Q-0705 (interim: the landing spot of S-0501 claim 41)
-            let s = crate::air::landing_spot(w, t);
-            crate::econ::assign_destination(w, t, s.map(Target::Cell));
+    let cruise = crate::air::cruise_height(w, t);
+    // spec: S-0507 claim 13 (approach when the current height in integer leptons above terrain equals the cruise height, otherwise reselect)
+    let next = if h == cruise {
+        air_phase::APPROACH
+    } else {
+        air_phase::RESELECT
+    };
+    set_air_phase(w, t, next);
+}
+
+/// Claim 13's *release* phase: position 1 gets out, unless tethered.
+fn release(w: &mut World, t: ObjectId) {
+    // spec: S-0507 claim 13 (release while tethered: nobody released)
+    if crate::econ::tethered(w, t) {
+        return;
+    }
+    let Some(o) = w.obj(t).cloned() else { return };
+    let Some(&p) = o.transport.passengers.first() else {
+        // spec: S-0507 claim 13 (release with no passengers: fall back to rest)
+        crate::process::fall_back(w, t, false);
+        return;
+    };
+    // spec: S-0507 claim 13 (position 1 is removed from the passenger order for this attempt)
+    if let Some(tb) = w.obj_mut(t) {
+        tb.transport.passengers.retain(|&x| x != p);
+    }
+    if let Some(ob) = w.obj_mut(p) {
+        ob.transport.riding = None;
+        ob.pos = o.pos;
+        ob.layer = Layer::Ground;
+    }
+    let c = o.pos.cell();
+    let reference = occupancy::reference_level(w, t);
+    let step = |d: usize| CellXY::new(c.x + STEPS[d].0, c.y + STEPS[d].1);
+    // spec: S-0507 claim 13 (the first neighbour whose entry outcome for this passenger is clear, in preference 4, 5, 3, 7, 1, 0, 6, 2; no entry direction or requested level)
+    let clear = RELEASE_ORDER
+        .iter()
+        .copied()
+        .find(|&d| enters(w, p, step(d), reference));
+    // spec: S-0507 claim 13 (none clear: direction 4 supplies the facing and the last tested neighbour, direction 2, the destination)
+    let (fd, dd) = match clear {
+        Some(d) => (d, d),
+        None => (
+            RELEASE_FALLBACK_FACING,
+            RELEASE_ORDER[RELEASE_ORDER.len() - 1],
+        ),
+    };
+    // spec: S-0507 claim 13 (facing: the chosen direction times 8192, not the aircraft's body facing)
+    let facing = (fd as i32 * DIRECTION_FACING) as Facing;
+    let at = release_position(w, t, p);
+    match at {
+        Some(at) => put_out(w, t, p, at, facing, Some(step(dd))),
+        None => {
+            // spec: S-0507 claim 13 (failed placement: the unit stays off the map, out of the passenger order, with no retry and no kill awarded)
+            w.note("S-0507 claim 13: a released passenger found no place; it stays off the map (its lifetime is unmeasured)");
+            passenger_left(w, t, p);
         }
     }
-    // Q-0705 (interim: an airborne air transport otherwise waits a standard delay while its flight approaches)
-    w.note("Q-0705: an airborne air transport's unload transitions are interim");
-    crate::process::standard_delay(w, t)
+    if count(w, t) == 0 {
+        // spec: S-0507 claim 13 (fall back to rest when now empty)
+        crate::process::fall_back(w, t, false);
+    }
+}
+
+/// Where a passenger released by air transport `t` is put (claim 13), or
+/// `None` when an infantry unit finds no standing position.
+fn release_position(w: &mut World, t: ObjectId, p: ObjectId) -> Option<Pos> {
+    let o = w.obj(t)?.clone();
+    let kind = w.obj(p)?.kind;
+    // spec: S-0507 claim 13 (the desired world position: the aircraft's exact world position, not its cell centre)
+    let (x, y) = (o.pos.x, o.pos.y);
+    if kind != Kind::Infantry {
+        // Q-0672 (interim: a vehicle passenger is put at the aircraft's exact horizontal position)
+        w.note("Q-0672: a vehicle passenger of an air transport is put at the aircraft's position");
+        return Some(Pos::new(x, y, w.surface_at(x, y)));
+    }
+    if crate::air::height(w, t) != 0 {
+        // Q-0672 (interim: away from surface height the infantry choice is made all the same, at the surface below)
+        w.note("Q-0672: an infantry passenger released away from surface height uses the surface choice below the aircraft");
+    }
+    let c = o.pos.cell();
+    // spec: S-0507 claim 13 and S-0208 claim 3 (the desired point's class; a centre class takes the ranged draw, a side class its non-random row)
+    let class = crate::walk::position_class(x.rem_euclid(256), y.rem_euclid(256), true);
+    // spec: S-0507 claim 13 and S-0208 claim 3 (only the aircraft itself is excluded from occupancy: its object-present mark is set aside for the choice)
+    let had = crate::air::set_aside_mark(w, t);
+    let k = crate::walk::choose_position(w, c, Layer::Ground, class, false);
+    if had {
+        crate::air::restore_mark(w, t);
+    }
+    let (u, v) = crate::walk::standing_point(k?);
+    let (px, py) = (256 * c.x + u, 256 * c.y + v); // spec: S-0208 table P (a standing position within the cell)
+    Some(Pos::new(px, py, w.surface_at(px, py)))
 }
 
 /// Every passenger of transport `t` dies with it, credited by `hit`, one
@@ -1125,27 +1411,30 @@ pub fn kill_passengers(w: &mut World, t: ObjectId, hit: &crate::combat::damage::
     }
 }
 
-/// Removes every passenger of transport `t` without a death (Q-0702
-/// interim): a transport that leaves play by a path no claim gives its
-/// passengers' fate for (a sale, a sinking or crash that ends without
-/// them, any other removal) takes them out of play with it.
+/// The removal cleanup of claim 16: every passenger still carried when
+/// transport `t` is removed from play is killed, nested passengers too,
+/// with no attacker credit and no death effects of its own (S-0312 claim
+/// 5's passenger destruction with no attacker). This covers a sale
+/// (S-0408 claim 11), an aircraft killed on the ground and a crashable
+/// vehicle on the ground (S-0312 claims 12 and 15), the end of a sinking
+/// (S-0504 claim 5) and every other removal.
 pub fn remove_passengers(w: &mut World, t: ObjectId) {
-    for p in passengers(w, t) {
-        if let Some(tb) = w.obj_mut(t) {
-            tb.transport.passengers.retain(|&x| x != p);
-        }
-        if let Some(ob) = w.obj_mut(p) {
-            ob.transport.riding = None;
-        }
-        // Q-0702 (interim: removed with the transport, nested passengers first)
-        remove_passengers(w, p);
-        crate::objects::remove(w, p);
-    }
+    // spec: S-0507 claim 16 (killed, not released or preserved; no attacker credit)
+    let none = crate::combat::damage::Hit {
+        amount: 0,
+        warhead: None,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    };
+    kill_passengers(w, t, &none);
 }
 
-/// An object is removed from the game (Q-0702 interim): a removed
-/// passenger leaves its transport's passenger order, and a removed
-/// transport's passengers are removed with it.
+/// An object is removed from the game: a removed passenger leaves its
+/// transport's passenger order, and a removed transport's remaining
+/// passengers die (claim 16).
 pub fn removing(w: &mut World, id: ObjectId) {
     if let Some(t) = riding(w, id)
         && let Some(tb) = w.obj_mut(t)
@@ -1169,9 +1458,17 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
     // spec: S-0312 claim 12 (the vehicle's body facing rounded to the nearest of 256 steps, S-0204 F4 with n = 256)
     let facing = (n_step(to.body.value(w.tick), 256) * 256) as Facing;
     let reference = occupancy::reference_level(w, t);
-    // Q-0707 (interim: the destroyed vehicle itself is not counted by its passengers' entry test; it is out of its cell's list while they get out)
+    // spec: S-0312 claim 12 and S-0209 claim 4 (the dying vehicle contributes neither a listed blocker nor its vehicle-present flag to these escape tests; other occupants count normally)
     let at = w.cells.list(c, to.layer).iter().position(|&x| x == t);
     w.cells.leave(c, to.layer, t);
+    let flag = to.drive.as_ref().is_some_and(|d| d.claims.contains(&c))
+        || to
+            .hover
+            .as_ref()
+            .is_some_and(|h| h.claims.contains(&(c, to.layer)));
+    if flag {
+        w.cells.claim_vehicle(c, to.layer, false);
+    }
     for p in passengers(w, t) {
         if let Some(tb) = w.obj_mut(t) {
             tb.transport.passengers.retain(|&x| x != p);
@@ -1221,6 +1518,9 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
             // spec: S-0312 claims 12 and 25 (a neutral or special house's passenger is put on hunt; a player house's gets no further order)
             ob.beh.queue(Some(Behaviour::Hunt));
         }
+    }
+    if flag {
+        w.cells.claim_vehicle(c, to.layer, true);
     }
     if let Some(at) = at {
         w.cells.restore(c, to.layer, t, at);

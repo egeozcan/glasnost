@@ -241,3 +241,67 @@ fn ship_transport_cannot_unload_on_water() {
     assert!(!transport::may_unload(&w, t));
     assert_eq!(cursor(&w, &[t], ClickOn::Object(t)), Action::NoDeploy);
 }
+
+/// Forces *unload* on `t` (claim 8: whoever queued it), progress 0.
+fn force_unload(w: &mut World, t: ObjectId) {
+    let tick = w.tick;
+    let stale = w.rules().quirks.stale_suspended_revert;
+    w.obj_mut(t)
+        .unwrap()
+        .beh
+        .force(glasnost_sim::rules::Behaviour::Unload, tick, stale);
+}
+
+// spec: S-0507 claim 8 and S-0212 claim 25 (settling on water with no destination: the shore search's cell becomes the destination and it waits 10 ticks)
+#[test]
+fn settling_on_water_heads_for_the_shore() {
+    let mut w = world();
+    let t = at(&mut w, Kind::Vehicle, "FERRY", 0, 0);
+    let p = at(&mut w, Kind::Infantry, "WALKER", -6, 0);
+    transport::board(&mut w, p, t);
+    force_unload(&mut w, t);
+    assert_eq!(transport::process_unload(&mut w, t), 10);
+    let Some(glasnost_sim::world::Target::Cell(c)) = w.obj(t).unwrap().dest else {
+        panic!("a cell destination");
+    };
+    assert_ne!(w.cells.cell(c).unwrap().land, land::WATER, "on shore");
+    assert_eq!(transport::riding(&w, p), Some(t), "nobody out yet");
+}
+
+// spec: S-0507 claim 8 and S-0212 claim 25 (with no result the placeholder at map cell (0, 0) is still assigned, it waits 10 ticks and does not go on to claim 9)
+#[test]
+fn settling_on_water_with_no_shore_takes_the_placeholder() {
+    let mut s = Scene::new();
+    s.ruleset = rules();
+    // No land type lets a wheeled unit stand: the search finds nothing.
+    s.ruleset
+        .sim
+        .land_types
+        .insert(LandType::Clear, land_row("0", "0"));
+    s.ruleset
+        .sim
+        .land_types
+        .insert(LandType::Road, land_row("0", "0"));
+    for dx in -8..=8 {
+        for dy in -8..=8 {
+            if lake(dx, dy) {
+                s.set_cell(cell(dx, dy), code_tile(WATER_CODE), 0);
+            }
+        }
+    }
+    let mut w = s.build();
+    let t = at(&mut w, Kind::Vehicle, "FERRY", 0, 0);
+    let p = at(&mut w, Kind::Infantry, "WALKER", 0, 0);
+    transport::board(&mut w, p, t);
+    force_unload(&mut w, t);
+    assert_eq!(transport::process_unload(&mut w, t), 10);
+    let o = w.obj(t).unwrap();
+    assert_eq!(
+        o.dest,
+        Some(glasnost_sim::world::Target::Cell(
+            glasnost_map::CellXY::new(0, 0)
+        ))
+    );
+    assert_eq!(o.beh.progress, transport::phase::SETTLING, "still settling");
+    assert_eq!(transport::riding(&w, p), Some(t));
+}
