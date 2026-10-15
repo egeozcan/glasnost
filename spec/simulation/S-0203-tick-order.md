@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -125,7 +125,8 @@ confidence and proposed measurements remain those of the owning claims.
      that draw or can draw are rows 1, 3, 5 to 12 and 14 to 16. Each of them holds its place in the
      original's sequence, so that whatever draws they take come in this order: the polling of map
      triggers (row 1), resource growth and spread (row 9),
-     diving aircraft (row 10), teams (row 11), disc lasers (row 12), the weather storm (row 3),
+     diving aircraft (row 10), teams (row 11), disc lasers (row 12), psychic domination then
+     the weather storm (row 3),
      the end of electromagnetic pulses (row 14), the turn pass (row 5),
      blast rings (row 15), crate respawns (row 16), the production lines (row 6), the houses (row 7)
      and the orders (row 8). Inside a part that holds several members (several teams, disc lasers,
@@ -134,39 +135,39 @@ confidence and proposed measurements remain those of the owning claims.
      stands. The teams and computer-player decisions describe the original only. Our AI uses
      normal orders under S-0213 and the glossary's *AI house* rule; this table does not require a
      replacement team system or require AI decisions to draw during row 11 or row 7.
-     - Backing: `measurable` for the relative draw order of rows 1, 5 and 8 (scenario O13).
-       The remaining relative draw places, and the member orders within rows 9 to 12, 14 to 16 and 7,
-       are `unmeasured` here, with the following specific limits. This does not mean that the
-       permitted random-state recorder cannot check draw order. It supplies the raw values.
-       Identifying which effect used them requires a phase-specific outcome and a complete draw
-       description, as O13 demonstrates.
-       - Row 3: O10 times the storm deaths but does not identify the storm's complete
-         animation and damage draw groups. It therefore does not test its draw place relative
-         to resource work and disc lasers. Timed planted-bomb detonations instead belong to
-         their carriers' turns in row 5, not row 2.
-       - Row 9: no scenario here aligns a resource growth or spread update with a second drawing
-         part and predicts both complete draw groups. Resource timing and draws remain owned by
-         S-0401; its isolated tests do not establish this cross-part order.
-       - Rows 10 and 14: no drawing case is established here. Their places are precautionary
-         fidelity constraints, not claims that a draw occurs every tick or even occurs at all.
-         A stream record with no draw cannot distinguish their positions.
-       - Row 11 and the computer-decision draws in row 7: the original's team and strategy
-         systems are outside scope. No test script predicts their decisions and complete draw
-         groups; our AI's ordinary orders cannot stand in for those groups in an oracle test.
-       - Rows 12, 15 and 16: no phase-specific draw probe is specified here for a disc laser,
-         blast ring or crate reappearance. Their feature specs must establish the damage timing,
-         creation effects or crate-placement choices needed to allocate raw values to these rows.
-       - Row 6 relative to row 7: a production update has no established draw in its own work.
-         A queued creation can draw, but no scenario here aligns that creation with an identified
-         house-update draw. O7 tests the credit and hold consequences, not this draw comparison.
-       These are limits of the proposed scenarios, not a restriction on recorder access or a
-       requirement to choose the oracle's seed. Each untested place stays an explicit fidelity
-       rule pending a discriminating scenario; it is not reported as confirmed by O13.
-     - Confidence: high for the sequence itself; medium that rows 12 and 15 take their draws only
-       through the damage, animations and objects they create (not every path was traced); low
-       that rows 6, 10 and 14 take draws in their own updates at all. None was found in their
-       own update, but their work runs through paths that were not traced in full, so they keep
-       the original's place.
+     - Backing: `measurable` for rows 1, 5 and 8 (O13), and for the cross-part
+       assignment among rows 1, 9, 12, 3, 5, 15, 16, 7 and 8 (O16). O16 also tests
+       newest-first disc-laser damage and house-order tag-action draws. S-0401 claim 6
+       owns growth-before-spread and resource registration order; S-0520 claim 4 and
+       CR2 own simultaneous crate-expiry priority. These are proposed tests, not measurements.
+       The remaining qualifications are narrower than a lack of a test:
+       - Rows 10 and 14: their conditional draw places are `unmeasured`. No reachable
+         draw-producing effect of diving steering or pulse expiry has been identified.
+         With no value assigned to either part, moving it across another drawing part
+         leaves the labelled random outcomes and stream state identical. The recorder
+         cannot distinguish that empty allocation. These links retain precautionary
+         scheduling only; they do not assert that either part draws. A newly identified
+         drawing path needs its own scenario before being labelled measurable.
+       - Row 6: its own update takes no draws under S-0404 claim 11. Its purported draw
+         comparison with row 7 is therefore empty, not an untested queued-creation batch.
+         Item-start draws belong to the action that starts the item (claim 8), not row 6.
+         The internal position of this non-drawing work relative to a house's draws is
+         `unmeasured`: no random outcome can distinguish it. O7 still tests its credit
+         and hold boundaries; claim 8 retains its place before the houses.
+       - Row 11 and computer-strategy work in row 7 are deferred original-only context,
+         not engine requirements. Their internal draw order is `unmeasured` in this
+         skirmish contract because those systems are absent from our engine; ordinary
+         AI orders expose no corresponding team or strategy-update event to compare.
+         This does not assert that their order is unobservable in the original. O16
+         tests in-scope house updates through tag actions, without requiring strategy draws.
+       - The domination ring has no draw allocation (S-0612 claim 8, PD9). O16 tests
+         row 15's placement using a damage-enabled ring's first-update animation draws.
+         This establishes a phase-placement probe, not the details of every ring effect
+         or an order among multiple damage-enabled rings, neither of which is specified here.
+     - Confidence: high for the sequence, for row 6's absence of own-update draws
+       (S-0404 claim 11), for row 12's absence of producer draws (S-0615 claim 18),
+       and for the domination ring's absence of draws (S-0612 claim 8); medium for
+       other row-15 effects; low that rows 10 and 14 take any draws at all.
    - **Row 1, the polling of map triggers, comes before the turn pass.** Row 1 is the per-tick raise
      of every polled tag (S-0011, claim 6), which also owns how the raise works. A trigger action
      that this polling sets off (for example one that destroys an object) takes effect before any
@@ -185,8 +186,8 @@ confidence and proposed measurements remain those of the owning claims.
      Detonations caused by death or an explicit order retain the timing of their cause
      (S-0312 claim 7; S-0519 claim 9), not a shared bomb-detonation pass.
      - Backing: `measurable` (scenario O10 part A; S-0519 scenarios T4, T5 and T11).
-       The absence of maintenance draws is `unmeasured` here: these scenarios do not
-       isolate complete sound and visibility maintenance paths against a draw probe.
+       O16 part F additionally tests the absence of maintenance draws during sound
+       and visibility refreshes; it does not test every possible sound configuration.
      - Confidence: high
    - **Row 17, shared kamikaze re-orders, comes after row 2 and before row 10.**
      S-0506 claim 26 owns the shared cycle and its deadlines. Its due ammunition, target
@@ -199,11 +200,14 @@ confidence and proposed measurements remain those of the owning claims.
        of immediate assignment draws). A timer-driven planted-bomb release is during
        the turn pass, too late for this tick's shared cycle.
      - Confidence: high
-   - **Row 3, the weather storm's update, with the strikes of its storm bolts, comes before the turn
-     pass.** An object that a storm bolt destroys in tick *n* takes no turn in tick *n*,
-     unless claim 6 keeps it in play after its death. Its removal is outside the turn pass
-     and costs no other object a turn (claim 10).
-     - Backing: `measurable` (scenario O10, part B)
+   - **Row 3, psychic domination and the weather storm, comes before the turn pass.**
+     The domination update, including its sweep and area damage, precedes the storm's own
+     update (S-0612 claims 4, 9 and 14). The sweep therefore uses the storm owner before
+     that tick's storm cleanup, and a taken-over unit acts under its new owner in that tick.
+     An object that the sweep's damage or a storm bolt destroys in tick *n* takes no turn
+     in tick *n*, unless claim 6 keeps it in play after its death. Its removal is outside
+     the turn pass and costs no other object a turn (claim 10).
+     - Backing: `measurable` (scenario O10, part B; S-0612 scenarios PD3 and PD5)
      - Confidence: high
    - **Row 4, the step of a chrono flash in force, comes after row 1 and before the turn pass.** The
      step that a chrono flash takes in a tick (S-0201, claim 11) is part of row 4. So a chrono flash
@@ -225,15 +229,20 @@ confidence and proposed measurements remain those of the owning claims.
      - Backing: `measurable` (S-0525 scenarios RF3, RF5 part b, RF8 and RF10)
      - Confidence: high for maintenance before hits and absence of draws; medium for the
        same-tick-creation residue and within-turn hit consequences, as in S-0525
-   - **Rows 9 to 12 and 14 to 16.** These parts are placed only by the draw order above; apart
-     from the disc laser's, below, no other consequence of their places is stated here. The specs of their topics
-     own what each one does. A disc laser
+   - **Rows 9 to 12 and 14 to 16.** These parts retain the draw-order constraints above.
+     The domination's blast ring takes no draws and first updates in its creation tick
+     (S-0612 claim 8, scenarios PD3 part b and PD9). Apart from that and the disc laser's
+     consequence below, no other consequence of their places is stated here. The specs of
+     their topics own what each one does. A disc laser
      (row 12) applies its damage in its own update, outside any object's turn. So, as in row 3,
      an object it destroys takes no turn in that tick, with claim 6's exceptions, and its
      removal costs no object a turn (claim 10).
-     - Backing: `unmeasured` for the disc laser. Which weapons fire one, and in which tick its
-       damage falls after firing, is the combat specs' to establish, so no setup can yet time it.
-     - Confidence: medium
+     For a shot in tick *T*'s turn pass, its damage falls in tick *T* + 17, subject to
+     cancellation (S-0615 claim 13). The disc laser itself draws nothing from either random
+     stream; its detonation retains its ordinary draws (S-0615 claim 18).
+     - Backing: `measurable` (S-0615 scenario DL1). The cross-part draw placement retains
+       the limits stated above.
+     - Confidence: high
    - **Other work done once per tick.** The original does further work once per tick outside any
      object's turn that takes no draws from the scenario random stream: the regrowth of shroud and
      the re-covering by fog of war (visibility), a periodic re-check of what is visible, the step of
@@ -368,10 +377,12 @@ confidence and proposed measurements remain those of the owning claims.
        is the combat specs' to establish, and the place of a beam's turn has no other effect a
        recorder can time.
      - Confidence: low
-   - **(f) Disc lasers.** A weapon that fires a disc laser applies its damage in the disc laser's own
-     update, in row 12 of a later tick, not in a turn of the turn pass (claim 1).
-     - Backing: `unmeasured`, for the reason given in claim 1 for rows 9 to 16
-     - Confidence: medium
+   - **(f) Disc lasers.** A weapon that fires a disc laser in tick *T*'s turn pass applies its
+     damage in row 12 of tick *T* + 17, not in an object's turn, unless it is cancelled
+     (S-0615 claim 13). The disc laser itself takes no random draws; its detonation has the
+     ordinary draws (S-0615 claim 18).
+     - Backing: `measurable` (S-0615 scenario DL1)
+     - Confidence: high
 
 6. **When a destroyed object stops acting.** This claim gives the general rule for each kind of
    object and where its removal falls in the tick. S-0312 owns the death effects and the exceptions
@@ -460,8 +471,8 @@ confidence and proposed measurements remain those of the owning claims.
    stream (for example by creating objects or firing a superweapon), and so can a house's update.
    - Backing: `measurable` (scenario O2 for the turn pass; scenario O7, part C, for the production
      lines; O13 for the drawing order after row 5; S-0414 scenario V8 for surrender after the
-     houses, and V12 part c for orders in the final tick); for the row-7 draw order, claim 1's
-     backing (`unmeasured`)
+     houses, and V12 part c for orders in the final tick); O16 part D for row-7 tag-action
+     draws before row-8 order draws
    - Confidence: high for the turn pass and for the place after the houses; medium for the
      production lines
 
@@ -510,12 +521,11 @@ confidence and proposed measurements remain those of the owning claims.
      - Confidence: S-0414's high for destruction creation order and within-update ordering,
        medium for cancellation skips, same-tick results and final-tick commitment; high for
        removals outside the turn pass costing no turn, as in claim 10.
-   - **Draw order among them.** A house's update can take draws from the scenario random stream, so
-     its place is fixed by the draw order of claim 1: the houses come after the production lines,
-     one after another in house order (S-0009, claim 19), and before the orders (claim 7). No draw
-     is known in a production line's own update, but the lines keep the original's place before the
-     houses for the same reason (claim 1). S-0404 claim 11 distinguishes item-start creation
-     draws from a line's own update, which takes none under that claim. Each start receives its
+   - **Draw order among them.** A house's update can take draws from the scenario random stream,
+     one house after another in house order (S-0009, claim 19), before the orders (claim 7).
+     Production lines retain their place before houses, but not a draw group:
+     S-0404 claim 11 distinguishes item-start creation draws from a line's own update,
+     which takes none under that claim. Each start receives its
      creation draw at the action that causes it, with no value reserved for a line in advance.
      Starts caused during the turn pass inherit the causing objects' turn order and precede
      starts caused by orders at that tick's end. At the order boundary, starts follow production
@@ -531,8 +541,9 @@ confidence and proposed measurements remain those of the owning claims.
        `unmeasured`, because it is a design rule, not an oracle outcome.
      - Confidence: medium for causing-action assignment, as in S-0404 claim 11.
    - Backing: `measurable` (scenario O7, part A for the lines after the turn pass, part C for the
-     lines before the orders, and part B for the houses); for the draw order among them, claim 1's
-     backing (`unmeasured`)
+     lines before the orders, and part B for the houses); O16 parts C to E for house
+     tag-action draw placement and house order. The non-drawing row-6 comparison and
+     excluded computer-strategy work retain claim 1's `unmeasured` qualifications
    - Confidence: high for the lines after the turn pass and for the draw order among the houses,
      medium for the lines before the orders and the houses, and for the lines before the houses
 
@@ -688,9 +699,10 @@ order 1, 9, 10, 11, 12, 3, 14, 5, 15, 16, 6, 7, 8, which is the order of their d
 Row 2 takes no scenario draws; timed bomb damage and its effects belong to the carrier's
 turn in row 5 (S-0519 claim 4). Row 13 takes no draws; its links preserve radiation maintenance before the turn pass's hits
 and same-tick maintenance of fields made by storm deaths (S-0525 claims 6, 11 and 12).
-Claim 1 explicitly separates the measurable links from the unmeasured fidelity constraints.
-The table does not imply that all draw places have measurement scenarios. Row 11 and the
-computer-strategy work within row 7 describe the original only, not our AI's order interface.
+O13 and O16 test the nonempty in-scope draw allocations listed in claim 1.
+Rows 6, 10 and 14 retain the non-drawing or conditional qualifications there; their
+position does not itself prove a draw exists. Row 11 and computer-strategy work within
+row 7 are deferred original-only context, not requirements on our AI's order interface.
 
 | Row | Part | Comes after | Observable consequence of its place | Claim |
 |---|---|---|---|---|
@@ -701,12 +713,12 @@ computer-strategy work within row 7 describe the original only, not our AI's ord
 | 10 | Steering of aircraft that dive into their target (the aircraft specs own it) | 17 | Draw order | Claim 1 |
 | 11 | Teams, one after another in the order of the list of teams (the specs of teams own both) | 10 | Draw order | Claim 1 |
 | 12 | Disc lasers, the most recently fired first; each applies its damage in its own update | 11 | An object a disc laser destroys takes no turn in this tick unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1 |
-| 3 | The weather storm's update, with the strikes of its storm bolts | 12 | An object a bolt destroys in this tick takes no turn in it unless S-0312 keeps it in play (claim 6), and its removal costs no object a turn; draw order | Claim 1, scenario O10 part B |
+| 3 | Psychic domination's update, including its sweep and area damage, then the weather storm's own update and bolt strikes | 12 | The sweep sees the storm owner before cleanup; takeovers affect same-tick turns. An object the sweep or a bolt destroys takes no turn unless claim 6 keeps it in play; removal costs no other turn. Draw order | Claim 1; S-0612 claims 4, 9 and 14, scenarios PD3 and PD5; O10 part B |
 | 13 | Radiation maintenance, the most recently created field first (S-0525 claims 5 and 6) | 3 | A storm-death field updates in its creation tick; decay is visible to this tick's hits. Maintenance takes no scenario draws | Claim 1; S-0525 scenarios RF3, RF5 part b and RF10 |
 | 14 | The end of electromagnetic pulses whose time is up (the combat and superweapon specs own them) | 3 | Draw order | Claim 1 |
 | 4 | The step of a chrono flash in force (S-0201, claim 11) | 1 | A chrono flash started in row 1 steps in the tick of its action; one started in the turn pass first steps in the next tick | Claim 1, scenario O6 part B |
 | 5 | Turn pass | 4, 13, 14 | Objects act one after another in update order; their effects are immediate. Timed bombs detonate in carriers' turns, with counting-removal skips under claim 10 (S-0519 claim 4). Radiation hits and their effect draws occur in affected objects' own turns (S-0525 claims 9, 11 and 12); draw order | Claims 1 to 6, 10, 11; O10 part A; S-0525 scenario RF8 |
-| 15 | Blast rings (the superweapon specs own them) | 5 | Draw order | Claim 1 |
+| 15 | Blast rings; the psychic domination's ring takes no draws (S-0612 claim 8) | 5 | A domination ring first updates in its creation tick; other blast-ring paths keep their draw place | Claim 1; S-0612 claim 8, scenarios PD3 part b and PD9 |
 | 16 | Crate respawns, in skirmish games with crates on (S-0520 claim 4) | 15 | Draw order | Claim 1 |
 | 6 | Production lines | 16 | A line sees credits delivered in the turn pass of the same tick; draw order | Claim 8, scenario O7 part A |
 | 7 | Houses, one after another in house order; final-tick results committed at this part's start (S-0414 claim 16) | 6 | A house's tag raise and defeat test see the turn pass; later houses' defeats are not yet known to an earlier end test. Assigned-tag raises see own surrender and defeat effects; due tech-tree/sidebar work sees tag actions, but completed ordinary power/radar work does not (S-0414 claims 16 and 18). Defeated houses keep raises; cleanup-removed houses have no update. Draw order | Claim 8, scenario O7 part B; S-0414 scenarios V7, V11, V12, V13 and V15 |
@@ -774,7 +786,7 @@ establish the boundary; an unresolved sub-tick comparison is inconclusive.
 **Common setup.** All scenarios run under the glossary's *measurement setup*, as skirmish games on
 purpose-made maps, at game speed index 6, with director and mods off except the named test data.
 The slowest speed makes manual orders easiest. The ordering rules do not depend on speed.
-sequence durations can depend on it under the glossary's speed-normalised-delay rules, so the
+Sequence durations can depend on it under the glossary's speed-normalised-delay rules, so the
 scenarios' timing expectations use the stated index.
 - *Recorder.* At the end of every tick the *recorder* reads, without changing anything: the tick
   number; for the named objects their position, health and presence and the tick in which a
@@ -790,9 +802,11 @@ scenarios' timing expectations use the stated index.
   behaves. A pilot run of each scenario checks that no object enters play when a test weapon fires
   or hits, or when a test object is destroyed, apart from the test weapon's projectile and the
   objects the scenario names.
-- *Computer player.* It has the fewest starting units and the lowest starting credits the game
-  allows, and its start position is the one farthest from the test objects, so that none of its
-  starting units has a target in range of the test objects.
+- *Computer player.* Use the glossary's bystander computer player: the farthest start,
+  separated from the test area. Starting units and credits are game-wide settings, not a
+  separate minimum for this player; a scenario that grants ample credits grants them to
+  the bystander too. Its original-only extras remain possible. The void rule, not assumed
+  inactivity, excludes interference.
 - *Void rule.* Each scenario names its counted ticks and the events it expects in them: its
   projectiles entering and leaving play, the animations it names, and the removals its expected
   result lists. A counted tick is void, and is not used, when anything else enters or leaves play in
@@ -1396,6 +1410,106 @@ scenarios' timing expectations use the stated index.
   Void runs with unrelated creation, removal, combat or bystander activity in the test
   area during the counted tick. This proposes a recorder extension, not a harness change.
 
+**Scenario O16: cross-part labelled draw allocation (claim 1).**
+- *Setup and tool:* O13's flat skirmish, game speed 6, director and mods off, with
+  a distant bystander. Use named map overrides and a temporary test art file for the
+  probes below; a temporary rules file may select the blast-ring animations and crate
+  settings. Remove these files afterward. Use O13's read-only random-state recorder
+  and ordinary scripted input, recording the labelled delays, resource changes, crate
+  cells and lifetimes, tag firings and production starts below. Never set the seed,
+  suspend execution or insert logging into the game. This proposes recorder support,
+  not a change to an existing harness.
+- *Probe definitions:* each label identifies an outcome, not an internal observation point.
+  - **P, row 1:** O13's elapsed-time creation of a random-rate animation.
+  - **G, row 9:** one resource type with one growing cell, as S-0401 E4, with spreading
+    disabled by a zero spread fraction. Named map data gives growth a positive fraction
+    and a short period. Record the cell's stage and the new growth-entry key. Predict
+    the complete update using S-0401 claim 7 and F2, including its initial raw draw,
+    re-entry and any spread offer that actually adds an entry. The read-only key
+    distinguishes assignments even when the same cell grows under either prediction.
+  - **D, row 12:** S-0615 DL1's due disc-laser detonation at an isolated durable target.
+    Its test warhead creates one non-damaging random-rate animation on that terrain,
+    with no other hit effects. Its chosen delay labels the detonation's draw group.
+    S-0303 owns damage-animation selection and S-0109 owns animation draws. The
+    disc producer itself takes none (S-0615 claim 18).
+  - **W, row 3:** a psychic domination sweep on empty ground, using S-0612 PD3/PD9's
+    fixed lead-in timing, but a random-rate sweep animation as its labelled outcome.
+    With no recipients, resources or damage effects there, account only for the sweep
+    animation's creation group. Separately repeat with the weather storm of O10 B,
+    aimed at empty ground: record bolt/cloud cells and animation delays, accounting
+    for all storm placement, sound and animation draws under S-0513 claims 14 to 19,
+    S-0701 claim 25 and S-0109. Do not assume lightning sounds are draw-free.
+  - **T, row 5:** O13's switch from animation B to random-rate C.
+  - **R, row 15:** a damage-enabled blast ring created by the original's map-trigger
+    action for a ring at a waypoint, on empty flat ground with no resources, walls or
+    objects in its affected area. This is an oracle-only fixture, not an extension of
+    S-0011's supported action subset. Named test rules select two harmless initial
+    ring animations with distinct random-rate ranges; their delays label the first
+    update. Use S-0109 for both creation groups and S-0303 for any area-effect draws.
+    Do not substitute the domination ring, which takes none. Count only the first
+    update, in its creation tick, not later ring damage or distortion paths.
+  - **C, row 16:** S-0520 CR2's zero-regeneration control with exactly one crate,
+    crates on and free replacement cells: one replacement per tick, not repeated
+    same-tick expiry. Record the replacement cell
+    and lifetime. Predict x/y attempts, any overlay-placement draws and lifetime with
+    S-0520 claims 3 and 4 and S-0202 claim 10. No unit collects a crate in this tick.
+  - **H, row 7:** a house-assigned one-time tag with any-event and a variable-set
+    condition, creating a harmless random-rate animation when it fires. Use O7 B's
+    entered-by variable setter to enable it during row 5 of a tick divisible by 8.
+    Before that turn-pass action the variable is clear, so row-1 polling cannot fire
+    H. Record the setter, tag firing and animation delay. S-0011 claims 17 and 35
+    and S-0414 claim 18 own the raise and gate; count only same-tick firings.
+  - **O, row 8:** O13 B's infantry-production-start order and complete creation group.
+- *Controls and alignment:* run each probe alone five times, with all other probes
+  disabled, and account for every raw draw and labelled outcome from that run's own
+  incoming state. Check quiet ticks too. Include the otherwise draw-free variable
+  setter in H's controls. Tune only named timing fields and ordinary input in pilot
+  runs so the two probes of a comparison occur in the same tick. For comparisons
+  involving H use a tick divisible by 8; for P use a positive multiple of 15, and
+  for both use a positive multiple of 120. Record actual event ticks: missed
+  coincidence is inconclusive, not evidence of reversed order. Unexplained draws in
+  controls must be resolved before counting a combined run.
+- *Procedure and expected results:* exercise each pair separately, with no other
+  probe active. Reconstruct the two complete draw groups from the incoming state,
+  including rejected raw values, once in the expected order and once reversed.
+
+  | Part | Pairs, earlier allocation first | Labelled observables |
+  |---|---|---|
+  | A | P then G; G then D | animation delay, growth-entry key, disc-hit animation delay |
+  | B | D then W; W then T | disc-hit, sweep or storm outcomes, C's delay |
+  | C | T then R; R then C; C then H | C's delay, ring-animation delays, crate cell/lifetime, house-animation delay |
+  | D | H then O | house-animation delay and item-creation sample |
+  | E | two D probes, newest shot first; two H probes, house order first | separately labelled animation delays |
+
+  Part B uses both W variants separately. Part E aligns disc shots from distinct
+  map-placed test vehicles in one tick with identical schedules and separated targets.
+  Their entry order fixes firing order by claim 3; repeat with those entries reversed. For H use two assigned tags owned by distinct houses,
+  both gated by the same turn-pass variable setter; reverse their house-creation
+  order in the map, preserving tag definition order. Keep those houses undefeated.
+  The expected assignment follows house order, not tag definition order.
+- *Falsifiers and runs:* for each pair or variant obtain ten discriminating runs in
+  at most 100 attempts. A run discriminates only when the two allocation predictions
+  give different labelled outcomes. Expected: all labels and outgoing stream state
+  match the table's assignment. A reversed assignment falsifies that link or member
+  order; matching neither after fully accounted controls falsifies the proposed
+  accounting and requires investigation, not silent reassignment. A total draw
+  count alone never confirms order. Fewer than ten discriminating runs is
+  inconclusive. Apply the common void rule, exempting only the named probe effects.
+  any unrelated draw or bystander activity voids the counted tick. These pairwise
+  links establish the listed nonempty draw chain transitively, not the empty
+  allocations of rows 6, 10 and 14 or original-only team/strategy decisions.
+- *Part F, bomb maintenance without scenario draws:* separately use S-0519 T11's
+  attached-bomb visibility fixture, with a long detonation delay and no combat.
+  Record the scenario stream on quiet ticks, the ticking sound's start and ongoing
+  playback, a due visibility refresh and carrier removal through an ordinary order
+  after the observed maintenance. Account for order-caused effects separately.
+  Compare with no planted bomb and with sound omitted in named test data. Obtain
+  five refresh intervals with sound enabled and five with it omitted. Expected:
+  maintenance adds no scenario draws on sound-start, ongoing-sound or refresh ticks.
+  a reproducible extra draw attributable solely to one of these events falsifies
+  that no-draw claim. Detonation and carrier-destruction draws are excluded, not
+  treated as maintenance. An unexplained unrelated draw makes the interval void.
+
 **Production-start assignment (claim 8).** S-0404 P11 B and C own the shared measurement
 scenarios: game speed 6, quiet test maps with named test data, scripted normal input and a
 read-only random-state and item-creation recorder. P11 B reverses line creation order while
@@ -1404,7 +1518,7 @@ application order. P11 C aligns a factory-removal start during the turn pass wit
 start at that tick's end; the former sample must occupy the earlier stream position, allowing
 intervening draws. Each requires three distinguishing observations; reversed assignment falsifies
 the rule. These tests do not measure the between-house order-boundary design extension or the
-separate row-6 versus row-7 draw comparison.
+internal position of the non-drawing row-6 work relative to row-7 draws.
 
 **Assigned-tag raises within a house update (claim 8).** S-0414 V15 owns the shared
 measurement: a named test skirmish map, scripted input and a read-only recorder compare
@@ -1442,8 +1556,8 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   causing-action precedence, cited in claim 8 here. P11 B and C propose assignment tests, not
   completed measurements; the between-house order-boundary extension remains an unmeasured
   design rule. Confirm this resolution together with S-0202 claim 10 at hand-off. It does not
-  resolve claim 1's separate row-6 versus row-7 draw comparison, for which no scenario here
-  aligns a queued creation with an identified house-update draw.
+  imply a row-6 draw comparison: that work takes none, and queued creation belongs
+  to its causing action. O16 tests house tag-action draws against neighbouring drawing parts.
 - Rows 6, 10 and 14 keep the original's places only because they might take draws (claim 1).
   If their owning specs show that they take none, their places can be released to the freedom of
   claim 1's last point. Likewise, if work listed there turns out to take draws, it needs a row.
@@ -1476,7 +1590,9 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
   still acts through normal orders, not through those rows. Three rows (6, 10 and 14) are
   placed although no draw was found in their own updates, because their work was not traced
   through every path. The alternative is to release them until a draw is shown. Please confirm
-  retaining the unmeasured fidelity constraints; O13 tests only rows 1, 5 and 8.
+  retaining the precautionary constraints for rows 10 and 14 and the non-drawing
+  row-6 position. O13 tests rows 1, 5 and 8; O16 tests the other identified in-scope
+  draw allocations. Team and computer-strategy scheduling remains deferred context.
 - **Removal condition (revision 5).** The scrub of revision 4 found that claim 10 stated its
   condition two ways. Revision 5 keeps one: a removal counts when the removed object is the object
   taking its turn or stands before it in the update order, whether or not it took its turn in this
@@ -1543,4 +1659,5 @@ rule; V15 specifies controls separating the ordinary poll from the owner-house r
     claims 7 and 11 and S-0202 claim 10: completion alone causes no replacement-start
     draw batch in row 6. A later release or place action causes any queued successor's
     start and its creation draw. Keep P11 B/C as proposed measurements, not measured
-    results. The unrelated row-6 versus row-7 comparison remains unmeasured.
+    results. Row 6 takes no own-update draws, so no random outcome distinguishes
+    its internal position relative to row-7 draws; O7 tests its observable boundaries.
