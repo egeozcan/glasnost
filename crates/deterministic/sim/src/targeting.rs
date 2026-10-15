@@ -489,6 +489,65 @@ fn being_erased(_w: &World, _id: ObjectId) -> bool {
     false
 }
 
+/// Mind-controlled (S-0214 Terms; the combat topic owns mind control).
+/// Seam: no object is under mind control in our engine yet.
+fn mind_controlled(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+
+/// The occupation test of S-0508 claim 1, row I8's "can garrison": the
+/// infantry unit `actor` may garrison building `t`.
+fn may_garrison(w: &World, actor: ObjectId, t: ObjectId) -> bool {
+    let (Some(a), Some(b), Some(tb)) = (w.obj(actor), w.obj(t), building(w, t)) else {
+        return false;
+    };
+    // spec: S-0508 claim 1 (the building's type is garrisonable)
+    if !tb.raw.can_be_occupied.unwrap_or(false) {
+        return false;
+    }
+    // spec: S-0508 claim 1 (not being built up and not being sold, S-0408: the construction or selling behaviour, current or queued, or a sale under way)
+    if matches!(
+        b.beh.seen(),
+        Some(Behaviour::Construction | Behaviour::Selling)
+    ) || b.econ.sale.is_some()
+    {
+        return false;
+    }
+    // spec: S-0508 claim 1 (the building's centre lies in the usable area)
+    if !w.cells.usable(w.reference_point(t).cell()) {
+        return false;
+    }
+    // spec: S-0508 claim 1 (not being erased)
+    if being_erased(w, t) {
+        return false;
+    }
+    // spec: S-0508 claim 1 (the unit's type is an occupier type)
+    if !uflag(w, actor, |u| u.raw.occupier.unwrap_or(false)) {
+        return false;
+    }
+    // spec: S-0508 claim 1 (the building belongs to the unit's own house or to a passive house; alliance plays no part)
+    let owner_ok = match b.owner {
+        Some(h) => b.owner == a.owner || crate::econ::setup::passive(w, h),
+        None => false,
+    };
+    if !owner_ok {
+        return false;
+    }
+    // spec: S-0508 claim 1 (the occupant count is not equal to the occupant capacity: equality only, quirk)
+    if crate::econ::power::occupants(w, t) == tb.building.max_occupants {
+        return false;
+    }
+    // spec: S-0508 claim 1 (not both positive health and badly damaged: h ≤ the red ratio, S-0108 Terms and F3)
+    if b.health > 0
+        && tb.strength != 0
+        && health_cmp(w, t, w.rules().general.condition_red) != std::cmp::Ordering::Greater
+    {
+        return false;
+    }
+    // spec: S-0508 claim 1 (the unit is not mind-controlled)
+    !mind_controlled(w, actor)
+}
+
 /// Phasing in after a teleporting jump (S-0214 Terms, S-0207 claim 20 f).
 fn phasing_in(w: &World, id: ObjectId) -> bool {
     crate::teleport::phasing_in(w, id)
@@ -893,11 +952,8 @@ fn infantry_on(
             Action::DamagingEntry
         };
     }
-    // spec: S-0214 table I row I8 (a building this infantry can garrison; no force-fire)
-    if tb.is_some_and(|b| b.raw.can_be_occupied.unwrap_or(false))
-        && uflag(w, actor, |u| u.raw.occupier.unwrap_or(false))
-        && !mods.force_fire
-    {
+    // spec: S-0214 table I row I8 (a building this infantry can garrison under S-0508 claim 1; no force-fire)
+    if !mods.force_fire && may_garrison(w, actor, t) {
         return Action::Capture;
     }
     // spec: S-0214 table I row I9
