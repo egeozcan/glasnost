@@ -2,11 +2,11 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0020, Q-0060, Q-0061]
 supersedes: []
@@ -78,11 +78,12 @@ addition:
 - **Wall hit.** The damage of one detonation to the wall overlay of one cell (claim 16).
 - **Nullified detonation.** A detonation that claim 15 restricts to objects under the invulnerability
   effect.
-- **Tracked flying object.** An object that the game registers as flying from the moment it lifts
-  off until it lands: an aircraft-kind object in flight, a jumpjet between its lift-off and its landing, and a
-  rocket-propelled missile object in flight (the movement specs own when each lifts off and lands).
-  Each is registered in the *sector* (Formulas F7) of the cell it is over, which the game updates
-  as it flies.
+- **Tracked flying object.** An object registered for the flying-object search: an aircraft-kind
+  object in ordinary flight, a jumpjet between lift-off and landing, or a rocket missile from the
+  end of its tilt or raise phase until it detonates (S-0506 claims 15 and 19). Rocket missiles
+  cease to be tracked before their own detonation's area damage. The movement specs own the
+  registration boundaries of the other kinds. Each is registered in the *sector* (Formulas F7)
+  of the cell it is over, which the game updates as it flies.
 - **Sector.** One of the 20 × 20 rectangles of whole cells into which F7 divides the map for the
   flying-object search.
 - **Turn.** In claim 1, an object's share of one tick (S-0203, Terms), not an amount of rotation.
@@ -111,8 +112,14 @@ addition:
    inert flag does not suppress them. The animation is not chosen when the damage amount is 0 (F5),
    but the debris depends only on the warhead and is thrown whatever the damage amount. A
    projectile that has no warhead is a departure (Edge cases).
+   A projectile whose warhead has the parasite flag does not apply this area damage: it makes
+   no area hits, whether or not attachment succeeds (S-0614 claim 1). Its later explosion
+   animation and debris are not suppressed by that exception. This is a projectile-producer
+   rule, not an exclusion for other producers using the same warhead.
    - Backing: `measurable` (scenario A1, variant e, for the inert flag; A14, variant f, for the
-     damage amount 0); `unmeasured` for area damage without a warhead (no producer with a
+     damage amount 0; S-0614 scenarios P1 and P3 for parasite-projectile area-hit suppression,
+     and A14 variant o for their later animation and debris),
+     `unmeasured` for area damage without a warhead (no producer with a
      reproducible named-data setup for that case is established) and for the projectile without
      a warhead (the original stops, so there is no effect value to compare)
    - Confidence: high
@@ -158,9 +165,12 @@ addition:
    height never hits a flying object through this rule, whatever *R* is
    (`quirks.ground_detonation_misses_aircraft`).
    - Backing: `measurable` (scenario A5 for the height condition; scenario A16 for the sectors), and
-     `unmeasured` for rocket-propelled missile registration and the full sector membership list:
-     these scenarios use aircraft and jumpjets, not missiles, and sample only three distant
-     sectors rather than every F7 sector
+     S-0506 scenario R10 for rocket-missile registration at the end of tilt or raise, as
+     S-0506 claim 15 specifies; `unmeasured` for the full sector membership list: A16 samples
+     only three distant sectors rather than every F7 sector. Rocket-missile removal from the
+     search before its own area damage follows S-0506 claim 19 but is `unmeasured` here:
+     R11 records impact damage and effects, not the missile's eligibility for a nested flying-object
+     search during that damage
    - Confidence: high for the height condition; medium for the set of tracked objects and for F7
      (Open questions: whether a tracked flying object can also appear in a scanned cell)
 
@@ -425,7 +435,11 @@ addition:
     position *Q* (the metallic debris of F6 raised by 20 leptons), not at *P*. This happens
     whatever the damage amount, on an inert map as well, and not when the detonation was nullified
     (claim 21).
-    - Backing: `measurable` (scenario A15, statistical; variant c for the position)
+    - Backing: `measurable` (scenario A15, statistical; variant c for the position), and
+      `measurable` for signed maxima and a zero allocation divisor (A19 variants b and c), and
+      `unmeasured` for F6's signed-magnitude exceptional raw value and its overflowing quotient:
+      the setup cannot select the seed to make that one value in 2³² occur, as S-0202 claim 6
+      explains. The safe results of arithmetic departures are design rules, not oracle values
     - Confidence: high for the count draw; medium for the distribution over types and the position
 
 23. **Result of a detonation.** A detonation reports one of three results to whatever produced it:
@@ -554,9 +568,48 @@ Integer division truncated toward zero; entries counted from 0. For −24 ≤ *D
 for the splash list) the entry is 0, a valid entry. For smaller *D* the entry is negative, which
 lies outside the list (Edge cases).
 
-**F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). All debris is created at the projectile position *Q* (claim 22).
+**F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). A non-positive *N* creates no pieces and takes no allocation or type-choice draws. This non-positive-total case is `unmeasured`: A15 and A19 use positive totals, not a setup producing a non-positive total. Confidence: high. All debris is created at the projectile position *Q* (claim 22).
 
-For a nonempty retained type list, number the *m* types from 0 to *m* − 1 and pair each type with its corresponding maximum. Begin with remainder ℓ₀ = *N*. For each assignment while ℓⱼ > 0, consume the next scenario-random-stream value as a signed integer, raw*ⱼ*. Let *i*ⱼ be the remainder of *j* divided by *m*. The assignment is *g*ⱼ = min(|raw*ⱼ*| mod (*u*ᵢⱼ + 1), ℓⱼ) pieces of type *t*ᵢⱼ, leaving ℓⱼ₊₁ = ℓⱼ − *g*ⱼ pieces. The remainder operation is the magnitude-first remainder of S-0202 claim 6. Stop once the remaining count is 0; the raw value that reduces it to 0 is included. If the remainder never becomes 0, the non-terminating case is described under Edge cases: debris that can never be placed. If the warhead lists no debris types, the detonation creates *N* animations, each selected by entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by 20 leptons. Arithmetic is exact integer arithmetic; counts are pieces and the position raise is in leptons.
+For a nonempty retained type list, number its *m* types from 0 to *m* − 1 as *t*₀ … *t*ₘ₋₁,
+paired with signed maxima *u*₀ … *u*ₘ₋₁. The allocation state is the remaining count *ℓ*, initially
+*N*, together with an assignment number *j*, initially 0. While *ℓ* is positive, the next signed
+scenario-random-stream value supplies *raw*ⱼ; the selected type is *t*ᵢⱼ, where *i*ⱼ is the ordinary
+non-negative remainder of *j* divided by *m*. With wrap meaning S-0205 claim 1's signed 32-bit
+wrap, the state transition is:
+
+| Quantity | Value or transition |
+|---|---|
+| *a*ⱼ | wrap(|*raw*ⱼ|) |
+| *b*ⱼ | wrap(*u*ᵢⱼ + 1) |
+| *g*ⱼ | min(*a*ⱼ rem *b*ⱼ, *ℓ*ⱼ) |
+| Remaining count | *ℓ*ⱼ₊₁ = wrap(*ℓ*ⱼ − *g*ⱼ) |
+| Next assignment | *j* increases by 1 if *ℓ*ⱼ₊₁ > 0 |
+
+The allocation remainder uses signed division truncated toward zero (S-0205 claims 2–3): its sign
+follows *a*ⱼ, not *b*ⱼ. This is the magnitude-first rule of S-0202 claim 6, extended here to
+signed divisors. Thus a maximum below −1 normally behaves like the non-negative maximum −*u* − 2:
+−2 assigns zero pieces, while −4 assigns 0 to 2 pieces. A maximum of 2147483647 gives the
+wrapped divisor −2147483648, not a zero divisor. A maximum of −1 gives a zero divisor, and its
+departure is specified under Edge cases. For the exceptional raw value −2147483648, *a*ⱼ stays
+negative under the default of S-0202 claim 6; signed remainder and the wrap of the remaining count
+still apply, and a non-positive *g*ⱼ creates no pieces. With
+`quirks.random_magnitude_overflow` off (S-0202 claim 6), *a*ⱼ is instead the exact magnitude
+|*raw*ⱼ|, including 2147483648; the remainder is then non-negative. The magnitude and its
+quotient may use that wider non-negative integer domain, while *b*ⱼ and the remaining count retain
+signed 32-bit wrap.
+
+Assignment *j* contributes *g*ⱼ pieces of its selected type. The allocation sequence ends when
+the resulting remaining count is non-positive; the random value for that final assignment is
+included. The pieces belonging to one assignment are created before the next assignment's
+allocation value is drawn. Any draws caused by creating those pieces intervene and are not
+allocation values *raw*ⱼ, so allocation values need not be consecutive values of the scenario
+random stream. If the remaining count never becomes non-positive, the non-terminating case is
+described under Edge cases: debris that can never be placed.
+
+If the warhead lists no debris types, the detonation creates *N* animations, each selected by
+entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by
+20 leptons. Arithmetic is exact integer arithmetic, with the signed-magnitude exception owned
+by S-0202 claim 6; counts are pieces and the position raise is in leptons.
 
 **F7. Flying-object search** (claims 6 and 11). Let *W* and *H* be the map's width and height
 (S-0009) and *B* = *W* + *H* − 1, the largest cell coordinate of the map along either axis. Sector
@@ -759,11 +812,26 @@ A projectile that is no longer in play after its area damage creates nothing (cl
   draw R(0, −1) for each piece, and the debris it creates is undefined. Our engine takes the same
   draws and creates nothing, and the importer warns about a warhead with a positive maximum debris count and
   nothing to throw.
-- **Departure: debris that can never be placed** (no switch). In F6, when every listed maximum is 0
-  and *N* > 0, the original never finishes. Our engine stops after one full pass over the types that
-  places nothing (having taken that pass's raw values), and the importer warns. A maxima list
-  shorter than the types list is bad data: our engine treats the missing maxima as 0 and the
-  importer warns.
+- **Departure: a zero debris-allocation divisor** (claim 22; no switch). A retained maximum of
+  −1 is parsed and kept, but when F6 reaches that type with pieces remaining, the original
+  takes its allocation raw value and stops with a program error. Our engine applies S-0205
+  claim 3: the remainder is *a*ⱼ, capped by the remaining count as usual. No extra draw is
+  taken, and the importer warns about a retained maximum of −1. The same claim supplies a
+  remainder of 0 for the overflowing quotient when the maximum is −2 and the raw value is
+  −2147483648; the original stops in that exceptional case. Other negative maxima are not
+  rejected or clamped: their signed-remainder behaviour is F6. Backing: `measurable` for the
+  zero-divisor stop (A19 c), `unmeasured` for the exceptional raw-value stop because the
+  recorder cannot force that value; departure results are design rules. Confidence: high.
+- **Departure: debris that can never be placed** (no switch). In F6, when every paired maximum
+  is 0 or −2 and *N* > 0, every allocation remainder is 0 (apart from the exceptional
+  raw-value stop above), so the original never finishes. Our engine stops after one full pass
+  over those types, having taken that pass's raw values, and the importer warns. This guard
+  applies only to that all-zero-remainder configuration, not to a chance pass of zero
+  allocations when some type can receive pieces. A maxima list shorter than the types list is
+  bad data: our engine treats the missing maxima as 0 and the importer warns.
+  Backing: `unmeasured` for the original's nontermination and missing-maxima result: no finite
+  observation proves nontermination, and no isolated missing-maxima setup is specified.
+  Confidence: high for nontermination, low for the original's missing-maxima result.
 - **Departure: negative damage and the animation list** (no switch). F5 with *D* ≤ −25 (*D* ≤ −35
   for the splash list) gives a negative entry, for which the original's result is undefined. Our
   engine shows no animation for a negative entry, and the importer warns about a weapon with
@@ -773,11 +841,17 @@ A projectile that is no longer in play after its area damage creates nothing (cl
   for the order of draws, which our engine reproduces. *D* = −1 and the absolute flag are claim
   16's.
 
+The original's undefined results for an out-of-range scan radius, an empty metallic debris list,
+and a negative animation entry remain `unmeasured`: no isolated scenario here exercises those
+invalid inputs. Confidence: medium. Their clamping, suppressed creation, preserved draws and
+warnings above are design rules, not claimed oracle observations.
+
 ## Import mapping
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | rules, warhead section, `CellSpread` | spread *S* | decimal (single) | 0 |
+| rules, warhead section, `Parasite` | parasite flag: projectile area damage replaced by attachment (claim 2; S-0614 claim 1) | boolean | no |
 | rules, warhead section, `PercentAtMax` | edge fraction *p* | decimal (single) | 1.0 |
 | rules, warhead section, `Verses` | versus values *v* (F3; S-0003 claim 13 owns the parse, S-0305 the order of the armour classes) | percent list | 100 % each |
 | rules, warhead section, `Wall`, `Wood`, `WallAbsoluteDestroyer` | wall flags (claim 16) | boolean | no |
@@ -906,7 +980,10 @@ not of the airburst kind). *Observable:* health lost. *Expected:* the 1 × 1 bui
 3 × 3 building loses 900 when all nine cells are within *R* (S-0302's per-hit rules applied to each
 hit). Variant b: F3 with *d* = ⌊*r*(*n*)⌋ − 208 for the distance the recorder gives; with a
 measured distance of 300 that is *d* = 92 and a loss of 94, against 80 if the full distance were
-used and 100 if *d* were 0. *Variant c:* repeat with the can-be-demolished flag off and a zero
+used and 100 if *d* were 0. Repeat b at recorded heights 208 and 209 leptons, keeping *P*
+horizontally at the cell centre: expected *d* = 0 and 1 respectively, and losses 100 and 99.
+A different loss falsifies the centre-cell height boundary.
+*Variant c:* repeat with the can-be-demolished flag off and a zero
 versus value: each eligible foundation entry costs 1 health point. Then restore versus 100 % and
 lower the building's starting health below one hit, with the warhead's delayed-kill flag off.
 It dies once and later entries produce no further death effects. The delayed-kill exception is
@@ -919,8 +996,13 @@ any variant-b loss differs from F3 at the recorded reduced distance, variant c d
 **A4. Bridge-deck layer (claim 4).** *Setup:* a high bridge; one vehicle on the deck and one on the
 ground under the deck in the same cell; detonations (spread 2, edge fraction 1.0) once at the deck
 surface and once at ground level. *Observable:* the health of each vehicle. *Expected:* the deck detonation hits only the deck vehicle, the
-ground detonation only the ground vehicle. *Falsified if:* either detonation hits the vehicle of
-the other layer, or fails to hit the vehicle of its own layer.
+ground detonation only the ground vehicle. *Variant b (height boundary):* use the vertical test
+projectile of A3 b to obtain recorded heights of 208 and 209 leptons above the terrain at *P*,
+keeping *P* in the bridge cell. Expected: at 208 only the ground vehicle is hit; at 209 only the
+deck vehicle is hit. Repeat with *P* in an adjacent cell that carries no bridge and with both
+vehicles still within *R*: only the ground vehicle is hit, even when *P* is above deck height.
+*Falsified if:* either detonation hits the vehicle of the other layer, fails to hit the vehicle
+of its own layer, or any variant-b layer selection differs.
 
 **A5. Flying aircraft (claims 6, 10).** *Setup:* a stock aircraft hovering or circling at known
 height near a ground target; (a) a ground-level detonation with spread 10 directly below it; (b) a
@@ -969,8 +1051,8 @@ the protected vehicle; (b) spread 0.6; (c) the same as (a) under a force shield 
 *Observable:* the unprotected vehicle's health and the animations the recorder sees created.
 *Expected:* (a) the unprotected vehicle takes no damage and the nullify animation shows; (b) and
 (c) it takes damage. *Variant d:* the protected object is a tracked flying object, with the
-detonation raised above the terrain as in scenario A5 (b), spread 0.5, 84 and then 86 leptons from
-*P*: nullified at 84, not at 86. *Variant e:* the protected vehicle in the centre cell 84 leptons
+detonation raised above the terrain as in scenario A5 (b), spread 0.5, and recorded distances
+84, 85 and 86 leptons from *P*: nullified at 84, not at 85 or 86. *Variant e:* the protected vehicle in the centre cell 84 leptons
 from *P* with spread 0.3 (*R* = 76, so the vehicle is beyond *R*): still nullified.
 *Variant f (cell and post-hit effects):* repeat a on separate copies with scanned wall and resource
 cells configured as A10, and with a centre-cell exploding overlay and a named warhead particle
@@ -1118,13 +1200,23 @@ both ranges zero at both ends. Record both random streams immediately before the
 the screen displacement. Expected: one unsynchronised ranged draw for each nonzero range,
 horizontal then vertical, and no additional scenario-stream draw. Any count, stream or axis-choice
 order different from those predictions falsifies the draw rule.
+*Variant o (parasite-projectile visuals, claim 2):* use the successful and failed latches of
+S-0614 P1 and P3, with named map overrides giving the latching weapon damage 25, a warhead
+animation list of two distinct stock types, minimum debris 2, maximum debris 3 and no voxel
+debris types. Keep a nonempty metallic debris list. Record attachment outcome, created effects,
+their positions and random state at detonation. Expected in both latch outcomes: no area hit,
+but the animation at entry 1 and two metallic debris animations, following F5 and F6 at the
+recorded *P* and *Q*. Suppressing either visual effect solely because the parasite flag is set,
+or any different type, count or position, falsifies this part.
 
 **A15. Warhead debris (claim 22).** *Setup:* a test warhead with minimum debris 2, maximum 6 and no
 debris types; counted over 200 detonations. *Observable:* the number, types and positions of the
 debris animations that the recorder sees created by each detonation. *Expected:* counts 2 to 5 only (R(2, 5)), roughly
 uniform. Variant b: two debris types with maxima 1 and 3, with the recorder reading the raw values
-of the scenario random stream; expected: the two types together number 2 to 5 pieces per
-detonation, and each type's count is the one F6 gives for the raw values read. Variant c (position, claim 22): the projectile
+of the scenario random stream, including its state before and after each piece's creation.
+Expected: the two types together number 2 to 5 pieces per detonation, and each type's count is the
+one F6 gives for the allocation values read. Creation draws for the pieces of one assignment
+precede the next assignment's allocation value; any reversed order falsifies F6's ordering. Variant c (position, claim 22): the projectile
 of variant i of scenario A14 with this warhead: the recorder reads the debris positions, which
 equal the projectile's own position for every detonation of the cluster (the metallic ones 20
 leptons higher). *Falsified if:* any count is outside 2 to 5, any type or position differs from F6 at the
@@ -1208,14 +1300,35 @@ because the physical-line limit also counts the key and separator; it remains un
 Do not detonate if the recorder shows only zero maxima, because the original would not finish
 (Edge cases).
 
+*Variant b (signed maxima, claim 22 and F6):* repeat the two-type allocation test with the
+first maximum −2, then −4, then −2147483648, then 2147483647, keeping the second maximum 3.
+Use a fixed total of 4 pieces (minimum 4, maximum 5), ten detonations per pair, and record
+allocation raw values separately from creation draws. Expected: for ordinary raw values the
+first type's allocation is respectively 0, min(|*raw*| rem 3, pieces remaining),
+min(|*raw*| rem 2147483647, pieces remaining), and
+min(|*raw*| rem 2147483648, pieces remaining); the second type follows F6. Any count or stream
+consumption different from F6 falsifies the signed-divisor rule. These cases keep a type that
+can receive pieces, avoiding an all-zero-remainder hang. They do not claim to force the rare
+minimum signed raw value.
+
+*Variant c (zero divisor, claim 22):* on an isolated copy of that test map give the first type
+maximum −1 and the second 3, with the same fixed total 4. Start a fresh program for each of
+three runs, fire once and record the random stream until program termination. Expected: the
+first allocation takes one raw value, creates no voxel pieces and ends the original with a
+program error. Continued play, creation of a voxel piece or a different attributed allocation
+draw count falsifies that prediction. This test deliberately stops the original; do not use an
+unsaved game. Our engine's warned, continuing result under S-0205 claim 3 is a departure and
+has no oracle value to compare.
+
 ## Open questions
 
 - S-0209 claim 13 excludes an aircraft using ordinary flight at positive terrain-relative
   height from cell layers, so it cannot receive a second entry that way. Whether other tracked
   flying kinds, such as jumpjets, can also be listed remains open; if listed they could receive
   two entries. Claim 10 would halve both entries for an aircraft in the air, not just one.
-- Exactly when each kind of flying object is registered and unregistered (lift-off, landing,
-  leaving the map), which the movement specs own; F7 relies only on the registration order. In
+- Exactly when flying kinds other than rocket missiles are registered and unregistered
+  (lift-off, landing, leaving the map), which the movement specs own; rocket-missile boundaries
+  are S-0506 claims 15 and 19. F7 relies only on the registration order. In
   particular, where an object that crosses into a sector in flight comes in that sector's order
   (after the objects already registered there, or by its first registration), which fixes the
   hit order among tracked flying objects (claim 11, medium confidence).
