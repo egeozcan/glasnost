@@ -97,7 +97,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0106](rendering/S-0106-voxel-tilt-slopes.md) | Slope shapes, terrain surface height and voxel tilt on slopes | rendering | 8 | approved | — |
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 15 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 13 | approved | — |
-| [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 33 | approved | — |
 | [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 26 | approved | — |
 | [S-0301](combat/S-0301-firing-cycle.md) | Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check) | combat | 11 | approved | — |
 | [S-0306](combat/S-0306-projectiles.md) | Projectiles (launch, flight, homing, scatter, detonation) | combat | 11 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0615](combat/S-0615-special-hit-effects.md) | Special-hit effects (death-kind animations, the burning walker and the disc laser) | combat | 1 | approved | — |
 | [S-0206](movement/S-0206-turn-rates.md) | Turn rates and turning | movement | 13 | approved | — |
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 37 | approved | — |
+| [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 34 | approved | — |

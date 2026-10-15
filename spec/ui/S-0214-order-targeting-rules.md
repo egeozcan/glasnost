@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 33
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -685,7 +685,10 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     the shadow below them. Ordinary buildings are excluded, but vehicle-like buildings
     can be taken if they meet the same eligibility tests. Enemy and allied objects are
     never added by an ordinary box. A selectable object being erased still cannot be added
-    (the normal selection exclusion of claim 16).
+    (the normal selection exclusion of claim 16). A bunkered vehicle and an occupied
+    bunker are excluded from this ordinary band-box selection. This is the band-box
+    part of S-0606 claim 11, not a blanket refusal of click selection or proof that
+    the bunker cases of rows VD5 and I17 cannot be reached by player input.
 
     Without force-select, a box containing at least one live box candidate clears the old
     selection before adding eligible objects. The clearing test is broader than eligibility:
@@ -2334,6 +2337,9 @@ run per sub-case; repeat ambiguous input samples.
   own selected units outside the box are removed without force-select and retained with it.
   Already-selected units inside an additive box remain selected, rather than toggling off.
   Hold force-fire together with force-select: expect the same additive selection.
+  Repeat around an occupied own tank bunker and its vehicle after confirming occupancy:
+  neither is newly added by the ordinary box. A successful addition falsifies that exclusion.
+  a separate click-selection outcome does not test the band-box rule.
 - With a tank selected outside the box, enclose only the enemy tank or ordinary building:
   expect the old selection cleared and none added. Enclose a completely empty open region
   and release over a reachable empty cell: expect the old tank retained and a move order
