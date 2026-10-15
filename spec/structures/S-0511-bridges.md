@@ -2,7 +2,7 @@
 id: S-0511
 title: Bridges (destruction, collapse, falling and repair)
 topic: structures
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,6 +20,11 @@ Bridge damage, collapse, falling, hut demolition and engineer repair in skirmish
 campaigns are out of scope. Intact-deck movement belongs to S-0207 claim 5 and S-0209 claims 1, 4,
 5 and 15, initial bridge marking to S-0010 claim 25 and S-0211 claims 9 and 15, and drawing to
 S-0112 claim 6 and S-0102 claim 15.
+
+Vehicle-transport unloading restrictions belong to S-0507 claims 7 and 10: an unload order is
+refused on a bridge or when the transport's own cell or any straight neighbour carries a bridge
+deck; passenger exit searches pass over neighbouring cells that carry a deck. These restrictions
+concern ordinary unloading, not passenger escape from a destroyed transport.
 
 ## Terms
 
@@ -128,14 +133,14 @@ S-0112 claim 6 and S-0102 claim 15.
    - Confidence: medium (test order and acceptance, the low single attempt, the gate); low (target
      dropping, the trigger cell)
 
-2. **What one attempt at a cell acts on.** The attempt applies the first rule below that matches the
-   cell:
-   1. The cell holds a low piece that is not in the destroyed class: its low strip (claim 13).
-   2. The cell is a high-bridge cell: the section whose overlay marks it (claim 3).
-   3. The cell's tile is a pier of either family in state 0 to 3: the pier (claim 6), provided
-      its sub-tile is even along x, or at most 4 along y. Other pier cells without a deck take
-      no effect.
-   4. Otherwise nothing happens and the attempt fails.
+2. **What one attempt at a cell acts on.** The cell's first matching condition in the table determines the effect; lower rows apply only when no earlier condition matches.
+
+   | Cell condition, in priority order | Effect |
+   |---|---|
+   | The cell holds a low piece that is not in the destroyed class | The low strip is affected (claim 13). |
+   | The cell is a high-bridge cell | The section whose overlay marks it is affected (claim 3). |
+   | The cell's tile is a pier of either family in state 0 to 3, and its sub-tile is even along x or at most 4 along y | The pier is affected (claim 6). Other pier cells without a deck take no effect. |
+   | None of the above | Nothing happens and the attempt fails. |
    - Backing: `measurable` (scenarios B1, B4, B7)
    - Confidence: medium
 
