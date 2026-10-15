@@ -2,11 +2,11 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: []
 supersedes: []
@@ -334,9 +334,11 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
     in place delays the start of the step by max(Θ, 1) ticks, *t*₀ included. While it drives along
     its path, its body facing is set at once (claim 5) to the facing that the path's track gives for
     each point of the path (S-0207, claims 5 to 7); that change is not limited by the turn rate.
+    These turning rules apply unchanged to the ship locomotor on ordinary travel tracks
+    (S-0504 claim 1).
     - Backing: `measurable` (scenarios R1 and R2, run c of R2 for the tick in which the track
       begins, scenario R3 for the delay of max(Θ, 1) ticks against a vehicle that needs no turn,
-      and S-0207 scenario D7 for the curve case)
+      and S-0207 scenario D7 for the curve case; S-0504 scenario N1 for ships)
     - Confidence: high for the turn in place, the stop while turning and the tick in which the
       track begins; when a step counts as "about to start" is S-0207's
 
@@ -437,31 +439,17 @@ which gives 256, 512, 1024, 1024 and 2048 for ω = 1, 2, 3, 4 and 5 or more.
 facing (turret facing with the turret flag, body facing without it) and *d* the direction of its target, the weapon counts as pointing at the target when
 |δ(*f*, *d*)| ≤ 2048, or |δ(*f*, *d*)| ≤ 4096 for a homing projectile.
 
-**F5. Observable facing when several turret rows apply** (claim 9). All values are integers in
-facing units. In a tick where *k* ≥ 1 of the spin, target and facing-error rows apply, let
-τ₀ be the target in force before the tick and let *s*₀ be the facing supplied by F1 for that
-tick before any of these rows has an effect. Number the applicable rows in their table order,
-from lowest to highest, with target facings τ₁ … τₖ. The final target is τₖ.
+**F5. Observable facing when several turret rows apply** (claim 9). All values are integers in facing units. In a tick where *k* ≥ 1 of the spin, target and facing-error rows apply, let τ₀ be the target in force before the tick and *s*₀ the facing supplied by F1 for that tick before these rows have an effect. Let τ₁ … τₖ be the target facings supplied by the applicable rows, listed in their table order, from lowest to highest. The final target is τₖ.
 
-The tick's facing is the result of the successive target changes described by the following
-state relation. For each *i* from 1 to *k*, if τᵢ = τᵢ₋₁, that row leaves the turn and facing
-unchanged. Otherwise it replaces the target with τᵢ and starts a turn from the facing produced
-by the preceding applicable row. When the replacement has duration Θᵢ ≥ 1, that starting facing
-is
+The following table gives the observable result associated with each row’s target, relative to the target and facing state immediately before that row:
 
-> *s*ᵢ = (τᵢ − βᵢ × Θᵢ) mod 65536,
+| Relation of row target to preceding target | Result for target and facing |
+|---|---|
+| τᵢ = τᵢ₋₁ | No change to the turn or facing. |
+| τᵢ ≠ τᵢ₋₁ and the replacement duration Θᵢ is positive | The target becomes τᵢ. The replacement turn starts from *s*ᵢ = (τᵢ − βᵢ × Θᵢ) mod 65536, which is F1’s value at ε = 0, including its remainder jump Δᵢ − βᵢΘᵢ. Θᵢ and βᵢ are given by F1 for the difference from the preceding facing to τᵢ. |
+| τᵢ ≠ τᵢ₋₁ and the replacement duration is zero, or ω ≤ 0 | The target and facing become τᵢ at once. |
 
-where Θᵢ and βᵢ are given by F1 for the difference from the preceding facing to τᵢ. This is
-F1's value at ε = 0, including its remainder jump Δᵢ − βᵢΘᵢ. When Θᵢ = 0 or ω ≤ 0, the facing
-takes τᵢ at once. The target of the spin row, when it applies, is the F2 target derived from
-the facing supplied by the preceding applicable row. If the final row's target equals the target
-already in force immediately before it, the existing turn continues unchanged.
-
-Thus earlier effective target changes can affect the facing visible in the tick even though
-the highest applicable row supplies the final target. With only one applicable row, this is
-claims 1 and 3. Example (scenario R4 run f): *s*₀ = 0 and τ₀ = 0; the facing-error row gives
-τ₁ = 16383 and *s*₁ = 3 (Θ₁ = 63, β₁ = 260); the turret-locked row gives τ₂ = 0, whose
-replacement turn completes at once, so the turret rests at 0.
+For the spin row, its target is the F2 target derived from the facing supplied by the preceding applicable row. If the final row’s target equals the target in force immediately before that row, the existing turn continues unchanged. Earlier effective target changes can therefore affect the facing visible in the tick even though the highest applicable row supplies the final target. With only one applicable row, this is claims 1 and 3. Example (scenario R4 run f): *s*₀ = 0 and τ₀ = 0; the facing-error row gives τ₁ = 16383 and *s*₁ = 3 (Θ₁ = 63, β₁ = 260); the turret-locked row gives τ₂ = 0, whose replacement turn completes at once, so the turret rests at 0.
 
 ## Constants
 
