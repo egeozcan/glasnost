@@ -626,7 +626,10 @@ fn claim_11_sinking_over_water() {
     assert!(marked, "the bomb mark over water");
     // spec: S-0511 claim 10 (the marked object falls; the mark is spent when it lands)
     common::run(&mut w, 200);
-    assert!(w.obj(id).is_none_or(|o| o.health <= 0 || !hover::bomb_mark(&w, id)));
+    assert!(glasnost_sim::fall::falling(&w, id) || w.obj(id).is_none_or(|o| o.health <= 0));
+    common::run(&mut w, 200);
+    // It reached the surface through the fall and took the landing hit.
+    assert!(w.obj(id).is_none_or(|o| o.health <= 0 && !o.fall.falling), "the landing kill");
 }
 
 // spec: S-0503 claim 11 (a spin ending at 104 leptons or more above the water: no mark)

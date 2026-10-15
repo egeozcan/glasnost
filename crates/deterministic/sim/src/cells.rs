@@ -163,6 +163,15 @@ pub struct Cells {
     pub bridge_body: Vec<bool>,
     /// The bridge links, in creation order (S-0212 claim 3).
     pub links: Vec<BridgeLink>,
+    /// The cells of ramp tiles showing their alternate (damaged) look
+    /// (S-0511 claim 4); drawing only.
+    #[serde(default)]
+    pub alternate: std::collections::BTreeSet<CellXY>,
+    /// The height levels the cells of collapsed piers had before their
+    /// collapse (S-0511 claim 6), for `quirks.pier_repair_partial_height`
+    /// off (claim 19).
+    #[serde(default)]
+    pub pier_levels: std::collections::BTreeMap<CellXY, i8>,
     /// Marking counter.
     pub mark_seq: u32,
     /// The owner of each cell's wall (S-0210 claim 14); `None`: no owner.
@@ -238,6 +247,8 @@ impl Cells {
             bridge_axis: vec![Axis::None; n],
             bridge_body: vec![false; n],
             links: Vec::new(),
+            alternate: Default::default(),
+            pier_levels: Default::default(),
             mark_seq: 0,
             wall_owner: vec![None; n],
             anim_started: vec![false; n],
@@ -276,6 +287,37 @@ impl Cells {
                 self.deck_entry[i] = k < 2;
             }
         }
+    }
+
+    /// A lost section's four cells lose their high-bridge marking and gain
+    /// the bridge-body mark (S-0010 claim 25, *In play*; S-0511 claim 5);
+    /// their bridge axis stays.
+    pub fn unmark_high_bridge(&mut self, cells: &[CellXY]) {
+        for &c in cells {
+            if let Some(i) = self.idx(c) {
+                // spec: S-0010 claim 25 (In play: the four cells receive the bridge-body mark as their high-bridge marking is cleared)
+                self.deck[i] = false;
+                self.deck_entry[i] = false;
+                self.bridge_body[i] = true;
+            }
+        }
+    }
+
+    /// A placed section's four cells lose the bridge-body mark (S-0010
+    /// claim 25, *In play*; S-0511 claim 19); [`Self::mark_high_bridge`]
+    /// marks them.
+    pub fn clear_body(&mut self, cells: &[CellXY]) {
+        for &c in cells {
+            if let Some(i) = self.idx(c) {
+                // spec: S-0010 claim 25 (In play: repair clears the bridge-body mark on those four cells)
+                self.bridge_body[i] = false;
+            }
+        }
+    }
+
+    /// Whether `c` has the bridge-body mark (S-0010 claim 25).
+    pub fn body(&self, c: CellXY) -> bool {
+        self.idx(c).is_some_and(|i| self.bridge_body[i])
     }
 
     /// Whether `c` is a high-bridge cell (S-0211 claim 15), a bridge cell

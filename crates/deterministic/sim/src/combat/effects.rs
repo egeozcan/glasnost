@@ -140,6 +140,12 @@ pub enum Sound {
     /// A teleporting object's own jump arrived at its landing point (S-0207
     /// claim 20 e): `of` is its type, `pos` the landing point.
     ChronoIn,
+    /// The bridge-repaired announcement (S-0511 claim 17), for the
+    /// engineer's owner at the engineer's position.
+    BridgeRepaired,
+    /// The game-wide bridge repair sound (S-0511 claim 17), at the hut's
+    /// position, for every player.
+    RepairBridge,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

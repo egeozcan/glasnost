@@ -927,12 +927,16 @@ fn infantry_on(
     if eng && planted_bomb(w, t) {
         return Action::DisarmBomb;
     }
-    // spec: S-0214 table I row I3 (a bridge repair hut: no bridge is destroyed in our engine yet)
+    // spec: S-0214 table I row I3 (a bridge repair hut: repair building when S-0511 claim 21's cursor test reports a destroyed bridge, else no-repair)
     if eng
         && target_building_repairable
         && tb.is_some_and(|b| b.raw.bridge_repair_hut.unwrap_or(false))
     {
-        return Action::NoRepair;
+        return if crate::bridges::hut::repair_offered(w, t) {
+            Action::RepairBuilding
+        } else {
+            Action::NoRepair
+        };
     }
     let friendly = eng && engineer_friendly(w, actor, t);
     // spec: S-0214 table I row I4 (an engineer below full health; an engineer-friendly hospital)

@@ -322,6 +322,10 @@ pub struct World {
     pub tick: i32,
     /// The scenario random stream (S-0202).
     pub rng: Rng,
+    /// The map-generator stream (S-0202 claim 13), drawn by low-bridge
+    /// repair (S-0511 claim 20, F4). Seeded once at game start (Q-0711).
+    #[serde(default)]
+    pub map_rng: Option<Rng>,
     /// Game-speed index.
     pub game_speed: u8,
     /// Houses in house order.
