@@ -2,11 +2,11 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0110, Q-0112, Q-0277, Q-0331, Q-0417, Q-0480]
 supersedes: []
@@ -289,7 +289,11 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    - **Not owned by *H*:** it is inside the usable area (the height-aware test of S-0009, claim 5a,
      at its position), its point is not shrouded for *H* (S-0110's point test), it has not gained
      the radar-invisible veterancy ability (S-0311), and it is not hidden from *H* by cloaking or by
-     being underground (the special-abilities specs own those states).
+     being underground (the special-abilities specs own those states). A fully cloaked object
+     of another house, an ally's included, is listed only when *H* senses its cell through *H*'s
+     own sensor coverage (S-0516 claims 21 and 27). Allied sensor coverage does not count.
+     This is necessary, not sufficient: the remaining listing and draw-time tests still apply.
+     The owned-object case above has no sensor requirement.
    Draw-time tests, for every listed object, applied at the object's radar pixel:
    - when it is not owned by *H*, the cell shown at its radar pixel is not shrouded for *H*
      (claim 6),
@@ -298,7 +302,8 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    - its type is not insignificant, unless its type is radar-visible or it has an owner whose
      country is not passive for multiplayer (so insignificant objects of the neutral and special
      houses, and ownerless ones, are hidden).
-   - Backing: `measurable` (scenarios R5 parts A to C, E and G, R6 part B, R9); the ownerless
+   - Backing: `measurable` (scenarios R5 parts A to C, E and G, R6 part B, R9,
+     R9 part D for owner-only sensor coverage); the ownerless
      insignificant object is `unmeasured` (R5 part D, no skirmish setup creates it). The own-object
      discovery predicate with a clear mark is `unmeasured` independently: ordinary skirmish cell
      placement already sets the mark (S-0409 claim 20), so R9 A cannot isolate that condition.
@@ -308,10 +313,9 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    - Confidence: medium for the restriction to radar objects (the evidence so far shows only the
      four radar-object kinds ever listed, and no other kind); high for the type flags, the
      passive-country rule (both exceptions to "insignificant", R5 part G), the shroud test at the
-     pixel and the own-object case; low for the cloaking, underground and veterancy-ability tests (a
-     further condition also decides whether such an object is listed, and for some objects the
-     original lists one although the rule above hides it; which ones is not established, Open
-     questions)
+     pixel and the own-object case; medium for the owner-only sensor requirement for fully
+     cloaked objects, including allies (S-0516 claim 27); low for the remaining underground and
+     veterancy-ability tests and their sensor exceptions (Open questions)
 
 8. **Object position, colour and priority.** An object that is not a building lies at the one
    radar pixel of its stored position (F4); a building lies at the filled, stepped diamond or
@@ -322,9 +326,12 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    sizes. Each pixel still passes claim 7's draw-time tests separately. An object of *H* outside the radar image, other than a building, is drawn at the
    nearest pixel on the image's edge; other houses' objects outside the usable area are not shown
    (claim 7). A shown object is drawn using its owner's house display RGB (S-0103 claim 15),
-   converted as Terms *radar colour* says, or using the display RGB of the house it is
-   disguised as when it is disguised against *H*; a radar object without an owner is drawn in a fixed
-   neutral colour. Buildings, infantry, vehicles and aircraft use the same house display RGB:
+   converted as Terms *radar colour* says. For a disguised unit, S-0516 claim 38 selects the
+   colour house: its owner when that owner allies *H* (including ownership by *H*), otherwise
+   its disguise house. This radar choice is not the game-state test of appearing disguised
+   or the battlefield image test (S-0516 claims 35 and 37). The colour when the disguise house
+   is none remains open under S-0516 claim 38. A radar object without an owner is drawn in a
+   fixed neutral colour. Buildings, infantry, vehicles and aircraft use the same house display RGB:
    there is no building-versus-nonbuilding colour rule (Q-0417). Their radar shapes and visibility
    can differ, and claim 10 can invert an own object's colour independently. The RGB input is
    the setup-time sample of the brightest ramp entry, palette index 16 at shade row 26, not the
@@ -355,19 +362,17 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    another house is made on that cell, not on the cell it stands on (scenario R5 part F's setup
    makes it observable; R3 part A measures the pixel).
    - Backing: `measurable` (scenarios R5 parts A to C and F, R10, R11; R14 for house RGB,
-     object-kind equality and lighting independence); the following rules are
-     `unmeasured`. The neutral colour of an ownerless radar object: no skirmish setup is known that
-     creates a radar object without a house. The disguise colour: disguising is an order of the
-     object's owner, the other houses are computer players that no scenario can make
-     disguise a unit, and a disguise of the human's own object is not a case against *H*, so no
-     skirmish setup under the scenarios' control creates it. The separate rejection of a
+     object-kind equality and lighting independence; S-0516 CS16 part c and CS17 for
+     disguise-house selection). The following rules are `unmeasured`. The neutral colour of an ownerless radar object: no skirmish setup is known that
+     creates a radar object without a house. A disguise with no disguise house has no
+     established colour (S-0516 claim 38). The separate rejection of a
      non-owned object whose F4 pixel is outside the image while its position remains usable is
      also `unmeasured`: R11 tests leaving the usable area, not that boundary case
    - Confidence: high for the house RGB input, its equality across object kinds, lighting independence,
      the arrival order and the single pixel of an object that is not a building; medium for the edge
-     clamp and a building's set of pixels; low for the pixels outside the image, for the same-tick
-     results, for the one-tick lag of the drawn pixel, for the neutral colour and for the disguise colour
-     (including whether the disguise depends on the viewer, Open questions)
+     clamp, a building's set of pixels and disguise-house selection (S-0516 claim 38); low for
+     the pixels outside the image, for the same-tick results, for the one-tick lag of the drawn
+     pixel and for the neutral colour
 
 9. **Terrain colour.** Every radar point of a cell gets one point colour, the same for both points of the cell (an 8-bit triple, Terms). The applicable row is the first matching row in this precedence table; the rows are outcome rules, not an order of internal work.
 
@@ -1163,6 +1168,18 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   one that has the radar-invisible veterancy ability, each in explored ground. Expected for C
   (hypothesis, low confidence): none is shown. Falsified if: A or B differ; for C, any is shown
   (that records the original's behaviour and revises claim 7's confidence, not the other parts).
+  For the fully cloaked control in C, *H* has no sensor coverage on its cell.
+  Part D: place a stationary fully cloaked vehicle of an enemy house in fully explored water,
+  with its radar pixel's tested cell also explored and no competing radar object. Give the
+  human house *H* free radar. Compare no sensors, only an ally's sensor coverage, and *H*'s own
+  sensor coverage, using stock sensor vessels at a distance that does not cause adjacency
+  uncloaking. Repeat with the cloaked vehicle's owner mutually allied with *H*, and with a
+  discovered vehicle of *H*. Record cloak state, coverage by house and radar pixels after
+  listing stabilises. Expected: both foreign vehicles are absent without *H*'s own coverage,
+  including the allied-owner case and allied-sensor-only case. With *H*'s coverage they appear
+  when all other tests pass. The owned discovered vehicle needs no sensors. Any contrary
+  result with these conditions intact falsifies the corresponding requirement. A real uncloak
+  during the test makes that run inconclusive. This supplements S-0516 CS9 part f and CS17.
 - **R10 (claim 8, buildings; Q-0112).** Named test art gives separated own and enemy buildings
   foundation rectangles of 1 × 1, 2 × 2, 2 × 3, both 3 × 3 forms, and zero size. Place them on
   flat, fully explored ground with free radar and no competing radar objects. Use maps whose
@@ -1325,12 +1342,13 @@ within skirmish scope.
   also exchanges the green and blue channels is not established. Whether the bridge case of
   claim 9 covers the cells of a low bridge as well as those of a high one is not established either
   (scenario R6 part F).
-- Claim 7, cloaking, underground and veterancy-ability tests: for some such objects the original
-  lists the object although claim 7's rule hides it, so a further condition, not yet identified,
-  also decides whether they are listed. Which objects (which cloak or detection state, which height of an
-  underground object, which veterancy level) is not established; scenario R9 part C records it.
-- The disguise colour (claim 8): whether it depends on the viewing house, as claim 8 states, or
-  applies to every viewer, was not established, and no scenario can create the case (claim 8).
+- Claim 7's remaining underground and radar-invisible veterancy-ability exceptions under
+  sensor coverage are not fully specified here. Scenario R9 part C records them. The necessary
+  own-sensor condition for another house's fully cloaked object is resolved by S-0516 claim 27
+  and R9 part D, not an alliance bypass.
+- The radar colour of a disguised unit whose disguise house is none remains open under
+  S-0516 claim 38. With a disguise house, claim 8 now uses that spec's viewer-dependent
+  radar rule, not its game-state or battlefield-image disguise predicates.
 - Whether a bridge cell's colour (claim 9) is taken from image frame 0 of the bridge's sprite, as
   the evidence so far suggests, or from the cell's own image frame (scenario R6 part F).
 - The colour of an object without a house (claim 8): the original draws it in the colour of a
