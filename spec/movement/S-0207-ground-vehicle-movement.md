@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -120,8 +120,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   target when a curve is chained (claim 8). A drive vehicle that stands still, turns in place
   before a step, waits (claim 15) or is between two tracks has no heading point. A vehicle with the
   teleporting locomotor has none either (claim 20). The ship locomotor has the same heading
-  point as the driving locomotor (S-0504 claim 1). The heading point of the hovering and
-  other locomotors belongs to their specs (Open questions).
+  point as the driving locomotor (S-0504 claim 1). For the hovering locomotor it is the next
+  cell centre chosen under S-0503 claim 5, with the height defined in S-0503 Terms. The
+  heading points of other locomotors belong to their specs (Open questions).
 - **Vehicle scatter centre cell.** The cell around which a vehicle that accepts a scatter request
   looks for its new destination (claim 16): the cell of its heading point when it has one, and
   otherwise its own cell. For a vehicle travelling through a tunnel (S-0212 Terms), the tunnel's
@@ -616,7 +617,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     | moving blocker | S-0212 claim 22 | S-0212 claim 22 |
     | friendly obstacle, enemy obstacle | it discards its stored path and makes a fresh search at once, whatever its path retry timer shows (S-0212 owns the search and the timer). When the search finds a path, the repeated check follows on the same tick | it waits in every case. It takes as its target, and attacks by an override of its behaviour (S-0215 claim 10): the first object listed in the cell (S-0209 claim 13) when its house is not allied with that object (a terrain object is never allied), or, when no object is listed and the cell holds a wall, the wall, whatever its owner. When its house is allied with the first listed object, or when no object is listed and the cell holds no wall, it attacks nothing. The override gives no destination (below) |
     | stationary friendly | as for an obstacle: it discards its stored path, makes a fresh search at once, and makes the repeated check on the same tick | when the give-up test (F7) holds, it gives up the move (Terms). Otherwise it sends a scatter request with no threat point, forced and move-anywhere, to every object listed in the cell layer it drives on (below), and waits. Which of them receive it is S-0209 claim 11; what a vehicle among them does is claim 16, what an infantry unit does is S-0208 claim 11 |
-    | cloaked blocker | the cloaked objects in the cell become visible to its house, as in S-0209 claim 9 (the visibility specs own for how long). It discards its stored path. The fresh search that follows (S-0212 claims 20 and 21) is made on the same tick only when its path retry timer has run out, and then the repeated check follows | the cloaked objects become visible to its house again, and it gives up the move |
+    | cloaked blocker | every cloaked object in the cell's ground layer, of any house, starts uncloaking for every house, not just the mover's house (S-0516 claim 11 e). It discards its stored path. The fresh search that follows (S-0212 claims 20 and 21) is made on the same tick only when its path retry timer has run out, and then the repeated check follows | the same global uncloaking applies, and it gives up the move |
     | blocked | it discards its stored path and makes a fresh search at once, whatever its path retry timer shows (S-0212 claim 22). When the search finds a path, the repeated check follows on the same tick | it gives up the move |
 
     *The override of an obstacle's repeated check.* The override that makes the vehicle attack
@@ -880,7 +881,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       are S-0215 claim 17 and S-0417 claims 4 and 13). Low for cases g and j. High for the vehicle
       scatter centre cell of a drive vehicle (the heading point was read wherever it is set and
       cleared), including the ship equivalence of S-0504 claim 1. Medium for the tunnel exit.
-      The heading point of the hovering locomotor belongs to its spec
+      The hovering heading point is defined by S-0503 Terms and claim 5, with medium confidence
 
 ### Engine defaults of the speed-fraction fields
 
@@ -991,8 +992,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
         vehicle take its next step at once: the discarded path has no visible effect.
       - If no next step is chosen at the end of this transition, the hovering vehicle applies
         the arrival-time stop of part a, with the same target, behaviour, empty approach-list
-        and arrival-range conditions. When those hold, it clears its destination and stops
-        there, keeping its target. In particular, a still-running *R* leaves no next step and
+        and arrival-range conditions. When those hold, it clears its destination and keeps
+        its target. A positive travel distance already computed for this tick may still
+        produce a final step (S-0503 claim 7); no later travel tick occurs until a new move. In particular, a still-running *R* leaves no next step and
         therefore triggers this stop when those conditions hold. It does not wait for *R* to
         expire in that case.
       - When the arrival-time stop does not apply, for example against a building, a running
@@ -1820,12 +1822,12 @@ of the first group.
 | on a track | track target reached, no step left | at rest, *ρ* = 0 (claim 11) |
 | on a track | move stopped | target fraction becomes min(*ρ*ₜ, *F*₀.₃), destination cleared, finish the current track (claim 11) |
 | driving or sailing, track target reached | mobile target passes the arrival range test, qualifying behaviour, no approach destinations | destination cleared, remaining steps discarded, target kept, stop there (claim 19 a) |
-| hovering, step transition leaves no next step | the same arrival-time stop conditions hold | destination cleared, target kept, stop instead of retaining a destination through the retry wait (claim 19 d) |
+| hovering, step transition leaves no next step | the same arrival-time stop conditions hold | destination cleared, target kept; an already-computed final step is permitted, with no later travel until a new move (claim 19 d; S-0503 claim 7) |
 | hovering, step transition leaves no next step | arrival-time stop conditions fail, retry timer still runs | wait with destination kept until a search can choose the next step (claim 19 d) |
 | no track, step ahead, allied closed gate in the next cell | any tick | tells the gate to open and waits, without turning (claim 15) |
 | no track, facing the step | first check: friendly obstacle, enemy obstacle, stationary friendly | discards the stored path and searches at once; repeated check on the same tick when the search finds a path (claim 15, T4) |
 | no track, facing the step | first check: blocked | discards the stored path and searches on this tick regardless of the retry timer; a found path gets a repeated check on this tick (claim 15, T4; S-0212 claim 22) |
-| no track, facing the step | first check: cloaked blocker | reveals the cloaked objects, discards the stored path; searches on the same tick only if the path retry timer has run out |
+| no track, facing the step | first check: cloaked blocker | starts uncloaking every cloaked object in the cell's ground layer for every house (S-0516 claim 11 e), discards the stored path; searches on the same tick only if the path retry timer has run out |
 | holding a path found on this tick | repeated check: friendly or enemy obstacle | attacks the first listed object if not allied (a wall if nothing is listed) by an override that gives no destination, so its move destination is put aside until the override is reverted; waits |
 | no track, facing the step, first cell clear, curve chosen | second cell: friendly or enemy obstacle | discards the stored path; when the path retry timer has run out, searches on that tick, looks at the new first cell and makes a step check of the same kind, which can begin only a straight or diagonal track (claim 15, T5) |
 | holding a path found on this tick | repeated check: stationary friendly | gives up the move if the give-up test holds (F7), otherwise sends a forced, move-anywhere scatter request to the cell, waits |
@@ -2442,10 +2444,12 @@ cell before *X*.
   arrival tick, before *M*'s facing starts to change. *Falsified if:* *M* turns before the gate
   starts to open.
 - (f) As (d), with a test file that makes *E*'s type cloak when idle (the visibility specs own
-  cloaking) and *M* unarmed. *Expected:* on *M*'s arrival tick *E* becomes visible to the human
-  player and *M*'s stored path is cleared; in runs in which *M*'s path retry timer has run out on
+  cloaking) and *M* unarmed. Include a third house with ordinary sight of *X* but no sensor
+  coverage. Record *E*'s cloak state and its presentation for both non-owning houses.
+  *Expected:* on *M*'s arrival tick *E* starts uncloaking for every house (S-0516 claim 11 e),
+  and *M*'s stored path is cleared; in runs in which *M*'s path retry timer has run out on
   that tick, *M* gives up its move on the same tick (destination removed). *Falsified if:* *E* stays
-  invisible, or *M* keeps its path.
+  fully cloaked, only the mover's house sees the uncloak, or *M* keeps its path.
 - (g) A corridor that turns by 1/8 turn at *X*, so that the step into *X* and the next one form a
   two-cell curve; *X* itself is clear, and the cell after *X* is the curve's second cell (table
   T5). The recorder also reads *M*'s speed fraction.
@@ -2463,7 +2467,7 @@ cell before *X*.
     a straight or diagonal track, not a curve. A failed search follows S-0212 claim 23.
     The discarded path need not remain empty at the end of a tick that searched again.
   - Run 4: as run 3, with *E*'s type cloaking when idle (as in (f)). *Expected:* on *M*'s arrival
-    tick *E* becomes visible to the human player and *M*'s stored path is cleared; in runs in which
+    tick *E* starts uncloaking for every house, as in (f), and *M*'s stored path is cleared; in runs in which
     *M*'s path retry timer has run out on that tick, *M* gives up its move on the same tick.
   - Run 5: the corridor turns by 1/4 turn at *X* instead, and the cell after *X* holds a closed gate
     of the human player through which the corridor passes. *Expected:* on *M*'s arrival tick the
@@ -2492,7 +2496,7 @@ cell before *X*.
   - *Falsified if:* *M* curves into an occupied cell (runs 1 and 2); *M* keeps its old stored
     path or begins a track on its arrival tick (runs 1, 4 and 5); in run 3 the old path is
     kept, a search occurs while the retry timer is running, or the logged new clear first
-    step begins a curve instead of a straight or diagonal track; in run 4 *E* stays invisible,
+    step begins a curve instead of a straight or diagonal track; in run 4 *E* stays fully cloaked or the uncloak is limited to the mover's house,
     in run 5 the gate does not start to open on that tick; in runs 1 and 5 *ρ* is not 0 at the
     end of that tick; or in a qualifying run 6 the fresh search waits for a later tick, or
     the repeated check disagrees with T4/T5 for the logged new path.
@@ -2692,7 +2696,8 @@ cell before *X*.
   read-only recorder logs each tick *A*'s position, destination, number of stored steps and
   target, current and queued behaviour, approach destinations, the tick of each path search
   *A* makes, and *U*'s position. Log track completion for driving and sailing and step
-  transitions with and without a chosen next step for hovering. Compute both the approach
+  transitions with and without a chosen next step for hovering; also record the travel
+  distance computed before each transition and the movement heading. Compute both the approach
   range test and claim 19 a's arrival range test from the recorded positions.
 - *Procedure:* scripted input orders *A* to attack *U* (forced attack on an own unit). Once *A*
   has a destination, scripted input orders *U* to the cell of the second lane next to *A*'s
@@ -2726,7 +2731,9 @@ cell before *X*.
     result; the open-topped controls instead follow the strict three-dimensional test.
   - Run 3: at a step transition while *U* is in range under the approach test, the stored
     path is discarded. If *R* still runs, no next step is chosen; with claim 19 a's conditions
-    satisfied, *A* clears its destination and stops there on that tick, keeping its target.
+    satisfied, *A* clears its destination and keeps its target. A positive travel distance
+    already computed may produce a final step on that tick under S-0503 claim 7; it is not
+    required to stop at its pre-transition position. No later travel occurs until a new move.
     If *R* has expired and a successful search chooses a next step, *A* continues on that
     transition instead. Run 3c has no range-driven path discard before reaching its destination.
   - Run 4: because the target is not mobile, the arrival-time stop does not apply. After
@@ -2738,7 +2745,9 @@ cell before *X*.
   boundary controls falsify the claim if they follow the wrong measured point or comparison.
   A qualifying hover run falsifies part d if its transition with no next step retains the
   destination despite satisfying the stop conditions, or clears it in run 4 because of range
-  alone. A run 4 search before the retry delay expires falsifies the waiting rule.
+  alone, or suppresses an otherwise permitted positive final step solely because the
+  destination was cleared. Later travel without a new move also falsifies part d.
+  A run 4 search before the retry delay expires falsifies the waiting rule.
 - *Runs:* 3 each, including controls. The chase exception of claim 19 c is `unmeasured`: in our rules no order gives
   a hovering vehicle a vehicle or infantry unit as destination together with a target in range
   except the target-object destinations of S-0215 claim 37 h and S-0307, whose setups are those
@@ -3064,9 +3073,9 @@ are not covered by this scenario.
 - Whether a game started with the capture-the-flag option on places flags that a vehicle can carry
   (scenario D15 checks this as its precondition).
 - The reactions to a curve's second cell (claim 15, T5) were read at low confidence.
-- The heading point (Terms) of the hovering and other locomotors, which decides a vehicle
-  scatter centre cell for such vehicles (claim 16), remains for their specs. The ship case is
-  settled by S-0504 claim 1: it is the driving heading point.
+- The heading points (Terms) of locomotors other than driving, ship, hovering and teleporting,
+  which decide a vehicle scatter centre cell for such vehicles (claim 16), remain for their
+  specs. The ship case is settled by S-0504 claim 1 and the hover case by S-0503 claim 5.
 - Whether a live erasing-weapon lock can coexist with a teleporting locomotor jump (claim 20 e)
   is not established by a stock setup. The conditional exception follows S-0215 claim 10.
   reachability belongs to the erasing-weapon rules.
