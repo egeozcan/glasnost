@@ -22,5 +22,6 @@ played: the importer rejects it. The importer and the type registration order ne
    S-0004 say so?
 
 ## Current workaround
-Neither gas clouds nor late type creation of particle systems are built. The importer neither
-creates nor rejects; no code depends on the answer yet.
+The importer follows S-0004 claim 3: when no layer names the gas-cloud particle system, it
+creates the type at game start, reading no section (`convert::layers`, `finish`). Gas clouds
+themselves are not built, so nothing uses that type yet.
