@@ -2,7 +2,7 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -54,7 +54,8 @@ S-0301's term (Terms and claim 10).
 - **Gunner type.** A vehicle type with the imported gunner flag: its weapon number is set by its
   passenger (claim 6).
 - **Mode index.** A type's imported passenger mode index: the weapon number a gunner type takes when
-  an object of this type becomes its first passenger.
+  an object of this type becomes its first passenger, or is put back after a failed exit
+  (claim 6).
 - **Airborne.** An object is airborne when the original counts it as in the air. For aircraft,
   use S-0501 claim 18's *in-the-air answer*, as defined in its Terms, not its distinct *in flight*
   test. The movement specs own the exact test for other objects; S-0303 (claim 10) and S-0309 use
@@ -157,11 +158,19 @@ This spec covers skirmish combat and import. Network games and campaigns are out
    - when an object enters it as a passenger and is then its only passenger, its weapon number
      becomes the mode index of that passenger's type,
    - when its last passenger leaves, its weapon number becomes 0,
-   - further passengers entering or leaving while at least one remains change nothing.
+   - further passengers entering or successfully leaving while at least one remains change
+     nothing.
+
+   **Failed-exit exception.** When a passenger fails to exit during unloading and stays inside
+   at position 1 (S-0507 claim 10), the gunner hand-over runs again for that passenger, even
+   with others aboard. Its weapon number becomes that passenger's mode index, subject to
+   claim 5's clamping and charge-turret exception
+   (`quirks.unload_failed_exit_gunner_handover`).
 
    For a gunner vehicle that is also a switching type but is not a charge-turret type, the weapon
    is therefore chosen by the passenger that entered the empty vehicle, and it stays while any
-   passenger is aboard, even after that passenger has left. A charge-turret gunner ignores the
+   passenger is aboard, even after that passenger has left, unless a failed exit changes it as
+   above. A charge-turret gunner ignores the
    weapon-number change request and remains at weapon number 0. Other gunner vehicles still follow
    table P for slot choice.
    One refinement (low confidence): a
@@ -171,9 +180,13 @@ This spec covers skirmish combat and import. Network games and campaigns are out
    restarts with the delay of the weapon in the vehicle's slot 7. In this case too, the vehicle's
    weapon number after the entry is the mode index of the passenger's type, as above.
    - Backing: `measurable` (scenario W4, parts a to f for the first-passenger rule; part g for the
-     temporal hand-over). Retention after the first passenger alone leaves is `unmeasured`
+     temporal hand-over; part i and S-0507 scenario T10 part e for the failed-exit weapon-number
+     exception). Retention after the first passenger alone leaves is `unmeasured`
      if W4 part d cannot remove that passenger alone: evacuating and refilling does not test it.
-   - Confidence: high for the first-passenger rule; low for the temporal hand-over
+     Other hand-over effects after a failed exit are `unmeasured`: these scenarios isolate the
+     weapon number, not temporal erasure or rearm-countdown transfer.
+   - Confidence: high for the first-passenger rule and failed-exit weapon-number exception,
+     low for the temporal hand-over, including after a failed exit
 
 7. **Gattling types.** A gattling type at gattling stage *s* uses slot 2*s* + 1 against an airborne
    target object when the weapon in its slot 1 has an anti-air projectile, and slot 2*s* otherwise.
@@ -425,8 +438,13 @@ choice tells the two apart. The importer need not model "no weapon".
 | State | Event | Result |
 |---|---|---|
 | no passenger | an object enters as passenger | weapon number = mode index of its type |
-| one or more passengers | another enters, or one leaves and at least one remains | unchanged |
-| one passenger | it leaves | weapon number = 0 |
+| one or more passengers | another boards, or one successfully exits and at least one remains | unchanged |
+| one passenger | it successfully exits | weapon number = 0 |
+| one or more passengers | position 1 fails to exit and stays inside | weapon number = that passenger's mode index, with the failed-exit quirk on |
+
+All weapon-number changes in this table are subject to claim 5's clamping and charge-turret
+exception. With the failed-exit quirk off, a failed exit leaves the gunner role and weapon
+number unchanged.
 
 **Occupant index of a garrisoned building.**
 
@@ -447,6 +465,11 @@ moment (for example the gattling stage and the deployed state of the same tick).
   secondary lacks the never-use flag; a single-weapon type ignores the index, except infantry of a
   deploy-fire type (claim 8). Switch `quirks.passenger_weapon_needs_secondary` (default on =
   original). Off: row 4 applies before row 3.
+- **Gunner hand-over after a failed exit** (claim 6; S-0507 claim 10). Switch
+  `quirks.unload_failed_exit_gunner_handover` (default on = original), shared with S-0507.
+  A failed exit repeats the gunner hand-over for the passenger staying at position 1, changing
+  the weapon number to its mode index even with others aboard, subject to claim 5. Off: the
+  failed exit leaves the gunner role and weapon number unchanged.
 - **Gattling air test reads slot 1** (claim 7). Switch `quirks.gattling_air_test_slot_one` (default
   on). Off: the anti-air test reads the weapon in slot 2*s* + 1.
 - **Secondary wins against air targets** (table P, row 19). Switch
@@ -608,6 +631,18 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   *Expected:* hits of 3 after *P* enters and after *Q* enters (the weapon number stays 0 whatever
   the passengers' mode indices); the same vehicle without the flag gives the results of parts a to f.
   *Falsified if:* any hit other than 3.
+- *Part i (failed-exit exception):* use the two-passenger gunner of parts a to c, with *P*
+  boarded first and *Q* last. Use game-speed index 2 and 800 × 600. Order an unload while
+  neighbours are open; after the transport chooses its unloading cell and starts turning,
+  move blockers into every exit before release, as in S-0507 scenario T10 part e. A read-only
+  recorder logs passenger order, count, weapon number and tick. *Expected:* the failed exit
+  leaves both inside, *Q* at position 1, but changes the weapon number from 2 to 3. Interrupt
+  unloading and attack a stationary enemy target: hits of 11 rather than 7 identify the change.
+  Repeat with the charge-turret flag: the weapon number remains 0 and hits remain 3.
+  *Falsified if:* a reached failed exit retains weapon number 2 in the ordinary gunner, changes
+  number in the charge-turret control, or the subsequent hits disagree. A run blocked before
+  the unloading-cell choice is inconclusive: unloading may end without attempting an exit.
+  With the quirk off in our engine, the ordinary gunner keeps number 2 and hits of 7.
 - *Falsified if:* any completed part a to f differs from the listed damage, including part f
   not reverting to damage 3.
 
