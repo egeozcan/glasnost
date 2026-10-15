@@ -819,7 +819,7 @@ Provisional rules of M6b parachutes and drops, each tied to a request:
 | `paradrop::attempt` | the standing-position choice comes first, so every refusal takes its draw; then entry outcome, usable area, deck-entry mark, qualification; on a bridge cell the paratrooper goes on the deck layer, and its mark goes in the deck record | Q-0750 |
 | `combat::fire::shot`, `paradrop::shot_drops` | a drop shot replaces only the projectile launch; the spray draw, the delay and its draws, the burst counter and the report effect run as usual; a drop shot is never void; a successful drop then sets the rearm countdown to the current tick | Q-0751 |
 | `paradrop::release` | with no parachute type, or one that is not listed, the drop succeeds, no animation is attached and no draws are taken, and the paratrooper falls with the no-parachute recurrence | Q-0752 |
-| `transport::drop_out` | the paratrooper takes the ordinary placement fall-back to rest at the drop; after that, its behaviour follows the ordinary rules | Q-0753 |
+| `paradrop::release` (through `transport::drop_out`) | the paratrooper takes the ordinary placement fall-back to rest at the drop; after that, its behaviour follows the ordinary rules | Q-0753 |
 | `mapview::live` (`attach_parachute`) | the parachute uses the ordinary ground-layer animation order against its paratrooper and the animation palette | Q-0754 |
 
 ## Own AI (M5b)
