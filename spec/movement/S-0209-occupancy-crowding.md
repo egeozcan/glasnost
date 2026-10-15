@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 32
+revision: 33
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -447,19 +447,44 @@ rank* and *elite weapon*), *n*
      occupant rows of claims 4 and 5 (row VP1 for the vehicle itself) still see it. Moving into a
      new cell during a track clears nothing. When ships and walking vehicles clear their flags
      is not established (Open questions).
-   - *Hovering vehicles.* S-0503 claim 13 owns their reservations and between-steps state.
-     A clear heading-point choice reserves that point's cell before physical entry. Replacing or
-     abandoning the point clears its old reservation. The positive advance with a heading point
-     that ends the between-steps state clears the flag at the actual position before movement,
-     even when the vehicle remains in that cell. While not between steps, cell-edge crossings
-     move the listing without setting or clearing flags, so cells merely swung through at a turn
-     are not reserved. A crossing while still between steps clears the old actual-position flag
-     and marks the new actual position. A successful arrival-time choice that leaves no heading
-     point restores a mark at the actual position. Reservation surface follows the marked point
-     under S-0503 claim 13, not automatically the current listing layer. These are flags, not
-     per-vehicle counts. This pointer inherits that claim's high confidence for reservation and
-     first-advance release, medium confidence for exceptional crossings and no-point restoration,
-     and `measurable` backing (S-0503 scenario H11).
+   - *Hovering vehicles.* S-0503 claims 13 and 15 own their reservations, between-steps state
+     and arrival outcomes. A clear heading-point choice reserves that point's cell before
+     physical entry. Replacing or abandoning the point clears its old reservation, except for
+     the no-choice idle arrival below. The positive advance with a heading point that ends the
+     between-steps state clears the flag at the actual position before movement, even when the
+     vehicle remains in that cell. While not between steps, cell-edge crossings move the listing
+     without setting or clearing flags, so cells merely swung through at a turn are not reserved.
+     A crossing while still between steps clears the old actual-position flag and marks the new
+     actual position. These are flags, not per-vehicle counts.
+
+     Setting a flag uses deck occupancy only when the marked point's cell has a high bridge and
+     the point is at least 416 leptons above terrain surface there; otherwise it uses ground.
+     Clearing uses the point's height alone: at least 416 leptons above that surface clears deck,
+     even without a high bridge, and below that clears ground. These are integer comparisons,
+     with no rounding. Neither operation uses the listing layer. S-0503 claim 13 owns
+     `quirks.hover_flag_clear_height_only` (default original); off, clearing requires the same
+     high-bridge condition as setting.
+
+     For a surviving on-map vehicle, an arrival-time choice that does not refuse entry and
+     leaves no heading point marks the actual position and produces S-0503 claim 15's
+     cell-arrival update. This includes a timer-deferred search with the locomotor destination
+     retained, a failed search during choice even when it clears that destination, and an absent
+     locomotor destination with contact in the vehicle's present cell, provided the vehicle is
+     not held. Search success is not required. A refused choice, including a held vehicle,
+     supplies neither restoration nor that update. If the initial arrival path update has already
+     cleared the locomotor destination, choice requires contact in the present cell. Without
+     that contact, a failure there that cleared the old heading reservation supplies no
+     replacement mark or update. An ordinary no-destination/no-contact arrival with no stored
+     step clears the heading point without releasing its old reservation, absent another clearing
+     event. S-0503 claim 15 owns `quirks.hover_idle_arrival_reservation` (default original).
+     Off, release that reservation and mark the actual position, still without a cell-arrival
+     update. These tests use the locomotor destination, not the order-level destination.
+     Any already-computed final travel can still follow these arrival outcomes; a boundary
+     crossing while between steps transfers an actual-position mark to the post-travel cell.
+     Crossing itself is not a cell-arrival update.
+     These pointers inherit high confidence for reservation and first-advance release, medium
+     confidence for exceptional crossings and restoration, and `measurable` backing
+     (S-0503 scenarios H11 and H15).
    - *Teleporting vehicles.* S-0207 claim 20 a, e and k owns their reservation lifecycle.
      Fixing a landing point reserves its ground record, even for a high-bridge cell and even
      when the nearby search uses deck mode. Replacing a remembered landing point clears that
