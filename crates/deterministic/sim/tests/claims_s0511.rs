@@ -1538,3 +1538,21 @@ fn bridge_state_save_round_trip() {
     }
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
 }
+
+// spec: S-0202 claim 13 (the map-generator stream starts an ordinary-map game in its seed-0 state, whatever the game seed)
+#[test]
+fn map_generator_stream_starts_at_seed_zero() {
+    let rules = Arc::new(SimRules::new(&ruleset(), "synthetic-bridges"));
+    for seed in [5, 77] {
+        let w = glasnost_sim::load::new_game(
+            rules.clone(),
+            &base(),
+            catalogue(),
+            &testkit::setup(seed),
+        )
+        .expect("synthetic map loads");
+        let mut got = w.map_rng.clone().unwrap();
+        let mut want = glasnost_sim::rng::Rng::new(0);
+        assert_eq!(got.raw(), want.raw(), "seed {seed}");
+    }
+}

@@ -672,7 +672,6 @@ Provisional rules of M6b bridges, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `bridges::high::span_check` | the far-side named cell of a direct pier collapse accepts that collapsed pier as its span's start piece | Q-0678 |
-| `load` (`map_rng`) | the map-generator stream is seeded from the first R(0, 65535) of a fresh stream seeded with the game seed | Q-0711 |
 | `bridges::area_attempts` | only the attack target equal to the centre cell is dropped | Q-0719 |
 | `bridges::blow::heads_to` | a drive or ship vehicle's heading point has no stored height of its own: its test takes the unit's height, so it coincides with the track-end test | Q-0676 |
 | `fall::land` | the bomb mark is spent on landing, after the landing hit | Q-0677 |
