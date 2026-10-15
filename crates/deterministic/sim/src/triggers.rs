@@ -926,9 +926,9 @@ fn action(w: &mut World, a: &glasnost_map::triggers::Action) {
                 present(w, a, Some(c));
             }
         }
-        // spec: S-0011 claim 30 (actions that hand over to other specs: recognised, their effects belong to specs not written yet)
+        // spec: S-0011 claim 30 (actions that hand over to other specs: recognised, their effects belong to other topics: teams (no spec yet), crates (S-0520) and superweapons (S-0512, S-0513), not built yet)
         4 | 5 | 7 | 80 | 102 | 108 | 135 => {
-            w.note("S-0011 claim 30: a trigger action hands over to a spec not written yet (teams, crates, superweapons, computer targeting); no effect");
+            w.note("S-0011 claim 30: a trigger action hands over to a topic not built yet (teams, crates, superweapons, computer targeting); no effect");
         }
         // spec: S-0011 I4 (14 change owner, 32 destroy attached, 42 explosion, 113 cheer, 8 drop-zone animation, 41 play an animation)
         14 | 32 | 42 | 113 | 8 | 41 => {

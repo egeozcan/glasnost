@@ -553,7 +553,8 @@ fn phasing_in(w: &World, id: ObjectId) -> bool {
     crate::teleport::phasing_in(w, id)
 }
 
-/// Carries an active planted bomb (S-0213 Terms). Seam: planted bombs
+/// Carries a planted bomb (S-0213 Terms; for row I2 one visible to the acting
+/// player, S-0519 claim 10). Seam: planted bombs
 /// (S-0519, wave 2) are not built.
 fn planted_bomb(_w: &World, _id: ObjectId) -> bool {
     false
@@ -917,7 +918,7 @@ fn infantry_on(
     if g == Action::ToggleSelect {
         return Action::ToggleSelect;
     }
-    // spec: S-0214 table I row I2 (an engineer over a target carrying an active planted bomb: disarm bomb)
+    // spec: S-0214 table I row I2 (an engineer over a target carrying a planted bomb visible to the acting player, S-0519 claim 10: disarm bomb; bomb visibility is part of the planted-bomb seam)
     if eng && planted_bomb(w, t) {
         return Action::DisarmBomb;
     }
