@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 26
+revision: 27
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -955,8 +955,8 @@ rank* and *elite weapon*), *n*
 7. **First reaction to an obstacle: an immediate new path.** When the next cell gives *cloaked
    blocker*, *stationary friendly*, *friendly obstacle*, *enemy obstacle* or *blocked*, the walker
    stops, discards its path and searches a new one on the asking tick itself, whatever its path
-   retry timer shows (S-0212 owns the search). For a cloaked blocker, that search treats the cloaked
-   objects as revealed (claim 9).
+   retry timer shows (S-0212 owns the search). For a cloaked blocker, that search sees the
+   ground-layer uncloaking caused by claim 9; bridge-deck objects are not uncloaked by it.
    - When the repeated ask (Terms *asking tick*), about the first cell of the new path, gives
      *clear* with a free position, the walker chooses its walking target there on the same asking
      tick (claim 6). So it loses no tick against
@@ -1016,15 +1016,18 @@ rank* and *elite weapon*), *n*
        target. That includes an allied wall: no alliance test applies to the wall. Whether it then
        fires on an allied wall belongs to the combat specs (Open questions; a possible switch is among the Questions for the project lead).
      - In every case the walker also stops and discards its path.
-   - *Cloaked blocker.* The cloaked objects in that cell become visible to the walker's house, on
-     the asking tick. The visibility specs own for how long. On the first ask the walker also
-     searches a new path on that tick, and that search treats the cloaked objects as revealed (claim 7). On the
-     repeated ask it waits for the rest of that tick. Its asks on later ticks are first reactions
-     again (claim 7), so the objects are made visible again on every tick on which the walker asks.
+   - *Cloaked blocker.* Every cloaked object in the blocking cell's ground layer, of any house,
+     starts uncloaking on the asking tick (S-0516 claim 11(e)). This changes the object's cloak
+     state for every house, rather than granting sight only to the walker's house. Bridge-deck
+     occupants are not affected, even when the blocker was found on deck. S-0516 claim 7 owns
+     the uncloak progression. On the first ask the walker also searches a new path on that tick,
+     with the ground-layer objects already uncloaking (claim 7). On the repeated ask it waits
+     for the rest of that tick. Its asks on later ticks are first reactions again (claim 7), and
+     each cloaked-blocker answer causes the same ground-layer uncloaking.
    - Backing: `measurable` (scenarios C3 and C8; scenario C9 for the first listed object; scenario
      C16, part c2, for a terrain object; scenario C25, part a, for the walker's view; scenario C19,
-     parts b and d, for the asking tick)
-   - Confidence: medium. High that a terrain object counts as not allied. Low for what happens to
+     parts b, d and d2, for the asking tick, global uncloaking, ownership and cell-layer scope)
+   - Confidence: medium. High for ground-layer uncloaking of any house, and that a terrain object counts as not allied. Low for what happens to
      an allied wall, or to a terrain object, after it is taken as a target (the combat specs own
      that).
 
@@ -1274,7 +1277,7 @@ delay is an imported integer in ticks, used as read.
 | holding a path searched on this asking tick | repeated ask: friendly obstacle, enemy obstacle | stops and discards the path. On the same tick it attacks the first listed object when the walker's house is not allied with that object (a terrain object included), takes the wall as its target when no object is listed, and attacks nothing when the walker's house is allied with the first listed object (claim 9) |
 | holding a path searched on this asking tick | repeated ask: blocked | keeps the path and waits for the rest of the tick; on the next tick it asks again as a first reaction |
 | walking | closed friendly gate | opens the gate, waits |
-| walking, or waiting after a repeated ask on an earlier tick | cloaked blocker (first or repeated ask) | the cloaked objects become visible to its house. On the first ask: it searches a new path on the asking tick, a search for which they already count as revealed (claim 7). On the repeated ask: it waits for the rest of the tick; on the next tick it asks again as a first reaction |
+| walking, or waiting after a repeated ask on an earlier tick | cloaked blocker (first or repeated ask) | every cloaked ground-layer occupant of the blocking cell, of any house, starts uncloaking for every house; deck occupants are unaffected (S-0516 claim 11(e)). On the first ask: it searches a new path on the asking tick with those ground-layer occupants already uncloaking (claim 7). On the repeated ask: it waits for the rest of the tick; on the next tick it asks again as a first reaction |
 | walking | moving blocker | waits; starts the blockage delay on the first such tick; re-paths whenever the retry timer allows, avoiding blockers once the delay has passed |
 
 Ordering stated as consequences:
@@ -1602,8 +1605,9 @@ stock infantry type has the destroyer zone.
   - (d2) The crusher drives into the enemy vehicle's cell without stopping in front of it.
   - (e) The walker never attacks the spy. It stops in front of the cell and sends a cell-wide request,
     so the spy may move away (S-0208 claim 11).
-  - (f) The cloaked vehicle becomes visible to the human player when the walker reaches its cell
-    (*cloaked blocker*, claim 9). The walker does not enter that cell while the vehicle stands there.
+  - (f) The vehicle starts uncloaking for every house when the walker asks about its cell
+    (*cloaked blocker*, claim 9), not merely becoming visible to the human player. The walker does
+    not enter that cell while the vehicle stands there. Scenario C19(d) distinguishes the houses.
   - (f2) The vehicle still gives *cloaked blocker*, although the human player sees it, so a path
     through its cell exists when the order is given (at a step cost of 1000, S-0212 claim 8). The
     walker sets out and walks up to *P*. It does not enter the vehicle's cell while the vehicle
@@ -2205,7 +2209,13 @@ the asking tick.
     destination, so it sends the cell-wide request of claim 8.
   - (d) As (a), with *E* replaced by an enemy vehicle of a type that a test file lets cloak. It is
     moved from the niche into *X* by the trigger and stands there, cloaked and invisible to the
-    human player, when *W* arrives. *X* gives *W* *cloaked blocker*.
+    human player, when *W* arrives. *X* gives *W* *cloaked blocker*. Include a third house with
+    ordinary sight of *X* but no sensor coverage. Neither non-owning house has sensors covering *X*.
+  - (d2) As (d), with *X* under a high bridge and the route and bypass at ground level. The named
+    test file also lets an infantry type cloak. Put one idle infantry of *W*'s house on a side
+    position of ground *X*, and one on deck *X*, both fully cloaked before *W* arrives. Keep the
+    ground cell's other side positions free. The enemy ground vehicle still gives *cloaked blocker*.
+    No sensor or other cause of uncloaking may affect these objects during the observation.
   - (e) Later ticks. As (d), with these changes. The cloaked vehicle is pre-placed in *X* by the
     map, so a path through *X* exists at a step cost of 1000 (S-0212 claim 8) when the order is
     given, and the test file also removes its weapons, so that it cannot fire on *W* once revealed.
@@ -2216,11 +2226,14 @@ the asking tick.
     again leads through *X*, and it waits (claims 7 and 9). At least 30 ticks after *t*ₐ, a map
     trigger moves *E*₂ into *N*, where it stands. *t*ₙ is the first tick on which *E*₂'s recorded
     position lies in *N*.
-- *Procedure:* give *W* its order and record until it has passed *X*, or 400 ticks. In (d), also
-  record on every tick whether the vehicle is visible to the human player's house.
+- *Procedure:* give *W* its order and record until it has passed *X*, or 400 ticks. In (d) and
+  (d2), also record each test object's cloak state every tick and its presentation to both
+  non-owning houses, using a read-only recorder and presentation capture. Compare houses in the
+  same recorded skirmish state; no network game is required.
 - *Observable:* *g*₀, *t*ₐ and *g*; the cells *W* moves through after *P*; in (b) the first tick on
   which *W*'s recorded target is *E*; in (c) the tick on which each occupant's recorded destination
-  changes; in (d) the first tick on which the vehicle is visible to the human player; in (e) *t*ₙ
+  changes; in (d) and (d2) the first uncloaking tick of each test object and whether the cloak
+  change applies to both non-owning houses; in (e) *t*ₙ
   and the first tick after *t*ₐ on which *W*'s position changes, and into which cell.
 - *Runs:* 3 each.
 - *Expected:*
@@ -2231,8 +2244,11 @@ the asking tick.
     obstacle* again, and *W* takes *E* as its target on the same asking tick (claims 7 and 9).
   - (c) All three occupants' recorded destinations change on tick *t*ₐ + *g*₀ − 1 (claims 7, 8 and
     11).
-  - (d) As (a): *g* = *g*₀ and *W* takes the bypass. The vehicle is visible to the human player from
-    tick *t*ₐ + *g*₀ − 1 (claim 9).
+  - (d) As (a): *g* = *g*₀ and *W* takes the bypass. The vehicle starts uncloaking on
+    tick *t*ₐ + *g*₀ − 1 for every house, including the third house (claim 9).
+  - (d2) On that same asking tick, both the enemy ground vehicle and the friendly ground infantry
+    start uncloaking. The deck infantry stays fully cloaked. Ownership does not limit the effect,
+    but the ground layer does. The route timing is not this part's observable.
   - (e) *W* stays in *P* until *E*₂ has left *B*. Its next position change is a step into *B*, on
     tick *t*ₙ + 1 or *t*ₙ + 2: on each tick it searches a new path, so the search of the first
     asking tick after *B* is vacated takes the bypass, and *W* chooses its walking target in *B* on
@@ -2244,7 +2260,11 @@ the asking tick.
   - (b) *W*'s target is first *E* on a tick after *t*ₐ + *g*₀ − 1, or *W* never takes *E* as its
     target,
   - (c) any occupant's destination does not change on tick *t*ₐ + *g*₀ − 1, while *W* stands in *P*,
-  - (d) the vehicle is not visible to the human player on tick *t*ₐ + *g*₀ − 1,
+  - (d) the vehicle remains fully cloaked on tick *t*ₐ + *g*₀ − 1, or the effect grants sight to
+    the walker's house only rather than changing cloak state for every house,
+  - (d2) either ground object does not start uncloaking on that tick, or the deck infantry does.
+    If any test object is not fully cloaked beforehand, or another uncloak cause acts, the run
+    cannot decide this part,
   - (e) *W* still stands in *P* on tick *t*ₙ + 30 while the vehicle stays in *X* (as if each later ask
     were a repeated ask, which waits without searching again), or its first step after *t*ₐ comes later than tick
     *t*ₙ + 2 (a later search, held back by a timer). If *W* gives up, leaves *P* before *t*ₙ, or the
