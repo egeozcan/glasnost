@@ -1,9 +1,9 @@
 ---
 id: Q-0635
 title: Strafing wait with a zero speed field, enter processing delay, an attack run's scatter request, and a release-started crash
-status: open
+status: answered
 related: [S-0501, S-0215, S-0506]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

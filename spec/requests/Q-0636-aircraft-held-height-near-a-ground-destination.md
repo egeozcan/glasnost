@@ -1,9 +1,9 @@
 ---
 id: Q-0636
 title: Which held height does a holding aircraft use near a destination on the ground, and how does it steer early in take-off?
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

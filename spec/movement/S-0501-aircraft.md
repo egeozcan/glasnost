@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 4
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0635, Q-0636]
 supersedes: []
 ---
 
@@ -21,8 +21,8 @@ an armed aircraft carries out an attack run and spends its ammunition; how it fi
 lands on and is serviced at a pad; how the number of pad-bound aircraft a house may build follows
 from its pads; and the flight and return of non-missile aircraft launched from a carrier.
 The shared spawn-controller cycle, including replacement, reload and release, belongs to
-S-0506 claims 1 to 9 and 11 to 13; missile flight also belongs to S-0506. The spy plane's dispatch and reveal are planned S-0513 and the
-delivery of paratroopers and cargo is planned S-0522; only their flight is covered here.
+S-0506 claims 1 to 9 and 11 to 13; missile flight also belongs to S-0506. The spy plane's dispatch and reveal are S-0513 claims 43 to 45 and the
+delivery of paratroopers and cargo is S-0522 claims 1 to 16; only their flight is covered here.
 Ordinary air-transport eligibility is S-0507 claim 2: capacity counts passengers, without a
 passenger-size or size-limit test. Boarding releases mind control (S-0507 claim 6).
 Landed passenger release is S-0507 claim 13; its airborne unloading transitions remain incomplete.
@@ -54,7 +54,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   test, not either sense of the glossary's *airborne*. Two other tests appear and are named where
   used: *h* > 0 (claim 37), and the aircraft's **in-the-air answer**, which is S-0307's *airborne*
   (height above the surface at least 208 leptons) for every aircraft except the game-wide
-  V3-rocket and dreadnought-missile types, which use their locomotor's own answer (claim 18).
+  V3-rocket and dreadnought-missile types, which use their locomotor's own answer (S-0506 claim 22; claim 18 here uses that answer).
   The in-the-air answer is the exact test that S-0308's *airborne* leaves to this spec for
   aircraft.
 - **visiting aircraft**: an aircraft marked as not meant to stay on the map. Successful placement
@@ -78,6 +78,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   invisible.
 - **speed fraction**: a floating-point value from 0 to 1 that multiplies the aircraft's speed.
   The locomotor holds a current and a target value.
+- **unfinished flight**: movement accepted but not yet completed by settling at a landing
+  destination (claim 40); this is distinct from a nonzero speed fraction.
 - **attack run**: one approach to a target ending in one or more firing passes and one round of
   ammunition spent (claim 15). A **firing pass** is one processing in which the run fires.
 - **run lock**: a mark an aircraft carries during the later passes of a strafing run, a fighter's
@@ -102,7 +104,10 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    a superweapon), it is placed on the ground when it is not a visiting aircraft and its position
    lies inside the usable area. Otherwise it is placed at its cruise height above the terrain.
    Its current speed fraction starts at 1 when it is placed exactly at cruise height and at 0
-   otherwise. A type placed carrying passengers is marked as a passenger carrier for the rest of
+   otherwise. Ground placement replaces the requested world height with the terrain height.
+   It does not preserve an elevated launch request or a docking displacement's height.
+   A later docking-position assignment is separate (claim 24; S-0404 claim 15).
+   A type placed carrying passengers is marked as a passenger carrier for the rest of
    its life (claim 19). Where an aircraft factory puts a new aircraft is S-0404 claims 13 and 15,
    and its contact and tether at release are S-0417 claim 11.
    - Backing: `measurable` (scenario AC1)
@@ -130,15 +135,25 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    and *f* its current speed fraction. The displacement is split into x and y with the table trigonometry of S-0105 (F1),
    and each new coordinate is truncated toward zero (Formula F3). Ordinary forward motion
    follows its body facing; the table and coordinate truncations determine the exact step.
-   Descent can additionally adjust its horizontal position toward the destination cell (not yet
-   specified: Open questions). Body turning follows S-0206 claim 1.
+   A living descending aircraft with a destination additionally moves 5 leptons toward the
+   centre of its destination cell in the same tick, except during *enter* toward a helipad
+   building. This extra displacement follows the forward step and ordinary height reduction.
+   It retains the resulting world height. Take the direction to that centre by S-0204
+   claim 8, then use F3's facing conversion and table trigonometry
+   with step length 5, truncating each coordinate sum toward zero. This is not a snap or a
+   distance-clamped step: even a nearer cell centre does not reduce its length.
+   Body turning follows S-0206 claim 1.
    When the new position is not in a legal map cell, the aircraft moves there anyway unless it
    may leave the map now (claim 10) and its type lacks the fly-by flag. In that case it tries the
-   position shifted 128 leptons in x back toward the map's middle, then a nearby fallback
-   position; if neither is in a legal cell it does not move in this tick (low: Open questions).
-   - Backing: `measurable` (scenario AC3)
-   - Confidence: high (the forward-step formula, type speed and truncation); low (the unresolved
-     fallback position and descent adjustment, `unmeasured` because their geometry is not traced)
+   position shifted 128 leptons in x back toward the map's middle, then a random fallback
+   position 64 leptons from that shifted point. One raw scenario-stream draw supplies its
+   low eight bits as a facing index, multiplied by 256 facing units. F3's displacement and
+   coordinate truncation apply, with length 64 and no snapping to a cell centre. If either
+   resulting cell coordinate is outside 0 … 511, this random candidate is the shifted point
+   itself instead. If neither candidate lies in a legal cell, no forward relocation occurs
+   that tick; altitude adjustment and any descent nudge can still occur.
+   - Backing: `measurable` (scenarios AC3 and AC23)
+   - Confidence: high
 
 5. **Speed fraction.** While a living aircraft that is not landing has a destination, its target
    speed fraction is *τ* = min(1, *d* / *S*), where *d* is the truncated table square root of
@@ -176,9 +191,14 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 6. **Holding height and the landing trigger.** An aircraft is marked as holding height while
    any of these holds: its destination point is more than 120 leptons above terrain there,
    it has a target and ammunition left; it carries the run lock; its type is not landable.
-   In ordinary flight its held height is the cruise height. Within 768 leptons of the destination,
+   In ordinary flight its held height is the cruise height. Below 768 leptons from the destination,
    guidance instead uses destination height minus terrain height there when the holding-height
-   mark is set. An *enter* movement update clears that mark. Without the mark, in a tick
+   mark is set. This applies to every marked approach, not just an originally elevated
+   destination. However, accepting a nonempty movement point while the aircraft has a target
+   and ammunition replaces that point's world height with terrain height there plus cruise
+   height. Thus an attacker approaching a ground target ordinarily keeps cruise height,
+   rather than descending to the ground. This replacement concerns the flight point held for
+   movement, not the destination object's position. An *enter* movement update clears that mark. Without the mark, in a tick
    in which it is alive, neither landing nor taking off, standing in its destination cell with a
    target speed fraction of 0, and it has no target or no ammunition, it **starts to land**.
    When its behaviour is not *enter* and it has a further waypoint of a planned route (the
@@ -194,7 +214,10 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    - Confidence: high (the triggers); medium (the 120-lepton rule, the planned-route exception)
 
 7. **Landing and touchdown.** Landing sets the target speed fraction to 0; descent follows
-   claim 3. On changing into the ground render layer, its landing cell is tested (Formula F7).
+   claim 3. The ground render layer applies exactly when height above the surface is at most
+   0 leptons; any positive height uses the top layer. Both directions use that boundary,
+   with no hysteresis and no separate 208-lepton combat threshold.
+   On changing into the ground render layer, its landing cell is tested (Formula F7).
    If the cell is refused the aircraft rises by 10 leptons and starts to take off again. The
    exceptions in F7 mean occupancy is not an unconditional refusal: its own contact, itself,
    and certain spawned-object combinations are accepted.
@@ -203,9 +226,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
 8. **Take-off.** An aircraft on the ground (or landing) that gets a destination takes off: its
    held height becomes its cruise height and it climbs by claim 2. During take-off, with
-   *H* = cruise height minus landing height, its requested heading stays at its current heading
-   above *H* − trunc(*H* / 3); between that threshold and trunc(*H* / 2), it aims toward the
-   destination and requests full speed. These are take-off rules, not descent stages. The
+   *H* = cruise height minus landing height, above *H* − trunc(*H* / 3) its aiming facing is
+   requested to match its current body facing. Above trunc(*H* / 2), up to and including that
+   upper threshold, its body is requested to face the destination and it requests full speed.
+   At or below trunc(*H* / 2), take-off makes no new heading request: the previously requested
+   heading persists, which need not equal the current facing. These are take-off rules, not descent stages. The
    divisions are integer divisions toward zero, with heights in leptons. Setting no destination while it is in flight
    makes it land where it is (claim 6). An aircraft standing on a pad leaves its pad reservation
    when it takes any destination other than that pad (claim 24).
@@ -257,16 +282,18 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
 12. **The attack run.** An aircraft in *attack* follows table T1 (State and ordering). It flies
     toward a firing spot near its target, aims, fires, and then either makes further passes or
-    leaves to rest. The firing spot is chosen anew at the start of every run (Open questions).
-    For a strafer the firing spot is the target itself. The firing-spot selection for other
-    aircraft is not yet specified.
+    leaves to rest. The firing spot is chosen anew at the start of every run (claim 39).
+    For a strafer the firing spot is the target itself.
+    In T1, **close enough** means that the range test of S-0307 claims 7 to 11 passes for
+    the weapon selected against the current target, using that claim 8's firing source point.
+    It is not distance to the firing spot and is not the last firing-check answer: an earlier
+    refusal such as *not facing* does not decide whether this separate range test passes.
     A **full burst** is *B* shots (S-0301 claim 4) made one after another in the same tick, with no
     firing check between them; each shot still advances the burst counter and sets the rearm
     countdown as S-0301 claims 1 to 6 say, including any in-burst draw, so after a full burst the
     countdown holds the full delay.
-    - Backing: `measurable` (scenarios AC7, AC8 and AC9); `unmeasured` for the non-strafing
-      firing-spot geometry: its candidate-selection rule has not been traced completely
-    - Confidence: high (the run structure and burst in one tick); low (unresolved firing spots)
+    - Backing: `measurable` (scenarios AC7, AC8, AC9 and AC23)
+    - Confidence: high
 
 13. **Strafing run.** A strafer that reaches its target makes five firing passes in one run: the
     first pass fires its full burst, the next four fire one shot each. The passes after the first
@@ -276,11 +303,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     so with no other refusal the spacing is the larger of the bare field and S-0301's delay. Later passes fire even when
     the check answers *not facing*, *cloaked* or *out of range* (claim 19). After the fifth shot the aircraft waits
     ⌊(*R* + 1024) / *V*ₜ⌋ ticks before it starts the next run, where *R* is the weapon's range in
-    leptons and *V*ₜ the type's speed field (Formula F6). A strafer begins its firing passes as
+    leptons and *V*ₜ the converted type speed (Formula F6, including its zero-speed departure). A strafer begins its firing passes as
     soon as the target is within its weapon's range; a strafer that has not yet reached that
     range keeps flying at the target. If the first pass's check answers *not facing*, the strafer
     goes back to choosing a firing spot and waits 45 ticks.
-    - Backing: `measurable` (scenario AC7)
+    - Backing: `measurable` (scenarios AC7 and AC23)
     - Confidence: high
 
 14. **Fighter and ordinary runs.** A fighter fires its full burst in one pass and then starts the
@@ -304,9 +331,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Confidence: high
 
 16. **Scatter.** Every firing pass sends a scatter request (S-0215 claim 19) to the occupants of
-    the target's cell.
-    - Backing: `measurable` (scenario AC9)
-    - Confidence: medium
+    the target's ground cell layer. Its threat point is the aircraft's current position.
+    It is forced and not move-anywhere. The cell-wide forwarding gates of S-0209 claim 11
+    still apply: the cell request need not reach every occupant, or be accepted.
+    - Backing: `measurable` (scenarios AC9 and AC23)
+    - Confidence: high
 
 17. **End of the run.** A run ends when the aircraft has no target or no ammunition left. Then:
     - with no ammunition, a visiting aircraft or an aircraft of a human-controlled house forgets
@@ -335,8 +364,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       overridden behaviour and the two other early-exit rows are also `unmeasured`: AC10 has
       not established normal inputs that isolate a fall-back invocation in those states.
       The computer and team cases are context, not extra rules for our AI houses.
-      F8's fallback choice near another own object is also `unmeasured`: no specific
-      object-selection rule or distinguishing scenario is established (Open question 5).
+      F8's other-object fallback is covered by claim 41 and AC23; its equal-distance tie
+      order and complete building-footprint search remain open.
     The pad-search rows need the in-the-air answer (Terms); the other rows use the on-the-ground
     test.
     - Confidence: high (the in-flight and pad rows); medium (the ground rows and the computer
@@ -359,7 +388,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Confidence: high (the 2048 tolerance and fighter exemption); medium (the passenger-carrier
       refusal and cloak interaction)
 
-20. **What a shot does.** A shot of an aircraft that carries passengers is a drop (planned S-0522). For any
+20. **What a shot does.** A shot of an aircraft that carries passengers is a drop (S-0522 claim 11). For any
     other shot, the projectile starts as in S-0306, with two aircraft changes: a projectile whose
     type has turn rate 0 (a bomb) takes the aircraft's body heading, pitch and current ground
     speed instead of its own launch velocity, so it keeps flying forward as it falls; a projectile
@@ -417,7 +446,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     queued. A pad-bound aircraft that is on the ground but not on its destination pad leaves its
     current contact and takes off toward the pad. If the reservation is refused or lost while it
     approaches, the aircraft falls back to rest (claim 18).
-    - Backing: `measurable` (scenario AC14)
+    Entry begins with a 1-tick delay. While in contact during the approaching stage it returns
+    3 ticks, including the processing that recognizes arrival and advances to docking.
+    The docking-position and entered-report stage returns 1 tick. The unlinked retry and
+    fallback paths also return 1 tick. None of these delays takes a standard-delay draw.
+    - Backing: `measurable` (scenarios AC14 and AC23)
     - Confidence: high
 
 25. **Landing-facing choice.** Where flight calls for the landing direction, an aircraft in
@@ -433,8 +466,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
 26. **Servicing.** A pad that has one or more aircraft settled on it services them at a fixed
     cadence: every *P* = ⌊*r* × 900⌋ ticks, where *r* is the game-wide reload rate in game minutes
-    (Formula F10). In each service step the pad, for each of its contact places in order, deals
-    with the aircraft there:
+    (Formula F10). In each service step, service outcomes follow contact-place order. For example, if two aircraft need paid repair and the house can afford only one step, the earlier contact place is repaired and charged first; the later aircraft is then handled with the credits that remain:
     - an aircraft that is ready for take-off (no target, full ammunition) and has full health is
       released: it falls back to rest and its *guard* is forced,
     - an aircraft still flying in (behaviour *enter*) or still moving is skipped,
@@ -450,7 +482,14 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     round per step means filling *A* missing rounds takes *A* service steps, followed by a
     further step to release an undamaged aircraft. The delay before the first step depends on
     when servicing begins; this is not a guaranteed touchdown-to-release duration.
-    - Backing: `measurable` (scenario AC15)
+    An accepted entered report sets the pad ready to change and queues servicing, without
+    starting it synchronously or resetting its existing processing timer. At its next ready
+    per-tick start, servicing becomes current with its timer expired, so its first processing
+    can service immediately (S-0215 claims 3 and 11). It does not wait one reload period after
+    the report. If the pad's turn has passed, this opportunity is in the next tick; otherwise
+    it can be in the report tick. This describes a previously non-servicing pad, not a
+    universal minimum interval across new arrival reports.
+    - Backing: `measurable` (scenarios AC15 and AC23)
     - Confidence: high
 
 27. **Repair on a pad.** A repair step costs the aircraft's house the repair cost of Formula F11
@@ -545,19 +584,29 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     aircraft that is not pad-bound is in flight in *guard* with a destination and nothing queued,
     it queues *move*.
     - Backing: `measurable` for hunt queueing, delays and move completion (scenario AC10).
-      The exact flight-point geometry is `unmeasured`: AC10 records a destination and completion
-      but cannot establish a point-selection rule that remains untraced (Open question 2).
+      Flight-destination substitution and the stopped answer are specified in claim 40 and
+      tested by AC23; a zero speed fraction alone does not complete *move*.
     - Confidence: medium
 
 34. **Retreat and the spy plane's flight.** In *retreat* an aircraft with no destination takes a
-    cell on its house's starting map edge as destination; it is removed when it leaves the map
-    (claim 10). In *spy-plane approach* an aircraft flies at its target; with no target it starts
-    *retreat*. When its ground distance (S-0204 claim 6) to the target is below 769 leptons it
-    starts *spy-plane overfly* with the run lock and a destination on its house's map edge. The
-    approach processing ends with a delay equal to the game-wide spy-plane camera frame count.
-    What the spy plane reveals, and when, is planned S-0513.
-    - Backing: `measurable` (scenario AC20)
-    - Confidence: medium
+    cell on its house's arrival edge (S-0522 claim 5), selected as in S-0522 claim 4, as destination.
+    It is removed when it leaves the usable area (claim 10).
+    In *spy-plane approach* an aircraft flies at its target. When its ground distance
+    (S-0204 claim 6) to the target is below 769 leptons it queues *spy-plane overfly*, holds the
+    run lock and chooses an exit destination. With no target it also ends that processing with
+    *spy-plane overfly* queued and the run lock held, not *retreat*.
+    The spy plane's exit destination is selected as in S-0522 claim 4 on the edge opposite its
+    house's computed edge (S-0522 claim 5): north and south are opposites, as are east and west.
+    This uses the computed edge at destination choice, ignoring any map-section arrival edge.
+    In *spy-plane overfly* an absent destination is replaced by a new choice on that exit edge.
+    Approach processing has the game-wide spy-plane camera frame count as its delay; overfly
+    and retreat processing each have a delay of 3 ticks. Queued changes follow claim 31.
+    Dispatch, camera sight and reveal are S-0513 claims 43 to 45.
+    - Backing: `measurable` for ordinary flight, exit destinations and cadence (AC20).
+      The targetless approach is `unmeasured`: dispatch targets a map cell, and no normal-input
+      way to remove that target during approach has been established. The map-section edge
+      contrast inherits S-0522 claim 5's unresolved skirmish loading limitation
+    - Confidence: high (targetless outcome, computed exit edge and delays); medium (flight)
 
 35. **Carrier slot aircraft flight.** S-0506 claims 1 to 9 and 11 to 13 own the shared slot
     cycle; table T4 supplies only the preparing, attacking and returning flight of a carrier
@@ -590,17 +639,22 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     A notification for a living, unreleased non-missile aircraft leaves its slot unchanged.
     Spawner destruction, ownership change and the other slot-clearing events follow S-0506
     claim 13; release of a non-missile aircraft through that rule starts its crash (S-0506
-    claim 12), rather than letting it return to the carrier.
-    - Backing: `measurable` (scenario AC21); `unmeasured` for loss notification of a living,
+    claim 12), rather than letting it return to the carrier. For an ordinary aircraft not
+    held by a magnetic beam, starting this crash sets health to 0: it is not a new living
+    disabled-fall state. Crash start does not clear its unfinished flight (claim 40) or speed
+    fraction. Ordinary movement can continue, combining F5's dead counter contribution
+    with F2's dead descent in the same non-impact tick. Release does not impose a universal
+    no-forward-motion fall. AC23 tests this distinction.
+    - Backing: `measurable` (scenarios AC21 and AC23); `unmeasured` for loss notification of a living,
       unreleased aircraft, because no normal-input setup has been established that generates it
     - Confidence: high
 
 37. **Random draws traced here.** The following draws use the scenario stream (S-0202 claim 10),
     with inclusive integer ranges as in S-0202 claim 4:
     - **Non-strafing firing spot.** When a non-strafer finds a firing-spot candidate, one
-      *U*(0, 99) draw chooses between two outcomes, split at 50. Strafers return the target
-      without that draw; failure to find a candidate also takes none. The exact two positions
-      remain unresolved (claim 12). This draw precedes that approach's standard-delay draw.
+      *U*(0, 99) draw chooses between claim 39's best and preceding record candidate, split
+      at 50. Strafers return the target without that draw; failure to find a candidate also
+      takes none. This draw precedes that approach's standard-delay draw.
     - **Damage smoke.** In each update tick in which an aircraft's health ratio is below the
       game-wide condition-red ratio and its height is above 0, one draw *u* = *U*(0, 99) is taken.
       Smoke is shown when *u* < 10 for a living aircraft and *u* < 80 for a dead one. The draw is
@@ -612,23 +666,29 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       shifts the splash in x.
     - **Processing delays.** The standard delay of S-0215 claim 6 takes its own draw wherever
       claims 12, 29 and 33 use it.
+    - **Edge cells.** A paradrop plane's arrival cell and a retreating aircraft's destination
+      use S-0522 claim 4's no-reference edge-cell selection: one ranged draw, or two for south,
+      with that claim's ranges and order. Spy-plane arrival uses the same selection (S-0513
+      claim 43), as do the spy exit destinations of claim 34 on their computed opposite edge.
+      Choosing the edge itself takes no draw (S-0522 claim 5).
 
-    These are not an exhaustive flight draw inventory: edge-destination selection and
-    unresolved firing-spot geometry still need tracing. Pad selection and the service steps
+    Flight-destination substitution takes one *U*(0, 7) per examined radius (claim 40).
+    The failed edge push-back takes one raw draw only when its random fallback is attempted
+    (claim 4). These are not an exhaustive flight draw inventory. Pad selection and the service steps
     themselves take no random draw. The crash tumble draws are S-0312 claim 16's.
     - Backing: `measurable` for smoke, firing-spot and processing-delay draws, and pad/service
-      draw absence (AC22, with the permitted random-state recorder). Sinking splash draws are
+      draw absence (AC22, with the permitted random-state recorder); edge-cell draws are
+      `measurable` through AC20, AC22 and S-0522 scenario P3. Sinking splash draws are
       `unmeasured`: AC5 and AC22 have no established normal-input witness for aircraft sinking.
-      Edge-selection draw counts are `unmeasured` because their selection rule has not been
-      traced. The smoke switch-off alternative is `unmeasured`, a design rule of our engine
+      The smoke switch-off alternative is `unmeasured`, a design rule of our engine
       rather than an outcome of the original
     - Confidence: high (the listed draws); low (the unresolved draw inventory)
 
 38. **Boundaries.** This spec does not cover the paradrop and cargo delivery behaviours
-    (*paradrop approach* and *paradrop overfly*: planned S-0522). Ordinary air-transport
+    (*paradrop approach* and *paradrop overfly*: S-0522 claims 6 to 8). Ordinary air-transport
     eligibility and landed *unload* are S-0507 claims 2 and 13, not a future cargo-delivery
     rule; airborne unloading transitions remain incomplete there. This spec also excludes the spy
-    plane's dispatch and reveal (planned S-0513), missile flight (S-0506 claim 14), aircraft that lift vehicles
+    plane's dispatch and reveal (S-0513 claims 43 to 45), missile flight (S-0506 claim 14), aircraft that lift vehicles
     (out of scope), or the original AI's choice of targets for computer aircraft (out of scope).
     An aircraft's cell-entry outcome is always *clear* in a skirmish (S-0209 claim 14); the landing
     test of Formula F7 is a separate test. The specialized drop-ship climb, descent and pitch
@@ -636,6 +696,108 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     Claims 2 to 8 cover ordinary flying aircraft.
     - Backing: `unmeasured` (pointer only)
     - Confidence: high
+
+39. **Non-strafing firing spots (Q-0630).** Let *T* be the target's current position and
+    *ρ* the firer's primary-weapon range of S-0307 claim 13. Candidate circles have radii
+    *ρ* − 256, *ρ* − 512, … leptons, retaining only radii strictly above 256. Use the
+    largest circle with any eligible candidate; smaller circles matter only when every larger
+    one has none. Each circle's ordered candidates use facings 0, 4096, …, 61440, with
+    F3's trigonometry and truncation applied to *T* and the radius. Convert each resulting
+    planar point to a cell by integer division toward zero by 256. The destination is a cell,
+    not the unsnapped point or a point retaining the target's world height.
+
+    A candidate must be inside the height-aware usable area and pass the flight-reservation
+    test below. There is no terrain-passability or F7 landing test at this choice. The
+    reference point is the destination object's current position when the target is a mobile
+    unit with a destination, otherwise the attacking aircraft's current position. Score each
+    eligible unsnapped candidate by planar distance to that reference, using the table
+    root and integer truncation of S-0204 claim 5. In candidate order, a **record candidate**
+    is the first eligible candidate or one scoring strictly below all preceding eligible
+    candidates. Equal scores do not replace a record. One scenario draw *U*(0, 99) chooses
+    the last record's cell below 50, or the preceding record's cell otherwise. With only one
+    record both outcomes use it. The preceding record is not necessarily the second-nearest
+    eligible candidate. No target, no eligible circle, or failure of all its candidates gives
+    no destination and no selection draw. Strafers bypass this search and return the target.
+
+    **Flight-reservation test.** A pad-bound aircraft passes. A spawned aircraft also passes
+    when the ground occupant selected as in F7 is spawned or has a spawn controller.
+    Otherwise another placed, non-limbo mobile actor in that cell, or whose destination is
+    that cell object, refuses it. This includes infantry, vehicles and aircraft, not just
+    other flying aircraft. In firing-spot selection the searching aircraft itself also
+    counts as a reservation. Vehicle-lifting aircraft's carried-vehicle exception is outside
+    this spec's scope.
+    - Backing: `measurable` (scenario AC23). The multi-occupant spawned exemption inherits
+      F7's unresolved found-object choice, not a new nearest-object rule
+    - Confidence: high for circles, records, draw and ordinary reservation test; medium for
+      the spawned exemption
+
+40. **Move destinations and the stopped answer (Q-0631).** Ordinary non-vehicle-lifting
+    *move* first retains its destination when F7 accepts the cell at that object's current
+    position and the flight-reservation test of claim 39 accepts the cell of its heading
+    point. In this initial F7 use, its competing-aircraft destination comparison is against
+    the original destination object, not always against a cell object. Here the reservation
+    test excludes the searching aircraft itself. The heading
+    point is S-0506 claim 14's destination heading point, evaluated with no requesting actor
+    for this initial test. Otherwise, outside initial map loading, it seeks a replacement
+    cell around the destination's current-position cell.
+
+    Replacement candidates have integer radii 0 … 31 cells, in increasing order. Each radius
+    takes one scenario *U*(0, 7) draw as its first step direction, then tries all eight
+    clockwise directions, wrapping modulo eight. With that direction's facing of 8192 times
+    its index, apply F3's trigonometry in cell units with length equal to the radius; truncate
+    the coordinate sums toward zero. Candidates must be height-aware usable cells, pass F7,
+    and pass the flight-reservation test excluding self. Consecutive duplicate usable
+    candidates in the same radius are not tested again; the remembered initial pair is
+    (0, 0). Choose the first accepted cell. Failure of all 32 radii, initial map loading,
+    or an absent destination retains the original destination, without a replacement.
+    These are eight samples per radius, not a scan of every cell of a square ring.
+
+    After destination selection, flight takes that destination's heading point, now with the
+    aircraft as requesting actor. For a cell this is its centre at its surface height; for
+    a mobile object its next movement point or stationary position; for a building its
+    centre or docking point as S-0506 claim 14 specifies. Claim 6 can replace the world
+    height for an armed approach. Pad guidance can subsequently replace a building point
+    with the contacting aircraft's docking position (S-0404 claim 15).
+
+    For *move* completion and T1's ordinary-attacker approach, **stopped** is not the
+    zero-current-fraction test. A movement point accepted by the locomotor remains an
+    **unfinished flight** until landing has settled in its destination cell, or on its contact
+    building. That completion clears the unfinished flight and destination. The locomotor
+    reports stopped only with no unfinished flight and no positive forward pitch (the pitch
+    comparison is single precision against 0). Thus a holding or non-landable aircraft
+    which has accepted a movement point does not report stopped merely by hovering at that
+    point with speed fraction 0. A freshly placed aircraft with no unfinished flight can
+    nevertheless report stopped above terrain.
+    - Backing: `measurable` (scenario AC23)
+    - Confidence: high for destination selection, draws and the stopped test; medium for
+      unusual object heading-point cases inherited from S-0506 claim 14
+
+41. **Landing-search settings and fallback (Q-0634).** F8's search near a house building
+    uses locomotion class *foot*, movement zone *normal*, the building cell's ground reach
+    region for that zone, no deck mode, and a 3 × 3-cell free footprint. It allows bridges,
+    asks for no height, no-overlay or burrowing condition, and has no reference cell. The
+    aircraft type's own movement zone is not used. These are caller settings for S-0212
+    claim 25; its complete 3 × 3 footprint qualification and result displacement remain
+    open, so this is not yet a complete F8 destination rule.
+
+    Below F8's 256-lepton weighted-distance threshold, the replacement search centred on
+    the aircraft's own cell instead uses a 1 × 1 footprint, the same fixed class and zone,
+    the own cell's ground reach region, and its own cell as reference. With no successful
+    building choice, or no dock types, the fallback considers other own-house infantry,
+    vehicles, aircraft and buildings, excluding self and objects in limbo. It prefers the
+    smallest spatial table-root distance for which a nearby search succeeds. That search
+    uses the other object's cell, a 1 × 1 footprint and otherwise the building-search settings.
+    With no successful object choice, it returns the aircraft's own current cell without
+    another free-cell search. No random draw belongs to these nearby searches. The exact
+    tie order between equally distant fallback objects remains open.
+
+    The edge half of Q-0634 is already answered by claim 34, claim 37 and S-0522 claims 4
+    and 5: retreat uses the arrival edge, spy overfly the opposite computed edge, with one
+    ranged draw except two on south. It is not a nearest-cell projection with no draws.
+    - Backing: `measurable` (AC23) for caller settings, unequal-distance object choice and
+      empty-house fallback; `unmeasured` for a complete 3 × 3 search outcome because its
+      footprint predicate and result displacement have not been established here
+    - Confidence: high for caller settings and empty-house fallback; medium for object choice
 
 ## Formulas
 
@@ -673,13 +835,16 @@ division truncated toward zero.
 > All fractions and their arithmetic use double precision with S-0205 claim 5's rounding
 > mode; there is no integer conversion of a fraction.
 
-> **F5 Crash contribution.** *k*₀ = 0; each crashing tick *k* ← *k* + 1 (dead) or *k* + 3
-> (alive), then *h*₁ = *h* − *k*. Integer, leptons. Impact is tested against *h*₁ before any
-> ordinary altitude adjustment. Without impact and with ordinary movement active, claims 2
-> and 3 give the remaining altitude change, using *h*₁ as their input height.
+> **F5 Crash contribution.** The fall counter starts at zero. On each crashing tick, increase it by 1 for a dead aircraft or by 3 for a living aircraft. The downward height contribution on that tick equals the updated counter: *h*₁ = *h* − *k*. Integer, leptons. Impact is tested against *h*₁ before any ordinary altitude adjustment. Without impact and with ordinary movement active, claims 2 and 3 give the remaining altitude change, using *h*₁ as their input height.
 
 > **F6 End of a strafing run.** wait = ⌊(*R* + 1024) / *V*ₜ⌋ ticks, *R* the weapon range in leptons
-> and *V*ₜ the type's speed field, integer division toward zero.
+> and *V*ₜ the converted integer type speed of S-0207 claim 1, the same value used as *V*
+> in F3, not the raw imported number. Integer division truncates toward zero. There is no
+> minimum divisor in the original: reaching this calculation with converted speed 0 stops
+> it with a program error. A raw negative speed does not supply a negative divisor: import
+> clamps it to 0, except the −1 keep-existing rule of S-0207 claim 1. Our engine follows
+> S-0205 claim 3's departure: quotient 0, with an importer warning for a zero converted speed.
+> A delay of 0 processes again next tick under S-0215 claim 2.
 
 > **F7 Landing cell test.** A landing cell is accepted when the touchdown position is inside the
 > usable area and either
@@ -701,7 +866,8 @@ division truncated toward zero.
 > truncating toward zero. Choose the smallest resulting distance, retaining the earlier
 > eligible building on a tie. Below 256 leptons seek a free cell near the aircraft's own cell.
 > Otherwise use the free spot near the chosen building. Without dock types, or when no building
-> yields a spot, another own object is considered; the exact fallback selection is unresolved.
+> yields a spot, use claim 41's other-object fallback and ultimately the aircraft's own cell.
+> Claim 41 supplies caller settings; the building search's complete footprint semantics remain open.
 
 > **F9 Pad distance.** *D*² = (*x*ₚ − *x*ₐ)² + (*y*ₚ − *y*ₐ)² between the centre of the pad and of the
 > aircraft, in leptons, as a signed 32-bit integer that wraps on overflow (S-0205 claim 1); height is
@@ -741,6 +907,11 @@ division truncated toward zero.
 | Crash counter increments | 1 dead, 3 alive | leptons per tick² | F5 |
 | Sinking rate, removal depth | 5, −400 | leptons per tick, leptons | claim 9 |
 | Edge push-back | 128 | leptons | claim 4 |
+| Edge random fallback radius | 64 | leptons | claim 4 |
+| Descent horizontal nudge | 5 | leptons per descending movement tick | claim 4 |
+| Flight-destination search radii | 0 … 31 | cells | claim 40 |
+| Firing-spot radius interval | 256 | leptons | claim 39 |
+| Firing-spot angular interval | 4096 | facing units | claim 39 |
 | In-the-air height | 208 | leptons | Terms (S-0307) |
 | Strafing passes | 5 | passes per run | full burst, then four single shots (claim 13) |
 | Strafe run-out extra | 1024 | leptons | F6 |
@@ -901,7 +1072,8 @@ attacking in that same pass; it does not require either neighbour to have been r
 | `FlightLevel` | rules, type | cruise height | integer, leptons | the game-wide value |
 | `FlightLevel` | rules, `[General]` | game-wide cruise height | integer, leptons | 500 |
 | `SlowdownDistance` | rules, type | slowdown distance *S* | integer, leptons | 500 |
-| `Speed` | rules, type | *V* and *V*ₜ | S-0207 | S-0207 |
+| `Speed` | rules, type | converted integer *V* and *V*ₜ, including F6's zero-divisor warning | S-0207 claim 1; not the raw value in F6 | S-0207 claim 1 |
+| none | — | layer boundary, entry delays, service start, search and edge constants | fixed engine rules, not new import fields | — |
 | `Ammo` | rules, type | maximum ammunition *A* | integer | −1 (unlimited) |
 | `Selectable` | rules, object type | visiting test | boolean | yes |
 | `Strength`, `Cost` | rules, type | F11 | integer | S-0302, S-0403 |
@@ -970,7 +1142,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   named speed-bonus test-map overrides for country, veterancy and per-object speed bonuses:
   expected F3 uses the unchanged type speed in every case, not a bonus-scaled speed.
   Compute F3 with the signed facing and compare every forward step. Use sustained cruise ticks
-  to exclude the unresolved descent adjustment. On approach to a cell destination, log distance
+  to separate the forward formula from claim 4's additional descent step. On approach to a cell destination, log distance
   and fractions around each F4 threshold, including distance 0, and around 128, 512 and 768
   leptons. Expected: F4's halving, then distance clamp, then creep restart, then the 0.1
   adjustment, followed by claim 5's target replacement for the next movement tick. At *d* = 0
@@ -984,7 +1156,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   tick reached with the run lock held. An unreachable zero-distance example is recorded as a
   coverage gap, not inferred from another distance.
   An edge-flight variant records the push-back attempt
-  and a refused tick; it does not establish the unresolved fallback position.
+  and a refused tick; AC23 isolates the random fallback and its draw.
 - **AC4 Landing, take-off and refusal (claims 6 to 8).** Start with an empty tracked-passable
   destination, then a single vehicle occupant, then an impassable destination. Use the named
   landing-test map override to give an ordinary controllable aircraft landable but not pad-bound
@@ -1166,9 +1338,19 @@ listed in Open questions are not claimed confirmed by these scenarios.
 - **AC20 Retreat and spy flight (claim 34).** Dispatch a spy plane and record ground target
   distance, behaviour, run lock, edge destination, processing ticks and exit. Expected: overfly
   begins below 769 leptons, approach cadence is the imported camera-frame count, and retreat
-  without a destination chooses the owner's starting edge. Named spy-flight test-map variants
-  remove the target in approach and give an empty retreat destination: expect retreat and a
-  new edge destination respectively. Compare removal with AC6's retreat exception.
+  without a destination chooses the owner's arrival edge (S-0522 claim 5). Compare starts
+  near each edge and a later change of primary building factory: each new retreat destination
+  uses the then-current arrival edge; a spy exit uses the opposite of the then-current computed
+  edge, not a remembered launch edge. Use S-0522 scenario P3's edge-cell predictions and
+  random-state records to test each destination and its one ranged draw (two for south).
+  Record overfly and retreat processing 3 ticks apart and compare removal with AC6's retreat
+  exception. A named spy-flight test map with an aircraft initially in retreat and no
+  destination tests destination choice. Targetless spy approach remains unmeasured: dispatch
+  targets a cell, so a test cannot assume that destroying an object deletes that cell. If a
+  normal-input witness is established, expect overfly queued and run lock held, not retreat.
+  Otherwise report a coverage gap. A named map-section edge variant contrasts an explicit
+  arrival edge with a different computed edge only if loading that edge for the player house
+  is established; it must not be inferred from ordinary dispatch.
 - **AC21 Carrier aircraft (claims 35 and 36).** Attack with a carrier and record each slot's
   launch request, actual position, destination changes, slot states entering and leaving each
   launch pass, controller target, return, off-map interval, health and ammunition. Keep a
@@ -1219,30 +1401,101 @@ listed in Open questions are not claimed confirmed by these scenarios.
   claim 10 and S-0301 claim 18. Repeat AC13's pad searches and AC15's service steps with this
   recorder: neither event itself advances the stream, after accounting separately for the
   aircraft's smoke and processing-delay draws. Any additional attributed draw falsifies that
-  absence claim. Do not count unexplained edge-search draws as smoke draws.
+  absence claim. Record paradrop and spy arrivals and AC20's retreat and spy exit destination
+  choices separately: expect S-0522 claim 4's ranged draws and cell, with two draws for south
+  and one otherwise. Edge choice itself takes none. A different attributed count, range,
+  order or selected cell falsifies that rule; separate aircraft creation and smoke draws.
   For a tick with no visible smoke, verify that the same eligible smoke chance draw is still
   consumed. An eligible update without that draw falsifies the default rule even though its
   screen image is unchanged. The quirk-off absence of damage smoke and its chance draw is an
   engine test, not an expected outcome to test on the original.
 
+- **AC23 Aircraft-lane discriminators (claims 1, 4, 6 to 8, 12, 13, 16, 24, 26,
+  36 and 39 to 41).** Use the common five-run skirmish setup, scripted normal input and
+  read-only per-tick and random-state recorders. Named test map `aircraft-lane` supplies
+  non-strafing fighter and ordinary aircraft, landable non-pad-bound variants, a non-landable
+  variant, durable stationary ground targets, a carrier and pads. Remove all overrides
+  afterwards. The observed area includes every candidate cell and own-house fallback object.
+  Record intermediate movement points separately from destination objects and current position.
+  Each mismatching point, flag, draw count, processing tick or outcome below falsifies that
+  prediction; an unreachable boundary is a coverage gap, not a passing test.
+  - Attack from several directions with two distinct non-strafing primary ranges. Compute
+    claim 39's circle candidates, distances and successive record cells from the logged
+    target and aircraft positions. Expected: the first eligible circle, best cell for draws
+    below 50 and previous record cell otherwise, even when that is not the second nearest.
+    Move a mobile target toward a new destination to distinguish its destination-position
+    reference from its current position and the attacker's position. Block selected cells
+    with mobile actors or their cell destinations; a pad-bound variant bypasses that
+    reservation. A short-range named variant with no radius above 256 must fail without a
+    selection draw. Separate this from the following standard-delay draw. At a facing
+    refusal compare the target range test with distance to the firing spot: T1 follows the
+    former, even though the firing check's answer is not *out of range*.
+  - Move to empty cells, occupied cells and moving objects. Record the retained object or
+    substituted cell and the point actually accepted for movement. Expected: claim 40's
+    heading point, eight-sample circles, one direction draw per attempted radius, and the
+    original object on exhaustion. A non-landable variant and an ammunition-bearing attacker
+    can hover with current fraction 0 while unfinished flight still prevents a stopped
+    answer. The landed ordinary variant clears unfinished flight; forward pitch must be
+    nonpositive for stopped. Record the completion tick, not just absence of displacement.
+  - Approach ground targets from beyond 768 leptons: the accepted movement point is raised
+    to terrain plus cruise height before close guidance adopts its height. Compare a
+    non-attacking elevated destination and an ordinary ground move. Record requested body
+    and aiming headings through both take-off thresholds. At or below half height no new
+    take-off heading request is made; do not substitute current facing for a retained request.
+  - Record every descending position after subtracting the ordinary forward step. Except
+    *enter* toward a helipad, expect the additional length-5 step toward the destination-cell
+    centre, including a near-centre case that can overshoot. At the map edge isolate failure
+    of the 128-lepton shift: one raw draw and its low-eight-bit direction select the length-64
+    candidate, or no forward relocation when that is illegal. Compare the 0 … 511 guard.
+  - Record height and render layer on take-off and landing: positive surface-relative height
+    uses top, nonpositive uses ground. Log a carrier placement request and actual placement
+    before movement: the requested positive height is discarded for non-visiting placement
+    inside the usable area. Log a produced pad aircraft separately at initial placement and
+    final docking assignment, preserving S-0404 claim 15's final docking height.
+  - Land empty aircraft at an initially non-servicing pad, on both sides of its turn in the
+    tick when normal timing permits. Record the entered report, queued and current pad
+    behaviours, pad turn, service effects and subsequent cadence. Expected: servicing starts
+    at the next per-tick start and processes without a new reload-period wait; an already
+    passed pad turn defers it to the next tick. Aircraft entry processing has initial delay
+    1, contacted approach delay 3 and docking/report delay 1, with no standard-delay draws.
+  - For F6 use positive raw speeds whose converted values differ from them; the post-fifth-pass
+    delay divides by converted speed. A named zero-speed variant already in firing range
+    attempts all five passes; if it reaches the quotient, the original stops with a program
+    error. Test raw negative and −1 separately against S-0207 claim 1's import rule. Our
+    engine's zero-delay warning departure is an engine test, not an original-game outcome.
+  - At each attack pass record the cell scatter inputs and delivered requests: threat at the
+    aircraft position, forced, not move-anywhere, ground layer. Verify forwarding against
+    S-0209 claim 11; no movement alone does not falsify a sent request.
+  - Destroy or change ownership of a carrier while one ordinary slot aircraft is moving.
+    Expected: release-started crash sets health to 0 and retains unfinished flight and its
+    fraction, allowing forward motion plus ordinary dead descent until impact. Repeat with
+    a settled slot if normal play can produce it; release is not a blanket movement stop.
+  - For F8, compare no house buildings, no other own object, and separate unequal-distance
+    own infantry/vehicle/aircraft anchors with no dock types. Keep the short-game setting off
+    and the bystander alive. Expected with no qualifying anchor: own cell without search.
+    Otherwise expect the nearest anchor yielding a successful 1 × 1 search under claim 41's fixed
+    foot/normal settings, with no search draw. Compare zones and water to discriminate from
+    using the aircraft's own movement settings. The 3 × 3-building search and equal-distance
+    fallback ties remain incomplete and are not confirmed by those 1 × 1 runs.
+
 ## Open questions
 
-1. Non-strafing firing-spot geometry and its two random outcomes remain unresolved (claims
-   12 and 37). A strafer uses the target itself.
-2. The flight point used by *move* (claim 33) was not decoded.
+1. Q-0630 is answered by claims 12 and 39; no firing-spot geometry question remains.
+2. Q-0631 is answered by claims 33 and 40; the stopped test is distinct from speed fraction.
 3. The planned-route exception of claim 6 belongs with the order specs' waypoint planning; this
    spec states only that it stops a landing.
 4. The exact application timing of the landing-facing choice (claim 25) remains unresolved.
    Do not infer height stages from the take-off rules.
-5. F8 with no house building: the original picks a spot near another object of the house (low).
-6. The fallback position of claim 4's push-back, and the position adjustment applied while
-   descending toward a destination cell, were seen but not decoded.
+5. Q-0634 remains partial: S-0212 claim 25 needs the 3 × 3-footprint qualification and
+   result displacement for claim 41's building search. Equal-distance other-object fallback
+   tie order also remains unresolved. Unequal-distance and empty-house fallbacks are specified.
+6. Q-0633 is answered by claim 4.
 7. The landing test's selection among multiple ground-layer occupants remains unresolved
    (F7). Single-occupant outcomes are specified.
 8. Climb and descent variants for drop-ship aircraft types (a separate type flag) are not covered.
 9. Which states switch off an aircraft's locomotor and start a crash (claim 9).
-10. The complete draw inventory of edge destinations and nearby flight-point searches still
-    needs tracing (claim 37).
+10. Claim 40 answers the ordinary flight-destination search draws. A complete inventory
+    across specialized flight outside this spec remains open; edge cells are S-0522 claim 4.
 11. The two game-wide rocket types whose in-the-air answer comes from their locomotor (Terms) are
     missiles in stock use (S-0506); whether any aircraft of those types reaches this spec's rules
     was not checked.

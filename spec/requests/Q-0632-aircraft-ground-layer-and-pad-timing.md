@@ -1,9 +1,9 @@
 ---
 id: Q-0632
 title: When is an aircraft in the ground layer, how high is it placed on the ground, and when does a pad's first service step come?
-status: open
+status: answered
 related: [S-0501, S-0404]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0633
 title: Where does an aircraft go when its push-back at the map edge fails, and how does descent adjust its position?
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

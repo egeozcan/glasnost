@@ -1,9 +1,9 @@
 ---
 id: Q-0631
 title: Which point does an aircraft fly to in move, and when has its locomotor stopped?
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

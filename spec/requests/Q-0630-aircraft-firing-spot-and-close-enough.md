@@ -1,9 +1,9 @@
 ---
 id: Q-0630
 title: Where does a non-strafing aircraft fly to fire, and when is it close enough?
-status: open
+status: answered
 related: [S-0501, S-0301]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
