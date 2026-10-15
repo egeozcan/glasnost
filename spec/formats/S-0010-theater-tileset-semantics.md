@@ -2,7 +2,7 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -96,7 +96,9 @@ this spec owns its rules. The terms below are specific to this spec.
   or repaired), or an object that stands on the ground (an infantry unit, a vehicle, an aircraft on
   the ground, a building or a terrain object) is put into the cell or taken out of it. The last
   trigger includes every ordinary move of a unit from one cell to the next, so every cell a unit
-  enters or leaves is recalculated. The *game-start pass* of claim 12 is the whole-map
+  enters or leaves is recalculated. Resizing the local area in play also recalculates every
+  legal cell (S-0524 claim 8), under the same terrain and animation rules, not the second
+  load pass's animation replacement rule. The *game-start pass* of claim 12 is the whole-map
   recalculation at game start. S-0211 claim 5 holds the authoritative list.
 - **Transition pair.** A pair of roles, a *ground tileset* and a *transition tileset* of 16 tiles,
   used by ground smoothing (claim 10). The four pairs are rough, sand, green and pave.
@@ -289,11 +291,14 @@ in our engine is a design rule, not a claim of an oracle measurement.
    | **tile case** | every other cell: a usable tile and no row-1 overlay (rows 4 and 5 of S-0211 claim 5) | slope shape from its tile (claim 6) | yes | yes | yes |
 
    S-0211 claim 7 may remove the overlay of a tile-case cell in the same recalculation; that changes
-   none of the above.
+   none of the above. Resizing the local area in play recalculates every legal cell, not only
+   cells gained or lost by the resize (S-0524 claim 8). Each cell still follows its case above.
+   The event does not unconditionally restart tile animations (claim 19).
    - Backing, by part:
 
      | Part | Backing |
      |---|---|
+     | Local-area resize and its whole-map terrain recalculation | S-0524 claim 8 owns the trigger, confidence and backing; scenario G4 part G here tests preservation of an existing tile animation, not the exact extent of the recalculation |
      | The tile case is smoothed | `measurable` (scenario L1) |
      | The overlay case is smoothed | `measurable` (scenario C2 part A) |
      | The overlay case starts no tile animation | `measurable` (scenario C2 part C, on the animated tile of scenario G4 part A) |
@@ -673,6 +678,9 @@ in our engine is a design rule, not a claim of an oracle measurement.
       Without an intervening recalculation, this is the tile the second pass left (scenario G4
       part C). At the first tick a cell has started at most one tile animation since the second
       pass, whether in that pass, an intervening recalculation or the game-start pass.
+      A local-area resize in play (S-0524 claim 8) preserves this once-only state: an existing
+      tile animation is not removed or restarted by the resize. A cell that has started none
+      may start one only when the ordinary eligibility conditions above hold.
     - **Where.** The animation is placed at the world position (X, Y, *z*) of the formula *Tile
       animation position* (Formulas): the cell's centre, moved by the ground displacement that S-0101's
       screen-to-ground formula (F6) gives for the world pixel (*dx*, *dy*), at the height of the
@@ -704,6 +712,7 @@ in our engine is a design rule, not a claim of an oracle measurement.
       | The animation is that of the tile held when the second pass began, not of the smoothed tile | `measurable` (scenario G4 part B) |
       | The game-start pass starts the animation of the tile the second pass left, in a cell that has started none | `measurable` (scenario G4 part C, run 1) |
       | A start in play, after smoothing, in a cell that has started none | `unmeasured`: after the game-start pass, the tiles that smoothing writes in play in the known cases are stray tile numbers or tiles a cell already held, so no setup is known in which a cell comes to hold, in play, a tile that names an animation |
+      | Local-area resize does not remove or restart an existing tile animation | `measurable` (scenario G4 part G); a previously missing animation starting at resize remains `unmeasured`, for the same missing-fixture reason as a start in play above |
       | None that the first pass started survives loading, and at most one animation per cell after loading | `measurable` (scenario G4 part E) |
       | A cell that has started one starts no second one in later recalculations | `measurable` at the game-start pass (scenario G4 part C, run 2); in play `unmeasured`, for the reason of the row on starts in play |
       | A displacement far larger than the view | `measurable` (scenario G4 part D) |
@@ -918,7 +927,10 @@ in our engine is a design rule, not a claim of an oracle measurement.
       against the marking direction, the overlay's own cell, and the cells one and two steps
       along that direction. Repair clears the bridge-body mark on those same four cells and
       restores their high-bridge marking. S-0511 claims 5 and 19 own which cells are unmarked
-      and re-marked during destruction and repair. When a destruction or repair finds no bridge link within 3 cells of
+      and re-marked during destruction and repair; their connectivity changes and the cells
+      named for them are S-0511 claims 12 and 19. These pointers settle neither passenger
+      escape placement nor exceptional repair-cursor selection, which remain open in S-0511.
+      When a destruction or repair finds no bridge link within 3 cells of
       its named cell, the spans are found again from the map's current tiles and high-bridge
       markings by the start, far-end and high-or-low rules above. This replaces the bridge links
       as S-0212 claim 3 states, but does not set the low-span bands again: neither their body
@@ -2018,6 +2030,20 @@ tileset decides.
   then ends or switches to its follow-up type. Run 2: the ore in the cell is gone although no
   animation remains (the first pass's start event kept its effect). *Falsified if:* in run 1 the
   ore in sub-run A is gone, ore in sub-run B remains, or the number of passes differs; or in run 2 the ore remains.
+
+- *Part G, local-area resize preserves an existing animation (claims 8 and 19; named test
+  data).* *Setup:* part A's map and tile, with its attached animation set to a non-vein test
+  type using a stock sprite, enough passes to remain visible throughout the test, and no
+  damaging or terrain-changing effects. Add the local-area resize action of S-0524 claim 8
+  at tick 30, enlarging the area while leaving the observed tile well inside both rectangles.
+  Use game speed 6, one human house and one bystander computer player kept away; director
+  and mods off except these named test data. Run once with the action and once without it.
+  *Procedure and observable:* capture video with tick numbers around tick 30, tracking the
+  animation's image frame and pass count, not its screen position if the view moves.
+  *Expected:* its playback continues across the resize as in the control, without an extra
+  copy or a return to the starting frame. *Falsified if:* resize removes, duplicates or
+  restarts the animation. This does not establish whether a previously missing animation
+  can start or how many cells were recalculated.
 
 **G5. Shadow casters need a count (claim 18; named test files).** *Setup:* a theater whose stock data
 declares a tileset a shadow caster with a non-zero shadow-tile count (the measurer checks), and
