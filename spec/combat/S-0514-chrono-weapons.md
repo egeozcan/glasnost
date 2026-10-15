@@ -2,7 +2,7 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,7 +20,8 @@ Temporal weapons attach to targets and erase them over time rather than reducing
 This spec covers attachment, progress, interruptions, completion and its extra experience gain.
 Skirmish only; network games and campaigns are out of scope.
 
-Attacker teleport movement belongs to S-0207 claim 20. Ordinary firing eligibility belongs to
+Attacker teleport movement belongs to S-0207 claim 20; superweapon teleportation, including
+jumpjet eligibility, belongs to S-0513 claims 34 to 40. Ordinary firing eligibility belongs to
 S-0301 claim 9 and S-0310 claim 7, gunner hand-over to S-0308 claim 6, damage protection to
 S-0302 claims 8 and 10, power totals to S-0405 claims 1, 2 and 7, bunker target redirection to
 S-0309 claim 24, and destruction credit to S-0311 claims 7 to 10. Where those specs disagree
@@ -51,6 +52,9 @@ before joint hand-off.
 
 1. **Delivery.** A temporal detonation needs both its firer and its target still present.
    An object target must be in the ground render layer, otherwise this effect does nothing.
+   For a jumpjet this is S-0102 claim 3's render-layer test, not a test of its flight state
+   (S-0502 claim 20), combat height or in-the-air state. Being in the ground render layer
+   permits delivery but does not bypass claim 3's lock refusals.
    A bunkered vehicle is redirected to its bunker. A cell or a non-combat object only makes
    the firer's old beam let go. Temporal erasure replaces ordinary direct and area damage,
    but does not suppress the detonation's other presentation effects.
@@ -366,9 +370,13 @@ is falsified by the opposite result under the same conditions.
   amount. A reset on joining/handover or retained progress after last release falsifies it.
 - **E4, gates (claims 1, 3).** Compare protected and unprotected targets, a named not-erasable
   type, factory-contact vehicles before and after leaving, landed and airborne aircraft,
-  airborne jumpjet infantry, and ground force-fire. Expect refusal in the listed protected
-  cases, no airborne effect, and ground force-fire only releasing the old lock without
-  damage. Use a named slow temporal projectile already in flight when its firer becomes
+  jumpjet infantry before take-off, during ascent and after landing, and ground force-fire.
+  Record each object's render layer at impact as well as height and jumpjet flight state.
+  Expect refusal in the listed protected cases, no effect on targets outside the ground
+  render layer, and ground force-fire only releasing the old lock without damage. An
+  otherwise eligible ground-layer jumpjet locks regardless of its flight-state label.
+  a lock outside that layer or refusal caused only by flight state falsifies the layer gate.
+  Use a named slow temporal projectile already in flight when its firer becomes
   locked: expect refusal when it arrives. A lock in a refused case falsifies that gate.
 - **E5, refused side effects (claim 2).** Hit a protected mind controller holding two units
   and a protected carrier with aircraft out. Expect control freed/spawner slots cleared
