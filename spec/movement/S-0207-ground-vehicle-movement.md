@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -153,7 +153,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   step check uses is the entry outcome with the substitutions of S-0209 claim 5 (part 5f).
 - **Crate, speed power-up.** A *crate* is an overlay (glossary) that gives a power-up when it is
   collected. The *speed power-up* is the power-up that changes speed bonus factors (claim 13). The
-  crate specs own everything else about both.
+  pickup, area, effects and feedback are owned by S-0520 claims 6, 20 and 26, with the
+  own-locomotor teleport pickup specified in claim 20 e here.
 - **Capture-the-flag game.** A game started with the capture-the-flag game option on. Whether such
   a game places flags that a vehicle can carry is an Open question.
 - **Giving up the move.** A vehicle that gives up its move gets no track on that tick. When it has
@@ -553,8 +554,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     exactly 1.0, the factor is multiplied by the power-up's value. Otherwise it is unchanged, so a
     second power-up has no effect. The power-up is not limited to the vehicle that collects it: it
     acts on the mobile ground objects (aircraft excluded) within an area around the power-up's cell.
-    The crate specs own which objects that area covers, the power-up's value and when it is
-    collected.
+    S-0520 claim 20 owns the affected objects, power-up value and crate area (its Terms and
+    F4), including the off-map behaviour and quirk of its claim 19. S-0520 claims 6 and 26 own
+    pickup timing and feedback, subject to the own-locomotor teleport pickup in claim 20 e here.
     - Backing: `measurable` (scenario D12; run 5 for the area and for the exclusion of aircraft)
     - Confidence: high for the exactly-1.0 rule; medium that it acts on an area (read, not traced in
       detail)
@@ -1152,7 +1154,12 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       plays at *L*. Entering *L*'s cell has the arrival effects of the object's own kind: for a
       vehicle these are the effects of reaching a track target in a new cell, not a rule imposed
       on infantry or aircraft. The respective movement and combat specs own those effects.
-      Crate collection is governed by claim 13 and the crate specs. It stops moving and its
+      After the cell-arrival effects, the object attempts to collect any crate in the landing
+      cell under S-0520 claims 7–11. The pickup happens after placement and does not undo the
+      landing when its result would refuse an ordinary ground step. Speed bonuses and feedback
+      belong to S-0520 claims 20 and 26 and claim 13 here. This requires a paired correction
+      to S-0520 claim 6: its teleport exclusion does not apply to an own-locomotor jump.
+      It stops moving and its
       destination is removed, so its behaviour falls back to rest (S-0215 claim 13). A second
       warp animation plays at *L*.
       Its type's departure and arrival sounds override the game-wide ones.
@@ -1233,7 +1240,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       mark and landing, and animation creation draws; run 13 for Q-0240's vehicle
       reservation layers, replacement clearing and post-jump marks; run 14 for Q-0310's
       aircraft two-record landing, next destination and destruction cleanup; run 15
-      for part k's actual-cell-only removal and retained pending reservations). `unmeasured`:
+      for part k's actual-cell-only removal and retained pending reservations; run 16 for
+      landing-cell crate pickup after placement). `unmeasured`:
       the airstrike target-retention exception, because no stock setup establishes an airstrike
       aimed at a living object making its own locomotor jump. Part a's vehicle destination
       restriction uses S-0517 claim 9's backing (P3 a and P4 b); jumpjet landing cancellation
@@ -2052,8 +2060,7 @@ fall-back restoration have no additional key here (S-0417 and S-0215).
 No other speed field of a country or of a difficulty level enters the formulas of this spec
 (Open questions).
 
-Claim 19 has no key of its own: the range test's fields are S-0307's, and the path-retry delay
-field (`[AI]`, key `PathDelay`) that sets *R* is imported as S-0212 says.
+Claim 19 has no key of its own: the range test's fields are S-0307's, and the path-retry delay field that sets *R* is imported as S-0212 says.
 
 No key feeds the destination of the override of claim 15 or the choice of the nearest object in
 the look at the first cell of a new path (F8): both are engine rules. The close-enough distance
@@ -2333,11 +2340,11 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
   set to 1.5. Run 3: a speed power-up of value 1.5 is placed on the route and picked up before
   cell 10. Run 4: two such power-ups are picked up before cell 10. The power-ups come from crates on
   the route, with a test rules file that leaves the speed power-up as the only one a crate can give
-  and sets its value to 1.5 (which power-up a crate gives belongs to the crate specs). In runs 1
+  and sets its value to 1.5 (which power-up a crate gives belongs to S-0520 claims 8–10). In runs 1
   to 4 no other mobile object is near the crates (claim 13). Run 5: as run 3, with a second vehicle
   *W* of the test type standing idle in a cell next to the crate's cell and a stock aircraft that
   can land on open ground landed in another cell next to it; the test rules file also sets the
-  size of the crate's area (crate specs) large enough to cover the cells next to the crate.
+  size of the crate's area (S-0520 Terms and F4) large enough to cover the cells next to the crate.
   Place an idle infantry unit in a further covered neighbouring cell. The recorder also reads
   the speed bonus factors of *W*, the infantry unit and the aircraft.
 - *Observable:* as D1, arrival tick at cell 20 minus arrival tick at cell 10; in run 5, the speed
@@ -2953,6 +2960,20 @@ cell before *X*.
   *D* from F9, *H* phases in, the order of run 6 is
   carried out, the draw count of run 7 differs, the projectile of run 8 hits *T*, or in run 9 *T*
   cannot be damaged or is treated differently by the crusher.
+
+  - Run 16 (landing-cell crate pickup). On a tiny flat skirmish map at speed index 2,
+    with director and mods off, crates disabled for random replacement, give the human house
+    an existing base and place a fixed money crate by a map trigger on an empty cell.
+    Order the stock chrono miner to jump onto it. Record position, cell-arrival event,
+    crate presence and credits each tick, with within-tick event order where available.
+    Expect placement and the arrival event before pickup, crate removal and a money award
+    on the jump tick under S-0520 claim 12. A crate remaining despite passing the pickup
+    gates, pickup before landing, or pickup delayed to a later tick falsifies the rule.
+    Use scripted input and the bench recorder at 800×600 with a recorded seed and one job.
+    A named test-map control with fixed unit contents and a successful unit placement tests
+    that the pickup's ground-step refusal does not reverse the completed teleport landing.
+    Record the created unit and collector positions; a return to the departure cell falsifies
+    that distinction. Do not generalise this test to superweapon transport.
 
 **D23: temporary drive and return to teleporting (claim 21; Q-0233).**
 - *Setup:* S-0417 U6's stock vehicle factory and produced chrono miner, a human house,
