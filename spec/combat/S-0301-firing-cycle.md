@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -21,6 +21,8 @@ bonuses combine into it, bursts and the short delays inside a burst, ammunition 
 delayed and animation-synchronised shots, and the firing check, the per-attempt test whose answer
 says whether a shot can be fired now and, if not, why. Aiming tolerances and turret behaviour are
 S-0310; where a shot starts is S-0313; which weapon is used is S-0308; range is S-0307.
+Drain attempts replace ordinary shots (S-0608 claim 1; claim 9 here). Disc-laser firing and its
+lasting effect are S-0615 claims 12 to 17.
 
 ## Terms
 
@@ -32,6 +34,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
 - **Firer.** An object that fires a weapon: a vehicle, infantry, aircraft or building.
 - **Shot.** One firing of one weapon by a firer: one projectile, beam or effect launched, or, for a spawner weapon, one target handed to the spawn controller as a pending target. A shot is *made* when the weapon's firing action succeeds; an attempt that the firing check refuses, or whose projectile launch fails (claim 15), makes no shot.
+- **Draining weapon, drain attempt, drainable type, draining, being drained.** As S-0608
+  claims 1 to 3 and Terms. A drain attempt replaces an ordinary shot and does not count as a
+  shot for this spec's countdown, burst, ammunition or ordinary-shot draw rules (claim 9).
 - **Void shot.** An attempt that passed the firing check but whose projectile could not be put on
   the map (claim 15). It makes no shot.
 - **Rearm countdown.** A per-firer countdown in ticks. It is set by every shot the firer makes, to
@@ -289,7 +294,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
 8. **Berserk halving.** A firer that is berserk when it makes a shot gets half the delay chosen by
    claim 2's order (any of its four kinds, with the factors of claims 3, 6 and 7 where they
-   apply), truncated toward zero. Exception: the shot of a disc laser weapon is never halved. The
+   apply), truncated toward zero. Exception: the shot of a disc laser weapon is never halved
+   (S-0615 claim 12). The
    rule is stated for the firer's state, not for its kind: whether a building can be berserk
    belongs to the warhead specs, and if it can, its 1-tick delay halves to 0.
    - Backing: `measurable` (scenario F6)
@@ -309,7 +315,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | moving | the firer may not fire while it moves (S-0310) |
    | cloaked | the weapon needs the firer uncloaked and it is not |
    | out of range | the target is beyond the weapon's range (S-0307) |
-   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), or a sinking firer or target (S-0504 claim 5). S-0214, claim 6(e), defers to these for what the check refuses |
+   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), or the drain refusals of S-0608 claim 3 (rank 4 below). S-0214, claim 6(e), defers to these for what the check refuses |
    | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power or the firer is disabled, a hidden target fails the test below (S-0516 claim 24), and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
    | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy-to-fire cell test of S-0517 claim 14 (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
@@ -332,7 +338,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | the firer's ammunition *a* is 0 |
@@ -345,6 +351,14 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 14 | still turning | |
    | 15 | not facing | |
    | 16 | a refusal of the vehicle's locomotor | a vehicle whose locomotor adds a refusal of its own gets it only when no reason above holds; which answer it gives is open (Open questions) |
+
+   **Drain attempts (S-0608 claim 1).** Passing the firing check with a draining weapon
+   leads to a drain attempt rather than an ordinary shot: no projectile, shot damage or
+   warhead effect, no rearm-countdown start, no burst advance, no ammunition use and no
+   ordinary-shot draws. S-0608 claims 1, 2 and 5 own the link attempt, target clearing and
+   link-formation effects. Clearing the target still resets the burst counter under claim 4.
+   Link effects, including animation creation and release of controlled units, retain their
+   own possible random draws; their randomness is not an ordinary-shot draw.
 
    A takeover weapon that passes S-0601 claim 3's test still faces the remaining target tests
    at rank 9, including the zero-versus test, and all later ranks (S-0601 claim 4).
@@ -387,7 +401,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      scenario F15 part f and S-0516 scenario CS9 part c for hidden targets; S-0519 scenario T3 for bomb-planting and disarm legality,
      S-0601 scenarios MC2, MC3 and MC11 for takeover legality; S-0610 scenario P4 for the
      berserk-friendly refusal; scenario F7 part e and S-0501 scenario AC11 for the
-     empty passenger-carrier refusal and its precedence).
+     empty passenger-carrier refusal and its precedence; S-0608 scenarios D1 and D2 for
+     drain attempts instead of shots and D3 for the rank-4 drain refusals).
      The berserk-weapon refusals of S-0610 claim 3 are `unmeasured` here for that claim's
      reason: stock berserk weapons do not isolate the single-target firing check.
      Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
@@ -398,7 +413,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      *rearming* cases, so no scenario could tell the orders apart).
      Rank 16 is `unmeasured`: no isolated locomotor refusal and its answer have yet been
      identified, so no scenario here can distinguish it from another refusal.
-   - Confidence: high (rearming before ammunition and range, facing and moving after them, and
+   - Confidence: high (the three drain refusals and no ordinary shot from a drain attempt),
+     medium (its missing countdown start and ammunition use, as S-0608 claim 1), high (rearming before ammunition and range, facing and moving after them, and
      *must deploy* before *not facing*, and the hidden-target refusal using mean weapon damage),
      medium (the full membership of *illegal* and *impossible*,
      and the early *rearming* cases, which other specs own; only the ones relevant to this spec are
@@ -419,8 +435,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     that can reload a vehicle (claim 11) or service an aircraft. Each shot
     that a vehicle, infantry or building makes uses one round when *a* > 0; *a* = −1 is never
     changed. With *a* = 0 the firing check answers *out of ammunition*. A disc laser shot uses no
-    round (and it neither advances a garrison's muzzle index, S-0313, nor restarts a vehicle's
-    reload, claim 11). Aircraft spend one round per attack run in which they fired, not per shot
+    round (S-0615 claim 12; and it neither advances a garrison's muzzle index, S-0313,
+    nor restarts a vehicle's reload, claim 11). A drain attempt likewise uses no round
+    (claim 9; S-0608 claim 1). Aircraft spend one round per attack run in which they fired, not per shot
     (S-0501 claim 15). Servicing on pads belongs to S-0501 claims 26 to 28. Only their starting count is owned here. The 1-tick rule depends on
     a building's ammunition before the shot: a building that holds more than 1 round before a shot
     has a delay of exactly 1 tick after that shot, with no draw, whatever its weapon's burst count
@@ -533,7 +550,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     - Backing: `measurable` (scenario F10, part d)
     - Confidence: low
 
-18. **Draws taken by one shot.** A shot takes, from the scenario random stream and in this order:
+18. **Draws taken by one shot.** These are ordinary-shot draws, not the possible
+    link-effect draws of a drain attempt (claim 9; S-0608 claims 1 and 5). A shot takes, from the scenario random stream and in this order:
     the spray pick of S-0313 (only for the first shot of a burst of a spray-attack type), the
     projectile's own draws (S-0306), the draws of creating an effect weapon's particle system
     (S-0202, claim 10, when this shot starts the effect), then the one delay draw (R(0, 2) of claim 2 or R(3, 5) of claim 4) if
@@ -542,7 +560,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     effects). A refused attempt takes no draw at all. A delay without a draw (a burst-delay field of claim 4, the bare
     rate of claim 5, the 1-tick delay of claim 10) takes no delay draw. A void shot as in claim 15 takes the projectile's draws but no delay draw.
     - Backing: `measurable` (scenario F14, with the random-state recorder; the void-shot rule through
-      S-0306 scenario P5 run d)
+      S-0306 scenario P5 run d; S-0608 scenario D1 part a for drain attempts and link effects)
     - Confidence: high (one delay draw per shot, or none); medium (its place between the projectile's and the animation's
       draws)
 
@@ -616,6 +634,7 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 | State | Event | Result |
 |---|---|---|
 | ready (no countdown running), or countdown running in claim 13's sync tick | an attempt passes the firing check and makes a shot | the shot is the *j*-th of its burst, *j* = *k* + 1; the countdown runs for the shot's delay *D*, of the kind that claim 2's order gives for *j*, with the factors of claims 3, 6 and 7 where that kind takes them and the halving of claim 8 where it applies; the burst counter is *j* mod *B* |
+| ready | an attempt passes the firing check with a draining weapon | a drain attempt replaces the ordinary shot (claim 9; S-0608 claim 1); no countdown start, burst advance, ammunition use or ordinary-shot draws; target clearing still resets the burst counter |
 | ready | an attempt passes the firing check, but its projectile cannot be put on the map (a void shot, claim 15) | nothing changes |
 | ready, animation-delayed building | its attack behaviour gets *can fire* | the delayed shot becomes pending (claim 14); no shot is made yet |
 | countdown running, outside claim 13's sync tick | an attempt | answer *rearming*, unless a reason of ranks 1 to 4 gives its own answer (claim 9); either way no shot and no draw |
@@ -733,8 +752,9 @@ value below −1 (Edge cases).
 Scenario labels F1 to F16 are separate from the formulas F1 to F6; the text says "scenario" or
 "Formula" each time. All scenarios use stock data unless a named test rules file is listed, under the measurement setup
 (glossary), a small purpose-made skirmish map, one game speed (any; claim 1 says it does not matter),
-and the random-state recorder where draws matter. "Shot ticks" means the tick numbers at which the
-firer's shots are made, read from projectile creation or the target's health drops.
+and the random-state recorder where draws matter. Unless a scenario states otherwise, each distinct
+setup is run once; any explicitly stated repetitions or comparisons between runs take precedence.
+"Shot ticks" means the tick numbers at which the firer's shots are made, read from projectile creation or the target's health drops.
 
 **F1. Rearm countdown and full delay.**
 - Setup: one human-house vehicle with a single-shot weapon (burst count 1, not an effect weapon) and
