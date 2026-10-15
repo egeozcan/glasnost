@@ -660,11 +660,14 @@ fn paratroopers_land_and_stand_for_their_house() {
     let mut w = game(&rules());
     let p = launch(&mut w);
     let ps = transport::passengers(&w, p);
+    let full: Vec<i32> = ps.iter().map(|&x| w.obj(x).unwrap().health).collect();
     until(&mut w, 3000, |w| transport::count(w, p) == 0);
     until(&mut w, 3000, |w| ps.iter().all(|&x| !falling(w, x)));
     step(&mut w);
-    for x in ps {
+    for (x, h) in ps.into_iter().zip(full) {
         let o = w.obj(x).unwrap();
+        // spec: S-0522 claim 12 and Edge cases (no paradrop fall damage)
+        assert_eq!(o.health, h);
         assert_eq!(o.owner, Some(ALPHA));
         assert!(o.on_map);
         assert_eq!(o.pos.z, surface(&w, x));
