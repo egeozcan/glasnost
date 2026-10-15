@@ -1109,3 +1109,28 @@ fn claim_21_repair_cursor() {
     bridges::attempts(&mut w, at(3, 0), 2);
     assert!(hut::repair_offered(&w, h));
 }
+
+// spec: S-0511 State and ordering (bridge state: overlays, alternate looks, pier levels, falls and the map-generator stream survive a save and load with the same state hash)
+#[test]
+fn bridge_state_save_round_trip() {
+    use glasnost_sim::save;
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 10, &[4]);
+    let mut w = game(&ruleset(), &m);
+    let top = spawn(&mut w, Kind::Vehicle, "CART", at(7, 0));
+    onto_deck(&mut w, top);
+    bridges::attempts(&mut w, at(4, 0), 2);
+    bridges::attempts(&mut w, at(7, 0), 2);
+    bridges::attempts(&mut w, at(9, 0), 2);
+    glasnost_sim::tick::step(&mut w);
+    assert!(w.obj(top).unwrap().fall.falling);
+    assert!(!w.cells.alternate.is_empty() && !w.cells.pier_levels.is_empty());
+    let bytes = save::save(&w);
+    let mut l = save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
+    assert_eq!(save::state_hash(&l), save::state_hash(&w));
+    for _ in 0..40 {
+        glasnost_sim::tick::step(&mut w);
+        glasnost_sim::tick::step(&mut l);
+    }
+    assert_eq!(save::state_hash(&l), save::state_hash(&w));
+}
