@@ -1862,7 +1862,7 @@ fn wakes(w: &World, name: &str) -> Vec<(i32, i32, i32)> {
     w.effects
         .iter()
         .filter_map(|e| match e {
-            glasnost_sim::combat::effects::Effect::Anim { name: n, pos } if n == name => {
+            glasnost_sim::combat::effects::Effect::Anim { name: n, pos, .. } if n == name => {
                 Some((pos.x, pos.y, pos.z))
             }
             _ => None,

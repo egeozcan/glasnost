@@ -870,7 +870,7 @@ fn claim_20_click_move_teleports_in_play() {
     let order: Vec<(&str, Pos)> = seen
         .iter()
         .filter_map(|e| match e {
-            Effect::Anim { name, pos } if name == "WARPX" => Some(("warp", *pos)),
+            Effect::Anim { name, pos, .. } if name == "WARPX" => Some(("warp", *pos)),
             Effect::Sound {
                 sound: Sound::ChronoOut,
                 of: Some(t),

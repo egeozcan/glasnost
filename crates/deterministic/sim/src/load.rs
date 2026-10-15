@@ -161,12 +161,13 @@ fn tile_anim_due(
 }
 
 /// The creation draws of S-0202 claim 10 before the start event.
-fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) {
+fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) -> Option<i32> {
     let q = w.rules().quirks;
     let (d1, d2) = a.random_delay;
+    let mut delay = None;
     if d1 != d2 {
         // spec: S-0109 claim 3 (one ranged draw over [d₁′, d₂′] when d₁′ ≠ d₂′)
-        let _ = w.rng.ranged(d1, d2, q.ranged_draw_half_span);
+        delay = Some(w.rng.ranged(d1, d2, q.ranged_draw_half_span));
     }
     if a.bouncing {
         // spec: S-0202 claim 10 (a bouncing type: three raw values, then three ranged draws R(−65535, 65535))
@@ -178,6 +179,7 @@ fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) {
             let _ = w.rng.ranged(-65535, 65535, q.ranged_draw_half_span);
         }
     }
+    delay
 }
 
 /// The creation draws of an animation created with no loop delay at the
@@ -196,12 +198,14 @@ fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) {
 /// resource cell is S-0401 claim 20's, the economy topic's seam, and is not
 /// taken. An animation type the rules do not list has no fields (S-0004
 /// claim 3) and takes no draw.
-pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) {
+///
+/// Returns the stage delay the creation's ranged draw gave, when one was
+/// taken, for the drawing's playback (presentation only, never read by the
+/// simulation).
+pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) -> Option<i32> {
     let rules = w.rules_arc();
-    let Some(a) = rules.animation(name) else {
-        return;
-    };
-    creation_draws(w, a);
+    let a = rules.animation(name)?;
+    let delay = creation_draws(w, a);
     let effects = a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater;
     match a.mu {
         // spec: S-0109 claim 13 (the start event produces the middle event at once when μ = 0)
@@ -221,6 +225,7 @@ pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) {
             w.note("S-0401 claim 20: an animation's start-event chain reaction on a resource cell (the economy topic's seam) takes no draw and has no effect");
         }
     }
+    delay
 }
 
 /// The cell containing a ground position (S-0204 claim 2).
