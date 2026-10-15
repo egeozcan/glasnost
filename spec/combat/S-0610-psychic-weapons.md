@@ -2,7 +2,7 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -38,8 +38,9 @@ skirmish only; network games and campaigns are out of scope.
 - **Granting, charging, readiness and the aiming interface** of the psychic reveal: S-0512 claims 1
   to 8 and 16 to 18, and S-0513 claims 1 to 3 for aiming and the record.
 - **The area reveal itself** (cells, radius cap, explore and see, gap fields): S-0409 claim 17.
-- **Gas clouds** that carry a berserk warhead: planned S-0613 delivers them; each hit then follows this
-  spec and S-0302.
+- **Gas clouds** that carry a berserk warhead: S-0613 claims 4 and 13 cover their creation and
+  hits when the data supplies them; each hit then follows this spec and S-0302 claim 10.
+  The stock chaos drone creates no gas particles (claim 8).
 - **Permanent and temporary mind control** and psychic domination use the psionics immunity of
   claim 1; their detailed rules belong to planned S-0601 and planned S-0612.
 
@@ -165,9 +166,12 @@ skirmish only; network games and campaigns are out of scope.
    the berserk-friendly flag behaves as claims 3 to 7 give: its own hits cannot make it berserk,
    and units made berserk by it never fire at it or at others of its type. Every berserk hit takes
    *T* at distance 0 (S-0302 claim 10), so equally susceptible units with the same type,
-   posture and damage modifiers get the same initial duration from one pulse. This does not promise simultaneous expiry: units can have different numbers
-   of countdown updates in the hit tick, and later cloud hits can reset individual durations.
-   Gas-cloud delivery belongs to planned S-0613.
+   posture and damage modifiers get the same initial duration from one pulse. This does not
+   promise simultaneous expiry: units can have different numbers of countdown updates in the hit
+   tick. The stock chaos drone creates an animation and an area berserk effect, but no gas
+   particles. If other data supplies gas particles with a berserk-causing warhead, their delivery
+   follows S-0613 claims 4 and 13, and their later hits can reset individual durations under
+   S-0302 claim 10.
    - Backing: `measurable` (scenarios P4 part a and P5)
    - Confidence: medium
 
@@ -349,11 +353,9 @@ skirmish only; network games and campaigns are out of scope.
 ## Measurement scenarios
 
 All scenarios: stock data, director off, mods off, a small purpose-made skirmish map, normal game
-speed, 800 × 600 presentation. Use the bench or arena when it can deliver the stated setup on
-the stock executable, otherwise scripted input and a read-only recorder. Record the seed rather
+speed, 800 × 600 presentation. Use scripted input and a read-only recorder when needed to deliver and observe the stated setup on the stock executable. Record the seed rather
 than assuming it can be set. Repeat each deterministic part three times. Include one bystander
-computer player, kept outside the test area under the glossary's void rule. Count ticks with the
-harness tick counter, record health and orders read-only, and capture frames for presentation.
+computer player, kept outside the test area under the glossary's void rule. Record tick counts, health and orders using read-only observation, and capture frames for presentation.
 Unless a part gives a narrower falsifier, any observed departure from its expected outcome
 falsifies that part. A setup not achievable with stock data is not a successful measurement.
 
@@ -366,7 +368,7 @@ falsifies that part. A setup not achievable with stock data is not a successful 
   building or the immune infantry is damaged.
 - **P2. Entry and expiry.** A human-owned tank attacking a durable enemy target stands inside
   an enemy chaos drone's pulse area. Have the drone fire once, then withdraw it. Void a run
-  with a later gas-cloud hit during the isolated interval. Record hit and countdown-update ticks,
+  with any further berserk hit during the isolated interval. Record hit and countdown-update ticks,
   target loss, queued and current behaviour, tint and acceptance of subsequent orders. Compute
   *T* under S-0302 claim 10. Expected: the initial hit clears the target and queues *hunt*,
   without immediately replacing the current behaviour. Expiry clears the target and queues
@@ -395,9 +397,11 @@ falsifies that part. A setup not achievable with stock data is not a successful 
 - **P5. Equal initial duration over the area.** Several enemy tanks of one type, rank and
   damage modifiers at different distances inside a chaos drone's area, all on the same side
   of the drone in update order.
-  Record the first hit and expiry for each, voiding runs with later cloud hits. Expected:
+  Record the first hit and expiry for each, and record whether any gas particles appear.
+  Void runs with further berserk hits. Expected: no gas particles from the stock drone,
   equal initial *T* under S-0302 claim 10, and expiry after equal numbers of countdown updates.
-  A duration difference caused by distance falsifies the claim. A later reset does not.
+  A duration difference caused by distance or a gas particle created by the stock drone
+  falsifies the claim. A later reset does not falsify the equal-initial-duration claim.
 - **P6. Psychic sensor.** The viewer owns a psychic sensor (choose the type by reading the stock
   rules). Enemy tank 1 is ordered from outside the radius to move to a cell inside it, enemy tank
   2 to attack an object inside it, enemy tank 3 to move to a cell outside it. Expected: lines for
