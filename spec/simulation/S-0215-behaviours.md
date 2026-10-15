@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 45
+revision: 46
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1483,6 +1483,15 @@ apply in our engine to the actors of every player house.
     processing timer, so the fallback need not be in the cleanup tick or the next tick.
     A due processing before cleanup still sees the retained destination and uses the
     standard delay. This does not add a cleanup wait to locomotion.
+
+    S-0207 claim 26 also owns destinations naming a vehicle, infantry unit or aircraft:
+    no-track equality with the cell of the supplied movement point alone clears neither
+    destination, whether the named unit is moving or stationary. Its separate exception
+    applies when the mover rests in *guard* and its world point exactly equals the retained
+    locomotor destination point in all three integer-lepton coordinates, including height,
+    without rounding. That exception removes the goal or invokes the approach-destination
+    fallback specified there; it does not compare the named unit's current position.
+    Behaviour-issued replacement destinations remain separate effects.
     - **Vehicles:** a deployed vehicle or one in the middle of deploying or undeploying instead
       queues *guard* and chooses 1 tick (S-0517 claim 10; transitions: S-0517 claims 3 to 8).
       This special fallback applies only to *move*, not to *patrol*.
@@ -1500,7 +1509,9 @@ apply in our engine to the actors of every player house.
       negative undeploy delay, and otherwise follows the general rule above).
     - Backing: `measurable` (scenario B3; scenario B25 for deployed infantry; S-0517 P3 b for
       deployed vehicles and P6 for the inactive cycle; B43 and S-0207 D30 for goal
-      cleanup versus the next due processing). Processing *move* during a vehicle's
+      cleanup versus the next due processing; S-0207 D31 for unit-goal retention and
+      the exact-point guard exception, inheriting claim 26's measurement limitations).
+      Processing *move* during a vehicle's
       deploy or undeploy transition is `unmeasured`: ordinary orders cannot start it until
       the transition ends (S-0517 claim 10).
     - Confidence: high (the general rule and deployed-vehicle fallback); medium (the infantry
@@ -1925,9 +1936,14 @@ apply in our engine to the actors of every player house.
     processings. A movement-arrival exchange may queue *sleep* in the arrival tick, as
     above, but queueing it is not removal of the order-level destination. S-0207 claim 26
     distinguishes the cell-goal locomotion cleanup from this building goal, including its
-    separate exact-point guard exception. Refusal, replacement orders, entry guidance and
-    servicing can still change destinations by their own rules; this is not a promise of
-    permanent retention or a replacement for those rules.
+    separate exact-point guard exception. The same claim owns destinations naming a
+    vehicle, infantry unit or aircraft, including a transport: no-track equality with the
+    supplied-point cell alone clears neither destination, regardless of the named unit's
+    motion. Its exact-point exception concerns the mover resting in *guard*, not the named
+    unit's state, and compares the mover with the retained locomotor point, not the named
+    unit's current position. Refusal, replacement orders, entry guidance, transport boarding
+    and servicing can still change destinations by their own rules; this is not a promise
+    of permanent retention or a replacement for those rules.
 
     **Earlier guard transition.** An unarmed repair building in the waiting stage of its guard
     processing can queue repair before the completed entry report: a contacted mobile actor
@@ -1981,7 +1997,9 @@ apply in our engine to the actors of every player house.
       S-0314 H16 and H19 for reservation, tether and movement arrival, H18 for orders,
       queued entry, run-away notices and other interruption consequences, H22 for late
       queued retries, phase-in gating, passenger/parasite ordering and next-turn processing,
-      and scenarios B39 and B43 for depot processing, orders and goal-cell retention).
+      and scenarios B39 and B43 for depot processing, orders and goal-cell retention, plus
+      S-0207 D31 for unit-goal retention and the exact-point guard exception, inheriting
+      claim 26's measurement limitations).
       For transport loading, the existing-tether exception inherits S-0507 claim 5's
       `unmeasured` backing; repair-specific tether observations are the H19 cases above.
       Repair-specific tether, movement arrival and docking-point selection inherit
