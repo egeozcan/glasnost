@@ -149,7 +149,10 @@ fn last_in_first_out_and_save_round_trip() {
     click(&mut w, &[t], ClickOn::Object(t));
     click(&mut l, &[t], ClickOn::Object(t));
     assert!(run_until(&mut w, 600, |w| transport::count(w, t) < 2));
-    assert!(transport::riding(&w, b).is_none(), "position 1 leaves first");
+    assert!(
+        transport::riding(&w, b).is_none(),
+        "position 1 leaves first"
+    );
     assert_eq!(transport::riding(&w, a), Some(t));
     while l.tick < w.tick {
         tick::step(&mut l);
@@ -411,7 +414,10 @@ fn open_topped_passengers_ride_along_and_take_the_target() {
     let p = at(&mut w, Kind::Infantry, "WALKER", 0, 3, 0);
     let e = at(&mut w, Kind::Vehicle, "BUGGY", 1, 9, 9);
     put_in(&mut w, p, t);
-    assert!(w.update.contains(p), "an open-topped passenger stays in the update order");
+    assert!(
+        w.update.contains(p),
+        "an open-topped passenger stays in the update order"
+    );
     testkit::run(&mut w, 5);
     orders::issue(
         &mut w,
@@ -474,4 +480,116 @@ fn open_topped_passenger_fires() {
         "the passenger's fire hurt the enemy"
     );
     assert_eq!(transport::riding(&w, p), Some(t));
+}
+
+fn move_to(w: &mut World, actor: ObjectId, dx: i32, dy: i32) {
+    assert!(orders::issue(
+        w,
+        ALPHA,
+        orders::Order::Behaviour {
+            actor,
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(glasnost_sim::world::Target::Cell(testkit::mid(
+                SIZE, dx, dy
+            ))),
+        }
+    ));
+}
+
+// spec: S-0507 claims 5 and 6 (a transport whose locomotor is moving refuses; the passenger arriving is turned away: no boarding, destination cleared)
+#[test]
+fn moving_transport_turns_the_passenger_away() {
+    let r = ruleset();
+    let mut w = game(&r);
+    let t = at(&mut w, Kind::Vehicle, "HAULER", 0, -8, 0);
+    let p = at(&mut w, Kind::Infantry, "WALKER", 0, -7, 1);
+    testkit::run(&mut w, 5);
+    move_to(&mut w, t, 9, 0);
+    tick::step(&mut w);
+    click(&mut w, &[p], ClickOn::Object(t));
+    let moving = |w: &World| w.obj(t).unwrap().dest.is_some();
+    assert!(
+        run_until(&mut w, 900, |w| !moving(w)
+            || transport::riding(w, p).is_some()
+            || w.obj(p).unwrap().dest.is_none()),
+        "the transport stops or the passenger gives up"
+    );
+    assert_eq!(transport::riding(&w, p), None, "not boarded while moving");
+    assert!(
+        w.obj(p).unwrap().dest.is_none(),
+        "the turned-away passenger has no destination"
+    );
+}
+
+/// HAULER with a turret count of 1 (claim 11), as KEEPER.
+fn keeper_ruleset() -> Ruleset {
+    let mut r = ruleset();
+    let mut k = r.sim.vehicles["HAULER"].clone();
+    k.turret_count = Some(1);
+    r.sim.vehicles.insert("KEEPER".into(), k);
+    if let Some(v) = r.registries.get_mut("vehicles") {
+        v.push("KEEPER".into());
+    }
+    r
+}
+
+// spec: S-0507 claim 11 (a turret count above 0 keeps one passenger: letting out stops at it and the unload ends)
+// spec: S-0507 table U (letting out: no more than kept, finished; finished: unload ends with guard)
+#[test]
+fn turret_count_keeps_one_passenger() {
+    let r = keeper_ruleset();
+    let mut w = game(&r);
+    let t = at(&mut w, Kind::Vehicle, "KEEPER", 0, 0, 0);
+    let a = at(&mut w, Kind::Infantry, "WALKER", 0, 0, 4);
+    let b = at(&mut w, Kind::Infantry, "WALKER", 0, 0, -4);
+    put_in(&mut w, a, t);
+    put_in(&mut w, b, t);
+    testkit::run(&mut w, 5);
+    assert_eq!(cursor(&w, &[t], t), Action::Deploy);
+    click(&mut w, &[t], ClickOn::Object(t));
+    assert!(
+        run_until(&mut w, 900, |w| transport::count(w, t) < 2),
+        "one is let out"
+    );
+    assert!(
+        run_until(&mut w, 300, |w| w.obj(t).unwrap().beh.current
+            != Some(glasnost_sim::rules::Behaviour::Unload)),
+        "the unload ends"
+    );
+    testkit::run(&mut w, 60);
+    assert_eq!(transport::count(&w, t), 1, "one passenger is kept");
+    assert_eq!(transport::riding(&w, b), None, "position 1 got out");
+    assert_eq!(transport::riding(&w, a), Some(t));
+}
+
+// spec: S-0507 claim 8 (settling: a moving transport waits; it unloads once stopped)
+#[test]
+fn deploy_while_moving_unloads_after_stopping() {
+    let r = ruleset();
+    let mut w = game(&r);
+    let t = at(&mut w, Kind::Vehicle, "HAULER", 0, -6, 0);
+    let p = at(&mut w, Kind::Infantry, "WALKER", 0, 0, 5);
+    put_in(&mut w, p, t);
+    testkit::run(&mut w, 5);
+    move_to(&mut w, t, 6, 0);
+    testkit::run(&mut w, 10);
+    assert!(w.obj(t).unwrap().dest.is_some(), "still on its way");
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        orders::Order::Behaviour {
+            actor: t,
+            behaviour: glasnost_sim::rules::Behaviour::Unload,
+            attack_move: false,
+            target: None,
+            dest: None,
+        }
+    ));
+    assert!(
+        run_until(&mut w, 900, |w| transport::riding(w, p).is_none()),
+        "let out once stopped"
+    );
+    assert!(w.obj(p).unwrap().on_map);
 }
