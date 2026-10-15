@@ -2,7 +2,7 @@
 id: S-0310
 title: Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -55,8 +55,8 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
 - **Spark-particle weapon, fire-particle weapon.** A weapon with the imported spark-particle flag
   or fire-particle flag.
 - **Temporal weapon.** A weapon that erases its target over time (glossary, *being erased*),
-  through a beam attached to the target. Claim 7 gives what a temporal primary weapon changes in
-  firing while moving.
+  through a beam attached to the target. A *temporal beam* is the persistent erasing capability
+  of S-0514, Terms; it can exist without being attached. Claim 7 uses possession of that beam.
 - **Balloon-hover type.** A vehicle type with the imported balloon-hover flag (a hovering
   locomotor of the jumpjet kind).
 - **Deploy-to-fire flag.** An imported vehicle-type flag: the vehicle must deploy before it fires
@@ -85,6 +85,9 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
 - **Animation stage of a visceroid.** A non-negative integer per visceroid-type vehicle on which
   its drawing depends (claim 10).
 - **Jump-jet turn flag.** An imported infantry-type flag (claim 8).
+- **Moving now, for a jumpjet.** S-0502 claim 20's flight-state test: true in *ascending*, *cruising*,
+  *descending*, *crashing* and *crashed*, false in *grounded* and *hovering*. In claims 7 and 8,
+  a jumpjet locomotor *moving it* means this test, not actual displacement or a destination.
 
 ## Behaviour
 
@@ -192,30 +195,36 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
      balloon-hover type this condition (and only this one) reads *its locomotor is moving it*
      instead of *it has a destination*,
    - the weapon is a spark-particle or fire-particle weapon and the vehicle has a destination,
-   - the vehicle's primary weapon is a temporal weapon and it has a destination. This condition
-     does not depend on the beam: it applies from the moment the vehicle is created, whether or
-     not its beam is attached to anything. A temporal weapon that is only the vehicle's secondary
-     weapon does not give this condition. When the beam is attached to the very target being
-     checked, the answer is *rearming*, which outranks *moving* (S-0301, claim 9, rank 4).
+   - the vehicle has a temporal beam and a destination. A primary weapon whose warhead is temporal
+     supplies a beam at creation (S-0514, Terms); gunner hand-over can also supply one (S-0308
+     claim 6). Attachment is irrelevant to this condition. A temporal secondary weapon alone
+     supplies no beam. When the beam is attached to the very target being checked, the answer is
+     *rearming*, which outranks *moving* (S-0301 claim 9, rank 4).
 
    Having a destination is what counts, not motion, in the first, third and fourth conditions: a
    vehicle that has stopped on the way but still has a destination gets *moving*, and one that is
    still rolling after its destination was cleared does not. Only after these conditions and
    the aiming tests pass can its locomotor add a refusal of its own (S-0301 claim 9).
-   Which locomotor states produce such a refusal is not specified here (Open questions).
-   - Backing: `measurable` (scenario T6, parts a to i) for the four conditions, the balloon-hover
-     reading and the cleared destination. The locomotor's additional refusal is `unmeasured`:
-     no scenario here isolates a flight phase producing it independently of the other refusals.
-   - Confidence: high (the first three conditions); medium (the temporal condition, and that only
-     the primary weapon gives it, which T6 h and i test); low (the locomotor's own refusal)
+   For a jumpjet locomotor the balloon-hover test uses *moving now* (Terms; S-0502 claim 20):
+   grounded and hovering do not give this refusal, even with a destination. The jumpjet locomotor
+   adds no separate refusal after the aiming tests (S-0502 claim 20). Other locomotors' additional
+   refusals remain outside this spec.
+   - Backing: `measurable` (scenario T6, parts a to j, and S-0502 scenario J14) for the four
+     conditions, the living jumpjet phases and the cleared destination. The absence of a separate
+     jumpjet-locomotor refusal and its crashing/crashed cases inherit S-0502 claim 20's
+     `unmeasured` backing: other refusals mask them in those scenarios.
+   - Confidence: high
 
 8. **Infantry.** An infantry unit gets *moving* when its infantry speed fraction (Terms) is above
    0.1, or when it has a destination and its current sequence is not interruptible (S-0107, T1).
    A jumpjet infantry type whose type also has the jumpjet-turn flag (Terms)
-   gets it while its jumpjet locomotor moves it; one without that flag does not. A fire-particle
-   weapon gets *moving* while the unit has a destination.
+   gets it while its jumpjet locomotor is *moving now* (Terms; S-0502 claim 20); one without
+   that flag does not get this flight-state refusal. Grounded and hovering do not trigger it.
+   A fire-particle weapon gets *moving* while the unit has a destination.
    - Backing: `measurable` (scenario T7, parts a to d) for walking, sequence, jumpjet and
-     particle restrictions. The exact 0.1 boundary is `unmeasured`: the walking fraction takes
+     particle restrictions; S-0502 scenario J14 covers living jumpjet flight phases. Crashing
+     and crashed inherit S-0502 claim 20's `unmeasured` backing because other refusals mask them.
+     The exact 0.1 boundary is `unmeasured`: the walking fraction takes
      only 0 or 1, so ordinary orders cannot supply intermediate values around the boundary.
    - Confidence: medium (the fraction's 0 and 1 settings follow the walking step of S-0208; the
      exact set of stopping cases that return it to 0 is medium)
@@ -229,10 +238,10 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
 
    | Answer | Vehicle | Reply in this step |
    |---|---|---|
-   | *can fire* | type with the deploy-to-fire flag | deploys, instead of firing (the deploy specs) |
+   | *can fire* | type with the deploy-to-fire flag | queues *unload* instead of firing, without starting it immediately (S-0517 claim 13) |
    | *can fire* | visceroid type without the deploy-to-fire flag | its animation stage is set (claim 10), and it fires |
    | *can fire* | any other | fires |
-   | *not facing* | type with the deploy-to-fire flag | deploys, and none of the three facing replies below applies (the deploy specs) |
+   | *not facing* | type with the deploy-to-fire flag | queues *unload* without starting it immediately, and none of the three facing replies below applies (S-0517 claim 13) |
    | *not facing* | without the deploy-to-fire flag, with the turret flag | the turret's target facing becomes the direction of the target (S-0206, claim 9, facing-error row) |
    | *not facing* | without the deploy-to-fire flag, without the turret flag, with no destination, and not being moved by its locomotor | its body's target facing becomes the direction of the target, and its turret follows (S-0206, claim 9) |
    | *not facing* | without the deploy-to-fire flag, without the turret flag, with a destination or being moved by its locomotor | none |
@@ -240,17 +249,22 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    | *illegal* | default weapon is a healing weapon | may drop its target (claim 11) |
    | *still turning*, *moving*, *rearming*, *must deploy* and every other answer | any | none here, apart from what other specs own |
 
-   A type with both the visceroid and the deploy-to-fire flags therefore deploys on *can fire*, and
-   its animation stage is not set.
+   The deploy-to-fire rows use S-0517 claim 13's rules and `quirks.deploy_to_fire_repacks`:
+   with the switch on (default original), they apply even after in-place deployment, so such a
+   vehicle queues *unload* again and repacks instead of firing. With it off, a deployed vehicle
+   fires normally and only a mobile one queues *unload*; the deployed vehicle uses the ordinary
+   firing and facing replies above. A type with both the visceroid and deploy-to-fire flags
+   therefore does not set its animation stage when it queues *unload* instead of firing.
 
    A deploy-to-fire vehicle gets *must deploy* when no higher-ranked refusal applies
    (claim 6), and its cell does not allow it to deploy
    there (for example a sloped cell, a building in the cell, or a land
-   type that does not allow it; the deploy specs own that cell test). It then neither fires nor
+   type that does not allow it; S-0517 claim 14 owns that cell test). It then neither fires nor
    deploys. *Must deploy* ranks above *moving*, *still turning* and *not facing* (State and
    ordering), so on such a cell the vehicle does not re-aim, whatever its aim error. So a
-   deploy-to-fire vehicle never fires from this step: where it would otherwise fire, it deploys
-   if its cell allows it, and gets *must deploy* if not.
+   deploy-to-fire vehicle with the default quirk setting never fires from this step: where it
+   would otherwise fire, it queues *unload* if its cell allows it, and gets *must deploy* if not.
+   The switch-off deployed exception is S-0517 claim 13's alternative above.
    - Backing: `measurable` (T1 for facing replies, T8 for deployment, and S-0301 claim 12
      and scenario F7 for uncloaking). The combined visceroid/deploy-to-fire case and the
      building-occupied and land-type deployment refusals are `unmeasured`: T8 isolates only
@@ -258,7 +272,8 @@ shift* (claims 7 and 8 there; the screen-pixel to lepton conversion is its F3). 
    - Confidence: high (the facing replies); medium (deploy-to-fire)
 
 10. **A visceroid's attack animation.** In each tick in which a vehicle of a visceroid type
-    without the deploy-to-fire flag gets *can fire* (in practice the tick of a shot, because a shot starts the rearm countdown), its
+    gets *can fire* and fires rather than queuing *unload* under claim 9 (in practice the tick of
+    a shot, because a shot starts the rearm countdown), its
     animation stage is set to *S*<sub>*k*</sub> of the table in Constants, and from then on the
     stage rises by 5 every 5 ticks (the period and step of Constants; when the first rise comes
     after the stage is set is open, Open questions). The index is *k* = ⌊(*d* + 4096) / 8192⌋ mod 8 (integer arithmetic), where *d* is the
@@ -388,6 +403,9 @@ facing enters its tolerance, subject to the other refusals (T1 and T3).
   bound. The bound's wrap and its separate switch are S-0215 claim 32's, not this tolerance switch.
 - **A destination, not motion, makes a vehicle "moving"** (claim 7). This is the rule itself
   rather than a defect of the original, so it has no switch and is not a quirk.
+- **Deploy-to-fire repacking** (claim 9). S-0517 claim 13 owns
+  `quirks.deploy_to_fire_repacks`, default original, and its alternative allowing an already
+  deployed vehicle to fire normally rather than queue *unload* again.
 - **Empty former passenger carriers** (claim 5). This is the cargo-availability rule itself,
   not a defect, so it has no switch. The retained placement category prevents an empty
   cargo-dropping aircraft from becoming an ordinary armed aircraft merely because ammunition
@@ -536,32 +554,42 @@ the scenario's orders.
   primary weapon, with the fire-while-moving flag and neither particle flag, and the vehicle is
   ordered to move past an enemy while attacking, as in (a); no beam is attached at any time before
   the first shot. (i) The same vehicle with the temporal weapon as its secondary weapon and an
-  ordinary weapon, with the same flags, as its primary weapon.
-- Observable: shot ticks against the movement record (whether the vehicle has a destination and
-  whether its locomotor moves it).
+  ordinary weapon, with the same flags, as its primary weapon. (j) Repeat S-0308 scenario W4
+  part g's idle-beam gunner transfer into a vehicle with an ordinary primary weapon. Enable
+  mobile fire and fire while moving and clear particle flags in named test data. Compare
+  movement with the beam-bearing passenger aboard and after its exit, recording possession
+  of the beam even while unattached. For (d), repeat S-0502 scenario J14's living flight phases.
+- Observable: shot ticks against the movement record (whether the vehicle has a destination,
+  its jumpjet flight state where applicable, and whether it has an unattached temporal beam).
 - Expected: (a) no shots while a destination exists. (b) also none. (c) no shots with a destination
   for any weapon. (d) the blocked balloon-hover vehicle fires while its locomotor is not moving it,
   although it keeps its destination, and does not fire while its locomotor moves it. (e) and (f) no
   shots while a destination exists. (g) the first shot comes in a tick with no destination, even
   while the vehicle is still rolling. (h) no shot while a destination exists, though no beam is
   attached; shots once the destination is cleared. (i) the primary weapon fires while the
-  destination exists.
+  destination exists. (j) No shot with a destination while it holds the transferred beam.
+  After the passenger takes the beam back, movement alone no longer prevents a shot. In (d),
+  grounded and hovering do not give the flight-state refusal; ascending, cruising and descending
+  do, regardless of actual displacement.
 - Falsified if: (a) or (c) fires with a destination, or (b) fires while blocked with a destination,
   (d) fires only when the destination is cleared, or fires while its locomotor moves it; (e) or (f) fires while a destination exists; (g)
   waits for the vehicle to stop; (h) fires while a destination exists; (i) does not fire while a
-  destination exists.
+  destination exists; (j) a vehicle holding the transferred beam fires with a destination, or
+  after losing it still refuses solely because of that destination. For (d), a different living
+  flight-state boundary also falsifies the claim.
 
 **T7. Infantry while moving.**
 - Setup: (a) an infantry unit attacking while ordered to walk, with separate runs ending by
   arrival, stop order, loss of walking target and blockage. (b) One ordered to go prone while it
   has a destination. (c) A jumpjet infantry type, once with the jumpjet-turn flag and once without
-  (test rules files), attacking while its jumpjet locomotor moves it. (d) A test rules file gives an
+  (test rules files), attacking in each living flight phase of S-0502 scenario J14. (d) A test rules file gives an
   infantry weapon the fire-particle flag; the unit attacks with a destination and again without.
 - Observable: shot ticks against the recorded speed fraction, destination and sequence.
 - Expected: (a) the fraction is 1 from a walking step until each stopping case and 0 thereafter,
   no shot while its speed fraction is above 0.1. (b) no shot while it is in a
   sequence that is not interruptible and has a destination. (c) the type with the flag does not
-  fire while its locomotor moves it; the type without it does. (d) no shot while it has a
+  fire while ascending, cruising or descending; grounded and hovering do not give this refusal.
+  The type without it has no flight-state refusal. (d) no shot while it has a
   destination, a shot without one.
 - Falsified if: (a) the fraction differs from those 0/1 settings, or (a) or (b) fires during
   the stated restriction; (c) the flagged type fires while moving or the unflagged type waits despite all other refusals being absent; (d) it fires with
@@ -571,10 +599,14 @@ the scenario's orders.
 - Setup: a vehicle type with the deploy-to-fire flag (a stock one if there is one, else a test rules
   file on a vehicle with a turret). (a) Given an attack order, once on flat open ground and once on a
   sloped cell. (b) On the sloped cell, a target outside its aiming tolerance.
-- Observable: whether it deploys before the first shot, and the turret and body facing every tick.
-- Expected: (a) it deploys first on flat ground and neither deploys nor fires on the slope. (b) It
-  does not re-aim: turret and body facings stay put.
-- Falsified if: (a) it fires undeployed, or deploys on the slope; (b) it turns its turret or body.
+- Observable: queued and current behaviour per tick, whether it deploys before the first shot,
+  and turret and body facing. S-0517 scenario P5 additionally tests in-place repacking and the
+  full cell test.
+- Expected: (a) on flat ground it queues *unload* without immediately starting it, then deploys
+  when ready to change. On the slope it neither queues deployment nor fires. (b) It does not
+  re-aim: turret and body facings stay put.
+- Falsified if: (a) it fires undeployed, starts *unload* immediately from this firing reply, or
+  deploys on the slope; (b) it turns its turret or body.
 
 **T9. Visceroid attack animation.**
 - Setup: a stock vehicle of a visceroid type given an attack order on a target in each of the
@@ -622,17 +654,12 @@ the scenario's orders.
 
 ## Changes for other specs
 
-- **S-0215, claim 32 and its supporting definition, import mapping and snap scenario:** replace
-  the art-sourced voxel-turret classification with the building's own rules-type flag, shared
-  with claim 4 here and S-0313 claim 10. Art supplies no separate value or fallback. The snap
-  scenario must vary the rules flag, not an art mark, and should keep conflicting art settings
-  unchanged as a negative control. Its snap outcomes and bound do not change. This is a required
-  correction to the contrary definition and mapping currently in S-0215; sign-off must check
-  the two specs together.
+No cross-spec changes are required. S-0215 claim 32, its supporting definition and import mapping, and its snap scenario use the building type's rules voxel-turret flag, consistent with claim 4 here and S-0313 claim 10. The art settings do not supply a separate value or fallback.
 
 ## Open questions
 
-- The locomotor's own refusals (claim 7) need the locomotor specs. The aircraft additions formerly
+- Other locomotors' own refusals (claim 7) need their locomotor specs; S-0502 claim 20 resolves
+  the jumpjet case with no separate refusal. The aircraft additions formerly
   left open here are answered by S-0501 claim 19.
 - Which weapon a vehicle tests each tick is S-0308's.
 - What a visceroid's drawing does with the animation stage, which image frame each stage value
