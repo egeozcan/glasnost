@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 10
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -66,6 +66,11 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
   a claim says so (claim 6).
 - **Repair depot, hospital.** Building type flags (Import mapping). A unit enters a repair depot by
   docking on it and a hospital by entering it (S-0214, table I, rows e4 to e6 for the hospital).
+- **Depot contact, docking place.** Contact and tether have S-0215's Terms meanings. A docking
+  place is one of the depot's contact places, reserved by an accepted entry request (claim 17).
+  Contact can exist before the vehicle reaches the building.
+- **Docking point.** The world position the depot supplies for that vehicle's approach and
+  waiting-distance check (claim 18 for ordinary land depots; S-0504 claim 12 for vehicle factories).
 - **Building repair.** The repair state of a building that its owner turns on and off with the
   repair order (S-0213, claim 13). It is separate from the repair steps of claims 3 to 7 (claim 8).
 - **Terms owned elsewhere.** *Radar event* (S-0011, claim 32), *rally point* (S-0213, claim 20),
@@ -158,8 +163,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    A step has the outcome of the first row whose condition holds, so a full-health object whose
    paying house cannot pay reports *not needed*, not *cannot pay* (scenario H4, part b). A step cost of 0 is not refused at non-negative available credits, including 0. The
    affordability comparison still applies if available credits are negative. The paying house
-   is the owner of the repaired object. Through the orders of S-0214 a vehicle enters only an own
-   depot, so the paying house and the depot's owner are then the same house.
+   is the owner of the repaired object, not necessarily the depot's owner: an allied depot can
+   accept it too (claim 16).
    - Backing: `measurable` at non-negative available credits (H3, H4 and H6). The affordability
      test at a negative balance is `unmeasured`: no scenario here arranges a hospital entry at
      such a balance, and vehicles have a positive step cost so cannot isolate the zero-cost case.
@@ -193,7 +198,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 ### Repair depot, hospital and building repair
 
 6. **Repair depot.** Write *K*<sub>u</sub> for the vehicle repair count and *D* for the depot's
-   processing delay (Formulas F1). A repair depot treats a vehicle docked on it in three phases:
+   processing delay (Formulas F1). Claims 16 to 18 describe the established parts of contact and
+   entry. A repair depot treats a vehicle docked on it in three phases:
    - *Waiting.* At each processing, normally *D* ticks apart, the depot checks whether the
      vehicle stands still within the starting distance of its docking point: strictly less than
      100 leptons for ordinary locomotors, or 200 leptons for ship and hovering locomotors.
@@ -213,9 +219,11 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      - *done* or *not needed:* the local player hears the repair-complete announcement when the
        depot is theirs and the announcement is not suppressed (below), and the vehicle is sent
        away,
-     - *cannot pay:* repairing stops; the depot's owner, when it is the local player and its
-       available credits are exactly 0, hears the low-funds announcement. Whether the vehicle then
-       stays docked or is sent away is not known (Open questions).
+     - *cannot pay:* the vehicle stays in contact and the depot returns to settling, with its
+       first retry on the next tick and subsequent unsuccessful retries *D* ticks apart.
+       Restoring the paying house's funds can therefore restart repair without a new order.
+       The depot's owner, when it is the local player and its available credits are exactly 0,
+       hears the low-funds announcement on leaving the working phase.
    *The repair-complete announcement.* It belongs to the depot's owner: it is heard only when that
    house is the local player. It tries to create the *unit repaired* radar event, the kind that
    depots and hospitals share (claim 7). If a nearby event of that kind suppresses creation,
@@ -235,9 +243,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    does not establish those suppression details.
    The low-funds announcement belongs to the depot's owner
    too: it is heard only when that house is the local player, and it is that house's available
-   credits that must be exactly 0. It has no such suppression. The paying house of a step is the vehicle's owner
-   (claim 3), and the two houses are the same one for every vehicle that can enter the depot
-   through the orders of S-0214.
+   credits that must be exactly 0. It has no such suppression. The paying house of a step is
+   the vehicle's owner (claim 3), even at an allied depot (claim 16).
    A vehicle that the settling step brings to full health (*done*) therefore waits for one more
    step, which reports *not needed*, before it is sent away. A vehicle that is sent away moves to
    the depot's rally point when the depot has one (S-0213, claim 20), and otherwise to an exit cell
@@ -250,12 +257,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    original's rules for owners that are not human-controlled (glossary, *AI house*, *Player houses
    only*). It holds for no player house: the vehicles of an *AI house*, like a person's, follow the
    destination rule above, and our AI sends them on by ordinary orders.
-   - Backing: `measurable` (scenario H4, parts a to f, and S-0504 N8 for the waiting gate,
-     spatial distance and 3-tick delay, for everything above except the next two
-     statements, the non-local-owner announcement conditions and F7's stated unmeasured
-     suppression details). The non-local-owner conditions are `unmeasured`:
-     the other-owner attempt in H4 part f needs the original's computer player to dock a vehicle,
-     which normal player input cannot require; failure to dock is not evidence about sound.
+   - Backing: `measurable` (scenario H4, parts a to f, H16 b for an allied depot's owner and
+     announcement distinction, and S-0504 N8 for the waiting gate, spatial distance and 3-tick
+     delay), except the following cases and F7's stated unmeasured suppression details.
      `unmeasured` for the return to the guard spot of a non-player house: no input of
      the measurement setup makes a vehicle of the original's neutral or special house, or of its
      computer player, dock at a depot in a way that can be timed and recorded, and a player house
@@ -266,10 +270,10 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      docking. If H4 part g finds one, this statement becomes `measurable`.
    - Confidence: high (one step per count of *K*<sub>u</sub>, the cost, the end on *done*,
      the waiting thresholds, spatial distance and 3-tick delay); medium
-     (the settling step, the phase *D* + *K*<sub>u</sub> − 1, that repairing stops after *cannot
+     (the settling step, the phase *D* + *K*<sub>u</sub> − 1, the return to settling after *cannot
      pay*, the owner conditions of the two announcements, that the settling *not needed* makes no
      announcement, and that *not needed* is tested before *cannot pay*), and low (the destination without a rally
-     point; what happens to the vehicle after *cannot pay*; the suppression of the repair-complete
+     point; the suppression of the repair-complete
      announcement; the return to the guard spot; the moving step)
 
 7. **Hospital.** An infantry unit inside a hospital gets repair steps at a cost of 0, on the
@@ -380,9 +384,13 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     and strength *S*, with no other health-changing event in that tick, ends it with health
     min(*H* + 1 + *a* × *T*, *S*) (Formulas F3, which
     also gives our engine's treatment of a negative *a*).
-    - Backing: `measurable` (H8 parts a to d, including the building-kind exclusion). The
+    Both this claim's healing and claim 9's healing precede an attached parasite's delivery
+    in the host's same turn (S-0614 claim 18). Health already restored can prevent a lethal
+    delivery, but neither kind heals damage from that delivery later in the same turn.
+    - Backing: `measurable` (H8 parts a to e, including the building-kind exclusion and
+      same-turn parasite ordering; S-0614 claim 18). The
       health-0 exclusion is `unmeasured` for the same destruction-handling reason as claim 9.
-    - Confidence: high (amounts, intervals, the kinds, the stacking); medium (the events that change
+    - Confidence: high (amounts, intervals, the kinds, the stacking, same-turn parasite ordering); medium (the events that change
       the totals, the floor at removal, and that power plays no part)
 
 11. **Healing on resources has no effect.** The type flag and the game-wide value for healing on
@@ -471,6 +479,78 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     - Confidence: high (one start, hold release, the two draw sites),
       medium (the nonzero computer-player delay)
 
+### Docking at a land repair depot
+
+16. **Permission and player entry (Q-0641, partial).** S-0214 claim 8, table V row n3,
+    already supplies the ordinary click's *enter* action over an accepting allied building.
+    Its claim 10, table M, supplies the enter order. S-0215 claim 29 owns the repeated entry
+    requests. The depot's permission does not require damage or affordable repair: a full-health
+    vehicle can enter, and claim 6 sends it away at the settling check without payment.
+    The depot's owner must count the vehicle as allied. Construction, selling, remaining in
+    the build-up state, being switched off, and no contact place free for this vehicle prevent
+    acceptance. A place already assigned to this vehicle is not considered occupied by another.
+    S-0504 claim 7's naval match applies. A vehicle already standing on this very depot does
+    not receive a new acceptance through this query. The click's fly-zone refusal remains
+    S-0214 claim 8, table V row n1. These are permission rules, not a new repair-sidebar command.
+    - Backing: `measurable` (H16 a, b and d).
+    - Confidence: high (no damage or money gate, alliance and contact-place tests), medium
+      (input consequences of the refusal cases)
+
+17. **Contact is earlier than repair (Q-0641, partial).** A depot has max(*d*, 1) contact
+    places, where *d* is its imported docking-place count. A successful entry request establishes
+    contact in the first free place before the vehicle has reached the docking point. It is
+    this assigned vehicle, not the nearest damaged vehicle, that the depot services. At a
+    one-place depot an ordinary click by a second vehicle while that contact is held does not
+    produce another enter order: the permission fails, rather than adding the vehicle to a
+    depot waiting queue. The existing contact is not displaced.
+
+    Reaching the destination cell is distinct from the first contact. In the ordinary completed
+    entry exchange the vehicle turns toward 16384 facing units (map east). Once it is no longer
+    moving, is tethered to the contacted building and still has *enter* as its behaviour, it
+    reports arrival. The depot queues *repair* and the vehicle queues *sleep*. Claim 6's waiting
+    checks begin when the depot processes that repair behaviour, not on the initial click.
+    There is also an earlier start opportunity in the depot's guard processing: a contacted
+    entering unit, standing still at a spatial distance strictly below 64 leptons from the
+    foundation centre, causes the depot to queue repair with a 1-tick processing delay.
+    This guard test uses floating-point Euclidean distance truncated toward zero to integer
+    leptons. It is not claim 6's distance to the docking point and never takes a paid step.
+    Simultaneous requests issued before either contact exists and servicing with multiple
+    imported contact places remain open below.
+    - Backing: `measurable` (H16 a and c; contact, tether, behaviours and processing ticks
+      recorded separately).
+    - Confidence: high (capacity and completed entry), medium (reservation timing and early
+      guard start)
+
+18. **Land-depot docking point (Q-0641).** For an ordinary land repair depot without the
+    vehicle-factory, resource-unloading or tank-bunker flags, let *c* be the foundation centre
+    including the depot's world height. With an imported docking-place count of 1, the point
+    is *c* plus the sole imported docking displacement. With a count greater than 1, use the
+    displacement of the vehicle's assigned contact place, counted from 0. With a count of 0,
+    or no assigned place within the displacement count, the point is *c*. These are the same
+    displacement-selection rules as S-0404 claim 15, applied to a vehicle approaching repair.
+    Coordinates and additions are signed 32-bit integer leptons with S-0205 claim 1's wrapping
+    arithmetic, without floating-point calculation or rounding. The height displacement is
+    added too. Neither approach side nor vehicle facing rotates or changes the point.
+    A vehicle-factory flag takes precedence and instead selects S-0504 claim 12's fixed point.
+
+    The depot directs the vehicle toward the building as its movement destination; the supplied
+    docking point, not a searched neighbouring exit cell or the rally point, is the destination
+    position. The vehicle remains on the map. Foundation blocking is still S-0209 claim 5's:
+    the repair flag does not make all blocking foundation cells traversable. The exact approach
+    and stopping exchange is left to S-0215 claim 29 and the open question below, not replaced
+    here by a teleport or an unconditional permission to cross the foundation.
+    - Backing: `measurable` (H16 a and e).
+    - Confidence: high (point selection, precedence and integer arithmetic), medium (approach
+      destination and stock route)
+
+19. **Healing during sinking.** A sinking vehicle still receives the individual and house-wide
+    self-healing of claims 9 and 10 when their ordinary eligibility tests pass. Sinking neither
+    adds a health test nor changes their tick schedules, integer amounts or caps. Raising health,
+    even to full health, does not clear sinking or cancel descent and removal (S-0504 claims 4,
+    5 and 10). This does not grant depot contact or another healing-weapon target.
+    - Backing: `measurable` (H17; S-0504 N10).
+    - Confidence: high
+
 ## Formulas
 
 **F1, periods and counts.** *r*<sub>b</sub>, *r*<sub>u</sub>, *r*<sub>i</sub> are the game-wide
@@ -558,6 +638,8 @@ Backing and confidence are claim 15's.
 | Depot waiting distance, ordinary locomotors | 100 | leptons, strict upper bound | Claim 6 |
 | Depot waiting distance, ship and hovering locomotors | 200 | leptons, strict upper bound | Claim 6 |
 | Waiting-to-settling delay | 3 | ticks | Claim 6 |
+| Early guard repair-start distance | 64 | leptons, strict upper bound | Claim 17; measured to foundation centre, not docking point |
+| Arrival body facing | 16384 | facing units | Claim 17; map east |
 | Infantry and vehicle self-heal intervals, absent-key default | 1000 | ticks | Claim 10 |
 | Infantry and vehicle self-heal amounts, absent-key default | 1 | health points per source | Claim 10 |
 | Infantry and vehicle self-heal counts of a building type, absent-key default | 0 | sources | Claim 10 |
@@ -573,6 +655,8 @@ Backing and confidence are claim 15's.
 
 | State | Event | Result |
 |---|---|---|
+| no depot contact | successful entry request with a place free | contact assigned before arrival (claim 17) |
+| completed entry exchange | vehicle still, tethered and entering | depot queues repair; vehicle queues sleep (claim 17) |
 | waiting for a docked vehicle | processing finds it still within its starting distance | settling scheduled 3 ticks later (claim 6) |
 | waiting for a docked vehicle | moving or outside its starting distance | waiting, next processing after *D* ticks |
 | settling scheduled | later processing finds the vehicle still and its locomotor settled | settling step (claim 3) |
@@ -583,7 +667,7 @@ Backing and confidence are claim 15's.
 | working | a step falls due, vehicle moving | the step is taken on the first tick the vehicle stands still |
 | working | step reports *more needed* | stays |
 | working | step reports *done* or *not needed* | sent away (rally point or exit cell); repair-complete announcement as claim 6 says |
-| working | step reports *cannot pay* | repairing stops; low-funds announcement as claim 6 says |
+| working | step reports *cannot pay* | contact retained; settling retry next tick, then unsuccessful retries every *D* ticks; low-funds announcement as claim 6 says |
 | infantry inside a hospital | a step falls due (claim 7) | repair step at cost 0 |
 | same | *more needed* | stays |
 | same | *done* or *not needed* | put out; announcements as claim 7 says |
@@ -594,7 +678,9 @@ Backing and confidence are claim 15's.
 | eligible building below the reserve | eligible sale choice succeeds and late tests pass (claim 14) | sale attempt under S-0408 claim 4 |
 
 An object that claims 9 and 10 both heal in one tick ends it with the health that F3 gives: the two
-gains add, and the sum is capped at the strength. The place of healing among the other work of a tick is S-0203's.
+gains add, and the sum is capped at the strength. Both kinds precede an attached parasite's
+same-turn delivery, with no later self-healing after that delivery (claim 10; S-0614 claim 18).
+The place of healing among the other work of a tick is S-0203's.
 Claims 8 to 10 use the global tick number: objects sharing a period or interval have the same
 scheduled ticks, not schedules counted from when each began healing. Different intervals need
 not coincide. Depot and hospital steps instead use claim 6's and claim 7's entry-relative timing.
@@ -686,6 +772,12 @@ alternatives are design rules, not claims of oracle measurements.
 | Rules, building section, `InfantryGainSelfHeal`, `UnitsGainSelfHeal` | infantry and vehicle self-heal counts (claim 10) | integer (not a boolean: a value of 2 counts twice; a negative value is kept, or read as 0 with `quirks.negative_self_heal_counts` off, Edge cases) | 0 |
 | Rules, building section, `UnitRepair` | repair depot (claim 6) | boolean | no |
 | Rules, building section, `Hospital` | hospital (claim 7) | boolean | no |
+| Rules, building section, `NumberOfDocks` | docking-place count *d* (claims 17 and 18) | integer | 1; later absent entries keep the value in force |
+| Art, building section, `DockingOffset0`, `DockingOffset1`, and subsequent numbered entries | displacement from the foundation centre including height (claim 18) | integer triple, leptons; only indices below the imported docking-place count are read | keep the value in force; a newly added place starts at (0, 0, 0) |
+| Rules, building section, `WeaponsFactory` | vehicle-factory point precedence (claim 18; S-0504 claim 12) | boolean | no |
+| Rules, building section, `Naval`; vehicle section, `MovementZone` | naval permission comparison and amphibious exception (claim 16) | boolean; named movement zone, S-0504 claim 7 | no; S-0211 owns the zone default |
+| Rules, building section, `Bib` | bib in the foundation-blocking test (claim 18) | boolean, S-0209 claim 5 | no |
+| Art, building section, `Foundation` | foundation shape during approach (claim 18) | foundation word, S-0406 | S-0406 |
 | Rules, `[IQ]`, `RepairSell` | house skill level threshold for automatic building repair and sale (claim 8) | integer | 3; keeps |
 | Rules, `[AI]`, `CreditReserve` | repair reserve (claim 12) | signed integer credits | 1000; a missing or empty key keeps the value in force |
 | Rules, `[IQ]`, `SellBack` | additional sale threshold (claim 14) | integer; unsigned interpretation at the comparison | 2; keeps |
@@ -810,12 +902,14 @@ too.
   is 3); the vehicle is two steps short. The local player owns the depot and the vehicle.
   *Expected:* the settling step is paid, leaving 0 credits; no step is paid at the second step
   tick, and the low-funds announcement is heard once, when the failed step is taken at 0 credits.
-  Record whether the vehicle stays docked or leaves. After the failed step give the house credits
-  for two more steps. If the vehicle stays docked, watch it for *D* + 2 × *K*<sub>u</sub> ticks:
-  *expected:* no further step is taken while it stays docked. In a second run the house has 1
-  credit left after the settling step (still below the step cost): *expected:* the announcement is
-  not heard. *Falsified if:* a step is paid without money, a later step is taken while the
-  vehicle stays docked, the announcement is missing at 0 credits, or it is heard at 1 credit.
+  *Expected:* the vehicle stays in contact and returns to settling, with its first retry on the
+  next tick and then every *D* ticks while funds remain insufficient. After observing two failed
+  retries give the house credits for two more steps. *Expected:* a paid settling step at the next
+  retry without another enter order, followed by claim 6's working cadence and departure.
+  In a second run the house has 1 credit left after the first settling step (still below the
+  step cost): *expected:* the low-funds announcement is not heard. *Falsified if:* a step is paid
+  without money, contact ends merely for lack of funds, repair cannot restart without an order,
+  retry timing differs, the announcement is missing at 0 credits, or it is heard at 1 credit.
 - *Part f (the repair-complete announcement):* the local player owns the depot and the vehicle.
   *Run 1:* one vehicle is repaired to full health and sent away. *Expected:* the announcement is
   heard once, when the step that reports *done* (or, when it comes from the settling step, *not
@@ -947,6 +1041,16 @@ strength and no charge; either falsifies the rule.
   period. At 10 below full health. *Expected:* on the first common tick it gains 3 (1 and 2). At 2
   below full health it becomes full, and never rises above the strength. *Falsified if:* it gains
   another amount, or ends above the strength.
+
+- *Part e (parasite delivery ordering):* use S-0614 claim 18's delivery-order setup: a
+  non-organic vehicle host with an attached drone parasite, whose nonlethal delivery resolves
+  to 10 health points of damage. Arrange a delivery on a due self-healing tick, with the host
+  already at full health before its turn. Test individual self-healing alone, house-wide
+  self-healing alone with amount 2 and one source, and both together. Record health before
+  and after the host's turn, excluding every other health-changing event. *Expected:* in
+  each run the host ends that turn 10 below strength, not 9, 8 or 7 below it: the due gains
+  cannot heal damage delivered later in that turn. Any other final health falsifies the
+  corresponding ordering rule. Repeat each variant three times under the common setup.
 
 **H9: exclusion by the skill-level gate (claim 8).** The human house has 100 000 credits and two
 damaged buildings of a repairable type, with individual and house-wide self-healing disabled,
@@ -1172,15 +1276,74 @@ delays of the original computer player remain unmeasured for claim 15's stated c
 Aircraft pad repair timing and release are specified by S-0501 claims 26 and 27, with scenario
 AC16 covering step size and cost; they are not open questions here.
 
+**H16: land docking (claims 16 to 18; Q-0641).** Use a tiny flat skirmish map with each
+stock land depot type in separate runs, two own stock ground vehicles, ample credits and one
+isolated bystander computer player. Director and mods off, game speed index 2, 800 × 600.
+Repeat each part three times. A read-only recorder logs input action, issued orders, positions,
+body facing, contact places, tether, behaviour, building processing and health every tick.
+- *a, ordinary entry:* damage one vehicle and click the depot with it selected, from each
+  accessible side. Expected: enter order, contact before arrival, destination directed to the
+  depot's supplied point, map-east arrival facing, depot repair and vehicle sleep at completed
+  entry, then claim 6's waiting and settling timing. Where the guard-start conditions of claim
+  17 occur first, record that earlier repair scheduling instead. Repair on the initial click,
+  a neighbouring-water or exit-cell destination substituted for the docking point, a point
+  changing with approach side, or a different recorded transition falsifies the relevant rule.
+- *b, eligibility:* repeat at full health, then with no credits. Expected: entry is still allowed,
+  full health leaves without payment at settling, and an injured unaffordable vehicle stays for
+  retries. Repeat with a depot switched off and one in selling: no new enter action. Repeat on
+  an allied bystander's depot, keeping that building in view and excluding its other objects
+  from the observed area. Expected: the own vehicle can enter and its owner pays; the depot's
+  owner need not pay. Record sounds too: completion at that non-local depot produces no local
+  repair-complete announcement, unlike the own-depot control. Exhaust the vehicle owner's funds
+  during working and leave the allied depot owner funded: no local low-funds announcement.
+  An own-only restriction, damage/money entry gate, payment by the depot owner, or either local
+  announcement at the non-local depot falsifies the relevant claim. Void a run if the bystander
+  sells or loses the allied test depot.
+- *c, contention:* send the first vehicle, wait until its contact is recorded, then click with
+  the second selected. At a one-place depot expect no second enter order, no displacement and
+  no repair of the second vehicle. Repeat the click after release: entry can succeed. A queued
+  second vehicle automatically entering without another order falsifies this sequential case.
+  Also issue both orders before either contact and record the outcome as exploration only:
+  this proposal makes no prediction for the still-open simultaneous-request case.
+- *d, refusal controls:* attempt entry during build-up, after switching off, and with a vehicle
+  already standing on the same depot. Expected: no new acceptance in each case. Restore the
+  operational depot and move the vehicle off it: the ordinary accepting case returns. Any
+  acceptance while a listed exclusion holds falsifies that exclusion.
+- *e, position:* record the supplied point relative to the foundation centre and world height.
+  For isolated displacement tests use a named test map with otherwise identical depot types:
+  counts 0, 1 and 2 and invented displacements (32, −48, 16) and (−64, 24, 0) leptons.
+  Record the supplied point even if a displaced height prevents the waiting gate. Expected:
+  claim 18's componentwise sums, count-0 fallback and no facing rotation. A different point
+  falsifies the formula. This tests point selection, not simultaneous servicing of two places.
+  Use screen capture and scripted input alongside the recorder; no harness changes are assumed.
+
+**H17: healing while sinking (claim 19).** Repeat S-0504 N10's sinking setup with a stock
+vessel and an owned vehicle-healing source. Use a named test map setting the house-wide vehicle
+healing interval to 1 tick and its amount to 2 health points, and a separate variant granting
+individual self-healing with building repair period 1 tick. An otherwise identical control has
+neither source. Keep further damage out of the observed area after the sinking hit. Use the
+common speed, resolution, repeat count and recorder; log health, sinking and height per tick.
+Expected: eligible sinking turns still gain the applicable health, capped at strength, while
+height and removal follow the same sinking rule as the control. No healing, a changed schedule
+or amount, or recovery that cancels sinking falsifies claim 19. Void a run that destroys the
+vessel outright instead of entering sinking.
+
 ## Open questions
 
+- Q-0641 remains partial: exact approach/stopping and contact-break timing for move, stop,
+  attack and replacement enter orders; the fate and destination of a vehicle when its depot
+  is sold or destroyed; power loss during an existing exchange; simultaneous entry requests
+  and servicing with more than one imported place. The established point and completed-entry
+  handshake do not by themselves settle those paths. S-0215 claim 29 owns the general approach
+  and interruption behaviour; claims 16 to 18 here supply depot-specific inputs.
+- Q-0641's original computer-player automatic retreat condition remains untraced. AI script
+  choices are out of scope; our AI may send vehicles only through ordinary legal orders.
+  Whether a shared skill-gated unit rule also initiates repair remains to be checked by S-0215.
 - The exact phase of the second depot step and the first hospital step (±1 tick), and whether a
   depot's settling step can be retried before *D* ticks; scenarios H4 and H6 record them.
 - Where a vehicle goes when the depot has no rally point and no exit cell is found (claim 6).
 - Whether a unit inside a hospital can reach full health by another rule, so that *not needed* can
   arise there (claim 7, H6 part d).
-- Whether a vehicle stays docked or is sent away after *cannot pay* in the working phase (H4,
-  part e).
 - Whether passengers inside a transport (not a hospital) self-heal: the original is believed not to
   heal them while they are inside. This question covers open-topped transports too, whose
   passengers are in play and take turns (glossary, *in play*); no measurement has settled it for them.
