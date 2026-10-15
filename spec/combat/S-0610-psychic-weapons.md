@@ -1,0 +1,461 @@
+---
+id: S-0610
+title: Psychic weapons
+topic: combat
+revision: 1
+sources-class: [decomp, design]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-15
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0610: Psychic weapons
+
+## Summary
+
+The psychic side of combat: the two psychic immunities that types carry, how psychic area pulses
+are delivered, how the berserk state starts, what it forbids and how it ends, the psychic sensor
+that shows the intent of hostile units near it, and the psychic reveal superweapon. The chaos
+drone's berserk weapon is covered here rather than in a unit spec of its own. These claims cover
+skirmish only; network games and campaigns are out of scope.
+
+**What this spec does not restate.**
+- **Damage resolution of psychic and berserk hits:** S-0302. The psychic-immunity row and the
+  berserk row of claim 8's table, the berserk duration *T*, its re-hit reset and its exceptions
+  (claim 10) are S-0302's.
+- **Firing while berserk:** the halved rearm time is S-0301 claim 8.
+- **Searches while berserk:** S-0309 claims 7 and 9 to 12, including the friendly-row exceptions
+  and the permanent-berserk mark.
+- **Orders to a berserk unit:** S-0214 claim 15 refuses them.
+- **Firing from the deployed state** (the pulse of a deployed psychic infantry): S-0517 claim 16.
+  Ordinary area damage of the pulse: S-0303.
+- **The warning marker** that psychic detection shows for a nuclear strike: S-0513 claim 11.
+- **Cloak sensors and disguise detectors**, a different coverage with different rules: S-0516
+  claims 21 to 24 and 40.
+- **Granting, charging, readiness and the aiming interface** of the psychic reveal: S-0512 claims 1
+  to 8 and 16 to 18, and S-0513 claims 1 to 3 for aiming and the record.
+- **The area reveal itself** (cells, radius cap, explore and see, gap fields): S-0409 claim 17.
+- **Gas clouds** that carry a berserk warhead: planned S-0613 delivers them; each hit then follows this
+  spec and S-0302.
+- **Permanent and temporary mind control** and psychic domination use the psionics immunity of
+  claim 1; their detailed rules belong to planned S-0601 and planned S-0612.
+
+## Terms
+
+- **Psionics immunity.** A type's flag that protects its objects from control and berserk: mind
+  control, permanent control, psychic domination and berserk hits all leave them alone (claim 1).
+- **Psychic-weapon immunity.** A separate type flag that protects only from the damage of
+  psychic-damage warheads (claim 1). The two flags are independent.
+- **Psychic-damage warhead.** A warhead whose hits a psychic-weapon-immune target ignores (S-0302
+  claim 8).
+- **Berserk-causing warhead.** A warhead whose hits put the target into the berserk state instead
+  of damaging it (S-0302 claim 10).
+- **Berserk-friendly.** A type's flag: a berserk unit may not fire at objects of this type
+  (claim 6).
+- **Psychic sensor, psychic-detection radius.** A building whose type has a positive
+  psychic-detection radius, in whole cells. A house's *psychic sensors* are the buildings it owns
+  with such a type (claim 9).
+- **Hostile-intent line.** The line a psychic sensor lets its owner see from a hostile unit to
+  what that unit is attacking or where it is going (claims 10 and 11).
+- **Psychic reveal.** The superweapon kind that reveals an area of the map to the launching house
+  (claims 13 to 15).
+
+## Behaviour
+
+### Immunities and pulses
+
+1. **Two immunities.** Every infantry, vehicle, aircraft and building type has a psionics immunity
+   and a psychic-weapon immunity (Import mapping). Both are on by default for building types and
+   off by default for infantry, vehicle and aircraft types.
+   - Psionics immunity is consulted by: berserk hits (S-0302 claim 10), the firing check of a
+     weapon whose warhead is berserk-causing (claim 3), and the control effects assigned to planned S-0601
+     and planned S-0612 (temporary mind control, permanent control, psychic domination).
+   - Psychic-weapon immunity is consulted only by damage resolution (S-0302 claim 8). It adds no
+     firing refusal and no search exclusion: a unit may fire a psychic-damage weapon at a
+     psychic-weapon-immune target, and the hit does nothing.
+   - Backing: `measurable` (P1 for psychic damage and P4 for berserk immunity).
+     Absent-key defaults and control-immunity consumers are `unmeasured` here: the stock-only
+     scenarios do not isolate absent fields or control effects. The lack of an immunity-specific
+     firing refusal is `unmeasured`: P1 observes area hits, not the single-target firing check.
+   - Confidence: high (defaults and consumers); medium (that nothing else reads the
+     psychic-weapon immunity)
+
+2. **Psychic pulses need no delivery of their own.** A psychic area pulse, such as the one a
+   deployed psychic infantry fires, is an ordinary weapon whose warhead is a psychic-damage
+   warhead. It is fired under S-0517 claim 16 (or as an ordinary shot), spreads as ordinary area
+   damage (S-0303, including the friendly-damage rules of claim 14 there), and each hit is resolved
+   by S-0302. The psychic-damage property changes nothing about which objects the pulse reaches:
+   it only makes psychic-weapon-immune objects ignore the hit.
+   - Backing: `measurable` (scenario P1)
+   - Confidence: medium
+
+### Berserk
+
+3. **Firing refusals for berserk weapons.** The firing check (S-0301 claim 9) answers *illegal*,
+   at rank 4 of its table, when the weapon's warhead is berserk-causing and either
+   - the target's type has psionics immunity, or
+   - the target is a vehicle inside a tank bunker, or a tank bunker that holds a vehicle.
+   So a berserk weapon is never fired at a building whose type keeps the default immunity, nor at
+   a bunkered vehicle. Its area may still reach such objects when it is fired at something else,
+   and S-0302 claim 10 then decides.
+   - Backing: `unmeasured`, because the only stock weapons with a berserk-causing warhead are fired
+     at an area by deploying or are gas clouds, so these stock-only scenarios do not isolate
+     the single-target firing check
+   - Confidence: high (psionics immunity); medium (the bunker case)
+
+4. **Going berserk.** When a berserk hit takes effect (S-0302 claim 10) on a unit that is not
+   berserk, all of the following happen at once:
+   - its remaining berserk time becomes *T* and the berserk state starts,
+   - it drops its target,
+   - *hunt* is queued as its next behaviour (S-0215), replacing whatever was queued; it becomes
+     current at the unit's next behaviour change, not within the hit,
+   - in the original, a unit that belongs to a team leaves that team (see *team member* —
+     the original's team system is out of scope).
+   A berserk hit on a unit that is already berserk only sets its remaining time to the new *T*
+   (S-0302 claim 10). Nothing else changes: its target and behaviour stay.
+   - Backing: `measurable` (P2 for entry, target loss, queued behaviour and re-hit).
+     Team departure is `unmeasured` here because the original's team system is out of scope.
+   - Confidence: high
+
+5. **Countdown and the end of berserk.** In each of its own updates a berserk unit's remaining time
+   goes down by 1. In the update where it reaches 0 or less, the berserk state ends, the remaining
+   time is set to 0, the unit drops its target and a behaviour is queued:
+   - *guard* when its owner is human-controlled,
+   - *hunt* otherwise, in the original. In our engine an AI house follows the human-controlled
+     rule (*guard*), and only units of the neutral and special houses queue *hunt* (glossary,
+     *AI house*).
+   For *T* ≥ 1, expiry occurs on the *T*-th countdown update following application of the hit.
+   The first such update may occur in the hit tick if the hit precedes that unit's update
+   (S-0203 claims 1 and 3); an elapsed interval of exactly *T* ticks from the hit is not guaranteed.
+   A hit with *T* ≤ 0 still has all the effects of claim 4, and the state ends at the next
+   countdown update (Edge cases, `quirks.berserk_zero_duration`). Countdown behaviour while out
+   of play has not been established and is not specified here.
+   - Backing: `measurable` (P2). The *T* ≤ 0 case is `unmeasured`: P3 is a conditional
+     proposal and no stock susceptible zero-duration setup has yet been demonstrated.
+   - Confidence: high (countdown and expiry effects); medium (the *T* ≤ 0 case)
+
+6. **While berserk.** A berserk unit takes no orders (S-0214 claim 15), fires with the halved rearm
+   time (S-0301 claim 8) and searches for targets with the friendly-row exceptions of S-0309. In
+   addition the firing check answers *illegal*, at rank 4 of S-0301 claim 9, when the firer is
+   berserk and the target's type is berserk-friendly. So a berserk unit never fires at, and never
+   acquires through a search that asks the firing check, an object of a berserk-friendly type.
+   - The original's rule that a unit of a computer-controlled owner drops a target allied with its
+     owner in each update does not apply to a berserk unit, so a berserk unit of such an owner
+     keeps attacking its allies. In our engine that rule holds only for units of the neutral and
+     special houses (glossary, *AI house*). No approved spec owns the rule yet (Open questions).
+   - Backing: `measurable` (scenario P4)
+   - Confidence: high (berserk-friendly refusal); medium (the exception to the computer-owner rule)
+
+7. **Berserk tint.** A berserk vehicle or infantry is drawn with an extra additive tint, the entry
+   of the colour-adjustment table (S-0006) whose position the rules' berserk-colour field gives
+   (position 0 when absent). It adds to any other tint the object has. Berserk aircraft and
+   buildings get no tint (buildings cannot go berserk). This is presentation.
+   - Backing: `measurable` (P4 c for infantry and vehicle tint).
+     Additivity, the absent-field colour and absence of aircraft tint are `unmeasured` here:
+     the stock-only scenario does not isolate overlapping tints, omit the colour field or
+     establish a susceptible aircraft setup.
+   - Confidence: medium
+
+8. **Area berserk weapons (chaos drone).** No rule in this spec or in S-0302 names a particular
+   unit. A vehicle type that combines a weapon with a berserk-causing warhead and an area spread,
+   fired at an area through the vehicle's deploying behaviour (S-0517 claim 1), with psionics immunity and
+   the berserk-friendly flag behaves as claims 3 to 7 give: its own hits cannot make it berserk,
+   and units made berserk by it never fire at it or at others of its type. Every berserk hit takes
+   *T* at distance 0 (S-0302 claim 10), so equally susceptible units with the same type,
+   posture and damage modifiers get the same initial duration from one pulse. This does not promise simultaneous expiry: units can have different numbers
+   of countdown updates in the hit tick, and later cloud hits can reset individual durations.
+   Gas-cloud delivery belongs to planned S-0613.
+   - Backing: `measurable` (scenarios P4 part a and P5)
+   - Confidence: medium
+
+### Psychic sensor
+
+9. **Membership.** A building whose type has a psychic-detection radius above 0 becomes one of its
+   owner's psychic sensors when it is placed on the map. When it is captured, it stops being one
+   of the old owner's and becomes one of the new owner's. The same set of buildings feeds the
+   warning marker of S-0513 claim 11. A sensor counts only while it is in operation (S-0405), as
+   in S-0513 claim 11.
+   - Backing: `measurable` (scenario P6)
+   - Confidence: high (placement and capture); medium (operation requirement)
+
+10. **Detection conditions.** A viewing player sees the hostile-intent line of a unit when all of
+    these hold:
+    - the unit is an infantry, vehicle or aircraft and is in play,
+    - it is not owned by the viewer's house, and the viewer's house does not count the unit's
+      owner as an ally (the one-way alliance is taken from the viewer's side),
+    - at least one psychic sensor of the viewer's house that is in operation is within reach of
+      the unit's intent: (a) the unit's target, an object or a cell, or (b) the unit's movement
+      destination, an object or a cell, lies within that sensor's radius. The destination is the
+      last waypoint of its queued path when it has one, and its current destination otherwise.
+    Distance is the point-to-point spatial distance of F1 from the sensor's reference point
+    (as in S-0513 claim 11) to the target's or destination's reference point. No building-size
+    subtraction applies, even when the target is a building. The point is within reach when the
+    distance is at most the radius in cells times 256 leptons (Formulas F1).
+    Visibility plays no part: the line is shown for units that are cloaked, disguised or under the
+    shroud for the viewer (Edge cases, `quirks.psychic_intent_ignores_visibility`). Eligibility is
+    tested afresh when drawing. There is at most one line per unit: a target takes precedence
+    over movement. In particular, a destination inside the radius can make the unit eligible
+    while its line points to an attack target outside the radius. With no target, the line
+    uses the destination, choosing the final queued waypoint when available. It is the intent's
+    endpoint, not the unit's position, that must be in reach.
+    - Backing: `measurable` (P6, including parts e to h).
+      The table-root versus exact-root distinction is `unmeasured`: no legal reachable
+      boundary separating the two has yet been identified for this sensor.
+    - Confidence: high (one line and target precedence); medium (other conditions)
+
+11. **The line's look.** A hostile-intent line runs from the unit to its target (from its firing
+    point to the target's aim point) or from the unit to its destination (raised by a bridge's
+    height when the destination cell carries a bridge). Both ends carry a small square of 3 by 3
+    pixels, drawn in the unit owner's house colour. The line has a dash pattern animated with
+    real time rather than ticks. Presentation only; exact line-colour animation is not specified.
+    - Backing: `measurable` (P6 c)
+    - Confidence: medium
+
+12. **Range ring.** A psychic sensor of a type that shows a range ring when selected (Import
+    mapping) shows a ring of its psychic-detection radius when that radius is at least 1, in
+    preference to any cloak-sensor radius it also has. Presentation only.
+    - Backing: `measurable` (scenario P6 part d)
+    - Confidence: medium
+
+### Psychic reveal
+
+13. **Launch.** A psychic reveal is launched like every superweapon: its record must be ready and
+    is spent under S-0512 (claims 1 to 8), and it may be aimed at any cell, by the tactical view or
+    by the radar (S-0513 claims 1 to 3). It needs no power unless its data says so (S-0512). At
+    the launch, in the same tick:
+    - the area reveal of claim 14 is made,
+    - the reveal's activation sound plays at the target cell's centre, positionally, for every
+      player,
+    - for the launching player the aiming mode ends and that superweapon's ready announcement is
+      cancelled if it is still pending.
+    There is no launch announcement for any house and no radar event.
+    - Backing: `measurable` (scenario P7)
+    - Confidence: high
+
+14. **Area and visibility.** The reveal is an area reveal of S-0409 claim 17 originating at the
+    target cell's centre. Its grid centre includes S-0409 claim 5's height shift; it is not
+    necessarily the unshifted target cell. Its radius in cells is the rules' psychic-reveal
+    radius (3 when absent). As that claim says, a radius above 10 counts as 10 and a radius of 0 reveals nothing.
+    Unlike the other reveals of S-0409 claim 17, high ground hides nothing: the cell test of
+    S-0409 claim 7 is not made, so every legal cell of the shape (S-0409 claims 5 and 6) is
+    explored and seen whatever the reveal-by-height flag says. It is made for the launching house. In the original it changes only the local player's map,
+    and so reveals the local map only when the launching house is the local player or its
+    reveal is shared with that player under S-0409 claim 2. Our engine applies it to the launching house's own map state
+    (S-0409 claim 1) and to the houses that S-0409 claim 2 lets share it; this scope is a design
+    rule, as for the reveals named in S-0409 claim 17.
+    - Backing: `measurable` (scenario P7); the default radius 3 is `unmeasured`, because stock
+      data sets the field and scenarios use stock data only
+    - Confidence: high (centre, radius and no high-ground test); medium (who receives it)
+
+15. **Duration and detection.** The reveal has no duration: it explores and sees the cells once and
+    adds no lasting sight, so the cells stay explored and are re-covered by the shroud's normal
+    rules (S-0409 claim 17, including the cells inside hostile gap fields). It gives no sensor
+    coverage and no disguise detection: cloaked units in the area stay hidden and disguised units
+    stay disguised (S-0516). It deals no damage and changes no ownership or orders.
+    - Backing: `measurable` (scenario P7 part c)
+    - Confidence: high
+
+16. **Unused berserk setting.** The rules' berserk-allowed flag in the combat-damage section
+    is read but has no effect on the berserk hits or countdown described here.
+    - Backing: `unmeasured`: stock data fixes the flag, so the stock-only scenarios do not
+      compare its two settings.
+    - Confidence: medium
+
+## Formulas
+
+> **F1. Sensor reach.** A point *p* is within reach of a psychic sensor *s* with radius *R* (whole
+> cells) when trunc(*r*(Δ*x*² + Δ*y*² + Δ*z*²)) ≤ 256 × *R*. Coordinate differences are
+> integer leptons between the sensor's reference point and *p*, heights included. Squares and
+> sum are evaluated in floating point (S-0205). The root *r* is S-0204 claim 5's table root,
+> with its rounding and `quirks.table_root_distance` alternative. Its non-negative result is
+> truncated toward zero to integer leptons. Radius scaling and comparison are integer.
+> Unlike S-0204 claim 6's object-to-object distance, no target-building size is subtracted.
+
+> **F2. Berserk countdown.** With remaining time *t* after the hit (*t* = *T*), each update of the
+> unit sets *t* ← *t* − 1 (integer); berserk ends in the update where *t* ≤ 0. For *T* ≥ 1 that is
+> the *T*-th countdown update following application of the hit; for *T* ≤ 0 it is the first.
+> The first countdown update may be in the same tick as the hit (claim 5).
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Psychic-reveal radius default | 3 | cells | when the rules' field is absent (claim 14) |
+| Berserk tint position default | 0 | table position | colour-adjustment table position (claim 7) |
+| Psychic-detection radius default | 0 | cells | no sensor (claim 9) |
+| Sensor reach scale | 256 | leptons per cell | F1 |
+| Intent-line end square | 3 × 3 | pixels | claim 11 |
+| Berserk countdown step | 1 | per update | F2 |
+
+## State and ordering
+
+| State | Event | Result |
+|---|---|---|
+| not berserk | berserk hit takes effect (S-0302 claim 10) | berserk with *t* = *T*; target dropped; *hunt* queued; leaves its team (original) |
+| berserk | berserk hit takes effect | *t* = new *T*; nothing else |
+| berserk | own update, *t* − 1 > 0 | *t* decreases by 1 |
+| berserk | own update, *t* − 1 ≤ 0 | not berserk, *t* = 0; target dropped; *guard* queued (human-controlled owner, AI house) or *hunt* (otherwise) |
+
+- Entry clears the old target immediately. This does not forbid acquiring that object again
+  through a later search, even in the same tick. The queued *hunt* becomes current at the next
+  behaviour change (claim 4).
+- Every effective re-hit replaces the remaining duration rather than adding to it (claim 4).
+  A countdown update between two hits can therefore affect expiry in the same tick.
+- A psychic reveal applies in the launch tick (claims 13 and 14). A re-cover sweep later
+  in that tick can already hide a cell in a hostile gap field again (S-0409 claim 17).
+
+## Edge cases and quirks
+
+- **`quirks.berserk_zero_duration`** (default on, the original). A berserk hit whose *T* is 0 or
+  less (for example on a target whose versus value for the warhead is 0, or any berserk hit in an
+  inert game)
+  still makes the target drop its target and queue *hunt*, and the unit is berserk until its next
+  update, when expiry queues *guard* or *hunt* (claim 5). Its effect is that the target loses its
+  target and its queued behaviour. Off: a berserk hit with *T* ≤ 0 has no effect on the target.
+- **`quirks.psychic_intent_ignores_visibility`** (default on, the original). Hostile-intent lines
+  are shown for units the viewer cannot see, including cloaked units, disguised units and units
+  under the shroud, so a sensor betrays where they are (claim 10). Off: a line is shown only for a
+  unit that is visible to the viewer's house (not hidden under S-0516 claim 18, and on a cell the
+  viewer's house sees).
+- **Sensor capture.** A captured sensor moves to the new owner at once (claim 9); there is no
+  delay.
+- **Berserk-friendly applies only to firing.** A berserk unit's area weapon may still hit a
+  berserk-friendly object near its target. When that weapon's warhead is itself berserk-causing,
+  the object can go berserk only if all exceptions of S-0302 claim 10 permit it, including
+  the immunity, building and attacking-house exceptions. For other warheads, resolve the hit
+  normally under S-0302; berserk-friendly itself supplies no damage immunity.
+
+## Import mapping
+
+| Key | Section | Parse | Absent | Feeds |
+|---|---|---|---|---|
+| `ImmuneToPsionics` | infantry, vehicle, aircraft or building type | boolean | yes for building types, no for others | psionics immunity (claims 1, 3) |
+| `ImmuneToPsionicWeapons` | same | boolean | yes for building types, no for others | psychic-weapon immunity (claim 1; S-0302 claim 8) |
+| `BerserkFriendly` | infantry, vehicle, aircraft or building type | boolean | no | berserk-friendly (claim 6) |
+| `Psychedelic` | warhead | boolean | no | berserk-causing warhead (claims 3, 4; S-0302) |
+| `PsychicDamage` | warhead | boolean | no | psychic-damage warhead (claim 2; S-0302) |
+| `PsychicDetectionRadius` | building type | integer, cells | 0 | psychic-detection radius (claims 9 to 12) |
+| `HasRadialIndicator` | building type | boolean | no | shows a range ring when selected (claim 12) |
+| `BerserkColor` | `[AudioVisual]` | integer, table position | 0 | berserk tint (claim 7) |
+| `PsychicRevealActivateSound` | `[AudioVisual]` | sound name | none | activation sound (claim 13) |
+| `PsychicRevealRadius` | `[CombatDamage]` | integer, cells | 3 | reveal radius (claim 14) |
+| `Type` | superweapon section | kind name | (S-0512) | the psychic-reveal kind of S-0512's kind table (claims 13 to 15) |
+| `EVA_PsychicRevealReady` | announcements | announcement name | none | the ready announcement cancelled at launch (claim 13) |
+| `BerzerkAllowed` | `[CombatDamage]` | boolean | no | read, no effect (claim 16) |
+
+## Measurement scenarios
+
+All scenarios: stock data, director off, mods off, a small purpose-made skirmish map, normal game
+speed, 800 × 600 presentation. Use the bench or arena when it can deliver the stated setup on
+the stock executable, otherwise scripted input and a read-only recorder. Record the seed rather
+than assuming it can be set. Repeat each deterministic part three times. Include one bystander
+computer player, kept outside the test area under the glossary's void rule. Count ticks with the
+harness tick counter, record health and orders read-only, and capture frames for presentation.
+Unless a part gives a narrower falsifier, any observed departure from its expected outcome
+falsifies that part. A setup not achievable with stock data is not a successful measurement.
+
+- **P1. Immunities.** A deployed psychic infantry fires its pulse with an enemy building, an
+  enemy vehicle, an enemy infantry and an enemy infantry of a psychic-weapon-immune type inside
+  the pulse's area. Choose the building and the immune infantry by reading the stock rules (a
+  building type that does not set the psychic-weapon immunity field, an infantry type that sets
+  it); copy no value. Record the health of each before and after. Expected: the building and the
+  immune infantry are unchanged, the vehicle and the other infantry take damage. Falsified if the
+  building or the immune infantry is damaged.
+- **P2. Entry and expiry.** A human-owned tank attacking a durable enemy target stands inside
+  an enemy chaos drone's pulse area. Have the drone fire once, then withdraw it. Void a run
+  with a later gas-cloud hit during the isolated interval. Record hit and countdown-update ticks,
+  target loss, queued and current behaviour, tint and acceptance of subsequent orders. Compute
+  *T* under S-0302 claim 10. Expected: the initial hit clears the target and queues *hunt*,
+  without immediately replacing the current behaviour. Expiry clears the target and queues
+  *guard* on the *T*-th countdown update following application of the hit, counting an update
+  in the hit tick when applicable. The unit then accepts orders. Repeat with a neutral-house
+  tank: expiry queues *hunt*. Repeat with map-placed tanks on either side of the drone in the
+  update order (S-0203 claim 3). Re-hit halfway through: remaining time becomes the new *T*,
+  not the sum, without another target clear or behaviour change. Falsifiers include immediate
+  behaviour replacement, an additive re-hit, or expiry at the wrong update. This tests a
+  queued behaviour, not a guarantee that its later search chooses a different enemy.
+- **P3. Zero duration.** A berserk hit with *T* ≤ 0: either a target whose armour has a versus
+  value of 0 for the berserk warhead (choose by reading the stock rules; not measurable if none
+  has), or any target in an inert game (S-0302). The target is attacking something before the hit.
+  Record target, queued behaviour and berserk state around the hit and next countdown update,
+  not just tint: entry and expiry can both precede a drawn frame. Expected: target cleared and
+  *hunt* queued at entry, then expiry and *guard* queued at the first countdown update.
+  Falsified by no entry effects, no expiry at that update, or a different queued behaviour.
+  If neither stock zero-versus nor inert-game setup is achievable, this part remains unmeasured.
+- **P4. While berserk.** (a) A berserk tank of house A beside a chaos drone and an infantry, both
+  of house A. Expected: it attacks the infantry, never the drone. (b) A tank of the neutral house
+  made berserk next to another neutral-house unit: it attacks that unit and keeps attacking it.
+  Also place an enemy chaos drone in the pulse area: it must not go berserk from the hit.
+  (c) Capture before/after frames of a berserk vehicle and infantry: both gain the tint.
+  Falsifiers: a shot aimed at a berserk-friendly drone, losing the allied target solely because
+  it is allied, the immune drone going berserk, or no tint on a susceptible vehicle or infantry.
+- **P5. Equal initial duration over the area.** Several enemy tanks of one type, rank and
+  damage modifiers at different distances inside a chaos drone's area, all on the same side
+  of the drone in update order.
+  Record the first hit and expiry for each, voiding runs with later cloud hits. Expected:
+  equal initial *T* under S-0302 claim 10, and expiry after equal numbers of countdown updates.
+  A duration difference caused by distance falsifies the claim. A later reset does not.
+- **P6. Psychic sensor.** The viewer owns a psychic sensor (choose the type by reading the stock
+  rules). Enemy tank 1 is ordered from outside the radius to move to a cell inside it, enemy tank
+  2 to attack an object inside it, enemy tank 3 to move to a cell outside it. Expected: lines for
+  tanks 1 and 2 only, in the enemy house colour, while the sensor is powered, and none while it is
+  unpowered (S-0405). An allied unit's order inside the radius shows no line. A cloaked enemy unit
+  ordered into the radius shows a line. Capture the sensor with an enemy engineer: from then on
+  the viewer no longer sees lines from that sensor. In a separate run the viewer captures an
+  enemy sensor and begins seeing lines from it. No player-view switching is assumed.
+  (c) Screenshot the ends: 3 × 3
+  squares; record their house colour. Compare dash motion across equal tick intervals at two
+  game speeds: animation follows elapsed real time rather than tick count. Also order a unit
+  onto a bridge and verify the movement endpoint is raised to deck height.
+  (d) Select the sensor: its ring has the psychic-detection radius, not its cloak-sensor radius.
+  (e) Keep a tank with both an attack target and a movement destination in reach, using an
+  attack while moving where legal. Expected: exactly one line, to its target. Move the target
+  outside reach while keeping its destination inside: the line still points to the target.
+  (f) Queue movement waypoint points whose first point is inside and last point outside the radius,
+  then reverse them. With no target, eligibility and the endpoint follow the last waypoint.
+  Keep the unit itself outside reach in both tests. (g) Use a disguised enemy and a unit on a
+  shrouded cell whose endpoint is in reach: lines still appear. For alliance direction, use a
+  purpose-made map with a one-way alliance and keep the reverse relation unchanged: it is the
+  viewer's relation that suppresses the line. (h) Place endpoints at the integer-lepton reach
+  boundary of F1, then just outside it, using stock movement and object positions where possible.
+  Repeat with a height difference and with a building target whose centre is outside reach
+  but foundation edge inside it. Expected: height counts, and building size does not extend
+  reach. Record actual reference-point coordinates rather than just cell labels. Falsifiers:
+  two simultaneous lines, eligibility following the first waypoint or the unit's position,
+  hidden-unit suppression, the reverse alliance deciding, or a boundary result unlike F1.
+  The table-root versus exact-root distinction is unmeasured unless a legal reachable boundary
+  separates their results.
+- **P7. Psychic reveal.** Grant the reveal to the viewer and launch it at a shrouded cell far from
+  any own unit, next to a cliff of several height levels. Expected: the shape of S-0409 claim 6 for
+  radius min(imported radius, 10), with the height-shifted centre of S-0409 claim 5, is explored
+  in the launch tick, including
+  cells behind the high ground that an ordinary reveal would leave out (S-0409 claim 7), the
+  activation sound plays positionally and no launch announcement or radar event appears.
+  Record sound, targeting mode, the ready record and revealed cells at tick boundaries.
+  Expected: readiness is spent, targeting ends for the launching viewer, and the reveal has
+  no persistent sight contribution. Units become hidden again when S-0409's normal coverage
+  rules require it, not necessarily in the next tick. Compare an area with and without a hostile
+  gap field: exploration persists outside it and is re-covered under S-0409 claim 17 inside it.
+  (b) Launch from a bystander house first without, then with the sight-sharing conditions of
+  S-0409 claim 2. In the original only the latter reveals the viewer's map. Our engine's
+  per-house scope is a design rule, not an observable of the original.
+  (c) A cloaked enemy stays hidden and a disguised spy stays disguised. Record their health,
+  ownership and orders too: the reveal changes none of them. Falsifiers include height-blocked
+  cells missing from the shape, persistent sight without a covering object, detection of the
+  cloaked unit, loss of disguise, or a launch announcement or radar event.
+
+## Open questions
+
+- Which spec owns the original's rule that a unit of a computer-controlled owner drops a target
+  allied with its owner in each update (claim 6). S-0215 seems the right place.
+- Whether a berserk unit's countdown is paused while it is out of play (claim 5). This is
+  untraced and unmeasured: no stock boarding setup that preserves the state is established.
+- (Low) Whether a psychic sensor that leaves the map but is not destroyed stays a sensor of its
+  owner (claim 9). It cannot be in operation then, so no observable depends on it as far as known.
+- Exact line-colour animation, and whether its cosmetic appearance needs a separate rendering
+  claim (claim 11).
+- The absent-field defaults, control consumers and aircraft-tint subcases marked unmeasured
+  need dedicated setups before they can acquire measurement backing.
