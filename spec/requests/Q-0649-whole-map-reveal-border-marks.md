@@ -1,9 +1,9 @@
 ---
 id: Q-0649
 title: Whether the whole-map reveal at game start leaves the border cells' surrounded marks clear
-status: open
+status: answered
 related: [S-0409]
-answered-by: []
+answered-by: [S-0409]
 ---
 
 ## Need

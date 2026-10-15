@@ -2,13 +2,13 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0110, Q-0111, Q-0460]
+requests: [Q-0110, Q-0111, Q-0460, Q-0649]
 supersedes: []
 ---
 
@@ -75,7 +75,9 @@ S-0101 claim 3. In addition:
   any state that gives the same results.
 - **Surrounded mark.** A per-house yes/no mark of every legal cell, used in the same way as the
   explored state is. A sight (S1 row 1) and a plain reveal set it whenever they explore a cell, whatever
-  its neighbours; the original also sets it when every map neighbour of an explored cell is explored.
+  its neighbours. The explored-only whole-map reveals of claims 3 and 15 also set it where
+  all eight map neighbours are explored, reading non-legal neighbours through claim 14's shared
+  state. Border cells are not categorically excluded. These reveals do not clear an existing mark.
   It is cleared whenever the cell becomes unexplored, and on the map neighbours of a cell that
   regrowth re-covers (claim 18). It matters only for regrowth and for S1 row 1.
 - **Discovered by H.** An object's discovery mark for house *H*, distinct from ownership and
@@ -136,10 +138,19 @@ S-0101 claim 3. In addition:
    every cover count is 1, every hostile gap count is 0 and no pending mark is set. When the rules'
    lobby shroud setting is off (Import mapping), the whole map is revealed for every player house
    at game start and its whole-map-revealed mark is set; the original does this for the local
-   player's house. This reveal makes every legal cell explored but changes no cover count and does not make cells seen; it marks as surrounded each cell whose eight map neighbours are explored. A non-legal neighbour uses the shared explored state described in claim 14, so a border cell can be marked surrounded when that shared state is explored. The skirmish lobby
-   has no control of its own for this setting, so the rules value decides. A consequence for reveal on fire in such a game is in claim 16.
+   player's house. This reveal makes every legal cell explored but changes no cover count and
+   does not make cells seen. It sets the surrounded mark wherever all eight map neighbours are
+   explored, without clearing any existing surrounded mark (S1 row 10). A non-legal neighbour
+   uses claim 14's shared explored state: when that state is explored, border cells gain the mark
+   too. When it is unexplored, a border cell gains no mark from this reveal alone. The same rule
+   applies to the defeat reveal of claim 15. This distinction affects regrowth and hence which
+   cells remain explored (claim 18); it is not merely a drawing difference.
+   The skirmish lobby has no control of its own for this setting, so the rules value decides.
+   A consequence for reveal on fire in such a game is in claim 16.
    - Backing: `measurable` for initial exploration and the whole-map reveal (scenario V1,
-     part A; part B with a named test copy of the rules). Initial seen states and counts are
+     part A; part B with a named test copy of the rules); the surrounded-mark consequence is
+     `measurable` by V11 D for the initially unexplored shared state and V19 for both shared
+     states at defeat, which uses the same reveal. Initial seen states and counts are
      `unmeasured` as separate quantities: V1 reads exploration only, and fog is off. Their
      observable consequences are tested by the sight, gap and regrowth scenarios below.
    - Confidence: high for the initial state and the reveal; medium that the skirmish lobby offers
@@ -421,7 +432,9 @@ S-0101 claim 3. In addition:
       entry. Entry conditions and the single-effect precedence belong to S-0510 claims 1 and 3.
     - *Defeat.* When a player house is defeated, and its whole-map-revealed mark is clear, the whole
       map becomes explored for it as in claim 3 (explored, not seen; cover counts, hostile gap counts
-      and pending marks unchanged, S1 row 10) and the mark is set. The pending marks the house holds
+      and pending marks unchanged, S1 row 10) and the mark is set. Border cells gain surrounded
+      marks when the shared non-legal explored state is explored, just as at game start (V19).
+      Existing surrounded marks are retained. The pending marks the house holds
       at that moment are kept, so the next re-cover sweep makes those cells unexplored again.
       With no later whole-map operation, nothing explores them afterwards, because a defeated
       house has no sights and no gap field is hostile to it: the defeated player sees the whole
@@ -441,7 +454,7 @@ S-0101 claim 3. In addition:
       clearing event. Immediate seen-state changes and the
       whole-map-revealed mark are also `unmeasured` as state in their own right: fog is off
       and the mark alone is not drawn; the explored consequences are the scenario targets. The
-      defeat clause is `measurable` (V9 parts F and F2), as is the satellite test after defeat
+      defeat clause is `measurable` (V9 parts F and F2; V19 for border regrowth), as is the satellite test after defeat
       (part F3), within the original's end delay lengthened by a named test rules file
       (S-0414 claim 8). The original ends the game at the human's defeat (S-0414 claim 6).
       Our engine instead lets the defeated person keep watching, but that departure is not
@@ -539,22 +552,27 @@ S-0101 claim 3. In addition:
     Consequences. A cell explored by a sight or a plain reveal is always marked surrounded,
     whatever its neighbours, so a step affects no cell while no cell holds a pending mark and
     no cell was explored by a reveal that leaves the mark clear (some trigger reveals outside
-    S-0011's subset, and the reveal of claim 3 and of defeat, which leaves the cells on the border
-    of the map's diamond unmarked: S1 row 10). Once an affected explored cell loses exploration,
+    S-0011's subset, and the reveals of claim 3 and of defeat where a cell has an unexplored
+    neighbour: S1 row 10). Those whole-map reveals leave a previously unmarked border cell
+    unmarked only when the shared non-legal explored state is unexplored. When that state is
+    explored, every border cell gains the surrounded mark, so the border alone starts no erosion.
+    The reveal does not clear existing surrounded marks in either case. Once an affected explored cell loses exploration,
     its explored neighbours outside the restoring sights become unmarked and lose exploration
     at the next step, with their neighbours at the following step. The explored area outside
     those sights therefore erodes by one ring of eight-neighbour distance per step, through
     the connected explored cells. Cells under the restoring sights remain explored. In a skirmish with no map reveals of that kind, the start is a pending
     cell that the step reaches before the sweep does (a cell a sight left inside a hostile gap
     field, or a plain reveal, less than the step period before). With the lobby shroud setting off
-    the whole map is explored without a sight, its border cells are not marked surrounded, and
-    the first step (at tick 0) leaves them unexplored, after which the shroud erodes
+    the whole map is explored without a sight. With the shared non-legal state still initially
+    unexplored, its border cells are not marked surrounded, and the first step (at tick 0)
+    leaves them unexplored, after which the shroud erodes
     inwards by one ring per step except under sights; this follows from the rules above and is
     not observed (scenario V11, part D).
     - Backing: `measurable` (scenario V11, with a named test copy of the rules: parts A and B that
       sight-explored cells do not regrow, part C that pending cells go at the regrowth step and
       that the ring follows one step later each; part D the shroud-off consequence; part E the
-      zero-rate and non-positive-period cases; part F for the combined result on a sweep tick).
+      zero-rate and non-positive-period cases; part F for the combined result on a sweep tick,
+      and V19 for the border consequence with either shared state at defeat).
       A pending-cell collision specifically at tick 0 is `unmeasured`: no scenario here
       establishes a pending cell before tick 0's periodic work; its result follows the same
       coincident-tick rule. Restoration under sight on a coincident tick is also `unmeasured`
@@ -786,7 +804,7 @@ does not mention it keeps its seen state.
 | 7 | Whole-map re-cover of *H* (claim 15) | afterwards *k*′ = −*n* when *n* ≥ 1 re-applied sights of *H* cover the cell, otherwise *k*′ = 1; *G*′ = the number of gap fields hostile to *H* that cover it | explored and seen when *n* ≥ 1, otherwise unexplored and unseen; *m* kept, and set where claim 15 creates a mark; the first sight over the cell does not clear *m* (the cell is unexplored when it arrives) and a second one does, so *m* survives only where *n* ≤ 1 |
 | 8 | Spy satellite's whole-map reveal of *H* (claim 15) | as row 7, except that a cell that no re-applied sight covers has *k*′ = 1 when *G*′ ≥ 1 and *k*′ = 0 when *G*′ = 0 | explored, seen and marked surrounded, except a cell with *k*′ = 1, which is unexplored but still seen (row 3 leaves the seen state unchanged); a pre-existing *m* survives with *n* = 0 and is cleared with *n* ≥ 2; survival with *n* = 1 and creation of new marks during a reveal are not established (claim 15) |
 | 9 | Uncounted sight of *H* over the cell (Edge cases) | only when the cell is not yet explored, seen and surrounded with all neighbours seen: as row 1 | as row 1 |
-| 10 | Explored-only whole-map reveal of *H* (claim 3 at game start; defeat, claim 15) | none | explored, not made seen; marked surrounded where all eight map neighbours are explored, which excludes the border cells of the map's diamond (their non-legal neighbours are never explored, except through `quirks.offmap_cells_shared`); *m* kept (at game start no cell has a pending mark) |
+| 10 | Explored-only whole-map reveal of *H* (claim 3 at game start; defeat, claim 15) | none | explored, not made seen; existing surrounded marks kept, and surrounded marks set where all eight map neighbours are explored. Non-legal neighbours read claim 14's shared explored state under `quirks.offmap_cells_shared`: when explored, border cells gain the mark too; otherwise previously unmarked border cells remain unmarked. *m* kept (at game start no cell has a pending mark) |
 
 Consequences: with no hostile field (*G* = 0), removing a sight brings *k* back to at most 0, so the
 cell stays explored. Several sights over one cell count down (*k* = −2 for two); the cell becomes
@@ -949,6 +967,7 @@ Entries labelled fixed rules below are not optional corrections. Only entries na
 | Map, cell data | terrain height contributing to world height *Z* (claim 5) | signed integer height levels, converted to leptons by S-0204 claim 1 | level 0, as in S-0009 claim 7 |
 | No user key | discovery on cell placement and reveal-selection priority (claim 20) | engine rule, not configurable through data | always applies in a skirmish |
 | No user key | shared-state participation and satellite-state timing (claim 21) | engine rule under `quirks.offmap_cells_shared` | original behaviour |
+| No user key | surrounded marks after explored-only whole-map reveal, including border cells (claims 3, 15 and 18; S1 row 10) | engine rule; non-legal neighbours use the shared explored state under `quirks.offmap_cells_shared` | no independent setting; with that quirk off, non-legal neighbours are unexplored |
 | Rules, building type section, `SpySat` | spy-satellite flag (claim 15) | boolean | no |
 | Rules, building type section, `Radar` | radar flag, for infiltration (claim 15) and S-0410 | boolean | no |
 | Rules, weapon section, `RevealOnFire` | reveal-on-fire flag (claim 16) | boolean | no |
@@ -1376,6 +1395,32 @@ mean an allied and an enemy bystander computer player.
   the running-field loss leaves them absent, or field-free satellite loss restores them.
   To test that the state is not permanently immune, in a third run restart the stopped
   field before satellite loss: expected outside-neighbour edges return on field restart.
+
+- **V19 (Q-0649; claims 3, 15 and 18; S1 row 10).** Two fresh skirmish runs on a flat
+  purpose-made map with a border visible inside the usable area. Use named test rules enabling
+  regrowth at a period of 900 ticks and lengthening the end delay to 1800 ticks (S-0414 claim 8).
+  Keep lobby shroud on and ally reveal off, and place no allied or reveal-to-all building.
+  Director and mods are off apart from this named test data. In run A, give the human an active
+  satellite after tick 200. Stop one powered enemy border gap field while the satellite works,
+  with no other field touching non-legal cells, as in V8 H. Confirm that outside-neighbour edge
+  pieces vanish. Destroy the satellite and wait for its loss recheck, with no running border
+  field: claim 21 leaves the shared state explored. In run B, never create a satellite or border
+  field, leaving the shared state unexplored. In each run defeat the human between ticks 500
+  and 700, with no active satellite and no pending cells. Sample a long border segment and
+  its first inward ring, excluding the segment's ends. Keep them and all their legal neighbours
+  outside every sight and earlier reveal except run A's satellite reveal.
+  In run B they must have remained unexplored until defeat, so none has an earlier surrounded
+  mark. No later reveals, satellites or gap-field changes are permitted.
+  Record tick-labelled screenshots at defeat and through tick 1800, using S-0110's test shroud
+  sprite to read exploration rather than mistaking an edge piece for an unexplored cell.
+  Expected: both runs explore every legal cell at defeat. At tick 900, run A keeps every legal
+  cell explored: the defeat reveal marked even the border surrounded. In run B the sampled
+  border cells become unexplored at tick 900 and the sampled inward ring at tick 1800.
+  Any other sampled explored-cell
+  set or timing falsifies the prediction, including border erosion in run A or no erosion in
+  run B. One valid run per case, any game speed, 800×600; scripted input and a tick recorder
+  suffice. This tests the gameplay consequence of the marks, not their unobservable values
+  independently. V11 D separately tests the ordinary game-start case with shared state unexplored.
 
 ## Open questions
 
