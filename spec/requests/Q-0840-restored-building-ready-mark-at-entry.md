@@ -1,9 +1,9 @@
 ---
 id: Q-0840
 title: Is a building made by the restore-starting-buildings action a placed or a deployed entry for its build-up
-status: open
+status: answered
 related: [S-0524, S-0406, S-0215]
-answered-by: []
+answered-by: [S-0524]
 ---
 
 ## Need
