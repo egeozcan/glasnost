@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1176,10 +1176,12 @@ target: its turret facing or its body facing. S-0310 owns which facing aims and 
 tolerance (claims 1 to 5); S-0306 and S-0313 use it.
 
 **airborne.** Ambiguous on its own in a rule, because the combat specs use two different tests:
-S-0307 (Terms) gives a test by height above the surface, which S-0306 uses, and S-0308 (Terms)
-means the state in which the original counts an object as in the air, which S-0309 uses.
-For aircraft, S-0501 claim 18 supplies that second test as the *in-the-air answer*. A spec that uses "airborne" in a rule
-says in its Terms which test it means. In a measurement setup the word keeps its everyday sense:
+S-0307 gives a test by height above the surface, which S-0306 uses, except that the game-wide
+V3-rocket and dreadnought-missile aircraft types use their locomotor's own in-the-air answer
+instead; their *floor-bound* answer is its opposite (S-0307 claim 26).
+S-0308 means the state in which the original counts an object as in the air, which S-0309 uses.
+For aircraft, S-0501 claim 18 supplies that second test as the *in-the-air answer*. A spec that
+uses "airborne" in a rule says in its Terms which test it means. In a measurement setup the word keeps its everyday sense:
 the object is in the air.
 
 **ammunition.** A firer's count of shots left. A type whose maximum ammunition says it uses none
