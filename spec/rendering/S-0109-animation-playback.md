@@ -2,11 +2,11 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0046, Q-0418]
 supersedes: []
@@ -78,10 +78,10 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 | owner | The object an animation is attached to, if any (claim 22). |
 | translucency code | 0, 1, 2 or 3: opaque, 25 %, 50 % or 75 % translucent drawing (claim 20). Two codes combine to the larger of the two, except that 1 and 2 combine to 3. |
 | translucency level *t* | An integer per animation from 0 to 16, 0 unless its building sets it (claim 20). |
-| building fade level | An integer from 0 to 15 that a building keeps for drawing itself see-through: it rises step by step to 15 while the building cloaks. No approved spec defines when it changes; the cloaking and structures specs will (Open questions). This spec uses it only as the source of *t* (claim 20). |
-| cloak | To become invisible to other players over a few steps; a building that cloaks raises its fade level step by step (below). Which objects can cloak, and when, is the cloaking specs' business. |
-| sensors | Coverage of cells by which a house sees cloaked objects in them. Which objects give it, and over which cells, is the visibility specs' business. |
-| cloaked from the viewer | A building is cloaked from the viewer when its fade level is 15 and it is drawn as invisible to the local player. In the original that holds unless the local player owns the building, or the local player's sensors cover its cell, or, in the skirmish covered here, the local player's house and the building's house are allied with each other in both directions; those players see the building see-through instead. When it holds is the cloaking specs' business; this spec uses it only in claim 20. It depends on the local player, so it changes only what is drawn. |
+| building fade level | An integer from 0 to 15 for drawing a building see-through. Under S-0516 claim 18 it rises by one per tick while cloaking and falls by one per tick while uncloaking: a full transition takes 15 ticks each way. This spec uses it only as the source of *t* (claim 20). |
+| cloak | To become invisible to other players over a few steps. S-0516 claim 18 owns building transitions and claim 28 owns their appearance to each viewer. |
+| sensors | Coverage of cells by which a house sees cloaked objects in them (S-0516 claim 21). |
+| cloaked from the viewer | For this spec's slot-animation rule, a building at fade level 15 that is not drawn for the local player under S-0516 claim 28. It is instead drawn see-through when the local player owns it, senses its cell, or is mutually allied with its owner. This term selects *t* in claim 20; it changes only drawing, never game state. |
 | being erased | A building is being erased from the moment an erasing weapon locks onto it until the last erasing weapon that locked onto it lets go, or until it is removed. When erasing weapons lock on and let go is the combat specs' business. |
 | new-theater type | An animation type with the new-theater flag and without the theater flag. Only such a type gets a sprite again, with letter substitution, at the theater refresh (S-0007, claim 14). |
 
@@ -507,8 +507,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     table does not apply: the code is 0 and the animation is drawn even when *t* ≥ 15. In both cases
     the code is then combined (Terms) with the code of claim 21.
 
-    A building's slot animations take the building fade level (Terms) as *t*, except that they take
-    16 while the building is cloaked from the viewer (Terms). Other animations have *t* = 0. *t*
+    A building's slot animations take the building fade level of S-0516 claim 18 as *t*, except
+    that they take 16 while the building is cloaked from the viewer (Terms, S-0516 claim 28).
+    Other animations have *t* = 0. *t*
     follows the fade level: it is set again when a slot animation of the building starts and when the
     building refreshes its animations, which it does at each change of its fade level. So, at a
     fade level of 15:
@@ -520,10 +521,10 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       drawn opaque even while its building is cloaked from the viewer, since the table does not
       apply to it (`quirks.anim_low_detail_shows_cloaked`).
 
-    Below a fade level of 15, *t* is the level itself whatever the viewer. If the cloaking specs
-    stop drawing the building itself earlier for some viewers (in the original, from fade level 11
-    on for a viewer it is cloaked from), such a viewer still sees its slot animations at fade levels
-    11 to 14: those of the neither row at 50 %, the others with their own codes.
+    Below a fade level of 15, *t* is the level itself whatever the viewer. S-0516 claim 28 stops
+    drawing the building itself from fade level 11 for a viewer who neither owns it nor senses its
+    cell nor is mutually allied with its owner. Such a viewer still sees its slot animations at
+    fade levels 11 to 14: those of the neither row at 50 %, the others with their own codes.
 
     Since *t* depends on the local player, it changes only what is drawn, never game state.
     - Backing: `measurable` (AN14 for progress and field codes; AN22 for full-cloak slot
@@ -533,10 +534,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       supplies those cases. Negative-end fade comparisons and F4's equivalence over the
       entire 32-bit integer domain are `unmeasured`: AN14 uses only end values 10 and 0,
       and a finite set of playback runs cannot exercise that whole domain.
-    - Confidence: high for the table and the fade thresholds; medium for the source of *t* and for
-      which viewers the building is cloaked from (the cloaking specs own that rule); low for the
-      visibility of slot animations at fade levels 11 to 14, which depends on how the cloaking specs
-      draw the building
+    - Confidence: high for the table and the fade thresholds; medium for the source of *t*.
+      Building fade timing and viewer presentation have S-0516 claims 18 and 28's backing and
+      confidence. Slot-animation visibility at fade levels 11 to 14 remains low-confidence.
 
 21. **Erasure.** While a building is being erased (Terms), every slot animation it has is drawn
     with translucency code 2, or 3 if its type has the double-thick flag, combined (Terms) with
@@ -1448,9 +1448,6 @@ building that can cloak), it sets them in the test map's override section, which
   claims 20 and 21 as in Terms. No creator is known to ask for one; the creators' specs should confirm it.
 - A "random start" of animations has been suggested. No random starting image frame exists (claim 12); if a
   measurement shows one, this spec needs a revision.
-- When a building's fade level changes, and exactly which viewers a fully cloaked building is
-  cloaked from in skirmish (Terms), should be settled by the cloaking
-  and structures specs. This spec only takes *t* from them (claim 20).
 - When an erasing weapon locks onto a building and lets go, and how several erasing weapons on one
   building interact, belong to the combat specs; this spec uses only the resulting *being erased*
   state (claims 21 and 23).
