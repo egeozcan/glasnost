@@ -201,7 +201,9 @@ Q-0520 is answered by S-0102 revision 15, claim 33 and its Import mapping: for `
 
 | Where | Placeholder | Request |
 |---|---|---|
-| `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6; revision 16 marks Q-0215 answered with question 7 explicitly `unmeasured` and says our pixels there are no reference, so this choice stays a provisional rule) | Q-0215 |
+| — | None at present. | — |
+
+Revision 17 of S-0105 answers Q-0215 question 7 (F8's record-low relation, MS-25 and MS-28); `render::voxel::section_order` already computes it, and `section_order_is_f8_relation`, `section_order_ms25_pair_winners` and `section_order_ms28_rows` check it.
 
 ## Map viewer (M2)
 

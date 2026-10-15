@@ -211,3 +211,11 @@ Q-0679, Q-0720 to Q-0729, Q-0790, and Q-0327 (S-0701 claims 21 and 32). Filed: Q
 - **S-0701 (rev 14 to 15), S-0109 (rev 24 to 25), (a) and not built.** Claim 40 indexes
   Q-0260, Q-0264 and Q-0265 (already listed as answered). The per-layer sound-reference
   import rules are not built (`docs/development.md`, audio).
+
+## Spec revisions after dbdb150
+
+- **S-0105 (rev 16 to 17), (a, already done).** Q-0215 question 7 is answered: F8 gives every
+  sequence its overlap priority by record lows (MS-25 pairs, MS-28 larger ties). The existing
+  `section_order` loop is that relation; the new tests check it against F8 written out from its
+  words for every pattern of up to six sections, plus the MS-25 and MS-28 tables. The interim row
+  is retired.
