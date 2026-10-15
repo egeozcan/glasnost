@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -85,7 +85,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
 - **Needs-power flag, special-power flag, needs-engineer flag.** Boolean fields of a building type
   (Import mapping). The needs-power flag marks a building that stops working under low power
   (claim 8); the special-power flag marks one that stops working during a blackout; the
-  needs-engineer flag marks one that works only while an engineer is inside it.
+  needs-engineer flag marks one that works only when it is *manned* (glossary; S-0515 claim 2).
+  Manned is permanent from the building's first ownership change of any cause, not physical
+  engineer presence. Placement for a house does not man a building.
 - **In operation.** Whether a building currently works as a powered building: claim 8 gives the test.
   It is derived each time it is asked; it is not the power switch. Rules that ask the question
   (firing, claim 9) read the answer as it stands at that moment; the one-off effects of claim 9 and the
@@ -177,8 +179,13 @@ house's own update in a tick, which comes after the turn pass and before orders 
    - Confidence: high (timed blackout), medium (drain blackout)
 
 6. **Timed blackout length.** A timed blackout is started for a house with a length of *d* ticks:
-   - when an enemy spy enters one of its buildings whose type's base output is above 0, *d* is the
-     game-wide spy blackout length (Import mapping; the special-abilities specs own the entering),
+   - when a spy of another house enters one of its buildings and the entry selects the blackout
+     effect of S-0510 claim 3, row E2, *d* is the game-wide spy blackout length (Import mapping).
+     In the default single-effect rule, the type must have base output above 0 and no radar flag:
+     a radar-flag type selects re-cover instead, even if it also produces power. Alliance is not
+     tested for the effect: an allied spy that reaches entry has the same effect. S-0510 claims
+     1 and 3 own entry, its conditional allied case and single-effect precedence, including the
+     quirk switch's alternative,
    - when the house launches a force shield, *d* is the force-shield blackout length
      (S-0513 claim 30; that spec owns its import).
 
@@ -200,7 +207,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
      less the replacement ends the running blackout at once, but the house's totals follow in its
      next update. A spy always starts with the game-wide length, so only a superweapon effect (whose
      length can differ) can start a different length during a running blackout.
-   - Backing: `measurable` (scenario W4, parts a, c, d and e); `unmeasured` for the live
+   - Backing: `measurable` (scenario W4, parts a, c, d and e; S-0510 scenarios I2 and I5 for
+     effect precedence and conditional allied entry); `unmeasured` for the live
      in-operation effect of a length of 1 (W4 records house totals only; no scenario here separates
      the start from the building's next turn), and for a negative length (W4 tests absence, not a
      negative value), for a start after the house update (no spy-entry input path is established
@@ -260,9 +268,11 @@ house's own update in a tick, which comes after the turn pass and before orders 
    | alive | its health is 0 |
    | powered | its type has the needs-power flag and a base drain above 0, its house has low power, and *n*<sub>c</sub> < 2 |
    | no blackout | its type has the special-power flag and its house has a blackout in force (a timed blackout running, or a drain blackout at its last working-out) |
-   | engineer present | its type has the needs-engineer flag and no engineer is inside |
+   | manned when required | its type has the needs-engineer flag and it is not manned (S-0515 claim 2) |
    | not building or selling | its current behaviour is *construction* or *selling* |
 
+   A needs-engineer building placed for a house is never in operation until its first ownership
+   change; own-engineer entry does not man it (S-0515 claim 2).
    The last row reads the building's current behaviour only, not its queued behaviour. A building
    whose sale has been ordered is in operation until the selling behaviour becomes its current
    behaviour (at the sale's first processing, S-0408 claim 6) and is not in operation from then on,
@@ -274,20 +284,20 @@ house's own update in a tick, which comes after the turn pass and before orders 
    building with two or more chargers passes the switch and power conditions even under low
    power or when switched off, but must still pass every other condition. The test is the same for every house; no rule of it depends on whether the owner is human-
    or computer-controlled.
-   - Backing: `measurable` (scenario W6, parts a to f and j; scenario W4, part a for the blackout
-     row); `unmeasured` for a building being erased staying in operation (its output and drain are 0
+   - Backing: `measurable` (scenario W6, parts a to f and j; S-0515 scenarios TB3 and TB8 for
+     manned state; scenario W4, part a for the blackout row); `unmeasured` for a building being erased staying in operation (its output and drain are 0
      and the erasure has effects of its own on the building, so no observable separates the two
      states); `unmeasured` for the health-0 row (no scenario here keeps a destroyed building
      available to test its operation separately), and for the distinction between queued and
      current construction or selling behaviour (W6 tests current behaviour only).
    - Confidence: high (switch, low power, construction and selling behaviours), medium (chargers,
-     pulse, blackout, engineer), low (being erased)
+     pulse, blackout, manned state), low (being erased)
 
 9. **What stops when a building is not in operation.** A building that is not in operation:
    - cannot fire: its firing check (S-0301, claim 9) answers *impossible* or *illegal*, as T1
      below gives,
    - stops being an active control centre (claim 13), stops its gap (claim 16), and produces no
-     credits from a cash-producing type (economy specs),
+     credits from a cash-producing type (S-0515 claims 5 to 7),
    - releases every controlled unit it holds and lets go of its held unit (Terms; the
      special-abilities specs own what release does),
    - stops the effects of sensor types (visibility specs), and its lights and working animations
@@ -328,9 +338,10 @@ house's own update in a tick, which comes after the turn pass and before orders 
      `unmeasured` for T1's distinction between *illegal* and *impossible*, including where both
      sets of conditions hold (W6 observes firing refusal, not an answer label; no differing
      building response to these labels is known, and S-0301 claim 9 makes the same argument).
-     `unmeasured` for the held unit, the cash-producing type, the lights and the sensor types (each needs the observable of the spec that
-     owns the effect, and those specs' scenarios should add a variant in which the building is
-     switched off)
+     `measurable` for cash production (S-0515 scenario TB3, including switched-off and unmanned
+     cases). `unmeasured` for the held unit, the lights and the sensor types (each needs the
+     observable of the spec that owns the effect, and those specs' scenarios should add a variant
+     in which the building is switched off)
    - Confidence: high (firing under low power, the one-off effects' timing for the animation and the
      controlled unit), medium (T1 where only one of its conditions holds, the gap, the other items),
      low (T1's answer where the conditions of both its rows hold)
@@ -575,7 +586,7 @@ is implementer design, not a further game-state rule. No formula here prescribes
 | full power | worked out with *D* > 0 and *O* < *D* | low power: needs-power buildings with a base drain above 0 and fewer than 2 chargers stop being in operation (claim 8) |
 | low power | worked out with *O* ≥ *D* or *D* = 0 | full power: the power condition no longer prevents operation; claim 8's other conditions still apply |
 | in operation | the building's current behaviour becomes *selling* (sale's first processing) | not in operation at once (claim 8); output and drain unchanged (claim 3) |
-| no blackout | spy enters a building with base output, at tick *t*₀, with *d* > 0 | timed blackout running until the house update of tick *t*₀ + *d* − 1 (claim 6) |
+| no blackout | spy entry selects claim 6's blackout effect, at tick *t*₀, with *d* > 0 | timed blackout running until the house update of tick *t*₀ + *d* − 1 (claim 6) |
 | no blackout | the same, with *d* ≤ 0 | house due; no blackout runs (claim 6) |
 | not an active control centre | the building's first turn in which it is in operation | active control centre (Terms; claim 13) |
 | active control centre | the building's first turn in which it is not in operation, or its loss | not active (Terms; claim 13) |
@@ -728,7 +739,7 @@ switched off the house has full power (W3's second pair).
   low-power pairs, the production time must match S-0403 scenario B4's computed period.
 
 **W4: blackouts (claims 5, 6 and 8).**
-- *Setup:* own house with two test plants (base output 100 each), a consumer (drain 100) and the
+- *Setup:* own house with two test plants (base output 100 each, neither with the radar flag), a consumer (drain 100) and the
   defence of W3; spy blackout length 300 in a named test file (parts d and e change it as stated),
   an enemy house with spies and a draining unit; a test type C with the special-power flag and a
   working animation, and no needs-power flag.
@@ -781,14 +792,15 @@ switched off the house has full power (W3's second pair).
     no drain,
   - a type C with the special-power flag and a working animation, and a type D with the animation
     and without the flag; neither has the needs-power flag,
-  - a defence E with the needs-engineer flag and no needs-power flag; a defence F with the
+  - a defence E placed for the human house, never having changed owner, with the needs-engineer
+    flag and no needs-power flag; a defence F with the
     needs-power flag, a drain and a mind-control weapon,
   - a refinery-type R with a working animation, no needs-power flag, and a harvester docked in it
     with its way out blocked,
   - a control-centre type K with powered unit X, no needs-power flag and no drain, with a long
     build-up time (at least 300 ticks), and a vehicle type X with the powered-unit flag,
   - a gap type G with the needs-power flag and a drain of 10 (S-0409 owns the gap),
-  - charging infantry of a type that can charge A, a pulse weapon, an own engineer, a factory
+  - charging infantry of a type that can charge A, a pulse weapon, a factory
     producing an item, and enemy targets in range of every defence.
   - The power state of each part is as that part says (spare consumer, above).
 - *Procedure:*
@@ -797,7 +809,9 @@ switched off the house has full power (W3's second pair).
   - (c) at full power with A switched off, two chargers charge A.
   - (d) at full power, a pulse hits A; watch A during the pulse and after it ends.
   - (e) at full power, a timed blackout (W4) while C and D are switched on.
-  - (f) at full power, an own engineer enters E.
+  - (f) at full power, observe E before any ownership change; a trigger transfers it to another
+    house and a second trigger returns it to the human house, then observe it again. Keep full
+    power and a legal enemy target in range after its return.
   - (g) at low power, watch the factory.
   - (h) F takes over an enemy vehicle at full power; then the house is brought to low power.
   - (i) at full power, a sell order on R.
@@ -813,7 +827,8 @@ switched off the house has full power (W3's second pair).
   the item's progress advances; whether the X vehicle obeys orders; whether the gap hides cells.
 - *Expected:* (a) A does not fire and B fires. (b) A fires with two chargers and not with one.
   (c) A fires; (d) A does not fire while under the pulse and fires again after it ends; (e) C stops
-  its animation, D keeps it; (f) E fires only after the engineer is inside; (g) progress advances,
+  its animation, D keeps it; (f) E does not fire before the ownership changes and fires after
+  its return, remaining manned without an engineer inside; (g) progress advances,
   more slowly; (h) the vehicle returns to its owner's control 1 tick after the tick in which the
   recorder first reads low power; (i) the animation stops at the tick of the sale's first
   processing (S-0408 claim 6) and the building then stays on the map, sprite unchanged, until the
