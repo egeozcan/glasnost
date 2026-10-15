@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -358,14 +358,20 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    excluded from ordinary work before entering the leaving stage. These are restrictions
    within a turn, not a missed turn under claim 10 or a separate tick part. In particular,
    no universal ordering of warp work after protection brightness processing is implied.
-   Exact continuation at departure, off-map retries, placement, arrival and hold expiry
+   For a vehicle, infantry unit or landed aircraft beginning its turn in arrival hold,
+   the hold-expiry test precedes ordinary healing, behaviour, movement, firing and
+   turret-work opportunities in that turn (S-0513 claim 48). This fixes ordering only:
+   eligibility and continuation of each ordinary operation remain explicitly unmeasured.
+   Exact continuation at departure, off-map retries, placement and arrival likewise
    remains unresolved for each kind under S-0513 claim 48. S-0513 claim 39's timeline
    assumes one warp update per tick; neither it nor the one-turn constant here establishes
    that update count or makes the warp update the whole turn through arrival.
-   - Backing for this boundary: `measurable` (S-0513 scenario SW23); exact continuation
-     and per-kind update counts remain `unmeasured` for the reasons in S-0513 claim 48
-   - Confidence for this boundary: high for the leaving-stage exclusion; low for the
-     unresolved continuation, as in S-0513 claim 48
+   - Backing for these boundaries: `measurable` (S-0513 scenario SW23, including part e
+     for hold-test ordering); per-operation eligibility, continuation and per-kind warp
+     update counts remain `unmeasured` for the reasons in S-0513 claim 48
+   - Confidence for these boundaries: high for the leaving-stage exclusion and hold-test
+     ordering; low for unresolved eligibility, continuation and update counts, as in
+     S-0513 claim 48
 
    - Backing: `measurable` (scenarios O1 and O3). For the turn of an object that re-enters play
      after its own turn: claim 11's backing (`unmeasured`).
