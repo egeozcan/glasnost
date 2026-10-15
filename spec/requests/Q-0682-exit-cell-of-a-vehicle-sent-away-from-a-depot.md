@@ -1,9 +1,9 @@
 ---
 id: Q-0682
 title: Which exit cell a repair depot picks for a vehicle it sends away without a rally point (S-0314 claim 6)
-status: open
+status: answered
 related: [S-0314, S-0404, S-0417, S-0504]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need

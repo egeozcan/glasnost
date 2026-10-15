@@ -1,9 +1,9 @@
 ---
 id: Q-0683
 title: Where in the tick a vehicle with a queued depot entry asks again for a place (S-0314 claim 23)
-status: open
+status: answered
 related: [S-0314, S-0203, S-0215]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need

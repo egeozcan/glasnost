@@ -1,9 +1,9 @@
 ---
 id: Q-0681
 title: What a depot in its settling phase does while its docked vehicle is moving 200 leptons or more away (S-0314 claims 6 and 21)
-status: open
+status: answered
 related: [S-0314, S-0504]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need

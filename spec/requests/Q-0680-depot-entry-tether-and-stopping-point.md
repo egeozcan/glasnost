@@ -1,9 +1,9 @@
 ---
 id: Q-0680
 title: When a vehicle approaching a repair depot becomes tethered, and where it stops on an off-centre docking point (S-0314 claims 17 and 18)
-status: open
+status: answered
 related: [S-0314, S-0215, S-0504, S-0207]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need
