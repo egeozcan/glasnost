@@ -1883,8 +1883,9 @@ fn on_track(w: &mut World, id: ObjectId) {
 }
 
 // spec: S-0207 claim 23 (a drive vehicle moving now, off a deck, on water, in a tick divisible by 10 creates one
-// wake at its own position, if the wake animation is defined; no underwater-type exclusion). Open in Q-0600:
-// moving now is read as a turning body or a track whose latest drive tick earned s > 0.
+// wake at its own position, if the wake animation is defined; no underwater-type exclusion). Q-0600, answered:
+// moving now is a turning body, or an active track with s = trunc(s₂ × ρ) > 0 worked out with the current ρ at
+// the check (not the step remembered from the last drive tick).
 #[test]
 fn claim_23_driving_wakes() {
     let mut t = car(WHEEL, 30, false);
@@ -1909,10 +1910,22 @@ fn claim_23_driving_wakes() {
     w.tick += 1;
     assert!(wake_now(&mut w).is_empty(), "not divisible by 10");
     w.tick += 9;
-    // Not moving now: s = 0 on the track and the body not turning.
-    w.obj_mut(id).unwrap().drive.as_mut().unwrap().step = 0;
-    assert!(wake_now(&mut w).is_empty());
-    w.obj_mut(id).unwrap().drive.as_mut().unwrap().step = 1;
+    // Not moving now: ρ = 0 on the track gives s = 0 (the remembered step of the last drive tick does not count).
+    let rho = w.obj(id).unwrap().drive.as_ref().unwrap().rho;
+    {
+        let d = w.obj_mut(id).unwrap().drive.as_mut().unwrap();
+        d.rho = F64::ZERO;
+        d.step = 5;
+    }
+    assert!(wake_now(&mut w).is_empty(), "ρ = 0: s = 0");
+    // A positive ρ that still gives s = 0 (30 × 2⁻¹⁰ < 1): no wake either.
+    w.obj_mut(id).unwrap().drive.as_mut().unwrap().rho = F64(0x3f50_0000_0000_0000);
+    assert!(wake_now(&mut w).is_empty(), "ρ > 0 but s = 0");
+    w.obj_mut(id).unwrap().drive.as_mut().unwrap().rho = rho;
+    // No active track: no heading point, whatever ρ.
+    let track = w.obj_mut(id).unwrap().drive.as_mut().unwrap().track.take();
+    assert!(wake_now(&mut w).is_empty(), "between tracks");
+    w.obj_mut(id).unwrap().drive.as_mut().unwrap().track = track;
     // On a bridge deck: none.
     w.obj_mut(id).unwrap().layer = glasnost_sim::world::Layer::Deck;
     assert!(wake_now(&mut w).is_empty());

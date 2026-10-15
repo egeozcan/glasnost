@@ -13,7 +13,7 @@ use crate::occupancy::{self, Outcome};
 use crate::path::{self, Mode, Search};
 use crate::process;
 use crate::regions::STEPS;
-use crate::rules::{Behaviour, Kind, SimRules, UnitRules};
+use crate::rules::{Behaviour, Kind, Locomotor, SimRules, UnitRules};
 use crate::tracks::{self, Point};
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
@@ -324,8 +324,9 @@ fn update_rho(w: &mut World, id: ObjectId, u: &UnitRules) {
     }
 }
 
-/// Progress per tick s (S-0207 claim 2, F2).
-fn progress(w: &World, id: ObjectId, u: &UnitRules) -> i32 {
+/// Progress per tick s (S-0207 claim 2, F2), with the speed fraction the
+/// vehicle holds now.
+pub(crate) fn progress(w: &World, id: ObjectId, u: &UnitRules) -> i32 {
     let r = w.rules();
     let mode = r.mode;
     let Some(o) = w.obj(id) else { return 0 };
@@ -1047,6 +1048,10 @@ fn crush_mode(w: &World, id: ObjectId, u: &UnitRules, first: CellXY, second: Cel
                 .is_some_and(|o| o.crushable || (walls && all && o.wall))
         })
     };
+    if u.locomotor == Locomotor::Ship {
+        // spec: S-0210 claim 9 (the ship locomotor's crush mode: the first cell, whose entry outcome is clear here, or the second holds a crushable overlay or, for crusher-all, a wall overlay; never set by a vehicle)
+        return overlay_crush(first, true) || overlay_crush(second, true);
+    }
     // spec: S-0207 claim 7 (the second cell: a crushable overlay, or for crusher-all a wall or a vehicle)
     let second_vehicle = all
         && w.cells.list(second, Layer::Ground).iter().any(|&x| {
@@ -1415,39 +1420,61 @@ fn arrive_or_rest(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The driving wake of S-0207 claim 23: in a tick divisible by 10, a drive
-/// vehicle that is moving now, off a bridge deck, on a cell of land type
-/// water, creates one game-wide wake animation at its own position, if
-/// that animation is defined, with no draw of its own beyond the
-/// animation's creation draws. No underwater-type exclusion.
-pub fn driving_wake(w: &mut World, id: ObjectId) {
-    // spec: S-0207 claim 23 (ticks whose number is divisible by 10)
-    if w.tick % 10 != 0 {
+/// Whether a vehicle on the driving or ship locomotor is *moving now* for
+/// its wake (S-0207 claim 23, S-0504 claim 2; Q-0600): its body is turning,
+/// or it has a heading point (the active track's target) and its integer
+/// progress rate s, worked out with its current speed fraction at the check,
+/// is above 0.
+pub(crate) fn moving_now(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.body.turning(w.tick) {
+        // spec: S-0207 claim 23 and S-0504 claim 2 (moving now: its body is turning)
+        return true;
+    }
+    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
+        return false;
+    };
+    // spec: S-0207 claim 23 and S-0504 claim 2 (a heading point, the active track's target, and s = trunc(s₂ × ρ) above 0 with the current ρ; not ρ itself nor a remembered rate)
+    o.drive.as_ref().is_some_and(|d| d.track.is_some()) && progress(w, id, u) > 0
+}
+
+/// The shared wake test of S-0207 claim 23 and S-0504 claim 2: in a tick
+/// whose number is divisible by `period`, a vehicle that is moving now, off
+/// a bridge deck, on a cell of land type water, creates one game-wide wake
+/// animation at its own position, if that animation is defined, with no
+/// draw of its own beyond the animation's creation draws. The check reads
+/// the state after the tick's locomotor movement.
+pub(crate) fn wake_check(w: &mut World, id: ObjectId, period: i32) {
+    if period <= 0 || w.tick % period != 0 {
+        return;
+    }
+    let Some(wake) = w.rules().wake.clone() else {
+        // spec: S-0207 claim 23 and S-0504 claim 2 (only when the game-wide wake animation is defined)
+        return;
+    };
+    if !moving_now(w, id) {
         return;
     }
     let Some(o) = w.obj(id) else { return };
-    let Some(wake) = w.rules().wake.clone() else {
-        // spec: S-0207 claim 23 (only when the game-wide wake animation is defined)
-        return;
-    };
-    // spec: S-0207 claim 23 (moving now: body turning, or a heading point and current speed above 0).
-    // Open in Q-0600: the heading point is read as an active track and the current speed as the integer
-    // step s of the latest drive tick above 0 (the measure of S-0402 claim 5a).
-    let moving = o.body.turning(w.tick)
-        || o.drive
-            .as_ref()
-            .is_some_and(|d| d.track.is_some() && d.step > 0);
-    // spec: S-0207 claim 23 (off a bridge deck, on a cell whose land type is water)
+    // spec: S-0207 claim 23 and S-0504 claim 2 (off a bridge deck, on a cell whose land type is water)
     let water = w
         .cells
         .cell(o.pos.cell())
         .is_some_and(|c| c.land == land::WATER);
-    if !moving || o.layer == Layer::Deck || !water {
+    if o.layer == Layer::Deck || !water {
         return;
     }
     let at = o.pos;
-    // spec: S-0207 claim 23 (one instance at its own position; only the animation's creation draws, S-0109 claim 3)
+    // spec: S-0207 claim 23 and S-0504 claim 2 (one instance at its own post-movement position; only the animation's creation draws, S-0109 claim 3)
     crate::combat::effects::anim(w, &wake, at);
+}
+
+/// The driving wake of S-0207 claim 23: ticks divisible by 10, with no
+/// underwater-type exclusion. Created in the vehicle's turn right after its
+/// drive update, at its position after the move (Q-0600, answered).
+pub fn driving_wake(w: &mut World, id: ObjectId) {
+    // spec: S-0207 claim 23 (ticks whose number is divisible by 10)
+    wake_check(w, id, 10);
 }
 
 /// A stop while on a track (S-0207 claim 11): the target fraction becomes

@@ -274,7 +274,18 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         Kind::Infantry => infantry_death(w, id, hit),
         Kind::Vehicle => {
             let tc = type_combat(w, id).cloned().unwrap_or_default();
-            // Sinking (claim 10) is not modelled yet; its sinking weight defaults to 3.0 (claim 27).
+            // spec: S-0312 claim 10 and table rows 4 and 8 (a vessel that sinks shows no explosion or destruction animation, takes no list picks and stays in play at 1 health point)
+            let sinks = crate::naval::sinks_at_kill(w, id);
+            if sinks {
+                // Passengers (claim 12) need transports.
+                crew(w, id, hit);
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.health = 1; // spec: S-0312 claim 10 (it keeps 1 health point)
+                }
+                // spec: S-0312 claim 10 and S-0504 claims 4 and 5 (the descent starts at its next own update)
+                crate::naval::start_sinking(w, id);
+                return;
+            }
             // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
             if !tc.explosion.is_empty() {
                 let k = w.rng.list_pick(tc.explosion.len() as u32) as usize;

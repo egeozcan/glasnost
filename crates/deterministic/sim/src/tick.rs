@@ -100,8 +100,15 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::death::infantry_death_turn(w, id);
         return;
     }
-    // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn)
-    crate::combat::heal::turn(w, id);
+    // spec: S-0504 claim 4 (a sinking vessel's own update first descends, and may leave play at once)
+    if crate::naval::sinking_turn(w, id) {
+        return;
+    }
+    let sinking = crate::naval::sinking(w, id);
+    if !sinking {
+        // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn); a sinking vessel does not heal (Q-0642, interim)
+        crate::combat::heal::turn(w, id);
+    }
     // spec: S-0614 claim 18 (an attached parasite acts in its host's turn; its place within the turn is an interim rule, Q-0622)
     crate::parasite::host_turn(w, id);
     if w.obj(id).is_none_or(crate::combat::damage::dead) {
@@ -141,10 +148,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
     let moved = match loco {
         // spec: S-0506 Terms (a rocket missile moves in the rocket-flight movement mode, claims 14 to 19)
         _ if rocket => crate::rocket::tick(w, id),
+        // spec: S-0504 claim 5 (a sinking vessel makes no progress by its locomotor, turning and speed-fraction updates included)
+        _ if sinking => false,
         Some(Locomotor::Drive) if held => false,
         Some(Locomotor::Drive) => {
             let moved = drive::tick(w, id);
-            // spec: S-0207 claim 23 (a drive vehicle's wake; open in Q-0600: created right after its drive update)
+            // spec: S-0207 claim 23 (a drive vehicle's wake, created right after its drive update; Q-0600 answered)
             drive::driving_wake(w, id);
             moved
         }
