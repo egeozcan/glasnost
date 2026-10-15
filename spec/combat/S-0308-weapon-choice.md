@@ -2,11 +2,11 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0083]
 supersedes: []
@@ -68,10 +68,11 @@ S-0301's term (Terms and claim 10).
   aircraft specs own when that state begins.
 - **Overpowered building.** A building in the state defined by S-0518 claim 13. An
   *overpowerable* building type can be put in that state.
-- **Installed upgrade.** A building type that has been installed on a building through one of the
-  building's upgrade slots (S-0108 gives the slots). The structures specs own installing an upgrade
-  and removing it; this spec only reads the building's list of installed upgrades, in the order they
-  were installed.
+- **Installed upgrade.** A building type recorded in one of a building's three upgrade positions,
+  numbered 1 to 3. S-0406 claim 12 owns installation, the upgrade count and position precedence.
+  S-0408 claim 5 owns sale removal. A position can be empty while a higher position is occupied,
+  or retain a type above the current count. Weapon providers follow claim 12's count-limited
+  position order, not installation history.
 - **Cloaking, cloaked, uncloaking.** The states an object passes through when it hides itself
   (*cloaking*, then *cloaked*) and comes into view again (*uncloaking*); an object in none of the
   three is fully visible. The cloaking specs own the transitions. S-0301 (claim 12) uses the same
@@ -245,22 +246,38 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 
 ### Buildings
 
-12. **Upgrades supply weapons.** The weapon in slot *i* of a building is the weapon in slot *i* of
-    the first of its installed upgrades, in the order they were installed, whose type has a weapon
-    there. It is always the upgrade type's ordinary slot *i*: an upgrade's elite slots are never
-    used, whatever the building's veterancy rank. Only when no installed upgrade has one do the
-    occupant rule (claim 13) and then the building's own slot *i* (with claim 2) apply.
+12. **Upgrades supply weapons.** With upgrade count *c* from 1 to 3, the weapon in slot *i*
+    of a building comes from the first provider in upgrade positions 1 through *c*, in increasing
+    position number. Empty positions and types without an ordinary weapon in slot *i* are skipped.
+    Positions above *c* do not participate, even if they retain upgrade types after a sale.
+    With count 0 no upgrade participates, including retained types. It is always the provider's
+    ordinary slot *i*: upgrade elite slots are never used, whatever the building's veterancy rank.
+    Only when no eligible position supplies the slot do the occupant rule (claim 13) and then
+    the building's own slot *i* (with claim 2) apply. Installation history is not a separate
+    precedence rule (S-0406 claim 12).
+    **Departure for bad data.** With count above 3 our engine considers only positions 1 to 3,
+    in increasing order, with the same skipping and fallbacks. There is no fourth valid position.
+    The original can fail when those three positions supply no weapon; no stable additional
+    provider or fallback is specified for it. This uses S-0406 claim 12's excessive-count
+    departure and importer warning.
     This resolves a weapon, not permission to fire it. S-0215 claim 32 owns the non-SAM
-    building's upgrade weapon gate: it tests the first installed upgrade, even when a later
-    upgrade supplies a requested slot here. A failed gate suppresses firing attempts despite
-    a *can fire* answer; a passing gate permits a primary attempt followed by a secondary
-    attempt without another firing check between them. Those two attempts resolve slots 0
-    and 1 by this claim, not necessarily from the same upgrade. An ordinary single-shot
-    primary with no secondary fails that gate.
-    - Backing: `measurable` for slots 0 and 1 (scenario W9, parts c and d, including the
-      distinct-slot extension; S-0215 claim 32, scenario B36, for permission and paired
-      attempts); `unmeasured` for slots 2 through 17: these parts request only slots 0 and 1.
-    - Confidence: medium
+    building's upgrade weapon gate: it applies only with a nonzero count and occupied position 1,
+    and tests that position alone, even when another eligible position supplies the requested
+    weapon. An empty position 1 bypasses the gate; the first occupied higher position is not
+    substituted. A failed gate suppresses firing attempts despite a *can fire* answer; a passing
+    gate permits a primary attempt followed by a secondary attempt without another firing check
+    between them. Those two attempts resolve slots 0 and 1 by this claim, not necessarily from
+    the same upgrade. An ordinary single-shot primary with no secondary in position 1 fails
+    that gate. A bypassed gate uses the ordinary selected-weapon firing rule.
+    - Backing: `measurable` for slots 0 and 1 (scenario W9, parts c, d and h, including the
+      distinct-slot extension; S-0406 claim 12, scenario PL16, for skipped and retained positions,
+      replacement and excess-count controls; S-0215 claim 32, scenario B36, for permission and
+      paired attempts). Slots 2 through 17 are `unmeasured`: these parts request only slots 0
+      and 1. The original's outcome beyond the three valid positions is `unmeasured`: it may
+      fault, and PL16's diagnostic part predicts no stable result. The bounded search and
+      fallback for our engine are design rules, not predicted oracle results.
+    - Confidence: high for count-limited provider order and the position-1-only gate; medium
+      for observing excess-count behaviour in an original run that survives bad data
 
 13. **Garrisoned buildings fire their occupants' weapons.** A building whose type can be occupied
     and lets its occupants fire, and that holds at least one occupant, uses slot 0 when row 2 of
@@ -351,10 +368,10 @@ This spec covers skirmish combat and import. Network games and campaigns are out
       keeps the registration and section-reading effects of higher-numbered references, and warns
       about the excessive count. No usable firing slot is supplied for those higher references.
     - Backing: `measurable` for registration and section-reading effects (scenario W11, shared
-      with S-0004 K6). Registration order is `unmeasured`: these parts expose existence through
-      overlay artwork, not a weapon index or the relative order of several created weapons.
-      When several numbered references create weapon types, their registration indices follow the stated order: the normal reference before the elite reference at each number, and lower numbers before higher numbers.
-      The safe slot limit and warning are design rules, not predicted oracle results.
+      with S-0004 K6), and for registration order when W11's recorder extension described below
+      is used. The order tested is the normal reference before the elite reference at each number,
+      and lower numbers before higher numbers. The safe slot limit and warning are design rules,
+      not predicted oracle results.
     - Confidence: high for registration without a cutoff; medium for observing it in an original
       game that successfully loads the unsafe test data.
 
@@ -536,8 +553,9 @@ moment (for example the gattling stage and the deployed state of the same tick).
   section reads of weapon types they create, but usable weapon slots and their elite slots remain
   limited to the first 18 (claim 16; S-0004 claims 6 and 16). Missing numbered fields create
   nothing. The importer warns for a count above 18.
-- **Upgrade weapons win over occupants** (claim 12). A garrisoned building with an installed upgrade
-  that supplies slot 0 resolves that slot to the upgrade's weapon, not its occupants'. This does
+- **Upgrade weapons win over occupants** (claim 12). A garrisoned building with an eligible upgrade
+  position that supplies slot 0 resolves that slot to the upgrade's weapon, not its occupants'.
+  Retained types above the count are ineligible, and count 0 ignores all upgrades. This does
   not bypass S-0215 claim 32's firing gate or guarantee a shot. No switch proposed for weapon
   resolution; this is a consequence of the slot rule. The firing gate's separate switch,
   `quirks.upgrade_attack_weapon_gate`, is owned by S-0215 claim 32.
@@ -798,7 +816,7 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   respectively; no particular total shot count is predicted here. A different resolved weapon,
   an elite substitution, a missing pair after *can fire*, or the reversed attempt order
   falsifies the corresponding result. Repeat with *U1*'s primary burst count reduced to 1:
-  the first upgrade now fails the gate and neither attempt occurs, although *U2* has weapons.
+  position 1's upgrade now fails the gate and neither attempt occurs, although *U2* has weapons.
 - *Part e (disc-laser exception):* no upgrade; two rookie occupants entered in order, *E* then
   *G*. Give *E* a disc laser occupying weapon with damage 5, and *G* its ordinary damage-11
   primary. Order the building to attack the stationary enemy vehicle and record at least four
@@ -824,6 +842,21 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   occupants' hits, or eviction caused solely by their house's defeat falsifies this part.
   No safe subsequent shot is predicted; a mixed-house selective-survival fixture is not
   assumed by this test.
+- *Part h (position order, not history):* share S-0406 claim 12's scenario PL16 setup,
+  game-speed index 2, three fresh runs per part and read-only recorder. Install a level-2
+  upgrade on an empty capacity-3 host, then a level-less upgrade: positions 2 and 3 supply
+  weapons in that order, skipping any missing requested slot. Position 1 remains empty, so
+  even a position-2 type whose weapons would fail the gate does not suppress the ordinary
+  selected-weapon attempt. For the retained-position control, install three upgrades with
+  a turret-flag third upgrade, then sell that third upgrade as in PL16: count 0 ignores the
+  retained types in positions 1 and 2 and resolves to occupants or the host. Reinstalling a
+  level-less upgrade replaces position 1 rather than appending after the retained types.
+  Record count, types by position, resolved weapons, attempts and successful shots separately.
+  A retained type providing a weapon at count 0, history taking precedence over position,
+  or a gate imposed by position 2 with position 1 empty falsifies this part. PL16 also gives
+  the above-count retained-position and excess-count controls; its unsafe diagnostic part
+  predicts no deterministic original result. In our engine excess counts must use at most
+  three positions and the ordinary fallbacks, with the importer warning.
 - *Falsified if:* any damage in parts a to d differs from their expected sequences, part e
   rotates occupants or muzzles after a disc-laser shot while its ordinary-weapon control
   alternates, or part f or g differs from its index predictions.
@@ -865,10 +898,9 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
   A positive control names *W* in the first slot instead. Keep the bystander away throughout.
 - *Observable:* record the artwork at the expected new overlay index by screenshot. The overlay
   demonstrates that *W* read its section, created *A*, and *A* read its art in a later layer.
-- *Expected:* the overlay appears in both count-19 runs and the first-slot control, not in the
-  count-18 control. A successful count-19 load lacking the overlay while the first-slot control
-  shows it falsifies the claim. Failure to load is inconclusive: the original's excessive count
-  is unsafe. No firing through a nineteenth slot is attempted or predicted.
+  In the count-19 runs, a read-only recorder also records the registration indices of the
+  weapons created by numbered references.
+- *Expected:* the overlay appears in both count-19 runs and the first-slot control, not in the count-18 control. In the count-19 runs, each number's normal reference registers before its elite reference, and lower numbers register before higher numbers. A successful count-19 load lacking the overlay while the first-slot control shows it, or registration indices in a different order, falsifies the corresponding part of the claim. Failure to load is inconclusive: the original's excessive count is unsafe. No firing through a nineteenth slot is attempted or predicted.
 - *Our engine:* both count-19 imports create the overlay but provide no nineteenth firing slot,
   and issue the excessive-count warning. This checks the safety departure, not oracle behaviour.
 
