@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0060]
+requests: [Q-0060, Q-0798]
 supersedes: []
 ---
 
@@ -397,9 +397,14 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    attempt of a non-SAM building with an installed upgrade when S-0215 claim 32's upgrade
    weapon gate passes: a primary attempt is followed by a secondary attempt in that processing,
    without another firing check. A rearm countdown begun by the primary does not prevent the
-   secondary attempt. These are attempts, not a guarantee of two successful shots; in particular,
-   the outcome of a missing-secondary attempt remains unspecified here. S-0215 claim 32 owns
-   the gate and paired attempts. An aircraft's full burst likewise has no firing check between
+   secondary attempt. These are attempts, not a guarantee of two successful shots. If the
+   secondary slot resolves to no weapon, that attempt does nothing: no shot, no burst-counter
+   change, no rearm-countdown change, no ammunition use and no random draw. It produces no
+   firing-check answer, because it asks no firing check. In particular, it leaves the primary
+   shot's burst position and rearm delay intact. This requires the resolved slot to be empty,
+   not merely the gate-tested upgrade's own secondary: S-0308 claim 12 owns resolution from
+   other upgrades, occupants and the host. S-0215 claim 32 owns the gate and paired attempts.
+   Claim 14 here specifies their priority over animation-delayed firing. An aircraft's full burst likewise has no firing check between
    its shots (S-0501 claim 12).
    - Backing: `measurable` (scenarios F7, F8 and F15; S-0506 scenarios R2 and R6 for spawner
      handoff and lockouts; S-0607 scenario L9 parts c and d for the gripping lifter's conditional
@@ -413,7 +418,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      empty passenger-carrier refusal and its precedence; S-0608 scenarios D1 and D2 for
      drain attempts instead of shots and D3 for the rank-4 drain refusals; also
      S-0215 scenario B36 and its extensions for the upgrade gate and ordered paired attempts
-     despite the primary's rearm countdown).
+     despite the primary's rearm countdown; scenario F17 for an empty resolved secondary
+     slot and animation-delayed upgrade buildings).
      The berserk-weapon refusals of S-0610 claim 3 are `unmeasured` here for that claim's
      reason: stock berserk weapons do not isolate the single-target firing check.
      Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
@@ -424,7 +430,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      *rearming* cases, so no scenario could tell the orders apart).
      Rank 16 is `unmeasured`: no isolated locomotor refusal and its answer have yet been
      identified, so no scenario here can distinguish it from another refusal.
-   - Confidence: high (the upgrade-building paired attempts without a second firing check,
+   - Confidence: high (the empty-secondary no-op and the upgrade-building paired attempts without a second firing check,
      falling refusal and the same-turn surviving-landing boundary,
      the three drain refusals and no ordinary shot from a drain attempt),
      medium (its missing countdown start and ammunition use, as S-0608 claim 1), high (rearming before ammunition and range, facing and moving after them, and
@@ -520,20 +526,34 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     - Backing: `measurable` (scenario F11, test data only; its tunnel part for the tunnel rows)
     - Confidence: medium
 
-14. **Animation-delayed building shots.** A building whose type has the animation-delayed-fire
-    flag does not fire when its attack behaviour gets *can fire* (S-0215, claim 32). Instead it
+14. **Animation-delayed building shots.** In the ordinary non-SAM attack path, outside
+    S-0215 claim 32's active upgrade weapon gate, a building whose type has the
+    animation-delayed-fire flag does not fire when its attack behaviour gets *can fire*.
+    Instead it
     starts its firing animation and its delayed-fire countdown, set by the type's delayed-fire field
     *d* (ticks). The delayed shot is pending until the building's turn max(*d* − 1, 0) ticks after
     the turn that started it. (A building takes a turn in every tick. The countdown does not depend on how often its attack behaviour is processed,
     which is every other tick while it turns towards its target or rearms, S-0215 claim 32.) In that turn the building makes its scheduled firing check again, with range; that check is not refused merely because this same delayed shot is pending. On *can fire* it fires its weapon at its current target; on any other answer the shot is dropped. Either way the shot is no longer pending. Other firing checks made while the shot is pending answer *rearming*. The rearm countdown starts only with the shot itself.
+
+    **Upgrade gate priority (Q-0798).** For a non-SAM building to which S-0215 claim 32's
+    upgrade weapon gate applies, the animation-delayed-fire flag does not defer a passing
+    gate's pair: the primary and secondary attempts occur in that processing, with no
+    delayed shot started by it. A failed gate with the original quirk setting starts
+    neither an attempt nor a delayed shot. With that gate's quirk off, a failed gate uses
+    the ordinary selected-weapon path, including this claim's animation delay when enabled.
+    A passing gate still makes the immediate pair. An empty resolved secondary slot has
+    claim 9's no-op outcome, including when the host has the animation-delayed-fire flag.
+    The gate's applicability, including the upgrade-position test, belongs to S-0215
+    claim 32; weapon-provider order belongs to S-0308 claim 12 and upgrade placement to
+    S-0406 claim 12. A gate bypass leaves the ordinary animation-delay rule in force.
 
     **Prism-type buildings.** S-0518 claims 1–10 own their support recruitment and supported
     shots. In the ordinary attack path covered there (no SAM flag or installed upgrades), a
     prism-type building recruits supporters before starting its own delayed shot. That shot
     always uses this countdown, regardless of the animation-delayed-fire flag, and both its
     final firing check and its shot use weapon slot 0 (S-0518 claims 4 and 7).
-    - Backing: `measurable` (scenario F12; S-0518 scenarios PS1 and PS5 for prism shots)
-    - Confidence: medium (the countdown arithmetic); high (the prism exceptions)
+    - Backing: `measurable` (scenarios F12 and F17; S-0518 scenarios PS1 and PS5 for prism shots)
+    - Confidence: medium (the countdown arithmetic); high (upgrade gate priority and the prism exceptions)
 
 15. **Failed launches.** If the projectile of a shot cannot be put on the map, the shot is void:
     the rearm countdown, the burst counter, the ammunition and the garrison muzzle position (S-0313)
@@ -649,7 +669,9 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 | ready (no countdown running), or countdown running in claim 13's sync tick | an attempt passes the firing check and makes a shot | the shot is the *j*-th of its burst, *j* = *k* + 1; the countdown runs for the shot's delay *D*, of the kind that claim 2's order gives for *j*, with the factors of claims 3, 6 and 7 where that kind takes them and the halving of claim 8 where it applies; the burst counter is *j* mod *B* |
 | ready | an attempt passes the firing check with a draining weapon | a drain attempt replaces the ordinary shot (claim 9; S-0608 claim 1); no countdown start, burst advance, ammunition use or ordinary-shot draws; target clearing still resets the burst counter |
 | ready | an attempt passes the firing check, but its projectile cannot be put on the map (a void shot, claim 15) | nothing changes |
-| ready, animation-delayed building | its attack behaviour gets *can fire* | the delayed shot becomes pending (claim 14); no shot is made yet |
+| ready, animation-delayed non-SAM building on the ordinary path | its attack behaviour gets *can fire*, outside an active upgrade gate | the delayed shot becomes pending (claim 14); no shot is made yet |
+| ready, animation-delayed non-SAM building with active upgrade gate | *can fire*, gate passes | immediate primary and secondary attempts, no delayed shot started; an empty secondary does nothing (claims 9 and 14) |
+| ready, animation-delayed non-SAM building with active upgrade gate | *can fire*, gate fails with the gate quirk on | no attempt and no delayed shot started (claim 14) |
 | countdown running, outside claim 13's sync tick | an attempt | answer *rearming*, unless a reason of ranks 1 to 4 gives its own answer (claim 9); either way no shot and no draw |
 | countdown running | *D* ticks have passed since the shot | ready |
 | any | the firer's target is cleared | burst counter 0; countdown unchanged |
@@ -754,7 +776,8 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 | `ROF` (rules, country section) | country factor *κ* | decimal (S-0003, claims 6 and 7), held as a double | 1.0 |
 | `CompEasyBonus` (rules, `General`) | the computer-easy-bonus flag of claim 3 (the original's set-up only; read by the optional handicap setting) | boolean | no |
 | `CanBeOccupied`, `CanOccupyFire` (rules, building type) | garrisoned building (Terms) | boolean | no |
-| `IsAnimDelayedFire`, `DelayedFireDelay` (art, building image) | claim 14 | boolean; integer, ticks | no; 0 |
+| `IsAnimDelayedFire`, `DelayedFireDelay` (art, building image) | claim 14's ordinary delayed shot; a passing upgrade gate bypasses both | boolean; integer, ticks | no; 0 |
+| `Primary`, `Secondary`, `ElitePrimary`, `EliteSecondary` (rules, type) | weapon references for slots 0 and 1 and their elite replacements; S-0308 claims 1, 2 and 12 own resolution; claim 9 here covers an empty resolved secondary | weapon type name | held value; engine default no weapon |
 | `IsChargeTurret`, `TurretCount` (rules, vehicle type) | charge turret and *N* (claim 16) | boolean; integer | no; 0 |
 
 The importer warns for a `Burst` below 1, a negative `ROF`, a negative factor, and a burst-delay
@@ -1130,6 +1153,35 @@ is absent (the control).
 - (b) A bunkered vehicle (S-0206) with a bunker factor of 0.5 and of 0: Formula F1's *D*₅ is double
   *D*₄ for 0.5 (the delay lengthens) and equals *D*₄ for 0 (the division is skipped). Falsified
   if the 0.5 run shortens the delay.
+
+**F17. Upgrade pair with an empty secondary and animation delay (Q-0798).**
+- Setup: tiny skirmish test map, speed index 2, 800 × 600, director and other mods off,
+  one bystander computer player outside the test area under the glossary's void rule.
+  Named map overrides supply a non-SAM, ungarrisoned host and an upgrade in position 1
+  with a primary ordinary projectile weapon of burst count 2 and no secondary. Remove
+  every host and upgrade secondary, including elite replacements, and keep ammunition
+  unlimited. Use a durable stationary enemy target in range and correct aim. Set the
+  host's animation-delay field to 20 ticks; compare its animation-delay flag off and on.
+  Add a passing control with a distinct, single-shot secondary and a failing-gate control
+  whose upgrade primary burst count is 1, with no secondary.
+- Procedure: install the upgrade through normal placement and order sustained attack.
+  Run each fixture three times. With tick-labelled capture and a read-only recorder,
+  record projectile creation, burst counter, rearm delay, ammunition, delayed-shot pending
+  state and random-stream draws at each attack processing. Stop before other objects
+  affect the target. No injection or state writes are permitted.
+- Expected: with the passing gate and empty secondary, each processing that gets *can fire*
+  makes only the primary shot. Its first shot leaves burst counter 1 and one in-burst
+  delay draw; its next shot finishes that burst and gets the full delay. There is no
+  extra burst step, delay draw, countdown replacement or ammunition change from the
+  missing secondary. Enabling animation delay neither postpones these shots nor starts
+  a pending shot. With the populated secondary both attempts occur in the same processing,
+  not 19 ticks later. With the failing gate and original quirk setting neither shots nor
+  a pending delay appear; on our engine with the gate quirk off, the failing control
+  instead starts the ordinary delayed single shot. A no-upgrade ordinary control uses
+  scenario F12's delay. The original cannot test our engine's quirk-off alternative.
+- Falsified by any extra shot or state/draw change attributable to the empty secondary,
+  an immediate-pair fixture becoming delayed, or a failed original gate starting a delay.
+  Record unreachable fixtures as inconclusive rather than inferred confirmations.
 
 ## Open questions
 
