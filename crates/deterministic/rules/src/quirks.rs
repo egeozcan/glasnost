@@ -1597,6 +1597,38 @@ pub struct Quirks {
     // spec: S-0613 claim 12, Constants and Edge cases
     #[serde(default = "on")]
     pub wind_southeast_short: bool,
+    /// When the first other object under a dropped unit is an infantry unit, every object after it in the cell's list is also removed, whatever its kind, the dropped unit included when it is listed after the infantry; off: only infantry units in the cell are removed, and the dropped unit never is. Not implemented yet (wave 2).
+    // spec: S-0607 claim 16 and Edge cases
+    #[serde(default = "on")]
+    pub lift_drop_erases_cell_tail: bool,
+    /// A dropped unit that ends its fall in *crashed* leaves play after the two impact detonations even when they did not kill it; off: a unit that survives both detonations stays in play, is set down and gets its own locomotor back. Not implemented yet (wave 2).
+    // spec: S-0607 claims 18 and 20 and Edge cases
+    #[serde(default = "on")]
+    pub lift_impact_removes_survivor: bool,
+    /// When a dropped unit's fall ends on a bridge deck, the objects listed in the ground layer under the bridge decide what lies underneath, not those on the deck; off: the layer the unit landed in decides. Not implemented yet (wave 2).
+    // spec: S-0607 claim 16 and Edge cases
+    #[serde(default = "on")]
+    pub lift_deck_impact_reads_ground: bool,
+    /// A recycling building tests nothing about itself or its owner when an entrant arrives, so a building being sold, switched off or now owned by a house that does not count the entrant's house as allied still consumes the entrant and pays its owner; off: at consumption the building gives claim 2's docking answer to every entrant, infantry included, without the link-place row, and a refused entrant is not consumed, its destination is cleared and it falls back to rest. Not implemented yet (wave 2).
+    // spec: S-0603 claim 5 and Edge cases
+    #[serde(default = "on")]
+    pub grinder_no_arrival_recheck: bool,
+    /// An infantry entrant that reaches an absorbing building goes in whatever the passenger count, the switch or its size, so with two or more link places the building can hold more than its capacity; off: at completion the building applies claim 1's acceptance test again, and a refused entrant is treated as a refused vehicle. Not implemented yet (wave 2).
+    // spec: S-0605 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub absorber_contact_no_capacity_recheck: bool,
+    /// When the eighth direction of the first round of an absorbing building's exit search passes both cell tests but its neighbour cell carries a bridge deck, the second round never starts and the passenger stays inside this processing; off: the second round starts as after any other failure at the eighth direction. Not implemented yet (wave 2).
+    // spec: S-0605 claim 12 and Edge cases
+    #[serde(default = "on")]
+    pub absorber_release_bridge_ends_search: bool,
+    /// The second round of an absorbing building's exit search does not try the rear direction; off: the second round tries the rear direction first. Not implemented yet (wave 2).
+    // spec: S-0605 claim 12 and Edge cases
+    #[serde(default = "on")]
+    pub absorber_release_second_round_skips_rear: bool,
+    /// The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left. Not implemented yet (wave 2).
+    // spec: S-0606 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub bunker_clear_nearest_only: bool,
 }
 
 impl Default for Quirks {
@@ -1991,6 +2023,14 @@ impl Default for Quirks {
             berserk_zero_duration: true,
             psychic_intent_ignores_visibility: true,
             wind_southeast_short: true,
+            lift_drop_erases_cell_tail: true,
+            lift_impact_removes_survivor: true,
+            lift_deck_impact_reads_ground: true,
+            grinder_no_arrival_recheck: true,
+            absorber_contact_no_capacity_recheck: true,
+            absorber_release_bridge_ends_search: true,
+            absorber_release_second_round_skips_rear: true,
+            bunker_clear_nearest_only: true,
         }
     }
 }
@@ -2967,6 +3007,35 @@ impl Quirks {
                 self.psychic_intent_ignores_visibility,
             ),
             ("wind_southeast_short", self.wind_southeast_short),
+            (
+                "lift_drop_erases_cell_tail",
+                self.lift_drop_erases_cell_tail,
+            ),
+            (
+                "lift_impact_removes_survivor",
+                self.lift_impact_removes_survivor,
+            ),
+            (
+                "lift_deck_impact_reads_ground",
+                self.lift_deck_impact_reads_ground,
+            ),
+            (
+                "grinder_no_arrival_recheck",
+                self.grinder_no_arrival_recheck,
+            ),
+            (
+                "absorber_contact_no_capacity_recheck",
+                self.absorber_contact_no_capacity_recheck,
+            ),
+            (
+                "absorber_release_bridge_ends_search",
+                self.absorber_release_bridge_ends_search,
+            ),
+            (
+                "absorber_release_second_round_skips_rear",
+                self.absorber_release_second_round_skips_rear,
+            ),
+            ("bunker_clear_nearest_only", self.bunker_clear_nearest_only),
         ]
     }
 

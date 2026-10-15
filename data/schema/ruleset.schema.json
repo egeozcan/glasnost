@@ -6396,6 +6396,21 @@
       "description": "The quirk switches. Absent fields take the original's behaviour.",
       "type": "object",
       "properties": {
+        "absorber_contact_no_capacity_recheck": {
+          "description": "An infantry entrant that reaches an absorbing building goes in whatever the passenger count, the switch or its size, so with two or more link places the building can hold more than its capacity; off: at completion the building applies claim 1's acceptance test again, and a refused entrant is treated as a refused vehicle. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "absorber_release_bridge_ends_search": {
+          "description": "When the eighth direction of the first round of an absorbing building's exit search passes both cell tests but its neighbour cell carries a bridge deck, the second round never starts and the passenger stays inside this processing; off: the second round starts as after any other failure at the eighth direction. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "absorber_release_second_round_skips_rear": {
+          "description": "The second round of an absorbing building's exit search does not try the rear direction; off: the second round tries the rear direction first. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "aim_origin_without_target": {
           "description": "A shot fired with no current target aims at the world origin.",
           "type": "boolean",
@@ -6578,6 +6593,11 @@
         },
         "building_wrap_normalisation": {
           "description": "A building body range's speed normalisation follows two rules: an immediate entry needs the art's normalised mark and excludes construction; a deferred entry and every wrap ignore the mark and cover construction and idle only.",
+          "type": "boolean",
+          "default": true
+        },
+        "bunker_clear_nearest_only": {
+          "description": "The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -7146,6 +7166,11 @@
           "type": "boolean",
           "default": true
         },
+        "grinder_no_arrival_recheck": {
+          "description": "A recycling building tests nothing about itself or its owner when an entrant arrives, so a building being sold, switched off or now owned by a house that does not count the entrant's house as allied still consumes the entrant and pays its owner; off: at consumption the building gives claim 2's docking answer to every entrant, infantry included, without the link-place row, and a refused entrant is not consumed, its destination is cleared and it falls back to rest. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "ground_detonation_misses_aircraft": {
           "description": "Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.",
           "type": "boolean",
@@ -7268,6 +7293,21 @@
         },
         "launch_spacing_from_spawner_type": {
           "description": "The 9-tick launch spacing is chosen by the missile-spawn flag of the spawner's own type, not of the spawned type; off: the spawned type's flag decides.",
+          "type": "boolean",
+          "default": true
+        },
+        "lift_deck_impact_reads_ground": {
+          "description": "When a dropped unit's fall ends on a bridge deck, the objects listed in the ground layer under the bridge decide what lies underneath, not those on the deck; off: the layer the unit landed in decides. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "lift_drop_erases_cell_tail": {
+          "description": "When the first other object under a dropped unit is an infantry unit, every object after it in the cell's list is also removed, whatever its kind, the dropped unit included when it is listed after the infantry; off: only infantry units in the cell are removed, and the dropped unit never is. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "lift_impact_removes_survivor": {
+          "description": "A dropped unit that ends its fall in *crashed* leaves play after the two impact detonations even when they did not kill it; off: a unit that survives both detonations stays in play, is set down and gets its own locomotor back. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
