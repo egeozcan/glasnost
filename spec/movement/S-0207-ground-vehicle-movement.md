@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676]
 supersedes: []
 ---
 
@@ -74,7 +74,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     locomotor (S-0208 claims 19–20 own infantry landing-point choice and placement clearing),
   - claim 21 and scenario D23 cover teleporting vehicles whose own movement is temporarily
     replaced by driving,
-  - claim 22 and D24 cover driving vehicles and own-locomotor teleports of any kind.
+  - claim 22 and D24 cover driving vehicles and own-locomotor teleports of any kind,
+  - claim 24 and D27 cover heading-point heights for driving and ship vehicles.
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -117,7 +118,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
 - **Heading point.** The point a vehicle's locomotor is moving the vehicle towards at this moment,
   if any. For the driving locomotor it is the track target of the track the vehicle is on, from
   the tick its track begins until the tick that track ends; it moves one cell on with the track
-  target when a curve is chained (claim 8). A drive vehicle that stands still, turns in place
+  target when a curve is chained (claim 8). Its stored world height is the vehicle's world
+  height when the track begins, retained through chaining as claim 24 specifies, not the
+  terrain or deck height at the target. A drive vehicle that stands still, turns in place
   before a step, waits (claim 15) or is between two tracks has no heading point. A vehicle with the
   teleporting locomotor has none either (claim 20). The ship locomotor has the same heading
   point as the driving locomotor (S-0504 claim 1). For the hovering locomotor it is the next
@@ -1402,6 +1405,28 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       boundaries, position and draw ordering; Q-0600)
     - Confidence: high
 
+24. **Stored height of a driving or ship heading point (Q-0676).** On ordinary travel
+    tracks, the heading point receives the vehicle's current world height when the track
+    begins, before any progress along that track. This is an exact copy of an integer
+    height in leptons, with no rounding, terrain sampling or additional deck lift. It is
+    the same for one-cell tracks and two-cell curves. A high-bridge target cell does not
+    by itself give the heading point deck height, whether the vehicle approaches on the
+    deck or on the ground below it.
+
+    The stored height stays unchanged while that track runs, even when claim 5 changes
+    the vehicle's own height. Chaining a curve moves the heading point horizontally
+    one cell on (claim 8) but keeps its previous stored height: it neither copies the
+    vehicle's then-current height nor samples the new target's surface. Only beginning
+    a new track after completion assigns the vehicle's height anew. These are ordinary
+    travel rules, not a definition for special building exit tracks.
+
+    Thus the stored heading height and the vehicle's current height can differ. The
+    bridge-loss heading test and reservation clearing use the stored point as specified
+    by S-0511 claims 9 and 11; that spec owns the separate current-height track test and
+    the resulting hits, including Q-0676 question 3.
+    - Backing: `measurable` (D27)
+    - Confidence: high
+
 ## Formulas
 
 Every floating-point operation in this spec, in the claims (the speed-fraction updates of claim 10
@@ -2076,6 +2101,7 @@ settings. Claim 14 supplies confidence and backing; D16's identifier controls te
 | country section, key `SpeedUnitsMult`; the country's matching keys for infantry and aircraft do not feed this spec | *κ*, for progress and the lead estimate (claims 2 and 18) | decimal (S-0003, claim 6), stored in single precision | keeps value; engine default 1.0 |
 | land-type sections | *M* | S-0211 | S-0211 |
 | `[General]`, key `Wake` | game-wide wake animation (claim 23) | animation type name | keeps value; engine default none |
+| No data key | driving and ship heading-point height at track start and retention through chained curves (claim 24; Q-0676) | integer world-height leptons copied from runtime vehicle height; no independent imported height | fixed behaviour; target terrain and bridge data do not replace the copied height |
 | No data key | wake's integer-rate test, active-track heading eligibility and post-movement creation timing (claim 23) | engine behaviour; rate reuses the speed, country and veterancy fields above and runtime speed fraction and bonus | fixed rules of claim 23; no separate wake-speed field |
 | vehicle section, key `Underwater` | underwater-type flag; does not suppress driving wakes (claim 23) | boolean | keeps value; engine default no |
 | infantry, vehicle and aircraft type sections, key `Locomotor` (building type sections read it too, without effect) | locomotor (claim 14, table T3) | class identifier: hexadecimal digits in groups of 8, 4, 4, 4 and 12, joined by hyphens, in braces, letters in either case; the value is read whole after trimming. A value of another form is ignored; an identifier not in T3 is treated as not given (departure, claim 14); both warn | keeps value in force; engine default the teleporting locomotor |
@@ -3169,7 +3195,45 @@ is otherwise legal. Mid-track arrest, starting a track during launch, lost desti
 resume falsifies the hold. Use the read-only recorder and scripted orders; concurrent special waits
 are not covered by this scenario.
 
+**D27. Stored heading height (claim 24; Q-0676 questions 1 and 2).**
+*Setup:* a tiny skirmish map with level ground, a drivable slope and a high bridge
+with a traversable ground lane below it, game speed index 2, stock units and rules,
+director and mods off. Use the read-only recorder with scripted move orders; record
+world position, heading point including its stored height, current track and path.
+Keep one human house and a bystander house outside the lanes. Run each case once
+for a driving vehicle and once for a ship on a legal water route; if a ship cannot
+use the slope or deck route with its stock movement zone, use the water control
+for it rather than assuming it traverses land.
+
+*Procedure and observable:* record the height immediately before each ordinary
+track begins and compare it to the heading height throughout that track. Include
+a one-cell straight track, a two-cell curve and a track across changing terrain
+height. Separately move under the bridge and along its deck towards a high-bridge
+target cell. For the chaining control use D9 control 1's explicitly named test-map
+override, with acceleration off and the passive flag on, and a winding corridor
+crossing a slope. Repeat it with ship locomotion on a legal test route; this control
+is not a claim that stock passive units are available. Qualify the control only
+when a chain actually occurs and the vehicle's height or the new target's surface
+height differs from the height at the original track start.
+
+*Expected:* every initial heading height equals the pre-progress vehicle height,
+not the target's terrain or deck height. It stays equal to that original value
+through all qualified chains, even while the vehicle height changes. A completed
+track followed by a new track copies the vehicle height anew. A ground approach
+under a bridge starts with ground height, not deck height. *Falsified by:* a
+heading height set from target terrain or deck instead of the starting vehicle,
+a mid-track change, or a height refresh at a qualified chain. S-0511 B6 tests the
+bridge-loss consequences separately; record stored and current heights there too.
+No oracle run is claimed here.
+
 ## Cross-spec changes to confirm
+
+- Q-0676: S-0511 claims 9 and 11 should cite claim 24 here for the driving/ship
+  heading point's copied starting height and retention through chaining. S-0511
+  owns question 3's distinction between that stored height and current height.
+- S-0504 claim 1 should explicitly include claim 24 here in its shared rules,
+  with D27 as the proposed height-specific measurement; N1 and N2 alone do not
+  distinguish the possible height assignments.
 
 - Q-0356: S-0209 claim 1 must extend its vehicle and aircraft lifecycle pointers to
   claim 20 k here: removal clears actual occupancy, not a separate remembered or
