@@ -2,11 +2,11 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0742, Q-0730, Q-0731, Q-0737]
 supersedes: []
@@ -205,8 +205,13 @@ between a fire order and the effect.
    (`quirks.missile_without_launcher_consumes_charge`, default on = original; off: the order is
    refused and the record stays ready). S-0513 claim 7 owns the launcher choice: only the first
    matching silo type in building-type-list order is considered by default. The chosen silo
-   must accept the launch: selling prevents it, and an already-running launch sequence need
-   not start another missile. A chosen selling or busy silo still records the target and plays
+   must accept the launch: selling prevents it. S-0513 claim 47 owns the busy-silo
+   acceptance boundary: with uninterrupted ordinary building turns, a launch accepted after
+   the building turn in tick *t* permits another such launch in *t* + 8 or later, not
+   immediately after take-off in *t* + 1. While launch is current with no different behaviour
+   queued, another launch neither restarts the sequence nor queues a missile; claim 47 also
+   gives the exception when a different behaviour is already queued.
+   A chosen selling or busy silo still records the target and plays
    the launch sounds; with no matching building there are no launch sounds. These cases all
    consume readiness under the original behaviour. The quirk's off state refuses an order
    that would produce no new launch sequence, including the selling and busy cases.
@@ -784,8 +789,11 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   order refused with a message, its record still ready; (c) nothing launched, row restarts at ⌊*T* / 15⌋.
 - *Launcher variants:* repeat (c) with the chosen silo selling and with it still in its launch
   sequence (S-0513 scenario SW2 parts b, c and e). Record sounds, target, missiles and readiness:
-  charge is spent and sounds play, but no additional missile need appear. With two matching silo
-  types, owning only the later type still gives no launcher under the default first-type rule.
+  charge is spent and sounds play, but no additional missile need appear. For the busy boundary,
+  use S-0513 scenario SW21: a second post-turn order before *t* + 8 spends readiness without
+  queuing another missile when no different behaviour is queued; at *t* + 8 or later it starts
+  a fresh sequence. With two matching silo types, owning only the later type still gives no
+  launcher under the default first-type rule.
 - *Falsified if:* any differs. Repeat (b) for a pending storm and for domination already under
   way; either consuming readiness falsifies refusal. After a source pick, also repeat with a
   ready first stage whose charge was set to 0 %: the pick must preserve the positive countdown
