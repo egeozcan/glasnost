@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -163,16 +163,22 @@ addition:
    tracked flying object that lies within *R* but in a sector off the four map axes and off the
    near diagonals (F7, `quirks.flying_search_sectors`). A detonation at or below that terrain
    height never hits a flying object through this rule, whatever *R* is
-   (`quirks.ground_detonation_misses_aircraft`).
+   (`quirks.ground_detonation_misses_aircraft`). A rocket missile in rocket-flight movement
+   is never listed in a scanned cell, in any flight phase, including pause, tilt and raise
+   (S-0506 claim 23). Before its tracking starts it is therefore absent from both candidate
+   searches; afterwards only the flying-object search can find it. Its tracking starts and
+   ends at the boundaries of S-0506 claims 15 and 19, not according to its height or its
+   in-the-air answer.
    - Backing: `measurable` (scenario A5 for the height condition; scenario A16 for the sectors), and
      S-0506 scenario R10 for rocket-missile registration at the end of tilt or raise, as
-     S-0506 claim 15 specifies; `unmeasured` for the full sector membership list: A16 samples
+     S-0506 claim 15 specifies; S-0506 scenario R17 for rocket-missile exclusion from cell
+     scans in every phase (S-0506 claim 23); `unmeasured` for the full sector membership list: A16 samples
      only three distant sectors rather than every F7 sector. Rocket-missile removal from the
      search before its own area damage follows S-0506 claim 19 but is `unmeasured` here:
      R11 records impact damage and effects, not the missile's eligibility for a nested flying-object
      search during that damage
-   - Confidence: high for the height condition; medium for the set of tracked objects and for F7
-     (Open questions: whether a tracked flying object can also appear in a scanned cell)
+   - Confidence: high for the height condition and rocket-missile cell exclusion; medium for
+     the set of tracked objects and for F7 (Open questions: dual membership for other flying kinds)
 
 ### Distance, exclusions and order
 
@@ -1383,9 +1389,11 @@ claim 11's design rule, not any off-state behaviour of the original.
 ## Open questions
 
 - S-0209 claim 13 excludes an aircraft using ordinary flight at positive terrain-relative
-  height from cell layers, so it cannot receive a second entry that way. Whether other tracked
-  flying kinds, such as jumpjets, can also be listed remains open; if listed they could receive
-  two entries. Claim 10 would halve both entries for an aircraft in the air, not just one.
+  height from cell layers, so it cannot receive a second entry that way. Rocket missiles in
+  rocket-flight movement are likewise excluded from cell layers in every phase (S-0506 claim 23),
+  irrespective of height or tracking membership. Whether other tracked flying kinds, such as
+  jumpjets, can also be listed remains open; if listed they could receive two entries.
+  Claim 10 would halve both entries for an aircraft in the air, not just one.
 - Exactly when flying kinds other than rocket missiles are registered and unregistered
   (lift-off, landing, leaving the map), which the movement specs own; rocket-missile boundaries
   are S-0506 claims 15 and 19. Once an object is tracked, sector-crossing order is specified
