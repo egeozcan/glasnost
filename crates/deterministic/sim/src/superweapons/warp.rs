@@ -6,7 +6,10 @@
 //! at the start of the member's living turn. A member still leaving takes no
 //! other part of its turn (S-0513 claim 48, confirmed); for the other stages
 //! before its arrival hold, whether it takes the rest of its turn is
-//! unmeasured, and the warp update is its whole turn there (Q-0851 interim).
+//! unmeasured in the original; our engine's rule (S-0513 claim 51, engine
+//! design) is that none of the five kinds of ordinary work runs there, so the
+//! warp update is the whole turn there, other parts of the turn (the cloak
+//! update, reload timers and so on) being left out as before.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -20,7 +23,7 @@ use crate::world::{HouseId, Layer, ObjectId, Pos, World};
 
 /// The blank stand-in cell that the nearby-cell search's callers use when
 /// it finds nothing (S-0212 claim 25; S-0507 claims 8 and 10).
-// spec: S-0212 claim 25 (the unchecked no-result placeholder at map cell (0, 0)); Q-0850 interim for the warp: S-0513 claim 49 leaves the exact replacement point open
+// spec: S-0513 claim 50 (both exceptional cases use fallback cell coordinates (0, 0), the stand-in cell of S-0212 claim 25 and S-0009 claim 44)
 const STAND_IN: CellXY = CellXY::new(0, 0);
 
 /// The leaving stage's fixed wait (Constants).
@@ -57,6 +60,13 @@ pub struct Member {
     pub landing: Pos,
     /// This warp's landing was redirected (claim 40, quirk off).
     pub redirected: bool,
+    /// The first fallback of this member's warp has been reported (claim 50).
+    #[serde(default)]
+    pub fell_back: bool,
+    /// The first placement failure of this member's warp has been reported
+    /// (claim 50).
+    #[serde(default)]
+    pub refused: bool,
 }
 
 impl Member {
@@ -235,16 +245,12 @@ fn examine(w: &mut World, h: HouseId, id: ObjectId, to: Option<CellXY>) {
     {
         return;
     }
-    // spec: S-0513 claim 49 (an off-map destination cell is no early rejection: the object joins the warp after the parasite and organic tests above)
-    if to.is_none() {
-        w.note("Q-0850: a warp object whose destination cell is off the map lands at the stand-in cell (interim; its fate is unmeasured)");
-    }
-    // Q-0850 interim: the point conversion of an off-map destination cell is unmeasured (S-0513 claim 49); the stand-in cell of S-0212 claim 25 stands for it
-    join(w, h, id, to.unwrap_or(STAND_IN));
+    // spec: S-0513 claims 49 and 50 (an off-map destination cell is no early rejection: the object joins the warp after the parasite and organic tests above, with the fallback cell coordinates (0, 0); the first fallback is reported)
+    join(w, h, id, to.unwrap_or(STAND_IN), to.is_none());
 }
 
 /// The object joins the warp group (claim 34).
-fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY) {
+fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY, fell_back: bool) {
     let Some(o) = w.obj(id).cloned() else { return };
     // Tank bunkers are not built (S-0606, structures specs): no bunker link exists to end.
     // spec: S-0513 claim 34 (its docking, repair and similar contact links end)
@@ -274,12 +280,16 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY) {
     let landing = landing_in(w, o.kind, o.pos, to);
     if let Some(ob) = w.obj_mut(id) {
         ob.contact = None;
-        // spec: S-0513 claim 48 (a member in its leaving stage drops its target and destination, and its former driving does not continue; whether the path and the queued destinations are cleared at launch is unmeasured, Q-0851 interim: they are)
-        crate::spawn::clear_own_target(ob);
-        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-        ob.dest = None;
+        // spec: S-0513 claim 51 (launch immediately clears the old path, the queued destinations and the current driving step; none resumes when the warp ends. Target and current destination are dropped by the leaving-stage rule of claim 48, in the first update, not here)
         ob.queued_dests.clear();
         ob.path.steps.clear();
+        if let Some(wk) = ob.walk.as_mut() {
+            wk.fraction = false; // spec: S-0513 claim 51 (the driving step: a walker's speed fraction ends with it)
+        }
+        if let Some(hv) = ob.hover.as_mut() {
+            hv.point = None; // spec: S-0513 claim 51 (the driving step: a hover's heading point and taken destination)
+            hv.for_dest = None;
+        }
         if let Some(t) = ob.teleport.as_mut() {
             t.landing = None;
             t.for_dest = None;
@@ -291,7 +301,31 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY) {
             house: h,
             landing,
             redirected: false,
+            fell_back,
+            refused: false,
         });
+    }
+    if fell_back {
+        w.note(format!(
+            "warp: object {} has no destination cell on the map; it falls back to cell (0, 0) (S-0513 claim 50)",
+            id.0
+        ));
+    }
+    release_walk(w, id);
+}
+
+/// Ends a walker's step at launch and frees the standing position it was
+/// reserving.
+fn release_walk(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let Some(wt) = o.walk.as_ref().and_then(|s| s.target) else {
+        return;
+    };
+    let q = crate::objects::occ_quirks(w);
+    // spec: S-0513 claim 51 (launch clears the driving step: a walker's target and the standing position it reserved)
+    w.cells.clear_infantry(wt.cell(), o.layer, id, q);
+    if let Some(s) = w.obj_mut(id).and_then(|ob| ob.walk.as_mut()) {
+        s.target = None;
     }
 }
 
@@ -299,9 +333,10 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY) {
 /// whether the update was its whole turn: true in every stage before the
 /// arrival hold. For a member still leaving that is S-0513 claim 48's
 /// confirmed exclusion; for the pending, departure, retry, placement and
-/// arrival-effects turns it is the Q-0851 interim, those turns being
-/// unmeasured. In the arrival hold the hold-end test comes first and the
-/// ordinary turn follows (claim 48, confirmed ordering).
+/// arrival-effects turns it is the engine design of claim 51 (no ordinary
+/// self-healing, behaviour processing, movement, firing or turret turning
+/// before or after the warp work). In the arrival hold the hold-end test
+/// comes first and the ordinary turn follows (claims 48 and 51).
 pub fn turn(w: &mut World, id: ObjectId) -> bool {
     let Some(m) = member(w, id) else {
         return false;
@@ -309,6 +344,12 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
     let t = w.tick;
     match m.stage {
         Stage::Pending => {
+            if let Some(ob) = w.obj_mut(id) {
+                // spec: S-0513 claim 48 (a member in its leaving stage drops its target and destination) and claim 51 (this design adds no earlier target clearing)
+                crate::spawn::clear_own_target(ob);
+                ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+                ob.dest = None;
+            }
             // spec: S-0513 claim 39 and T2 (the leaving stage in t_L + 1; the fixed wait starts)
             set_member(
                 w,
@@ -482,6 +523,10 @@ fn check(w: &mut World, id: ObjectId, m: &Member) -> Check {
         return Check::Killed;
     };
     let c = m.landing.cell();
+    // spec: S-0513 claim 50 (a point outside the map is blocked, never accepted as an empty legal cell)
+    if w.cells.cell(c).is_none() {
+        return Check::Blocked;
+    }
     let r = w.rules_arc();
     if w.high_bridge(c) {
         let (class, zone) = r
@@ -563,14 +608,15 @@ fn redirect(w: &mut World, id: ObjectId, m: Member) {
         no_overlay: false,
     };
     let found = crate::path::nearby(w, c, crate::path::NearbyUse::Settings(settings));
+    let mut fell_back = m.fell_back;
     let landing = match found {
         Some(f) => {
             // spec: S-0513 claim 37 (its landing point moves to the found cell with the same position within the cell)
             landing_in(w, o.kind, m.landing, f)
         }
         None => {
-            // spec: S-0513 claim 49 (a failed search replaces the landing point without a success test and does not keep the old point; later checks use the replaced point). Q-0850 interim: the exact replacement point is unmeasured, the stand-in cell of S-0212 claim 25 stands for it
-            w.note("Q-0850: a blocked warp member with no nearby cell lands at the stand-in cell (interim)");
+            // spec: S-0513 claim 49 (a failed search replaces the landing point without a success test and does not keep the old point; later checks use the replaced point) and claim 50 (the fallback cell (0, 0), keeping the position within the previous landing cell; height 0 and no bridge lift while that cell is not a legal cell)
+            fell_back = true;
             landing_in(w, o.kind, m.landing, STAND_IN)
         }
     };
@@ -587,15 +633,41 @@ fn redirect(w: &mut World, id: ObjectId, m: Member) {
             stage: Stage::Blocked,
             landing,
             redirected: true,
+            fell_back,
             ..m
         }),
     );
+    if fell_back && !m.fell_back {
+        w.note(format!(
+            "warp: object {} found no nearby landing cell; it falls back to cell (0, 0) and retries (S-0513 claim 50)",
+            id.0
+        ));
+    }
 }
 
 /// The placement at the landing point (T2: check passed, next update).
 fn place(w: &mut World, id: ObjectId, m: Member) {
     let Some(o) = w.obj(id).cloned() else { return };
     let c = m.landing.cell();
+    // spec: S-0513 claim 50 (a placement failure never deletes a member: it stays alive in the landing-retry stage with its landing point, owner and passengers retained and retries on the next update; no retry cap and no timeout death; the first failure per member and warp is reported)
+    if w.cells.cell(c).is_none() {
+        if !m.refused {
+            w.note(format!(
+                "warp: object {} could not be placed at its landing point and stays in the landing retry (S-0513 claim 50)",
+                id.0
+            ));
+        }
+        set_member(
+            w,
+            id,
+            Some(Member {
+                stage: Stage::Blocked,
+                refused: true,
+                ..m
+            }),
+        );
+        return;
+    }
     let layer = crate::teleport::landing_layer(w, c);
     if let Some(ob) = w.obj_mut(id) {
         ob.layer = layer;

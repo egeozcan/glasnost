@@ -445,7 +445,7 @@ fn quirk_negative_self_heal_counts_off() {
     assert_eq!(negative_counts(false), vec![3, 3, 0, 0]);
 }
 
-// spec: S-0314 claims 9 and 10 (rev 21) and S-0513 claim 48 (a vehicle, infantry unit or landed aircraft still in the warp's leaving stage after its warp update skips both individual and house-wide healing in that turn; a pending warp alone is the interim whole-turn rule of Q-0738, owned by the superweapon topic)
+// spec: S-0314 claims 9 and 10 (rev 21) and S-0513 claim 48 (a vehicle, infantry unit or landed aircraft still in the warp's leaving stage after its warp update skips both individual and house-wide healing in that turn; S-0513 claim 51 extends the exclusion to the pending, departure, retry, placement and arrival-effects turns, tested in claims_s0513_contract.rs)
 #[test]
 fn claims_9_and_10_leaving_stage_skips_healing() {
     use glasnost_sim::superweapons::warp::{Member, Stage};
@@ -464,6 +464,8 @@ fn claims_9_and_10_leaving_stage_skips_healing() {
         house: glasnost_sim::world::HouseId(0),
         landing: pos,
         redirected: false,
+        fell_back: false,
+        refused: false,
     });
     let g = gains(&mut w, &[held, free], 46);
     // The control gains 1 at multiples of 14 (self-healing) and 4 at multiples of 15 (house-wide).
