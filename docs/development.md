@@ -852,6 +852,8 @@ Provisional rules of M6b multiplayer triggers, each tied to a request:
 
 Aircraft shadow anchor (S-0105 claim 40, Q-0799 answered): `mapview::build::vehicle_voxels` draws an aircraft shadow at the projection of its horizontal position at the terrain height there (`Mobile::shadow`, from `live::shadow_anchor`; a map-only scene reads the terrain from the map), 60 pixels higher over a qualifying high bridge, whatever its flight height. Q-0841 interim: an aircraft counts as marked on a deck only when its layer is the deck layer. Vehicle shadow anchors stay as the body point (open in S-0105). The paradrop plane's flight height (1500 leptons in the lane) is drawn.
 
+Save format 29 (M6b2): one bump for the step-2 to step-4 state changes: the silo's busy-until tick (`ObjSw::silo_busy_until`), `FallState::chute_once`, `Cloud::delay` meaning the effective stage delay, and the cloak generator's `was_on` phase mark. Format 28 is the multiplayer trigger and driving-destination state.
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.

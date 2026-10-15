@@ -167,12 +167,30 @@
           ],
           "default": null
         },
+        "canvas_height": {
+          "description": "The canvas height in pixels of that sprite's header (S-0513 F4);\nabsent when the import had no such sprite.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "crater": {
           "description": "`Crater`: a middle-event effect.",
           "type": [
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "frame_count": {
+          "description": "The image-frame count *F* of the type's current (drawn) sprite\n(S-0513 claim 46, not twice the middle frame); absent when the import\nhad no such sprite.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "is_meteor": {
@@ -190,6 +208,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "normalized": {
+          "description": "`Normalized`, the game-speed normalisation flag (S-0109 claim 4);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "num_particles": {
@@ -214,6 +240,15 @@
           },
           "maxItems": 2,
           "minItems": 2
+        },
+        "rate": {
+          "description": "`Rate`, the image frames per game minute (S-0109 claim 2); absent\nor −1: not given.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "scorch": {
           "description": "`Scorch`: a middle-event effect.",
@@ -6980,6 +7015,11 @@
           "type": "boolean",
           "default": true
         },
+        "cloak_generator_zero_radius_shutdown": {
+          "description": "An accepted manual power-off of a cloak generator makes shrinking pending even at radius 0, a current radius of 0 becoming the type radius first (no coverage is added); off: shrinking is requested only at a positive current radius, as for an ordinary loss of operation.",
+          "type": "boolean",
+          "default": true
+        },
         "cloak_zero_speed_stall": {
           "description": "With a cloaking speed of 0 cloaking advances a stage per tick and uncloaking never advances; off: fixed.",
           "type": "boolean",
@@ -9101,7 +9141,7 @@
       "type": "object",
       "properties": {
         "action": {
-          "description": "`Action`, the aim action word as written (S-0512 claim 23); absent:\nnone.",
+          "description": "`Action`, the aim action word as written (S-0512 claim 23); a word\noutside the vocabulary sets no action; absent: none.",
           "type": [
             "string",
             "null"
@@ -9142,7 +9182,7 @@
           "default": null
         },
         "kind": {
-          "description": "`Type`, the kind word as written (S-0407 claim 12 j); absent: none.",
+          "description": "`Type`, the kind word, one of the twelve words of S-0512 claim 24\n(S-0407 claim 12 j); absent: none. The importer keeps the previous\nlayer's word for an unknown one.",
           "type": [
             "string",
             "null"
@@ -9174,7 +9214,7 @@
           "default": null
         },
         "pre_dependent": {
-          "description": "`PreDependent`, the second stage's link, a kind word (S-0512 claim\n11); absent: none.",
+          "description": "`PreDependent`, the second stage's link, a kind word of S-0512 claim\n24 (claim 11); absent: none.",
           "type": [
             "string",
             "null"
