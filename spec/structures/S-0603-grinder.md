@@ -2,7 +2,7 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -42,7 +42,7 @@ Neighbouring specs own the rest, and this spec does not repeat them:
 - the original's enter-nearest instruction, which looks for an *absorbing* building and is a
   different action from claim 14's search: S-0215 (claim 24),
 - a slave master that is consumed: its untransferred slave group ends by S-0312 claim 31,
-- an entrant converted by mutation before it arrives: the planned mutation spec S-0611.
+- an entrant converted by mutation before it arrives: S-0611 claim 5.
 
 Cross-spec changes required at hand-off:
 - S-0601 claim 12's bullet on victims absorbed by "a grinder or bio reactor" holds for grinders:
