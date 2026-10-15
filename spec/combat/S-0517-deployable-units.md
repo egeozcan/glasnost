@@ -2,7 +2,7 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -78,12 +78,14 @@ Skirmish only. Network games and campaigns are out of scope.
      place.
    - Backing: `measurable` (P1 a and P8 a for overlapping non-bunkered types). The bunkered
      branch is owned by S-0415 claim 1, including its backing limitation, not newly established here.
+     S-0606 claim 11 establishes that fresh selection supplies no order route to the occupant,
+     and no player-input route to *unload* is known; it does not exclude every hotkey,
+     pre-existing selection or queued-order route.
    - Confidence: high
 
-2. **Deploy-fire vehicle.** At each processing of *unload*, a deploy-fire vehicle:
-   - takes its own cell as its target,
-   - asks the firing check (S-0301 claim 9), range test included, for its weapon in slot 0,
-   - on *can fire*, fires that weapon at its own cell.
+2. **Deploy-fire vehicle.** At each processing of *unload*, a deploy-fire vehicle uses its own
+   cell as the target and submits the weapon in slot 0 to the firing check, including its range
+   test (S-0301 claim 9). If the check answers *can fire*, it fires that weapon at its own cell.
 
    It always uses slot 0. The deploy weapon index (S-0308 claim 9) plays no part, because the
    vehicle never becomes deployed.
@@ -201,17 +203,25 @@ Skirmish only. Network games and campaigns are out of scope.
 
 ### Vehicles: while deployed or in transition
 
-9. **No destination.** A deployed vehicle or one in transition cannot receive a destination: any
-   destination given to it is replaced by none. This covers orders, approach steps and every other
-   rule that sets a destination. A deployed vehicle cannot move under its own power.
+9. **No destination.** Outside the magnetic-grip case below, a deployed vehicle or one in
+   transition cannot receive a destination: any destination given to it is replaced by none.
+   This covers orders, approach steps and every other rule that sets a destination. A deployed
+   vehicle cannot move under its own power.
 
-   There is one exception. While a deployed vehicle is being carried by another object's locomotion,
-   such as a magnetic beam's lift (planned S-0607), destination assignments are allowed. This exception
-   also applies during undeploying while that carried vehicle is still deployed.
-   - Backing: `measurable` (P3 a for the restriction; P4 b for the carried exception).
-     The exception test is inconclusive unless the recorded lift establishes the carried
-     state; named test data may supply a compatible beam and target type.
-   - Confidence: high (the rule); low (the exception)
+   Magnetic lift makes the vehicle *seized* (S-0607 claims 5 and 20). While it remains
+   gripped, being deployed does not itself clear its destination; this also applies during
+   undeploying while it is still deployed. This is not permission to assign a new destination:
+   the seized-state rule still ignores new destinations, and assigning no destination has
+   S-0607 claim 9's grip-ending effect.
+   This corrects this spec's previously approved claim 9: being carried does not permit new
+   destination assignments. S-0607 claim 9 remains unchanged; its seized-state restriction
+   applies alongside the narrower deployed-state exception here.
+   - Backing: `measurable` (P3 a for the ordinary restriction). The gripped/deployed exception
+     and seized-state destination handling are `unmeasured`: no ordinary input route to test
+     these assignments is established, as qualified in S-0607 claim 9. P4 b is conditional on
+     establishing that route, not evidence that it exists.
+   - Confidence: high (ordinary restriction and ignored new destinations); medium (the
+     deployed-state exception during a grip)
 
 10. **Move.** When *move* is processed for a vehicle that is deployed or in transition, *guard*
     becomes its queued behaviour and the processing chooses 1 tick. This covers the deployed
@@ -310,15 +320,14 @@ Skirmish only. Network games and campaigns are out of scope.
 16. **Deployed-firing rule.** Whenever S-0215 claims 23 or 31 run this rule for a deployed infantry
     unit, let *w* be its weapon selected with no target supplied (S-0308 claims 3 and 8). For a deployed infantry
     type with the deploy-fire flag, this is its deploy weapon (S-0308 claim 8).
-    - If it has a target within *w*'s range (the range test of S-0307), nothing changes here. It
-      fires at that target through its ordinary firing step (S-0301).
-    - Otherwise it runs a range search (S-0309), centred on its own position. This search does not
-      wait for its targeting timer. Its result becomes the unit's target:
-      - a found target replaces an out-of-range one,
-      - no result drops an out-of-range target,
-      - a unit that had no target and finds none is left without one.
-    - If it then has no target, it falls back to rest (S-0215), unless its current behaviour is
-      *guard* or its type is a jumpjet type.
+
+    When the unit has a target within *w*'s range under S-0307, this rule makes no targeting
+    change; firing remains subject to its ordinary firing step (S-0301). Without an in-range
+    target, it instead runs an S-0309 range search centred on its own position without waiting
+    for its targeting timer. A found target becomes its target, replacing any out-of-range
+    target. If the search finds none, an out-of-range target is dropped, while a unit that
+    began without a target remains targetless. A unit left targetless falls back to rest
+    under S-0215 unless its current behaviour is *guard* or its type is a jumpjet type.
 
     The rule never moves the unit: a deployed infantry unit takes no approach step (S-0215 claim 37
     g). The delay after the processing is S-0215's.
@@ -394,7 +403,7 @@ occurs for a stalled zero-delay transition with its quirk on.
 | deploying | processing before completion | stays deploying, 1 tick |
 | deploying | processing that completes F1 | deployed; *guard* queued and started, 450 ticks |
 | deploying or undeploying | ordinary order queues a behaviour | cannot start during the transition; default: completion replaces it with *guard* (claim 8) |
-| deploying or undeploying | destination given | ignored, except for claim 9's carried deployed vehicle |
+| deploying or undeploying | destination given | ordinary restriction: cleared; a seized vehicle follows claim 9 and S-0607 claim 9 |
 | deploying or undeploying | *move* processing | *guard* queued, 1 tick |
 | deployed | deploy order, then processing | no presentation: mobile; with presentation: undeploying, presentation starts in reverse, 1 tick |
 | deployed | move order | no destination; *move* processing queues *guard* (claims 9, 10) |
@@ -448,8 +457,7 @@ occurs for a stalled zero-delay transition with its quirk on.
   immediate deploy, and the undeploy sound once when an undeploy step starts. Sound mixing
   restrictions still apply in either setting. Backing and confidence are those of claim 12.
   The off setting is a design alternative.
-- **Airborne non-landing-first type.** A deploy order to an airborne in-place deploying type without
-  the deploy-to-land flag is silently dropped (claim 5). This is the original's behaviour and is kept.
+- **Airborne non-landing-first type** (`quirks.airborne_deploy_order_dropped`, default on; claim 5). A deploy order to an airborne in-place deploying type without the deploy-to-land flag is silently dropped. With the switch off, the order is retained until the vehicle is on the ground, and the next processing takes the ground deploy step of claim 4.
 - **Deploy-fire vehicle with no slot-0 weapon.** The firing check answers *impossible* (S-0301 claim
   9). The vehicle stays in *unload*, firing nothing and processing every 14 to 16 ticks.
 - **Deployed image type that differs in size.** Only drawing changes. The footprint, selection
@@ -634,16 +642,18 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
   human-owned deployer. Record the attack task and target to ensure refusal is tested.
 - Procedure: (a) deploy order; record the ticks of the beam's shots and lifts and of the in-place
   vehicle's own shots. (b) Continue after completion; record whether the beam lifts the deployed
-  vehicle and, if so, its cells while carried.
+  vehicle and, if so, its cells and existing destination while seized.
 - Expected: (a) no beam shot or new lift while *unload* is current, including landing, or
   during either transition. Its own shots are refused during transitions only: this spec does
   not prohibit firing during descent. Repeat for undeploying. A control before the deploy
   order must show the beam can hit the mobile vehicle; otherwise void the refusal test.
-  (b) If a lift is established, issue an accepted destination order while carried: expected
-  that the destination is retained, unlike the grounded deployed control. Repeat during
-  undeploying if an accepted deploy order starts that transition while the carried vehicle
-  is still marked deployed. If no legal lift or carried transition is obtained, the respective
-  exception test is inconclusive, not disproved.
+  (b) If a lift is established and an ordinary input route to a new destination is found,
+  record the attempted order and destination before and afterwards. Expected: the new
+  destination is ignored under S-0607 claim 9, not accepted merely because the vehicle is
+  seized. While it is still gripped, being deployed alone does not clear the existing
+  destination. Repeat during undeploying only if an accepted deploy order starts that
+  transition while the vehicle is still deployed and gripped. If the input route or state
+  overlap cannot be established, the respective test is inconclusive, not confirmation.
 - (c) Refusal label: in *deploy-cycle-test*, give the transitioning vehicle a negative-damage
   default weapon (a healing weapon), with nonzero effectiveness against a full-health vehicle
   target. During the transition, give an accepted attack order that assigns this target
@@ -666,7 +676,7 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
   claim 10), if those states overlap: expected no target drop until that higher-ranked busy
   state ends. A run with no verified overlap is void for this last comparison.
 - Falsified by: a beam shot or new lift in a forbidden state, an own shot during a transition,
-  rejection of a destination in a successfully carried deployed case, target retention in a
+  acceptance of a new destination in a verified seized case, target retention in a
   valid (c) or rearming (d) case, or transition-induced target dropping while the higher-ranked
   busy state holds. These tests distinguish the observable rank groups, not an unstated order
   among reasons within rank 4.
@@ -755,7 +765,7 @@ initial facings; record current and queued behaviours as well as facing.
   - (e) *guard* remains current, whereas targetless *area guard* falls back to rest.
 - Falsified by: movement, retaining A, failure to select the only legal in-range B, dropping
   an in-range B without another refusal, waiting for timer expiry in retained (b) runs, or
-  falling back from targetless *guard*.
+  falling back from targetless *guard*, or targetless *area guard* not falling back to rest.
 - (f) Named test file *deployed-infantry-test* supplies deployable infantry variants with
   and without the deploy-fire flag and with and without the jumpjet flag. Give the non-deploy-fire
   variant two weapons with different ranges and target-based selection, so its no-target
@@ -781,7 +791,8 @@ same map, recorder and five-seed repeats as P1. Each variant is a separate newly
   deploy-fire uses slot 0; otherwise harvesting wins over building deployment and in-place
   deployment, and building deployment wins over in-place deployment. Seeing the lower-priority
   outcome while both recorded conditions hold falsifies claim 1. Bunkered vehicles are excluded:
-  as in S-0415 claim 1, ordinary input cannot direct a deploy order to a bunkered occupant.
+  S-0606 claim 11 establishes no fresh-selection route and no known player-input route to
+  *unload*, not the exclusion of every hotkey, pre-existing selection or queued-order route.
 - (b) Disguise: give a grounded in-place vehicle permanent disguise capability as in S-0516
   claim 32, with no disguise-when-still reacquisition. Deploy, verify its disguise persists,
   and order undeploy without moving it or inflicting damage. Record the disguise flag at
@@ -816,8 +827,8 @@ same map, recorder and five-seed repeats as P1. Each variant is a separate newly
   One stage is the vehicle's default step, and nothing known changes it.
 - Approved S-0415 claim 1 calls the deploy-fire weapon the deploy weapon. Its current draft
   corrects this to slot 0 and the delay of claim 2 here. Confirm that correction at joint hand-off.
-- S-0516 claim 34 describes disguise loss as leaving deployed mode. Claim 6 specifies the first
-  undeploy step, before an animated undeploy clears the deployed state. Clarify that timing in
-  S-0516 claim 34 when these specs are handed off together.
+- Approved S-0516 claim 34 describes disguise loss as leaving deployed mode. Its current draft
+  now specifies the first undeploy step, before animated completion, as claim 6 does here.
+  Confirm that correction at joint hand-off.
 - The rest of the approach search of a deploy-to-fire vehicle whose own cell fails (S-0307, Open
   questions; Q-0072).
