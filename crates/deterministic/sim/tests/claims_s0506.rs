@@ -1636,3 +1636,28 @@ fn claim_4_lowest_index_first() {
     assert!(w.obj(first).unwrap().on_map);
     assert!(!w.obj(second).unwrap().on_map);
 }
+
+// spec: S-0303 claim 11 and F7 (sector arrival order: a crossing object follows every object already in its destination sector; the global order of tracking starts, used with quirks.flying_search_sectors off, is unchanged by the crossing; ending and restarting tracking puts an object last)
+#[test]
+fn s0303_sector_arrival_order() {
+    use glasnost_sim::combat::flying;
+    let r = rules();
+    let mut w = game(&r);
+    let a = spawn_at(&mut w, "VICTIM", 1, 0, 0, 0);
+    let b = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let (sa, sb) = (
+        flying::sector(&w, w.obj(a).unwrap().pos.cell()),
+        flying::sector(&w, w.obj(b).unwrap().pos.cell()),
+    );
+    assert_ne!(sa, sb);
+    flying::register(&mut w, a);
+    flying::register(&mut w, b);
+    let pb = w.obj(b).unwrap().pos;
+    w.obj_mut(a).unwrap().pos = pb;
+    flying::moved(&mut w, a);
+    assert_eq!(w.flying.sectors[&sb], vec![b, a], "the later arrival follows");
+    assert_eq!(w.flying.order, vec![a, b], "the global order is unchanged");
+    flying::unregister(&mut w, a);
+    flying::register(&mut w, a);
+    assert_eq!(w.flying.order, vec![b, a], "a new tracking period goes last");
+}
