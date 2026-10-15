@@ -1369,6 +1369,14 @@ pub struct Quirks {
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub sensor_count_negative: bool,
+    /// A paradrop's arrival fallback uses the local point (1, ⌊width / 2⌋), with coordinates reversed from the north midpoint; off: (⌊width / 2⌋, 1). Not implemented yet (wave 2).
+    // spec: S-0522 Edge cases
+    #[serde(default = "on")]
+    pub paradrop_fallback_point: bool,
+    /// A falling object uses the parachute fall recurrence while any animation is attached to it; off: only while the parachute animation is attached. Not implemented yet (wave 2).
+    // spec: S-0522 Edge cases
+    #[serde(default = "on")]
+    pub paratrooper_any_animation_slow_fall: bool,
 }
 
 impl Default for Quirks {
@@ -1706,6 +1714,8 @@ impl Default for Quirks {
             sensor_array_removal_radius: true,
             sensor_building_activation_once: true,
             sensor_count_negative: true,
+            paradrop_fallback_point: true,
+            paratrooper_any_animation_slow_fall: true,
         }
     }
 }
@@ -2532,6 +2542,11 @@ impl Quirks {
                 self.sensor_building_activation_once,
             ),
             ("sensor_count_negative", self.sensor_count_negative),
+            ("paradrop_fallback_point", self.paradrop_fallback_point),
+            (
+                "paratrooper_any_animation_slow_fall",
+                self.paratrooper_any_animation_slow_fall,
+            ),
         ]
     }
 

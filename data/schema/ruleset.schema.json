@@ -7161,6 +7161,11 @@
           "type": "boolean",
           "default": true
         },
+        "paradrop_fallback_point": {
+          "description": "A paradrop's arrival fallback uses the local point (1, ⌊width / 2⌋), with coordinates reversed from the north midpoint; off: (⌊width / 2⌋, 1). Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "parasite_carrier_loss_strands_unit": {
           "description": "A parasite whose carrying projectile is removed without detonating stays off the map, unattached; off: it attempts claim 4's failed-latch return.",
           "type": "boolean",
@@ -7188,6 +7193,11 @@
         },
         "parasite_host_loss_suppresses_naval": {
           "description": "On host loss, a suppressed naval parasite is removed silently; off: a naval parasite ignores suppression here too.",
+          "type": "boolean",
+          "default": true
+        },
+        "paratrooper_any_animation_slow_fall": {
+          "description": "A falling object uses the parachute fall recurrence while any animation is attached to it; off: only while the parachute animation is attached. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
