@@ -2,7 +2,7 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -85,11 +85,10 @@ before joint hand-off.
    not an immediate recalculation inside the hit. Slot animations follow S-0109 claim 21.
    Lock and ordinary release request redraws, not flashes.
 
-   A gattling target receives one spin-down update with multiplier 1, not an unconditional
-   stage loss. Its spin amount decreases by the imported spin-down amount, clamped to 0.
-   a zero spin-down amount resets it to 0. A positive current stage decreases by one only
-   if the new amount is below that stage's threshold, using the elite threshold when elite.
-   General gattling rules belong to planned S-0609.
+   Each successful lock, including a joining attacker, gives a gattling target one spin-down
+   update with multiplier 1, not an unconditional stage loss (S-0609 claims 3 and 11).
+   Spin arithmetic and the zero-amount quirk follow S-0609 claim 3; spin sound effects follow
+   S-0609 claim 13.
    - Backing: `measurable` (E3, E7, E11 parts c and d).
    - Confidence: high.
 
@@ -303,9 +302,7 @@ credit then uses S-0311 claims 7 to 10 independently. For F4 and F5,
 A refused lock can free controlled units without erasing their controller. Two temporal firers
 whose pending shots reach each other cannot establish reciprocal locks: the first successful
 lock releases its victim's beam and causes that victim's later lock attempt to be refused.
-The direct experience gain can remain on a passenger while ordinary credit goes to its
-transport, or exist when ordinary allied/unscored credit gives none. Both gains are available
-by the target's removal. No implementation-internal ordering beyond these consequences is required.
+The direct experience gain can remain on a passenger while ordinary credit goes to its transport, or exist when ordinary allied/unscored credit gives none. The direct gain precedes ordinary kill experience, and each gain is capped separately. Both gains are available by the target's removal.
 
 ## Edge cases and quirks
 
@@ -336,7 +333,7 @@ by the target's removal. No implementation-internal ordering beyond these conseq
 | `Harvester`, vehicle type | Harvester notice | boolean | S-0402 |
 | `Insignificant`, object type | Suppress building notice | boolean | no |
 | `UndeploysInto`, building type, and `Foundation`, building art | Packing-building notice exclusion | vehicle name and foundation token | S-0415 claim 9 and S-0108 |
-| `IsGattling`, `RateDown`, numbered `Stage1` and `EliteStage1` keys, object type | Spin-down flag, amount and thresholds | boolean and integers | Full defaults belong to planned S-0609; not established here |
+| `IsGattling`, `RateDown`, numbered `Stage1` and `EliteStage1` keys, object type | Spin-down flag, amount and thresholds | boolean and integers | Held value from earlier layers; initially no for the flag and 0 for the amounts and thresholds |
 | Numbered `DamageFireOffset0` keys, building art | Building sparkle positions | drawing-coordinate pairs | S-0302 claim 13 |
 
 ## Measurement scenarios
@@ -427,7 +424,11 @@ is falsified by the opposite result under the same conditions.
   deselection, no lock/release-induced flash. (d) Named gattling spin-down tests start well
   above a threshold and just above it. Expect spin reduction in both, a stage reduction only
   across the threshold. A zero decrement resets spin to 0. Record immediately, before
-  unrelated later spin-down updates. An unconditional stage drop falsifies claim 4.
+  unrelated later spin-down updates. Then attach a joining attacker: expect one more
+  spin-down update at that lock, not continuous decay between locks. Record the spin sound
+  and playing mark against S-0609 claim 13: expect looping to end and the mark to clear on
+  each lock. An unconditional stage drop, missing joiner update, continuous vehicle decay
+  during the lock, or retained playing mark falsifies the corresponding rule.
 - **E12, contributor limit (claim 7).** Named positive, distinct damage values and sufficient
   range allow 53 attachments. Record join order and amount reductions. Expect the leader
   plus 51 newest joiners only; all 53 contributing or a different excluded joiner falsifies it.
@@ -438,4 +439,3 @@ is falsified by the opposite result under the same conditions.
 - Whether death paths always release before removal, despite no release in beam cleanup itself.
 - Exact world placement of building sparkles from their drawing-coordinate positions.
 - Ordinary beam release's possible firing-side rearm restart; release alone does not establish it.
-- Full gattling import defaults belong to planned S-0609.
