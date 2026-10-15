@@ -2,7 +2,7 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,7 +20,10 @@ Sound data, selection and order responses, event sounds, announcements, mixing l
 placement and traced random choices in skirmish; network games and campaigns are out of scope.
 Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
 Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Which files hold the samples
-is claim 34; the byte formats of those files are outside this spec. Revision 9 removes
+is claim 34; the byte formats of those files are outside this spec. Revision 10 aligns
+garrison feedback with S-0508 claims 6 and 8, cites infiltration announcements in S-0510
+claim 11, and unifies the needs-engineer flag with S-0405 claim 8 while excluding passive
+new owners from capture announcements. Revision 9 removes
 previous-strike lightning suppression and aligns superweapon-ready requests with S-0512 claim 5.
 Revision 8 fixes duplicate
 damage-sound playback as a lead-approved presentation departure without a quirk switch.
@@ -82,7 +85,7 @@ normalisation N of its Formulas F3. In addition:
 - **Announcement kind.** One of *standard*, *queued*, *interrupt*, *queued interrupt*.
 - **Announcement priority.** One of *low*, *normal*, *important*, *critical* (0 to 3).
 - **Sound priority.** One of *lowest*, *low*, *normal*, *high*, *critical* (0 to 4), per sound entry.
-- **Engineer-required capture flag.** The imported building-type boolean that distinguishes
+- **Needs-engineer flag.** S-0405 claim 8's building-type boolean, also used to distinguish
   claim 39's custom capture/tech-building-loss announcement branch from ordinary capture.
   This spec uses it only to select an announcement, not to define capture legality.
 
@@ -594,7 +597,8 @@ normalisation N of its Formulas F3. In addition:
     | unit promoted | S-0311 | none |
     | primary building selected, rally point set | the local player's matching action | none |
     | building captured, tech building lost | ownership changes involving the local player | none |
-    | structure garrisoned, structure abandoned | the local player's building gets its first occupant or its last leaves | F7 for abandoned |
+    | structure garrisoned | an entry makes the occupant count 1 and the entering unit belongs to the local player, regardless of the building's owner (S-0508 claim 6); also requests the positional garrisoned sound at the entering unit's last position | none beyond claim 27 |
+    | structure abandoned | the building-turn ownership change to the civilian house of S-0508 claim 8, when the owner losing the building is the local player; also requests the screen abandoned sound without radar-event throttling | announcement only when F7 creates a *garrison abandoned* event at the building's top-left cell |
     | cannot deploy here | S-0415, S-0406 and a refused placement (S-0411 claim 10, claim 24) | none |
     | building online, building offline | S-0405 | none |
     | superweapon ready | an ordinary superweapon record of the local player becomes ready under S-0512 claim 5; its kind selects the entry through that spec's Import mapping and this spec's Import mapping | none beyond claim 27 |
@@ -610,21 +614,26 @@ normalisation N of its Formulas F3. In addition:
     Ordinary readiness timing and request eligibility belong to S-0512 claim 5, not to
     announcement playback: a request can still be dropped or delayed by claim 27.
     No announcement takes a random draw.
-    The table lists common announcements, not every skirmish announcement: infiltration,
+    Infiltration announcements and their request conditions belong to S-0510 claim 11.
+    The table lists common announcements, not every skirmish announcement:
     alliances, beacons, crates and specialised abilities also raise announcements whose complete
     conditions belong to their feature specs. Superweapon launch and detection announcements
     additionally respect the game's announcement-muting setting; detection has type-specific
     eligibility conditions not resolved here.
     - Backing: `measurable` (scenario G3) for low funds, low power, base and harvester
       attack, S-0512 X1 and X11 for ordinary readiness and drain-mode completion,
-      and F11 for production announcement kinds; other rows inherit the scenarios
+      F11 for production announcement kinds, and S-0508 G4 and G6 for local garrison
+      entry and abandonment feedback; non-local entry silence retains S-0508 claim 6's
+      `unmeasured` backing. Other rows inherit the scenarios
       of their cited specs where those establish the
       feedback. Announcement draw absence is `measurable` for G1's tested events and
       `unmeasured` exhaustively: G1 does not exercise every announcer event. Remaining
       ownership, exemption and superweapon-detection conditions are
       `unmeasured`: this verification has not traced all of those event paths and G3 does not
       exercise them. They are provisional, not complete eligibility rules.
-    - Confidence: high (the traced thresholds and throttles); low (unresolved eligibility)
+    - Confidence: high (the traced thresholds, garrison ownership gates and unthrottled
+      abandoned sound), medium (radar-event gating of the abandoned announcement),
+      low (unresolved eligibility)
 
 ### Determinism
 
@@ -777,8 +786,10 @@ normalisation N of its Formulas F3. In addition:
     - Backing: `measurable` (A5)
     - Confidence: high
 
-39. **Capture announcement entry selection.** For an announcement-eligible ownership change,
-    a building whose type has the engineer-required capture flag uses its imported capture
+39. **Capture announcement entry selection.** A new owner that is a passive house gets
+    neither capture-announcement branch, including no tech-building-lost request for a local
+    old owner. For an otherwise announcement-eligible ownership change,
+    a building whose type has the needs-engineer flag (S-0405 claim 8) uses its imported capture
     announcement when its new owner is the local player. With no capture announcement, this
     branch is silent: it does not fall back to the ordinary building-captured entry. Losing
     such a building as the local player requests the tech-building-lost entry instead.
@@ -788,10 +799,13 @@ normalisation N of its Formulas F3. In addition:
     The imported custom reference is an announcement entry, never a sound entry or a sample.
     Complete eligibility for every cause of ownership change is not established here:
     the owning feature must determine whether it is an announcement-eligible change.
-    - Backing: `measurable` (G5) for entry selection on ordinary engineer captures,
-      `unmeasured` for exhaustive eligibility across ownership-change causes, because G5
-      isolates captures rather than every specialised ownership-changing effect
-    - Confidence: high (entry selection and missing-custom silence); low (exhaustive eligibility)
+    - Backing: `measurable` (G5) for entry selection on ordinary engineer captures.
+      The passive-new-owner gate is `unmeasured`: G5's settling control has no validated
+      passive takeover that independently enables announcements. Exhaustive eligibility
+      across ownership-change causes is also `unmeasured`, because G5 isolates captures
+      rather than every specialised ownership-changing effect.
+    - Confidence: high (entry selection, missing-custom silence and passive-new-owner gate),
+      low (exhaustive eligibility)
 
 ## Formulas
 
@@ -933,9 +947,10 @@ For a kind marked *yes*, radar events are game-wide, not per house: a matching e
 another request regardless of why the first event was created, including triggered events
 (S-0011 claim 32). Kinds marked *no* do not apply the distance rejection. The complete set of
 event creators is not established here. F7 is high confidence and `measurable` in G3 for
-*unit produced*, *base attacked* and *harvester attacked*. The remaining table rows and
-cross-creator suppression are `unmeasured`: G3 has no isolated request sequence for those
-kinds or creators. Zoom timing retains S-0410 claims 14–15's backing and confidence,
+*unit produced*, *base attacked* and *harvester attacked*. The *garrison abandoned* gate
+is `measurable` in S-0508 G4 and G6, with medium confidence under S-0508 claim 8.
+The remaining table rows and cross-creator suppression are `unmeasured`: these scenarios
+have no isolated request sequence for those kinds or creators. Zoom timing retains S-0410 claims 14–15's backing and confidence,
 including their unresolved exact floating-point equality boundaries; it does not turn
 the unmeasured suppression rows into measured claims.
 
@@ -1179,7 +1194,7 @@ table. Custom capture selection is claim 39 and the following rows.
 
 | Key (building type section) | Concept | Parse form | Default when absent |
 |---|---|---|---|
-| `NeedsEngineer` | engineer-required capture flag for claim 39 | boolean | no at type creation; later omission retains the value in force |
+| `NeedsEngineer` | needs-engineer flag (S-0405 claim 8), also selecting claim 39's announcement branch | boolean | no at type creation; later omission retains the value in force |
 | `CaptureEvaEvent` | custom capture announcement for claim 39 | announcement entry name, case-insensitive, first 99 value characters; unknown nonempty name gives no entry | no entry at type creation; absent or empty retains the value in force |
 
 The custom capture entry uses the announcement sample-name, separate `.wav` file and voice
@@ -1227,7 +1242,8 @@ Weapon sections: `Report` (list, claim 21). Animation sections: `StartSound` (or
 
 Rules file, `[AudioVisual]`, sound names: `CreateUnitSound`, `CreateInfantrySound`, `CreateAircraftSound`
 (claim 23), `BuildingSlam` (placement), `SellSound`,
-`UpgradeVeteranSound`, `UpgradeEliteSound`, `BaseUnderAttackSound` (claim 28), `GuardSound`, `StopSound`,
+`UpgradeVeteranSound`, `UpgradeEliteSound`, `BaseUnderAttackSound` (claim 28),
+`BuildingGarrisonedSound`, `BuildingAbandonedSound` (S-0508 claims 6 and 8; claim 28), `GuardSound`, `StopSound`,
 `ScatterSound` (claim 19), `ScoldSound` (refusal, claim 24), `GUIBuildSound` (build click, claim 24),
 `BuildingDamageSound` and `BuildingDieSound` (also the fallbacks of claim 37),
 `GUIMainButtonSound`, `GUITabSound`, `GUIOpenSound`, `GUICloseSound`, `GUIMoveOutSound`,
@@ -1761,8 +1777,9 @@ to cut the current one as an *interrupt*, and silence for the unknown name.
 different entries, country alone changes voice set within one side, the trigger queues
 rather than interrupts, or an unknown name produces a line.
 
-For the revision-5 bindings, select an own primary factory, set its rally point, garrison and
-empty an own building, switch an own power-switchable building offline and online, capture an
+For the additional fixed bindings, select an own primary factory, set its rally point, use
+S-0508 G4 and G6's civilian garrison entry and building-turn abandonment controls, switch an
+own power-switchable building offline and online, capture an
 ordinary enemy building and lose an own tech building. Capture's generic-event control omits
 any custom announcement override. Record requested entry identities as well as samples.
 Expected: each role's mapped entry, independent of local faction. For each superweapon category
@@ -1789,7 +1806,7 @@ request, that branch stays inconclusive rather than being replaced by a differen
 **G5. Capture entry alternatives (Q-0325, claim 39).** Use G4's named announcement data,
 with distinct brief samples for the generic capture, tech-building-lost and two invented
 custom entries. Named test map overrides give otherwise capturable building types the
-engineer-required capture flag either on or off and the custom reference either present,
+needs-engineer flag either on or off and the custom reference either present,
 absent or unknown. Keep all prior announcement queues empty. Capture a bystander's building
 with the local player's engineer, then arrange the reverse ownership change using a named
 bystander engineer; that unit is exempt from the observed-area void rule. Repeat three times
@@ -1804,6 +1821,12 @@ Void a run when capture does not occur or a competing announcement masks request
 Ownership changes that the recorder establishes as ineligible are inconclusive for entry
 selection, not evidence that an entry binding is absent. Special ownership-changing abilities
 remain exploratory: record their eligibility separately rather than extrapolating this capture test.
+For the passive-new-owner gate, a settling control should transfer an own building to a passive
+house, with flagged and unflagged types, using a permitted ownership-change trigger. Compare
+an otherwise matching transfer to a non-passive house. Expected: neither capture branch for
+the passive new owner. A request from either branch falsifies the gate. Unless the recorder
+establishes that the transfer independently enables announcements, silence is inconclusive:
+this control is not yet a validated way to isolate the passive-owner check.
 
 **G6. Settling specialised superweapon announcements (Q-0325).** Use G4's per-entry distinct
 announcement samples and one isolated superweapon category per purpose-made skirmish map,
@@ -1868,13 +1891,14 @@ within one F4 step.
 
 ## Changes for other specs
 
-Current wording corrections needed:
-- S-0314 claim 6, H4 part f and Open questions: replace the stale assertion that radar-event
-  zoom duration is unresolved with S-0410 claims 14–15's progression and cadence and this
-  spec's F7 post-zoom tail. Keep the *unit repaired* suppression row and cross-creator
-  coverage explicitly unmeasured; the resolved zoom rule is not measurement of that row.
-- S-0213 claim 16: remove the historical assertion that current S-0701 claim 24 says
-  once-per-game silence; both specs now agree on another cue after a completed tick.
+Corrections already present in the approved companion specs; confirm they remain in the
+hand-off versions:
+- S-0314 claim 6, H4 part f and Open questions assign radar-event zoom progression and
+  cadence to S-0410 claims 14–15 and retain S-0701 F7's post-zoom tail. Keep the *unit
+  repaired* suppression row and cross-creator coverage explicitly unmeasured; resolved zoom
+  timing does not measure that row.
+- S-0213 claim 16 agrees with S-0701 claim 24 that a completed tick permits a new route-mode
+  refusal cue; there is no once-per-game silence rule.
 
 The remaining items are historical joint-hand-off confirmations, not new requests to
 change already agreeing behaviour. Earlier additions:
