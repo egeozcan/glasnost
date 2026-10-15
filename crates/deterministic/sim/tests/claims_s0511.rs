@@ -457,6 +457,46 @@ fn claim_2_what_an_attempt_acts_on() {
     assert!(!bridges::attempt(&mut w, at(0, 9)));
 }
 
+// spec: S-0511 claim 2 (the responsible section: no search for another overlay when it is missing; a non-collapsed pier tile of a family at the attempted cell supplies the family over a replaced responsible overlay, and claim 3 acts on the responsible cell's retained state; a state outside the section-state table gives no change and is not a no-deck pier attempt)
+#[test]
+fn claim_2_responsible_section() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 8, &[]);
+    let mut w = game(&ruleset(), &m);
+    let (r, c) = (at(2, 0), at(2, -1));
+    assert_eq!(w.cells.responsible(c), Some(r));
+    // The responsible overlay removed: the deck stays and nothing else is searched.
+    let before: Vec<Option<u8>> = (0..8).map(|x| data(&w, at(x, 0))).collect();
+    w.cells.grid.get_mut(r).unwrap().overlay = NO_OVERLAY;
+    assert!(w.cells.is_bridge(c));
+    assert!(!bridges::attempt(&mut w, c));
+    for x in (0..8).filter(|&x| x != 2) {
+        assert_eq!(data(&w, at(x, 0)), before[x as usize], "x = {x}");
+    }
+    // A replacement overlay that is neither a low piece nor a section, and
+    // a pier tile of the bridge family at the attempted cell.
+    let other = 1;
+    assert!(pieces::low_of(other).is_none() && pieces::high_of(other).is_none());
+    w.cells.grid.get_mut(c).unwrap().tile = tile(Family::Bridge, M1);
+    for (v, lost) in [(99, false), (6, true)] {
+        let cell = w.cells.grid.get_mut(r).unwrap();
+        cell.overlay = other;
+        cell.overlay_data = v;
+        assert_eq!(bridges::attempt(&mut w, c), lost, "retained state {v}");
+        let cell = w.cells.cell(r).unwrap();
+        if lost {
+            assert_eq!(
+                cell.overlay, NO_OVERLAY,
+                "the replacement overlay is removed"
+            );
+            assert!(!w.cells.is_bridge(c));
+        } else {
+            assert_eq!((cell.overlay, cell.overlay_data), (other, v), "no change");
+            assert_eq!(pier_k(&w, c), Some(0), "not a pier attempt");
+        }
+    }
+}
+
 // ---------------------------------------------------------------------
 // Claims 3 to 5: sections, notices, losses.
 

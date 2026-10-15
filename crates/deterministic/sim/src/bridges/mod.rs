@@ -162,9 +162,10 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
     {
         return low::attempt(w, c, l);
     }
-    // spec: S-0511 claim 2 (a high-bridge cell: the section whose overlay marks it)
+    // spec: S-0511 claim 2 (a high-bridge cell and a family qualifies: its responsible section)
     if w.cells.is_bridge(c) {
-        let Some(s) = pieces::section_marking(w, c) else {
+        // spec: S-0511 claim 2 (a retained state outside the table, or no qualifying family on a deck cell: no change, not a no-deck pier attempt)
+        let Some(s) = qualifying_section(w, c) else {
             return false;
         };
         let ok = high::attempt_section(w, s, ctx);
@@ -197,6 +198,47 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
     false
 }
 
+/// The section that an attempt at high-bridge cell `c` acts on (S-0511
+/// claim 2), when a family qualifies: the bridge-role family first, then
+/// the wooden one, each by its responsible overlay or by a non-collapsed
+/// pier tile of the family at `c`. With a pier supplying the family over a
+/// replaced responsible overlay, the section is the responsible cell's
+/// retained state, and a state outside the section-state table gives no
+/// section.
+fn qualifying_section(w: &mut World, c: CellXY) -> Option<pieces::Section> {
+    let Some(r) = w.cells.responsible(c) else {
+        // spec: S-0511 claim 2 and Edge cases (a missing responsible section is malformed input: nothing happens, with a warning)
+        w.note("S-0511 claim 2: a high-bridge cell has no responsible section; the attempt does nothing (a departure)");
+        return None;
+    };
+    let own = pieces::section_in(w, r);
+    let pier = match pieces::piece_at(w, c) {
+        // spec: S-0511 claim 2 (a non-collapsed pier tile: states 0 to 3)
+        Some((f, Piece::Pier(line, k))) if k <= 3 => Some((f, line)),
+        _ => None,
+    };
+    // spec: S-0511 claim 2 (family selection: the bridge-role family's responsible overlay or matching non-collapsed pier tile at the attempted cell, then the wooden family's)
+    for family in [Family::Bridge, Family::Wooden] {
+        if let Some(s) = own.filter(|s| s.family == family) {
+            return Some(s);
+        }
+        if let Some((_, line)) = pier.filter(|p| p.0 == family) {
+            // spec: S-0511 claim 2 (a pier supplying the family over a replaced responsible overlay: claim 3 on the responsible cell's retained section state; a state outside the table gives no change)
+            let data = w.cells.cell(r).map_or(0, |x| x.overlay_data);
+            let line = own.map_or(line, |s| s.line);
+            pieces::state_in_table(line, data)?;
+            return Some(pieces::Section {
+                cell: r,
+                family,
+                line,
+                d: pieces::marking_direction(line),
+            });
+        }
+    }
+    // spec: S-0511 claim 2 (without a recognised responsible overlay or such a pier tile, the attempt fails)
+    None
+}
+
 /// Up to `n` attempts at `c`, stopping at the first success (S-0511 claims
 /// 1 and 16). Returns whether one succeeded.
 pub fn attempts(w: &mut World, c: CellXY, n: i32) -> bool {
@@ -217,17 +259,14 @@ pub fn cell_attempts(w: &mut World, c: CellXY) -> bool {
 /// 1): `Some(true)` for a high-bridge cell (which imposes the height
 /// window), `Some(false)` for a pier cell.
 fn high_test(w: &World, c: CellXY, family: Family) -> Option<bool> {
-    if w.cells.is_bridge(c) {
-        // spec: S-0511 claim 1 (a high-bridge cell whose section overlay belongs to the family)
-        return pieces::section_marking(w, c)
-            .filter(|s| s.family == family)
-            .map(|_| true);
-    }
+    let deck = w.cells.is_bridge(c);
+    // spec: S-0511 claim 1 (a high-bridge cell whose section overlay belongs to the family); S-0511 claim 2 (its responsible section)
+    let section = deck && pieces::responsible_section(w, c).is_some_and(|s| s.family == family);
     // spec: S-0511 claim 1 (or the centre cell's tile is one of the family's piers in state 0 to 3)
-    match pieces::piece_at(w, c) {
-        Some((f, Piece::Pier(_, k))) if f == family && k <= 3 => Some(false),
-        _ => None,
-    }
+    let pier =
+        matches!(pieces::piece_at(w, c), Some((f, Piece::Pier(_, k))) if f == family && k <= 3);
+    // spec: S-0511 claim 1 (the height window applies only when the centre cell is a high-bridge cell)
+    (section || pier).then_some(deck)
 }
 
 /// The bridge attempts of an area-damage detonation at centre cell `c`

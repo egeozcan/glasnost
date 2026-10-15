@@ -310,23 +310,22 @@ pub fn section_in(w: &World, c: CellXY) -> Option<Section> {
     })
 }
 
-/// The section whose overlay marks `c` (S-0511 claim 2; S-0211 claim 15):
-/// the cell's own overlay first, then the overlay one step against the
-/// marking direction, two steps against it, and one step along it
-/// (Q-0717).
-pub fn section_marking(w: &World, c: CellXY) -> Option<Section> {
-    // spec: S-0511 claim 2; Q-0717 (interim: own cell, then one and two steps against the marking direction, then one step along it)
-    for k in [0, 1, 2, -1] {
-        for d in [(0, -1), (-1, 0)] {
-            let o = at(c, d, -k);
-            if let Some(s) = section_in(w, o)
-                && s.d == d
-            {
-                return Some(s);
-            }
-        }
+/// The responsible section of high-bridge cell `c` when its overlay is a
+/// section (S-0511 claim 2; S-0211 claim 15 (a)): no search for another
+/// overlay when it is missing or replaced.
+pub fn responsible_section(w: &World, c: CellXY) -> Option<Section> {
+    // spec: S-0511 claim 2 (historical responsibility; no nearest-overlay or directional tie-break, no search for another section)
+    section_in(w, w.cells.responsible(c)?)
+}
+
+/// The marking direction of a section of `line` (S-0211 claim 15): map
+/// north along x, map west along y.
+pub fn marking_direction(line: Line) -> (i32, i32) {
+    // spec: S-0211 claim 15 (indices 24 and 237 mark along step direction 0, map north; 25 and 238 along step direction 6, map west)
+    match line {
+        Line::X => (0, -1),
+        Line::Y => (-1, 0),
     }
-    None
 }
 
 /// A section's state (S-0511 Terms).
@@ -344,6 +343,18 @@ pub enum State {
     OpenStart,
     /// Its far-side neighbour is gone.
     OpenFar,
+}
+
+/// The state of a section of `line` with overlay data `v`, or `None` for a
+/// value outside the section-state table (S-0511 Terms and claim 2).
+pub fn state_in_table(line: Line, v: u8) -> Option<State> {
+    // spec: S-0511 Terms (intact 0 to 3 along x, 9 to 12 along y; the other states as in state_of)
+    let intact = match line {
+        Line::X => (0..=3).contains(&v),
+        Line::Y => (9..=12).contains(&v),
+    };
+    let st = state_of(line, v);
+    (intact || st != State::Intact).then_some(st)
 }
 
 /// The state of a section of `line` with overlay data `v` (S-0511 Terms).

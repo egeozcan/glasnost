@@ -106,7 +106,7 @@ fn section_cell(
 ) -> Option<(CellXY, Line, Option<Family>)> {
     if w.cells.is_bridge(b) {
         // spec: S-0511 claim 16 (a high-bridge cell gives its section cell)
-        let s = pieces::section_marking(w, b)?;
+        let s = pieces::responsible_section(w, b)?;
         return accepts(filter, s.family).then_some((s.cell, s.line, Some(s.family)));
     }
     let line = match w.cells.axis(b) {

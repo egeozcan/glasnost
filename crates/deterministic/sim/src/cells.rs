@@ -161,6 +161,14 @@ pub struct Cells {
     pub bridge_axis: Vec<Axis>,
     /// The bridge-body mark of each cell (S-0010 Terms, claim 25).
     pub bridge_body: Vec<bool>,
+    /// Whether a high-bridge overlay has marked the cell as its own
+    /// section cell (S-0211 claim 15 (a); S-0511 Terms, *responsible
+    /// section*). Historical: never cleared.
+    pub section_self: Vec<bool>,
+    /// The section cell of the last high-bridge overlay that marked the
+    /// cell as one of its covered cells (S-0211 claim 15 (a)). Historical:
+    /// a later covering mark replaces it, nothing clears it.
+    pub covered_by: Vec<Option<CellXY>>,
     /// The bridge links, in creation order (S-0212 claim 3).
     pub links: Vec<BridgeLink>,
     /// The cells of ramp tiles showing their alternate (damaged) look
@@ -246,6 +254,8 @@ impl Cells {
             deck_entry: vec![false; n],
             bridge_axis: vec![Axis::None; n],
             bridge_body: vec![false; n],
+            section_self: vec![false; n],
+            covered_by: vec![None; n],
             links: Vec::new(),
             alternate: Default::default(),
             pier_levels: Default::default(),
@@ -285,7 +295,27 @@ impl Cells {
                 self.bridge_axis[i] = axis;
                 // spec: S-0212 Terms (deck-entry mark set one step against d, on its own cell and one step along d; cleared two steps along d)
                 self.deck_entry[i] = k < 2;
+                if k == 0 {
+                    // spec: S-0211 claim 15 (a) (a cell marked as a section's own cell selects itself, even after another section covers it)
+                    self.section_self[i] = true;
+                } else {
+                    // spec: S-0211 claim 15 (a) (otherwise the last section that marked it as a covered cell; a later covering mark replaces it)
+                    self.covered_by[i] = Some(c);
+                }
             }
+        }
+    }
+
+    /// The responsible section cell of `c` (S-0211 claim 15 (a); S-0511
+    /// Terms and claim 2): `c` itself when it was marked as a section cell,
+    /// else the last section that marked it as a covered cell.
+    pub fn responsible(&self, c: CellXY) -> Option<CellXY> {
+        let i = self.idx(c)?;
+        // spec: S-0511 claim 2 (the cell itself when it retains the section-cell marking, else the last section to mark it as a covered cell)
+        if self.section_self[i] {
+            Some(c)
+        } else {
+            self.covered_by[i]
         }
     }
 
