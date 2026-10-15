@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 36
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742]
 supersedes: []
 ---
 
@@ -762,7 +762,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Confidence: high for frame assignments; medium for shrouded cases not normally reachable
 
 22. **Cursor frames, hot spot and time (Q-0277 part 2, battlefield cursors).** Cursor images
-    and palette are imported as listed below. Animated ranges in table C advance one frame
+    and palette are imported as listed below. Animated ranges in tables C and CS advance one frame
     whenever the original's 16-millisecond presentation clock has advanced at least
     4 clock units since the previous advance. The clock is real time, independent of game
     speed, not simulation ticks. One update advances at most one frame, wrapping to the
@@ -967,6 +967,35 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     - Confidence: high for cell-centre placement, action eligibility and single group feedback,
       medium for the original's unmarked-deck manifestation pending T22
 
+31. **Superweapon aim images (Q-0742 questions 1–3).** Table CS supplies the battlefield
+    images for superweapon aim actions, including refused force-shield aiming. These are
+    images for the offered action, not a new targeting-legality rule: S-0513 claim 1 owns
+    battlefield offers, and S-0512 claim 23 distinguishes the imported aim action from the
+    effect kind. Shrouded and revealed targets use the same superweapon image. All these
+    images use the cursor file and palette in Import mapping, not a superweapon's own art.
+
+    A warp destination uses exactly the same static battlefield frame as a source pick.
+    Arming the second stage after a source pick (S-0513 claim 33) therefore does not change
+    the cursor picture, although the next click has a different meaning. The source marker
+    is a separate animation, not a cursor frame.
+
+    Table CS also records the radar result already specified by S-0410 claims 12 and 13,
+    table C1. Radar does not simply substitute a miniature for every battlefield aim image.
+    Its list-position/kind distinction and selection fallbacks remain S-0410 claim 12's,
+    including the shared quirk switch. Its invulnerability, teleport and force-shield rows
+    are not radar aim offers. No-force-shield is a battlefield refusal image, not a new
+    radar offer. With a nonempty selection, the battlefield instead uses that selection's
+    ordinary action (S-0513 claim 1); radar's selection handling remains S-0410 claim 12's.
+
+    Static entries make zero visible frame advances per second. Animated battlefield
+    ranges use claim 22's 4 presentation-clock units, nominally 64 milliseconds per frame
+    or 15.625 advances per second with sufficiently frequent display updates, never a
+    simulation-tick rate. Every superweapon image has the centre hot spot of claim 22.
+    Radar's static miniature arrow alone uses (0, 0); a representative fallback inherits
+    its ordinary radar image's timing and hot spot (S-0410 claim 13).
+    - Backing: `measurable` (Scenario T23; S-0410 scenario R12 for radar)
+    - Confidence: high
+
 ## Formulas
 
 > **F1 (representative distance).** *d* = ⌊*r*(*n*)⌋, *n* = (*x*ₒ − *x*ₜ)² + (*y*ₒ − *y*ₜ)² +
@@ -1097,6 +1126,27 @@ imported cursor image, not action numbers. All multi-frame rows animate with cla
 | airstrike | 480–487 | arrow |
 | attack-move to a place, attack-move on a target | 404–412 | 404–412 |
 | damaging entry | unchanged previous cursor | arrow |
+
+**Table CS: superweapon aim images** (claim 31). Frame numbers in the imported cursor
+image, counted from 0, with inclusive ranges. Every single frame below is static. Every
+range animates with claim 22's interval. The battlefield column names actions; the radar
+column names the corresponding targeting mode subject to S-0410 claim 12's list-position
+rule. These distinctions matter when imported aim actions and effect kinds differ.
+
+| Aim action / corresponding mode | Battlefield, revealed or shrouded | Radar, revealed or shrouded |
+|---|---|---|
+| nuclear strike | 319–328 | 513 |
+| lightning storm | 279–298 | 514 |
+| iron curtain (invulnerability) | 346 | 1, miniature arrow, even with a selection |
+| chronosphere source pick (teleport source) | 357 | 1 without a selection; ordinary representative radar image with a selection |
+| chronosphere destination (teleport warp) | 357 | 1 without a selection; ordinary representative radar image with a selection |
+| force shield | 450–459 | 1 without a selection; ordinary representative radar image with a selection |
+| no-force-shield | 460–469 | no separate radar refusal image; force-shield mode uses the preceding row's radar fallback |
+| paradrop, either kind | 259 | 516 |
+| spy plane | 504–511 | 512 |
+| psychic domination | 488–495 | 516 |
+| genetic mutation | 470–479 | 1, miniature arrow, even with a selection |
+| psychic reveal | 496–503 | 515 |
 
 **Table A: actions.** Our own names for the actions, for reference in the other tables.
 
@@ -1720,8 +1770,11 @@ Ordering consequences:
 | Vehicle and building types, `ResourceGatherer` and `ResourceDestination` | gathers and processes resources itself: both set (rows VC2, BC2); a resource-gathering vehicle: the first (row GC9) | boolean (S-0003) | no (both keys) |
 | Building type `Explodes` | the exploding-type case that awaits removal in claim 16; destruction and the sale case are S-0312 claim 21's | boolean (S-0003) | no |
 | Object type `Selectable` | type permits click and box selection (Terms, claims 16 and 19); destruction does not clear this type property | boolean (S-0003) | yes |
-| Cursor image `MOUSE.SHA` | table C's frame numbers and full canvas dimensions | sprite image, resolved by S-0005; frame encoding follows the sprite format | no replacement file is specified if missing |
-| Cursor palette `MOUSEPAL.PAL` | cursor colours | 256-entry palette, S-0103 | no replacement palette is specified if missing |
+| Cursor image `MOUSE.SHA` | tables C and CS's frame numbers and full canvas dimensions, for battlefield and radar alike | sprite image, resolved by S-0005; frame encoding follows the sprite format | no replacement file is specified if missing |
+| Cursor palette `MOUSEPAL.PAL` | cursor colours, including superweapon aim images | 256-entry palette, S-0103 | no replacement palette is specified if missing |
+| Superweapon type `Action` | battlefield aim action whose image is table CS (claim 31); independent of effect kind | action word, case-insensitive, S-0512 claim 23; unrecognised word gives no action | keep previous layer's action; initially no action |
+| Superweapon type `Type` and registration order | radar targeting row, not the battlefield image assignment | kind word and type-list order, S-0512 Import mapping and S-0410 claim 12 | no kind initially; radar fallback and shared quirk as S-0410 claim 12 |
+| Superweapon cursor frames, timing and hot spots | claim 31 and table CS | engine constants, not per-superweapon cursor-art keys | no additional imported cursor default |
 | Box threshold, candidate count, point bounds, admission priority and cursor timing | claims 18, 20, 22, 24 and 25 | engine constants and drawing state, not imported keys; neither the 500-place capacity nor the 32-pixel margin is a data field | F6, F7 and Constants |
 | Physical held modifiers | force-move, force-fire and force-select (claim 23) | engine bindings, not rules keys or saved command entries | Alt, Ctrl and Shift respectively |
 | Attack-move entry | claim 5 | held Ctrl+Shift, or the available command-bar button; no dedicated default keyboard command | gesture available without a command bar |
@@ -2684,8 +2737,44 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   known way to obtain a particular object-directed move is inconclusive for that sub-test,
   not evidence that all object clicks create markers.
 
+**Scenario T23: superweapon aim images (claim 31, Q-0742).**
+- *Setup:* tiny purpose-made skirmish maps with stock rules and art, director and mods off,
+  800×600, speed indices 2 and 5, one distant bystander computer player under the usual
+  void rule. Across separate runs obtain each stock superweapon targeting mode in table CS
+  through its ordinary grant/charge route. Provide working radar, own and enemy buildings,
+  an allied building where applicable, empty explored ground and a shroud boundary. Keep
+  the bystander's unnamed objects outside the observed area. Clear the selection for the
+  battlefield aim tests. Do not treat a radar outage as a cursor result.
+- *Procedure:* arm each ready mode from the sidebar, hover those target categories without
+  clicking, and record the pointer-inclusive screen output and input pixel with a wall-clock
+  timestamp for at least two seconds per target. Compare displayed pictures with the user's
+  imported cursor frames. Pick a teleport source, then hover with its destination armed and
+  compare with the source-pick picture. For force shield compare own/allied building offers
+  with enemy buildings and empty ground. Repeat over the active radar image, first with
+  empty selection, then with a selected movable unit, and include the panel margin control.
+  Use scripted input and screen capture; no simulation recorder changes are required.
+- *Observable:* displayed frame identities, visible advances and wrap points, elapsed real
+  time, hot-spot position relative to the input pixel, selection and armed targeting mode.
+- *Expected:* exactly table CS. In particular iron curtain stays on 346, both teleport
+  stages stay on 357, and paradrop stays on 259; unused later pictures in their image file
+  do not imply pointer animation. Refused force shield cycles 460–469 rather than using
+  an arrow. Animated rows advance once per 4 clock units with no catch-up and wrap inside
+  their ranges. Both speeds give the same real-time cadence. All superweapon pictures are
+  centred on the input pixel using the full canvas. Radar miniatures are static; unsupported
+  modes use S-0410 claim 12's arrow or ordinary representative fallback. The panel margin
+  shows the full arrow, not an aim image.
+- *Falsified if:* a reachable offered action shows a different frame, a static row advances,
+  the two teleport stages differ in cursor picture, the refusal uses a different range,
+  timing follows game speed, the hot spot uses cropped-frame bounds, or radar substitutes
+  an unsupported battlefield image. An unavailable mode or hidden radar is inconclusive
+  for that sub-test, not evidence for an arrow assignment. Run each reachable mode three
+  times; record any still-unreached combination explicitly for follow-up.
+
 ## Open questions
 
+- Q-0742 questions 1–3 are answered by claim 31 and table CS, with radar behaviour already
+  owned by S-0410 claims 12 and 13. Protection tint and sidebar charge/state-label drawing
+  are companion parts owned by S-0513 and S-0512 respectively, not cursor-image rules.
 - Q-0278 is answered by claims 18–20, with the remaining explicitly unmeasured qualification
   of state-specific transient box points (claim 19, T14 part B). Claims 24 and 25 answer
   Q-0392's four candidate questions and replace the earlier overflow-order uncertainty:
