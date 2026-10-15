@@ -612,8 +612,11 @@ pub fn flight_point(w: &World, id: ObjectId, d: Target) -> Pos {
     {
         return crate::econ::release::pad_position(w, k, id).0;
     }
-    // Q-0631 (interim): the destination's own point
-    crate::process::target_pos(w, d)
+    // Q-0631 (interim): the destination's own point; for an object its reference point (S-0204 claim 4)
+    match d {
+        Target::Object(k) => w.reference_point(k),
+        Target::Cell(_) => crate::process::target_pos(w, d),
+    }
 }
 
 /// The truncated table root of the planar squared difference (S-0204
@@ -1026,7 +1029,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let mut heading = None;
     if let Some(p) = dp {
         let aim = if a.face_target {
-            o.target.map_or(p, |tg| crate::process::target_pos(w, tg))
+            // spec: S-0204 claim 8 and S-0310 F1 (the direction of the target: toward its reference point)
+            o.target
+                .map_or(p, |tg| crate::combat::range::target_point(w, tg))
         } else {
             p
         };
@@ -2236,8 +2241,8 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                 return None;
             }
             if !is_strafer {
-                // spec: S-0501 T1 (a non-strafer turns its body to the target)
-                let tp = crate::process::target_pos(w, tgv);
+                // spec: S-0501 T1 (a non-strafer turns its body to the target); S-0204 claim 8 and S-0310 F1 (toward its reference point)
+                let tp = crate::combat::range::target_point(w, tgv);
                 let f = toward(w, o.pos, tp);
                 let (tick, rate) = (w.tick, ty(w, id).map_or(0, |t| t.turn_rate));
                 if let Some(ob) = w.obj_mut(id) {

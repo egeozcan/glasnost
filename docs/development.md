@@ -389,7 +389,7 @@ Provisional rules of M6a (aircraft), each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `air` (attack, choosing) | a non-strafer takes the U(0, 99) draw and uses the target itself as the firing spot; "not close enough" is the firing check's out-of-range answer | Q-0630 |
-| `air::flight_point`, `air::stopped` | the flight point is the destination's own point; the locomotor has stopped at fraction 0 and the held height, or on the ground | Q-0631 |
+| `air::flight_point`, `air::stopped` | the flight point is the destination's own point (an object's reference point, S-0204 claim 4); the locomotor has stopped at fraction 0 and the held height, or on the ground | Q-0631 |
 | `air::placed`, `air::released_docked`, `air::pad_turn` | ground layer from ground placement or touchdown until take-off; a docked aircraft stands at the S-0404 claim 15 pad position; the first service step is at the pad's first turn at or after the report | Q-0632 |
 | `air::tick` | no fallback position when the edge push-back fails, and no descent adjustment | Q-0633 |
 | `air::landing_spot`, `air::edge_cell` | F8's nearby search uses the type's own movement zone on the ground layer with no draw, and the aircraft's own cell with no building; the edge cell is the nearest legal cell outside the usable area in the aircraft's row or column, else the first cell beyond the area, with no draw | Q-0634 |

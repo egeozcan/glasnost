@@ -718,6 +718,23 @@ fn claim_14_endless_refire_both_ways() {
     }
 }
 
+// spec: S-0501 claim 19 and T1, S-0204 claims 4 and 8, S-0310 F1 (a non-strafer attacking a 2 × 2 building turns toward its reference point, the point the facing check measures to, so its run reaches a shot); Q-0631 (interim flight point)
+#[test]
+fn attack_on_a_large_building_fires() {
+    let mut r = rules();
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let mut w = game(&r);
+    ready(&mut w);
+    let b = building(&mut w, "PADB", 1, 8, 0);
+    let a = put(&mut w, Kind::Aircraft, "JET", 0, -4, 0);
+    let full = w.obj(b).unwrap().health;
+    click(&mut w, a, ClickOn::Object(b));
+    let hit = run_until(&mut w, 2000, |w| w.obj(b).unwrap().health < full);
+    assert!(hit, "damages the building: {}", describe(&w, a));
+    let spent = run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
+    assert!(spent, "spends its rounds: {}", describe(&w, a));
+}
+
 // spec: S-0501 claim 19 (an aircraft that is not a fighter answers not facing beyond 2048 units; a fighter never does)
 #[test]
 fn claim_19_fighter_never_not_facing() {
