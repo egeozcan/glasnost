@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,6 +23,8 @@ it draws and how (draw point, stacked copies, translucency, shadow, detail level
 and depth are S-0102's, palettes and brightness S-0103's and S-0104's, building slot animations
 S-0108's, and sprite lookup and the theater refresh S-0007's. This revision covers skirmish.
 Network games and campaigns are out of scope. Claim 24 preserves a deferred fog rule only.
+Burning-walker playback exceptions belong to S-0615 claims 4 to 11; infantry creation and
+placement retries at playback end belong to S-0611 claims 9 to 11.
 
 **Joint hand-off.** Check S-0011 claim 36 and scenario T21 against claim 13 of this revision
 at sign-off, and hand the two revisions off together. Creation-time sound and resource chain
@@ -73,6 +75,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 | reversed | An animation is reversed while its current type has the reverse flag or its creator asked for reverse play. The test is made against the current type, so it can change when the animation switches to a follow-up type, claim 15. The step σ is separate state. |
 | shadow type | A type with the shadow flag: the second half of its sprite holds the shadows of the first half (claim 10). |
 | bouncing type | A type with the bouncer flag or the meteor flag. Such an animation follows its own motion, and its landing ends it (the specs of projectiles and debris own both). Until then its stage plays by claims 5 to 16 like any other animation's, but its advances produce no middle event (claim 14) and no damage by claim 17. The middle event that the start event produces when μ = 0 (claim 13) still happens. |
+| burning walker | An animation whose current type has the burning-walker flag. S-0615 claims 4 to 11 own its running image frames, frozen running stage, expiry timing and removal, overriding ordinary playback here. |
 | trigger-played animation | An animation created by a trigger action that plays an animation at a waypoint marker, including the action that shows the drop-zone animation (S-0011 claim 36). Its creation start event has the usual effects, including start sound and resource chain reaction when enabled. Later start events have neither sound nor chain reaction, and it delivers no damage (claims 13 and 17). |
 | erasing weapon | A weapon that removes its target over time instead of damaging it (the temporal weapon of the combat specs, which own it). |
 | owner | The object an animation is attached to, if any (claim 22). |
@@ -87,7 +90,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 
 ## Behaviour
 
-1. **Image frame and stage.** At every drawn frame an animation shows image frame *a* + *k*. A
+1. **Image frame and stage.** At every drawn frame an animation shows image frame *a* + *k*,
+   except for the burning-walker image selection of S-0615 claim 4. A
    new animation starts with *k* = 0 and σ = +1, unless it is reversed (claim 8). Stage timing
    follows ticks, not drawn frames: *k* changes only in updates. An image frame index outside 0 to
    *N* − 1 draws nothing, neither the image nor its shadow (claim 10), and is not an error: the
@@ -148,7 +152,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
    because of a removal is not an update and does not consume this first-update exclusion.
    On later updates an animation advances when at least *d* ticks have passed since its last
    advance, or since its creation if it has not advanced yet, provided it is neither in a loop
-   delay nor ending one (claim 11), is not held (claim 23), and *d* > 0. A loop delay does not
+   delay nor ending one (claim 11), is not held (claim 23), and *d* > 0. Burning walkers instead
+   follow S-0615 claims 4 to 11: their running stage never advances and their expiry has its own
+   delay and removal rules. A loop delay does not
    restart this clock. In uninterrupted play after the first advance, each image frame is held
    for exactly *d* ticks.
    - **The first image frame.** Let *c* be the integer creation tick and *u* the integer tick of
@@ -316,7 +322,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     produces the resource chain reaction when enabled, just as for any other animation. Its later
     start events, at loop-delay ends or follow-up switches, have no start sound and no chain
     reaction. It delivers no damage (claim 17), but its middle events, including the immediate
-    one when μ = 0, happen as for any other animation.
+    one when μ = 0, happen as for any other animation. A burning walker's creation start event
+    also retains these effects; its later playback follows S-0615 claims 4 to 11.
     - Backing: `measurable` (AN9, AN10, AN21, and S-0401 E17 for the immediate
       middle event preceding the chain reaction). Follow-up start sounds and later
       trigger-played chain-reaction suppression are `unmeasured` here: AN11 gives no
@@ -331,7 +338,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     say. It does not happen on the advances of a bouncing type (the start event's middle event of
     claim 13 still does). An animation whose advances never reach image frame μ has no middle
     event, except through claim 13. Reaching μ on an ending advance still produces the event,
-    even though that image frame is not drawn (State and ordering).
+    even though that image frame is not drawn (State and ordering). Burning walkers do not
+    advance while running; S-0615 claims 4 to 11 govern their playback and expiry exceptions,
+    without suppressing claim 13's creation-time middle event.
     These rules apply during map loading too. A tile animation (S-0010 claim 19) or an overlay's
     cell animation (S-0009 claim 12) with μ = 0 produces this event at creation, not at its first
     update. The event requests the type's particle count of its named particle type when a particle
@@ -398,7 +407,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       medium for the terrain-height test
 
 15. **Follow-up type.** When an animation's last pass ends and its type names a follow-up type, the
-    same animation continues as that type, at the same place and with the same owner. The start
+    same animation continues as that type, at the same place and with the same owner. Burning
+    walkers have the playback exceptions of S-0615 claims 4 to 11 and cannot reach a pass end
+    while running. The start
     event happens in that update (claim 13), and the switch sets:
 
     | Quantity | After the switch |
@@ -430,18 +441,26 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     - Confidence: high
 
 16. **End of an animation.** An animation whose last pass ends and whose type names no follow-up
-    type ends in that update and is removed. An animation whose type makes infantry creates it then, as
-    the infantry specs will say. The last image frame drawn is the one shown before that update.
+    type normally ends in that update and is removed. For every infantry-making animation,
+    S-0611 claims 9 to 11 own creation, ownership, placement and retries: the terminal type
+    attempts creation then, but a refused placement keeps the animation alive, steps its stage
+    back by one and retries when that frame is next due. Burning-walker expiry and removal
+    instead follow S-0615 claims 4 to 11. In ordinary removal the last image frame drawn is
+    the one shown before that update.
     The lifetime of an animation with one pass, no loop delay, delay *d* ≥ 1, *E* ≥ 1 and *a* = 0, that is
-    neither reversed nor ping-pong and, if it is a shadow type, has λ<sub>e</sub> ≥ *E*, is therefore
+    neither reversed, ping-pong nor a burning walker and, if it is a shadow type, has
+    λ<sub>e</sub> ≥ *E*, with no refused infantry placement, is therefore
     *E* × *d* ticks when its first update is in the creation tick and no update is lost or held.
     More generally, with creation tick *c*, first-update tick *u*, and uninterrupted updates
     thereafter, it is max(*d*, *u* + 1 − *c*) + (*E* − 1)*d* ticks, in exact integer arithmetic.
     This gives *E* × *d* + 1 ticks when *d* = 1 and *u* = *c* + 1 (claim 5).
     - Backing: `measurable` (AN1) for ordinary removal and before-turn-pass lifetimes.
       The late or lost-first-update extension is `unmeasured`, for claim 5's stated setup
-      limit. Infantry creation is `unmeasured` here: AN1 uses no infantry-producing type
-    - Confidence: high
+      limit. Infantry creation and placement retries inherit S-0611 claims 9 to 11's backing
+      and confidence (including MU10); burning-walker exceptions inherit S-0615 claims 4 to 11's
+      backing and confidence
+    - Confidence: high for ordinary playback; delegated exceptions have their owning claims'
+      confidence
 
 17. **Damage over time.** An animation whose type has a damage value δ > 0, and which is not a
     bouncing type, delivers damage at its own position on every advance. It keeps a floating-point
@@ -450,7 +469,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     subtracted (Formulas F5). So after *n* advances the total delivered is close to ⌊1 + *n*δ⌋ for
     an unattached animation, and the first advance already delivers 1 when δ < 1
     (`quirks.anim_damage_starts_at_one`). The advance that
-    ends the animation delivers too. A trigger-played animation delivers no damage. The warhead is
+    ends the animation delivers too. Burning walkers deliver no such damage while running,
+    since their stage does not advance; expiring advances can deliver it, subject to S-0615
+    claims 4 to 11's playback and removal rules. A trigger-played animation delivers no damage. The warhead is
     one of two game-wide warheads (Import mapping), chosen by the animation's type name; the type's
     own warhead field plays no part here. When the chosen warhead is not given, the amount is still
     taken from the accumulator but no damage is done. The area, warhead effect and damage rules
@@ -846,7 +867,8 @@ restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_one` off, *A*
 | *playing* | *d* ticks have passed since the last advance, the update is not skipped, the animation is not held, and *d* > 0 | The next image frame is shown if it is in range; damage due on this advance is delivered, and the middle event occurs when the resulting stage satisfies *a* + *k* = μ. A turn or pass end has the consequences specified in claims 6, 8, 9 and 10: in particular, the image frame at an ending limit is not drawn, and any same-update event or follow-up switch remains observable as those claims state. |
 | *playing* | pass ends with *r* ≥ 2 | new pass (F3); if the random loop delay pair is not (0, 0), ranged draw of *D*, and *delayed* when *D* > 0 |
 | *playing* | pass ends with *r* ≤ 1, follow-up type named | follow-up switch of claim 15, start event, *playing* |
-| *playing* | pass ends with *r* ≤ 1, no follow-up type | infantry created if the type makes infantry; removed |
+| *playing* | pass ends with *r* ≤ 1, no follow-up type | removed, except that a refused infantry placement keeps the animation for a retry under S-0611 claims 9 to 11 |
+| burning walker | running or expiring | playback and removal follow S-0615 claims 4 to 11, not the ordinary transitions above |
 | any | owner removed | not drawn from then on; removed at the next update, which has no advance, damage, event, follow-up switch or infantry (claim 22) |
 
 **Observable order within one update.** Damage, the middle event and the end test all follow the
@@ -968,7 +990,8 @@ forms are those of S-0003.
 | `Scorch`, `Crater` | boolean | scorch and crater requests of the middle event (claim 14) | no |
 | `ForceBigCraters` | boolean | request a large crater when a crater is chosen (S-0202 claim 15 owns size selection during loading and play) | no |
 | `Bouncer`, `IsMeteor` | boolean | bouncing type (Terms) | no |
-| `MakeInfantry` | integer | infantry created at the end (claim 16) | −1 (none) |
+| `MakeInfantry` | integer | infantry creation at the end (claim 16; S-0611 claims 9 to 11 for selection, placement and retries) | −1 (none) |
+| `IsFlamingGuy` | boolean | burning-walker flag (S-0615 claims 4 to 11) | no |
 | `Theater`, `NewTheater` | boolean | which sprites the type gets (S-0007), and so claim 25 | no |
 
 Game-wide keys:
@@ -1433,6 +1456,13 @@ building that can cloak), it sets them in the test map's override section, which
     separate order test: the upper copy blends over the lower, not the reverse.
     Recover clipped copy positions from the sprite's known labelled rows; a copy
     with no visible pixels cannot be counted from the capture alone.
+
+- **Companion scenarios (claims 5 and 13 to 17).** S-0611 scenario MU10 tests generic
+  infantry-making animations, terminal-only creation and position-choice draws; its MU9
+  tests refused placement and retries. Use those scenarios for claim 16's delegated contract.
+  S-0615 scenarios FW1 to FW4 test running-stage freeze, retained creation effects,
+  expiry damage and early removal. Use those scenarios for the burning-walker exceptions:
+  they retain their owning specs' setup, expected results and falsifiers.
 
 ## Open questions
 
