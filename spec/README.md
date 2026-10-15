@@ -63,7 +63,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0101](rendering/S-0101-isometric-projection.md) | Isometric projection, height lift, view position and scroll limits | rendering | 12 | approved | — |
 | [S-0009](formats/S-0009-map-file-semantics.md) | Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview) | formats | 25 | approved | — |
 | [S-0010](formats/S-0010-theater-tileset-semantics.md) | Theater data, tilesets and the terrain values of a cell | formats | 17 | approved | — |
-| [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 22 | approved | — |
 | [S-0306](combat/S-0306-projectiles.md) | Projectiles (launch, flight, homing, scatter, detonation) | combat | 10 | approved | — |
 | [S-0411](ui/S-0411-sidebar-behaviour.md) | Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement) | ui | 19 | approved | — |
 | [S-0511](structures/S-0511-bridges.md) | Bridges (destruction, collapse, falling and repair) | structures | 3 | approved | — |
@@ -122,3 +121,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0409](visibility/S-0409-shroud-sight.md) | Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire) | visibility | 12 | approved | — |
 | [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 25 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 12 | approved | — |
+| [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 23 | approved | — |

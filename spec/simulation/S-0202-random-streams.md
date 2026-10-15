@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -372,8 +372,12 @@ original's recording modes are retained as deferred context, not implementation 
         `quirks.failed_packup_keeps_vehicle` off, refusal removes the already-created
         vehicle and new group; their creation draws still occur. This alternative is
         our engine's rule, not an additional oracle outcome.
-      - *Every other creation* (reinforcements, crates, deploying, paratroopers and similar)
-        happens at a time the spec of that feature fixes, and the creation draw comes with it.
+      - *Every other creation* (reinforcements, units awarded by crates, deploying,
+        paratroopers and similar) happens at a time the spec of that feature fixes,
+        and the creation draw comes with it. S-0520 claims 3, 13 and 27 own crate
+        draw composition: placement and replacement draws, awarded-unit creation
+        and placement draws, and their order within a pickup. The crate overlay
+        itself takes no object-creation draw (see *Overlay placement* below).
         In particular, paratroopers are created at launch after their plane is successfully
         placed, not when dropped (S-0522 claim 3). For each payload entry in list order,
         the plane's creation draw precedes its arrival-cell draws and any placement draws,
@@ -1120,7 +1124,7 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 | Unused-house cleanup | after the second pass: tile-animation creation draws from occupied-ground-cell recalculations caused by removal, only when an animation has not already started since that pass (claim 14) | S-0009 claim 28; S-0010 claim 19; claims 10 and 14 |
 | S-0009 late phase | list 3, late re-assignments | S-0009, claim 20 |
 | Starting units | house by house, as S-0009 claim 46 orders them: each house's base unit and other starting units, each with its type choice, creation draw and placement draws; after the last house, one ranged draw over 0 … 65535 whose value has no effect | S-0009, claims 45 and 46; claim 10 |
-| Initial crates | crate placement draws when the crate setting is on; exact placement counts remain owned by the crate rules | S-0412 claim 10 |
+| Initial crates | crate placement draws when the crate setting is on; S-0520 claim 3 owns each placement's draw composition, and S-0412 claim 10 owns the count | S-0412 claim 10; S-0520 claim 3 |
 | Secret labs | the conditional secret-lab choice draws, after initial crates and before end-of-loading tags and the game-start recalculation | S-0407 claim 14; claim 14 |
 | Fence lines | When fence posts in the imported rules data can link on the map: the creation draws of the fence sections built between them, and the recompute draws of claim 10 for vein cells the line crosses. If no such posts are present, this row has no draws (low confidence) | fence rules (pointer); claim 10 |
 | End of loading | the tags created at the end of loading, in registration order | S-0011, claim 34 |
