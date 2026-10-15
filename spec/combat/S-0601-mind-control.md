@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -47,8 +47,10 @@ specs consume. These claims cover skirmish only.
   and 14.
 - **The control pips and their overload highlight:** S-0111 claim 13. The damage of an overload
   pulse is claim 16 here.
-- **Grinders and bio reactors** that absorb a unit: planned S-0603 and S-0605. They see an
-  absorbed controlled unit as an object of its current owner, by this spec's contract (claim 6).
+- **Grinders:** S-0603 claims 6, 8 and 9. Consumption silently frees the controller's slot and
+  values the victim as an object of its current owner, the controlling house (claim 12).
+- **Bio reactors and other absorbing buildings:** S-0605 claim 7. Accepted absorption releases
+  a controlled entrant by claim 9 before it goes inside as its original owner's object.
 
 ## Terms
 
@@ -271,10 +273,12 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
       but stated for completeness).
 
     Other releases covered here are claim 7's replacement, psychic domination (claim 13),
-    and boarding (S-0507 claim 6: a controlled unit that boards is released).
+    boarding (S-0507 claim 6: a controlled unit that boards is released), and accepted absorption
+    (S-0605 claims 7 and 8: the entrant is released before going inside).
     Claim 12's silent drop removes the link without a release.
-    - Backing: `measurable` (MC4 for death and reverse acquisition order; MC9 for low power and
-      selling; MC11 for draining and non-combat removal; S-0514 scenario E5 for the erasing hit).
+    - Backing: `measurable` (MC4 for death and reverse acquisition order; MC6 for absorption,
+      MC9 for low power and selling; MC11 for draining and non-combat removal; S-0514 claim 2
+      for the erasing hit).
       Trigger changes are `unmeasured` here because campaigns are outside scope
     - Confidence: high
 
@@ -299,10 +303,13 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
       when it receives its killing hit.
     - A victim that leaves the map without leaving the game (into a transport, a building or a
       tunnel) keeps its place, except where its own rule releases it (S-0507 claim 6 for
-      boarding).
-    - A victim absorbed by a grinder or bio reactor (planned S-0603, S-0605) is removed and
-      leaves the list silently; the absorbing building treats it as an object of its current
-      owner, the controlling house.
+      boarding; S-0605 claims 7 and 8 for accepted absorption).
+    - A victim consumed by a grinder is removed from the game and silently leaves the list,
+      freeing the slot. The payout values it as an object of its current owner, the controlling
+      house (S-0603 claims 6, 8 and 9). This is not the bio-reactor path: accepted absorption
+      releases the victim by claim 9, including ring removal, release sound, return to the
+      original owner and claim 8's fate decision. It then goes inside as its original owner's
+      object, not as a removed object (S-0605 claim 7).
     - Backing: `measurable` (MC6)
     - Confidence: high for removal-based silent drop; medium for individual death-path lifetimes
 
@@ -474,6 +481,7 @@ F3 uses exact integer additions and integer draws, with no rounding.
 | controlled by *C* | *C* killed, destroyed, removed, not in operation, erasing hit, drain start | free, back to original owner (claims 9, 10) |
 | controlled by *C* | *C* changes owner (not by trigger) | still controlled by *C*, owner unchanged (claim 11) |
 | controlled by *C* | victim boards a transport | free, back to original owner (S-0507 claim 6) |
+| controlled by *C* | accepted absorption | released by claim 9, then inside as its original owner's object (S-0605 claims 7 and 8) |
 | controlled by *C* | victim removed from the game | gone; *C*'s list shrinks; no owner change (claim 12) |
 | controlled by *C* | victim deploys or converts | new object of the controlling house, not controlled (claim 15) |
 | controlled by *C* | psychic domination reaches it | released, then permanently controlled by the dominating house (claim 13) |
@@ -608,15 +616,21 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   new computer order masks order clearing, that run tests only ownership and sound, not orders.
   MC11 isolates order clearing by arranging that the released victims return to A. Continued
   execution of the old order in that isolated variant falsifies claim 9.
-- **MC6. Removal, not visual death, frees the slot** (claim 12). On a coastal test map A's
+- **MC6. Removal versus absorption** (claims 9, 10 and 12). On a coastal test map A's
   Mastermind holds B's naval vehicle; sink it. Record victim existence, pip count, ownership and
   sounds each tick. Expected: the slot stays occupied while the original hull still exists,
   then disappears without a release sound or owner change at removal. Repeat with infantry
   deaths that retain the actor and deaths that replace it with a separate animation: only the
-  former can retain a slot. Repeat by grinding an eligible controlled vehicle and by entering a
-  bio reactor with eligible controlled infantry: absorption frees the slot without a release
-  sound. Continued slot occupancy after removal, or a release sound at silent removal, falsifies
-  the claim. Do not infer actor lifetime from a visible animation alone.
+  former can retain a slot. Repeat by grinding an eligible controlled vehicle: consumption
+  frees the slot without a control-release sound or owner change, and the payout uses the
+  controlling house's factors (S-0603 claims 8 and 9). Continued slot occupancy after removal,
+  or a control-release sound at silent removal, falsifies that part.
+  Separately order B's eligible controlled infantry into A's bio reactor. Expected: in the entry
+  tick the ring disappears, the control-release sound precedes the entry sound, the controller's
+  slot is freed, and the infantry returns to B before going inside. Sell the building and record
+  the infantry emerging as B's object (S-0605 claim 7). No release sound,
+  continued control, or emergence as A's object falsifies the absorption expectation. Do not
+  infer actor lifetime from a visible animation alone.
 - **MC7. Deploy keeps the new building** (claim 15). A's Yuri Clone takes B's construction
   vehicle, A deploys it, then B kills the clone. Expected: the construction yard stays A's.
   Falsified if it goes to B.
