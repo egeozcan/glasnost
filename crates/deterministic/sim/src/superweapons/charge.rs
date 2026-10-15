@@ -518,12 +518,12 @@ pub fn stage(w: &World, h: HouseId, i: u32) -> i32 {
     if ty.drain && r.drain == DrainState::Active {
         // spec: S-0512 F3 (drain active: min(53, ⌊54 r / (T ρ)⌋), exact over the integer times and the imported ratio)
         let Some((neg, m, e)) = w.rules().superweapons.ratio.parts() else {
-            return 53;
+            return 53; // spec: S-0512 F3 (the last charging stage 53)
         };
         if neg {
-            return 53;
+            return 53; // spec: S-0512 F3 (the last charging stage 53)
         }
-        let num = 54u128 * rem.max(0) as u128;
+        let num = 54u128 * rem.max(0) as u128; // spec: S-0512 F3 (54 stages)
         let den = tt as u128 * u128::from(m);
         let v = if e >= 0 {
             den.checked_shl(e as u32)
@@ -534,10 +534,10 @@ pub fn stage(w: &World, h: HouseId, i: u32) -> i32 {
             if num.leading_zeros() > s {
                 (num << s) / den.max(1)
             } else {
-                53
+                53 // spec: S-0512 F3 (the last charging stage 53)
             }
         };
-        return v.min(53) as i32;
+        return v.min(53) as i32; // spec: S-0512 F3 (min(53, …))
     }
     // spec: S-0512 F3 (min(53, ⌊54 × (T − r) / T⌋))
     ((54 * (tt - rem)).div_euclid(tt)).clamp(0, 53) as i32

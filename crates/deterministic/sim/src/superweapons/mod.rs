@@ -200,7 +200,7 @@ pub struct SwRules {
     pub ratio: F64,
     /// Each building type's first and second superweapon, by building
     /// registration index.
-    pub building_sw: Vec<[Option<u32>; 2]>,
+    pub building_sw: Vec<[Option<u32>; 2]>, // spec: S-0512 Terms (a building type's first and second superweapon fields)
     /// Each building type's silo flag.
     pub silo: Vec<bool>,
     /// Each building type's weapons-factory flag (S-0513 claim 34).
@@ -293,12 +293,12 @@ impl SwRules {
                 Some(0) => {
                     // spec: S-0512 claim 21 (0 keeps the previous value; one merged layer here, so the engine default)
                     warnings.push(format!("S-0512 claim 21: superweapon {n} has charge time 0, which keeps the previous value; the merged ruleset has none, so the engine default 4500 ticks applies"));
-                    4500
+                    4500 // spec: S-0512 Constants (the engine default charge time 4500 ticks)
                 }
                 Some(v) if v < 0 => {
                     // spec: S-0512 Edge cases (our importer refuses non-positive charge times with a warning; departure)
                     warnings.push(format!("S-0512 Edge cases: superweapon {n} has a negative charge time; refused, the engine default 4500 ticks applies"));
-                    4500
+                    4500 // spec: S-0512 Constants (the engine default charge time 4500 ticks)
                 }
                 Some(v) => v,
             };
