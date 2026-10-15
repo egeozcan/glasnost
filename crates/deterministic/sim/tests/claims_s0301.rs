@@ -2334,3 +2334,19 @@ fn s0215_quirk_upgrade_attack_weapon_gate_off() {
         assert_eq!(launched(&w), [wid(&w, "ZAP2")], "gate {gate}");
     }
 }
+
+// spec: S-0215 claims 32 and 33 and S-0308 claim 12 (B36: a building armed only by an installed upgrade finds a target by its own per-tick search in guard, starts attack, and with a failed gate keeps attacking without shots)
+#[test]
+fn s0215_claim_32_upgrade_only_defence_searches_and_attacks() {
+    let r = upgrade_rules(None, &[("U1", Some("ZAP"), None, None)]);
+    let (mut w, t, b) = upgraded(&r, &["U1"]);
+    w.obj_mut(t).unwrap().target = None;
+    w.obj_mut(t).unwrap().targeting_timer = w.tick;
+    glasnost_sim::combat::acquire::per_tick(&mut w, t);
+    assert_eq!(w.obj(t).unwrap().target, Some(Target::Object(b)));
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(w.obj(t).unwrap().beh.current, Some(Behaviour::Attack));
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert!(launched(&w).is_empty());
+    assert_eq!(w.obj(t).unwrap().beh.current, Some(Behaviour::Attack));
+}
