@@ -4505,7 +4505,7 @@
           ]
         },
         "gravity": {
-          "description": "`[AudioVisual] Gravity` (S-0306 Terms).",
+          "description": "`[AudioVisual] Gravity` (S-0306 Terms; *g* of S-0503 F6).",
           "type": [
             "integer",
             "null"
@@ -4543,6 +4543,70 @@
           "items": {
             "type": "string"
           }
+        },
+        "hover_acceleration": {
+          "description": "`[General] HoverAcceleration` *a*, game minutes (S-0503 F2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hover_bob": {
+          "description": "`[General] HoverBob` *q*, game minutes (S-0503 F6).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hover_boost": {
+          "description": "`[General] HoverBoost`, the boost factor (S-0503 claim 3).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hover_brake": {
+          "description": "`[General] HoverBrake` *b*, game minutes (S-0503 F2).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hover_dampen": {
+          "description": "`[General] HoverDampen` *k* (S-0503 F6).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hover_height": {
+          "description": "`[General] HoverHeight` *H*ₕ, leptons (S-0503 F6).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "i_repair_rate": {
           "description": "`[General] IRepairRate` r_i (S-0314 F1).",
