@@ -2,7 +2,7 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -260,15 +260,21 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     from its *current occupant*: the occupant at the building's occupant index. The occupant index starts at
     0 and moves to the next occupant, in the order the building holds them, after each successful
     non-disc-laser shot (wrapping to 0 after the last). A disc-laser shot does not advance it,
-    so successive such shots use the same occupant. An eviction or clearing action resets the
-    index to 0 before any occupant is released or removed (S-0508 claim 18), not only when the
-    last occupant goes. An additional entry appends an occupant without changing the index.
+    so successive such shots use the same occupant. After a completed whole-building eviction
+    or clearing action the index is 0 (S-0508 claim 18); reoccupation therefore starts at 0.
+    No ordering of that reset relative to individual releases or removals within the action
+    is required. An additional entry appends an occupant without changing the index.
     S-0311 claim 15 describes a distinct individual removal during scenario set-up: remaining
     occupants keep their relative order and the numeric index is unchanged, without reduction
-    modulo the new count. This does not establish an independent selective departure or death
-    during normal skirmish play; releases or removals within an eviction or clearing action
-    already have the action-start reset. A refused firing attempt or void shot does not
-    advance it (S-0301 claim 15).
+    modulo the new count. This set-up case does not establish a selective gameplay departure.
+    Defeat or surrender of an occupant's own house is a separate selective-death exception
+    (S-0508 claim 19): its occupants receive killing hits even inside a surviving foreign-owned
+    building, and in a mixed-house garrison other houses' occupants can survive. Such a death
+    neither resets nor reduces the numeric index modulo a new count, and does not compact
+    the occupants as set-up removal does. A dead occupant can remain among the firing choices.
+    No safe subsequent weapon choice or experience recipient through that dead choice is
+    specified here; this requires a project-lead decision. A refused firing attempt or void
+    shot does not advance the index (S-0301 claim 15).
     The weapon is:
     - for an elite occupant: its type's elite occupying weapon if the type has one, and otherwise
       the weapon in the occupant's own slot 0 (with claim 2),
@@ -280,16 +286,18 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     S-0313 (claim 6) owns this shared index, called the muzzle index there.
     - Backing: `measurable` for slot 0 (scenario W9, parts a, b and e; S-0313 P5 part b for the disc-laser
       exception; W9 part f for the reset after evacuation; S-0508 scenario G14 for completed
-      clearing, reoccupation and index retention on an additional entry). Reset before the first
-      release or removal is `unmeasured`: these actions finish within one tick and no validated
-      fixture observes a shot between their individual releases or removals. Individual set-up
-      removal is `unmeasured`, as S-0311 claim 15 explains. Unchanged index on a refused or void
-      attempt is `unmeasured` here: these parts do not isolate an unsuccessful launch between
-      distinguishable occupants. No prediction is made for an unestablished independent
-      selective gameplay removal. Occupant substitution in other slots is `unmeasured`: these
-      garrison parts choose only slot 0 for their shots.
-    - Confidence: high for the rotation, weapon rule, whole-building action reset and additional
-      entry; medium for the order of occupants and individual set-up removal
+      clearing, reoccupation and index retention on an additional entry; S-0508 scenario G15
+      for own-house defeat hits and numeric-index retention in a surviving foreign-owned
+      building, shared with W9 part g). Mixed-house selective death is `unmeasured`: no validated fixture supplies
+      differently owned entrants. Individual set-up removal is `unmeasured`, as S-0311 claim 15
+      explains. Unchanged index on a refused or void attempt is `unmeasured` here: these parts
+      do not isolate an unsuccessful launch between distinguishable occupants. Unsafe continued
+      firing or credit through a dead choice is `unmeasured`: no safe oracle result is predicted.
+      Occupant substitution in other slots is `unmeasured`: these garrison parts choose only
+      slot 0 for their shots. Other clearing causes inherit S-0508 claim 18's backing limitations.
+    - Confidence: high for the rotation, weapon rule, completed whole-building action reset,
+      additional entry and defeat's inclusion of off-map occupants; medium for the order of
+      occupants, individual set-up removal, mixed-house consequence and retained dead choice
 
 ### Other uses of the weapons
 
@@ -470,9 +478,10 @@ number unchanged.
 | a successful shot leaves the building, other than a disc-laser shot | index = (index + 1) mod occupant count |
 | a disc-laser shot leaves the building | index unchanged |
 | a firing attempt is refused or its shot is void | index unchanged |
-| an eviction or clearing action starts (S-0508 claim 18) | index = 0 before any release or removal |
+| a whole-building eviction or clearing action completes (S-0508 claim 18) | index = 0; no intermediate reset/release ordering required |
 | an additional occupant enters (S-0508 claim 18) | index unchanged; entrant appended |
 | an individual occupant is removed during scenario set-up (S-0311 claim 15) | index unchanged; remaining occupants keep relative order |
+| an occupant dies from its own house's defeat or surrender while the building survives (S-0508 claim 19) | numeric index unchanged, no modulo repair or occupant compaction; safe use of a retained dead choice unspecified |
 
 Ordering: none of its own. The choice is made each time a rule asks for it, with the state at that
 moment (for example the gattling stage and the deployed state of the same tick). S-0609 claims
@@ -773,9 +782,19 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   5, from the first occupant. Record the index before refilling so that an entry effect cannot
   masquerade as an evacuation reset. A nonzero index after evacuation, or a first shot from
   another occupant after refilling, falsifies this part.
+- *Part g (own-house defeat):* use S-0508 scenario G15's transferred-building fixture,
+  three fresh runs at game-speed index 2 and 800 × 600. After one ordinary shot, stop the
+  building with index 1, transfer only the building to a surviving house, then surrender the
+  occupants' house while a third contender remains. Read occupant health, building owner
+  and health, and the numeric index during surrender processing, before any further firing.
+  *Expected:* occupants receive killing hits, the foreign-owned building survives without
+  eviction, and the index remains 1. An index reset or modulo repair, exclusion of the
+  occupants' hits, or eviction caused solely by their house's defeat falsifies this part.
+  No safe subsequent shot is predicted; a mixed-house selective-survival fixture is not
+  assumed by this test.
 - *Falsified if:* any damage in parts a to d differs from their expected sequences, part e
   rotates occupants or muzzles after a disc-laser shot while its ordinary-weapon control
-  alternates, or part f differs from its reset and first-shot predictions.
+  alternates, or part f or g differs from its index predictions.
 
 **W10: mean weapon damage (claim 15).** Through S-0309. A test infantry type with primary damage
 −5 and secondary damage 3 (*M* = trunc(−2 / 2) = −1) is a healer for acquisition: in *guard* next to
@@ -838,11 +857,9 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
 
 - Which states make an aircraft a kamikaze aircraft (row 12): owned by the aircraft specs.
 - S-0508 claim 5 gives entry order for the occupant list; W9 tests the resulting firing order.
-  An independent selective departure or death while other occupants remain during normal
-  skirmish play, outside S-0508 claim 18's whole-building actions, is not established here.
-  S-0311 claim 15's limited set-up removal is not evidence of such a gameplay event. No index
-  repair or safe experience-recipient rule for an out-of-range retained index is inferred.
-  An additional entry retains the index (S-0508 claim 18); that former question is resolved.
+  Claims 18 and 19 there settle completed-action reset, additional-entry retention and the
+  distinct own-house-defeat case. S-0311 claim 15's limited set-up compaction is not a repair
+  rule for defeat deaths. No modulo repair or safe continuation through a dead choice is inferred.
 - The rearm-countdown transfer of claim 6, restarted from slot 7, remains low confidence
   pending W4 part g. Temporal beam transfer and exit release agree with S-0514 claims 9,
   10 and 14.
@@ -850,3 +867,19 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
   S-0609 claims 5–9; it is no longer an open question here.
 - Whether any rule refuses a shot where table N's "no weapon" answers arise (modes 0, 2 and 6):
   the weapon choice gives slot 0 and nothing here forbids the shot.
+
+## Cross-spec changes required
+
+- S-0313 claim 6 must retain completed-action reset without intermediate ordering, but
+  replace its unresolved selective-death premise with S-0508 claim 19's own-house-defeat
+  exception and retained numeric index, without inferred compaction or modulo repair.
+- S-0311's firing-occupant term and claim 15 must use completed-action reset without
+  intermediate ordering and distinguish defeat deaths from set-up compaction. Safe credit
+  through a retained dead choice needs the same project-lead decision as weapon choice.
+
+## Questions for the project lead
+
+- Choose a deterministic safety policy for weapon choice, muzzle selection and experience
+  credit after own-house defeat leaves a dead occupant among a surviving building's firing
+  choices (S-0508 claim 19; S-0313 claim 6; S-0311 claim 15). This spec does not infer a
+  replacement occupant, compaction or modulo repair.
