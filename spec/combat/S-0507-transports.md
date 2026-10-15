@@ -2,7 +2,7 @@
 id: S-0507
 title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -45,7 +45,9 @@ This spec does not repeat what other specs own:
 - Aircraft flight, landing and pads: S-0501.
 - Buildings that take units inside (tank bunkers, garrisons and absorbing buildings): the
   structures and garrison specs.
-- Vehicles of a transport type that fire a deploy weapon instead of carrying anyone: planned S-0517.
+- Deploy-fire vehicles that fire at their own cell instead of carrying passengers: S-0517 claim 2.
+- The absence of an *unload or deploy cycle* for vehicles, including vehicle transports:
+  S-0517 claim 15. That cycle is distinct from the passenger-unloading phases below.
 
 ## Terms
 
