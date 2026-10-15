@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -62,6 +62,12 @@ addition:
 - **Stream sequence.** The raw values a stream produces after seeding, numbered x₀, x₁, x₂, … in the
   order they are taken. The 250 *seed values* x₋₂₅₀ … x₋₁ are the values the seeding function
   gives (claim 3); they are never returned as raw values themselves.
+- **Draw allocation order.** The assignment of successive stream values to effects, not an
+  implementation's internal work schedule. An earlier group uses the incoming stream state.
+  A later group uses the state left by the earlier groups, including their rejections and
+  conditional draws. Thus changing an earlier group can change a later effect's random outcome.
+  Ordered tables below specify this observable assignment; they require neither a particular
+  data structure nor a particular schedule for computing values whose assignment is unchanged.
 - **Seed.** The 32-bit unsigned integer from which a stream's 250 seed values are computed.
 - **Ranged draw R(a, b).** A draw with two signed 32-bit bounds *a* and *b*. Claim 4 gives
   its inclusive-range result from zero or more raw values; claim 5 gives the exceptional spans,
@@ -320,9 +326,9 @@ original's recording modes are retained as deferred context, not implementation 
     effects that look like presentation also draw from it: animations, particles and particle
     systems, debris, smudges, and the overlay placement effects below. Post-game winner-score
     bonuses also use it after simulation stops (claim 16). Consequence for our engine:
-    these presentation-like effects must run inside the deterministic simulation, in the
-    original's order, or every later draw of the stream shifts. Three kinds of draw are stated here
-    because no feature spec lists them yet:
+    these presentation-like effects contribute to the deterministic simulation's draw allocation.
+    Omitting one shifts the values assigned to later choices and can change gameplay outcomes.
+    Three kinds of draw are stated here because no feature spec lists them yet:
     - **The creation draw.** Every creation of an infantry, vehicle, aircraft or building object
       takes one raw value, whatever else that creation draws, at the moment the object is created.
       Creating an object is not the same as its entering play (S-0203): the draw is taken even for
@@ -340,10 +346,12 @@ original's recording modes are retained as deferred context, not implementation 
       reconstruct it using another draw. Persistence and hashing are a design contract
       of our engine, not an additional claim about the original's save or hash format.
       Where the creation falls:
-      - *Map loading.* A pre-placed object is created when its map entry is read, so its creation
-        draw comes before the draws of its own tag (S-0011, claim 34) and before any draw its
-        placement takes. An entry that names no house of the game (S-0009, claim 27) or an unknown
-        type creates nothing and takes no draw; an entry that is created but cannot be placed has
+      - *Map loading.* A pre-placed object's creation draw is attributable to its map entry.
+        Its tag choices (S-0011 claim 34) use the state left by that creation draw; its placement
+        choices use the state left by its tag. Thus the object's creation shifts both sets of
+        outcomes, even when the creation itself has no visible random effect. An entry naming
+        no house of the game (S-0009 claim 27) or an unknown type creates nothing and takes no
+        draw; an entry that is created but cannot be placed has
         still taken its draw. The players' starting units take their creation draws as S-0009
         (claim 46) orders them. The table *Draws during map loading* (State and ordering) places all of these
         relative to S-0009's phases and S-0011's tag draws.
@@ -354,19 +362,20 @@ original's recording modes are retained as deferred context, not implementation 
         including when the next item of a queue begins. S-0404 claim 11 assigns
         each creation draw at the action that causes the start: production orders receive
         values in application order, including automatic cancellations in S-0411 claim 13's
-        tab/icon order, not line creation or payment-priority order. A factory event in the
-        turn pass takes its start's draw before order-boundary starts at that tick's end.
-        Intervening actions keep their own draws between starts; no values are reserved
-        ahead of the causing action. Across houses, turn-pass starts inherit turn order.
+        tab/icon order, not line creation or payment-priority order. An order-boundary start
+        receives a value from the state left by any turn-pass starts and intervening actions
+        at that tick. Thus intervening random effects can change the new object's assigned
+        value; production does not reserve values ahead of the causing action. Across houses,
+        the values assigned to turn-pass starts follow turn order.
         Order-boundary starts in our engine follow S-0213 claim 3's house creation order
         and each house's production-order issue order; this between-house extension is
         an unmeasured design rule, not an original computer-production finding.
         Simultaneous completion does not create a separate batch of replacement starts:
         the later release or place action causes any queued successor's start.
       - *Packing up a slave miner.* S-0402 claim 19a owns the temporary hidden-slave
-        creations: the return vehicle and its new hidden slaves take their creation draws
-        before vehicle placement and before removal releases or destroys the building's
-        old slaves, on success and refusal alike. Success destroys the temporary slaves
+        creations: on success and refusal alike, vehicle-placement choices and the old
+        slaves' release or destruction choices use the state left by the return vehicle's
+        and new hidden slaves' creation draws. Success destroys the temporary slaves
         before transferring the old working group, without undoing their draws. Refusal
         retains the new group under S-0415 claim 11's default quirk. With
         `quirks.failed_packup_keeps_vehicle` off, refusal removes the already-created
@@ -379,22 +388,30 @@ original's recording modes are retained as deferred context, not implementation 
         and placement draws, and their order within a pickup. The crate overlay
         itself takes no object-creation draw (see *Overlay placement* below).
         In particular, paratroopers are created at launch after their plane is successfully
-        placed, not when dropped (S-0522 claim 3). For each payload entry in list order,
-        the plane's creation draw precedes its arrival-cell draws and any placement draws,
-        then each paratrooper takes its creation draw. Failed plane placement creates no
+        placed, not when dropped (S-0522 claim 3). The launch's draw allocation follows payload
+        entry order. Within an entry the groups are plane creation, arrival-cell choices, plane
+        placement and each paratrooper's creation. Thus arrival and placement outcomes reflect
+        the plane's creation draw, and the next entry's outcomes reflect the preceding entry's
+        paratrooper creations. Failed plane placement creates no
         paratroopers. S-0522 claim 16 owns this launch order and the later drop-attempt
         standing-position and successful-drop parachute-animation draws.
     - **Parasite ranged choices.** S-0614 claims 9 and 10 own these choices on the
       scenario random stream. A drone parasite's delivery to a non-infantry host
-      takes R(0, 1) after creating its effects and before its hit; an infantry
-      delivery takes no rocking choice. For a grappling parasite:
-      - Each push start takes R(0, 1) for its rocking direction, followed by three
-        wakes. Each wake takes R(−180, 180) and then R(−64, 64), integer
-        displacement components in leptons, before that wake is created. Thus every
-        push start has six wake-displacement ranged choices, not six fixed raw values.
-      - Each strike creates three splash effects before its cull test. Each splash
-        takes R(0, 1), then R(0, *n* − 1) to select from the game-wide splash
-        list of length *n*, before that splash is created.
+      takes R(0, 1) from the state left by its effect creations; its hit's choices use
+      the state left by that rocking choice. An infantry delivery takes no rocking choice.
+      For a grappling parasite:
+      - Each push start assigns R(0, 1) to rocking direction. The three wakes' groups
+        follow that direction choice in draw allocation order. Within each wake, the
+        groups are R(−180, 180), R(−64, 64) and wake creation. The two ranged results
+        are integer displacement components in leptons; the second component depends
+        on the first choice's consumption, and the next wake depends on any preceding
+        wake-creation draws. Thus every push start has six wake-displacement ranged
+        choices, not six fixed raw values.
+      - Each strike's cull test uses the state left by three splash-effect groups.
+        Each splash's groups are R(0, 1), R(0, *n* − 1) for selection from the
+        game-wide splash list of length *n*, and splash creation. Consequently both
+        choices and any creation draws affect the state available to later splashes
+        and the cull test.
       - The first push starts at the end of the grab. After a strike, a new push's
         direction and wake choices occur only after a hit that leaves the host
         carrying the parasite; a cull or lost attachment takes no next-push choices.
@@ -403,10 +420,11 @@ original's recording modes are retained as deferred context, not implementation 
       counts for the delivery, strike or push: effect creation and playback may
       contribute additional draws, which S-0614 leaves unestablished.
     - **Lightning sound choice.** Each lightning strike takes one raw value, read as
-      unsigned and reduced modulo the game-wide lightning sound list's length, after
-      the bolt-animation choice and all that animation's creation draws, but before
-      the explosion-animation and damage draws. It is taken regardless of audibility,
-      sound settings, view or shroud. An empty sound list takes no value. Repeating a
+      unsigned and reduced modulo the game-wide lightning sound list's length. Its incoming
+      state includes the bolt-animation choice and all that animation's creation draws.
+      Explosion-animation and damage choices use the state left by the sound choice.
+      Consequently even an inaudible sound choice shifts those later effects. It is taken
+      regardless of audibility, sound settings, view or shroud. An empty sound list takes no value. Repeating a
       previous strike's point does not suppress this choice or any later strike effects
       and draws (S-0513 claim 18). S-0701 claim 25 owns the sound.
     - **Overlay placement.** Creating an overlay object takes no draw by itself. Some effects of
@@ -423,7 +441,7 @@ original's recording modes are retained as deferred context, not implementation 
 
           | End-row cells | Result | Draw |
           |---|---|---|
-          | none holds an overlay | the end row is written: each of the three cells gets the marker's end-row overlay type, with overlay data 0, 1 and 2 in order of increasing *y* or *x*, and is recalculated as it is written; the partner rules below then apply | none of its own (the recalculation can start a tile animation, below) |
+          | none holds an overlay | each of the three cells gets the marker's end-row overlay type, with overlay data 0, 1 and 2 in order of increasing *y* or *x*. Each cell has its recalculation effects at this write, with their draw allocation in the same coordinate order. The written row is eligible for the partner and piece results below | none of its own (the recalculation can start a tile animation, below) |
           | any holds an overlay | nothing is written, and nothing else follows: no partner, no pieces | none |
         - *The marker itself.* The marker's own overlay type is never left on a cell. After a
           written end row its own cell is the end row's middle cell (the end-row type with overlay
@@ -447,14 +465,17 @@ original's recording modes are retained as deferred context, not implementation 
           they held, so 3*d* pieces in all. Each piece takes one raw value: its overlay type is the
           base type *t*₀ of its marker pair plus the lowest two bits of that raw value (the *low
           bits* form; formula *Bridge piece type*), so completing a bridge takes 3*d* raw values.
-          Their stream order is step by step, from the step next to the partner's middle cell on
-          the marker's side toward the marker, and within a step in order of increasing *y* or *x*
-          (overlay data 0, 1, 2); this is the numbering *j* of the formula. Neither the end-row writes nor the piece writes start a cell animation, even when
-          the type written names one. The end marker's own cell animation is also not started.
+          The assignment of values to piece types follows steps from the partner's middle cell
+          toward the marker, beginning with the adjacent step on the marker's side. Within a
+          step the assignment follows increasing *y* or *x* (overlay data 0, 1, 2); this is the
+          numbering *j* of the formula. Reversing either assignment can change the visible
+          bridge. Neither the end-row writes nor the piece writes start a cell animation,
+          even when the type written names one. The end marker's own cell animation is also not started.
           These writes do not count as placed overlays: they set off none of the other effects
           in this list (claim 14). Each piece's cell is recalculated as the piece appears,
-          though, which can start that cell's tile animation; that animation's creation draws
-          then come right after the piece's own raw value.
+          though, which can start that cell's tile animation. That animation uses the state
+          immediately following the piece's raw value; the next piece uses the state left by
+          the animation. A tile animation can therefore change every later piece type.
         - *Cells outside the map.* An end-row cell or a piece cell across the line can lie outside
           the map at its edge. The original then writes to its stand-in cell (S-0009, claim 44).
           Our engine writes nothing outside the map and counts such a cell as holding no overlay
@@ -494,10 +515,12 @@ original's recording modes are retained as deferred context, not implementation 
         vein-family overlays around a cell.
         *The placement.* A cell that passes the test gets the vein overlay and takes one raw value
         (formula *Vein pattern values*). A sloped placed cell does nothing more. For a flat one,
-        each edge neighbour then has the result of the table below. Their raw values follow the
-        placed cell's, in the order map north, map east, map south, map west, and each
-        neighbour's *c* counts the placed cell with its data already set. Because the placed cell
-        passed the test, each neighbour holds no overlay, the vein overlay or an overlay of
+        each edge neighbour has the result of the table below. Values are assigned to the
+        placed cell and eligible neighbours in the order placed cell, map north, map east,
+        map south, map west. Consequently a neighbour that takes no value shifts the variants
+        of later eligible neighbours. Each neighbour's *c* includes the placed cell's new data.
+        Because the placed cell passed the test, each neighbour holds no overlay, the vein
+        overlay or an overlay of
         another type that has the veins flag, so exactly one row applies to it:
 
         | Edge neighbour | Result | Draw |
@@ -533,9 +556,10 @@ original's recording modes are retained as deferred context, not implementation 
         | A flat vein edge neighbour that is not a pattern centre | no vein connection (connection pattern 0) | none | loses its vein |
         | A flat vein edge neighbour that is not a pattern centre | a vein connection | one raw value (same form) | keeps its vein |
 
-        In stream order, the recomputed cell's raw value, if it takes one, comes first, then the
-        neighbours' in the order map north, map east, map south, map west. The connection pattern
-        is the one defined above, taken at the moment each cell is treated.
+        Draw allocation order is the recomputed cell, map north, map east, map south, map west,
+        omitting cells that take no value. Thus keeping or losing a vein at an earlier position
+        can shift the variants assigned later. Each cell's connection pattern includes the
+        results at earlier positions in that order.
         *Map loading.* Placing a vein from the overlay type stream takes no draw. The vein
         overlays are instead rebuilt by the pass of S-0009 claim 14, which runs after the overlay
         data stream has been read and the first recalculation pass has run. The vein candidates
@@ -563,13 +587,16 @@ original's recording modes are retained as deferred context, not implementation 
         take no draw of their own when placed; the veinhole monster that the last one creates takes
         none either. (Placing any overlay recalculates its cell, which can start that cell's tile
         animation; see the map-loading table.)
-    - **Animation creation draws.** An animation's creation draws are as follows. When more than one row applies, the draws follow the table's top-to-bottom order; within a row, they follow the stated order. These draws determine which raw values remain for later users of the scenario random stream.
+    - **Animation creation draws.** The table gives draw allocation order from top to bottom,
+      with conditional rows omitted when inapplicable. Thus a random stage delay can change
+      the starting motion, and either group can change immediate start-event outcomes.
+      The resulting state determines later scenario-stream choices, including other creations.
 
       | Animation condition | Draws at creation |
       |---|---|
       | The type's random rate gives a range (S-0109, claim 3) | One ranged draw for the stage delay. |
-      | The animation is a bouncing type (S-0109, Terms) | Three raw values for starting motion, followed by three ranged draws R(−65535, 65535), each of which may consume more than one raw value (claim 4). What the motion does belongs to the debris and projectile specs. |
-      | The animation is created with no loop delay (S-0109, claim 11) | Its start event (S-0109, claim 13) happens immediately. When μ = 0, the start event first produces the middle-event draws (S-0109, claim 14), then the type's resource-chain-reaction effects. The specs of those effects (particles, scorch marks, craters and the chain reaction) own their draws. |
+      | The animation is a bouncing type (S-0109, Terms) | Starting motion uses a group of three raw values and a subsequent group of three ranged draws R(−65535, 65535). Each ranged request uses the state left by the preceding request and may consume more than one raw value (claim 4). What the motion does belongs to the debris and projectile specs. |
+      | The animation is created with no loop delay (S-0109 claim 11) | Its start event (S-0109 claim 13) has immediate effects. When μ = 0, the resource chain reaction sees the cell and stream state left by the middle event (S-0109 claim 14), so a crater can empty the cell and suppress the reaction. The particle, smudge and chain-reaction specs own those effects' draws. |
 
       A chain reaction takes no draw and has no effect when the cell containing the animation's position holds no resource. This does not suppress any preceding middle-event draws. S-0109 claims 14 and 25 state the middle-event gates, sprite-derived μ and particle-before-choice ordering at map load and during play. Claim 15 below completes the requested particle and smudge creation draws. S-0401 claim 20 gives the resource-chain-reaction draw sequence, including conditional child-animation and detonation effects. No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a cell animation are both created with no loop delay, so each takes the applicable draws at the moment it starts, including during map loading; nothing in loading holds animations back.
     - Backing, by part:
@@ -621,14 +648,15 @@ original's recording modes are retained as deferred context, not implementation 
     before play.** No draw from this stream that changes game state has been found. Its uses:
     - *During play:* which variant of a sound or voice response plays (including the idle comment
       of S-0107, claim 14, and the local player's unit responses and the spin-up sound of
-      rapid-fire weapons), except the lightning sound choice of claim 10. Sound instances
+      rapid-fire weapons, whose draw timing is S-0609 claim 13), except the lightning sound
+      choice of claim 10. Sound instances
       also use this stream for pitch, volume shift, conditional pre-delay, sample choices
       and play-order choices (S-0701 claims 13 and 14). Equal-ended ranged draws take
       no raw value under claim 4; these are not a fixed raw count per sound. The complete
       delayed-mode sound sequence remains unestablished in S-0701 claim 14.
       The damage-feedback chance is R(0, 99) from this stream when a hit turns an object
-      yellow and its type has a feedback list, before checking whether its owner is the
-      local player (S-0701 claim 20). This chance is distinct from any subsequent response
+      yellow and its type has a feedback list, even when its owner is not the local
+      player (S-0701 claim 20). This chance is distinct from any subsequent response
       choice and sound-instance draws. Other uses are the choice of music track, the screen-shake displacement of an
       explosion, the jitter of electric-bolt and radiation-beam effects and a flicker colour on
       some objects.
@@ -699,13 +727,15 @@ original's recording modes are retained as deferred context, not implementation 
     choice in a session the setting is 0, so a random map generated without one is played from a
     seed drawn at game start. Besides generating the random map, whose rules belong to a future
     spec, this stream supplies low-bridge repair's piece choices during play (S-0511 claim 20).
-    Each strip requiring a random intact piece takes an unsigned raw value *g* and computes
-    *r* = trunc(*g* × 4 × *c*), where *c* is the double-precision constant nearest
-    1 / (2³² − 1). Both multiplications use double-precision floating-point arithmetic, with
-    the final result truncated toward zero to an integer. A result above 3 is rejected and
-    another raw value is taken until *r* lies in 0 … 3. Each such strip therefore consumes
-    one accepted raw value plus all preceding rejection retries, in increasing bridge-axis
-    coordinate order. This is not claim 4's ranged-draw rule. Strips requiring no random
+    For each strip requiring a random intact piece, consider the successive unsigned raw
+    values *g* from the map-generator stream. For each value, *r* = trunc(*g* × 4 × *c*),
+    where *c* is the double-precision constant nearest 1 / (2³² − 1). Both multiplications
+    use double-precision arithmetic in S-0205 claim 5's round-toward-zero mode; the final
+    result is truncated toward zero to an integer. The strip's piece corresponds to the
+    first value for which *r* lies in 0 … 3. Every preceding value with *r* above 3 is also
+    consumed. Strips receive these groups in increasing bridge-axis coordinate order, so
+    each strip's choice uses the state left by the preceding strip's accepted and rejected
+    values. This selection is not claim 4's ranged-draw rule. Strips requiring no random
     piece choice take no map-generator value; occupant deaths and scatter retain their own
     scenario-stream draws (S-0511 claims 17 and 20).
     A third generator of a different kind serves only the original's setup screens
@@ -727,32 +757,38 @@ original's recording modes are retained as deferred context, not implementation 
     - Confidence: medium
 
 14. **Loading-order refinements (Q-0101).** In a new skirmish, the following relations
-    determine which scenario-stream values later effects receive:
+    fix observable animation and resource outcomes and the stream state available to later
+    choices. They describe draw allocation, not a required internal loading schedule:
     - The unused-house cleanup of S-0009 claim 28 follows the second whole-map
       recalculation of S-0010 claim 12 and precedes the late start-position phase. Taking a
       removed house's grounded pre-placed objects out of their occupied cells recalculates
       those cells, including a building's foundation cells. A recalculation can start a missing
       tile animation under S-0010 claim 19, and its creation draws occur during the cleanup,
-      not during the second pass or the later game-start pass. A cell that already has the
-      tile-animation start recorded since the second pass takes no new creation draws.
+      not during the second pass or the later game-start pass. Thus late start-position
+      choices include any cleanup consumption, whereas second-pass choices do not.
+      A cell whose tile-animation start is already recorded since the second pass takes no
+      new creation draws.
       Removal of an object not occupying a ground cell does not imply a ground-cell
       recalculation.
-    - The game-start recalculation's tile-animation creation draws follow the starting-unit
-      group's final R(0, 65535), when that draw is taken, the initial crate placement draws
-      of S-0412 claim 10, the secret-lab choices of S-0407 claim 14, and the end-of-loading
-      tag draws. They precede the first tick. The pass occupies the same position when no
-      starting units are placed or the starting-unit step stops early without its final draw.
-      It does not move ahead of crates or secret labs in those cases. Within the pass,
-      creations occur in visiting order and take claim 10's applicable animation draws.
+    - A tile animation created by game-start recalculation receives values from the state
+      left by starting units, initial crates (S-0412 claim 10), secret-lab choices (S-0407
+      claim 14) and end-of-loading tags. This includes the starting-unit group's final
+      R(0, 65535) only when that request occurs. Missing starting units or an early stop
+      without that final request omit only those draws; crate, lab and tag choices still
+      affect the animations' assigned values. The animations exist before the first tick.
+      Their creation groups use claim 10's draws in visiting order, so an earlier cell's
+      animation can change a later cell's delay or immediate effects.
     - After the game-start recalculation, resource-glint setup can take further scenario-stream
       draws before tick 0. When a glint animation type is configured, each cell with a nonzero
       contained resource value takes R(0, *f* − 1), where *f* is the imported glint frequency
-      (a signed 32-bit integer) and *f* − 1 wraps in signed 32-bit arithmetic (S-0205). Cells are tested in visiting order. Contained value is the resource's
+      (a signed 32-bit integer) and *f* − 1 wraps in signed 32-bit arithmetic (S-0205).
+      Eligible cells receive their choice groups in visiting order. Contained value is the resource's
       imported value per bale times the cell's bale count, with signed 32-bit multiplication
       wrapping as S-0205 specifies; empty cells and zero-value resource cells take no draw.
-      A zero result creates the glint animation with no loop delay, immediately taking all
-      applicable animation-creation and start-event draws of claim 10 before the next cell's
-      choice. A nonzero result creates nothing. With no configured animation, the whole group
+      A zero result creates the glint animation with no loop delay, with all applicable
+      animation-creation and start-event draws of claim 10. The next eligible cell's choice
+      uses the state left by this entire group, so a glint's creation can change which later
+      cells glint. A nonzero result creates nothing. With no configured animation, the whole group
       takes no draw. For *f* = 1 the choice consumes no raw value and every eligible cell
       creates an animation, whose own draws still apply. Other bounds obey claims 4 and 5,
       including reversed bounds and extreme spans. Recalculation is therefore not an
@@ -760,9 +796,10 @@ original's recording modes are retained as deferred context, not implementation 
     - Low-bridge end markers write their end-row and piece types directly: neither those
       types' cell animations nor the marker type's cell animation start. Thus an end-row
       cell's write can take tile-animation creation draws from its recalculation, but no
-      cell-animation creation draws. A piece's raw type-choice value precedes its own
-      recalculation's tile-animation draws, then the next piece's raw value. There is no
-      intervening cell-animation draw, even if the written type names a cell animation.
+      cell-animation creation draws. A piece's tile animation uses the state left by that
+      piece's type choice, and the next piece's type uses the state left by that animation.
+      Consequently a tile animation can change the later bridge pattern, while assigning a
+      cell animation to the written type cannot: no cell-animation draw is inserted.
 
     S-0010 claims 12 and 19 own the recalculation passes and tile-animation eligibility.
     S-0009 claim 28 owns unused-house cleanup. Claim 10 supplies the low-bridge exclusions,
@@ -773,7 +810,9 @@ original's recording modes are retained as deferred context, not implementation 
       R12 for low-bridge cell-animation exclusion, R13 for resource-glint setup at
       frequencies 0, 1 and 2). Glint choices at other frequencies and extreme-span
       behaviour are `unmeasured`: R13 contains no part exercising those bounds; their
-      predictions follow claims 4/5 and the imported field's arithmetic.
+      predictions follow claims 4/5 and the imported field's arithmetic. The contained-value
+      formula's signed-overflow cases are also `unmeasured`: R13's resource controls do not
+      isolate wrapping products.
       Cleanup's position, recalculations and conditional animation draws are `unmeasured`:
       the former R11 reused a deferred network fixture, and no discriminating skirmish
       fixture with no computer player has been established.
@@ -795,14 +834,18 @@ original's recording modes are retained as deferred context, not implementation 
     middle-event draws, in the same order, as one created during loading. Its creator
     (a weapon, teleport, death, debris, trigger or terrain effect) does not change that rule.
     All draws below use the scenario random stream, not the unsynchronised random stream.
-    They follow any stage-delay and bouncing creation draws of claim 10, and precede any
-    start-event resource chain reaction. There is no extra phase-dependent draw or omitted
-    effect. Equal incoming stream states, animation data and relevant cell state give equal
-    outcomes and consumption; different fitting smudges or resource state can of course
+    The event's incoming state includes any stage-delay and bouncing creation draws of
+    claim 10. A start-event resource chain reaction uses the cell and stream state left
+    by the complete middle event; thus particle or smudge choices can shift its later
+    choices, and a crater can suppress it by emptying the resource. There is no extra
+    phase-dependent draw or omitted effect. Equal incoming stream states, animation data
+    and relevant cell state give equal outcomes and consumption; different fitting smudges
+    or resource state can of course
     change the conditional groups and selection bounds. The same composition applies when
     a middle event occurs later in playback under S-0109 claim 14; subsequent particle
     updates are not particle creation and remain outside this spec. That exclusion does not
-    make them draw-free: their draws must be accounted for separately from this event's group.
+    make them draw-free: S-0613 claims 6 to 8 own gas-update draws and successor creation
+    draw ordering, separately from this event's group.
 
     The smudge height gate is also the same in both phases: for integer world position
     (X, Y, Z), test Z − H(X, Y) < 30 leptons, with H the terrain surface height at that
@@ -813,10 +856,13 @@ original's recording modes are retained as deferred context, not implementation 
     scorch-or-crater choice and smudge request, not the preceding particle groups; its
     complete flag cases and choice rule belong to S-0109 claim 14.
 
-    **Particles.** Each requested particle takes the following scenario-stream draws, in table
-    order. One particle's entire group precedes the next particle's group. No particle-system
-    creation draw is added: the request creates a particle in the existing animation-particle
-    system. Particles do not take the infantry/vehicle/aircraft/building creation draw of claim 10.
+    **Particles.** The table gives each particle's draw allocation order. Its lifetime
+    variation uses the state left by any smoke-speed draw, and its colour uses the state
+    left by lifetime variation. The next particle uses the state left by that whole group,
+    so a colour draw for one particle can change the next particle's speed or lifetime.
+    No particle-system creation draw is added: the request creates a particle in the
+    existing animation-particle system. Particles do not take the
+    infantry/vehicle/aircraft/building creation draw of claim 10.
 
     | Condition | Draw and form |
     |---|---|
@@ -839,8 +885,9 @@ original's recording modes are retained as deferred context, not implementation 
     overflowing-quotient departure for −2147483648 divided by −1. Railgun behaviour has
     neither exceptional divisor case.
 
-    **Smudges.** After the particle groups and S-0109's conditional scorch-or-crater choice,
-    the chosen kind uses the fit test and selection rule of S-0312 claim 26, with these forms:
+    **Smudges.** The conditional scorch-or-crater choice of S-0109 claim 14 uses the state
+    left by all particle groups, so changing the requested particles can change the smudge
+    kind. The chosen kind uses S-0312 claim 26's fit and selection rule, with these forms:
 
     | Request | Fit and candidate preference |
     |---|---|
@@ -867,16 +914,19 @@ original's recording modes are retained as deferred context, not implementation 
     passes act later still. Thus there is no single before/after answer for all map-load
     animations: the animation's creation group in the loading table determines it.
 
-    Resource removal that empties a cell can itself recalculate that cell. Any missing tile
-    animation started there immediately takes claim 10's creation and start-event draws before
-    smudge selection. A partial take, including stage 6 becoming stage 0, does
-    not cause these emptying effects. Emptying also makes the conditional neighbour spread offers of S-0401
-    claims 5 and 8, after that recalculation and before smudge selection; their draws must not
-    be omitted. These effects are conditional, not an extra fixed draw per crater. The draw
-    order is therefore particle groups, optional kind-choice draw, resource-removal effects
-    for a crater (including any recalculation effects and neighbour-offer draws), then the
-    smudge-type draw. The subsequent start-event chain reaction
-    remains S-0401 claim 20's rule, after the whole immediate middle event.
+    Resource removal that empties a cell can itself recalculate that cell. A missing tile
+    animation started there has claim 10's creation and start-event effects immediately.
+    A partial take, including stage 6 becoming stage 0, has no such emptying effects.
+    Emptying also makes S-0401 claims 5 and 8's conditional neighbour spread offers.
+    The offers use the state left by any recalculation-created animation; smudge-type
+    selection uses the state left by both. Thus resource exhaustion can change the chosen
+    smudge type through those intervening draws, even with the same fitting candidates.
+    They are conditional effects, not an extra fixed draw per crater.
+
+    In draw allocation order the groups are particles, optional kind choice, a crater's
+    conditional resource-removal effects (recalculation effects and neighbour offers), and
+    smudge-type selection. S-0401 claim 20's start-event chain reaction sees the cell and
+    stream state left by that entire immediate middle event.
     - Backing: `measurable` (R14 A for particles, B for smudge forms and dimensions, C for
       data-stream ordering and conditional recalculation, D for the same composition during
       play and later playback, E for the shared height test). The zero-divisor failure and
@@ -884,7 +934,10 @@ original's recording modes are retained as deferred context, not implementation 
       deterministic replacement is S-0205's design departure. Negative lifetime divisors
       are also `unmeasured`: R14 A uses positive divisors only. The exhaustive assertion that
       no map state can change a particle creation group is `unmeasured`: R14 tests named
-      terrain, overlay, occupation and theater variants, not every possible map state
+      terrain, overlay, occupation and theater variants, not every possible map state.
+      Independence from every creator is also `unmeasured` beyond the tile, overlay,
+      weapon and trigger fixtures in R14: it gives no teleport-, death- or debris-created
+      fixture. The corresponding event composition is still required for those creators
     - Confidence: high for particle draw forms, gates and order, smudge candidate preferences
       and data-stream ordering, the phase-independent event composition and terrain-height
       test; medium for absence of further placement draws and conditional
@@ -1051,9 +1104,10 @@ is flat):
 | A flat cell set, re-patterned or kept (a flat edge neighbour that a placement sets or re-patterns, or a flat cell that keeps its vein in a recompute) | 3*c* + \|*σ*(*x*) rem 3\| ("magnitude after"): 3*c* … 3*c* + 2 |
 | A cell set by a placement, sloped (*s* ≥ 1) | 51 + 2*s* + (*x* mod 2) |
 
-One placement on a flat cell uses consecutive raw values: the placed cell's first, then one for each
-edge neighbour that takes one (each neighbour that the placement sets or re-patterns, claim 10), in
-the order map north, map east, map south, map west.
+One placement on a flat cell assigns consecutive raw values to the placed cell and each
+eligible edge neighbour (each neighbour set or re-patterned under claim 10). The assignment
+order is placed cell, map north, map east, map south, map west, omitting ineligible neighbours.
+Thus the visible variants of later neighbours depend on which earlier neighbours take a value.
 
 ## Constants
 
@@ -1102,13 +1156,16 @@ the two streams are the same raw values when no other draw has been taken from e
 of draws within a tick is set by the specs of the systems that draw; every draw shifts all later
 draws of the same stream, which is why those specs state counts and order.
 
-**Draws during map loading.** The rows are groups of scenario-stream draws taken while a map loads
-and in its game-start pass before the first tick,
-in stream order: every draw of a row comes after the draws of the rows above it. It extends S-0009's
-table *Start position resolution* and S-0011's claim 34 with the draws of claim 10; within a row the
-order is the one given. Rows marked "pointer" belong to a spec that does not yet state them.
+**Draws during map loading.** Each row is a group of effects and scenario-stream draws
+attributable to loading or game-start setup before the first tick. Rows give draw allocation
+order: a group's random outcomes use the state left by all earlier groups, including conditional
+draws. For example, changing a bridge's length can shift pre-placed-object, starting-unit and
+animation choices; adding an animation at a later group cannot change an earlier group's choices.
+Within a row the stated allocation similarly fixes which effect receives which value, not how an
+implementation schedules its internal work. The table extends S-0009 claim 20 and S-0011 claim 34
+with claim 10's draws. Rows marked "pointer" belong to a spec that does not yet state them.
 
-| Group | Draws, in stream order | Owner |
+| Group | Effects and draw allocation within the group | Owner |
 |---|---|---|
 | S-0009 early phase | list 1, list 2, random positions | S-0009, claim 20 |
 | Initial fill | one per visited cell, water fill only | S-0009, claim 6 |
@@ -1118,7 +1175,7 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 | First recalculation pass | the creation draws of tile animations (S-0010, claims 12 and 19). In this pass and in everything before the second pass, a tile animation starts at the first recalculation of its cell; a cell recalculated earlier in loading (for example by an overlay placement or a bridge piece) starts it there, among that group's draws (low confidence). Each takes the animation creation draws of claim 10 | S-0010, claims 12 and 19; claim 10 |
 | Vein candidates | for each candidate cell that passes the test, in reverse visiting order: the vein pattern draws of claim 10 | S-0009, claim 14; claim 10 |
 | Terrain objects | none found (medium confidence) | — |
-| Pre-placed objects | kind by kind as in S-0009 claim 43 and S-0203 claim 3 (vehicles, aircraft, infantry, buildings), each kind in entry order; for each object: its creation draw, then its tag's draws, then its placement's draws. Of the placement draws, a vehicle of a type with either visceroid flag (Import mapping) takes one ranged draw R(0, 29) when it is placed (the rule S-0009 claim 46 states for starting units), and an infantry unit placed while the map loads takes none (its standing position comes from the map, S-0208 claim 5); the other placement draws belong to the placement specs (medium confidence). A building's upgrades are created after that building's tag and take their own creation draws | claim 10; S-0011, claim 34; placement specs (pointer) |
+| Pre-placed objects | Values are assigned by kind as in S-0009 claim 43 and S-0203 claim 3 (vehicles, aircraft, infantry, buildings), each kind in entry order. An object's tag outcomes use the state left by its creation draw; its placement outcomes use the state left by its tag. The next object's creation uses the state left by this whole group. Of the placement draws, a vehicle of a type with either visceroid flag (Import mapping) takes one ranged draw R(0, 29) when it is placed (the rule S-0009 claim 46 states for starting units), and an infantry unit placed while the map loads takes none (its standing position comes from the map, S-0208 claim 5); the other placement draws belong to the placement specs (medium confidence). A building's upgrade creations use the state left by that building's tag and contribute their own creation draws to later choices | claim 10; S-0011, claim 34; placement specs (pointer) |
 | Smudges | none found (medium confidence) | — |
 | Second recalculation pass | the creation draws of the tile animations that S-0010's second pass (claim 12) starts; these replace the ones started earlier in loading (S-0010, claim 19). Each takes the animation creation draws of claim 10 | S-0010, claims 12 and 19; claim 10 |
 | Unused-house cleanup | after the second pass: tile-animation creation draws from occupied-ground-cell recalculations caused by removal, only when an animation has not already started since that pass (claim 14) | S-0009 claim 28; S-0010 claim 19; claims 10 and 14 |
@@ -1129,13 +1186,14 @@ order is the one given. Rows marked "pointer" belong to a spec that does not yet
 | Fence lines | When fence posts in the imported rules data can link on the map: the creation draws of the fence sections built between them, and the recompute draws of claim 10 for vein cells the line crosses. If no such posts are present, this row has no draws (low confidence) | fence rules (pointer); claim 10 |
 | End of loading | the tags created at the end of loading, in registration order | S-0011, claim 34 |
 | Game-start recalculation pass | in visiting order, the creation and immediate start-event draws of each tile animation this pass starts, after starting units, initial crates, secret labs and end-of-loading tags and before the first tick, even when no starting units were placed. A cell that started one in the second pass starts no second one and takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0011, claim 34; claim 10 |
-| Resource-glint setup | after the game-start recalculation and before tick 0, in visiting order: each eligible cell's ranged choice, then any animation-creation and immediate start-event draws for a zero result, before the next cell's choice. No choices when no glint type is configured | claim 14 |
+| Resource-glint setup | Each eligible cell's ranged choice uses the state left by game-start recalculation and preceding eligible cells in visiting order. A zero result includes animation-creation and immediate start-event draws in that cell's group, changing the state available to later glint choices. No choices when no glint type is configured; all effects belong to setup before tick 0 | claim 14 |
 
 S-0009 points to this table for the rows between the initial fill and the late phase, and states
-the starting units' draws itself (claim 46). S-0011's table *Load-time draw order* cites
-this spec for the overlay and vein-candidate groups, claim 14's conditional cleanup
-tile-animation draws, and the secret-lab group before remaining tags. Creating terrain objects,
-smudges and tunnels from the map was not found to take draws (medium confidence). Neither S-0009
+the starting units' draws itself (claim 46). S-0011 claim 34 cites this spec for the
+overlay and vein-candidate groups, claim 14's conditional cleanup tile-animation draws,
+and the secret-lab group before remaining tags. Creating terrain objects, smudges and tunnels
+from the map was not found to take draws (medium confidence, `unmeasured`: no scenario
+isolates these creations between known stream checkpoints). Neither S-0009
 nor S-0011 lists the *Fence lines* row; it matters only for data with fence posts. Where each group
 sits is `unmeasured`, apart from what scenario R8 shows (the bridge and vein groups' own draws,
 that each bridge or vein site follows the one before it in the stream, that the overlays of R8 C
@@ -1261,7 +1319,8 @@ The recorder is part of the measurement setup (the project lead has approved it)
   3 local-network games of two machines, with the random-state recorder on both.
   *Expected:* in each game both machines give the same seed, in 0 … 32767, and the same stream
   state at the first tick. If the seed were any 32-bit value instead, all three seeds would fall
-  in 0 … 32767 with chance 2⁻⁵¹, so three games confirm the range.
+  in 0 … 32767 with chance 2⁻⁵¹ under a uniform full-range alternative, so three games
+  discriminate strongly against that alternative, without proving that no other seed is possible.
   *Falsified if* the seeds or states of the two machines differ in some game, or a seed exceeds
   32767.
   (c) *Campaign continuation* (kept for the future campaign spec, not required of the skirmish
@@ -1381,7 +1440,8 @@ The recorder is part of the measurement setup (the project lead has approved it)
     (x<sub>*p*+*j*</sub> mod 4), *j* = 0 … 11, with *t*₀ from the Formulas table for
     the tested pair; and the second bridge's 12 pieces match x<sub>*p*+12</sub> …
     x<sub>*p*+23</sub> in the same way. A wrong position matches one bridge with chance 4⁻¹², so
-    the match is unique. The second bridge following straight on the first shows that the first
+    a unique match is expected. Multiple matching positions are inconclusive; repeat the run.
+    The second bridge following straight on the first shows that the first
     took exactly 3*d* = 12 raw values. *Falsified if* no *p* matches in some run, the base type
     differs, the pieces match in another order, or the second bridge starts at another position
     than *p* + 12. The pieces' overlay data is not checked, because the map's overlay data stream
@@ -1398,7 +1458,8 @@ The recorder is part of the measurement setup (the project lead has approved it)
     placed cell's data is 48 + (|*σ*(*x*)| rem 3) (46 for the one raw value of
     `quirks.random_magnitude_overflow`), and each neighbour's data, taken modulo 3, is
     |*σ*(*x*) rem 3| (the neighbours' 3*c* is checked in part E). A wrong
-    position matches with chance 3⁻²⁰, so exactly one *p* ≤ *N* − 20 should match. Each site's 5
+    position matches with chance 3⁻²⁰ under independent uniform remainders, so a unique
+    *p* ≤ *N* − 20 is expected. Multiple matches are inconclusive; repeat the run. Each site's 5
     values following straight on the previous site's shows that a site with four empty flat
     neighbours takes exactly 5 raw values, so this also tests that all four such neighbours are
     set (claim 10, medium confidence). *Falsified if* no *p* matches in some run, or the
