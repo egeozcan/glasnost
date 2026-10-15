@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -271,13 +271,14 @@ confidence and proposed measurements remain those of the owning claims.
    turns (claim 3).
    - Backing: `measurable` in part (scenarios O1 and O3 for infantry, vehicles, buildings and
      projectiles, scenario O5 for open-topped passengers, O13 for a sprite animation's turn).
+     S-0109 claim 29 and AN26 establish the creator placements for sprite animations:
+     a successfully placed ordinary shot projectile enters play before its shot animation, and
+     detonation and death animations enter play at their causing event, in that event's tick
+     part. Those created before or during the turn pass are eligible for a turn in that pass,
+     not guaranteed one (claims 4 and 10). AN26 tests this distinction, including the
+     projectile-removal case in claim 10 below; O17 tests an ending animation's removal.
      `unmeasured` here for aircraft, voxel animations, particle systems, beams, searchlights and
-     terrain objects: no scenario here isolates their turn against another object's turn. The
-     indirect route through an animation's removal skip (claim 10) needs to know where that
-     animation stands in the
-     update order. For the animations a shot or a death creates, that depends on whether the
-     animation enters play before or after the projectile or object that comes with it, which is
-     not established, so no setup can yet predict which object loses its turn.
+     terrain objects: no scenario here isolates their turn against another object's turn.
    - Confidence: high for every kind, terrain objects included: a terrain object enters the update
      order when it is placed exactly when its type's spawns-resources flag is on, and no other field
      of a terrain type plays a part
@@ -576,15 +577,27 @@ confidence and proposed measurements remain those of the owning claims.
       (scenario O8, variant d), also when that unit missed its turn in the same tick (scenario
       O12).
     - An infantry unit whose death sequence completes (claim 6): `measurable` (scenario O9).
-    - An animation that ends: `unmeasured`, for the reason given in claim 2's backing: where such
-      an animation stands in the update order is not established, so no setup can predict which
-      object loses its turn.
+    - An animation that ends: `measurable` (O17). Its creator determines its appended place
+      under S-0109 claim 29; there is no separate death-animation pass.
     - A returning slave going inside its master during delivery: `measurable` (O14 D).
       This happens in the master's turn (claim 12), so only a slave earlier than the master
       in update order counts.
     - A unit boarding an open-topped transport (claim 3), or other entry exchanges: `unmeasured`.
       Whose turn performs those exchanges is not known (Open questions), so no setup can
       predict which object loses its turn.
+
+    **Consequence for a newly created explosion.** Suppose a projectile is last in the update
+    order before its turn, creates exactly one explosion animation, kills nothing, creates
+    nothing else and leaves play in that turn. The animation is appended during the pass
+    before the projectile leaves (S-0109 claim 29). The projectile's own counting removal
+    costs that animation its creation-tick turn. It first updates next tick, subject to any
+    further missed turns; creation during the pass does not itself guarantee a same-tick
+    update. With the removal-skip switch off, it first updates in its creation tick.
+    S-0109 claim 5 owns the first-update stage hold, so this lost turn also postpones the
+    animation's first advance and completion by one tick in an otherwise uninterrupted run.
+    - Backing: `measurable` (S-0109 scenario AN26, detonation/removal fixture)
+    - Confidence: high for creation placement and the conditional removal rule; medium for
+      the minimal fixture before measurement
 
     **Consequence for an object that missed its turn.** Suppose projectile P1 detonates in its
     turn, so that unit U directly after it misses its turn, and later in the same pass another
@@ -1529,6 +1542,23 @@ newly due power/radar work waits until tick 17, and a tag-caused last-object los
 for defeat in tick 17, not tick 16. Continued raises after defeat and cleanup absence use
 V15 part a and V13. Reversed timing or a missing eligible raise falsifies the corresponding
 rule; V15 specifies controls separating the ordinary poll from the owner-house raise.
+
+- **O17 (claims 2 and 10; ending animation).** Use S-0109 scenario AN26's tiny
+  skirmish, speed 4, director and unrelated mods off, with one non-damaging sprite
+  animation having an explicit finite end, no follow-up and no creation effects.
+  Create it by pre-pass trigger polling. While it plays, have one existing firer launch
+  exactly one long-flight projectile with no shot animation or trailer, then stop firing.
+  Confirm that the projectile directly follows the animation in update order and that it
+  projectile will neither detonate nor create effects during the observation window.
+  Exclude all other creations and removals around the animation's final turn. Use the
+  read-only recorder for update order, animation stage, removal tick and projectile
+  position and turns, with end-of-tick captures; repeat three times. Expected: the
+  animation's own removal costs the directly following projectile its turn in that
+  tick, delaying its next movement until the next tick. Falsified by a projectile
+  turn after that removal in the same tick with those preconditions confirmed.
+  The engine-only companion run with the removal-skip switch off must retain that
+  projectile turn. AN26 separately tests creation placement and the new explosion's
+  missed first turn; this scenario tests removal at animation completion.
 
 ## Open questions
 
