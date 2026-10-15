@@ -2,13 +2,13 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0660]
 supersedes: []
 ---
 
@@ -62,11 +62,13 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 - **Garrisoned building, firing occupant.** As S-0302 (Terms) for the garrisoned building. Its
   occupants fire through the shared occupant/muzzle index owned by S-0313 claim 6 and used by
   S-0308 claim 13. It advances after each successful non-disc-laser shot, stays unchanged after
-  a disc-laser shot, and resets to 0 at the start of a whole-building eviction or clearing
-  action, before any occupant leaves or is removed (S-0508 claim 18; claim 15 here).
-  This is not a reset on each independent occupant departure or death. Its *firing occupant*
-  at a given moment is the occupant at the index then, that is, the one whose weapon the building's next
-  shot uses.
+  a disc-laser shot, and is 0 after a completed whole-building eviction or clearing
+  action (S-0508 claim 18; claim 15 here), without an intermediate release/removal ordering
+  requirement. This is not a reset on each independent occupant departure or death.
+  Own-house defeat can leave a dead firing choice without changing the numeric index
+  (S-0508 claim 19). Where the index selects a living occupant, its *firing occupant*
+  at a given moment is that occupant, whose weapon the building's next shot uses.
+  Experience selection through a dead or out-of-range choice remains unresolved (claim 15).
 - **Actual cost.** The cost of a type for a given house: the type's cost multiplied by that
   house's cost factor for the type's kind and by the cost factor of the house's country for that
   kind, truncated (Formulas F1). The production specs own where the two factors come from; this
@@ -225,7 +227,10 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
    after an ordinary launch is credited to the next occupant, whereas after a disc-laser shot it
    is credited to that shot's shooter. With one occupant, that occupant is selected. A hit
    resolved during an ordinary launch before the index changes would name the shooter.
-   No such weapon case is established here.
+   No such weapon case is established here. These recipient predictions require the index
+   to select a living occupant. Claim 15 distinguishes retained dead firing choices after
+   own-house defeat and out-of-range choices after individual removal; neither has a safe
+   experience-recipient rule established here.
    - Backing: `measurable` for the recipient cases and ordinary/disc-laser comparison (X3).
      Timing of a hit resolved during launch is `unmeasured`: X3 uses hits after launch, and no
      synchronous-hit part is supplied. Carrier aircraft gaining for themselves is `unmeasured`
@@ -371,32 +376,48 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
       here: no part isolates their owner-dependent presentation.
     - Confidence: medium
 
-15. **Emptying a garrison and changes of occupant.** A whole-building eviction or clearing
-    action resets the shared occupant/muzzle index to 0 before any occupant is released or
-    removed (S-0508 claim 18). This includes evacuation, failed-exit removal, assault and
-    erasure. Individual releases or removals while others await the same action therefore
-    see the already-zero index, not the pre-action index retained or reduced modulo the
-    remaining count. The reset does not wait for the last occupant to go and is not a rule
-    for every independent individual departure or death. After reoccupation, the next shot
-    uses the first occupant, and a destruction credited to the building before any further
-    index change selects that occupant under claim 8.
+15. **Emptying a garrison and changes of occupant.** After a completed whole-building
+    eviction or clearing action, the shared occupant/muzzle index is 0 (S-0508 claim 18).
+    This includes evacuation, failed-exit removal, assault and erasure. No ordering between
+    the reset and individual releases or removals within the action is required. This is
+    not a reset rule for every independent individual departure or death. After reoccupation,
+    the next shot uses the first occupant, and a destruction credited to the building before
+    any further index change selects that occupant under claim 8. Additional entries append
+    occupants without changing the index.
 
     A distinct, limited case is established for scenario set-up: an individual removal from
     the building's occupancy preserves the remaining occupants' relative order and leaves
     the numeric index unchanged, without reducing it modulo the new count. If that index
-    still names an occupant, claim 8 uses that occupant, not necessarily the same individual
-    as before removal. This removal handling is not exclusive to set-up: eviction also
-    enables it, but has already reset the index to 0. Neither case establishes an independent
-    normal skirmish order or death event that removes just one occupant while leaving the
-    others inside. Nor does it establish a safe experience recipient when a retained index
-    no longer names an occupant (Open questions).
-    - Backing: `measurable` for evacuation and reoccupation (X15), and completed clearing
-      and additional-entry retention (S-0508 G14). The reset before the first release or
-      removal is `unmeasured`: no validated fixture makes an attack or credited destruction
-      observe the intermediate garrison during these same-tick actions. The individual
+    still names a living occupant, claim 8 uses that occupant, not necessarily the same
+    individual as before removal. This removal handling is not exclusive to set-up:
+    eviction also enables it. That does not impose intermediate ordering within the
+    whole-building action or establish an independent selective-evacuation order.
+
+    Own-house defeat or surrender is a different individual-death case (S-0508 claim 19,
+    S-0414 claim 5). It reaches the defeated house's off-map occupants even when the
+    building belongs to a surviving house. In a mixed-house garrison it can kill that
+    house's subset while the other occupants survive inside. Such deaths retain the
+    numeric index without resetting it or reducing it modulo a new count, and do not
+    perform the set-up removal and compaction described above. The original can retain
+    a dead occupant among its firing choices. Neither a dead choice nor an out-of-range
+    choice has a safe experience recipient established here. In particular, S-0308 claim 13's
+    building-weapon fallback does not establish an experience-credit fallback. A safe
+    deterministic continuation needs a project-lead decision, not an inferred reset,
+    modulo reduction or shooter substitution.
+    - Backing: `measurable` for evacuation and reoccupation (X15), completed assault-clearing
+      and additional-entry retention (S-0508 G14), and defeat hits with unchanged numeric
+      index in a surviving foreign-owned building (S-0508 G15). Other eviction causes,
+      including failed-exit removal, are `unmeasured` for the index reset: no part isolates
+      the index across each cause. Erasure's reset is `unmeasured`: the building has no
+      subsequent shot through which to observe it (S-0508 claim 18). Intermediate reset timing
+      is `unmeasured`: no validated fixture interleaves a shot or credited destruction
+      within these same-tick actions; it is not an implementation constraint. Individual
       set-up removal is `unmeasured`: no validated data-only selective-removal scenario is
-      supplied. No prediction is made for an unestablished independent gameplay removal.
-    - Confidence: high for whole-building actions; medium for individual set-up removal
+      supplied. Mixed-house selective survival is `unmeasured`: G15 does not establish a
+      differently owned entrant fixture. Unsafe subsequent credit is `unmeasured`: no
+      unsafe continuation is proposed as a confirming run.
+    - Confidence: high for whole-building actions and defeat's off-map inclusion; medium
+      for individual set-up removal, mixed-house selective death and the retained dead choice
 
 ## Formulas
 
@@ -831,19 +852,41 @@ out-of-scope AI policies are design rules, not oracle predictions. X1's wait tes
 
 ## Open questions
 
-- Q-0660 question 2 remains open for normal skirmish gameplay: no validated individual
-  departure/death transition that leaves other occupants inside is established here.
-  Claim 15 distinguishes the retained-index set-up case from whole-building action resets.
-  eviction also enables the removal handling, but with the index already reset.
-  If an individual removal leaves an index outside the remaining occupant range, its
-  experience recipient and a safe replacement behaviour also remain unspecified. Do not
-  infer a reset, modulo reduction or shooter credit from claim 8. The building-weapon
-  fallback of S-0308 claim 13 does not establish an experience-credit fallback.
-  Q-0660 question 1's
-  wording correction is answered by claim 15 and Terms; the request is not listed as
-  fully answered in front matter.
+- Q-0660's original numeric-index questions are answered by claim 15 and S-0508 claims
+  18 and 19: whole-building actions reset on completion, additional entry retains the
+  index, and own-house defeat can kill occupants independently without index repair.
+  An independently ordered selective evacuation is not established. Mixed-house selective
+  survival remains without a validated fixture, and the individual set-up removal case
+  does not establish compaction after defeat.
 - Which object a destruction that claim 9 does not list credits; erasure and assault are now
   covered, but other destruction paths were not exhaustively traced.
 - Which game-mode setting makes skirmish starting units elite, and whether it can be reached.
 - Whether the resource-proof ability has any effect in the original (one candidate rule was not
   checked).
+
+## Cross-spec changes to confirm
+
+Joint sign-off must confirm the following companion changes. The current companion drafts
+already agree; the approved text of S-0308 claim 13 and S-0508 claim 18 still requires the
+reset before individual releases or removals. This draft replaces that requirement with the
+completed-action result, not a different required intermediate order.
+
+- **S-0308 claim 13 and its occupant-index state table:** require index 0 after a completed
+  whole-building eviction or clearing action, without ordering the reset against individual
+  releases or removals. Retain the separate own-house-defeat case of S-0508 claim 19:
+  numeric-index retention does not imply occupant compaction or safe subsequent credit.
+- **S-0508 claim 18:** use the same completed-action reset rule and remove the requirement
+  that reset precede any release or removal. Preserve the distinction from independent
+  occupant death and the backing limits for untested eviction causes and erasure.
+  **S-0508 claim 19** supplies the own-house-defeat exception used by claim 15 here.
+- **S-0313 claim 6 and its muzzle-index state table:** retain the completed-action reset,
+  without intermediate release/removal ordering, and include S-0508 claim 19's defeat
+  exception. Muzzle, weapon and experience selection must share that numeric-index contract.
+  None supplies a safe continuation through a dead choice pending the lead's decision.
+
+## Questions for the project lead
+
+- Choose a safe deterministic experience-recipient policy when the shared garrison index
+  selects a dead occupant after own-house defeat, or is out of range after an individual
+  removal. Coordinate it with weapon and muzzle safety in S-0308 claim 13 and S-0313 claim 6.
+  No reset, modulo repair, shooter credit or building-weapon fallback is inferred here.
