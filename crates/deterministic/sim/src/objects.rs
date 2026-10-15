@@ -120,7 +120,8 @@ pub fn create_converted(
         attack_move: None,
         contact: None,
         path: PathState::default(),
-        drive: (loco == Locomotor::Drive).then(DriveState::new),
+        // spec: S-0504 claim 1 (a ship moves by the driving rules: it carries the driving locomotor's state)
+        drive: matches!(loco, Locomotor::Drive | Locomotor::Ship).then(DriveState::new),
         walk: (loco == Locomotor::Walk).then(WalkState::default),
         infantry: (kind == Kind::Infantry).then(InfantryState::default),
         teleport: (loco == Locomotor::Teleport).then(crate::teleport::TeleportState::default),

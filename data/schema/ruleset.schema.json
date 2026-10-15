@@ -1172,6 +1172,14 @@
           ],
           "default": null
         },
+        "cloakable": {
+          "description": "`Cloakable`: whether an underwater type can be submerged (S-0504 Terms; planned S-0516).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "coefficients": {
           "description": "The five threat coefficients, in the order own-effectiveness,\ntarget-effectiveness, special-threat, strength, distance (S-0309\nF4), doubles; an entry given as 0 already replaced by the importer\nwhere S-0309 Edge cases say.",
           "type": [

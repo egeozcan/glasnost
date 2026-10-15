@@ -454,6 +454,8 @@ pub struct TypeCombat {
     pub naval_targeting: i32,
     /// Underwater.
     pub underwater: bool,
+    /// Can cloak (S-0504 Terms, planned S-0516).
+    pub cloakable: bool,
     /// Organic.
     pub organic: bool,
     /// Unnatural.
@@ -1145,6 +1147,8 @@ pub fn type_combat(
         land_targeting: c.land_targeting.unwrap_or(0),
         naval_targeting: c.naval_targeting.unwrap_or(0),
         underwater: b(c.underwater),
+        // spec: S-0504 Import mapping (Cloakable absent: no)
+        cloakable: b(c.cloakable),
         // spec: S-0314 Import mapping (Organic absent: yes for infantry types, no otherwise)
         organic: c.organic.unwrap_or(infantry),
         unnatural: b(c.unnatural),

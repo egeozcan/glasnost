@@ -1182,7 +1182,7 @@ pub fn redirect(w: &World, a: ObjectId, t: Target) -> Option<Target> {
             )
         });
     // spec: S-0309 claim 24 (a dead or sinking object, or an infantry unit whose current sequence is a death kind of S-0107: die 1 to 5, wet die 1 and 2, the three air-death kinds: no target)
-    if crate::combat::damage::dead(o) || o.health <= 0 || dying {
+    if crate::combat::damage::dead(o) || o.health <= 0 || dying || crate::naval::sinking(w, x) {
         return None;
     }
     Some(t)

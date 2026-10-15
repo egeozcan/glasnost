@@ -2165,3 +2165,7 @@ mod econ_tests;
 #[cfg(test)]
 #[path = "sim_parasite_tests.rs"]
 mod parasite_tests;
+
+#[cfg(test)]
+#[path = "sim_naval_tests.rs"]
+mod naval_tests;

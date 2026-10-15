@@ -51,6 +51,10 @@ pub fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
         .as_ref()
         .and_then(|d| d.track.as_ref())
         .is_some_and(|t| t.crush);
+    if u.locomotor == crate::rules::Locomotor::Ship {
+        ship_entered_cell(w, id, c, crush_track);
+        return;
+    }
     // spec: S-0210 claim 9 (movement zone crusher-all, on a track in crush mode)
     if u.zone != MovementZone::CrusherAll || !crush_track {
         return;
@@ -70,6 +74,30 @@ pub fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
             && w.obj(x).is_some_and(|ob| ob.kind == Kind::Vehicle)
     });
     if vehicle && let Some(ob) = w.obj_mut(id) {
+        ob.crush_slowdown = true;
+    }
+}
+
+/// A ship drives into a new cell (S-0210 claim 9, ship locomotor case): a
+/// crusher on a track in the ship locomotor's crush mode enters the state
+/// when the cell's overlay is the overlay type of registration index 0
+/// (`quirks.crush_slowdown_first_overlay`; off: a wall overlay).
+fn ship_entered_cell(w: &mut World, id: ObjectId, c: CellXY, crush_track: bool) {
+    if !crush_track || !occupancy::is_crusher(w, id) {
+        return;
+    }
+    let Some(overlay) = w.cells.cell(c).map(|x| x.overlay) else {
+        return;
+    };
+    let r = w.rules();
+    let hit = if r.quirks.crush_slowdown_first_overlay {
+        // spec: S-0210 claim 9 (ship locomotor: the overlay of registration index 0, whatever its properties)
+        overlay == 0
+    } else {
+        // spec: S-0210 Edge cases (quirks.crush_slowdown_first_overlay off: a wall overlay)
+        overlay != NO_OVERLAY && r.overlays.get(usize::from(overlay)).is_some_and(|o| o.wall)
+    };
+    if hit && let Some(ob) = w.obj_mut(id) {
         ob.crush_slowdown = true;
     }
 }

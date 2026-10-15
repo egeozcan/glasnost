@@ -293,6 +293,10 @@ pub fn check(
     if wr.spawner && !crate::spawn::any_alive(w, firer) {
         return Answer::Rearming;
     }
+    // spec: S-0301 claim 9 rank 4 and S-0504 claim 5 (a sinking firer: illegal; earlier reasons keep their precedence)
+    if crate::naval::sinking(w, firer) {
+        return Answer::Illegal;
+    }
     let t = w.tick;
     let c = &o.combat;
     // spec: S-0301 claim 13 (the sync tick: the counter equals the sync frame for k mod B)
@@ -334,6 +338,12 @@ pub fn check(
             && w.obj(x).is_some_and(|ob| ob.kind.is_mobile())
             && crate::parasite::latching(w, weapon)
             && crate::parasite::shot_illegal(w, firer, x)
+        {
+            return Answer::Illegal;
+        }
+        // spec: S-0301 claim 9 rank 9 and S-0504 claim 5 (a sinking target, among the late target tests: illegal)
+        if let Target::Object(x) = tg
+            && crate::naval::sinking(w, x)
         {
             return Answer::Illegal;
         }
