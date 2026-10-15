@@ -2,7 +2,7 @@
 id: S-0524
 title: Multiplayer trigger completion (remaining stock actions and entry raises)
 topic: triggers
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -16,7 +16,7 @@ supersedes: []
 
 ## Summary
 
-Extends S-0011's non-team action subset for official multiplayer maps, including the loose official maps, and specifies additional object-entry raises. Superweapon grant, set-charge and reset effects belong to S-0512 claims 12 to 15; this spec's action table does not cover those actions. Storm-start and storm-stop actions (44 and 45) belong to S-0513 claim 20, and the waypoint curtain action belongs to S-0513 claim 22: no launching house, ground layer only, without the leaving-stage skip. These rules cover skirmish only; network games, campaigns, the team system and computer-player targeting policy are out of scope.
+Extends S-0011's non-team action subset for official multiplayer maps, including the loose official maps, and specifies additional object-entry raises. Superweapon grant, set-charge and reset effects belong to S-0512 claims 12 to 15; this spec's action table does not cover those actions. Storm-start and storm-stop actions (44 and 45) belong to S-0513 claim 20, and the waypoint curtain action (code 109) belongs to S-0513 claim 22: no launching house, ground layer only, without the leaving-stage skip. That claim also owns its invoke animation at the waypoint cell centre's terrain surface plus 5 leptons, without bridge lift, and its presentation: no radar event or activation announcement, with ordinary animation creation effects retained. These rules cover skirmish only; network games, campaigns, the team system and computer-player targeting policy are out of scope.
 
 ## Terms
 
