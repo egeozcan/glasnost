@@ -2,7 +2,7 @@
 id: S-0507
 title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -173,7 +173,7 @@ This spec does not repeat what other specs own:
    **If it accepts**, in the same tick the passenger:
    - forgets the target it had stored for later use,
    - leaves the bridge-deck layer if it was on it,
-   - returns its gattling stage to the first stage (S-0308),
+   - resets its gattling spin value and stage to 0 (S-0609 claim 11),
    - is released from any mind control that held it,
    - leaves the map (S-0203 claim 3 for whether it stays in play),
    - is recorded as riding in this transport, and goes to position 1 (claim 3).
@@ -526,8 +526,8 @@ that order, then order an unload.
 - *Recorded:* boarding and appearance ticks, passenger count, and exit order.
 - *Reset variants (claim 6):* board a unit with an archived target, a unit that was on a bridge
   deck, and a test gattling vehicle after it has spun up. Record archived target, bridge-layer
-  state and gattling stage on the boarding tick. Expected: no archived target, ground layer,
-  stage 0, off-map and riding the transport. Any retained reset state or different order
+  state, gattling spin value and stage on the boarding tick. Expected: no archived target,
+  ground layer, spin value 0, stage 0, off-map and riding the transport. Any retained reset state or different order
   falsifies the corresponding part.
 
 **T4. Exclusions and arrival refusals (claims 4 and 6).** With T3's transport empty, compare
@@ -648,15 +648,20 @@ close the incomplete flight contract, without assuming every aircraft can land t
 **T12. Open-topped passengers (claims 14 and 15).** A stock open-topped transport with two armed
 infantry passengers.
 - *(a)* Drive it past an enemy: the passengers fire while inside. Record passenger and
-  transport positions each tick: all agree after each transport position change. Repeat with
-  a named open-topped aircraft carrying infantry to test that the flag is not vehicle-only.
-- *(b)* Order it to attack: both passengers take its target.
+  transport positions each tick: all agree after each transport position change. Repeat with a
+  named open-topped aircraft carrying infantry to test that the flag is not vehicle-only.
+  Failure of either passenger to fire while the enemy is available, any passenger position
+  differing from the transport after a position change, or the aircraft not exhibiting the
+  same passenger behaviour falsifies the corresponding part.
+- *(b)* Order it to attack: both passengers take its target. Either passenger not taking the
+  transport's target falsifies this part.
 - *(c)* A test file defines a larger transport that takes the open-topped one. While its
   passengers have a target, it boards the larger transport. Expected: every passenger's
   target is nothing on the boarding tick. Also enter a suitable absorbing building: targets
   clear on leaving the map. A retained target falsifies either part.
 - *(d)* A test transport owned by house A, carrying an allied house B's unit, with a target, then
-  unloaded: B's unit has no target after leaving. An own unit keeps its target.
+  unloaded: B's unit has no target after leaving. An own unit keeps its target. A different
+  result for either passenger falsifies this part.
 
 ## Open questions
 
