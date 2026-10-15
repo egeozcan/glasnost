@@ -19,7 +19,7 @@ use glasnost_sim::parasite::{self, Leave, ParasiteState};
 use glasnost_sim::rules::Kind;
 use glasnost_sim::targeting::{self, ClickOn, Modifiers};
 use glasnost_sim::testkit::{self, mid, spawn};
-use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::world::{HouseId, Layer, ObjectId, Target, World};
 use glasnost_sim::{naval, save};
 
 const SIZE: i32 = 32;
@@ -485,7 +485,7 @@ fn claim_4_failed_latch_on_a_dead_target() {
     assert_eq!(o.pos.cell(), cell(0, 0));
 }
 
-// spec: S-0614 claim 4 (a cell it cannot be placed in: removed silently; interim placement rules, Q-0620)
+// spec: S-0614 claims 4 and 20 (an allied stationary vehicle in the cell: the entry outcome is not clear, removed silently)
 #[test]
 fn claim_4_blocked_cell_removes_silently() {
     let mut w = game();
@@ -1180,6 +1180,63 @@ fn claim_15_neighbour_in_front() {
     assert_eq!(w.obj(p).unwrap().pos.cell(), cell(2, -1));
 }
 
+/// A boat host of house 1 on water at (2, 0) facing north, a drone of
+/// house 0 latched on; the cell in front (2, -1) is dry.
+fn boat_host(w: &mut World) -> (ObjectId, ObjectId) {
+    wet(w, cell(2, 0));
+    let host = spawn(w, Kind::Vehicle, "BOAT", 1, cell(2, 0), 0);
+    let p = spawn(w, Kind::Vehicle, "DRONE", 0, cell(-2, 0), 64);
+    shoot(w, p, Target::Object(host));
+    assert_eq!(parasite::host_of(w, p), Some(host));
+    (host, p)
+}
+
+// spec: S-0614 claim 23 and Edge cases (quirks.parasite_host_loss_failed_choice_origin: a vehicle-present refusal in the front neighbour; on: the vehicle parasite survives at world position (128, 128, 0), unattached and not held; off: removed silently; no other cell is tried)
+#[test]
+fn claim_23_failed_choice_vehicle_at_the_origin() {
+    for on in [true, false] {
+        let r = quirks(|q| q.parasite_host_loss_failed_choice_origin = on);
+        let mut w = game_of(&r);
+        let (host, p) = boat_host(&mut w);
+        spawn(&mut w, Kind::Vehicle, "BUGGY", 0, cell(2, -1), 0);
+        glasnost_sim::objects::remove(&mut w, host);
+        assert_eq!(w.obj(p).is_some(), on, "quirk {on}");
+        if on {
+            let o = w.obj(p).unwrap();
+            assert_eq!((o.pos.x, o.pos.y, o.pos.z), (128, 128, 0));
+            assert_eq!(o.layer, Layer::Ground, "not marked on a bridge");
+            assert_eq!(parasite::host_of(&w, p), None);
+            assert!(!parasite::held(&w, p));
+        }
+    }
+}
+
+// spec: S-0614 claim 23 (an accepted fallback point in a high-bridge cell: on the deck, at the point's surface plus 416, exactly when the host stood on a bridge or the point's terrain is below the host cell's centre terrain; otherwise on the ground)
+#[test]
+fn claim_23_fallback_surface() {
+    for (front_level, deck) in [(1, false), (0, true)] {
+        let mut w = game();
+        for c in [cell(2, 0), cell(2, -1)] {
+            w.cells.grid.get_mut(c).unwrap().level = 1;
+        }
+        w.cells.grid.get_mut(cell(2, -1)).unwrap().level = front_level;
+        let i = w.cells.idx(cell(2, -1)).unwrap();
+        w.cells.deck[i] = true;
+        let (host, p) = boat_host(&mut w);
+        glasnost_sim::objects::remove(&mut w, host);
+        let o = w.obj(p).expect("placed");
+        assert_eq!(o.pos.cell(), cell(2, -1));
+        let ground = w.surface_at(o.pos.x, o.pos.y);
+        if deck {
+            assert_eq!(o.layer, Layer::Deck, "front level {front_level}");
+            assert_eq!(o.pos.z, ground + 416);
+        } else {
+            assert_eq!(o.layer, Layer::Ground, "front level {front_level}");
+            assert_eq!(o.pos.z, ground);
+        }
+    }
+}
+
 /// Land west of column `x0`, water from it eastwards, around the middle.
 fn shore(w: &mut World, x0: i32) {
     for dy in -4..=4 {
@@ -1286,6 +1343,82 @@ fn claim_18_parasites_act_in_their_hosts_order() {
     );
 }
 
+// spec: S-0614 claim 18 (the parasite acts after the host's movement: a hold first renewed by a delivery cannot prevent the movement already taken in that turn; the next turn's movement sees it)
+#[test]
+fn claim_18_delivery_after_the_hosts_movement() {
+    // A short paralysis (claim 7) leaves the host free between deliveries.
+    let mut r = ruleset();
+    r.sim.warheads.get_mut("Grip").unwrap().paralyzes = Some(4);
+    let mut w = game_of(&r);
+    let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+    let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+    shoot(&mut w, p, Target::Object(host));
+    assert_eq!(parasite::host_of(&w, p), Some(host));
+    w.tick = w.tick.max(w.orders_blocked_through + 1);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(1),
+        orders::Order::Behaviour {
+            actor: host,
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(cell(2, 12))),
+        },
+    ));
+    // Skip deliveries until the host is under way (it turns first).
+    for _ in 0..3 {
+        next_hit(&mut w, host, 100).expect("a delivery");
+    }
+    let mut moved_on_delivery = None;
+    for _ in 0..200 {
+        let before = w.obj(host).unwrap().pos;
+        let h0 = health(&w, host);
+        testkit::run(&mut w, 1);
+        if health(&w, host) < h0 {
+            moved_on_delivery = Some(w.obj(host).unwrap().pos != before);
+            break;
+        }
+    }
+    assert_eq!(moved_on_delivery, Some(true), "it moved in the delivery's turn");
+    assert!(parasite::held(&w, host), "the delivery renews the hold");
+    let after = w.obj(host).unwrap().pos;
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(host).unwrap().pos, after, "held in the next turn");
+}
+
+// spec: S-0614 claim 20 (one attempt in exactly the cell: an enemy vehicle refuses a non-crushing vehicle parasite's return like an allied one; no retry in a clear neighbour, no attack on the obstruction)
+#[test]
+fn claim_20_enemy_vehicle_refuses_without_retry() {
+    let mut w = game();
+    let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+    assert!(fire::shot(&mut w, p, 0, Target::Cell(cell(4, 0))));
+    let blocker = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(0, 0), 0);
+    let h0 = health(&w, blocker);
+    for _ in 0..100 {
+        if w.obj(p).is_none() {
+            break;
+        }
+        testkit::run(&mut w, 1);
+    }
+    assert!(w.obj(p).is_none(), "removed silently");
+    assert_eq!(health(&w, blocker), h0);
+}
+
+// spec: S-0614 claim 22 (the host-cell air test: at least 208 leptons above the surface fails, 207 passes; a deck-standing host counts its height from the deck)
+#[test]
+fn claim_22_air_threshold() {
+    for (lift, placed) in [(207, true), (208, false)] {
+        let (mut w, p, host, _) = latched();
+        w.obj_mut(host).unwrap().pos.z += lift;
+        glasnost_sim::objects::remove(&mut w, host);
+        // Below 208 the host's cell passes; at 208 the fallback neighbour in front is used.
+        let hc = cell(2, 0);
+        let o = w.obj(p).expect("placed");
+        assert_eq!(o.pos.cell() == hc, placed, "lift {lift}");
+    }
+}
+
 // spec: S-0614 claim 19 (re-selection is presentation: the imported flag resolves; selection is not game state)
 #[test]
 fn claim_19_reselect_flag_is_presentation() {
@@ -1334,17 +1467,27 @@ fn s0214_sonic_friend_attack_on_a_carrier() {
     assert_eq!(act(&w), targeting::Action::Attack);
 }
 
-// spec: S-0614 claim 4 (a projectile that leaves the map without a detonation: a failed latch, interim Q-0621)
+// spec: S-0614 claim 21 and Edge cases (quirks.parasite_carrier_loss_strands_unit: a carrying projectile removed without detonating strands the parasite off the map, unattached, health unchanged; off: claim 4's failed-latch return)
 #[test]
-fn q0621_carrier_removed_without_detonation() {
-    let mut w = game();
-    let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
-    assert!(fire::shot(&mut w, p, 0, Target::Cell(cell(4, 0))));
-    let carrier = ps(&w, p).carrier.unwrap();
-    let wp = w.projectiles[&carrier].weapon;
-    glasnost_sim::combat::projectile::remove(&mut w, carrier);
-    parasite::carrier_ended(&mut w, carrier, wp, false);
-    assert!(w.obj(p).is_some_and(|o| o.on_map));
+fn claim_21_carrier_removed_without_detonation() {
+    for on in [true, false] {
+        let mut w = game_of(&quirks(|q| q.parasite_carrier_loss_strands_unit = on));
+        let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+        let h0 = health(&w, p);
+        assert!(fire::shot(&mut w, p, 0, Target::Cell(cell(4, 0))));
+        let carrier = ps(&w, p).carrier.unwrap();
+        let wp = w.projectiles[&carrier].weapon;
+        glasnost_sim::combat::projectile::remove(&mut w, carrier);
+        parasite::carrier_ended(&mut w, carrier, wp, false);
+        let o = w.obj(p).expect("never removed");
+        assert_eq!(o.on_map, !on, "stranded off the map with the switch on");
+        assert_eq!(parasite::host_of(&w, p), None);
+        assert_eq!(health(&w, p), h0);
+        if on {
+            testkit::run(&mut w, 300);
+            assert!(w.obj(p).is_some_and(|o| !o.on_map), "no recovery");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

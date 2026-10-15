@@ -102,11 +102,6 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn)
     crate::combat::heal::turn(w, id);
-    // spec: S-0614 claim 18 (an attached parasite acts in its host's turn; its place within the turn is an interim rule, Q-0622)
-    crate::parasite::host_turn(w, id);
-    if w.obj(id).is_none_or(crate::combat::damage::dead) {
-        return;
-    }
     process::turn(w, id);
     if w.obj(id).is_none() {
         return;
@@ -160,6 +155,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
         Some(Locomotor::Ship) => !held && crate::naval::tick(w, id),
         _ => false,
     };
+    // spec: S-0614 claim 18 (an attached parasite acts late in its host's turn: after self-healing, behaviour processing and movement, before the separate firing update; a host killed by it does nothing more)
+    crate::parasite::host_turn(w, id);
+    if w.obj(id).is_none_or(crate::combat::damage::dead) {
+        return;
+    }
     // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)
     crate::econ::events::turn(w, id, moved);
     if kind == Kind::Vehicle {

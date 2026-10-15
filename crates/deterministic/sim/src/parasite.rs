@@ -17,7 +17,7 @@ use crate::combat::damage::Hit;
 use crate::combat::data::WeaponId;
 use crate::combat::veterancy::{self, Rank};
 use crate::rules::Kind;
-use crate::world::{Layer, ObjectId, Pos, Target, World};
+use crate::world::{Layer, Object, ObjectId, Pos, Target, World};
 
 /// Latch block length, ticks.
 const LATCH_BLOCK: i32 = 20; // spec: S-0614 Constants (latch block length 20 ticks)
@@ -230,8 +230,7 @@ pub fn fired(w: &mut World, firer: ObjectId, carrier: ObjectId, target: Target) 
 
 /// A projectile ends (claim 1): `detonated` when it detonated; the
 /// parasite inside it, if any, latches on or fails to latch. A projectile
-/// removed without a detonation (one that leaves the map) counts as a
-/// failed latch: an interim rule (Q-0621).
+/// removed without a detonation strands it (claim 21).
 pub fn carrier_ended(w: &mut World, carrier: ObjectId, weapon: WeaponId, detonated: bool) {
     if !w
         .rules()
@@ -257,13 +256,14 @@ pub fn carrier_ended(w: &mut World, carrier: ObjectId, weapon: WeaponId, detonat
         s.carrier = None;
         s.latch_target.take()
     });
-    if !detonated {
-        w.note("Q-0621: a parasite's projectile removed without a detonation is taken as a failed latch (S-0614 claim 4)");
+    if !detonated && w.rules().quirks.parasite_carrier_loss_strands_unit {
+        // spec: S-0614 claim 21 (removed without detonating: the parasite stays off the map, unattached and unable to act; no latch, return, death or recovery)
+        return;
     }
     match target {
         // spec: S-0614 claim 3 (the projectile's target object is latchable: it becomes the host; no distance is tested)
         Some(t) if detonated && latchable(w, p, t) => attach(w, p, t),
-        // spec: S-0614 claim 4 (not latchable, or a cell: the parasite fails to latch)
+        // spec: S-0614 claim 4 (not latchable, or a cell: the parasite fails to latch); claim 21 (quirks.parasite_carrier_loss_strands_unit off: removal without detonation attempts the same return)
         _ => fail_latch(w, p),
     }
 }
@@ -320,7 +320,7 @@ fn fail_latch(w: &mut World, p: ObjectId) {
         silent_remove(w, p);
         return;
     };
-    // spec: S-0614 claim 4 (the centre of the cell it last stood in, facing map north, under the ordinary placement rules; removed silently when it cannot be placed)
+    // spec: S-0614 claim 4 (the cell it last stood in, facing map north, under claim 20's placement rules; removed silently when it cannot be placed)
     if !place_ordinary(w, p, cell, layer, 0) {
         silent_remove(w, p);
         return;
@@ -383,35 +383,44 @@ fn clear_for(w: &World, p: ObjectId, c: CellXY, layer: Layer) -> bool {
         && !has_unit(w, c, layer, None)
 }
 
-/// The ordinary placement rules, an interim rule (Q-0620): the cell is
-/// enterable by the parasite's class and holds no building; a vehicle or
-/// aircraft needs a cell without infantry or vehicles, an infantry unit a
-/// free standing position (its centre first).
+/// The ordinary placement of a returning parasite (claim 20): one attempt
+/// in exactly cell `c`. An infantry parasite requested at terrain height
+/// inside the usable area first makes S-0208 claim 3's occupant-aware
+/// centre-class position choice on the ground record (its draw kept even
+/// when entry then refuses); then the entry outcome of S-0209 claims 4 and
+/// 5, asked with the ground record and ground occupants, must be *clear*.
+/// A vehicle uses the cell centre.
 fn place_ordinary(w: &mut World, p: ObjectId, c: CellXY, layer: Layer, facing: Facing) -> bool {
-    w.note("Q-0620: the ordinary placement rules of a parasite coming out are an interim rule (S-0614 claims 4 and 13)");
     let Some(o) = w.obj(p) else { return false };
     let kind = o.kind;
-    let Some((class, zone)) = class_zone(w, p) else {
-        return false;
-    };
-    if !crate::passability::enterable_by_class(w.rules(), w, c, class, zone, layer == Layer::Deck)
-        || has_building(w, c)
-    {
-        return false;
-    }
-    let pos = if kind == Kind::Infantry {
-        // spec: S-0208 table P (five standing positions 0 to 4, the centre first)
-        let free = (0u8..5).find(|&k| w.cells.occ(c, layer).is_none_or(|o| !o.taken(k)));
-        let Some(k) = free else { return false };
+    let ground_level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
+    let base = cell_z(w, c, layer);
+    let pos = if kind == Kind::Infantry && layer == Layer::Ground && w.cells.usable(c) {
+        // spec: S-0614 claim 20 (infantry: the occupant-aware position choice of S-0208 claim 3, centre class, ground record, one ranged choice over 0 … 3 unless the flags refuse; before entry acceptance)
+        let Some(k) = crate::walk::choose_position(
+            w,
+            c,
+            Layer::Ground,
+            crate::cells::position::CENTRE,
+            false,
+        ) else {
+            return false;
+        };
         let (u, v) = crate::walk::standing_point(k);
-        let base = cell_z(w, c, layer);
         Pos::new(256 * c.x + u, 256 * c.y + v, base.z) // spec: S-0204 claim 2 (a position within the cell)
     } else {
-        if has_unit(w, c, layer, None) {
-            return false;
-        }
-        cell_z(w, c, layer)
+        // spec: S-0614 claim 20 (a vehicle uses the requested centre)
+        base
     };
+    // spec: S-0614 claim 20 (the entry outcome must be clear: S-0209 claims 4 and 5 with S-0211 claim 10, no approach direction or source elevation, ground occupants and ground record)
+    let outcome = if kind == Kind::Infantry {
+        crate::occupancy::infantry_outcome(w, p, c, ground_level)
+    } else {
+        crate::occupancy::vehicle_outcome(w, p, c, ground_level)
+    };
+    if outcome != crate::occupancy::Outcome::Clear {
+        return false;
+    }
     put(w, p, pos, layer, facing);
     true
 }
@@ -427,9 +436,14 @@ fn put(w: &mut World, p: ObjectId, pos: Pos, layer: Layer, facing: Facing) {
 /// The host-cell test of claim 13 on cell `c` for host `host` and
 /// parasite `p`.
 fn host_cell_ok(w: &World, host: ObjectId, p: ObjectId, c: CellXY) -> bool {
-    // spec: S-0614 claim 13 (the host is not in the air: S-0307's airborne rule or in flight, an interim rule, Q-0623)
-    if crate::combat::weapon::in_air(w, host) || crate::combat::weapon::airborne_by_height(w, host)
-    {
+    // spec: S-0614 claim 22 (in the air: an aircraft by S-0501 claim 18's in-the-air answer; any other host by S-0307's airborne test, on the map and at least 208 leptons above its surface, a deck counted)
+    let aircraft = w.obj(host).is_some_and(|o| o.kind == Kind::Aircraft);
+    let in_air = if aircraft {
+        crate::combat::weapon::in_air(w, host)
+    } else {
+        crate::combat::weapon::airborne_by_height(w, host)
+    };
+    if in_air {
         return false;
     }
     // spec: S-0614 claim 13 (no building stands in the cell)
@@ -580,7 +594,7 @@ pub fn leave_living(w: &mut World, p: ObjectId, how: Leave) {
         silent_remove(w, p);
         return;
     }
-    // spec: S-0614 claim 13 (placed at the centre of the chosen cell, facing the exit direction, under the ordinary placement rules)
+    // spec: S-0614 claim 13 (the requested point is the centre of the chosen cell, facing the exit direction, under claim 20's placement rules)
     if !place_ordinary(w, p, c, layer_of(w, c), rounded(exit)) {
         silent_remove(w, p);
         return;
@@ -624,9 +638,16 @@ fn host_lost(w: &mut World, host: ObjectId, p: ObjectId) {
     }
     let hc = h.pos.cell();
     let f = h.body.value(w.tick);
+    let infantry = w.obj(p).is_some_and(|o| o.kind == Kind::Infantry);
     let at = if host_cell_ok(w, host, p, hc) {
-        // spec: S-0614 claim 15 (the host's position: the centre of its cell, at the deck's height on a bridge)
-        Some((hc, h.layer))
+        // spec: S-0614 claim 15 (the host's position: a vehicle at the centre of its cell, at the deck's height on a bridge; an infantry parasite at the host's position class, S-0208 claim 2, with no regard to occupants and no draw)
+        let class = if infantry {
+            let (u, v) = (h.pos.x.rem_euclid(256), h.pos.y.rem_euclid(256)); // spec: S-0204 claim 2 (the point within its cell)
+            crate::walk::position_class(u, v, q.top_position_counts_as_centre)
+        } else {
+            crate::cells::position::CENTRE
+        };
+        Some((hc, h.layer, class))
     } else {
         // spec: S-0614 claim 15 (the neighbour in the host's own 8-direction)
         let n = neighbour(hc, eight_direction(f));
@@ -642,20 +663,85 @@ fn host_lost(w: &mut World, host: ObjectId, p: ObjectId) {
             Some(l) if matches!(l, land::WATER | land::ROCK | land::BEACH) && !naval && !bridge => {
                 None
             }
-            Some(_) => Some((n, Layer::Ground)),
+            Some(_) => {
+                // spec: S-0614 claim 15 (the fallback's occupant-aware centre-class position choice of S-0208 claim 3 on the neighbour's ground record, even for a vehicle; one ranged choice unless the flags refuse)
+                let k = crate::walk::choose_position(
+                    w,
+                    n,
+                    Layer::Ground,
+                    crate::cells::position::CENTRE,
+                    false,
+                );
+                match k {
+                    Some(k) => Some((n, surface_layer(w, &h, n, k, infantry), k_of(k, infantry))),
+                    // spec: S-0614 claim 23 (failed choice, a flag refusal or no free side position: an infantry parasite is removed silently)
+                    None if infantry => None,
+                    // spec: S-0614 claim 23 (quirks.parasite_host_loss_failed_choice_origin: a vehicle survives at world position (128, 128, 0), unattached, unmarked on a bridge; off: removed silently)
+                    None if q.parasite_host_loss_failed_choice_origin => {
+                        put(w, p, Pos::new(128, 128, 0), Layer::Ground, f);
+                        released(w, p);
+                        return;
+                    }
+                    None => None,
+                }
+            }
         }
     };
-    let Some((c, layer)) = at else {
+    let Some((c, layer, k)) = at else {
         // spec: S-0614 claim 15 (no position: removed silently)
         silent_remove(w, p);
         return;
     };
-    // spec: S-0614 claim 15 (the ordinary placement rules are skipped; it faces the host's facing; not held)
-    let pos = cell_z(w, c, layer);
-    put(w, p, pos, layer, f);
+    // spec: S-0614 claim 15 (final placement skips claim 20's entry check; it faces the host's facing; not held)
+    let base = cell_z(w, c, layer);
+    let (u, v) = crate::walk::standing_point(k);
+    let (x, y) = (256 * c.x + u, 256 * c.y + v); // spec: S-0204 claim 2 (a position within the cell)
+    let z = if layer == Layer::Deck {
+        // spec: S-0614 claim 23 (on the deck: the point's terrain surface plus 416 leptons)
+        w.surface_at(x, y).wrapping_add(crate::teleport::DECK_HEIGHT)
+    } else {
+        base.z
+    };
+    put(w, p, Pos::new(x, y, z), layer, f);
+    released(w, p);
+}
+
+/// A parasite released by host loss: its kept orders back and no hold
+/// (claim 15).
+fn released(w: &mut World, p: ObjectId) {
     restore_kept(w, p);
     if let Some(s) = state_mut(w, p) {
         s.hold_until = None;
+    }
+}
+
+/// The standing position a fallback choice `k` gives: an infantry
+/// parasite's side position, a vehicle's cell centre (claim 15).
+fn k_of(k: u8, infantry: bool) -> u8 {
+    if infantry {
+        k
+    } else {
+        // spec: S-0614 claim 15 (a vehicle uses the resulting point's cell centre when the choice succeeds)
+        crate::cells::position::CENTRE
+    }
+}
+
+/// The layer a parasite released at fallback point `k` of cell `n` stands
+/// on (claim 23): the deck exactly when `n` is a high-bridge cell and
+/// either the host stood on a high bridge or the point's terrain surface
+/// is below the host cell's centre terrain height.
+fn surface_layer(w: &World, h: &Object, n: CellXY, k: u8, infantry: bool) -> Layer {
+    // spec: S-0614 claim 23 (after vehicle centring; exact integer heights)
+    let (u, v) = crate::walk::standing_point(k_of(k, infantry));
+    let z = w.surface_at(256 * n.x + u, 256 * n.y + v); // spec: S-0204 claim 2 (a position within the cell)
+    let hc = Pos::centre(h.pos.cell(), 0);
+    let host_z = w.surface_at(hc.x, hc.y);
+    let host_on_bridge = h.layer == Layer::Deck;
+    // spec: S-0614 claim 23 (deck when B and either the host stood on a high bridge or z < h)
+    if w.cells.is_bridge(n) && (host_on_bridge || z < host_z) {
+        Layer::Deck
+    } else {
+        Layer::Ground
     }
 }
 
@@ -680,10 +766,10 @@ fn renew_hold(w: &mut World, host: ObjectId, weapon: Option<WeaponId>) {
     }
 }
 
-/// The attached parasite acts in its host's turn (claim 18): a drone's
-/// deliveries (claim 6) or a grappling parasite's cycle (claim 10). Our
-/// engine runs it after self-healing and before the host's behaviour
-/// processing and movement (an interim placement, claim 18).
+/// The attached parasite acts late in its host's turn (claim 18): a
+/// drone's deliveries (claim 6) or a grappling parasite's cycle (claim
+/// 10), after the host's self-healing, behaviour processing and movement,
+/// before its separate firing update.
 pub fn host_turn(w: &mut World, host: ObjectId) {
     let Some(p) = parasite_of(w, host) else {
         return;

@@ -1225,6 +1225,14 @@ pub struct Quirks {
     // spec: S-0614 claim 15, Edge cases
     #[serde(default = "on")]
     pub parasite_host_loss_bridge_test: bool,
+    /// A parasite whose carrying projectile is removed without detonating stays off the map, unattached; off: it attempts claim 4's failed-latch return.
+    // spec: S-0614 claim 21, Edge cases
+    #[serde(default = "on")]
+    pub parasite_carrier_loss_strands_unit: bool,
+    /// On host loss, a vehicle parasite whose fallback standing-position choice fails survives at world position (128, 128, 0) leptons outside the playable map; off: it is removed silently like infantry, with the same draw count.
+    // spec: S-0614 claim 23, Edge cases
+    #[serde(default = "on")]
+    pub parasite_host_loss_failed_choice_origin: bool,
     /// On host loss, a suppressed naval parasite is removed silently; off: a naval parasite ignores suppression here too.
     // spec: S-0614 claim 15, Edge cases; S-0315 claim 7
     #[serde(default = "on")]
@@ -1658,6 +1666,8 @@ impl Default for Quirks {
             parasite_exit_search_host_mobility: true,
             parasite_exit_tests_host_cell: true,
             parasite_host_loss_bridge_test: true,
+            parasite_carrier_loss_strands_unit: true,
+            parasite_host_loss_failed_choice_origin: true,
             parasite_host_loss_suppresses_naval: true,
             cull_experience_path: true,
             aircraft_endless_refire: true,
@@ -2420,6 +2430,14 @@ impl Quirks {
             (
                 "parasite_host_loss_bridge_test",
                 self.parasite_host_loss_bridge_test,
+            ),
+            (
+                "parasite_carrier_loss_strands_unit",
+                self.parasite_carrier_loss_strands_unit,
+            ),
+            (
+                "parasite_host_loss_failed_choice_origin",
+                self.parasite_host_loss_failed_choice_origin,
             ),
             (
                 "parasite_host_loss_suppresses_naval",

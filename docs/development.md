@@ -324,7 +324,7 @@ S-0506 (missiles and the spawn controller) is built in `glasnost_sim::spawn` (th
 
 ## Simulation (M6a: parasites)
 
-- **Parasites (S-0614).** `glasnost_sim::parasite` holds a unit's parasite record (`ParasiteState` in `Object::parasite`). Only a latching weapon creates one, so saves without parasites are unchanged. `combat::fire::shot` calls `parasite::fired`: the firer leaves the map inside the projectile and the latch block is set. `combat::projectile` calls `parasite::carrier_ended` when the projectile ends, which either latches or fails to latch (claims 3 and 4). A parasite-flag detonation makes no area hit but keeps its animation and debris (S-0303 claim 2, S-0306 claim 21). An attached parasite acts in its host's turn (`parasite::host_turn`, called from `tick::object_turn`):
+- **Parasites (S-0614).** `glasnost_sim::parasite` holds a unit's parasite record (`ParasiteState` in `Object::parasite`). Only a latching weapon creates one, so saves without parasites are unchanged. `combat::fire::shot` calls `parasite::fired`: the firer leaves the map inside the projectile and the latch block is set. `combat::projectile` calls `parasite::carrier_ended` when the projectile ends, which either latches or fails to latch (claims 3 and 4). A parasite-flag detonation makes no area hit but keeps its animation and debris (S-0303 claim 2, S-0306 claim 21). An attached parasite acts late in its host's turn (`parasite::host_turn`, called from `tick::object_turn` after self-healing, behaviour processing and movement, before firing; claim 18):
   - drone deliveries and the hold (claims 6 to 9, F1);
   - the grappling cycle of table G, with strikes, splashes, wakes and the cull (claims 10 and 11, F3, F5, F6). A culled host starts sinking through `naval::start_sinking`.
 - **Leaving.** A parasite leaves its host through these hooks:
@@ -339,7 +339,7 @@ S-0506 (missiles and the spawn controller) is built in `glasnost_sim::spawn` (th
   - cannot deploy (`econ::deploy::deploy_ready`);
   - drops its destination when it is a teleporter.
 
-  A host never retaliates against its own parasite (`combat::acquire`). The five quirk switches from the spec's Edge cases are in `quirks`.
+  A host never retaliates against its own parasite (`combat::acquire`). Returning placement (claims 4, 13, 15, 20 and 23) uses S-0208 claim 3's position choice and S-0209's entry outcomes. A projectile removed without detonating leaves its parasite off the map (claim 21). On host loss a vehicle parasite whose fallback choice fails is put at world position (128, 128, 0) (claim 23). The seven quirk switches from the spec's Edge cases are in `quirks`.
 - **Orders a human gives.** Select a drone and click an enemy vehicle. The attack order fires the latching weapon (`targeting::click`, then `orders::issue`).
 - **Claim ledger.** `docs/m6-claims/S-0614.md`.
 
@@ -354,10 +354,6 @@ Provisional rules of M6a, each tied to a request:
 | `combat::flying::moved` | a crossing object goes to the end of its new sector's list | Q-0614 |
 | `rocket::tick`, `tick` | the aim-fixing tick does nothing else; each later tick counts one tick of pause, tilt or raise; the tick that reaches cruise altitude switches without accelerating; the pass runs after behaviour processing and before movement and firing | Q-0615 |
 | `spawn::pass` | "clearing the spawner's target clears the pending target" (claim 3) is applied at the start of each pass when the spawner's own target is empty, because our engine clears targets in many places | Q-0616 |
-| `parasite::place_ordinary`, `parasite::host_lost` | Ordinary placement. The parasite's own locomotion class and movement zone must be able to enter the cell (judged on the bridge deck when the parasite came from it), and the cell must hold no building. A vehicle parasite also needs a cell with no infantry or vehicles. An infantry parasite takes the first free standing position, 0 to 4. The claim 15 fallback places either kind at the cell centre. | Q-0620 |
-| `parasite::carrier_ended` | A latching projectile removed without a detonation counts as a failed latch (claim 4). | Q-0621 |
-| `tick::object_turn` | The parasite acts after the host's self-healing and before its behaviour processing and movement. A host killed by a delivery does nothing more in that turn. | Q-0622 |
-| `parasite::host_cell_ok` | A host is in the air when S-0307's airborne rule holds (at least 208 leptons above its surface) or when it is an aircraft in flight. | Q-0623 |
 
 Known limits of M6a:
 
