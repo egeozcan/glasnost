@@ -331,6 +331,8 @@ impl Setup {
                 crates: f(Flag::Crates),
                 build_off_ally: f(Flag::BuildOffAlly),
                 redeploy: f(Flag::Redeploy),
+                // spec: S-0412 claim 1 (bridge destruction is always on in a skirmish; no lobby control)
+                bridge_destruction: Some(true),
                 all_base_units: false,
                 houses: Vec::new(),
             },
