@@ -2,7 +2,7 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -151,12 +151,19 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
    kill is credited to the crusher (as for any kill: score and veterancy belong to their specs), and
    the crushed type's crush sound plays at the crusher's position. Removing it ends whatever it
    controlled as on any removal (for example units it held under mind control are released).
+
+   Actually crushing at least one such object makes a cloaked or cloaking crusher start
+   uncloaking on that tick, including when the victim is infantry rather than a vehicle
+   (S-0516 claim 11 (c)). The cloak sound plays once when this starts an uncloak, not once
+   per victim; repeated causes while already uncloaking do not restart it or repeat the sound
+   (S-0516 claims 7 and 15). Empty passage does not cause this uncloak.
    - Backing: `measurable` (scenario K1, part a for removal, damage, kill credit and the crush
-     sound, part k for the release of mind-controlled units). The position of the sound is
+     sound, part k for the release of mind-controlled units; K14 for the crushing-triggered
+     uncloak and its exclusions). The position of the sound is
      `unmeasured`: a capture shows that the sound plays, but the crusher and the crushed object are
      less than 128 leptons apart, too close for the difference in position to be heard.
    - Confidence: high for removal without damage, medium for the kill credit, the release of
-     controlled units and the sound position
+     controlled units and the sound position; high for the crushing-triggered uncloak
 
 5. **A vehicle thief is not crushed by its quarry.** When the object to be crushed is an infantry unit
    of a vehicle-thief type whose destination is the crusher itself, and the crusher is not a train,
@@ -165,7 +172,8 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
    already applies to the rest of that cell layer: an object listed after the thief (State and
    ordering) is judged against the crusher's new house, so one allied with the thief's house is not
    crushed, while an object listed before the thief is judged against the original house. A
-   take-over alone does not count as crushing for claim 6. What else of the thief's state the crusher
+   take-over alone does not count as crushing for claim 6 and does not cause claim 4's uncloak
+   (S-0516 claim 11 (c); scenario K14). What else of the thief's state the crusher
    takes over is left to the vehicle-theft specs.
    - Backing: `measurable` (scenario K3)
    - Confidence: medium for the take-over instead of crushing and for the new house already applying
@@ -206,7 +214,9 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
    movement zone is crusher-all. Every crushed overlay plays its crush sound at the crusher, adds 0.02
    to the crusher's body tilt (Constants; a single-precision addition under the number rules of S-0205,
    which affects only the drawing) and ends the crusher's crush-slowdown state (claim 9). What
-   becomes of the overlay and of the walls beside it depends on what was crushed:
+   becomes of the overlay and of the walls beside it depends on what was crushed. Crushing
+   only an overlay or wall does not cause the crusher to uncloak (S-0516 claim 11 (c),
+   scenario K14):
 
    | Crushed overlay | The overlay | The four orthogonal neighbouring cells |
    |---|---|---|
@@ -1205,6 +1215,29 @@ cell-centre crushing.
 - *Falsified if:* the idle crusher automatically chooses the spy while the spy appears disguised,
   the covered control fails to choose it despite an automatic-choice occasion, or the spy survives
   a valid drive-through solely because it appears disguised.
+
+**Scenario K14: object crushing uncloaks, passage alone does not (claims 4, 5 and 8).**
+- *Setup:* the measurement setup, director and mods off, game speed index 2, one human
+  player and one bystander computer player outside the test area. A named test map gives
+  an unarmed human-owned crusher self-cloaking without the cloak-stop flag. Keep it at
+  full health, outside sensor coverage and cloak fields, with no attacks or other uncloak
+  causes. Start each passage fully cloaked. Use separate corridors with (a) one trapped
+  enemy crushable infantry, (b) two such infantry in one cell, (c) only a crushable wall,
+  (d) only a crushable non-wall overlay, and (e) no victim or overlay. Add (f) K3's
+  takeover-only setup with no companion, starting with the same cloaked crusher. Give
+  the crusher the omni-crusher flag and add (g) one crushable enemy vehicle.
+- *Procedure:* order passage through the cell centre and record cloak state, victim presence,
+  ownership and tick-stamped sound. Repeat three times per case. A run decides nothing if
+  another uncloak cause occurs, the crusher is not cloaked at arrival, or the intended
+  crushing or takeover does not occur. In particular, discard (f) if the approaching thief
+  reveals the crusher as a cloaked blocker before takeover.
+- *Expected:* (a), (b) and (g) start uncloaking on the object-removal tick, with one cloak
+  sound even for the two victims in (b). Cases (c), (d) and (e) stay cloaked through arrival.
+  Case (f) changes owner without a crushing-triggered uncloak.
+- *Falsified if:* an actual object crush leaves the crusher cloaked, two victims cause two
+  cloak sounds, or an overlay-only, empty or takeover-only passage starts uncloaking with
+  no other uncloak cause. If no takeover run meets the eligibility conditions, that case
+  remains unconfirmed rather than establishing an uncloak.
 
 ## Open questions
 
