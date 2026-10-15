@@ -593,7 +593,7 @@ fn place_near(w: &mut World, d: &Displaced, taken: &mut BTreeSet<CellXY>) -> boo
     } else {
         (128, 128) // spec: S-0406 F4 (the cell centre)
     };
-    let (x, y) = (256 * c.x + u, 256 * c.y + v);
+    let (x, y) = (256 * c.x + u, 256 * c.y + v); // spec: S-0009 claim 38 (256·x + u, 256·y + v)
     let at = Pos::new(x, y, w.surface_at(x, y));
     if infantry {
         taken.insert(c);
