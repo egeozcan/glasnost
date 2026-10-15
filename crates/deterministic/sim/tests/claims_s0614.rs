@@ -371,6 +371,39 @@ fn claim_1_detonation_makes_no_area_hit() {
     assert!(w.obj(p).unwrap().on_map);
 }
 
+// spec: S-0614 claim 1, S-0303 claim 2 and S-0306 claim 21 (a parasite-flag detonation makes no area hit but keeps its explosion animation and debris, for a latch and for a failed latch)
+#[test]
+fn claim_1_detonation_keeps_anim_and_debris() {
+    let mut r = ruleset();
+    let g = r.sim.warheads.get_mut("Grip").unwrap();
+    g.anim_list = Some(vec!["BOOM0".into(), "BOOM1".into()]);
+    g.min_debris = Some(2);
+    g.max_debris = Some(3);
+    r.sim.general.metallic_debris = Some(vec!["DEB".into()]);
+    for on_host in [true, false] {
+        let mut w = game_of(&r);
+        let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+        let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+        w.effects.clear();
+        let target = if on_host {
+            Target::Object(host)
+        } else {
+            Target::Cell(cell(2, 2))
+        };
+        shoot(&mut w, p, target);
+        assert_eq!(parasite::host_of(&w, p).is_some(), on_host);
+        let count = |pre: &str| {
+            w.effects
+                .iter()
+                .filter(|e| matches!(e, Effect::Anim { name, .. } if name.starts_with(pre)))
+                .count()
+        };
+        assert_eq!(count("BOOM"), 1, "explosion animation, on host {on_host}");
+        // N = R(2, 3 − 1) = 2 metallic debris pieces.
+        assert_eq!(count("DEB"), 2, "debris, on host {on_host}");
+    }
+}
+
 // spec: S-0614 claim 2 (latchable: a mobile unit, on the map, health not 0, no parasite attached, the can-carry-a-parasite flag; a naval parasite needs a water tile)
 #[test]
 fn claim_2_latchable() {
@@ -860,6 +893,19 @@ fn claim_12_sonic_hit_exits() {
     assert!(!parasite::held(&w, host));
 }
 
+// spec: S-0614 claims 12 and 13 (a lethal sonic hit: the parasite exits before the hit changes health, so it comes out held for 3 × R as the host dies)
+#[test]
+fn claim_12_lethal_sonic_hit_exits() {
+    let (mut w, p, host, _) = latched();
+    let wh = warhead(&w, "Sonar");
+    let t = w.tick;
+    damage::apply(&mut w, host, hit(10_000, wh, None));
+    assert!(w.obj(host).is_none_or(|o| o.health <= 0));
+    assert!(w.obj(p).is_some_and(|o| o.on_map));
+    assert_eq!(parasite::host_of(&w, p), None);
+    assert_eq!(ps(&w, p).hold_until, Some(t + 3 * R));
+}
+
 // spec: S-0614 claim 12 and S-0315 claim 7 (a healing hit whose warhead is not sonic removes a drone parasite silently)
 #[test]
 fn claim_12_healing_hit_removes_a_drone() {
@@ -886,13 +932,12 @@ fn claim_12_repair_step_removes_a_drone() {
     w.obj_mut(host).unwrap().health -= 50;
     w.houses[1].credits = 10_000;
     let out = glasnost_sim::combat::heal::repair_step(&mut w, host);
-    if out.is_some() {
-        assert!(w.obj(p).is_none());
-    } else {
-        // Without a known step cost the hook is reached directly.
-        parasite::repair_step(&mut w, host);
-        assert!(w.obj(p).is_none());
-    }
+    assert!(
+        out.is_some(),
+        "the buggy has a cost, so the step goes ahead"
+    );
+    assert!(w.obj(p).is_none());
+    assert_eq!(parasite::parasite_of(&w, host), None);
 }
 
 // spec: S-0614 claim 12 (unloading and consumption: 50 ticks of suppression just before the exit, so a drone parasite is removed silently; a naval one exits)
