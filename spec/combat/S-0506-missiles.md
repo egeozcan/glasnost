@@ -2,7 +2,7 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -63,7 +63,10 @@ above the terrain*.
 - **Launching count.** The number of slots on the rail, plus the number of preparing slots whose
   object is of a missile type and is on the map. The spawner is *launching* while this count is
   above 0 (S-0301, Terms *launching*).
-- **Released missile.** A missile enrolled for repeated attack orders (claims 8 and 12).
+- **Kamikaze.** An aircraft enrolled for the repeated attack orders of claim 12. This is the
+  release marker used by the slot-loss test (claim 9), including for a slot aircraft in S-0501
+  claim 36; it does not by itself mean that the aircraft is dead.
+- **Released missile.** A missile that is a kamikaze (claims 8 and 12).
   This does not start its flight or change an already fixed aim point. While its slot is on the
   rail it can still vanish with the spawner (claim 13).
 - **Rocket-flight movement mode.** Movement governed by the phases, speed, pitch and fixed aim
@@ -143,7 +146,8 @@ above the terrain*.
      launch, where *s* = 9 when the **spawner's own type** has the missile-spawn flag and *s* = 20
      otherwise (`quirks.launch_spacing_from_spawner_type`),
    - the controller is not cooling down,
-   - the spawner, when it is a mobile unit, is not held by a magnetic beam,
+   - the spawner, when it is a mobile unit, is not restrained by a magnetic beam (distinct from
+     the parasite hold of S-0614 claim 8),
    - for a missile slot only: the spawner's locomotor reports that it is not moving.
 
    With passes every 10 ticks a spacing of 9 allows one launch per pass and a spacing of 20 one
@@ -198,12 +202,13 @@ above the terrain*.
    out, the slot gets a new slot object of the spawned type, owned by the spawner's **current**
    house, off the map and docked. A reloading slot becomes docked when its reload countdown (the
    spawner type's reload time) has run out; its object's ammunition is set to its type's ammunition
-   and its health to its type's strength. When a slot object is announced as lost to the controller,
-   the slot becomes empty with a regeneration countdown if its health is below 1, it has been
-   released, or it is of a rocket type. This can happen at crash start, before final removal.
-   Loss notification for a living, unreleased non-rocket object does not empty its slot.
+   and its health to its type's strength. When any slot object, including an ordinary carrier
+   aircraft, is announced as lost to the controller, the slot becomes empty with the spawner's
+   regeneration countdown if its health is below 1, it is a kamikaze, or it is of a rocket type.
+   This can happen at crash start, before final removal. An ordinary slot aircraft removed from
+   play while still alive and not a kamikaze leaves its slot unchanged (S-0501 claim 36).
    - Backing: `measurable` (scenarios R5 and R14) except ignoring a loss notification for a
-     living, unreleased non-rocket object: `unmeasured`, because no normal-input scenario has
+     living, non-kamikaze non-rocket object: `unmeasured`, because no normal-input scenario has
      been established that produces this notification while the object remains living and linked.
    - Confidence: high
 
@@ -211,13 +216,18 @@ above the terrain*.
     - While the spawner's launching count is above 0, its firing check answers *busy* when it is a
       vehicle (S-0301, claim 9, rank 2).
     - A spawner weapon none of whose slot objects is alive gets *rearming* (S-0301, claim 9, rank 4).
-    - While the launching count is above 0, a spawner that moves with the driving or the ship
-      locomotor does not move: its locomotor skips its movement for the tick.
+    - A mobile spawner under the parasite hold of S-0614 claim 8 gets *impossible* for its
+      spawner weapon, regardless of whether its type is organic (S-0301 claim 9, rank 4).
+      This is distinct from magnetic restraint in claim 6 and can cause the reset of claim 11
+      when a firing attempt is made.
+    - While the launching count is above 0, a spawner that moves with the driving or ship
+      locomotor cannot start another track. An existing track finishes; between tracks the
+      spawner waits with its destination kept until launching ends (S-0504 claim 3).
     - While the launching count is above 0 and below the spawn count *N*, the spawner is not movable
       (S-0214, Terms *movable*).
       With a single slot the count never lies strictly between 0 and *N*, so a spawner with a
-      spawn count of 1 stays movable while it launches; the driving and ship lockout above still holds it
-      still.
+      spawn count of 1 stays movable while it launches; the driving and ship lockout above still
+      prevents it from starting another track.
     - Backing: `measurable` (scenario R6)
     - Confidence: high
 
@@ -535,13 +545,16 @@ only after adding the missile's position. The trigonometry is floating point.
 
 ## State and ordering
 
-**Slot table** (claim 4; transitions at launch passes). A transition to docked does not produce
+**Slot table** (claim 4; ordinary transitions at launch passes, loss notifications immediately
+as in claim 9). A transition to docked does not produce
 an appearance until a later pass; becoming empty starts regeneration but cannot refill the slot
 in that same pass, even with a zero regeneration time. These are timing constraints, not a
 required order of internal processing.
 
 | Slot state | Event in the pass | Result |
 |---|---|---|
+| any occupied slot | loss notification, object health below 1, kamikaze or rocket type | empty, regeneration countdown starts immediately (claim 9) |
+| any occupied non-rocket slot | loss notification or removal from play, object alive and not a kamikaze | slot unchanged (claim 9) |
 | docked | claim 6 conditions hold | launch (claim 7); spacing restarts; preparing |
 | docked | otherwise | none |
 | preparing, missile slot | | none (claim 8 releases it) |
@@ -692,8 +705,8 @@ applies throughout that area. These are data-only tests, not stock-data measurem
 - **R3. Launch spacing and blockers (claims 6, 8).** A named test map gives a stock launcher two
   slots and varies only its own missile-spawn flag. Record appearance ticks: expected 20 ticks
   apart without the flag and 10 with it. In separate runs order movement before the first launch,
-  or hold the launcher with a magnetic beam. Expected: no rocket placement while its locomotor
-  reports motion or while magnetically held, then placement on the first eligible pass. A named
+  or restrain the launcher with a magnetic beam. Expected: no rocket placement while its locomotor
+  reports motion or while magnetically restrained, then placement on the first eligible pass. A named
   ordinary carrier variant confirms that aircraft launch is not blocked merely by carrier motion.
   A named variant removes the missile-spawn flag from a named rocket type; its released slot
   enters attacking rather than the rail interval. Another gives an ordinary spawned aircraft
@@ -719,11 +732,19 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   without a same-pass launch. A different appearance tick falsifies these constraints.
 - **R6. Lockouts.** A vehicle spawner whose spawn count is 1, ordered to move during the launch; a
   ship spawner whose spawn count is 2 or more, ordered to move between its first two launches (set
-  the counts in a test copy of the data if needed). Expected: the vehicle does not move while
-  launching, and resumes only when the launching count is zero (including the rail interval).
+  the counts in a test copy of the data if needed). Expected: a stationary vehicle starts no
+  track while launching and starts only after the launching count is zero (including the rail
+  interval). Also initiate launch during carrier travel and record track boundaries: the current
+  track finishes, but the next waits until launching ends. A mid-track freeze falsifies claim 10.
   The ship cannot be ordered (not movable) between the two launches. A vehicle's firing check
   answers *busy* throughout that interval. A named long-regeneration variant with every slot
   empty tests *rearming*: no new spawner shot occurs until at least one slot is alive.
+  Separately infect a stationary carrier or launcher with a parasite, using a named long-lived
+  host variant and long hold duration. Attempt a spawner shot while held but not launching, with
+  an in-range legal target and an occupied slot. Record hold state, firing answer and shot events:
+  expected *impossible* and no shot, even for a non-organic host. Repeat with only the host's
+  organic flag changed; the spawner answer remains *impossible*, not the later organic-only
+  *illegal* answer. A shot or different answer under these conditions falsifies this lockout.
 - **R7. Reset.** (a) Target driven out of range in the ticks between the shot and adoption:
   expected no launch. (b) Target killed by another unit while a missile is preparing: expected the
   missile still flies to the original aim point and detonates there. Also move the target out of
