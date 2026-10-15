@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 35
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -969,7 +969,7 @@ Terms used by this spec:
 
     | Situation | Effect |
     |---|---|
-    | its own locomotor has been temporarily replaced by another (for example while it is carried by another object) | it gets its own locomotor back; S-0417 claim 5 establishes temporary driving during factory exit; S-0207 claim 21 owns the restored teleporting state |
+    | its own locomotor has been temporarily replaced by another and that replacement can end | it gets its own locomotor back; for magnetic lift, S-0607 claim 20 requires jumpjet movement not to be *moving* (not merely not *moving now*) and the unit to be *set down* or no longer *seized*; S-0417 claim 5 establishes temporary driving during factory exit; S-0207 claim 21 owns the restored teleporting state |
     | it is a vehicle with approach destinations remaining after refresh | the first of them becomes its destination and is removed from the list; the route row and the guard-spot row do not apply in this fall-back |
     | it follows a route, the approach row does not apply, and it is not in a *patrol* that has already begun (progress count not 0) | it issues the action of the next route point as an order; this is not an immediate destination assignment |
     | it is an infantry unit that is not a harvesting slave, its guard spot is on another cell, the approach row does not apply, and it has not got its own locomotor back in this fall-back | the guard spot becomes its destination; unless its current behaviour is *area guard*, it also queues *move* and forgets the guard spot |
@@ -1080,7 +1080,9 @@ Terms used by this spec:
       setup is known that is sure to produce the case. The approach row and its refresh collision
       are `unmeasured`: no known input reliably provides specified approach entries at a
       fall-back. Temporary driving restoration is measurable for a factory-produced teleporting
-      vehicle; other temporary replacements remain `unmeasured` without an established setup.
+      vehicle. Magnetic-lift restoration and its eligibility conditions inherit `measurable`
+      backing from S-0607 claim 20, scenarios L3 and L11; other temporary replacements remain
+      `unmeasured` without an established setup.
       The guard-spot/memory and route/memory collisions are `unmeasured`: ordinary attack-move
       input clears the guard spot and ends the route, and no stock input sequence reliably keeps
       both states. B33 gives conditional recorder checks, not a way to manufacture them. Also `unmeasured`: the route row's condition on a *patrol* that has
@@ -1267,7 +1269,8 @@ Terms used by this spec:
       can send a vehicle a request with a threat point. For example, once a unit that is entering
       a bunker has stopped on the bunker's cell, the unit nearest the centre of each of the
       bunker's cells, other than the entering unit, is sent a forced request, not move-anywhere,
-      with the bunker's position as threat point. The structures specs own that rule.
+      with the bunker's position as threat point. S-0606 claim 6 owns this clearing rule,
+      including exclusion of the bunker itself.
       Factory apron-neighbour clearing is another sender: S-0417 claim 4 sends forced,
       move-anywhere requests with the apron centre as threat point, both while unloading and
       under that spec's idle clearing rule (claim 13),
@@ -1275,7 +1278,8 @@ Terms used by this spec:
     - Backing: `measurable` (scenario B6: part e for the fall-back rows, with an infantry unit and
       an armed vehicle reaching row 6 or 9 and an unarmed vehicle reaching row 7 first; part b for
       the damage scatter of a paralysed vehicle; part c for the refusal of a request with a threat
-      point, including its factory variant; scenario B5, case b, for the zombie property
+      point, including its factory variant; S-0606 claim 6, scenario K1, for bunker clearing,
+      and scenario B5, case b, for the zombie property
       suppressing the no-threat fall-back). The
       precedence of a target, a destination or queued destinations over the zombie and paralysed
       rows is `unmeasured`: *attack* falls back to rest only without a target and *move* only
@@ -1285,8 +1289,8 @@ Terms used by this spec:
       behaviour fall back to rest while it holds a target or a destination. It is the row order of
       claims 14 and 15, which states it.
     - Confidence: high for the fall-back rows, their order, and the request from damage having no
-      threat point; medium for the refusal of a request with a threat point; low for the bunker
-      rule as an example
+      threat point; medium for the refusal of a request with a threat point and the bunker's
+      nearest-object clearing rule (S-0606 claim 6)
 
 18. **Retaliate.** An actor retaliates against an attacker only while its current behaviour has the
     retaliate property, among the other retaliation conditions that the target-acquisition specs
@@ -4629,7 +4633,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 - Aircraft readiness and queued-start opportunities are now owned by S-0501 claim 31,
   with ordinary-flight coverage in AC10. The unisolated exclusions remain as that claim states,
   not an unspecified list of flight phases here.
-- The bunker rule of claim 17 and its exact conditions remain owned by the structures specs.
+- The bunker rule of claim 17 and its exact conditions are owned by S-0606 claim 6.
   It is not the only identified threat-point sender: S-0417 claim 4's factory apron-neighbour
   clearing supplies another setup for the paralysed refusal (scenario B6, part c).
 - Whether the recruitable property also keeps actors out of the computer player's teams (claim 20); scenario
