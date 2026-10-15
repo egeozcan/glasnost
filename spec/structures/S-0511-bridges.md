@@ -2,7 +2,7 @@
 id: S-0511
 title: Bridges (destruction, collapse, falling and repair)
 topic: structures
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -343,9 +343,10 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       immediately. There is no deferred transfer after claim 11. Movement reservations are
       cleared at the locomotor's heading point, when it has one, at that point's stored height,
       as well as the ordinary listing change's marks. For drive and ship locomotion that
-      stored height is the retained track-start height of S-0207 claim 24, not necessarily
-      the object's current height or the deck's height at drop. Curve chaining does not
-      refresh it. These are the ordinary flag/position
+      stored height follows S-0207 claim 24: ordinary tracks retain their starting height
+      through curve chaining, whereas the driving factory exit track retains world height
+      0 leptons. Neither is replaced by the object's current height or the deck's height
+      at drop. These are the ordinary flag/position
       clearing rules, not ownership-counted reservations (S-0209 claim 1).
       No general deck-record reset follows the attempt, landing or repair. Unrelated marks
       remain until their ordinary clearing event. With just a stationary dropped infantry unit
@@ -422,9 +423,12 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
         point to be present, even when using the unfinished track's endpoint.
       - A heading point keeps the height assigned when it was chosen. The test does not
         resample the cell's new surface after destruction. For drive and ship, S-0207 claim 24
-        supplies the retained height from track start, unchanged by curve chaining. Thus a
-        vehicle travelling under a level bridge on level ground, with its track begun at
-        that ground height, fails both deck-height tests: a deck-bearing endpoint does not
+        supplies the retained height from ordinary track start, unchanged by curve chaining.
+        The driving factory exit track instead retains world height 0 leptons, irrespective
+        of vehicle, terrain or deck height. Its stored-height test uses that zero, but its
+        unfinished-track test still uses the vehicle's current height independently. Thus a
+        vehicle on an ordinary track travelling under a level bridge on level ground,
+        with its track begun at that ground height, fails both deck-height tests: a deck-bearing endpoint does not
         lift its heading point. Ground-layer membership alone is not a refusal, however.
         If the retained starting height is within 104 leptons of *P* but the vehicle has
         since descended beyond that tolerance, the heading-point test can still hit it
@@ -716,7 +720,7 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       | 5 | (2, 0) | decreasing y |
       | 6 to 15 | no probe | no repair cursor |
 
-      At every probe, the selected link is the first link in creation order whose link-distance from the probe is at most 3 cells, as defined by S-0212 claim 3 and its Terms; low links are eligible. If no such link exists, there is no repair cursor, and this test creates no links. A selected disabled link offers repair. A selected enabled link also offers repair when neither endpoint is the current traversal cell (`quirks.bridge_cursor_unrelated_link`). Otherwise, the traversal continues from the selected link's opposite endpoint, with the next probe one cell away in the direction specified by the table. The initial traversal cell is the initial probe. Consequently, a chain of enabled links can lead to a later disabled link. Selection follows creation order, not nearest distance, and is not limited to one link near the hut.
+      **Link-traversal outcomes.** At each probe, eligible links are those, including low links, whose link-distance from the probe is at most 3 cells (S-0212 claim 3). If eligible links exist, the one created earliest is selected; distance does not break ties. If none exists, the cursor does not offer repair and this test creates no links. A selected disabled link offers repair. A selected enabled link also offers repair when neither endpoint is the current traversal cell (`quirks.bridge_cursor_unrelated_link`). Otherwise, the next probe is one cell from the selected link's opposite endpoint, in the direction given by the probe table; the initial traversal cell is the initial probe. Thus an enabled-link chain can lead to a later disabled link, and selection is not limited to one link near the hut.
     Cursor and actual repair may therefore select different bridges in mixed layouts.
     - Backing: `measurable` (B13 and its mixed-candidate and link-chain variants)
     - Confidence: high for candidate order and table; medium for link traversal
@@ -1111,6 +1115,22 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     merely because its target carries a deck, rejection of the separating heading case,
     or clearing based on current height instead of stored height falsifies that rule.
     Repeat three times per fixture, including a chained curve retaining its start height.
+  - *Factory-exit control (claims 9 and 11):* use S-0207 D28's elevated stock factory
+    setup to record the produced vehicle's stored heading height throughout its driving
+    exit track. Expected: 0 leptons even when its starting and current heights are nonzero.
+    A copied starting height or a terrain/deck-derived heading height falsifies the exception.
+    On a tiny test map arrange the exit apron at the watched bridge cell and time deck loss
+    while the vehicle is still outside that cell on its unfinished exit track. Record its
+    heading cell, stored height, current world height, track endpoint and the watched
+    cell's deck occupancy record at the sweep. Choose *P* above 104 leptons: the zero-height
+    heading test fails, but a qualifying current-height track endpoint still causes the hit.
+    Compare runs with current height within and outside 104 leptons of *P*. With the other
+    gates satisfied, survival in the former or a heading hit in the latter falsifies the
+    corresponding branch. Void runs without the intended track, endpoint or nonempty
+    record, or with an earlier killing hit. For a mover dropped during that exit, record
+    reservation clearing separately: claim 9 uses the stored zero, not its current height.
+    Repeat each realized fixture three times at the same recorded speed, director and mods
+    off; the read-only recorder supplies the points and marks, not altered game state.
   - *Falsified by:* a heading vehicle surviving with the nonempty-record condition satisfied,
     a heading hit despite the empty-record condition, the third vehicle dying, or reversed
     death ordering. The other locomotion kinds remain outside this scenario's backing.
