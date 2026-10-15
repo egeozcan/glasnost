@@ -1,9 +1,9 @@
 ---
 id: Q-0684
 title: Owner of a wall placed by a wall building of the map's building list (S-0112 claim 7, S-0210 claim 14)
-status: open
+status: answered
 related: [S-0112, S-0210, S-0406, S-0009]
-answered-by: []
+answered-by: [S-0210]
 ---
 
 ## Need

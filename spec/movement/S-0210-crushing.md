@@ -2,13 +2,13 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0020, Q-0036]
+requests: [Q-0020, Q-0036, Q-0684]
 supersedes: []
 ---
 
@@ -457,16 +457,30 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
       flag). This happens
       once per map load; later changes of building ownership, new buildings and destroyed
       buildings do not change the owner of a map-placed wall.
+
+      This applies equally to walls from the map's overlay list and walls placed by wall
+      buildings in its building list (S-0112 claim 7). A successfully placed wall building
+      initially gives its wall the building's owner, but that initial owner is replaced by
+      this nearest-building rule before play starts, even when the result is no owner.
+      Neither a pre-existing owner nor origin in the building list exempts a wall. The
+      converted wall building is not a surviving building and cannot itself qualify as the
+      nearest building. This reassignment changes the owner, not the wall's damage stage
+      or connection bits of S-0112 claim 7.
     - (b) **Consequences.** In a skirmish, the human player's own map-placed structures are not
-      placed (S-0009), and every player starts without buildings, so a map-placed wall belongs to
+      placed (S-0009 claim 27). This includes a wall building: dropping its entry places no
+      wall, rather than placing a wall that is later reassigned. A wall already supplied
+      independently by the overlay list is not removed by dropping that entry. Every player
+      starts without buildings, so a map-placed wall belongs to
       a house of the map (for example a neutral or civilian house) when one of its buildings
       qualifies, and otherwise to no house. A wall without an owner is allied with no house, so
       S-0209's wall rows treat it as a wall of another house for every mover (the mover's view of
       S-0209 Terms, *allied*).
     - (c) A wall that loses its last damage stage, is sold or is removed has no owner from then
       on. Who owns a wall that a house builds during play belongs to the structures specs.
-    - Backing: `measurable` (scenario K12)
-    - Confidence: high for the rule, the absence of a distance limit and the time it applies; medium for the tie rule (the order of the
+    - Backing: `measurable` (scenario K12, part c for building-list walls, reassignment and
+      dropped human-owned wall buildings)
+    - Confidence: high for building-list walls being included, replacement of their initial
+      owner, and dropped human-owned wall buildings placing no wall; high for the rule, the absence of a distance limit and the time it applies; medium for the tie rule (the order of the
       map's building list), and for the cell height used (a difference of height between wall
       cell and building changes the result only when two buildings are almost equally near)
 
@@ -656,7 +670,9 @@ Ordering stated as consequences:
 | Rules, overlay sections, `Crushable`, `Wall` | crushable overlay, wall overlay | boolean | no |
 | Art data, the section of the overlay type's image (S-0007), `DamageLevels` | damage-stage count *D* (claims 8 and 13) | integer (S-0003, claim 3) | keeps the value in force; engine default 1. The same key in the rules overlay section is not read |
 | Rules, overlay sections, `Strength` | wall strength *S* (F3, claim 13) | integer | keeps the value in force; engine default 1 |
-| Rules, country (house type) sections, `WallOwner` | wall-owner flag of the country (claim 14) | boolean | keeps the value in force; engine default yes. Not tied to any distance: the flag only decides whether the country's buildings qualify (claim 14 (a)) |
+| Rules, country (house type) sections, `WallOwner` | wall-owner flag of the country (claim 14) | boolean | keeps the value in force; engine default yes. Not tied to any distance: the flag only decides whether the country's buildings qualify (claim 14 (a)); it does not exempt an already owned wall from reassignment |
+| Map, `[Structures]` entries, owner and type fields | wall-building origin and initial owner (claim 14) | comma-separated records; owner resolution and dropped entries: S-0009 claim 27 | no entries means no walls from this list; surviving entries do not preserve their initial wall owner against claim 14 (a) |
+| Rules, building type sections, `Wall`, `ToOverlay` | whether a building places a wall, and its overlay type | boolean and overlay type name, respectively (S-0112 claim 7) | no and none, respectively |
 | Rules, the combat-damage section, `Crush` | crush range *c* (F2) | real, cells; exactly −1 counts as absent | keeps the value in force; before any rules layer gives it, 384 leptons |
 | Rules, the combat-damage section, `PlayerAutoCrush` | player-auto-crush rule | boolean | no |
 | Rules, unit type sections, `AutoCrush` | auto-crush flag | boolean | no |
@@ -1145,6 +1161,29 @@ cell-centre crushing.
   Optionally place *w*₃ at 10, 20, 30 and 40 cells from *N*'s building to show that the owner
   does not change.
 - *Runs:* one each.
+
+**K12 part c: building-list origin and dropped wall buildings (Q-0684).**
+- *Setup:* purpose-made skirmish maps, stock wall and building types, director and mods off,
+  game speed index 2, one human and one bystander computer player. Choose two distinct
+  non-human houses *A* and *B* that resolve under S-0009 claim 27, with the wall-owner flag
+  enabled. A map building-list entry places a wall of *A* on an otherwise empty cell *w*.
+  Place a surviving ordinary building of *B* two cells from *w*, and any surviving building
+  of *A* much farther away. Keep other buildings farther away. Compare a map with no
+  surviving qualifying ordinary building, and a map with the same wall-building entry
+  owned instead by the human player's resolved house. For that last map compare an empty
+  overlay cell with a wall independently placed there by the overlay list.
+- *Procedure:* load each map and record the wall's presence, owner and damage stage before
+  any player builds. Use the read-only recorder, and confirm ownership where possible by
+  wall-sale eligibility or the allied-wall entry outcomes of S-0209 claim 5. Do not sell
+  the wall until the initial record is taken.
+- *Expected:* the surviving *A* wall has owner *B*, not *A*, and stays at stage 0. With no
+  qualifying building it is present but has no owner. A human-owned wall-building entry
+  places nothing on the empty cell. With an independent overlay-list wall there, that
+  wall remains and receives the nearest qualifying building's owner as usual.
+- *Falsified if:* the *A* wall keeps *A* instead of *B*, retains any owner without a
+  qualifying building, qualifies itself, or changes damage stage on reassignment; or the
+  dropped human-owned entry creates a wall or removes the independent overlay-list wall.
+- *Runs:* one per case. The recorder is sufficient; no harness changes are required.
 
 **Scenario K13: disguise blocks automatic choice, not a drive-through (claim 11).**
 - *Setup:* the measurement setup, director and mods off, game speed index 2. On a purpose-made
