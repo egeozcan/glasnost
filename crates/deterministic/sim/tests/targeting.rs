@@ -792,6 +792,46 @@ mod r11 {
         assert_eq!((r.acknowledge, r.marker), (None, false));
     }
 
+    // spec: S-0214 claim 30 (a move marker for the first object's move on a cell, a force-move too; none for an
+    // object click; at the cell centre (256x + 128, 256y + 128) at the surface height, plus 416 on an intact
+    // high-bridge deck cell whether or not it carries the deck-entry mark)
+    #[test]
+    fn claim_30_move_marker() {
+        let mut s = scene();
+        s.place_unit(0, CAR, cell(0, 0), 64)
+            .place_unit(0, CAR, cell(0, 2), 64);
+        let mut w = built(&s);
+        let a = at(&w, cell(0, 0));
+        let b = at(&w, cell(0, 2));
+        let open = ClickOn::Cell(cell(4, 5));
+        let r = targeting::click(&w, ALPHA, &[a, b], open, Modifiers::default());
+        assert!(r.marker);
+        let force = Modifiers {
+            force_move: true,
+            ..Modifiers::default()
+        };
+        assert!(targeting::click(&w, ALPHA, &[a], open, force).marker);
+        // A click on an object (here selecting the other car) gives none.
+        assert!(
+            !targeting::click(&w, ALPHA, &[a], ClickOn::Object(b), Modifiers::default()).marker
+        );
+        // A force-move onto an object (a move towards it) gives none either.
+        let r = targeting::click(&w, ALPHA, &[a], ClickOn::Object(b), force);
+        assert!(!r.orders.is_empty() && !r.marker);
+        let c = cell(4, 5);
+        let p = targeting::move_marker_at(&w, c);
+        assert_eq!((p.x, p.y), (256 * c.x + 128, 256 * c.y + 128));
+        assert_eq!(p.z, w.surface_at(p.x, p.y));
+        // An intact deck cell without the deck-entry mark: deck height all the same.
+        let i = w.cells.idx(c).unwrap();
+        w.cells.deck[i] = true;
+        w.cells.deck_entry[i] = false;
+        assert_eq!(
+            targeting::move_marker_at(&w, c).z,
+            w.surface_at(p.x, p.y) + 416
+        );
+    }
+
     // spec: S-0214 F5 (i = x mod n, unsigned; none for an empty applicable list)
     #[test]
     fn order_response_choice() {

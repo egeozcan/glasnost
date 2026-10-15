@@ -122,6 +122,9 @@ pub struct Play {
     /// Battlefield clicks that gave orders, with the selection they were
     /// given to in selection order, for the order response (S-0701 claim 18).
     pub acks: Vec<(Vec<ObjectId>, ClickResult)>,
+    /// Move-target markers to show on this screen only (S-0214 claim 30),
+    /// taken by the session. Drawing only.
+    pub markers: Vec<glasnost_sim::world::Pos>,
     /// The first object each selecting input selected, for the selection
     /// response (S-0701 claim 17).
     pub selected: Vec<ObjectId>,
@@ -177,6 +180,7 @@ impl Play {
             effects: Vec::new(),
             cues: Vec::new(),
             acks: Vec::new(),
+            markers: Vec::new(),
             selected: Vec::new(),
             keys: Vec::new(),
             outcome: None,
@@ -432,6 +436,13 @@ impl Play {
         });
         if self.issue(r.orders.clone()) > 0 && rally {
             self.cues.push(UiCue::RallySet);
+        }
+        // spec: S-0214 claim 30 (the marker is click feedback on the clicking person's screen, at the input cell, not the destination claim 11 may choose)
+        if r.marker
+            && let ClickOn::Cell(c) = on
+        {
+            self.markers
+                .push(targeting::move_marker_at(&self.game.world, c));
         }
         if !r.orders.is_empty() {
             self.acks.push((sel, r));

@@ -297,6 +297,21 @@ impl Session {
         Some(r)
     }
 
+    /// Hands the click's move-target markers to the live drawing state
+    /// (S-0214 claim 30) and redraws, so they show at once, paused or not.
+    fn show_markers(&mut self) {
+        let markers = std::mem::take(&mut self.play.markers);
+        if markers.is_empty() {
+            return;
+        }
+        self.with_live(|live, inputs, scene| {
+            for at in markers {
+                live.move_marker(at);
+            }
+            live.redraw(inputs, scene);
+        });
+    }
+
     /// Runs one tick and redraws the live objects.
     pub fn step(&mut self) {
         if !self.play.running() {
@@ -634,11 +649,13 @@ impl Session {
                 if self.play.select_box(&inside, mods.force_select) {
                     let (cell, object) = self.under(end);
                     self.play.click_map(b, object, cell, mods);
+                    self.show_markers();
                 }
             }
             Some(HudHit::Map) if !dragged => {
                 let (cell, object) = self.under(p);
                 self.play.click_map(b, object, cell, mods);
+                self.show_markers();
             }
             Some(HudHit::Radar) if b == Button::Left => {
                 let l = Layout::new(self.screen);

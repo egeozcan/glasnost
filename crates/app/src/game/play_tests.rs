@@ -84,8 +84,8 @@ fn step_until(p: &mut Play, limit: i32, done: impl Fn(&Play) -> bool) {
 }
 
 /// spec: S-0214 claim 12 (a click selects), claim 26 (a left release
-/// selects or orders, a right release clears the selection), S-0213 claim
-/// 10 (deploy),
+/// selects or orders, a right release clears the selection), claim 30 (the
+/// move marker), S-0213 claim 10 (deploy),
 /// S-0201 claim 14 (no orders before tick 4), S-0411 claims 4 and 10
 /// (build and place from the sidebar)
 #[test]
@@ -112,6 +112,11 @@ fn select_move_deploy_build_and_place_through_the_client_model() {
     // spec: S-0701 claim 18 (the click's orders and selection go to the order response); the order selects nothing new
     assert_eq!(p.acks.len(), 1);
     assert_eq!(p.acks[0].0, [mcv]);
+    // spec: S-0214 claim 30 (one move-target marker at the clicked cell's centre, for this screen only)
+    assert_eq!(
+        std::mem::take(&mut p.markers),
+        [glasnost_sim::targeting::move_marker_at(p.world(), to)]
+    );
     assert_eq!(
         std::mem::take(&mut p.selected),
         [mcv],

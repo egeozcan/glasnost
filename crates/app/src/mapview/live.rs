@@ -614,6 +614,17 @@ impl Live {
         self.scripts.clear();
     }
 
+    /// Shows a move-target marker (S-0214 claim 30) as the animation marker
+    /// of the combat view, unattached at `at` (our own placeholder until the
+    /// imported move-feedback animation is drawn, S-0109).
+    pub fn move_marker(&mut self, at: glasnost_sim::world::Pos) {
+        self.transients.push(Transient {
+            kind: TransientKind::Anim,
+            at: project_lifted(at.x, at.y, at.z),
+            born: self.shown_tick(),
+        });
+    }
+
     /// Takes the tick's presentation events out of the game (they are not
     /// game state) and turns them into short-lived markers.
     fn take_effects(&mut self) {

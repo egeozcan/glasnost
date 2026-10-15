@@ -167,9 +167,10 @@ pub struct ClickResult {
     /// selection, when it got an order from the click (S-0214 claim 14).
     /// Sound only, never game state; AI houses give none.
     pub acknowledge: Option<ObjectId>,
-    /// Whether a move-target marker is drawn for the click: the first
-    /// object of the selection got an order from the action *move* (S-0214
-    /// claim 14). Drawing only.
+    /// Whether a move-target marker is drawn for the click (S-0214 claim
+    /// 30): the first object of the selection, a mobile actor, got an order
+    /// from the action *move* on a cell. Drawing only; placed by
+    /// [`move_marker_at`].
     pub marker: bool,
 }
 
@@ -1633,14 +1634,32 @@ pub fn click(
         }
         let a = action_in(w, house, selection, id, on, mods);
         let o = order(w, house, id, a, on, mods, am);
-        // spec: S-0214 claim 14 (only the first object of the selection gives the acknowledgement and the marker, and only when it gets an order; the marker only for move)
+        // spec: S-0214 claim 14 (only the first object of the selection gives the acknowledgement, and only when it gets an order)
+        // spec: S-0214 claim 30 (one move-target marker, from the first object only: a mobile actor handling a cell click
+        // with action move, a force-move or a move converted to attack-move to a place included; never a building's
+        // click, a no-move click, an object click or a click refused before dispatch)
         if i == 0 && o.is_some() {
             result.acknowledge = Some(id);
-            result.marker = a == Action::Move;
+            result.marker = a == Action::Move
+                && matches!(on, ClickOn::Cell(_))
+                && w.obj(id).is_some_and(|x| x.kind != Kind::Building);
         }
         result.orders.extend(o);
     }
     result
+}
+
+/// Where the move-target marker of a cell click stands (S-0214 claim 30):
+/// the clicked cell's centre at the terrain surface height there, plus 416
+/// leptons on an intact high-bridge deck cell, whether or not the cell
+/// carries the deck-entry mark (the original's unmarked-deck drawing defect
+/// is corrected, PLAN D6). Drawing only.
+pub fn move_marker_at(w: &World, c: CellXY) -> Pos {
+    // spec: S-0214 claim 30 (the cell centre (256x + 128, 256y + 128), exact integers)
+    let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
+    // spec: S-0214 claim 30 (the terrain surface height at the centre, S-0106 claim 2, plus 416 on an intact high-bridge deck cell)
+    let deck = if w.high_bridge(c) { 416 } else { 0 };
+    Pos::new(x, y, w.surface_at(x, y) + deck)
 }
 
 /// The order response that acknowledges an order (S-0214 claim 14, F5):
