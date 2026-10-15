@@ -152,6 +152,63 @@ fn defends_the_base() {
     }
 }
 
+// A hovercraft on the sea is army like any armed ground unit: an enemy
+// seen near the base draws it, and it crosses the water onto the land to
+// reach it, by orders only (S-0503 claims 1 and 4; the reach region of its
+// amphibious zone spans sea and land).
+#[test]
+fn a_hover_crosses_the_sea_to_a_land_goal() {
+    let map = fixture::map_naval();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-naval",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the naval skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let sea = fixture::at(0, fixture::SEA_DY - 4).y;
+    let water = |c: glasnost_map::CellXY| {
+        map.cells
+            .get(c)
+            .is_some_and(|x| x.tile == fixture::WATER_TILE)
+    };
+    let start = glasnost_map::CellXY::new(yard.x, sea);
+    assert!(water(start));
+    let hover = testkit::spawn(&mut g.world, Kind::Vehicle, "HOVR", 0, start, 32768);
+    // An unarmed enemy on land beside the yard, on the side away from the sea.
+    let goal = glasnost_map::CellXY::new(yard.x + 1, yard.y + 5);
+    assert!(!water(goal));
+    let intruder = testkit::spawn(&mut g.world, Kind::Vehicle, "MINR", 1, goal, 0);
+    g.step();
+    // With its own target dropped, the brain orders the hover at the intruder.
+    let mut w = g.world.clone();
+    w.obj_mut(hover).unwrap().target = None;
+    let orders = Brain::new(&w, &map, HouseId(0)).think(&w);
+    assert!(
+        orders.iter().any(|o| matches!(o,
+            Order::Behaviour { actor, target: Some(Target::Object(t)), .. }
+                if *t == intruder && *actor == hover)),
+        "the hover is sent at the intruder: {orders:?}"
+    );
+    let limit = g.world.tick + 3000;
+    let ashore = step_until(&mut g, limit, |w| {
+        w.obj(hover).is_some_and(|o| {
+            let c = o.pos.cell();
+            !water(c) && (c.x - goal.x).abs().max((c.y - goal.y).abs()) <= 6
+        }) || w.obj(intruder).is_none_or(|o| o.health == 0)
+    });
+    assert!(
+        ashore,
+        "the hover crossed onto the land by tick {}",
+        g.world.tick
+    );
+    let c = g.world.obj(hover).expect("the hover lives").pos.cell();
+    assert!(!water(c), "it stands on land: {c:?}");
+}
+
 // The AI sees only its own house's shroud: two worlds that differ only by
 // an enemy unit on a cell the house has not explored give the same orders.
 #[test]

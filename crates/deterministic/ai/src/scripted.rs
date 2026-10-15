@@ -231,7 +231,7 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             let ground = matches!(t.kind, Kind::Infantry)
                 || deploy::deploys_into(w, t.kind, t.index).is_none();
             // Only types the simulation moves: driving, walking,
-            // teleporting and ship vehicles and infantry.
+            // teleporting, ship and hovering vehicles and infantry.
             let moves = u.locomotor != Locomotor::None;
             match role {
                 Role::Harvester => (u.harvester || is_slave_miner(w, t)) && moves,
