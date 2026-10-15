@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0742]
 supersedes: []
 ---
 
@@ -67,6 +67,12 @@ presentation and swept-layer rules below also apply where those specs cite them.
   objects an effect reaches (claim 4).
 - **Protection timer.** The countdown of an object's temporary invulnerability (S-0302 Terms),
   with its *kind*: curtain kind or force-shield kind (S-0303 Terms, *curtain protection*).
+- **Protection brightness phase.** One interval of the protection's brightness envelope in
+  claim 29. Its remaining time is independent of the protection timer. Brightness is measured
+  in per-mille as in S-0104 claim 13; a phase factor of 256 means unchanged brightness.
+- **Protection colour adjustment.** An imported RGB triple selected by position in the
+  colour-adjustment table, not a house-colour definition or a replacement unit palette.
+  Claim 29 distinguishes which drawings receive it.
 - **Organic flag.** The object type flag of the same name (Import mapping). Infantry types have
   it unless the rules say otherwise; other types do not.
 - **Silo.** A building whose type has the missile-silo flag (Import mapping).
@@ -564,15 +570,63 @@ presentation and swept-layer rules below also apply where those specs cite them.
     - Backing: `measurable` for the original's behaviour (scenario SW10 part d); our rule is design
     - Confidence: high
 
-29. **Protection tint and its draw.** A protected object shows the protection tint (rendering
-    specs). Its tint phases advance in the object's turns: about 10 ticks after protection starts,
-    in the turn in which the tint enters its pulsing phase, the object takes one ranged draw
-    R(−5, 5) from the scenario stream, which lengthens or shortens that phase. Each start of
-    protection (claim 25) restarts this timing. Protection that expires or is restarted before
-    the pulsing phase takes no draw for that start; an object that takes no turns (out of play)
-    takes none. The draw is game state; the tint is presentation.
-    - Backing: `measurable` (scenario SW10 part e, with the random-state recorder)
-    - Confidence: medium (the exact tick of the draw: 10 or 11 ticks after the start)
+29. **Protection appearance and its draw (Q-0742 question 4).** Both protection kinds use
+    the same brightness envelope below. It brightens initially, dims, pulses at low brightness,
+    then brightens and returns to ordinary brightness near expiry. It does not weaken the
+    protection of claim 26. There is no fixed RGB colour to hard-code: colour adjustments come
+    from the imported table. Nor is a different palette file loaded for protection.
+
+    | Drawing | Additional protection colour adjustment |
+    |---|---|
+    | Curtain-protected vehicle drawn as voxels | Curtain selector's RGB triple |
+    | Curtain-protected building body drawn as a sprite | None: brightness envelope only |
+    | Force-shielded building body drawn as a sprite | Force-shield selector's RGB triple |
+
+    Thus sprites and voxels share the brightness timing, but not an unconditional identical
+    colour treatment. Ordinary infantry are killed, not recoloured (claim 23). This table
+    does not assert the treatment of building voxel turrets or every attached animation.
+    Exact packed-pixel colour composition belongs to S-0102; the remaining coverage needed
+    there is identified in Open questions. S-0104 claim 13 supplies ordinary brightness,
+    and its claim 15 maps the adjusted brightness to shade rows.
+
+    Let *q* be the first turn of the object while this application is still protecting it,
+    *P* its remaining protection in integer ticks, and *r* the remaining phase time in ticks.
+    A phase of length *L* entered in tick *s* has *r* = max(0, *L* − (*t* − *s*)) in tick *t*.
+    With one turn each tick, its successor starts in tick *s* + *L*. The phase table gives
+    the dimensionless integer factor *m*; F9 gives the brightness calculation.
+
+    | Brightness phase | Length | Factor *m* | Following phase |
+    |---|---|---|---|
+    | Before the first protected turn | Until *q* | 256 | Initial rise |
+    | Initial rise | 6 ticks, starting at *q* | trunc((12 − *r*) × 256 / 6) | Bright hold |
+    | Bright hold | 4 ticks | 512 | Initial dimming |
+    | Initial dimming | 20 + R(−5, 5) ticks | trunc((461 × *r* + 1020) / 20) | Pulse rise |
+    | Pulse rise | 8 ticks | trunc((1024 − 77 × *r*) / 8) | Pulse fall |
+    | Pulse fall | 16 ticks | trunc((77 × *r* + 816) / 16) | Low hold if *P* < 54 ticks, otherwise Pulse rise |
+    | Low hold | Until a turn finds *P* < 31 ticks | 51 | Final rise |
+    | Final rise | 6 ticks | trunc((3072 − 461 × *r*) / 6) | Final bright hold |
+    | Final bright hold | 4 ticks | 512 | Return to ordinary |
+    | Return to ordinary | 20 ticks | trunc((*r* + 20) × 256 / 20) | Ordinary |
+    | Ordinary | Until protection expires | 256 | No protection appearance |
+
+    All table arithmetic is integer, with divisions truncated toward zero. The remaining-time
+    tests happen only at the indicated transitions, not continuously in the preceding phases.
+    Low hold occupies at least its entry turn: even if its threshold is already met, Final
+    rise starts no earlier than the next turn. If an object misses turns, an expired phase
+    advances only to its next phase on its next protected turn, without skipping intervening
+    phases. Protection expiry immediately removes its appearance regardless of the current phase.
+    Reapplication restarts the envelope, even if it changes protection kind (claim 25).
+
+    There is exactly one ranged draw R(−5, 5) from the scenario stream for each application
+    that reaches Initial dimming. It occurs in turn *q* + 10 with uninterrupted turns.
+    For a launch applied after the turn pass in tick *t*₀ this is *t*₀ + 11, not *t*₀ + 10.
+    Expiry or restart before that turn prevents that application's draw. No turns means no
+    phase transitions or draw; elapsed phase time is still in game ticks, not counted turns.
+    The draw is game state; the brightness and colour are presentation.
+    - Backing: `measurable` (SW10 parts e and g). Exact pixel composition and the unlisted
+      drawing variants are not settled here, rather than assigned guessed values
+    - Confidence: high for phase lengths, factors, draw timing relative to *q* and the three
+      colour-selection rows; medium for the launch-to-first-turn boundary
 
 ### Force shield
 
@@ -859,6 +913,12 @@ presentation and swept-layer rules below also apply where those specs cite them.
   present cloud cell (*x*′, *y*′). Integers, cells.
 - **F7. Protection window.** Protected in tick *t* exactly when *t* − *t*₀ < *D*, i.e. for *D*
   ticks counting the start tick, provided *t* ≥ *t*₀ and *D* > 0. Integer ticks, no rounding.
+- **F9. Protection brightness.** For ordinary non-negative integer brightness *b* in per-mille
+  and claim 29's dimensionless phase factor *m*, the protection-adjusted brightness is
+  *b*′ = min(2000, ⌊*b* × *m* / 256⌋) per-mille. The multiplication is integer and the
+  division truncates toward zero. Before the first protected turn, after the envelope's
+  Ordinary phase begins, and without protection, brightness is unchanged, not newly capped.
+  This formula isolates protection with no simultaneous damage flash or air-strike marking.
 - **F8. Silo-launched falling missile start height.** *z*₀ = *h*(*c*) + *A*_up, where *h*(*c*)
   is the terrain surface height at the target cell centre and *A*_up is the upward projectile
   type's detonation-altitude value. Integer leptons, no rounding or bridge lift. This is a
@@ -991,9 +1051,9 @@ component or a time.
 The absent-key defaults have high confidence and `unmeasured` backing here: the scenarios
 below retain inherited fields or explicitly override them, rather than removing each key
 from every rules layer in a fresh session to isolate its default. Delegated field semantics
-retain the backing of their owning specs. The two cursor-circle fields and protection tint
-selectors have high confidence and `unmeasured` backing here: no scenario part varies them
-to isolate their presentation. The emergency nuclear fallback is also `unmeasured`: no scenario
+retain the backing of their owning specs. The two cursor-circle fields have high confidence
+and `unmeasured` backing here: no scenario part varies them to isolate their presentation.
+Protection colour selection is `measurable` under SW10 part g. The emergency nuclear fallback is also `unmeasured`: no scenario
 can reliably force its effect-creation failure through ordinary input.
 
 | Source | Key | Feeds | Form | Absent |
@@ -1046,7 +1106,8 @@ can reliably force its effect-creation failure through ordinary input.
 | `[General]` | `ForceShieldDuration` | force-shield duration *D* | integer, ticks | 400 |
 | `[General]` | `ForceShieldBlackoutDuration` | blackout length (claim 30) | integer, ticks | 800 |
 | `[General]` | `ForceShieldPlayFadeSoundTime` | fade-sound lead time *P* | integer, ticks | 50 |
-| `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | protection tint selectors (rendering) | integer, dimensionless selector | 0 (selector index) |
+| `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | curtain and force-shield colour-adjustment selectors, respectively (claim 29) | integer, zero-based position in the colour-adjustment table; not a colour-definition name | 0 (selector index); absent in a later layer retains the held selector |
+| `[ColorAdd]` | each entry, in section order; key spelling does not select a slot | RGB colour-adjustment triples (claim 29); layering owned by S-0006 claim 2 | three byte components, red, green, blue, parsed under S-0003; not palette components multiplied by 4 | table initially has 16 black triples (0, 0, 0); omitted entries and rules-layer clearing follow S-0006 claim 2 |
 | `[General]` | `ChronoPlacement` | source marker | animation name | none |
 | `[General]` | `ChronoBlast`, `ChronoBlastDest` | blast at the source, blast at the destination | animation names | none |
 | `[General]` | `WarpOut` | warp-out animation (claim 39) | animation name | none |
@@ -1263,12 +1324,35 @@ is not under test.
   and a teleport warp on non-organic protected objects; expected: all refused or skipped.
   Pulse and already-running erasure cases remain unmeasured, as claim 27 says. (d) A computer house's unit and a human house's unit next to a protected enemy; expected
   (original): the computer unit does not fire, the human unit fires without effect.
-  (e) Recorder: one draw R(−5, 5) per protected object on entering the pulsing phase, about
-  10 ticks after each start. Repeat with protection shorter than that and with reapplication
-  before the phase: no draw for an interrupted start. (f) Load a protected vehicle into a
+  (e) Recorder: one draw R(−5, 5) per protected object on entering Initial dimming, at *q* + 10
+  for uninterrupted turns, hence 11 ticks after a normal post-turn launch. Record the first
+  protected turn separately from the launch. Repeat with protection shorter than that and
+  with reapplication before the phase: no draw for an interrupted start. Record each protected
+  object's draw separately, not a combined count contaminated by invocation animations. (f) Load a protected vehicle into a
   transport, wait beyond expiry, and unload under fire: protection has expired. Capture a
   protected vehicle in a named map through an ownership-change trigger: timer expiry is unchanged.
   Named maps with zero and negative durations confer no protection but retain infantry kills.
+  (g) Protection appearance: use a stationary voxel vehicle and a stationary ordinary sprite
+  building on flat, neutrally lit ground, no combat, damage flashes or air-strike marking.
+  Capture their same visible pixels on every tick from application through expiry, with a
+  read-only record of ordinary brightness, protection remainder, first protected turn and
+  scenario-stream draws. Curtain both, then force-shield the building in a separate run.
+  Expected: claim 29's phase boundaries and F9's brightness, with the first draw determining
+  only Initial dimming's length; low-hold entry tests the strict 54-tick boundary and final
+  rise the strict 31-tick boundary. The bright hold doubles brightness subject to the cap,
+  low hold uses factor 51, not zero. Reapplication resets to the initial envelope; expiry
+  removes it immediately, even in an unfinished phase. In SW10-g.map use invented durations
+  of 170 and 230 ticks to obtain different pulse counts; add 7- and 12-tick applications to
+  distinguish early expiry and a truncated dimming phase. Repeat for ten recorded seeds.
+  A wrong phase length, threshold, brightness or draw boundary falsifies that part.
+  In SW10-g-colour.map change only the selected adjustment triple to invented (7, 19, 3),
+  then (21, 2, 11), in two fresh-session runs; preserve all table positions. Repeat by changing
+  the selector instead to another existing valid position. Expected: curtain vehicle and
+  force-shield building colour responds to the selected triple; curtain sprite building
+  brightness still follows the envelope but its colour does not respond to either selector.
+  A response in that last control, or no response in the first two, falsifies the respective
+  row. Compare frames with equal phase factor and brightness; this selection test alone does
+  not establish the exact per-pixel composition formula. Record it separately for S-0102.
 - **SW11 — force shield (claims 30 to 32).** (a) Allied buildings with reference points at
   distances just below and at 256 × *R* from the target centre, one on raised ground; an enemy
   building inside; expected: only allied buildings strictly inside F3 protected. (b) Vehicles
@@ -1415,7 +1499,18 @@ for these two kinds.
   for ordinary flight only (claim 4).
 - The deck-to-deck bridge lift of claim 36 remains low confidence; SW12 needs a deck-to-deck
   run recording both the initial landing point and actual placed height.
-- The exact tick of the tint draw (claim 29) and of each warp step (claim 39).
+- The absolute tick of each warp step (claim 39).
+- Q-0742 question 4: claim 29 settles the protection envelope, its draw and the three listed
+  colour-selection cases. S-0102 must still specify the exact per-pixel colour-adjustment
+  composition, including channel quantisation, clamping and its relation to shade selection,
+  and extend coverage to sprite vehicles, aircraft, building voxel turrets and attached
+  animations. These results remain `unmeasured` here: this investigation establishes the
+  supplied drawing inputs but has not traced every pixel-composition path. SW10(g)'s
+  same-pixel captures, repeated for these drawing variants with named art overrides where
+  necessary, are the proposed discriminating observation. Do not infer identical colour
+  treatment merely from identical brightness timing.
+- Q-0742 questions 1 to 3 belong to S-0214 claims 21 and 22; question 5 belongs to S-0512
+  claim 16. They are not answered by the protection changes here.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).
 - Negative storm countdowns and durations other than the endless value are not covered by the
   non-negative timing formulas; their safe import policy remains unresolved.
