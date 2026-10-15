@@ -873,6 +873,28 @@ fn claim_27_repair_on_pad() {
     assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Guard));
 }
 
+// spec: S-0501 Edge cases (a pad with no docking-place key, or with the key set to 0, has one contact place: an aircraft built there docks in it)
+#[test]
+fn pad_without_docking_places_has_one_place() {
+    for docks in [None, Some(0)] {
+        let mut r = rules();
+        r.sim
+            .buildings
+            .get_mut("APAD")
+            .unwrap()
+            .econ
+            .number_of_docks = docks;
+        let (w, k, a) = built_with(&r, "JET");
+        assert_eq!(
+            glasnost_sim::econ::release::contact_places(&w, k),
+            1,
+            "{docks:?}"
+        );
+        assert_eq!(w.obj(a).unwrap().contact, Some(k), "{docks:?}");
+        assert!(air::on_ground(&w, a), "{docks:?}");
+    }
+}
+
 // spec: S-0407 claim 16, S-0501 claim 30 and quirks.dock_bound_aircraft_ignores_limit (on: a pad-bound type's queue test ignores its own build limit; off: both limits apply)
 #[test]
 fn dock_bound_limit_both_ways() {
