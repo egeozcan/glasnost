@@ -3,7 +3,7 @@ id: Q-0634
 title: Which landing spot and which map-edge cell does an aircraft without a pad choose?
 status: answered
 related: [S-0501, S-0212]
-answered-by: [S-0212]
+answered-by: [S-0212, S-0501]
 ---
 
 ## Need

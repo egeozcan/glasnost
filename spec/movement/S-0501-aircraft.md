@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0635, Q-0636]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636]
 supersedes: []
 ---
 
@@ -364,8 +364,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       overridden behaviour and the two other early-exit rows are also `unmeasured`: AC10 has
       not established normal inputs that isolate a fall-back invocation in those states.
       The computer and team cases are context, not extra rules for our AI houses.
-      F8's other-object fallback is covered by claim 41 and AC23; its equal-distance tie
-      order and complete building-footprint search remain open.
+      F8's other-object fallback and equal-distance object preference are covered by claim 41
+      and AC23; footprint qualification and candidate choice are S-0212 claim 25a.
     The pad-search rows need the in-the-air answer (Terms); the other rows use the on-the-ground
     test.
     - Confidence: high (the in-flight and pad rows); medium (the ground rows and the computer
@@ -776,28 +776,37 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     uses locomotion class *foot*, movement zone *normal*, the building cell's ground reach
     region for that zone, no deck mode, and a 3 × 3-cell free footprint. It allows bridges,
     asks for no height, no-overlay or burrowing condition, and has no reference cell. The
-    aircraft type's own movement zone is not used. These are caller settings for S-0212
-    claim 25; its complete 3 × 3 footprint qualification and result displacement remain
-    open, so this is not yet a complete F8 destination rule.
+    aircraft type's own movement zone is not used. S-0212 claim 25a supplies the complete
+    footprint qualification and candidate choice: the footprint extends from the candidate
+    through two cells in each positive map axis, and the selected top-left cell is returned
+    unchanged, not shifted to the middle. Its no-reference candidate choice uses the search
+    tick modulo the preferred candidate count, not distance to the aircraft.
 
     Below F8's 256-lepton weighted-distance threshold, the replacement search centred on
     the aircraft's own cell instead uses a 1 × 1 footprint, the same fixed class and zone,
     the own cell's ground reach region, and its own cell as reference. With no successful
     building choice, or no dock types, the fallback considers other own-house infantry,
     vehicles, aircraft and buildings, excluding self and objects in limbo. It prefers the
-    smallest spatial table-root distance for which a nearby search succeeds. That search
-    uses the other object's cell, a 1 × 1 footprint and otherwise the building-search settings.
+    smallest spatial table-root distance, truncated toward zero to integer leptons, for
+    which a nearby search succeeds. Equal integer distances favour the object created
+    earliest, across all four kinds together; there is no preference by kind, current cell
+    or most recent entry onto the map. Removing another object does not change that
+    preference among the survivors. This is object creation order, not tick-update order.
+    That search uses the other object's cell, a 1 × 1 footprint and otherwise the
+    building-search settings, with no reference cell. Its candidate choice uses tick modulo
+    as in S-0212 claim 25a. The own-cell replacement instead uses its reference to minimize
+    candidate distance, retaining the earliest collected candidate on a tie (S-0212 claim 25a).
+    These candidate ties are distinct from the preference between fallback objects.
     With no successful object choice, it returns the aircraft's own current cell without
-    another free-cell search. No random draw belongs to these nearby searches. The exact
-    tie order between equally distant fallback objects remains open.
+    another free-cell search. No random draw belongs to these nearby searches.
 
     The edge half of Q-0634 is already answered by claim 34, claim 37 and S-0522 claims 4
     and 5: retreat uses the arrival edge, spy overfly the opposite computed edge, with one
     ranged draw except two on south. It is not a nearest-cell projection with no draws.
-    - Backing: `measurable` (AC23) for caller settings, unequal-distance object choice and
-      empty-house fallback; `unmeasured` for a complete 3 × 3 search outcome because its
-      footprint predicate and result displacement have not been established here
-    - Confidence: high for caller settings and empty-house fallback; medium for object choice
+    - Backing: `measurable` (AC23); footprint qualification and candidate choice also have
+      S-0212 claim 25a's scenario P28
+    - Confidence: high for caller settings, object preference and empty-house fallback.
+      Candidate choice inherits S-0212 claim 25a's confidence
 
 ## Formulas
 
@@ -867,7 +876,8 @@ division truncated toward zero.
 > eligible building on a tie. Below 256 leptons seek a free cell near the aircraft's own cell.
 > Otherwise use the free spot near the chosen building. Without dock types, or when no building
 > yields a spot, use claim 41's other-object fallback and ultimately the aircraft's own cell.
-> Claim 41 supplies caller settings; the building search's complete footprint semantics remain open.
+> Claim 41 supplies caller settings and fallback-object preference; S-0212 claim 25a supplies
+> footprint qualification, unchanged result cells and candidate choice.
 
 > **F9 Pad distance.** *D*² = (*x*ₚ − *x*ₐ)² + (*y*ₚ − *y*ₐ)² between the centre of the pad and of the
 > aircraft, in leptons, as a signed 32-bit integer that wraps on overflow (S-0205 claim 1); height is
@@ -1475,8 +1485,25 @@ listed in Open questions are not claimed confirmed by these scenarios.
     and the bystander alive. Expected with no qualifying anchor: own cell without search.
     Otherwise expect the nearest anchor yielding a successful 1 × 1 search under claim 41's fixed
     foot/normal settings, with no search draw. Compare zones and water to discriminate from
-    using the aircraft's own movement settings. The 3 × 3-building search and equal-distance
-    fallback ties remain incomplete and are not confirmed by those 1 × 1 runs.
+    using the aircraft's own movement settings. Add pairs of equal-integer-distance anchors,
+    first of the same kind and then of different kinds. Produce them in a recorded order,
+    move them to separate symmetric positions whose successful nearby-search results differ,
+    and trigger rest at the same recorded aircraft position and height. Reverse creation
+    order in a fresh run while retaining those positions and search conditions. Expected:
+    the earliest-created successful anchor wins, even when created later than an unrelated
+    object since removed. Move the earlier anchor away and back, or board and unload it
+    before restoring the setup: later entry onto the map must not make it lose its tie.
+    Record creation, entry and search ticks, integer spatial distances, qualifying anchors
+    and the selected destination. A later-created successful equal-distance anchor winning
+    falsifies the preference. Void a contrast if movement or visibility changes qualification.
+    For the 3 × 3-building branch, use the named rest-test override with dock types and no
+    accepting pad. Record the chosen building, candidate footprint and destination cell.
+    Apply S-0212 claim 25a's P28 variants. Expected: a qualifying forward 3 × 3 rectangle
+    with its top-left cell returned unchanged, and tick-modulo choice among preferred cells.
+    A middle-cell shift or refusal solely from the aircraft's own mobility settings falsifies
+    that part. Own-cell 1 × 1 replacement instead uses reference-distance choice; compare
+    equal-distance candidates at different search ticks to distinguish its stable collection
+    tie from the no-reference searches' tick-modulo choice. No search takes a random draw.
 
 ## Open questions
 
@@ -1486,9 +1513,9 @@ listed in Open questions are not claimed confirmed by these scenarios.
    spec states only that it stops a landing.
 4. The exact application timing of the landing-facing choice (claim 25) remains unresolved.
    Do not infer height stages from the take-off rules.
-5. Q-0634 remains partial: S-0212 claim 25 needs the 3 × 3-footprint qualification and
-   result displacement for claim 41's building search. Equal-distance other-object fallback
-   tie order also remains unresolved. Unequal-distance and empty-house fallbacks are specified.
+5. Q-0634 is answered by claim 41 and F8 with S-0212 claim 25a for footprint qualification,
+   unchanged result cells and candidate choice. Equal-distance fallback objects favour
+   earliest creation; map-edge destinations are claims 34 and 37 with S-0522 claims 4 and 5.
 6. Q-0633 is answered by claim 4.
 7. The landing test's selection among multiple ground-layer occupants remains unresolved
    (F7). Single-occupant outcomes are specified.
