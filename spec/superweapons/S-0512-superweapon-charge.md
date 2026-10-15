@@ -2,7 +2,7 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -194,7 +194,7 @@ between a fire order and the effect.
    and not suspended instead). An order that S-0513 refuses for its
    effect's state (a storm already pending or raging, a domination already under way) keeps the
    charge and the ready state; the local player gets a refusal message if the order was its own.
-   When the order is carried out, the effect starts (S-0513), the record stops being ready, and its
+   When the order is carried out, it requests the effect (S-0513 claim 3), the record stops being ready, and its
    clock restarts with remaining time *T*, so it becomes ready again in tick *L* + *T* for an order
    applied in tick *L*. The exceptions are one-time records (claim 12), first stages (claim 10) and
    manual-charge types (claim 20). If an ordinary non-first-stage record fires through the
@@ -203,7 +203,13 @@ between a fire order and the effect.
    superweapon whose house has no building able to
    launch the missile consumes its charge in the same way and launches nothing
    (`quirks.missile_without_launcher_consumes_charge`, default on = original; off: the order is
-   refused and the record stays ready). Which building launches is S-0513's.
+   refused and the record stays ready). S-0513 claim 7 owns the launcher choice: only the first
+   matching silo type in building-type-list order is considered by default. The chosen silo
+   must accept the launch: selling prevents it, and an already-running launch sequence need
+   not start another missile. A chosen selling or busy silo still records the target and plays
+   the launch sounds; with no matching building there are no launch sounds. These cases all
+   consume readiness under the original behaviour. The quirk's off state refuses an order
+   that would produce no new launch sequence, including the selling and busy cases.
    - Backing: `measurable` (scenario X5) for normal firing, refusal and the missing launcher.
      The exceptional already-issued order on a suspended but running record is `unmeasured`:
      no scenario here reliably produces that order through the original's sidebar
@@ -323,10 +329,17 @@ between a fire order and the effect.
     A suspended record whose clock is stopped shows the clock stage of the time it kept. The
     icon offers targeting when granted and not suspended and, for an ordinary type, ready; for
     a drain-mode type, in its *ready* or *active* state. These sidebar conditions differ from
-    order application in claim 8's exceptional states. How the stage, label and
-    progress look is the implementer's design. Presentation only. The giving building's own
+    order application in claim 8's exceptional states. Selecting an icon arms that superweapon
+    type, identified by its registration index in the superweapon type list, not by its kind.
+    Aim offers follow S-0513 claim 1. A battlefield or radar click instead orders the first type
+    in list order whose aim action matches the cursor action, under
+    `quirks.superweapon_order_first_type_of_action` (S-0513 claim 2, default on = original,
+    off: the order names the selected type). Thus selecting a ready later type can result in
+    refusal for an earlier type's unready record, without spending the selected record's charge.
+    How the stage, label and progress look is the implementer's design. Presentation only. The giving building's own
     charge animation follows the record's remaining time by S-0108 claim 18.
-    - Backing: `measurable` (scenarios X2 and X11, by labels, icon progress and countdown rows)
+    - Backing: `measurable` (scenarios X2 and X11, by labels, icon progress and countdown rows, and
+      S-0513 scenario SW1 part d for shared aim actions)
     - Confidence: high
 
 17. **Flash window.** A record is a ready superweapon in S-0411's sense (S-0411 claim 11) while it
@@ -362,8 +375,9 @@ between a fire order and the effect.
     running for the recharge time of F5, but launches no effect and issues no effect-ending
     action. It may be fired again immediately, for a shorter active time. Expiry in *active*,
     while not suspended, moves to *charging* with the full *T*, without an effect-ending action.
-    An order in *charging* does nothing. Launch effects retain their own lifetimes in S-0513,
-    the label *active* does not itself define an effect's lifetime.
+    An order in *charging* does nothing. Neither early return to *ready* nor natural expiry
+    ends any running effect. Launch effects retain their own lifetimes (S-0513 claims 19, 26,
+    39, 40, 42 and 43); the label *active* does not itself define an effect's lifetime.
 
     These drain-state order transitions do not test grant, readiness, clock-running or suspension
     again when the order is applied, and restart the clock even if suspended; the sidebar still
@@ -500,6 +514,7 @@ Observable ordering:
 - `quirks.predependent_kind_as_list_position` (claim 11).
 - `quirks.second_stage_order_unchecked` (claim 10).
 - `quirks.missile_without_launcher_consumes_charge` (claim 8).
+- `quirks.superweapon_order_first_type_of_action` (claim 16; S-0513 claim 2 owns it).
 - `quirks.permanent_grant_freezes_suspension` (claim 13).
 - `quirks.one_time_grant_keeps_stale_suspension` (claim 12).
 - A one-time record's icon is removed when it fires; the original leaves it until the next
@@ -662,6 +677,10 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   a permanent trigger grant to a house with no launching building, fired.
 - *Expected:* (a) ready again at *L* + *T*, other houses' rows unchanged; (b) the local player's
   order refused with a message, its record still ready; (c) nothing launched, row restarts at ⌊*T* / 15⌋.
+- *Launcher variants:* repeat (c) with the chosen silo selling and with it still in its launch
+  sequence (S-0513 scenario SW2 parts b, c and e). Record sounds, target, missiles and readiness:
+  charge is spent and sounds play, but no additional missile need appear. With two matching silo
+  types, owning only the later type still gives no launcher under the default first-type rule.
 - *Falsified if:* any differs. Repeat (b) for a pending storm and for domination already under
   way; either consuming readiness falsifies refusal. After a source pick, also repeat with a
   ready first stage whose charge was set to 0 %: the pick must preserve the positive countdown
@@ -782,3 +801,6 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   here. X6 tests the ordinary two-stage flow, not those bypasses.
 - Which houses still get house updates after defeat, and so how soon claim 22 applies, is S-0414's.
   The claim states "the next check".
+- The battle-lab force-shield availability and scope question is tracked in S-0513's Questions
+  for the project lead and scenario SW16. Claim 3 describes grants from imported building data.
+  It does not settle that scope decision.
