@@ -3004,7 +3004,7 @@ impl Builder<'_> {
         u: i32,
         light: i32,
     ) -> Option<Item> {
-        // spec: S-0402 claim 5a, Import mapping (the fixed game asset OREGATH.SHP, by its file name)
+        // spec: S-0402 claim 5a; S-0102 Import mapping (the fixed game asset OREGATH.SHP, by its file name)
         self.assets.get(super::harvesting::SPRITE_FILE)?;
         // spec: S-0402 F8 (project the anchor by S-0101 claim 1 and centre the image there); S-0102 claim 13 (the canvas centred at the displaced point)
         let at = project_lifted(h.anchor.0, h.anchor.1, h.anchor.2);

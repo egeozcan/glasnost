@@ -13,7 +13,7 @@ use glasnost_sim::world::{ObjectId, World};
 
 /// The harvesting sprite, loaded by its fixed file name with the ordinary
 /// asset precedence (S-0005 claim 1).
-pub const SPRITE_FILE: &[u8] = b"OREGATH.SHP"; // spec: S-0402 Import mapping (fixed game asset OREGATH.SHP)
+pub const SPRITE_FILE: &[u8] = b"OREGATH.SHP"; // spec: S-0102 Import mapping (fixed game asset OREGATH.SHP)
 
 /// Facing groups of the sprite.
 const FACING_GROUPS: u32 = 8; // spec: S-0402 Constants (harvesting sprite facing groups: 8)
