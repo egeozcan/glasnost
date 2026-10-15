@@ -2,11 +2,11 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162]
 supersedes: []
@@ -236,14 +236,17 @@ this spec:
    conditional 4-to-8-tick draw before the search (claim 1). An opportunity target for which the firing check of the
    weapon the searcher would use against it answers *illegal*, *out of range* or *impossible* is
    dropped, and the same search may pick a new target. One exception: a searcher that controls
-   spawned aircraft (a spawner type) and gets *impossible* keeps the target, and its spawned
-   aircraft's target is cleared (what spawned missiles already in flight then do is the aircraft
-   specs'). The answer *busy*
+   spawned aircraft (a spawner type) and gets *impossible* keeps the target, but resets its
+   spawn controller as S-0506 claim 11 gives. Released missiles already in flight continue to
+   their fixed aim points (S-0506 claims 11–12). The answer *busy*
    (the searcher is launching spawned aircraft, S-0301) is none of the three, so the target is kept
    and the spawned aircraft are left alone. Apart from the attack-move searches of claim 23 that
    run as for an object with no target, a search looks for a target only when the searcher is
    left with none, so it never replaces a kept target, and in particular never a target given by
-   an order. The table *Search outcome and target state* (State and ordering) gives every case.
+   an order. This is retention within a search, not protection against other target-loss rules:
+   before its behaviour processing, an aircraft clears even a living target whose in-the-air
+   answer is yes (S-0501 claim 32, using the test defined in its Terms). The table *Search
+   outcome and target state* (State and ordering) gives every search case.
    When the search picks a target object, that object's expected remaining health is reduced at
    once by the expected damage of the weapon the searcher would use against it (S-0302, claim 18),
    unless that weapon's projectile has the inaccurate flag (Import mapping). So a searcher that
@@ -669,7 +672,7 @@ this spec:
       ability (S-0311, claims 3 and 4),
     - if its owner is human-controlled and it is a vehicle whose type deploys into a building with
       the artillery flag: never,
-    - *X* is not the parasite attached to it.
+    - *X* is not the parasite attached to it (S-0614 claim 17).
 
     For the neutral and special houses claim 25, part h, gives the conditions that differ.
     - Backing: `measurable` (scenario A5, including the veterancy-ability variant of the charges
@@ -1160,7 +1163,7 @@ A building's *threat value* is defined in Terms.
 | none | no candidate | no target |
 | opportunity target | firing check *illegal* or *out of range* | not kept; the outcome is that of the two rows with target before "none" |
 | opportunity target | firing check *impossible*, searcher controls no spawned aircraft | not kept; the outcome is that of the two rows with target before "none" |
-| opportunity target | firing check *impossible*, searcher controls spawned aircraft | kept; its spawned aircraft's target is cleared; no candidate is looked for |
+| opportunity target | firing check *impossible*, searcher controls spawned aircraft | kept; spawn controller resets (S-0506 claim 11); released missiles fly on to their fixed aim points (S-0506 claim 12); no candidate is looked for |
 | opportunity target | firing check *busy* | kept; no candidate is looked for |
 | opportunity target | otherwise | kept; no candidate is looked for |
 | any other target (for example one given by an order) | any | kept; no candidate is looked for |
@@ -1653,7 +1656,10 @@ set in the test map's override sections.
   target stays and the spawned aircraft keep theirs. *Impossible, spawner:* after it has picked *X*
   by itself, the spawner firer is disabled (a disabled firer gets the answer *impossible*, S-0301
   claim 9), for example by a weapon that disables its victims; at its next search it keeps *X* and
-  its spawned aircraft's target is cleared. Since *X* was kept, not set again, it is still an
+  its spawn controller resets as S-0506 claim 11 gives. Record the controller target and slot
+  states, distinguishing them from the firer's kept target. Repeat with a missile already in
+  flight: expect it to continue to its fixed aim point, not retarget or disappear
+  (S-0506 scenario R7). Since *X* was kept, not set again, it is still an
   opportunity target: once the firer is no longer disabled and *X* is moved out of range with *Y*
   in range, the spawner switches to *Y* (as in part a). *Impossible, other firer:* a firer that is not of a
   spawner type, disabled in the same way, drops *X* at its next search, and the same search picks
@@ -1661,7 +1667,8 @@ set in the test map's override sections.
   then no longer an opportunity target (claim 24). Once the firer is no longer disabled, *X* is
   moved out of range with *Y* in range: the firer keeps *X* and never switches to *Y* by itself
   (compare part a). *Falsified if:* the spawner's target changes while it is launching, its
-  spawned aircraft keep their target in the *impossible* case, the spawner keeps *X* when *X* is
+  controller keeps its target in the *impossible* case, an already flying released missile
+  changes its aim point because of the reset, the spawner keeps *X* when *X* is
   moved out of range afterwards, or the other firer switches to *Y*. (If the recorder shows
   no search while a firer is disabled, the *impossible* cases are not decided.)
 - *Part g (attack-move, claim 23):* an attack-move order on a cell 20 cells away, through an enemy
