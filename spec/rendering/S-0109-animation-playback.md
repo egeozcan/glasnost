@@ -2,13 +2,13 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0046, Q-0418]
+requests: [Q-0046, Q-0418, Q-0770, Q-0771]
 supersedes: []
 ---
 
@@ -131,8 +131,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
      value.
    - Backing: `measurable` (scenario AN3) for the delays and, through a recorder that reads the
      state of the scenario random stream, for the number and order of creation-delay draws.
-     The −1 layered endpoints and random follow-up delays are `unmeasured` here: AN3 has
-     neither layered endpoints nor a follow-up type. The absence of a new-pass reroll is
+     AN25 tests random follow-up delays, including their own-turn placement. The −1
+     layered endpoints remain `unmeasured`: neither scenario supplies them. The absence of a new-pass reroll is
      `measurable` through AN3's two-pass variant.
    - Confidence: high
 
@@ -176,16 +176,11 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
      update; the next delay runs from that actual advance, with no catch-up advances. One lost
      update at a due advance therefore extends that image frame by 1 tick if the following
      tick's update is eligible. Further lost updates, holds or loop delays can extend it more.
-   - Backing: `measurable` (scenario AN1) for the steady-state period, for the first image frame
-     when *d* ≥ 2 and for the first image frame of an animation created before the turn pass.
-     `unmeasured` for the longer hold after a lost turn, for the reason S-0203 gives in claim 2's
-     backing: no setup is known that puts an animation directly after an object that leaves play
-     at a tick it can predict. `unmeasured` for an animation created during or after the turn
-     pass, until a creator's spec names a creator whose place in the tick and in the update order is
-     known (Open questions)
-   - Confidence: high for the steady-state period *d*, for the first image frame when *d* ≥ 2,
-     and for the first image frame of an animation created before the turn pass; medium for an
-     animation created during or after the turn pass, and for the longer hold after a lost turn
+   - Backing: `measurable` (AN1 for before-pass creation; AN26 for during-pass creation,
+     after-pass death effects and the first turn lost to projectile removal). Claim 29 supplies
+     the creator placements; claim 16 gives the resulting lifetime.
+   - Confidence: high for the clock and creator placements; medium for the removal-skip
+     fixtures before measurement
 
 6. **Passes and their end limits.** The first pass starts at *k* = 0, so it shows image frame *a*
    first. A pass ends on the advance after which *k* is at or above its end limit:
@@ -292,14 +287,15 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     prevents the advance altogether. A loop delay given at creation is counted only from the second update
     (claim 5), so its start event comes on update *D* + 1 after creation.
     - Backing: `measurable` (AN9) for its positive delays between passes, their draws and
-      start sounds. The reversed delay image, zero-draw delay case and either-order input
-      are `unmeasured` here: AN9 has no reversed type, zero endpoint or swapped pair.
-      A loop delay given at creation is `unmeasured` until the specs that own the creators
-      identify a creator that asks for one (Open questions); no test field requests it
+      start sounds; AN25 for equal-endpoint and zero-pair draw allocation. The reversed
+      delay image and either-order input remain `unmeasured`: these scenarios supply
+      neither reversed play nor swapped endpoints. AN26 tests the initial loop delay of
+      a projectile trailer (claim 29)
     - Confidence: high for the order of events; medium for the drawing during the delay
 
 12. **No random starting image frame.** No field and no creator makes an animation start at a
-    random stage. Randomness in playback comes only from claims 3 and 11.
+    random stage. Randomness in the ordinary stage clock comes only from claims 3 and 11.
+    This is not an exclusion of event, creation or specialised-motion draws (claim 28).
     - Backing: `measurable` (scenario AN3) for the tested trigger creator and types starting at
       image frame 0. The universal exclusion of every other field and creator is `unmeasured`:
       AN3 cannot exercise all creation paths; creator coverage remains an Open question.
@@ -455,8 +451,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     thereafter, it is max(*d*, *u* + 1 − *c*) + (*E* − 1)*d* ticks, in exact integer arithmetic.
     This gives *E* × *d* + 1 ticks when *d* = 1 and *u* = *c* + 1 (claim 5).
     - Backing: `measurable` (AN1) for ordinary removal and before-turn-pass lifetimes.
-      The late or lost-first-update extension is `unmeasured`, for claim 5's stated setup
-      limit. Infantry creation and placement retries inherit S-0611 claims 9 to 11's backing
+      AN26 tests the late and lost-first-update extensions using claim 29's creators. Infantry creation and placement retries inherit S-0611 claims 9 to 11's backing
       and confidence (including MU10); burning-walker exceptions inherit S-0615 claims 4 to 11's
       backing and confidence
     - Confidence: high for ordinary playback; delegated exceptions have their owning claims'
@@ -665,8 +660,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     finds no sprite.
     - Backing: `measurable` (AN18, AN23 part C) for their successful two-sprite fixtures
       and explicit-zero ends. Earlier failed sprite finds, repeated reads with changed
-      fields, loop-end −1 or zero, and a type with no sprite at any find are `unmeasured`
-      here: neither scenario creates those lookup/read histories.
+      fields and loop-end −1 or zero remain `unmeasured`: neither scenario creates those
+      lookup/read histories. AN25 tests a type with no sprite at any find, including its
+      absent-limit and explicit-positive-limit playback.
     - Confidence: medium (the order of the type reads and the refresh is S-0007's; the rule itself
       is clear)
 
@@ -716,6 +712,101 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       drawn frame in that case; the safe result is a design rule.
     - Confidence: high for spacing and the first-rectangle source; medium for the
       full-view count before measurement
+
+28. **Playback draws are simulation effects, whether drawn or not (Q-0770).** Claims 3
+    and 11 use the scenario random stream for every ordinary animation in play. Neither
+    shroud, being off screen, a detail field above the player's detail level, nor an absent
+    sprite changes the clock, pass ends, follow-up switches or their draw allocation. No
+    viewer-dependent cosmetic stream substitutes for these draws. Suppression of pictures
+    alone does not suppress start or middle effects either. Independent holds, removal,
+    zero stage delay and the specialised playback exceptions still have their stated effects.
+
+    A spriteless type plays its passes and follow-up normally. With absent end and loop-end
+    fields, both are 0 (claim 25), not an instruction to delete at creation: a forward,
+    non-ping-pong animation with one pass ends or switches on its first eligible advance.
+    Explicit positive limits permit longer invisible passes and between-pass draws.
+    Its μ = 0 gives an immediate middle event at each applicable start event (claim 13).
+    Missing-sprite −1 limits retain the safe departure in Edge cases.
+
+    A between-pass delay is chosen in that animation's own turn at the pass end. A follow-up
+    delay is chosen in that same turn at the follow-up switch, before the new type's start
+    event and its effects. There is no separate animation batch after the turn pass.
+    Draw assignment among animations and other objects follows S-0203 claims 3, 4 and 10,
+    including missed turns: a missed turn has no playback draw. Due damage and the old
+    type's middle event precede either pass-boundary delay choice. A single ordinary pass
+    boundary takes either the loop-delay choice or the follow-up-delay choice, never both.
+    The former uses one ranged draw only when its endpoints differ; equal nonzero endpoints
+    give their constant delay without consuming a raw value, and (0, 0) takes no draw.
+    Claim 3 gives the analogous random-rate rule. Every ranged draw retains S-0202 claim 4's
+    inclusive range and rejection behaviour.
+
+    These are the only random choices of the ordinary stage clock; advancing, reversing,
+    ping-pong turning, pass-count decrement, a delay countdown and its expiry add none.
+    A follow-up switch is its only autonomous ordinary type change, not an extra random
+    type selection. This does **not** make the whole animation update draw-free otherwise:
+    - start and middle effects retain claims 13 and 14's conditional scenario draws,
+      including particles, smudges and resource reactions (S-0202 claim 15),
+    - damage can cause deaths and their effects, with the combat specs' draws,
+    - creating another animation, including a trailer or a landing effect, takes that
+      animation's creation and immediate-event draws at the creation, not its first update,
+    - terminal infantry creation retains S-0611 claims 9 to 11's draws,
+    - burning-walker destination choices retain S-0615 claims 5, 6 and 9's draws.
+      Bouncing types' landing effects are not ordinary pass-boundary delay choices.
+
+    Thus claims 3 and 11 are not a complete draw budget for every animation type. A
+    building replacing a slot animation creates another animation under S-0108 claims 12
+    and 13; it is not a random in-place follow-up selection by this clock.
+    - Backing: `measurable` (AN25 for visibility, spriteless passes, both delay choices,
+      within-turn precedence and absence of extra ordinary clock draws). Delegated effects
+      retain their owning claims' backing. No claim of a complete bouncing-motion draw
+      budget is made here.
+    - Confidence: high
+
+29. **Creators and first-update timing in play (Q-0771).** An animation is created at the
+    event that produces it, not at drawing time. The following placements apply to actual
+    animation objects; an infantry death sequence played by the infantry itself is not a
+    new animation (S-0107 claim 17).
+
+    | Creator or event | Place of creation relative to the turn pass |
+    |---|---|
+    | A weapon's shot animation in ordinary firing | during the firer's turn; the shot's successfully placed projectile enters play before this animation |
+    | A projectile's warhead detonation animation | during that projectile's detonating turn, before the projectile leaves play |
+    | Death or destruction animation from damage | at the damage or death event, in the same tick part as that cause, not a later death-animation pass |
+    | Projectile trailer | during the projectile's turn, before its movement and any detonation that turn (S-0306 claim 16); its creator gives it an initial loop delay of 1 update, repeat factor 1 and no reverse request |
+    | Moving ship's wake | during the ship's own turn, after locomotor movement (S-0504 claim 2) |
+
+    Death and detonation therefore have no unconditional before/during/after classification.
+    A projectile kill, an animation's damaging advance, or a death completed during an
+    object's turn creates its effects **during** the pass. Damage from a storm or disc laser
+    before the pass creates them **before** it (S-0203 claim 1). Surrender destruction in
+    the house update creates them **after** it (S-0203 claim 8). Immediate death weapons
+    inherit the death's place too (S-0312 claims 1 and 6). Other causes inherit their owning
+    spec's placement; an animation is not postponed merely because its victim is different
+    from the object taking the turn.
+
+    Every animation created before or during the pass is appended and is eligible for its
+    first update later in that same pass, after objects already in the update order. This
+    is eligibility, not a guarantee: counting removals in S-0203 claim 10 can cost it that
+    update. An animation created after the pass is first eligible next tick. Receiving its
+    first update does not advance its stage or count down a loop delay (claim 5), even when
+    creation was in somebody else's turn.
+
+    In particular, there is no special next-tick rule for a projectile's detonation or for
+    a death in another object's turn. The difference can instead be a removal: suppose a
+    projectile is last in the update order before its turn, creates exactly one explosion
+    animation, kills nothing, creates nothing else and leaves play in that turn. The new
+    animation directly follows it and loses its creation-tick turn. Its first actual update
+    is next tick, and with *d* = 1 its first advance is two ticks after creation. A trailer
+    made by a projectile that continues flying, or a wake made by a ship that stays in play,
+    normally takes its excluded first update in the creation tick. A shot animation can
+    likewise take that update when its projectile keeps flying and no removal costs it a turn. Extra
+    objects, death effects and counting removals must be resolved by the actual update
+    order; no fixed first-update timing per visual effect replaces that rule. Turning off
+    `quirks.update_order_removal_skip` removes this loss, as S-0203 claim 10 specifies.
+    - Backing: `measurable` (AN26); existing phase contracts also have S-0203 claims 1,
+      4, 5 and 8, S-0306 claim 16, S-0312 claim 1 and S-0504 claim 2's backing.
+    - Confidence: high for creation placement and the conditional rule; medium for the
+      minimal explosion/removal fixture before measurement
 
 ## Formulas
 
@@ -961,7 +1052,7 @@ forms are those of S-0003.
 | Key | Form | Feeds | Absent |
 |---|---|---|---|
 | `Rate` | integer | ρ, stage delay (F1) | delay 1 tick; −1 keeps the held value |
-| `RandomRate` | two integers | random delay pair (claim 3) | no random rate; −1 in either place keeps that end |
+| `RandomRate` | two integers | random delay pair, including unseen and spriteless playback (claims 3 and 28) | no random rate; −1 in either place keeps that end |
 | `Normalized` | boolean | claim 4 | no |
 | `Start` | integer | *a* | 0 |
 | `End` | integer | *E* | *E*<sub>s</sub> of the first sprite found, *N* or ⌊*N*/2⌋ with `Shadow`; −1 gives *E*<sub>s</sub> of the drawn sprite; 0 is kept except for new-theater types (Terms, claim 25, F2) |
@@ -974,8 +1065,8 @@ forms are those of S-0003.
 | `YDrawOffset` | integer, pixels | vertical image shift *v*, not a shadow shift (claims 26 and 27); depth effect in S-0102 claim 13 | 0 |
 | `Tiled` | boolean | stack of image copies (claim 27), suppressing the shadow (claim 10) | no |
 | `Flat` | boolean | flat drawing profile of S-0102 claim 13, with claim 26's image point and no shadow image frame | no |
-| `RandomLoopDelay` | two integers, updates | loop delay pair (claim 11) | 0,0 (none) |
-| `Next` | type name | follow-up type (claim 15) | none |
+| `RandomLoopDelay` | two integers, updates | scenario-stream loop delay pair, including unseen and spriteless playback (claims 11 and 28) | 0,0 (none) |
+| `Next` | type name | follow-up type and its own-turn delay choice (claims 15 and 28) | none |
 | `Damage` | decimal | δ (claim 17) | 0 |
 | `DetailLevel` | integer | detail field (claim 19) | 0 |
 | `TranslucencyDetailLevel` | integer | translucency detail field (claim 20) | 0 |
@@ -1008,9 +1099,11 @@ Import defaults and sentinel cases not explicitly exercised by the named scenari
 `unmeasured` here (confidence: high): no scenario systematically omits each key in each layer
 or supplies every sentinel value. Playback effects of the selected test values use the
 numbered claims' backings. Quirk-off alternatives, importer warnings and safe bad-data
-results are design rules (confidence: high), not oracle measurements. The missing-type and
-missing-sprite behaviours in Edge cases are `unmeasured` (confidence: high): the scenarios
-all supply a valid type and sprite, so cannot test those failure paths.
+results are design rules (confidence: high), not oracle measurements. The missing-type
+behaviour in Edge cases remains `unmeasured` (confidence: high): no scenario creates an
+animation without a type. Missing-sprite ordinary playback is `measurable` through AN25
+(confidence: high); the crash with missing-sprite −1 limits remains `unmeasured` here
+because AN25 deliberately avoids those limits.
 
 An explicitly written zero end field or loop end is an input-value rule, not an optional
 playback quirk. Its result is claim 25 and F2's result, including the new-theater refresh
@@ -1457,6 +1550,82 @@ building that can cloak), it sets them in the test map's override section, which
     Recover clipped copy positions from the sprite's known labelled rows; a copy
     with no visible pixels cannot be counted from the capture alone.
 
+- **AN25 (claim 28; Q-0770).** Use the common setup at 800 × 600, speed 4, with a
+  read-only random-state recorder. Named test art supplies two ordinary trigger-played
+  types: a forward type with two passes, explicit positive end and loop limits, stage
+  delay 1 and a random loop delay pair (2, 5); and a one-pass type with a follow-up
+  whose descending random rate pair converts to delays [2, 4]. Give both explicit
+  playback limits, no damage, particles, smudges, resource reaction, trailers or special
+  motion. A second pass uses loop endpoints (3, 3), then (0, 0), and equal converted
+  follow-up-rate endpoints. Create one type at a time and record creation tick, stage,
+  current type, remaining passes, delay, lifetime and stream state each tick through
+  removal. Repeat 32 times per case. Compare predicted allocations from each run's own
+  incoming stream state, not an assumed identical initial seed.
+  - Visibility variants: visible; outside the view; in an unexplored cell not seen by
+    any house; above the player's detail level; and a named test image that resolves
+    to no sprite at any lookup. Keep explicit positive limits for the spriteless run.
+    Also run a spriteless type with absent limits, one pass, delay 1 and a named
+    follow-up with positive limits. Do not use −1 limits in the missing-image fixture.
+  - Expected: the unequal loop pair takes exactly one ranged draw at each nonterminal
+    pass end, and the follow-up takes exactly one at the type switch, with raw values
+    predicted by S-0202 claim 4. The equal pairs and zero loop pair consume no raw
+    value for their choices. Visibility variants have the same clock and conditional
+    draw rules. The spriteless positive-limit type plays every pass; the absent-limit
+    type switches at its first eligible advance, not at creation. No ordinary clock
+    transition consumes an additional raw value.
+  - Ordering variant: create two long-lived ordinary animations in a known order so
+    that both reach a drawing pass boundary in the same tick, neither being removed.
+    Their selected delays must receive the ranged results in update order, not image
+    depth order. In a further variant let the earlier animation's ending advance
+    produce a middle-event particle request and let its follow-up have μ = 0 and
+    particles. Predict old middle-event draws, follow-up-delay draw, then new immediate
+    middle-event draws using claim 14 and S-0202 claim 15. Record particle attributes
+    as well as stream state to distinguish a swap with the same total consumption.
+  - Falsified by a missing draw solely in an invisible variant, creation-time deletion
+    of the spriteless positive-limit type, any extra ordinary clock draw, a type switch
+    at the wrong advance, or any outcome assigned a value outside the stated order.
+
+- **AN26 (claims 5, 16 and 29; Q-0771).** Common tiny skirmish setup, speed 4,
+  800 × 600. Named test art gives each tested shot, warhead, death, projectile-trailer
+  and wake animation a distinguishable stock sprite, explicit end 3, one ordinary
+  forward pass, delay 1, no random rate, no normalisation, no follow-up and no event
+  or damage effects. Named map test data selects these types through their creators'
+  import mappings. Director and unrelated mods are off. Use the read-only recorder
+  for creation tick, update order, actual first update, stage and removal tick, plus
+  end-of-tick captures for visible types. Run each fixture three times.
+  - During-pass fixtures: one firer launches a long-flight projectile, testing its
+    shot animation; the still-flying projectile creates one trailer; a surface ship
+    moves on open water and creates a wake. Keep them alive, with no other removal
+    in those passes. Expected for creation tick *c*: first update in *c*, stage 0 at
+    the end of *c*, stage 1 at the end of *c* + 1, removal in *c* + 3. For a trailer,
+    retain its creator-supplied initial loop delay, recording that delay explicitly:
+    its first update still excludes countdown, the start event is in *c* + 1, the
+    first advance in *c* + 2, and removal in *c* + 4. These are claims 5 and 11's
+    results for its initial delay of 1 update, not the no-loop-delay example above.
+  - Detonation/removal fixture: one projectile is last in the update order before
+    its turn, has no shot animation or trailer, detonates nonlethally on open ground,
+    creates exactly one explosion animation and is removed, with no other creation or
+    removal. Expected: its explosion joins during the pass but loses that tick's turn.
+    First actual update is *c* + 1, stage 1 first appears in *c* + 2 and removal is
+    *c* + 4. Confirm the recorded order and creation count; reject the fixture, not
+    the claim, if other objects or effects invalidate those preconditions.
+  - Death fixture: let a killing projectile produce one victim death animation.
+    Record all counting removals and objects still following the current object at
+    the end of the turn. The death animation is created during that projectile turn.
+    Whether it first updates in *c* follows S-0203 claim 10, not a special death rule.
+    Repeat with a pre-pass storm kill and an after-pass surrender destruction that
+    actually creates the named death animation. Expected: creation before the pass
+    for the storm and after it for surrender; absent intervening skip/removal, first
+    update respectively in *c* and *c* + 1. First advances and lifetime follow claim
+    5 and claim 16's formulas. Exclude sinking, crashing, deferred deaths and infantry
+    death sequences unless separately recording their actual later creation event.
+  - Falsified by an ordinary creator running in a different phase, a no-removal
+    during-pass fixture withholding its first update until next tick, the minimal
+    projectile fixture updating its sole new explosion in *c*, or a first-stage hold
+    or lifetime inconsistent with the recorded first update and initial delay.
+    Turning off the removal-skip quirk is an engine-only companion test: the minimal
+    explosion should then first update in *c*, advance in *c* + 1 and end in *c* + 3.
+
 - **Companion scenarios (claims 5 and 13 to 17).** S-0611 scenario MU10 tests generic
   infantry-making animations, terminal-only creation and position-choice draws; its MU9
   tests refused placement and retries. Use those scenarios for claim 16's delegated contract.
@@ -1484,15 +1653,17 @@ building that can cloak), it sets them in the test map's override section, which
   S-0401 claim 20 answers Q2a's chain-reaction
   draw sequence, including its no-resource gate and ordering after the whole immediate middle
   event. Subsequent particle updates are not specified here and must not be treated as draw-free.
-- Whether the first image frame is held one extra tick when *d* = 1 depends on the part of the tick
-  that creates the animation (claim 5). The specs of the creators (combat, structures, triggers)
-  should say which part that is for each creator. For the animations that a shot or a death creates
-  it also depends on whether the animation enters play before or after the projectile or object
-  that comes with it, which S-0203 (claim 2) leaves open: if the projectile leaves play in its own
-  turn and the new animation directly follows it in the update order at the end of that turn, that
-  removal costs the animation its first turn (S-0203, claim 10).
-- Which creators give a repeat factor *m* > 1 or reverse play, and which give an initial loop delay,
-  is not listed here; the specs of those creators (combat, structures) should say so.
+- Q-0770 is answered by claim 28, supplementing the existing claims 3, 11, 14, 19 and 25
+  and the missing-sprite rule in Edge cases. S-0214 claim 14 retains its separate, draw-free
+  move-target marker. Q-0771 is answered by claim 29 and claim 5's clock formula:
+  existing S-0203 claims 1, 4, 5 and 8, S-0306 claim 16 and S-0504 claim 2 already
+  establish several creator phases. Claim 29 adds the explicit creator table and removal
+  qualification. At hand-off, update S-0203 claims 2 and 10's obsolete uncertainty about
+  animation placement to cite claim 29 and AN26. Creation phase alone must not be read as
+  a guarantee of a creation-tick update.
+- Claim 29 identifies a projectile trailer's initial delay, repeat factor and reverse
+  request. A complete inventory of other creators giving a repeat factor *m* > 1,
+  reverse play or an initial loop delay remains with their owning specs.
 - The terrain specs can end the looping of the animations attached to a terrain object early, by
   making their current pass the last (the fire on a burning tree). When that happens is theirs to
   say and to measure.

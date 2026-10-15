@@ -1,9 +1,9 @@
 ---
 id: Q-0771
 title: In which tick the animations of shots, detonations and deaths take their first update (S-0109 claim 5)
-status: open
+status: answered
 related: [S-0109, S-0203, S-0302, S-0312]
-answered-by: []
+answered-by: [S-0109]
 ---
 
 ## Need

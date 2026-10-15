@@ -1,9 +1,9 @@
 ---
 id: Q-0770
 title: Which animations take the playback draws of S-0109 claims 3 and 11 from the scenario stream, and in which order
-status: open
+status: answered
 related: [S-0109, S-0202, S-0203, S-0214]
-answered-by: []
+answered-by: [S-0109]
 ---
 
 ## Need
