@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -233,7 +233,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
 
 5. **Tech level and country lists.**
    - (a) A type is refused when its tech level is −1 or above the house tech level. The tech level's absent-key default is 255, so a type with no tech
-     level is refused at every house tech level below 255.
+     level is refused at every house tech level below 255. The house tech level comes from
+     S-0009 claim 45, equally for human and computer lobby houses; naval yards use the same
+     comparison as other types.
    - (b) A type with a required-countries list is refused unless the house's country is in it; a type
      with a forbidden-countries list is refused when the house's country is in it. Whether a country
      is in a list is decided by its registration index in the country registry, as F1 gives (see
@@ -241,7 +243,8 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    - (c) A list key that is absent or empty means no restriction. A list given but naming only unknown
      countries is an empty set: a required list of that kind refuses every house, a forbidden list
      refuses none.
-   - Backing: `measurable` (scenarios T4 and T5, runs 1 to 3)
+   - Backing: `measurable` (scenario T4, including its three-side stock naval-yard regression, and
+     T5, runs 1 to 3)
    - Confidence: high (a, b); medium (c)
 
 6. **Stolen tech.** A type that needs the stolen tech of a side is refused unless the house has that
@@ -820,6 +823,31 @@ of the scenarios.
 - Expected: only the type at the house tech level is offered.
 - Falsified if: the absent-key type or the −1 type is offered, the type at the house tech level
   is not offered, or the type above it is offered.
+
+**T4 naval-yard regression (Q-0647, claim 5 a).**
+- Setup: stock executable, stock rules and a stock coastal map in standard skirmish mode,
+  launched from the stock setup screen, with no setup-tool override. Use speed index 2,
+  800×600, crates off, director off and mods off. Run three fresh games, one human house
+  from each side in turn, with a distant bystander computer player. Keep power sufficient
+  and the relevant tab below capacity; use no captured override building or secret lab.
+- Procedure: build the imported prerequisites of that side's naval yard. After the next
+  recheck, inspect the building tab, order the yard, wait for completion and place it at
+  a valid coastal location. Record the source and imported values of the game's and
+  house's tech levels and the yard type's tech level separately in the engine replay.
+  Compare those imports with the corresponding source fields using Import mapping here
+  and S-0009 claim 45 and its Import mapping, rather than changing the comparison.
+- Observable and tool: scripted mouse and keyboard input, screenshots and the read-only
+  sidebar recorder log prerequisite placement, the yard's icon, accepted production,
+  completion and successful placement, with ticks. No oracle run is claimed here.
+- Expected: all three yards pass the tech-level condition and are offered, orderable,
+  completable and placeable once their other conditions hold. Both kinds of lobby house
+  receive the same game tech level (S-0009 claim 45); that equality is independently
+  tested by S-0009 scenario M26 H, not by a computer player's choice to build a yard.
+- Falsified if: any yard is absent or refused after a recheck with all other offer and
+  order conditions met, or cannot complete or be placed at a valid location with sufficient
+  credits. An engine replay whose imported yard level exceeds its house level, unlike the
+  verified source fields, indicates an input mismatch, not grounds for a naval exemption
+  or a higher ceiling. Record the differing field and source layer before diagnosing it.
 
 **T5. Country lists.**
 - Setup: test types with a required list naming the house's country, one naming another country,
