@@ -2,13 +2,13 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340]
+requests: [Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671]
 supersedes: []
 ---
 
@@ -38,10 +38,10 @@ these gaps before an implementation can claim complete audio coverage.
 **Timing boundary.** Audio-clock durations and service opportunities below describe the
 original. They do not authorise host-dependent choices in our engine. The glossary's
 *departure* rule remains authoritative: our engine must use deterministic presentation
-scheduling. The exact replacement schedule, including the mapping of milliseconds and
-sample completions to service opportunities, is deferred for a project-lead decision
-(claim 30). The retained selection, priority and draw rules do not by themselves specify
-that schedule. Complete engine audio-timing conformance cannot be claimed until it is settled.
+scheduling. Claim 30 supplies our engine's replacement clock, waits, sample-completion opportunities
+and draw interleaving as design rules, not oracle findings. Claim 14's separately deferred
+complete delayed-mode sequence remains outside coverage; settling its scheduling does not
+supply that missing sequence.
 
 ## Terms
 
@@ -63,9 +63,11 @@ normalisation N of its Formulas F3. In addition:
 - **Audio clock.** The original's real time in milliseconds. Durations stated in milliseconds
   in claims 9 to 14 and 27 use this clock, not ticks. Their thresholds are independent of
   game speed, although actual service opportunities need not be (claim 12). Our engine's
-  deterministic replacement schedule is deferred under claim 30.
-- **Audio pass.** One service of the sound instances. Successive passes are separated by more
-  than 33 ms of the audio clock, whatever the tick rate (claim 12).
+  deterministic replacement is the logical audio time of claim 30.
+- **Logical audio time.** Our engine's nonnegative integer millisecond count, advanced only
+  by completed skirmish cycles, not by the host or audio device (claim 30).
+- **Audio pass.** One service of the sound instances. In the original successive passes are
+  separated by more than 33 ms of the audio clock (claim 12). Our engine uses claim 30.
 - **Screen sound.** A request that is not tied to a map position: centre pan and full request
   level by default (claim 5); claim 35 specifies explicit volume-fraction exceptions.
 - **Positional sound.** A request at a map position: its level and pan follow from where the
@@ -650,23 +652,48 @@ normalisation N of its Formulas F3. In addition:
     immediate-mode draws for uninterrupted playback, not a fixed count for every instance.
     Our engine retains this shared unsynchronised stream, as required by S-0202 claim 11,
     for both game-side sound choices and per-instance choices; no separate presentation
-    generator is substituted. Under the glossary's host-or-real-time departure rule, its
-    presentation scheduling must be deterministic: with identical initial stream state,
-    data, game-speed changes, presentation inputs and cycle-indexed game events, changing
-    host load or audio-device callback timing must not change the assigned random choices
-    or their order. Actual delivery of already selected audio to a device is not required
-    to have identical wall-clock timestamps. Scenario-stream state and game rules must
-    remain unaffected (claim 29).
-    The exact deterministic replacement for the original's service clock, waits and
-    sample-completion opportunities is deferred, not supplied by claims 12 to 14 or 27.
-    No tick conversion, zero-wait substitute or exception allowing nondeterministic
-    presentation is adopted here. The original's draw ranges and within-instance ordering
-    remain the retained rules; their interleaving with game-side choices needs the deferred
-    schedule before there is a complete engine timing contract.
+    generator is substituted. The following schedule is our engine's design rule, a
+    deterministic departure, not a description or proposed measurement of the original.
+
+    **Clock and passes.** In a loaded skirmish, logical audio time *C* and last-pass time *L* begin at 0 ms, and no pass occurs at that instant. At the end of each cycle—after that cycle's input, presentation requests and any tick—*C* is greater than its previous value by *P(s)*, where *P(0) = 8 ms* and *P(s) = 16s* ms for speed indices 1 through 6, using the speed in force during that cycle (S-0201 claims 4, 5 and 8). A pass occurs at that cycle end exactly when *C − L > 33 ms*; when it occurs, the new value of *L* is *C*. Otherwise *L* is unchanged. These are exact integer-millisecond operations, without rounding or clock wrap. At constant speed the interval between passes is *P(s) × (⌊33 / P(s)⌋ + 1)* logical milliseconds: 40, 48, 64, 48, 64, 80 and 96 ms at indices 0 through 6 respectively. Speed changes do not restart the cadence. Thus the strict lower bound of claim 12 is retained without making pass choices depend on host execution time. Frozen cycles advance logical audio time and can service audio despite running no tick. During a stand-still, including the options menu or lost focus, neither logical audio time nor logical playback advances, and resumption causes no catch-up. No skirmish audio passes occur in setup menus before loading or after leaving the match. Menu-specific audio is outside scope.
+
+    **Completion and waits.** Each selected sample has a logical duration
+    *T* = max(1, ⌈100000 × *N* / (*f* × *p*)⌉) ms, where *N* is its decoded number of
+    sample frames (one frame contains all channels), *f* its positive integer sample rate
+    in frames per second, and *p* its positive pitch percentage from claim 13. This is exact
+    rational arithmetic rounded upward once to integer milliseconds, not a device-reported
+    duration. Announcements use *p* = 100. A sample logically started at pass time *C₀*
+    completes at the first pass with *C* ≥ *C₀* + *T*. There is no callback-driven completion
+    and no carry-over of elapsed excess into the next sample. Even a zero-frame sample has
+    duration 1 ms, preventing an instantaneous endless loop. Nonpositive rates or pitch are
+    invalid data: warn and discard that playback without sample-preparation draws; already
+    taken instance draws are not undone. This invalid-data rule is also an engine departure.
+
+    Retain the delay draws and the no-wait thresholds of claims 13 and 14. An effective
+    wait of *d* ms chosen at time *C₀* expires at the first pass with *C* > *C₀* + *d*.
+    A no-wait result permits preparation/start in that same pass, not a new pass or a new
+    completion. Each newly started sample can complete only at a later pass. Delayed-mode
+    completion choices happen at these logical completions, with terminal-delay eligibility
+    and partial choice ordering as claim 14 states. This supplies their opportunities, not
+    the still-deferred complete attack/decay sequence. Announcement requests keep claim 27's
+    immediate interruption and queue effects; queue playback is serviced only at passes,
+    after sound instances. Its next start requires both logical sample completion and
+    *C* − previous start > 500 ms. A first announcement needs no previous-start gap.
+    Device callbacks, underruns, mute settings and delivery failures never create or remove
+    a logical completion, wait, channel or draw opportunity.
+
+    **Draw assignment within a cycle.** Every game-side choice in claims 17 to 23 is assigned to its causing input or game event, in the event order supplied to presentation, and precedes any per-instance choice at that cycle's end pass. Such choices are not postponed until channel allocation, and no pass separates damage, movement or order events belonging to one tick. If a game-side stop or cut has taken effect, the cancelled sample has no later completion draw. Until a pass recognises completion, an object's intervening update continues to regard its response as speaking, even if the logical duration deadline has passed.
+
+    Sound requests have increasing presentation request numbers in causing-event order, including requests received before the first pass. At a pass, the shared-stream choices attributable to due completions occur in request-number order. Entry placement and limits are resolved before new channel allocation, under claims 6 to 10; exact entry-ranking ties favour older requests unless claim 8's interrupt rule favours the new request. Among instances that survive, allocation, expired-wait preparation and start choices occur in request-number order, with each instance retaining claim 13/14's internal draw order. When channels are free, the lowest-numbered free channel among channels 0 through 15 is used, and claim 9's channel-order ties follow that same order. A sample cut by an entry limit or channel replacement has no later completion event. Consequently, these observable event and draw assignments are fixed without prescribing data structures or the implementation's work schedule. Other presentation consumers retain their event order in the supplied trace.
+
+    Identical initial stream state, data, cycle-indexed events, presentation inputs and
+    speed changes must therefore give identical logical pass times and assigned choices
+    regardless of host load or audio callbacks. Physical delivery timestamps may differ.
+    Scenario-stream state and game rules remain unaffected (claim 29).
     - Backing: `measurable` (E1 for original instance draw order, E2 for original audio-clock
-      eligibility, H1 for original separation from game state). Shared-stream retention and
-      deterministic scheduling are design requirements, with engine-only conformance
-      scenario H2, not oracle measurements or a claim that the replacement schedule is settled.
+      eligibility, H1 for original separation from game state). The replacement schedule,
+      duration calculation, tie rules and shared-stream retention are design requirements,
+      tested by engine-only H2, not oracle measurements.
     - Confidence: high
 
 31. **Response draws come before the local-player check in two places.** The feedback chance of
@@ -954,7 +981,10 @@ exact floating-point equality boundaries. Proposed G7 observations are not compl
 | Vertical distance weight | 2 | dimensionless multiplier | F2 |
 | Start threshold | 0.05 | level fraction | claim 6 |
 | Equal-loudness band | 1/10 | of the entry's level | claim 8 |
-| Audio pass interval | more than 33 | ms, audio clock | claim 12 |
+| Audio pass interval | more than 33 | ms, original audio clock | claim 12 |
+| Logical cycle increment, speed 0 | 8 | logical ms per cycle | engine design, claim 30 |
+| Logical cycle increment, speeds 1 to 6 | 16 × speed index | logical ms per cycle | engine design, claim 30 |
+| Minimum logical sample duration | 1 | logical ms | engine design, claim 30 |
 | Smallest effective delay | 33 | ms | claims 13, 14 |
 | Ambient pre-delay minimum | 33 | ms | claim 13 |
 | Announcement gap | more than 500 | ms from the start of the previous one, audio clock | claim 27 |
@@ -999,6 +1029,10 @@ not specified by this table (claim 14, E3).
 requested, in the tick's order of events; the feedback chance R(0, 99) precedes its choice; for a
 death, the death response choice precedes the death sound choice.
 
+**Engine schedule.** Claim 30 fixes cycle-end pass times and the assignment order of
+completion, allocation and preparation draws. Game-side sound choices of the cycle precede
+all of those pass choices. The original's host-driven service opportunities are not retained.
+
 **Ordering.** Requests wait for an audio pass to obtain channels; pre-delays can prevent requests
 from one tick from becoming audible together. A per-entry
 limit (claim 8) is applied before channels are given out (claim 9), so a sound cut by its own limit
@@ -1037,15 +1071,21 @@ never takes a channel or the draws of claim 13.
 - **No fallback between response lists.** An enslaved or deactivated object with an empty list of
   its own is silent (claim 17); the first object of a selection with no response is silent even when
   another selected object has one (claim 18).
-- **Audio scheduling departure, replacement schedule deferred.** The original's real-time
+- **Audio scheduling departure.** The original's real-time
   service interval (claim 12) is a strict lower bound, not an exact schedule or latency
   guarantee. Our engine follows the glossary's deterministic-departure rule, with no quirk
   switch or presentation-only exception. Both game-side and per-instance choices retain
-  S-0202 claim 11's shared unsynchronised stream. Claim 30 states the determinism requirement
-  but does not settle its replacement schedule. Host-dependent output delivery must not
+  S-0202 claim 11's shared unsynchronised stream. Claim 30 fixes the cycle-end clock,
+  completion deadlines, waits and draw assignment. Host-dependent output delivery must not
   feed back into choice assignment, the scenario stream or game state.
 
 ## Import mapping
+
+Claim 30 adds no INI key or configurable timing field. Its cycle period comes from the
+speed index imported under S-0201 claims 7 and 8. Its waits use `Delay` and its pitch uses
+`FShift` below with their existing defaults. Sample duration uses the decoded frame count
+and sample rate from the selected sample's own audio data, not a sound-rule duration key.
+There is no absent duration default. Device metadata is not an import source.
 
 Sound data file (the sound rules file of S-0005):
 
@@ -1945,10 +1985,31 @@ Record chosen entries, pitch/shift values, sample order, every stream draw's ass
 and both stream states at matching logical service opportunities. Expected: identical
 assignments and states in all three runs; only device delivery timestamps may differ.
 A changed assignment or state caused solely by host timing falsifies claim 30's design
-requirement. Changed logical input voids the comparison. This tests invariance within one
-implementation; it supplies neither a canonical service schedule nor an expected cross-engine
-interleaving while that schedule remains deferred. The test driver is a proposal, not a
-change to the existing harness.
+requirement. Changed logical input voids the comparison. Also check these canonical controls:
+- From a fresh clock, run 20 cycles at each constant speed 0 to 6. Expect passes every
+  5, 3, 2, 1, 1, 1 and 1 cycles respectively, with the logical intervals of claim 30.
+  At speed 1 after two cycles (*C* = 32, *L* = 0), change to speed 0: the next cycle
+  passes at 40 ms, rather than resetting the cadence.
+- At speed 0, start a 100-frame, 1000-frame-per-second sample with pitch 100 at the
+  first pass, 40 ms. Expect its completion at 160 ms, not 120 ms or a callback time.
+  A 33-ms effective wait selected at 40 ms resumes at 80 ms. A 40-ms wait resumes at
+  120 ms, not 80 ms, because expiry is strict. A below-threshold no-wait choice can
+  start a sample immediately, but cannot complete that sample in the same pass.
+- Put two due completions and two new requests in one pass, with different request
+  numbers, while a selection and a feedback event occur in that cycle's tick. Record
+  draw-use labels: the tick's event choices precede completions in request-number order,
+  which precede surviving allocation/preparation choices in request-number order.
+  Repeat with a game-side cut before the pass: the cancelled completion takes no draw.
+- Insert ten frozen cycles: expect clock and audio progress with unchanged tick number.
+  Insert a menu/lost-focus stand-still: expect no logical progress or draws however many
+  host frames/callbacks occur; closing it resumes at the next cycle with no catch-up.
+  Test two announcements with known decoded durations: their starts obey both completion
+  and the strict 500-ms start gap, rounded to the first qualifying pass.
+Any different pass, deadline, ordering or stand-still result falsifies the design rule.
+Use positive-rate, positive-pitch fixtures, plus one invalid-rate and one nonpositive-pitch
+fixture to check warning/discard without additional sample-preparation draws. These are
+engine-only named test data, not stock values or oracle tests. The test driver is a proposal,
+not a change to the existing harness.
 
 **I1. Volume options.** Set the sound volume option to zero and the voice option to full: expect
 announcements at full and no audible sound instances, responses included; then the reverse: expect
@@ -1966,12 +2027,10 @@ E3, F9 and G5/G6 preserve exploratory scenarios for later revisions; they do not
 Q-0329's complete delayed sequence or Q-0325's specialised eligibility/binding gaps.
 No immediate-mode, zero-wait or silent substitute is established for a deferred case.
 
-The original's real-time audio service and sample completions need a deterministic engine
-replacement under the glossary's *departure* rule. Its exact schedule and millisecond mapping
-remain deferred to the project lead. Claims 12 to 14 and 27 describe original timing, not
-an exception permitting host-dependent presentation choices. H2 tests the required invariance
-but cannot establish the missing schedule. This is an explicit engine-coverage gap, not an
-unmeasured claim about the original.
+Q-0671's clock, completion/wait opportunities and same-cycle draw assignment are supplied
+by claim 30 and H2 as engine design rules. Claims 12 to 14 and 27 retain their original-timing
+meaning. Claim 14's complete delayed-mode sequence remains independently deferred: the
+replacement clock neither resolves it nor authorises an immediate-mode substitute.
 
 Within the retained scope, four precision/observability limits remain `unmeasured` with
 reasons at their claims: the corner-cell exclusion (claim 6), fractional channel tie/order
@@ -1986,14 +2045,15 @@ covers lethal-damage reactions, not sale, crushing or script removal.
 
 ## Changes for other specs
 
-Current changes required by this timing-scope repair:
-- glossary, *audio clock*: qualify real-time milliseconds as the original's clock. Point to
-  claims 12 and 30 for the original cadence and the deferred deterministic engine replacement.
-  Retain the existing *departure* rule unchanged; no presentation-only exception is proposed.
-- S-0202 claim 11: qualify playback-service timing variation as original behaviour. Our engine
-  retains the shared stream but must meet S-0701 claim 30's deterministic scheduling requirement,
-  with the exact replacement schedule explicitly deferred. Do not present host-dependent
-  presentation choices as our engine's contract.
+Current changes required by Q-0671's schedule:
+- glossary, *audio clock*: retain the original-only real-time definition, but replace the
+  statement that claim 30 defers the schedule with a pointer to its logical cycle-end clock,
+  completion deadlines and waits. Retain the existing *departure* rule unchanged.
+- S-0202 claim 11: replace its statement that S-0701 claim 30 defers the schedule with a
+  pointer to the now-specified cycle-end passes, deterministic completion/wait opportunities
+  and game-side-before-pass draw assignment. Retain the shared unsynchronised stream and
+  attribute host-dependent service interleaving only to the original. Complete delayed-mode
+  sequence coverage remains deferred under S-0701 claim 14, not under the schedule.
 
 The following earlier scope/coverage repairs are already present in the current companion
 drafts; retain them at joint hand-off, rather than treating them as new outstanding edits:
@@ -2095,8 +2155,8 @@ Other existing hand-off checks:
 
 Deferred cases need later investigation, not guessed implementation defaults. Q-0327 is applied
 in claims 21/32. The glossary's existing deterministic-departure policy is retained, with no new
-quirk default or real-time presentation exception. The project lead must settle the exact
-replacement audio schedule before complete audio-timing conformance can be specified.
+quirk default or real-time presentation exception. Q-0671 authorises the engine schedule
+now specified in claim 30; no scheduling decision remains deferred to the project lead.
 
 Claim 30 retains S-0202 claim 11's existing shared-stream contract. The former separate-generator
 proposal remains withdrawn. Neither shared-stream retention nor separation from game state

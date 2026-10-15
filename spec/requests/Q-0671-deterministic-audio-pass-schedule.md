@@ -1,9 +1,9 @@
 ---
 id: Q-0671
 title: The deterministic schedule that replaces the audio service clock (S-0701 claim 30)
-status: open
+status: answered
 related: [S-0701, S-0202]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need
