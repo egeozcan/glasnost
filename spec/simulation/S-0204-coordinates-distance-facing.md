@@ -2,13 +2,13 @@
 id: S-0204
 title: Coordinates, distance and facing
 topic: simulation
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
-requests: [Q-0077]
+requests: [Q-0077, Q-0610]
 supersedes: []
 ---
 
@@ -112,9 +112,11 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
    mathematical sum *n* is below 2⁵³ square leptons; no universal bound on world-height
    differences is asserted here. The following shortfall properties describe F1 with that exact
    integer input. The result truncated to an integer, ⌊*r*(*n*)⌋, is never more than ⌊√*n*⌋. The
-   possible shortfall *s*(*n*) = ⌊√*n*⌋ − ⌊*r*(*n*)⌋ increases with distance, although *s* itself
-   is not monotone, because the table keeps only
-   14 significant binary digits of *n* (relative error of *r* below 2⁻¹⁴):
+   shortfall *s*(*n*) = ⌊√*n*⌋ − ⌊*r*(*n*)⌋ is non-negative but not monotone in *n*:
+   for example, *s*(16641) = 1 lepton and *s*(16642) = 0 leptons. It is the upper bound
+   √*n* / 16384 + 1 lepton that increases with distance, not necessarily the shortfall itself.
+   The table keeps only 14 significant binary digits of *n*; for positive *n*, the relative
+   error of *r* is below 2⁻¹⁴. More precisely:
    - *s* = 0 for every *n* below 16641 (distances below 129 leptons).
    - *s* ≤ 1 for every *n* below 536987929 (distances below 23173 leptons, about 90.5 cells); for
      distances of 2 to 10 cells about 4 % of values are one lepton short, and from 10 to 50 cells
@@ -283,13 +285,32 @@ level*, *facing*, *foundation*, *top corner*, *tick* and *round-toward-zero mode
     level, whose pitch facing is 16383. In F13 the correction follows the sign of the angle
     after its negation for a negative aim height, not the sign of the argument supplied to
     the table. At every other index the surrogate conversion is exact for these pitches.
-    F6 defines the conversion without requiring the raw table angles. The projectile rules,
+    F6 defines the conversion without requiring the raw table angles. This pitch conversion
+    is outside `quirks.table_direction`: it retains F6's table, scale, truncation and exceptions
+    with that switch either on or off. The projectile rules,
     their inputs, velocity rebuild and imported settings remain owned by S-0306.
     - Backing: `measurable` (C4 for the current pitch, goal pitch and straight launch pitch,
       each with both elevation signs at index 1024).
       `unmeasured` for the other 49 exception indices and the exhaustive non-exception result:
       no scenario isolates their narrow input bands for both pitch uses. Those results rest on F6,
       not on C4's one tested index.
+    - Confidence: high
+
+13. **Exact raw arctangent angles.** F7 defines all 4097 single-precision table angles
+    exactly, including the small differences from F3's surrogate. These are the same angles
+    used before the facing conversion of claim 8 and retained as raw angles by the rocket
+    pitch rules of S-0506 claim 17. No facing-unit exception correction is applied to a raw
+    angle. S-0506 claim 17 owns the pitch blend and descent steering, not this spec.
+    The entries are fixed constants: changing the floating-point rounding-mode quirk does
+    not regenerate or alter them. Raw-angle uses are outside `quirks.table_direction` and
+    retain F7's entries with that switch either on or off.
+    - Backing: `measurable` for selected entries through rocket pitch (C5).
+      `unmeasured` for exhaustive equality over all entries: no set of legal flight
+      geometries selecting every index and exposing every angle bit has been established.
+      Selected entries count as covered only when C5 obtains a valid, distinguishing update.
+      An index with no such update remains `unmeasured`. The independence of the fixed entries
+      from the rounding-mode switch is also `unmeasured`: C5 does not change that mode.
+      The complete contract is F7, not an assertion that C5 covers the whole table.
     - Confidence: high
 
 ## Formulas
@@ -369,20 +390,22 @@ round-toward-zero mode; S-0205, number domains). *X* and *Y* are single-precisio
 when |*X*| and |*Y*| are below 2²⁴ leptons); the quotient *Y* / *X* and the quotient of that by
 *σ* are double-precision values; the conversion of the latter to the integer *i* truncates.
 F3's exact integer index is specified in that bounded domain. It is not a generalisation to
-arbitrary signed 32-bit position differences. trunc₂₄ is exact
-for every table entry: no value arctan(*i σ*) lies within 10⁻⁴ of a single-precision step of a
-boundary, so any correctly rounded double-precision arctangent gives the same *T*(*i*).
+arbitrary signed 32-bit position differences. For the surrogate, no value arctan(*i σ*)
+with *i* > 0 lies within 10⁻⁴ of a single-precision step of a boundary, so a correctly rounded
+double-precision arctangent followed by trunc₂₄ gives the stated surrogate.
 
 **The original's table and the exceptions.** The original's 4097 table angles are single-precision
 values close to, but not equal to, trunc₂₄(arctan(*i σ*)): 4067 of them are smaller, none is
-larger, and the largest gap is about 1.55 × 10⁻⁶ radians (13 single-precision steps near π/2). No
-closed formula for them is known. For direction facings the gap matters only at the 50 indices
+larger, and the largest gap is about 1.55 × 10⁻⁶ radians (13 single-precision steps near π/2).
+F7 supplies an exact generating rule for these original angles. For direction facings the gap matters only at the 50 indices
 *i* listed below: there the facing *φ* comes out one facing unit nearer to map east (when *X* > 0)
 or map west (when *X* < 0) than the surrogate formula gives, in all four quadrants. For every
 other index, the surrogate gives the original's facing exactly. The pitch conversions of
 claim 12 are also exact with the corrections of F6. A use that retains the raw angle, rather
-than converting it by this same facing scale and truncation, still needs the original's table
-values, not the surrogate. The exceptions correct the final integer facing, not the angle.
+than converting it by this same facing scale and truncation, uses F7, not the surrogate.
+The exceptions correct the final integer facing, not the angle. Using F7 directly in the
+angle and facing expressions already gives the correct facing: do not also apply the
+surrogate's exception correction.
 
 > 441, 486, 789, 810, 842, 993, 1024, 1115, 1148, 1183, 1203, 1405, 1419, 1443, 1504, 1542, 1582,
 > 1618, 1810, 1907, 2015, 2044, 2094, 2136, 2202, 2225, 2400, 2513, 2605, 2621, 2670, 2704, 2721,
@@ -456,7 +479,40 @@ At index 1024, a positive angle gives *p* = 417 rather than *p*ₛ = 416; a nega
 gives *p* = 32349 rather than *p*ₛ = 32350. These are the pitches for F12 at a narrowed
 vertical-to-horizontal ratio of +25 or −25, and for F13 when its unnegated table arguments
 have ratio 25 and the aim height has the corresponding sign. The formula describes the
-original table behaviour, with the default setting of `quirks.table_direction`.
+original table behaviour. F6 is unchanged with `quirks.table_direction` off: that switch
+controls map-plane directions and the infantry reverse scale, not projectile pitch.
+
+**F7. Exact raw arctangent table** (claim 13). Let *σ* be the exact rational table step
+of F3. Define dimensionless tangents *u*₀ … *u*₄₀₉₆ and angles *T*(0) … *T*(4096) by
+
+> *u*₀ = 0,
+> *u*ᵢ₊₁ = trunc₂₄(*u*ᵢ + *σ*) for 0 ≤ *i* < 4096,
+> *T*(*i*) = trunc₂₄(arctan(*u*ᵢ)) for 0 ≤ *i* ≤ 4096.
+
+The addition is exact before each single-precision truncation toward zero. Each tangent is
+therefore a binary single-precision value, not the single-precision rounding of *i σ*.
+Arctangent means the mathematical principal arctangent, in radians. Its positive result is
+truncated toward zero to 24 significant binary digits. Zero gives positive zero. This
+recurrence defines fixed engine constants, not mutable per-game state or a startup
+calculation that depends on the current rounding mode. It is unchanged with
+`quirks.chop_rounding` off.
+
+A correctly rounded binary double-precision arctangent, rounded either to nearest with
+ties to even or toward zero, followed by trunc₂₄ yields the same angles. For every nonzero
+entry the mathematical angle is more than 0.000068 single-precision steps from either
+single-precision boundary, so that intermediate double rounding cannot change the final
+single. An arbitrary approximate arctangent without an error bound is not this contract.
+No integer-facing correction belongs in F7.
+
+Exact test values (tangents dimensionless, angles in radians):
+
+| *i* | *u*ᵢ | *T*(*i*) |
+|---:|---:|---:|
+| 0 | 0 | 0 |
+| 1 | 3276705 / 134217728 | 1638027 / 67108864 |
+| 40 | 511985 / 524288 | 6488809 / 8388608 |
+| 1024 | 3276631 / 131072 | 12841411 / 8388608 |
+| 4096 | 13104829 / 131072 | 409153 / 262144 |
 
 ## Constants
 
@@ -502,6 +558,10 @@ moment a rule asks for them; the order of the rules within a tick is S-0203's.
   rules S-0208 F3 gives. One switch covers both directions of the scale, so that a facing made by
   F3 and turned back into an angle uses a matching scale convention with the switch on or off.
   The original's table and integer truncation still prevent a generally exact round trip.
+  This switch does not change projectile pitch conversions (claim 12, F6) or raw-angle
+  uses (claim 13, F7). With it off, those uses retain the original table and their existing
+  conversion rules, including F6's signed exception corrections. In particular, switching
+  map-plane directions to exact angles does not switch projectile elevation to exact angles.
 - **`quirks.one_sided_building_distance`** (default: on, the original). The building reduction
   *β* applies only to the second object of *D*(*A*, *B*) (claim 7). Off: *β*(*A*) + *β*(*B*) is
   subtracted, so the distance between two objects is the same in both orders. The weapon range
@@ -526,6 +586,13 @@ Distance, direction and the range test ignore the flag (claims 4, 6 and 7). The 
 what else it does. Claim 12 and F6 introduce no rules or art key: the table, scale and exception
 indices are engine constants, not imported settings. The projectile settings and their parse
 forms and absent-key defaults belong to S-0306's Import mapping.
+
+| User data | Key | Concept | Parse form | Absent |
+|---|---|---|---|---|
+| None | — | claim 13's raw arctangent angles, tangent recurrence and rounding | not imported | fixed by F7 |
+
+The rocket parameters that consume these angles are imported by S-0506 claim 17's rules,
+with their keys, parse forms and defaults in that spec's Import mapping.
 
 ## Measurement scenarios
 
@@ -726,6 +793,37 @@ arithmetic is S-0206's (F1 there).
   Compare the full recorded floating-point components, not the image or the next position
   alone, whose integer truncation can conceal a one-unit pitch difference.
 
+**C5. Raw angles through rocket pitch (claim 13; Q-0610).**
+- *Setup:* the glossary's measurement setup, game speed index 2, 800 × 600, director and
+  mods off. Use S-0506's rocket-flight scenario R10 with a set-A lazy-curve missile and
+  a set-B descent missile, a stationary target and one bystander computer player kept
+  outside the observed flight area. Named test maps vary firing distance and terrain
+  height; any named parameter changes are limited to R10's test rules data. A read-only
+  recorder samples each missile's position, aim point, pitch, phase and cruise-start
+  distance before and after each rocket update. It never writes flight state.
+- *Procedure:* vary geometry to obtain nonzero table indices, preferably including 40,
+  146, 1024 and 4096. For each recorded update compute the index and both pitch predictions
+  under S-0506 claim 17: one with F7 and one with the surrogate. Retain only updates where
+  the predictions differ after final single-precision rounding. For lazy cruise, the
+  cruise-distance ratio must not be 1, which would erase the raw-angle contribution.
+  For descent, select an update that reaches the line-of-sight pitch rather than merely
+  advancing by the maximum pitch step. Repeat with positive and negative aim-height
+  differences where legal flight allows them.
+- *Observable:* the exact single-precision pitch in radians after the update, together
+  with the recorded inputs and tick. Positions alone or drawn orientation are insufficient
+  because their rounding can hide the angle difference.
+- *Runs:* one valid update per selected index, sign and flight mode, from separate shots
+  as needed. Unreachable indices remain unmeasured, not inferred from another index.
+  An unnamed bystander action in the observed flight area, its arrival there or its
+  defeat voids the run.
+- *Expected:* the pitch equals S-0506 claim 17's prediction using F7. When descent reaches
+  a positive line-of-sight angle at index 1024 it is exactly 12841411 / 8388608 radians,
+  and for the corresponding negative angle its negation. Lazy cruise uses that same
+  angle in its blend, with no facing-unit correction.
+- *Falsified if:* any valid recorded pitch differs from the F7-based prediction. A run
+  where both predictions coincide is inconclusive and is replaced, not counted as
+  supporting the exact table.
+
 ## Open questions
 
 - The largest world-height separation that legal play or imported settings can produce has not
@@ -747,12 +845,3 @@ arithmetic is S-0206's (F1 there).
   found that does this from the direction of claim 8 belongs to the computer player's team
   logic and reports a rotated direction number, so it was not generalised; the path and movement
   specs should say what their rules do.
-
-## Questions for the project lead
-
-- Should our engine ship the 4097 arctangent table values as engine-constant data instead of the
-  surrogate and exception list of F3? The surrogate with the 50 exceptions gives identical
-  facings, but other users of the same angle (turret and projectile aiming, matrices and other
-  locomotor rules, outside this spec) take the raw angle, and there the surrogate differs from the
-  original's value at 4067 of the 4097 entries. Those specs will need the table values
-  themselves, which no closed formula is known to reproduce.

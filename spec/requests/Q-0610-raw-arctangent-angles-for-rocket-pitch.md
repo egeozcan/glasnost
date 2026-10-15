@@ -1,9 +1,9 @@
 ---
 id: Q-0610
 title: The raw arctangent angles that steer a rocket missile's pitch
-status: open
+status: answered
 related: [S-0506, S-0204]
-answered-by: []
+answered-by: [S-0204]
 ---
 
 ## Need
