@@ -672,6 +672,20 @@ fn destruction_firings_without_the_latch() {
     assert_eq!(destruction_firings(testkit::ruleset(), 0, true), 1);
 }
 
+// spec: S-0312 claim 29 (rev 28: with quirks.persistent_event_latch off and the extra vehicle group on, a normal vehicle gives two firings, one per destroyed-by-anything raise, with or without an attacker; a common-group-only death gives one; with both switches off one; these are rules of our engine under S-0011 claim 9)
+#[test]
+fn s0312_claim_29_latch_off_alternatives() {
+    let mut r = testkit::ruleset();
+    r.globals.quirks.persistent_event_latch = false;
+    // extra group on: twice, with or without an attacker.
+    assert_eq!(destruction_firings(r.clone(), 2, true), 2);
+    assert_eq!(destruction_firings(r.clone(), 2, false), 2);
+    // extra group off (common group only): once, with or without an attacker.
+    r.globals.quirks.vehicle_destruction_extra_raises = false;
+    assert_eq!(destruction_firings(r.clone(), 2, true), 1);
+    assert_eq!(destruction_firings(r, 2, false), 1);
+}
+
 // spec: S-0011 claim 18 (a unit's arrival raises the cell's tag with the entered-by code and the unit as causing object; any house)
 #[test]
 fn cell_entered_raises_the_cell_tag() {

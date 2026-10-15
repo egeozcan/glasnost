@@ -524,6 +524,65 @@ pub fn game_with(ruleset: &Ruleset, size: i32, seed: u32) -> World {
         .expect("synthetic test game loads")
 }
 
+/// Triggers for object-tag notification tests (S-0524 claims 10 to 14),
+/// every tag repeating: `ENT` fires on every entered-by raise (any house)
+/// and sets variable 0, `DIE` fires on a destroyed-by-anything raise and
+/// sets variable 1, and `DIE_CARRY` is like `DIE` with the carry-over flag
+/// and sets variable 2. Tag them with [`crate::triggers::object_tag`].
+pub fn entry_triggers() -> glasnost_map::triggers::Triggers {
+    use glasnost_map::triggers::{Action, Event, Owner, TagDef, TriggerDef, Triggers};
+    let def = |id: &str, code: i32, value: i32, var: i32, carry: bool| TriggerDef {
+        owner: Owner::None,
+        events: vec![Event {
+            code,
+            kind: 0,
+            value,
+            type_name: None,
+        }],
+        actions: vec![Action {
+            code: 56,
+            number: var,
+            ..Default::default()
+        }],
+        carry_over: carry,
+        ..TriggerDef::created(id.as_bytes().to_vec())
+    };
+    let defs = vec![
+        def("ENT", 1, -1, 0, false),
+        def("DIE", 48, 0, 1, false),
+        def("DIE_CARRY", 48, 0, 2, true),
+    ];
+    let tags = defs
+        .iter()
+        .enumerate()
+        .map(|(i, t)| TagDef {
+            id: t.id.clone(),
+            repeat: 2,
+            name: t.id.clone(),
+            first: Some(i as u32),
+            chain: vec![i as u32],
+        })
+        .collect();
+    Triggers {
+        triggers: defs,
+        tags,
+        ..Default::default()
+    }
+}
+
+/// A new sandbox game like [`game_with`], on a map holding `triggers`.
+pub fn game_with_triggers(
+    ruleset: &Ruleset,
+    size: i32,
+    seed: u32,
+    triggers: glasnost_map::triggers::Triggers,
+) -> World {
+    let rules = Arc::new(SimRules::new(ruleset, "synthetic-test"));
+    let mut m = empty_map(size);
+    m.triggers = triggers;
+    crate::load::new_game(rules, &m, catalogue(), &setup(seed)).expect("synthetic test game loads")
+}
+
 /// A new sandbox game like [`game_with`], with two more houses that are
 /// not player houses: house 2 is the neutral house and house 3 the special
 /// house (S-0009 claim 19), neither human-controlled, of the countries

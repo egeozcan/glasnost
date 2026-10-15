@@ -1120,3 +1120,88 @@ fn aircraft_killed_on_the_ground_loses_its_passengers() {
     assert!(w.obj(t).is_none());
     assert!(w.obj(a).is_none());
 }
+
+// --- Notifications (claim 6; S-0524 claim 14) ------------------------------------
+
+/// A game on a map with the entry-notification tags of `testkit::entry_triggers`.
+fn tagged(r: &Ruleset) -> World {
+    testkit::game_with_triggers(r, SIZE, 7, testkit::entry_triggers())
+}
+
+fn tag(w: &mut World, id: ObjectId, name: &str) {
+    glasnost_sim::triggers::object_tag(w, id, Some(name.as_bytes()));
+}
+
+/// Variable `n` of the entry triggers.
+fn var(w: &World, n: usize) -> bool {
+    w.triggers.variables[n]
+}
+
+// spec: S-0507 claim 6 and S-0524 claim 14 (an infantry unit's qualifying arrival gives one entered-by raise on the transport's tag, none on receiving the order; no own-tag destruction raise for the passenger; unloading adds none and a fresh arrival notifies again)
+#[test]
+fn claim_6_infantry_boarding_raises_the_transport_tag_once() {
+    let r = ruleset();
+    for (kind, name) in [(Kind::Vehicle, "HAULER"), (Kind::Aircraft, "LIFTER")] {
+        let mut w = tagged(&r);
+        let t = at(&mut w, kind, name, 0, 0, 0);
+        let p = at(&mut w, Kind::Infantry, "WALKER", 0, 3, 0);
+        tag(&mut w, t, "ENT");
+        tag(&mut w, p, "DIE");
+        testkit::run(&mut w, 5);
+        let f0 = w.triggers.fired;
+        click(&mut w, &[p], ClickOn::Object(t));
+        assert_eq!(w.triggers.fired, f0, "{name}: no raise on receiving the order");
+        assert!(run_until(&mut w, 900, |w| transport::riding(w, p) == Some(t)), "{name}: boarded");
+        assert_eq!(w.triggers.fired - f0, 1, "{name}: one entry raise");
+        assert!(var(&w, 0) && !var(&w, 1), "{name}: the passenger gets no destruction raise");
+        // Unloading adds no entered-by raise; boarding again notifies again.
+        let f1 = w.triggers.fired;
+        click(&mut w, &[t], ClickOn::Object(t));
+        assert!(run_until(&mut w, 900, |w| transport::riding(w, p).is_none()), "{name}: let out");
+        assert_eq!(w.triggers.fired, f1, "{name}: unloading raises nothing");
+        click(&mut w, &[p], ClickOn::Object(t));
+        assert!(run_until(&mut w, 900, |w| transport::riding(w, p) == Some(t)), "{name}: boarded again");
+        assert_eq!(w.triggers.fired - f1, 1, "{name}: a fresh arrival notifies again");
+    }
+}
+
+// spec: S-0507 claim 6 and S-0524 claim 14 (a vehicle's boarding gives no entered-by raise on the transport's tag and no destruction raise for the vehicle)
+#[test]
+fn claim_6_vehicle_boarding_raises_nothing() {
+    let r = ruleset();
+    let mut w = tagged(&r);
+    let t = at(&mut w, Kind::Vehicle, "HAULER", 0, 0, 0);
+    let v = at(&mut w, Kind::Vehicle, "BUGGY", 0, 4, 0);
+    tag(&mut w, t, "ENT");
+    tag(&mut w, v, "DIE");
+    testkit::run(&mut w, 5);
+    let f0 = w.triggers.fired;
+    click(&mut w, &[v], ClickOn::Object(t));
+    assert!(run_until(&mut w, 900, |w| transport::riding(w, v) == Some(t)), "boarded");
+    assert_eq!(w.triggers.fired, f0);
+    assert!(!var(&w, 0) && !var(&w, 1));
+}
+
+// spec: S-0507 claim 6 and S-0524 claim 14 (the arrival raise precedes the final acceptance test: a boarding that the transport then refuses has already notified)
+#[test]
+fn claim_6_refused_boarding_has_already_notified() {
+    let r = ruleset();
+    let mut w = tagged(&r);
+    let t = at(&mut w, Kind::Vehicle, "HAULER", 0, 0, 0);
+    // Four passengers fill the transport, so the final acceptance test refuses.
+    for i in 0..4 {
+        let q = at(&mut w, Kind::Infantry, "WALKER", 0, 6, i);
+        put_in(&mut w, q, t);
+    }
+    // An arriving infantry unit in the transport's cell with the transport as its destination.
+    let p = at(&mut w, Kind::Infantry, "WALKER", 0, 0, 0);
+    tag(&mut w, t, "ENT");
+    testkit::run(&mut w, 5);
+    w.obj_mut(p).unwrap().dest = Some(glasnost_sim::world::Target::Object(t));
+    assert_eq!(transport::answer(&w, t, p), transport::Answer::Refuses);
+    let f0 = w.triggers.fired;
+    assert!(!transport::arrival(&mut w, p), "turned away");
+    assert_eq!(w.triggers.fired - f0, 1, "the arrival raise came first");
+    assert_eq!(transport::riding(&w, p), None);
+    assert_ne!(w.obj(p).unwrap().dest, Some(glasnost_sim::world::Target::Object(t)), "it gave up its destination");
+}

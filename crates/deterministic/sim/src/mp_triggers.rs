@@ -151,22 +151,43 @@ pub fn resolve_house(w: &World, value: i32, triggering: Option<HouseId>) -> Opti
     }
 }
 
-/// The waypoint of a number slot (codes 63 and 66, S-0524 claims 5 and 6):
-/// its cell, or none for an invalid number or an absent marker, both with no
-/// effect (S-0011 claim 33's departure; S-0524 claim 5's safe departure).
-fn number_waypoint(w: &mut World, n: i32) -> Option<CellXY> {
+/// The point of an undefined waypoint marker (S-0524 claims 5 and 6): the
+/// centre of the blank stand-in cell (0, 0) at height 0.
+// spec: S-0524 claim 5 (an undefined marker's centre is (128, 128, 0) integer leptons when the stand-in cell is blank; S-0009 claim 44: our stand-in always reads blank)
+const ABSENT_POINT: (i32, i32, i32) = (128, 128, 0);
+
+/// The waypoint of a number slot (codes 63 and 66, S-0524 claims 5 and 6).
+enum Marker {
+    /// A defined marker: its cell.
+    Defined(CellXY),
+    /// An undefined marker: the stand-in point, no cell.
+    Absent,
+}
+
+/// The waypoint of a number slot: its marker, or none for an invalid number
+/// (no effect, S-0011 claim 33's departure).
+fn number_waypoint(w: &mut World, n: i32) -> Option<Marker> {
     if !(0..=LAST_WAYPOINT).contains(&n) {
         // spec: S-0524 claim 5 (invalid waypoint numbers follow S-0011 claim 33's departure: no effect)
         w.note("S-0524 claim 5: a blast or flash waypoint number lies outside 0 … 701; no effect");
         return None;
     }
-    match w.triggers.waypoints.get(&(n as u16)).copied() {
-        Some((x, y)) => Some(CellXY::new(i32::from(x), i32::from(y))),
+    Some(match w.triggers.waypoints.get(&(n as u16)).copied() {
+        Some((x, y)) => Marker::Defined(CellXY::new(i32::from(x), i32::from(y))),
         None => {
-            // spec: S-0524 claim 5 (an absent marker: no effect for codes 63 and 66, and a warning; a safe departure; Q-0760)
-            w.note("S-0524 claim 5: a blast or flash names an absent waypoint marker; no effect");
-            None
+            // spec: S-0524 claims 5 and 6 (an undefined marker is not suppressed: the request uses the stand-in point; S-0011 claim 33's importer warning)
+            w.note("S-0524 claim 5: a blast or flash names an undefined waypoint marker; it acts at the stand-in point (128, 128, 0)");
+            Marker::Absent
         }
+    })
+}
+
+/// The point of a marker: a defined marker's waypoint point, or the
+/// stand-in point.
+fn marker_point(w: &World, m: &Marker) -> Pos {
+    match m {
+        Marker::Defined(c) => waypoint_point(w, *c),
+        Marker::Absent => Pos::new(ABSENT_POINT.0, ABSENT_POINT.1, ABSENT_POINT.2),
     }
 }
 
@@ -194,10 +215,10 @@ pub fn lightning_strike(w: &mut World, waypoint: i32, cell: CellXY) {
 
 /// The demolition blast at a waypoint (code 63, S-0524 claim 5).
 pub fn demolition_blast(w: &mut World, waypoint: i32) {
-    let Some(c) = number_waypoint(w, waypoint) else {
+    let Some(m) = number_waypoint(w, waypoint) else {
         return;
     };
-    let p = waypoint_point(w, c);
+    let p = marker_point(w, &m);
     let warhead = w.rules().combat.general.c4_warhead;
     // spec: S-0524 claim 5 (five successive area damages of 100 with the demolition warhead, no attacker and no attacking house, in this precedence)
     for (dx, dy) in BLASTS {
@@ -214,8 +235,10 @@ pub fn demolition_blast(w: &mut World, waypoint: i32) {
             },
         );
     }
-    // spec: S-0524 claim 5 (then up to four direct bridge-destruction attempts at the cell, stopping at the first success, whatever the bridge-destruction setting)
-    crate::bridges::cell_attempts(w, c);
+    // spec: S-0524 claim 5 (then up to four direct bridge-destruction attempts at the cell, stopping at the first success, whatever the bridge-destruction setting; none for an undefined marker)
+    if let Marker::Defined(c) = m {
+        crate::bridges::cell_attempts(w, c);
+    }
 }
 
 /// The flash-size level of the large flash (S-0524 claim 6, Formulas), or
@@ -248,13 +271,13 @@ pub fn flash_level(w: &World) -> Option<i32> {
 /// detail-level and frame-rate gate; the action takes no draw and deals no
 /// damage.
 pub fn light_flash(w: &mut World, a: &glasnost_map::triggers::Action) {
-    let Some(c) = number_waypoint(w, a.number) else {
+    let Some(m) = number_waypoint(w, a.number) else {
         return;
     };
     let Some(level) = flash_level(w) else {
         return;
     };
-    let pos = waypoint_point(w, c);
+    let pos = marker_point(w, &m);
     w.effects.push(Effect::Trigger {
         code: a.code,
         name: String::new(),
@@ -308,13 +331,15 @@ pub fn resize_local_area(w: &mut World, items: [i32; 4]) {
     }
     // spec: S-0524 claim 8 (pathfinding connectivity is rebuilt for the new area, S-0212 claims 3 and 4)
     crate::regions::rebuild(w);
-    // Q-0761 interim: buildings and units left outside the new area are not affected
+    // spec: S-0524 claim 8 (shrinking does not remove, relocate, stop or switch off existing buildings or mobile units and does not clear their orders; an excluded power source still contributes and an excluded building still counts; nothing here touches them)
 }
 
 /// Records the starting buildings (S-0524 claim 9, Terms): before the
 /// first tick, after tag setup and the game-start terrain pass, every
-/// house's buildings by type and top-left cell. Neither health nor tags are
-/// recorded. Q-0763 interim: in house order, then in object order.
+/// house's buildings by type and top-left foundation cell. Neither health
+/// nor tags are recorded. A house's entries are in their surviving object
+/// creation order, oldest first (the object order, which is creation order),
+/// not in type or cell order.
 pub fn record_starting_buildings(w: &mut World) {
     let mut rec = Vec::new();
     for h in 0..w.houses.len() {
@@ -332,8 +357,9 @@ pub fn record_starting_buildings(w: &mut World) {
     w.triggers.mp.starting = rec;
 }
 
-/// The present building of the record entry's type and house that holds
-/// its cell (Q-0763 interim: the cell is one of its foundation cells).
+/// The present building of the record entry's type and house that covers
+/// its cell.
+// spec: S-0524 claim 9 (a recorded cell covered by any ground-layer foundation cell of a building of the recorded type and house; the covering building need not have its top-left cell there)
 fn holder(w: &World, b: &StartingBuilding) -> Option<ObjectId> {
     w.objects
         .iter()
@@ -394,17 +420,45 @@ fn heal(w: &mut World, id: ObjectId) {
     );
 }
 
-/// A displaced occupant: its id, position, facing and layer.
+/// A displaced occupant (S-0524 claim 13): its id, the point it stood at and
+/// its layer.
 struct Displaced {
     id: ObjectId,
     pos: Pos,
-    facing: glasnost_num::geom::Facing,
     layer: Layer,
 }
 
-/// The forced replacement of a missing starting building (S-0524 claim 9).
+/// The ground-layer mobile occupants of the foundation cells (S-0524
+/// claim 13), in lifting order: the foundation's cell order, then each
+/// cell's listing order.
+// spec: S-0524 claim 13 (only ground-layer mobile occupants of the attempted foundation cells are lifted: a landed aircraft is included; a bridge-deck occupant, an airborne aircraft and a mobile in an adjacent non-foundation cell are not; ties in one cell are unmeasured, so the listing order is used)
+fn occupants(w: &World, cells: &[CellXY]) -> Vec<Displaced> {
+    let mut out: Vec<Displaced> = Vec::new();
+    for &c in cells {
+        for &id in w.cells.list(c, Layer::Ground) {
+            let Some(o) = w.obj(id) else { continue };
+            let airborne = o.kind == Kind::Aircraft
+                && (o.rocket.is_some() || crate::combat::weapon::in_air(w, id));
+            if o.kind.is_mobile()
+                && o.on_map
+                && o.layer == Layer::Ground
+                && !airborne
+                && !out.iter().any(|d| d.id == id)
+            {
+                out.push(Displaced {
+                    id,
+                    pos: o.pos,
+                    layer: o.layer,
+                });
+            }
+        }
+    }
+    out
+}
+
+/// The forced replacement of a missing starting building (S-0524 claims 9
+/// and 13).
 fn replace(w: &mut World, b: &StartingBuilding) {
-    let t = w.tick;
     let cells = crate::econ::placement::foundation_cells(w, b.type_index, b.cell);
     // spec: S-0524 claim 9 (its foundation overlays are removed; not restored on failure)
     for &c in &cells {
@@ -412,71 +466,46 @@ fn replace(w: &mut World, b: &StartingBuilding) {
             crate::crush::remove_overlay(w, c);
         }
     }
-    // spec: S-0524 claim 9 (mobile occupants are displaced; Q-0763 interim: ground-layer occupants of the foundation cells, in object order)
-    let lifted: Vec<Displaced> = w
-        .objects
-        .iter()
-        .filter(|(_, o)| {
-            o.kind.is_mobile()
-                && o.on_map
-                && o.layer == Layer::Ground
-                && cells.contains(&o.pos.cell())
-        })
-        .map(|(&id, o)| Displaced {
-            id,
-            pos: o.pos,
-            facing: o.body.value(t),
-            layer: o.layer,
-        })
-        .collect();
+    let lifted = occupants(w, &cells);
     for d in &lifted {
         crate::objects::take_inside(w, d.id);
     }
+    // spec: S-0524 claim 13 (a missing building is a fresh object at full type strength, not the former object's saved state)
     let id = crate::objects::create(w, Kind::Building, b.type_index, Some(b.house));
     let test = crate::econ::placement::Test::order(b.house);
     let placed = crate::econ::placement::cell_test(w, b.type_index, b.cell, &test);
     if placed {
-        // spec: S-0524 claim 9 (a building of that type and house is created at the cell; Q-0764 interim: complete, as a pre-placed building, S-0009 claim 40)
-        crate::econ::body::set_up(w, id);
-        let z = w.surface_at(256 * b.cell.x + 128, 256 * b.cell.y + 128); // spec: S-0406 claim 1 and F4 (the centre of the cell at the surface height)
-        // spec: S-0406 claim 16 and Constants (a placed building faces 0, map north)
+        // spec: S-0524 claim 13 (ordinary during-play placement, not map-loading placement: construction is queued and its build-up follows S-0215 claim 1 and S-0406 claims 14, 15 and 17; the power switch begins on; no special restoration shortcut; a deploy alone sets the ready mark at entry, S-0406 claim 17)
+        crate::econ::placement::begin_construction(w, id, false);
+        // spec: S-0406 claim 1 and F4 (the centre of the cell at the surface height)
+        let z = w.surface_at(256 * b.cell.x + 128, 256 * b.cell.y + 128);
+        // spec: S-0524 claim 9 (a fresh building is attempted at the recorded top-left cell, facing 0) and S-0406 claim 16 (a placed building faces 0)
         crate::objects::place(w, id, Pos::centre(b.cell, z), 0);
-        // spec: S-0524 claim 9 (mobile occupants are displaced to nearby cells if placement succeeds; Q-0764 interim: S-0212 claim 25's substitution search)
         crate::regions::ensure(w);
-        for d in lifted {
-            let near = crate::path::nearby(
-                w,
-                d.pos.cell(),
-                crate::path::NearbyUse::Substitution { unit: d.id },
-            );
-            match near {
-                Some(c) => put_back(w, &d, cell_point(w, d.id, c)),
-                None => {
-                    // Q-0764 interim: a displaced unit with no nearby cell is removed, as a failed return is
-                    w.note("S-0524 claim 9: a displaced unit found no nearby cell; it is removed (Q-0764 interim)");
-                    crate::objects::remove(w, d.id);
-                }
+        let mut taken: BTreeSet<CellXY> = BTreeSet::new();
+        // spec: S-0524 claim 13 (displaced occupants are placed one at a time in reverse lifting order)
+        for d in lifted.iter().rev() {
+            if !place_near(w, d, &mut taken) {
+                // spec: S-0524 claim 13 (search failure leaves no unit under the new building or off the map: the original attempts placement at the stand-in cell (0, 0), which is never legal here, and removes the unit when that placement fails; a found cell whose placement fails also removes it)
+                w.note("S-0524 claim 13: a displaced unit found no placeable nearby cell; it is removed");
+                crate::objects::remove(w, d.id);
             }
         }
     } else {
-        // spec: S-0524 claim 9 (if placement fails, no replacement remains)
+        // spec: S-0524 claim 9 (a blocking building or other placement failure leaves no replacement)
         w.objects.remove(&id);
-        // spec: S-0524 claim 9 (displaced objects are then offered their original positions; failed returns are removed, quirks.restoration_failed_return_removes_unit)
-        for d in lifted {
-            if return_free(w, &d) {
-                put_back(w, &d, d.pos);
+        // spec: S-0524 claim 13 (previously lifted occupants are offered their original positions, facing 0; a failed return placement removes that occupant: quirks.restoration_failed_return_removes_unit)
+        let mut taken: BTreeSet<CellXY> = BTreeSet::new();
+        for d in lifted.iter().rev() {
+            if return_free(w, d) {
+                put_back(w, d, d.pos);
             } else if w.rules().quirks.restoration_failed_return_removes_unit {
                 crate::objects::remove(w, d.id);
             } else {
                 // spec: S-0524 Edge cases (switch off: kept, placed at a nearby cell)
                 crate::regions::ensure(w);
-                let near = crate::path::nearby(
-                    w,
-                    d.pos.cell(),
-                    crate::path::NearbyUse::Substitution { unit: d.id },
-                );
-                if let Some(c) = near {
-                    put_back(w, &d, cell_point(w, d.id, c));
+                if !place_near(w, d, &mut taken) {
+                    crate::objects::remove(w, d.id);
                 }
             }
         }
@@ -484,7 +513,7 @@ fn replace(w: &mut World, b: &StartingBuilding) {
 }
 
 /// Whether a displaced unit's original cell can take it back: no building
-/// holds it (Q-0764 interim).
+/// holds it.
 fn return_free(w: &World, d: &Displaced) -> bool {
     let c = d.pos.cell();
     w.cells.idx(c).is_some()
@@ -494,21 +523,71 @@ fn return_free(w: &World, d: &Displaced) -> bool {
             .any(|o| o.kind == Kind::Building && o.on_map && o.pos.cell() == c)
 }
 
-/// The point at which a displaced unit stands in cell `c`: the cell centre
-/// at the surface (an infantry unit at its centre standing position).
-fn cell_point(w: &World, _id: ObjectId, c: CellXY) -> Pos {
-    // spec: S-0208 table P (standing position 0, the centre)
-    let (u, v) = crate::walk::standing_point(0);
-    let (x, y) = (256 * c.x + u, 256 * c.y + v); // spec: S-0009 claim 38 (256·x + u, 256·y + v)
-    Pos::new(x, y, w.surface_at(x, y))
+/// Places a displaced unit at the cell S-0212 claim 25's search chooses
+/// (S-0524 claim 13): the 1 × 1-cell search centred on its old cell, with
+/// its type's locomotion class, movement zone *normal*, no reach region,
+/// deck mode off, and no height, further or no-overlay condition, bridges
+/// allowed, and its old cell as reference. An infantry unit refuses a cell
+/// that another displaced infantry unit took. Returns whether it was placed.
+fn place_near(w: &mut World, d: &Displaced, taken: &mut BTreeSet<CellXY>) -> bool {
+    let Some((kind, ti)) = w.obj(d.id).map(|o| (o.kind, o.type_index)) else {
+        return false;
+    };
+    let Some(class) = w.rules().unit(kind, ti).map(|u| u.class) else {
+        return false;
+    };
+    let old = d.pos.cell();
+    // spec: S-0524 claim 13 (the nearby search arguments: type's class, zone normal, no reach restriction, deck off, no height, further or no-overlay condition, bridges allowed, old cell as reference)
+    let settings = crate::path::NearbySettings {
+        class,
+        zone: glasnost_rules::sim::MovementZone::Normal,
+        reach: None,
+        deck: false,
+        height: false,
+        reference: Some(old),
+        no_bridges: false,
+        no_overlay: false,
+    };
+    let infantry = kind == Kind::Infantry;
+    let refuse: BTreeSet<CellXY> = if infantry { taken.clone() } else { BTreeSet::new() };
+    let free = |_: &World, c: CellXY| !refuse.contains(&c);
+    let Some(c) = crate::path::nearby_filtered(
+        w,
+        old,
+        crate::path::NearbyUse::Settings(settings),
+        Some(&free),
+    ) else {
+        return false;
+    };
+    // spec: S-0524 claim 13 (the placement point is the selected cell's terrain-surface centre, without a bridge lift; an infantry unit can choose a standing position there by its ordinary placement rules)
+    let (u, v) = if infantry {
+        let top = w.rules().quirks.top_position_counts_as_centre;
+        let class = crate::walk::position_class(128, 128, top); // spec: S-0208 table P (the centre)
+        let Some(p) = crate::walk::choose_position(w, c, Layer::Ground, class, false) else {
+            return false;
+        };
+        crate::walk::standing_point(p)
+    } else {
+        (128, 128) // spec: S-0406 F4 (the cell centre)
+    };
+    let (x, y) = (256 * c.x + u, 256 * c.y + v);
+    let at = Pos::new(x, y, w.surface_at(x, y));
+    if infantry {
+        taken.insert(c);
+    }
+    put_back(w, d, at);
+    true
 }
 
-/// Puts a displaced unit back on the map at `pos`, facing as it did.
+/// Puts a displaced unit back on the map at `pos`, facing 0; the ordinary
+/// placement fall-back of S-0215 claims 13 to 15 applies, and its old order
+/// is neither saved nor reinstated (S-0524 claim 13).
 fn put_back(w: &mut World, d: &Displaced, pos: Pos) {
     if let Some(o) = w.obj_mut(d.id) {
         o.layer = d.layer;
     }
-    crate::objects::place(w, d.id, pos, d.facing);
+    // spec: S-0524 claim 13 (facing 0 for every re-placed mobile; its facing is not preserved)
+    crate::objects::place(w, d.id, pos, 0);
 }
 
 /// Whether the tag carried by `entrant` passes on (S-0011 I1; S-0524 claim

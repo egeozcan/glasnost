@@ -510,6 +510,17 @@ pub fn arrival(w: &mut World, p: ObjectId) -> bool {
     if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) {
         return false;
     }
+    if o.kind == Kind::Infantry {
+        // spec: S-0507 claim 6 and S-0524 claim 14 (an infantry unit's qualifying arrival with the transport as destination gives one entered-by raise on the transport's current tag, the infantry unit as causing object, before the final acceptance test: a refused boarding can already have notified; a vehicle's boarding gives none, and neither kind gets an own-tag destruction raise)
+        crate::mp_triggers::entry_raise(w, t, p);
+        // The raise's actions may have removed either object or moved the transport.
+        let (Some(po), Some(to)) = (w.obj(p), w.obj(t)) else {
+            return false;
+        };
+        if !po.on_map || !to.on_map || to.pos.cell() != po.pos.cell() {
+            return false;
+        }
+    }
     // spec: S-0507 claim 6 (at that moment the transport answers again by claims 1, 2 and 4; neither counts as a refusal)
     if answer(w, t, p) == Answer::Accepts {
         board(w, p, t);
