@@ -2,11 +2,11 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0279, Q-0450, Q-0460, Q-0570]
 supersedes: []
@@ -154,7 +154,11 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    - Confidence: high
 8. **Scroll limits.** Every time the view centre is set, by scrolling, by centring on an object or at
    the start of the game, each component of the requested centre is limited by F5, independently of
-   the other component. On an axis whose maximum is at least its minimum, F5 gives:
+   the other component. F5 uses the current local area, including a replacement made during play
+   by S-0524 claim 8. Subsequent scroll and centring requests therefore use the changed limits,
+   not the starting rectangle. The radar rectangle follows the same runtime change under
+   S-0524 claim 8; radar presentation is not otherwise specified here.
+   On an axis whose maximum is at least its minimum, F5 gives:
 
    | Requested value | Result |
    |---|---|
@@ -183,7 +187,7 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
    This is presentation only and changes no simulation state. It takes precedence over
    S-0110 claim 5's light-alpha drawing and claim 8's shroud point test for battlefield imagery
    in those bands, without changing the point test for other uses.
-   - Backing: `measurable` (M3a for normal limits; M3b tests centring and black bands on our
+   - Backing: `measurable` (M3a for normal limits; M3d for runtime changes; M3b tests centring and black bands on our
      engine). Original-side backing for the black-band rule: not applicable, our departure
      accompanying the fixed oversized centre, not a claim about the original
    - Confidence: high for the formulas and the oversized-view result. Medium for the mapping of the
@@ -819,6 +823,16 @@ A second run otherwise serves to rule out a reading mistake.
     in M2c. Centre on it once it is stationary. Expected: the same image feature lands at the
     same view pixel in both runs. Falsified if it differs, notably by the 240-pixel lift difference on our engine (claim 3's departure)
     that ground-only centring would leave. The cell is far from all scroll limits.
+  - (d) Runtime local-area change (claim 8). Use S-0524 claim 8's scenario C7, at speed 2,
+    with both the initial and replacement areas larger than the view on each axis. After the
+    resize action fires, scroll to all four limits and centre on units near the new edges.
+    Record tile pixels to recover the view origin and capture the radar border before and
+    after the action. Expected: subsequent requests obey F5 with the replacement area's
+    four integers, and the radar uses that same area. Repeat with a shrink of an empty strip.
+    One run per enlargement/shrink condition, director and mods off, using scripted input
+    and frame capture. A limit still derived from the initial area, or a radar rectangle that
+    remains unchanged, falsifies the runtime rule. This does not assert whether resizing alone
+    immediately repositions a stationary view before another scroll or centring request.
 - **M4 — drawn extent** (claim 6). Parts a and c–e test the departure against this spec,
   not the original; part b retains the original's independently needed building exemption.
   - (a) Setup: flat map. An aircraft flying with a world height *z* of at least 1700 leptons, so that
