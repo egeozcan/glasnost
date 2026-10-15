@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 29
+revision: 30
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -584,6 +584,14 @@ rank* and *elite weapon*), *n*
    Every row of the three tables has a label (WO for overlays, WP for occupants, WR for the
    occupancy record), its own confidence and its own backing. A backing of the form U*n* is
    `unmeasured`, and the list after the tables gives its reason.
+
+   **Destruction-escape use.** S-0312 claim 12 also uses these entry outcomes for passengers
+   escaping a destroyed vehicle. In those checks the dying vehicle itself contributes neither a
+   listed blocker nor its vehicle-present flag. Other occupants still affect entry normally.
+   This exclusion is specific to that vehicle's passenger escape: it does not exempt unrelated
+   dying objects or apply to ordinary unloading.
+   - Backing: `measurable` (S-0312 claim 12's passenger-escape measurement)
+   - Confidence: high for the scoped exclusion
 
    *4a. Terrain checks.* Terrain checks that give *blocked* belong to S-0211 and S-0212 and are not
    repeated here: height steps (S-0212 claim 10), impassable land, a land type whose walker speed
