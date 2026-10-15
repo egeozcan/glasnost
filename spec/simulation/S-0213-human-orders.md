@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1076,12 +1076,19 @@ from claim 17. Every row that carries an actor also ends the actor's planned rou
 | Primary | actor (a building) | live (it may be off the map); imported factory category not the no-factory value, including recognised non-producing categories | Primary designation switched (claim 13) |
 | Place | building type, cell | (production specs) | A finished building is placed |
 | Build, hold, cancel, cancel all | type | (production specs) | Production started, held or cancelled |
-| Fire superweapon | superweapon, cell | (superweapon specs) | The superweapon fires at the cell |
+| Fire superweapon | superweapon, cell | S-0512 claim 8: ordinarily granted, ready and charge clock running, not a direct suspension check; claim 10: second-stage orders accepted unchecked under `quirks.second_stage_order_unchecked`; claim 19: drain-mode state transitions instead | Charge and state changes follow S-0512 claims 8, 10 and 19; targeting, record choice and effect-level launch checks follow S-0513 claims 1 to 3 |
 | Alliance | other house B | both multiplayer alliance flags on (S-0414, claim 14); when issuer A does not yet ally B: B is not A, B's country is not of the civilian side, A is undefeated, and the last-enemy test of S-0414 claim 12 passes (with exactly one enemy contender, A can ally nobody); when A already allies B: neither house is passive (S-0414, claim 13) | The issuer allies the other house one way, or the alliance ends in both directions (S-0414, claims 12 and 13) |
 | Surrender | none | issuing house undefeated and with no result pending (S-0414, claim 11) | The issuer's objects are destroyed in its next house update, and the house is defeated when its defeat test then fails, which may be later or never (S-0414, claims 5 and 11); the game ends only through S-0414 claim 6 (play to the last side; a defeated person keeps watching); legal for every player house, human or AI |
 | Game speed | speed index | none | Game speed changed; network games only (claim 14; S-0201, claims 8 and 13) |
 | Cheer | none | none | All of the issuer's infantry cheer |
 | Route point add, commit, delete | route data | (claim 16) | Route mode (claim 16) |
+
+For the fire-superweapon row, sidebar eligibility (S-0512 claim 16) and cursor target offers
+(S-0513 claims 1 and 2) govern issuing an order, not checking it again when applied. In
+particular, suspension normally stops the charge clock, but a suspended record with a running
+clock can pass claim 8's original order check. Applied orders do not repeat the cursor's allied-building
+test for a force shield; effect-level readiness and legal-cell exceptions remain S-0513 claim 3's
+rules. These companion claims own the confidence, backing and measurement scenarios for this row.
 
 **Table T2: key commands.** The command keys are the player's own key bindings, initially those
 of claim 22. "Selected object"

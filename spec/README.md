@@ -58,7 +58,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 11 | approved | — |
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 16 | approved | — |
 | [S-0402](economy/S-0402-harvest-cycle.md) | Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners) | economy | 22 | approved | — |
-| [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 26 | approved | — |
 | [S-0307](combat/S-0307-range.md) | Weapon range test | combat | 12 | approved | — |
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 12 | approved | — |
 | [S-0404](production/S-0404-production-queue-payment.md) | Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion) | production | 15 | approved | — |
@@ -111,3 +110,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 19 | approved | — |
 | [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 22 | approved | — |
 | [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 21 | approved | — |
+| [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 27 | approved | — |
