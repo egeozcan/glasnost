@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -97,8 +97,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
   primary-building rule.
 - **Free unit.** S-0408's term (Terms): the vehicle type that a building type's free-unit field
   names. Claim 18 says when one is created.
-- **Grand opening.** S-0108's term (claim 11): the moment a building first completes, at the end of
-  its build-up.
+- **Grand opening.** S-0108's term (claim 11): a building's once-only entry into service,
+  at construction completion in play or during placement at game set-up.
 - **Start price.** The price of a produced item at the moment its production starts (S-0404,
   claim 2), which the original records on the produced object; claim 18 reads it.
 - **Docking, payment and unloading animations.** Three animations of the building in the
@@ -781,12 +781,14 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 ### A building's free unit
 
 18. **When and where a free unit appears.** A building whose type has a free unit (Terms) gets
-    one at its grand opening (Terms), so at the end of its build-up, in the building's own turn. It
-    gets none:
+    one at its grand opening (Terms), subject to the exclusions below. For a building constructed
+    in play, this is at the end of its build-up, in the building's own turn. It gets none:
     - when it is captured (a capture is not a grand opening, and a building has one grand opening
       at most),
-    - when the map pre-places it (it has no grand opening, S-0009 claim 40; also when the original
-      reaches that step during the set-up, the free unit is skipped then),
+    - when the map pre-places it: the grand opening runs during set-up placement, but its free-unit
+      grant is suppressed then (S-0009 claim 40). This does not suppress the opening itself or its
+      readiness effect. Set-up queues *guard*, and it becomes current at the first per-tick start
+      (S-0215 claim 1),
     - when its owner is a player house, the building was produced, and its start price (Terms) is
       not 0 and not above the adjusted cost of its type (S-0408, claim 2, *C*), both integers in
       credits. A building that was not produced has no start price, and this condition does not
@@ -835,7 +837,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     - Backing: `measurable` (scenario H13, parts a to g)
     - Confidence: high for the timing at the grand opening, for no unit after a capture and for the
       first place and its facing; medium for the two searches, the refund, the start of *harvest*
-      and the start-price condition; medium for the pre-placed building (S-0009's)
+      and the start-price condition; high for suppression of the set-up free-unit grant
 
 ### Creating and directing a slave group
 
@@ -2065,7 +2067,11 @@ is wrong). *Runs:* 3.
   ore cell, facing 40960. Part d: every cell is blocked (the refinery placed on a tiny enclosed
   area): no harvester appears and the balance rises by *P* of S-0408 claim 1 for the harvester's
   type in that tick. Part e: a refinery captured by an engineer, and a refinery the map pre-places:
-  no harvester appears. Part f: the test data gives the house's country a vehicle cost factor of
+  no harvester appears. For the pre-placed case use a refinery of the neutral house, with a clear
+  exit area. Record the end of set-up and its first turn: expect the opening's slot effects
+  (S-0108 claim 11) and readiness, with *guard* queued at the end of set-up and current from the
+  first per-tick start (S-0215 claim 1), but no free unit at either observation. This distinguishes
+  a suppressed grant from an absent opening. Part f: the test data gives the house's country a vehicle cost factor of
   0 and a building cost factor of 1, so the refinery's price at its production start is its
   adjusted cost *C* (S-0404 claim 2, with *P*ₑ = 0; *C* above 0): no harvester appears. With the
   vehicle cost factor at 1 the price is *C* + *P*ₑ and it appears.
