@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 42
+revision: 43
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -455,8 +455,10 @@ Terms used by this spec:
    the ready mark set. At the building's first per-tick start (claim 11; its first turn, the
    tick of which S-0203 gives) *guard* becomes current and the mark is cleared, and *guard*
    is processed in that same turn (claim 3 a). From there an armed building's search and
-   first shot follow claims 32 and 33, and its *guard* processing sets the mark again
-   (claim 32).
+   first-shot eligibility follow claims 32 and 33, and an armed building's *guard*
+   processing sets the mark again (claim 32). A building armed only by an installed
+   upgrade can acquire a target and start *attack* yet never fire: claim 32's upgrade
+   weapon gate is independent of this bootstrap.
 
    None of this depends on the building's weapon or turret. Armed or unarmed, turreted or
    not, the building starts *guard* at the same per-tick start. An upgrade that the map
@@ -472,11 +474,11 @@ Terms used by this spec:
    claim 18 to say. For a set-up building whose owner is human-controlled, which a skirmish
    never places, the original would run the grand opening before *guard* is queued, so
    placement's readiness test would already make *guard* current.
-   - Backing: `measurable` (scenario B1, reading the slots with the recorder; S-0406 PL11 for
-     construction entry and the queued-behaviour query; scenario B35 for game-set-up
-     buildings; scenario B36 for the slots and ready mark at the end of set-up, the first
-     per-tick start, the first processing of *guard*, and the armed, unarmed, non-turreted
-     and upgrade comparison). The human-owner set-up case is `unmeasured`: skirmish drops
+   - Backing: `measurable` (scenario B36 for the set-up grand opening's ready mark,
+     end-of-set-up slots, first per-tick start and same-turn processing, including the
+     armed, unarmed, non-turreted and map-installed-upgrade comparisons; scenario B1
+     for the other slot rules; S-0406 PL11 for construction entry and the queued-behaviour
+     query; scenario B35 for the body and queue at set-up). The human-owner set-up case is `unmeasured`: skirmish drops
      that owner's map building entries, and construction or capture cannot isolate set-up
      placement.
    - Confidence: high
@@ -787,10 +789,9 @@ Terms used by this spec:
       change, and case h for a target
       cleared by an order, which does not revert; cases h and l for the suspended slot kept across
       a start-next and for a later revert caused by another target). These parts are `unmeasured`:
-      - the cloak and underground cause and its two exceptions, because when an object starts to
-        cloak, when an underground object goes underground and what a sensor covers belong to the
-        visibility and movement topics, which no spec states, so no setup here can make a target
-        start to cloak or go underground at a known tick,
+      - the cloak and underground cause and its two exceptions: S-0516 owns cloak and
+        sensor timing, but no scenario here isolates a target's cloak transition or underground
+        entry, with and without each exception, while an override is in effect,
       - the strike-target exceptions to owner change and a locomotor jump, including after a
         strike ends normally, because each needs a living object held as the strike target at
         the moment of that event, and no setup here establishes that timing. Erasing attackers' owner-change target loss and beam retention
@@ -2068,13 +2069,38 @@ apply in our engine to the actors of every player house.
 
       | Firing check's answer (Terms) | Result | Delay |
       |---|---|---|
-      | *can fire* | fires (combat specs) | 1 tick |
+      | *can fire* | fires subject to the upgrade weapon gate below (combat specs own the shots) | 1 tick |
       | *not facing* or *rearming* | rotates towards the target | 2 ticks |
       | *illegal*, *impossible*, *out of ammunition* or *out of range* | drops its target, queues *guard* and starts it at once, whether or not it is ready to change | 1 tick |
       | any other answer (*busy*, *cloaked*, *moving*, *must deploy*, *still turning*) | rotates towards the target where that applies | 1 tick |
 
       So an attacking building is processed every tick or every other tick, and one whose target
       leaves its weapon's range returns to *guard* at its next processing.
+
+      **Upgrade weapon gate.** For a non-SAM building with an installed upgrade, the
+      *can fire* row uses the first installed upgrade's ordinary primary and secondary
+      weapons, not its elite replacements, to decide whether firing is allowed. The
+      gate passes only when that upgrade has a primary weapon and at least one of these
+      conditions holds: both slots name the same weapon type, the primary's imported
+      burst count is greater than 1 shot, or a secondary exists whose imported burst
+      count is greater than 1 shot. These are integer comparisons, with no rounding.
+      This tests the first installed upgrade even if another upgrade supplies the weapon
+      chosen for the target (S-0308 claim 12).
+
+      When the gate passes, this processing makes a primary firing attempt followed by a
+      secondary firing attempt against the target, without another firing check between
+      them. Both use the building's weapons as resolved by S-0308 claim 12. A rearm
+      countdown begun by the primary does not prevent the secondary attempt. When the
+      gate fails, neither attempt occurs: the building retains its target and *attack*,
+      still sets the ready mark and chooses 1 tick. It can therefore remain in *attack*
+      indefinitely with a *can fire* answer but no shots. With no installed upgrade the
+      gate does not apply and the ordinary selected-weapon firing rule remains in force.
+      This rule is not specific to map placement.
+
+      The suppression is `quirks.upgrade_attack_weapon_gate`, default original (on).
+      With it off, a failed gate instead permits the ordinary selected-weapon attempt,
+      while a passing gate still permits the paired attempts. This changes gameplay, not only
+      presentation.
 
       **Turret snap** (low confidence). When the answer is *not facing* and the building is a
       turreted building whose own type has the rules voxel-turret flag (Terms; shared with
@@ -2125,7 +2151,13 @@ apply in our engine to the actors of every player house.
       reaches the rule is open (Open questions).
 
       The combat specs own the firing itself.
-    - Backing: `measurable` (scenarios B8 and B16: cases b and f for the unarmed delays, case g for
+    - Backing: `measurable` (B36 and its extensions for the upgrade gate's predicate,
+      suppression, first-upgrade and ordinary-weapon selection, ordered paired attempts,
+      readiness and delay, and installation during play). Missing-secondary shot effects
+      remain `unmeasured`: no validated fixture settles whether that attempt has any
+      effect; B36 proposes an investigation, not a predicted shot outcome. The remaining
+      rules are `measurable` (B36's unarmed follow-up for the absence of a ready-mark
+      setter inside unarmed guard; scenarios B8 and B16: cases b and f for the unarmed delays, case g for
       an armed *guard* building that starts *attack* by its own processing, case a for the rows
       *can fire* and *rearming*, case e for the out-of-range row, case h for the turret snap and
       the row *not facing*, case i for *still turning* in the row of other answers; for SAM
@@ -2158,10 +2190,11 @@ apply in our engine to the actors of every player house.
         deploy*. S-0301 (claim 9) gives *moving* only to a firer that moves and *must deploy* only
         to a vehicle, so no building gets them; it gives *busy* to a firer launching spawned
         aircraft, and no building is known to launch any; and when a building is cloaked, and
-        whether it uncloaks to fire, belongs to the cloaking rules of another topic, which no spec
-        states, so no setup here can give a building *cloaked* at a known processing. The row keeps
+        whether it uncloaks to fire, is owned by S-0516, and no scenario here isolates a
+        building's *cloaked* answer at a known processing. The row keeps
         the table total.
-    - Confidence: medium (armed and unarmed *guard*, the ready mark, non-SAM *attack* and its delay
+    - Confidence: high (upgrade gate predicate, suppression and paired-attempt order),
+      medium (armed and unarmed *guard*, the ready mark, non-SAM *attack* and its delay
       table, SAM *attack* every tick and its stages, firing both weapons); low (the turret snap and
       its bound F8, the SAM aiming tolerance, the power condition and the out-of-stage rule)
 
@@ -2603,8 +2636,9 @@ apply in our engine to the actors of every player house.
       target, both steps leave the same state and take no search draw, so no observable
       distinguishes two such steps from one. Its independent eligibility and same-tick
       destination or target outcomes are measurable by B32 g.
-      Part i's movement outcomes have S-0207 claim 19's and S-0208 claims 16 and 17's backing and confidence. These parts are `unmeasured`: the magnetic-beam case of part c (the beam's
-      rules belong to the combat topic, which no spec states); the draining case of part d (the
+      Part i's movement outcomes have S-0207 claim 19's and S-0208 claims 16 and 17's backing and confidence. These parts are `unmeasured`: the magnetic-beam case of part c
+      (S-0607 owns the beam, but no scenario here isolates an approach step against the
+      object holding the attacker); the draining case of part d (the
       draining link belongs to the structures and combat topics, and no scenario establishes
       that link while testing approach); the *sticky* and *any other*
       rows of part d (an actor in those behaviours takes the step only by the per-tick case of
@@ -3059,8 +3093,8 @@ human-controlled owner):
 | *unload*, vehicle that deploys in place | taken over by mind control | no takeover guard reset; S-0601 claim 6 owns the exception and claim 9 owns release |
 | *area guard* | target leads it beyond the leash | target dropped, returns to the guard spot (claim 26) |
 | *hunt* (skirmish) | no target found | stays in *hunt*, idles, searches again next processing (claim 27) |
-| a behaviour with the no-threat property | damaged by a known attacker | falls back to rest (claim 16) |
-| *sticky* | any order | queued but never started while *sticky* lasts (claim 25) |
+| a behaviour with the no-threat property but not zombie, mobile actor not in a team | survives damage from a known attacker | falls back to rest (claim 16) |
+| *sticky* | behaviour order | queued but never started while *sticky* lasts (claim 25); stop has claim 12's separate effects |
 | a behaviour with the zombie or paralysed property | falls back to rest with no target, destination or queued destinations (infantry), or as an armed vehicle that is not a harvester, with no destination or queued destinations | the behaviour stays current and nothing is queued (claim 17) |
 
 **Ordering within a tick, as observed.** This list only gathers, for one infantry unit, vehicle or
@@ -3312,6 +3346,7 @@ absent key keeps the value the earlier layers left).
 | `ImmuneToRadiation` | type section | claim 31 | boolean |
 | `RadLevel` | weapon section | *W* of claim 31 (of the secondary weapon) | integer |
 | `AreaFire` | weapon section | claim 30 (of the deploy weapon, Terms) | boolean |
+| `Burst` | weapon section | upgrade weapon gate's burst-count comparisons (claim 32) | integer shots; engine default 1, owned by S-0301 claim 4 |
 | `SprayAttack` | type section | spray-attack flag: picks the first weapon slot as the deploy weapon (Terms; claim 30) | boolean; absent no |
 | `Turret` | building type section (and the building types installed on it as upgrades) | turret flag of a turreted building (Terms; claim 32) | boolean; absent no |
 | `TurretAnimIsVoxel` | rules, section named by the building type | voxel turret (Terms; claim 32; S-0310 claim 4 and S-0313 claim 10) | boolean; initially no; omission in a later rules layer keeps the current value; art supplies no value or fallback |
@@ -4326,7 +4361,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     first processing tick of the gate after *r* whose delay is a Std (the processing timer's
     expiry moves 45 ticks or more ahead, and the tick takes the Std's draw). Expected: *r* = *t* +
     90, and that processing comes in tick *r* + 1, the processings from *t* + 1 to *r* each having
-    a delay of 0 (expiry on the next tick, no draw from the gate). Falsified by that processing in
+    a delay of 0 (expiry on that processing tick, processed again at the next turn,
+    no draw from the gate). Falsified by that processing in
     tick *r* + 2 (the door reaching rest after the processing in its turn), or in tick *r* or
     earlier.
   - (h) Drawing progress (claim 35 d1, Q-0685): repeat (a–b) at game speed index 2,
@@ -4614,7 +4650,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   run. Per-tick searches or actions of other objects must be separated by the recorder; if
   they cannot be separated, that run cannot establish the draw assignment.
 
-- **B36 (claim 1, Q-0241).** Common tiny skirmish map, speed index 2, 800 × 600, no external
+- **B36 (claims 1, 32 and 33, Q-0241).** Common tiny skirmish map, speed index 2, 800 × 600, no external
   controller playing either house or altering game state, and no mods or engine add-ons
   except the named test data below. The map places a stock turreted defence with a weapon for
   a non-player owner, and a named enemy unit in its range; keep the bystander away. Use the
@@ -4623,15 +4659,23 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   the first turn, then at both per-tick-start boundaries and at the end of each tick through
   tick 1000. Repeat with a named test type identical except unarmed, with a non-turreted
   armed type, and with a non-turreted base that gets a turret-bearing upgrade installed by
-  the map. For the upgrade case, also capture the host just before and just after the
-  upgrade is installed. Three runs per case; remove named data afterwards. Keep the named
+  the map. Give that base no weapons of its own and the first upgrade an ordinary primary
+  with a burst count of 1 and no secondary; this is the failed-gate fixture. The same-weapon
+  comparison below changes only the upgrade's secondary. These are named test settings,
+  not assumed stock values. For the upgrade case, also capture the host just before and
+  just after the upgrade is installed. Three runs per case; remove named data afterwards. Keep the named
   enemy unable to damage the buildings.
 
   Expected, in every case: at the end of set-up the building has the idle body, current
   *none*, *guard* queued and the ready mark set. Installing the upgrade changes neither the
   host's slots nor its mark. At the building's first per-tick start *guard* becomes current
   and the mark is cleared, and *guard* is processed in that same turn. The armed defence
-  then searches and fires under claims 32 and 33; the unarmed one does not fire.
+  then searches under claim 33 and starts *attack* at a later guard processing. Without
+  upgrades it fires when eligible. An upgrade-only defence fires only when claim 32's
+  first-upgrade weapon gate passes; failure leaves it targeting and attacking without shots.
+  The unarmed one does not fire. Add a no-enemy control and a second upgrade-only case
+  differing solely by making the secondary weapon the same type as the primary: that case
+  must make both firing attempts in the first eligible attack processing.
   Falsifiers: a clear ready mark at the end of set-up; *guard* still queued after the
   building's first per-tick start; a first processing of *guard* later than the first
   turn; or any of these differing between the armed, unarmed, non-turreted and upgrade
@@ -4642,6 +4686,46 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   building is not set-up placement. Do not substitute either for that comparison. Do not
   inject a ready mark or force a start. Enemy action before the first recorded turn
   invalidates the placement observation.
+
+  Also record firing attempts and firing-check answers in the two upgrade cases.
+  A failed gate producing either attempt, or a passing same-weapon gate missing either
+  attempt, falsifies claim 32. Record the ready mark and processing timer at attack entry
+  and exit: a failed gate must still set the mark, retain target and *attack*, and choose
+  1 tick without a delay draw. A contrary state or delay falsifies that clause.
+
+  **Extensions (proposed, not completed measurements).** Repeat three runs per named
+  map-local variant, recording the natural seed, speed index 2 and 800 × 600, with
+  firing-check answers, selected weapons, attempts, shots and target health recorded.
+  Do not fix the seed or write random-stream state. Use different primary and secondary weapon types
+  with only the primary burst count above 1, then only the secondary burst count above 1,
+  then both counts at 1. Expect paired attempts in the first two and suppression in the
+  third. Reverse two installed upgrades, only one of which passes the gate: the first
+  installed must decide suppression regardless of which supplies the selected weapon.
+  A contrary outcome falsifies the corresponding gate clause. Add a first upgrade with
+  no primary, a secondary, and a host primary weapon: expect suppression even if the
+  secondary burst count exceeds 1. For the ordinary-versus-elite predicate, give the first
+  upgrade distinct ordinary weapons with burst counts of 1, but identical elite weapons,
+  then test a rookie and an elite host: both must remain suppressed. Conversely give it
+  identical ordinary weapons and distinct elite weapons: both hosts must make the paired
+  attempts. An elite-only change affecting permission falsifies the ordinary-weapon rule.
+  With distinct weapons in a passing case, record attempt order and rearm state: the
+  primary attempt precedes the secondary, whose attempt is not prevented by rearm begun
+  by the primary. A reversed or missing attempt falsifies this ordering clause.
+  Repeat the suppression and passing cases with upgrades installed during play rather
+  than by the map: expect the same permission and attempt outcomes. Record a no-upgrade
+  control's ordinary selected-weapon attempt, not a forced pair. A placement-dependent
+  gate or an upgrade-style pair in that control falsifies the corresponding clause.
+
+  Finally use a primary burst count above 1 with no secondary, recording whether the
+  second attempt has any effect or fails: its result is not yet specified, and must not
+  be inferred from the same-weapon case. Repeat the unarmed case with a separate mark
+  reading immediately at guard entry and exit, before any other readiness rule can run:
+  claim 32 predicts no mark set by unarmed guard itself; a clear-to-set transition inside
+  that processing falsifies it. If the mark was already set at entry, that sample cannot
+  isolate a setter. Do not clear it by writing state. Keep both enemy and building alive
+  and stationary through tick 1200.
+  No controller may force behaviours or firing-check results. Test the quirk's off state
+  in our engine: a failed gate must allow an ordinary selected-weapon attempt instead.
 
 - **B37 (claim 38, Q-0238 and Q-0312).** Reuse S-0212 P26's unreachable-destination
   skirmish setup for the neutral and special houses, speed index 2, 800 × 600, with no
@@ -4839,12 +4923,18 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 ### Cross-spec changes to confirm
 
-- S-0009 claim 40 should say that set-up queues *guard* and that it becomes current at the
-  building's first per-tick start (claim 1 here), and drop its sentence that leaves the turreted start open in this spec. Its statement
-  that a set-up building has no grand opening disagrees with claim 1: the grand opening
-  runs during set-up placement. S-0009, S-0108 claim 11 and S-0402 claim 18 should decide
-  which of its effects other than the ready mark a set-up building shows. Q-0241 is
-  answered here.
+- S-0009 claim 40, S-0108 claim 11 and S-0402 claim 18 already agree with claim 1:
+  set-up queues *guard*, the grand opening sets readiness during placement, and the
+  first per-tick start makes *guard* current. Those claims own the opening's other
+  effects. Retain these matching contracts at sign-off; no further edit is requested.
+- S-0301 claim 9 must also cover claim 32's unchecked secondary attempt for non-SAM
+  upgrade buildings: primary then secondary without a second firing check, despite
+  rearm begun by the primary.
+- S-0308 claim 12 and scenario W9 parts c/d must distinguish upgrade weapon resolution
+  from claim 32's permission to fire. Give the first upgrade matching primary and
+  secondary weapons for those firing tests, and record paired attempts. A single-shot
+  primary-only upgrade suppresses firing. Slot 1 is consequently testable through the
+  paired attempts, so reconsider claim 12's higher-slot backing.
 - S-0212 claim 23a's backing should inherit claim 38's unmeasured qualifications for
   separately set centre precedence and start-assigned records: B37 does not supply their
   legal setup. Its covered geometry, draw and failure-timing backing is unchanged.

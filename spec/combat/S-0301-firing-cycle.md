@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -190,13 +190,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    - *The original's set-up (a departure, no switch).* The original gives the house of every
      human player in a skirmish the normal row. The house of each computer player gets the row that
      its lobby entry selects (S-0412 claim 4 owns the pairing): the easy computer the difficult row,
-     the normal computer the normal row and the hard computer the easy row. When more than one human
-     player is in the game and the rules' computer-easy-bonus flag is on, a computer player's row
-     moves one step towards the easy row, unless it is the easy row already: the easy computer then
-     gets the normal row, the normal computer the easy row, and the hard computer stays on the easy
-     row. In a campaign mission the original takes the row of the player's chosen difficulty for the
-     player's house and the row of the scenario's computer difficulty for the others. Our engine does
-     not reproduce these assignments; the handicap setting can.
+     the normal computer the normal row and the hard computer the easy row. The computer-easy-bonus shift is conditional on more than one human participant and the rules' computer-easy-bonus flag being on. A skirmish has at most one human participant, including observers (S-0302, claim 3), so this shift does not occur in a skirmish. Its effect outside this spec's skirmish scope is not specified here. In a campaign mission the original takes the row of the player's chosen difficulty for the player's house and the row of the scenario's computer difficulty for the others. Our engine does not reproduce these assignments; the handicap setting can.
    - Backing: `measurable` (scenario F2); `unmeasured` for the one-step move of the
      computer-easy-bonus flag (it needs a game with more than one human player: a skirmish does not
      have one in our engine, and network games are out of scope). The historical campaign
@@ -399,8 +393,14 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
    **Exception (S-0215, claim 32).** The secondary shot of a building whose type has the SAM
    flag is made in the same processing as its primary shot without a firing check of its own, so
-   the table above does not apply to it. S-0215 owns that shot. An aircraft's full burst likewise
-   has no firing check between its shots (S-0501 claim 12).
+   the table above does not apply to it. The same exception applies to the secondary firing
+   attempt of a non-SAM building with an installed upgrade when S-0215 claim 32's upgrade
+   weapon gate passes: a primary attempt is followed by a secondary attempt in that processing,
+   without another firing check. A rearm countdown begun by the primary does not prevent the
+   secondary attempt. These are attempts, not a guarantee of two successful shots; in particular,
+   the outcome of a missing-secondary attempt remains unspecified here. S-0215 claim 32 owns
+   the gate and paired attempts. An aircraft's full burst likewise has no firing check between
+   its shots (S-0501 claim 12).
    - Backing: `measurable` (scenarios F7, F8 and F15; S-0506 scenarios R2 and R6 for spawner
      handoff and lockouts; S-0607 scenario L9 parts c and d for the gripping lifter's conditional
      rearming; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
@@ -411,7 +411,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      S-0601 scenarios MC2, MC3 and MC11 for takeover legality; S-0610 scenario P4 for the
      berserk-friendly refusal; scenario F7 part e and S-0501 scenario AC11 for the
      empty passenger-carrier refusal and its precedence; S-0608 scenarios D1 and D2 for
-     drain attempts instead of shots and D3 for the rank-4 drain refusals).
+     drain attempts instead of shots and D3 for the rank-4 drain refusals; also
+     S-0215 scenario B36 and its extensions for the upgrade gate and ordered paired attempts
+     despite the primary's rearm countdown).
      The berserk-weapon refusals of S-0610 claim 3 are `unmeasured` here for that claim's
      reason: stock berserk weapons do not isolate the single-target firing check.
      Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
@@ -422,7 +424,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      *rearming* cases, so no scenario could tell the orders apart).
      Rank 16 is `unmeasured`: no isolated locomotor refusal and its answer have yet been
      identified, so no scenario here can distinguish it from another refusal.
-   - Confidence: high (falling refusal and the same-turn surviving-landing boundary,
+   - Confidence: high (the upgrade-building paired attempts without a second firing check,
+     falling refusal and the same-turn surviving-landing boundary,
      the three drain refusals and no ordinary shot from a drain attempt),
      medium (its missing countdown start and ammunition use, as S-0608 claim 1), high (rearming before ammunition and range, facing and moving after them, and
      *must deploy* before *not facing*, and the hidden-target refusal using mean weapon damage),

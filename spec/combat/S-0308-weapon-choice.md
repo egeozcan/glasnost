@@ -2,7 +2,7 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,7 +22,8 @@ precedence of rules: the slot a multi-weapon type has switched to, the deployed 
 special warhead kinds, zero versus values, water, land and air targets. This spec gives the slots,
 the elite replacement, the precedence, the rules for gattling, gunner and garrisoned objects, and the
 mean weapon damage that other rules use. Whether the chosen weapon may fire is the firing check of
-S-0301; its range is S-0307's.
+S-0301; S-0215 claim 32 also controls buildings' firing attempts, including the upgrade weapon
+gate. Its range is S-0307's.
 
 ## Terms
 
@@ -249,8 +250,16 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     there. It is always the upgrade type's ordinary slot *i*: an upgrade's elite slots are never
     used, whatever the building's veterancy rank. Only when no installed upgrade has one do the
     occupant rule (claim 13) and then the building's own slot *i* (with claim 2) apply.
-    - Backing: `measurable` for slot 0 (scenario W9, parts c and d); `unmeasured` for higher
-      slots: these parts cannot select a higher building slot through ordinary input.
+    This resolves a weapon, not permission to fire it. S-0215 claim 32 owns the non-SAM
+    building's upgrade weapon gate: it tests the first installed upgrade, even when a later
+    upgrade supplies a requested slot here. A failed gate suppresses firing attempts despite
+    a *can fire* answer; a passing gate permits a primary attempt followed by a secondary
+    attempt without another firing check between them. Those two attempts resolve slots 0
+    and 1 by this claim, not necessarily from the same upgrade. An ordinary single-shot
+    primary with no secondary fails that gate.
+    - Backing: `measurable` for slots 0 and 1 (scenario W9, parts c and d, including the
+      distinct-slot extension; S-0215 claim 32, scenario B36, for permission and paired
+      attempts); `unmeasured` for slots 2 through 17: these parts request only slots 0 and 1.
     - Confidence: medium
 
 13. **Garrisoned buildings fire their occupants' weapons.** A building whose type can be occupied
@@ -344,6 +353,7 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     - Backing: `measurable` for registration and section-reading effects (scenario W11, shared
       with S-0004 K6). Registration order is `unmeasured`: these parts expose existence through
       overlay artwork, not a weapon index or the relative order of several created weapons.
+      When several numbered references create weapon types, their registration indices follow the stated order: the normal reference before the elite reference at each number, and lower numbers before higher numbers.
       The safe slot limit and warning are design rules, not predicted oracle results.
     - Confidence: high for registration without a cutoff; medium for observing it in an original
       game that successfully loads the unsafe test data.
@@ -527,8 +537,10 @@ moment (for example the gattling stage and the deployed state of the same tick).
   limited to the first 18 (claim 16; S-0004 claims 6 and 16). Missing numbered fields create
   nothing. The importer warns for a count above 18.
 - **Upgrade weapons win over occupants** (claim 12). A garrisoned building with an installed upgrade
-  that supplies slot 0 fires the upgrade's weapon, not its occupants'. No switch proposed; this is a
-  consequence of the slot rule.
+  that supplies slot 0 resolves that slot to the upgrade's weapon, not its occupants'. This does
+  not bypass S-0215 claim 32's firing gate or guarantee a shot. No switch proposed for weapon
+  resolution; this is a consequence of the slot rule. The firing gate's separate switch,
+  `quirks.upgrade_attack_weapon_gate`, is owned by S-0215 claim 32.
 
 ## Import mapping
 
@@ -760,13 +772,33 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   vehicle; record the damage of successive shots. *Expected:* 5, 11, 7 (or the elite primary if *E*
   has one), repeating. This part does not require an individual occupant to leave.
 - *Part b:* the same with *E* given an elite occupying weapon of damage 9. *Expected:* 5, 11, 9.
-- *Part c:* a building with an upgrade slot whose upgrade type holds a weapon in slot 0 (damage 17),
-  garrisoned as in part a. *Expected:* every shot 17.
-- *Part d (several upgrades, elite slots):* a building with two upgrade slots; upgrade type *U1*
-  (ordinary slot 0 damage 17, elite slot 0 damage 21) is installed first, then *U2* (slot 0 damage
-  19). *Expected:* every shot 17 (the first installed wins). Repeat with *U2* installed first:
-  every shot 19. With the host building at elite rank (the map's initial veterancy for its owner)
-  and *U1* installed: still 17, never 21.
+- *Part c:* a non-SAM building with an upgrade slot, garrisoned as in part a. The upgrade's
+  ordinary slots 0 and 1 name the same weapon type, with damage 17 and burst count 1 shot,
+  so S-0215 claim 32's gate passes. Order an attack on a stationary enemy in range. A read-only
+  recorder logs firing-check answers, firing attempts with slot and resolved weapon, successful
+  shots and target health by tick. *Expected:* each eligible attack processing attempts slot 0
+  then slot 1 without another firing check, and every successful shot has damage 17, not an
+  occupant's damage. Do not infer the number of successful shots solely from two attempts.
+  Suppression control: remove only the upgrade's secondary, retaining its single-shot primary.
+  Expect *can fire* answers but no firing attempts, not occupant fallback. A shot or attempt
+  in that control, occupant damage in the passing case, or missing/reversed paired attempts
+  falsifies the corresponding result.
+- *Part d (several upgrades, elite slots):* a non-SAM building with two upgrade slots. Upgrade
+  type *U1* has matching ordinary weapons in slots 0 and 1, damage 17, and matching elite
+  weapons of damage 21. Upgrade type *U2* has matching ordinary weapons in slots 0 and 1,
+  damage 19. All have burst count 1 shot. Install *U1* first, then *U2*, and record as in part c.
+  *Expected:* attempts for slots 0 then 1 both resolve to *U1*'s ordinary weapon, and every
+  successful shot has damage 17. Reverse installation order: both resolve to *U2* and successful
+  shots have damage 19. With the host elite and *U1* first, both still resolve to its ordinary
+  weapon, damage 17, never 21.
+  Distinct-slot extension: give *U1* an ordinary primary of damage 17 and burst count 2 shots,
+  no ordinary secondary, and install it before *U2*. Its primary burst count passes the gate.
+  Expect paired attempts resolving slot 0 to *U1*'s ordinary primary and slot 1 to *U2*'s
+  ordinary secondary. Successful shots identify the resolved weapon by damage 17 or 19,
+  respectively; no particular total shot count is predicted here. A different resolved weapon,
+  an elite substitution, a missing pair after *can fire*, or the reversed attempt order
+  falsifies the corresponding result. Repeat with *U1*'s primary burst count reduced to 1:
+  the first upgrade now fails the gate and neither attempt occurs, although *U2* has weapons.
 - *Part e (disc-laser exception):* no upgrade; two rookie occupants entered in order, *E* then
   *G*. Give *E* a disc laser occupying weapon with damage 5, and *G* its ordinary damage-11
   primary. Order the building to attack the stationary enemy vehicle and record at least four
@@ -868,14 +900,12 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
 - Whether any rule refuses a shot where table N's "no weapon" answers arise (modes 0, 2 and 6):
   the weapon choice gives slot 0 and nothing here forbids the shot.
 
-## Cross-spec changes required
+## Cross-spec changes to confirm
 
-- S-0313 claim 6 must retain completed-action reset without intermediate ordering, but
-  replace its unresolved selective-death premise with S-0508 claim 19's own-house-defeat
-  exception and retained numeric index, without inferred compaction or modulo repair.
-- S-0311's firing-occupant term and claim 15 must use completed-action reset without
-  intermediate ordering and distinguish defeat deaths from set-up compaction. Safe credit
-  through a retained dead choice needs the same project-lead decision as weapon choice.
+- S-0313 claim 6: confirm the approved text retains completed-action reset without intermediate ordering and the own-house-defeat exception with numeric-index retention, without inferred compaction or modulo repair.
+- S-0311's firing-occupant term and claim 15: confirm the approved text uses completed-action reset without intermediate ordering and distinguishes defeat deaths from set-up compaction. Safe credit through a retained dead choice remains a project-lead decision.
+
+The approved revisions reviewed for this scrub already state these rules; this confirmation is for joint sign-off, not a request to revise them again.
 
 ## Questions for the project lead
 
