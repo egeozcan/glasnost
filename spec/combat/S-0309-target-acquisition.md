@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 17
+revision: 18
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -964,7 +964,9 @@ this spec:
       draw, its runs 4 and 5 the objects for which the draw is taken, its run 6 the
       order of the draws across objects), part d the charges row of
       part h, part e parts a, c and d (its run 4 the engineer exception of claim 8), part f the
-      threat sum of part h, part h, case ii, that the draw of part g follows the timer draw, and
+      threat sum and draining condition of part h (run 3 isolates draining with no target,
+      since a drain attempt clears the drainer's target: S-0608 claim 1), part h, case ii,
+      that the draw of part g follows the timer draw, and
       part g part i:
       runs 1 and 2 the flag, run 3 the quirk, run 4 the early-stop row,
       run 5 the end of the search with ring *r*, run 6 the airborne candidate, run 7 the
@@ -982,9 +984,7 @@ this spec:
       is not itself a wall candidate, because no object stands in a cell that holds a wall, so no
       setup can put both in one cell; the opportunity mark of a wall target in (i), because a wall
       target stays within reach unless the searcher moves, and an order that moves it also replaces
-      its target, so no setup known separates an opportunity wall target from a kept one; the draining condition
-      of (h), because a draining object holds the drained object as its target, so the threat
-      comparison of (h) decides together with it and no setup known isolates it; (j), because the
+      its target, so no setup known separates an opportunity wall target from a kept one; (j), because the
       interval and the nearness measure are not established, so no expected tick or house can be
       stated
     - Confidence: medium for parts a, b, e, f, g and i; low for parts c, d, h and j, and for the opportunity mark of a wall target
@@ -2344,6 +2344,18 @@ claims give for a human-controlled owner. Target recorder in every part.
   threat coefficient 0 except the special-threat coefficient. Run 1: *Y*'s special threat value
   above *X*'s; run 2: below. *Expected:* run 1: it retaliates against *Y*; run 2: it keeps *X*.
   *Falsified if:* run 1 does not retaliate or run 2 does.
+  Run 3 (draining without a target): let a Floating Disc of the neutral house, placed over an
+  enemy drainable building of the human house, acquire it automatically and form a drain link
+  (S-0608 claims 1 and 2). Once the attempt clears its target and it is in *guard*, have a
+  human-owned anti-air attacker damage it from beyond its weapon range but within its sight.
+  Record the link, target, behaviour and attacker's distance at the hit and the target after
+  it. Void and repeat if the Disc has acquired any target before the hit, its link has ended,
+  or another retaliation condition of claim 18 or S-0215 claim 18 fails. Control: the same
+  targetless Disc in *guard*, not draining, attacked from the same distance. Run each three
+  times under the general setup. *Expected:* the draining Disc keeps no target and does not
+  retaliate; the control takes the attacker as its target. With no held target, the threat-sum
+  comparison does not apply. *Falsified if:* the draining Disc retaliates or the control does
+  not, with the stated conditions satisfied.
 - *Part g (enemy walls, (i)):* the test rules set the destroy-walls flag in every difficulty row
   (so the result does not depend on the house's row). A vehicle of the neutral house in *guard*,
   with a guard range of 8 cells (*n* = 8, early stops after rings 2 and 4) and a weapon of range 6
