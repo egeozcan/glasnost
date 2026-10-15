@@ -1,9 +1,9 @@
 ---
 id: Q-0654
 title: Which result a 1-lepton aircraft step has at facings just past south and just past west under round-toward-zero
-status: open
+status: answered
 related: [S-0501, S-0205, S-0208, S-0105]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

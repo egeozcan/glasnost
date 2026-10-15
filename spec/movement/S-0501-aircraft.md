@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654]
 supersedes: []
 ---
 
@@ -147,7 +147,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    positive, each coordinate moves by its component rounded down, so a one-lepton step whose
    body facing lies between east and south (both components positive and below one; F3's
    table gives the exact facings, 16391 to 32766) leaves the aircraft where it is (`quirks.aircraft_unit_step_stall`). A step of two or more
-   leptons always changes at least one coordinate.
+   leptons always changes at least one coordinate. Under the default round-toward-zero
+   arithmetic (S-0205 claim 5) a negative component, however small, also costs a whole lepton:
+   every step at body facings 32767 to 32772 (just past due south) also moves the aircraft one
+   lepton west, and every step at 49148 to 49155 (around due west) one lepton north, so a long
+   flight at such a facing drifts sideways by one lepton per step (F3).
    A living descending aircraft with a destination additionally moves 5 leptons toward the
    centre of its destination cell in the same tick, except during *enter* toward a helipad
    building. This extra displacement follows the forward step and ordinary height reduction.
@@ -165,7 +169,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    resulting cell coordinate is outside 0 … 511, this random candidate is the shifted point
    itself instead. If neither candidate lies in a legal cell, no forward relocation occurs
    that tick; altitude adjustment and any descent nudge can still occur.
-   - Backing: `measurable` (scenarios AC3 and AC23)
+   - Backing: `measurable` (scenarios AC3, AC23 and AC26)
    - Confidence: high
 
 5. **Speed fraction.** While a living aircraft that is not landing has a destination, its target
@@ -178,9 +182,10 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    - if *d* < 86 leptons, the current fraction is halved at once and *τ* = 0,
    - otherwise *τ* = 0.1.
 
-   In ordinary slowing, the distance clamp applies after any halving: when *d* is less than
-   the current fraction, that fraction becomes *d*. After this clamp, when *τ* = 0, the current
-   fraction is 0 and *d* > 0, the current fraction becomes 0.05. An
+   In ordinary slowing, F4 defines the distance-clamped fraction from the possibly halved
+   fraction and *d*. Its creep-restart value is 0.05 when *τ* = 0, the distance-clamped
+   fraction is 0 and *d* > 0. These intermediate values define the resulting fraction,
+   not a required internal evaluation order. An
    aircraft that is taking off keeps its target unchanged until its height reaches half its
    cruise height. At the end of every living movement tick the current fraction moves toward
    *τ* by at most 0.1.
@@ -218,7 +223,12 @@ the original only; the neutral and special houses retain it (glossary, *AI house
      north while its steps are longer, until the direction becomes exactly east; its 1-lepton
      steps then go east and the fraction reaches 0 at about 85 leptons. From the north, 11 leptons
      to either side of the point's column, it hovers as well: from the east side the drift ends
-     1 lepton east of the column, where the quantised direction lies just east of south.
+     1 lepton east of the column, where the quantised direction lies just east of south. From
+     the west side the quantised direction is first 32767 (S-0204 claim 8 (b)), so each step
+     also moves the aircraft one lepton west (claim 4), until the side distance exceeds about
+     1/100 of the remaining distance along the column; it then hovers at *d* = 166 with the
+     body facing well east of south. Started 20 cells (5120 leptons) north of the point, the
+     drift ends 47 leptons west of the column and the hover facing is 29778.
      The landing triggers of claim 6 need a zero target fraction or a current fraction below
      0.05, so the same hover also stops a *move* or a return to a pad short of landing.
    - With *V* < 10 the step ⌊*V* × *f*⌋ can become 0 while *f* is still at least 0.1, before
@@ -242,7 +252,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
      hover and the ineffective replacement (AC3 and AC24). The clamp's exact placement among the ordinary halving,
      creep and adjustment is `unmeasured`: with integer distance and fractions in 0 … 1, it
      changes only the zero-distance case, where several alternative intermediate orders give
-     the same final zero fraction.
+     the same final zero fraction. The replacement's effect in skipped-calculation ticks is
+     `unmeasured`: AC3 and AC24 isolate its ordinary ineffectiveness, not a refused-touchdown
+     restart retaining that replacement below half height.
    The target is instead fixed at 1 (no slowing down) while the aircraft carries the run lock,
    and while it holds its height (claim 6) and either its type has the fly-by flag or it is a
    strafer or fighter (claim 11) with ammunition left. This fixed-full-speed case does not apply
@@ -560,12 +572,17 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Confidence: high
 
 27. **Repair on a pad.** A repair step costs the aircraft's house the repair cost of Formula F11
-    and raises its health by the game-wide repair step (at least 1). When the result reaches full
+    and raises its health by the game-wide repair step (at least 1). F11 distinguishes the
+    original's raw cost divisor from our engine's guarded divisor: pad repair uses the same
+    departure as S-0314 claim 5, including for a negative imported repair step, not only when
+    the original would stop with a program error. When the result reaches full
     strength, health is set to exactly its strength and the aircraft is released in the same
     step. If the house cannot pay, the aircraft is released unrepaired. An aircraft whose health
     ratio is at least 1 gets no repair. The reload-pad service branch repairs without a separate repair flag. A building that
     also has the repair-building flag instead follows S-0314 claim 6's service branch.
-    - Backing: `measurable` (scenario AC16)
+    - Backing: `measurable` for original repair outcomes and invalid-divisor failures
+      (AC16). The guarded-cost alternative is `unmeasured`: it is the design departure
+      owned by S-0314 claim 5, tested on our engine rather than on the original.
     - Confidence: high (step and cost formula); medium (release when the house cannot pay)
 
 28. **Taking off with half ammunition.** An aircraft on a pad that has a target is served only up
@@ -706,9 +723,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     A notification for a living, unreleased non-missile aircraft leaves its slot unchanged.
     Spawner destruction, ownership change and the other slot-clearing events follow S-0506
     claim 13; release of a non-missile aircraft through that rule starts its crash (S-0506
-    claim 12), rather than letting it return to the carrier. For an ordinary aircraft not
-    held by a magnetic beam, starting this crash sets health to 0: it is not a new living
-    disabled-fall state. Crash start does not clear its unfinished flight (claim 40) or speed
+    claim 12), rather than letting it return to the carrier. For an ordinary aircraft that is
+    not seized (S-0607 claims 5, 12 and 20), starting this crash sets health to 0: it is not a
+    new living disabled-fall state. Crash start does not clear its unfinished flight (claim 40) or speed
     fraction. Ordinary movement can continue, combining F5's dead counter contribution
     with F2's dead descent in the same non-impact tick. Release does not impose a universal
     no-forward-motion fall. AC23 tests this distinction.
@@ -979,13 +996,23 @@ division truncated toward zero.
 > *θ* = (*F*ₛ − 16383) × *k* radians in double precision, where
 > *k* = −2π / 65534 rounded to double precision, that is −9.587672516830327 × 10⁻⁵. sin *θ* and cos *θ* are
 > S-0105's table trigonometry (F1), single-precision table values.
-> *x*′ = trunc(*x* + cos *θ* × *s*), *y*′ = trunc(*y* − sin *θ* × *s*), the sum formed in floating
-> point and truncated toward zero once. Facing 16384 moves along +x, facing 0 along −y, both by
-> exactly *s*. Because map positions are positive, the truncation of the sum acts as rounding the
-> step down, so a step with a negative component can be one lepton longer in that axis than a
-> step with the same positive component. The new coordinates are integers and no fractional
-> remainder is carried into the next step. With *s* = 1 this gives, by body facing *F* (with
-> S-0105's table values):
+> *x*′ = trunc(*x* + cos *θ* × *s*), *y*′ = trunc(*y* − sin *θ* × *s*), the product and the sum
+> each formed in floating point and the sum truncated toward zero once. This is the computation
+> of S-0208 F3 with step length *s*, and the rounding of each product and sum follows S-0205
+> claim 5: under the default (`quirks.chop_rounding` on) each is rounded toward zero. Facing
+> 16384 moves along +x, facing 0 along −y, both by exactly *s*. The new coordinates are
+> integers and no fractional remainder is carried into the next step.
+>
+> Because map positions are positive and each product of a table value with *s* is exact,
+> under the default each new coordinate is exactly the old one plus its component rounded
+> down: *x*′ = *x* + ⌊cos *θ* × *s*⌋ and *y*′ = *y* + ⌊−sin *θ* × *s*⌋. A negative component of
+> any size, however small, therefore costs a whole lepton. S-0105 F1's table has two tiny
+> nonzero entries, below 10⁻¹⁵ in magnitude, where the exact value would be zero. They give
+> a tiny negative x component at body facings 32767 to 32772, just past due south, and a tiny
+> negative y component at body facings 49148 to 49155, around due west. A step of any length *s* ≥ 1 at those facings moves the
+> aircraft one lepton west (32767 to 32772) or one lepton north (49148 to 49155) in addition
+> to its full step along the other axis. A long flight at such a facing drifts one lepton
+> sideways on every step. With *s* = 1 this gives, by body facing *F*:
 >
 > | *F* | Change (x, y) |
 > |---|---|
@@ -993,14 +1020,19 @@ division truncated toward zero.
 > | 16380 to 16386 | (+1, 0) |
 > | 16387 to 16390 | (0, −1), the table's negative-angle bias giving a positive sine |
 > | 16391 to 32766, between east and south | (0, 0): no motion (`quirks.aircraft_unit_step_stall`) |
-> | 32767 to 32772 | (0, +1) |
-> | 32773 to 49155 | (−1, 0) |
-> | 49156 to 65531 | (−1, −1) |
+> | 32767 to 32772, just past due south | (−1, +1) |
+> | 32773 to 49147 | (−1, 0) |
+> | 49148 to 65531 | (−1, −1) |
 > | 65532 to 65535 | (0, −1) |
 >
 > So between north and east a 1-lepton step moves one lepton north, between south and west
-> one lepton west, and between west and north one lepton on each axis. For *s* ≥ 2 at least
-> one coordinate always changes. With `quirks.aircraft_unit_step_stall` off, a forward step
+> one lepton west, and from just short of due west to north one lepton on each axis; just
+> past due south it moves one lepton on each axis. For *s* ≥ 2 at least one coordinate
+> always changes. With `quirks.chop_rounding` off, each sum is rounded to nearest instead,
+> and at every position of at least 1024 leptons the two near-zero components are lost: the
+> rows for 32767 to 32772 and 49148 to 49155 become (0, +1) and (−1, 0), and steps of every
+> length at those facings take no sideways lepton. Every other row is the same in both
+> settings. With `quirks.aircraft_unit_step_stall` off, a forward step
 > with *s* ≥ 1 that would change neither coordinate instead moves 1 lepton along the axis
 > whose component has the larger magnitude, in that component's direction, taking x on equal
 > magnitudes. The descent nudge and the off-map fallback (claim 4) use F3's trigonometry with
@@ -1020,8 +1052,9 @@ division truncated toward zero.
 > The distance-clamped fraction is *f*꜀ = min(*f*ₕ, *d*). The pre-adjustment fraction *f*ₚ
 > is 0.05 when *τ* = 0, *f*꜀ = 0 and *d* > 0, and *f*꜀ otherwise.
 > The adjusted fraction is min(*τ*, *f*ₚ + 0.1) when *f*ₚ < *τ*, max(*τ*, *f*ₚ − 0.1)
-> when *f*ₚ > *τ*, and *f*ₚ when equal. Thus halving precedes the distance clamp, which
-> precedes creep restart and the 0.1 adjustment. *f*₀ is the fraction that the same tick's
+> when *f*ₚ > *τ*, and *f*ₚ when equal. The adjusted fraction is the value defined by
+> the preceding equations. Only that resulting fraction is specified as observable; the
+> intermediate evaluation order is not. *f*₀ is the fraction that the same tick's
 > forward step (F3) has just used, and *d* is measured from the position after that step; the
 > adjusted fraction is the one the next tick's step uses. When the creep restart applies,
 > *τ* = 0 and the adjusted fraction is max(0, 0.05 − 0.1) = 0, so the restart never changes
@@ -1079,9 +1112,19 @@ division truncated toward zero.
 > double (S-0003), the product in double precision truncated toward zero (S-0205,
 > `quirks.chop_rounding`).
 
-> **F11 Repair cost.** *q* = ⌊*Σ* / *σ*⌋ (integer), *Σ* the type's strength and *σ* the game-wide repair step as imported (no minimum here).
-> *c*₀ = ⌊*C* / *q*⌋ (integer), *C* the type's cost; cost = max(1, ⌊*c*₀ × *p*⌋), *p* the repair
-> percent as a fraction, the product in double precision and truncated toward zero. Credits.
+> **F11 Repair cost (claim 27; S-0314 claim 5).** Let *Σ* be the type's strength in hit
+> points, *σ* the imported game-wide repair step in hit points, *C* the type's cost in
+> credits, and *p* the dimensionless repair percentage as a fraction. *Σ*, *σ* and *C* are
+> integers; *p* is double precision. The cost uses no house or country cost factor.
+>
+> **Original:** *q* = trunc(*Σ* / *σ*), without a minimum on either *σ* or *q*.
+> **Our engine:** *σ*′ = max(1, *σ*), *q* = max(1, trunc(*Σ* / *σ*′)), the departure
+> owned by S-0314 claim 5. The two agree when 1 ≤ *σ* ≤ *Σ*.
+> In either case, *c*₀ = trunc(*C* / *q*), and cost = max(1, trunc(*c*₀ × *p*)) credits.
+> Both quotients are integer division truncated toward zero. The final product uses double
+> precision with S-0205 claim 5's rounding mode, then truncation toward zero to integer
+> credits. The minimum cost is 1 credit. Zero divisors stop the original; our engine's
+> guards avoid them and the importer warns as specified by S-0314 claim 5.
 
 > **F12 Pad build limit.** *n* = Σ over types *t* in the pad-aircraft list of (the house's present count of *t* +
 > copies of *t* being built and queued in the house's aircraft line). Refuse when *n* ≥ pad total.
@@ -1245,10 +1288,15 @@ attacking in that same pass; it does not require either neighbour to have been r
 - **Pad distance overflow** (`quirks.pad_distance_overflow`, default on). The squared distance of F9
   wraps beyond about 46 340 leptons, so a very distant pad can look nearer than a close one.
   Fixed: compare exact squared distances.
-- **Repair step of 0 or above strength.** When the repair step is 0, or larger than the type's
-  strength, a divisor in F11 is 0 and the original stops with a program error. Our engine uses
-  S-0314 claim 5's existing safe departure: use at least 1 for the repair step in the cost
-  calculation and at least 1 for the resulting number of steps, with an importer warning.
+- **Repair-cost divisors** (departure, S-0314 claim 5). For positive strength, an imported
+  repair step of 0, or one whose absolute value exceeds strength, makes a divisor in the
+  original's F11 zero and stops it with a program error. Our engine uses F11's guarded
+  formula for every pad repair cost, with an importer warning for the guarded inputs.
+  This also changes defined original outcomes: with a negative repair step whose absolute
+  value is at most strength, non-negative type cost and non-negative repair percentage,
+  the original charges 1 credit but still restores at least 1 hit point. Our engine instead
+  computes cost using a repair step of 1; that charge can exceed 1 credit. This is the same
+  departure already specified by S-0314 claim 5, not a pad-only exception or quirk.
 - **A pad with no docking-place key** has one contact place and adds the absent default of
   the docking-place count to the pad total (Import mapping); a key set to 0 also gives one
   contact place but adds 0.
@@ -1351,7 +1399,7 @@ cell named by the variant; keep the bystander outside that area. Scripted normal
 
 Where stock types or normal orders cannot expose a branch, the scenario explicitly names a
 **test-map override**. These are the glossary's named-test-file allowance, not stock-data claims.
-remove the overrides after that variant. Never infer an untested branch from an ordinary run.
+Remove the overrides after that variant. Never infer an untested branch from an ordinary run.
 Each expected result below is falsifiable: an isolated record that differs in its stated count,
 tick, value, destination, behaviour or survival outcome falsifies that part. An unreachable setup
 is a coverage gap, not confirmation. Record actual seeds and tick boundaries. Unresolved parts
@@ -1379,9 +1427,9 @@ listed in Open questions are not claimed confirmed by these scenarios.
   Compute F3 with the signed facing and compare every forward step. Use sustained cruise ticks
   to separate the forward formula from claim 4's additional descent step. On approach to a cell destination, log distance
   and fractions around each F4 threshold, including distance 0, and around 128, 512 and 768
-  leptons. Expected: F4's halving, then distance clamp, then creep restart, then the 0.1
-  adjustment, followed by claim 5's target replacement, which the next movement tick's own
-  calculation replaces (AC24 isolates this). With positive slowdown distance, at *d* = 0
+  leptons. Expected: the resulting adjusted fraction defined by F4, and claim 5's target
+  replacement without a retroactive change to that fraction. The next movement tick's own
+  calculation replaces that target (AC24 isolates this). With positive slowdown distance, at *d* = 0
   in ordinary slowing with positive incoming fraction, the adjusted fraction must be 0.
   Record the pre-slowing and adjusted fractions separately; a result differing from F4
   falsifies the resulting-fraction rule, not every observationally equivalent intermediate
@@ -1543,12 +1591,29 @@ listed in Open questions are not claimed confirmed by these scenarios.
   aircraft to record place-order servicing and skipping an aircraft still in *enter* or moving.
   The named service-test override supplies several rounds and independently damaged aircraft.
 - **AC16 Pad repair (claim 27).** Land a full-ammunition damaged aircraft without a target.
-  record health and credits at each service tick. Expected: F11 cost and the repair step, exact
+  Record health and credits at each service tick. Expected: F11 cost and the repair step, exact
   full-health cap and release when full; insufficient credits cause release with no charge or
-  healing. Repeat on a reload pad without the separate repair-building flag. The named
-  repair-test override varies strength versus repair step to distinguish integer divisions
-  from floating division. Invalid zero-divisor inputs may stop the original; our engine uses
-  the already specified S-0314 claim 5 departure and does not reproduce that stop.
+  healing. Repeat on a reload pad without the separate repair-building flag. Each different
+  charge, health gain, cap or release outcome falsifies the corresponding prediction.
+  The named `aircraft-pad-repair` test-map override supplies the following invented inputs,
+  with enough credits to pay and no other healing or credit changes in the observed area:
+  - Integer-division contrast: strength 11 hit points, repair step 4 hit points, type cost
+    101 credits and repair percentage 0.5. At the first damaged, full-ammunition service step,
+    expect *q* = 2, *c*₀ = 50 and a 25-credit charge, with 4 hit points restored unless capped.
+    A different charge, including 18 from retaining both quotients in floating point,
+    falsifies the integer divisions.
+  - Negative-step contrast: strength 300 hit points, repair step −3 hit points, type cost
+    2400 credits and repair percentage 0.5. Expect the original to charge 1 credit and
+    restore 1 hit point per non-final step. A different charge or gain, or a program error,
+    falsifies that prediction. Replay separately on our engine: its F11 guards instead
+    give *σ*′ = 1, *q* = 300, *c*₀ = 8 and cost 4 credits, still restoring 1 hit point,
+    with an importer warning. Charging the original's 1 credit there fails the departure.
+  - Zero-divisor contrasts, separate runs: strength 11 hit points and repair steps 0, 12
+    and −12 hit points. Keep the type cost and percentage of the integer-division contrast.
+    Expect the original to stop with a program error at the first attempted repair cost.
+    Successful payment or healing falsifies that outcome. Our engine must instead warn
+    and continue: cost 4 credits for step 0 or −12, and 50 credits for step 12. These
+    guarded outcomes are engine tests, not oracle measurements.
 - **AC17 Half reload with a target (claim 28).** Issue an attack order while an aircraft reloads.
   The named half-reload test-map override gives several rounds, including separate odd and even
   maxima so the half threshold is not degenerate. Record target retention, round count and
@@ -1769,16 +1834,28 @@ listed in Open questions are not claimed confirmed by these scenarios.
     still set, and the first shot leaves from that hovering position. In (b2) the aircraft
     drifts north while its steps are several leptons long, stops drifting about 2 leptons south
     of the row when its body facing becomes exactly east (16383), and its 1-lepton steps then
-    go east.
+    go east. In (b5), from either side of the row, the westward legs at body facings 49148
+    to 49155 move the aircraft one lepton north on every step (F3), so it crosses or leaves
+    the row northward until its direction turns south of west; it still reaches fraction 0
+    at about 85 leptons and fires, but from about 84 leptons north of the row and about
+    18 leptons east of the point, with the body facing just west of south (about 35000).
+    With `quirks.chop_rounding` off (engine replay only) it keeps its side: 11 leptons north,
+    or about 2 leptons south, of the row. The expectations for variants (a) and (c) hold from
+    any of the four approach directions; only the final position and facing differ.
   - (b1), (b3) and (b4): once the forward step falls to 1 lepton (post-step distance about
     166, the first *d* with ⌊*V* × *d* / *S*⌋ = 1), the position stops changing with the
     fraction positive (about 0.166) and steady and the distance and body facing constant, the
-    facing lying in 16391 to 32766 (about 16892 in b1, about 32076 in b3 and 32766 in b4,
-    where the westward drift has ended 1 lepton east of the column). The run never reaches
+    facing lying in 16391 to 32766 (about 16892 in b1, about 29778 in b3 and 32766 in b4,
+    where the westward drift has ended 1 lepton east of the column). In (b3) the aircraft
+    first drifts one lepton west on every step while its body facing is 32767, and the side
+    distance at the hover is about 47 leptons from a start 5120 leptons north of the point
+    (45 from 4800, 50 from 5376: it depends on the start distance), not 11. The run never reaches
     *firing* and fires no shot within 2000 ticks. A run that keeps advancing one lepton per
     tick and fires falsifies the truncation of each coordinate without remainder (claim 4,
     F3); a hover in (b2), (b5) or (b6) falsifies F3's per-facing table or the direction
-    quantisation of S-0204 claim 8. In (b1) the side distance stays 11 leptons, because the
+    quantisation of S-0204 claim 8. A (b3) side distance that stays 11 with a hover facing
+    near 32076 falsifies the round-toward-zero sum of F3 (that is the result with
+    `quirks.chop_rounding` off, which an engine replay must reproduce). In (b1) the side distance stays 11 leptons, because the
     southward component of each step truncates away. A (b1) run at most 2 leptons off the row
     flies exactly east through the 1-lepton distances and does not stall; at 3 or 4 leptons it
     hovers nearer, at about 122 or 163 leptons. Check the logged side distance before reading
@@ -1822,6 +1899,18 @@ listed in Open questions are not claimed confirmed by these scenarios.
   is redirected to the building's spot once its weighted distance reaches 256 leptons. A landing
   spot near the building or another object while the own-cell search still fails falsifies the
   claim. Repeat with the first variant's patch freed: the own-cell spot must then be used.
+- **AC26 Sideways lepton just past due south and around due west (claim 4, F3; Q-0654).**
+  Named test map `aircraft-axis-drift`: open level ground at least 40 cells across. Give a
+  landable, non-pad-bound, unarmed aircraft cruising at full fraction a *move* order to a cell
+  20 cells due south of its own cell centre, and separately one 20 cells due west of it. Log
+  position, flight point and body facing per tick with the read-only recorder, and read every
+  expectation against the logged flight point and facing. Expected: on every forward step
+  with body facing 32767 to 32772 the x coordinate falls by exactly 1 lepton while y rises by
+  the full step, so the aircraft moves west of the flight point's column until its direction
+  leaves that range. When the start lies exactly on that column, the direction is first 32767
+  (S-0204 claim 8 (a)). On the westward flight, on every step with body facing 49148 to 49155
+  the y coordinate falls by exactly 1 lepton. An x (or y) that does not change on those steps
+  falsifies the round-toward-zero sum of F3 and matches F3 with `quirks.chop_rounding` off. Repeat due north and due east as controls: no sideways change.
 
 ## Open questions
 
@@ -1860,3 +1949,14 @@ listed in Open questions are not claimed confirmed by these scenarios.
     2*S* / *V* > max(16, min(86, *S* / 10)), and a body facing in 16391 to 32766 during a
     1-lepton step outside the halving zone; converted speed of at least 20 never takes such a
     step. AC24's (b1) to (b6) measure it.
+15. Q-0654 is answered by claim 4, claim 5, F3, AC24 and AC26. (1) Under the default
+    round-toward-zero arithmetic a 1-lepton step at body facings 32767 to 32772 moves one
+    lepton south and one lepton west, and at 49148 to 49155 one lepton west and one lepton
+    north. (2) On a long flight at those facings x (or y) falls by one lepton on every step,
+    whatever the step length. (3) The two agree once F3's table is computed with the
+    default rounding: the aircraft step is the computation of S-0208 F3 with S-0105 F1 and
+    S-0205 claim 5, and F3's table now follows it; the earlier table had been computed with
+    sums rounded to nearest. AC24 (b3) now expects the westward drift and a hover facing near
+    29778 with a side distance near 47 from a 5120-lepton start; facing 32076 and side
+    distance 11 are the result with `quirks.chop_rounding` off. AC26 measures the drift
+    directly.
