@@ -791,7 +791,7 @@ pub fn delay_kill_countdown(w: &World, f: i32, alpha: F64, spread: F64, r: i32) 
 }
 
 /// Credits a destruction (S-0302 claim 14; S-0311 claims 7 to 10).
-fn credit(w: &mut World, id: ObjectId, hit: &Hit) {
+pub(crate) fn credit(w: &mut World, id: ObjectId, hit: &Hit) {
     let attacker_owner = hit.attacker.and_then(|a| w.obj(a)).and_then(|a| a.owner);
     // spec: S-0302 claim 14 (the attacker when the attacking house is absent or its owner; otherwise the house)
     let (object, house) = match (hit.attacker, hit.house) {

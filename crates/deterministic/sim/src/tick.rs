@@ -166,6 +166,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     let moved = match loco {
         // spec: S-0506 Terms (a rocket missile moves in the rocket-flight movement mode, claims 14 to 19)
         _ if rocket => crate::rocket::tick(w, id),
+        // spec: S-0507 claim 15 and S-0203 claim 3 (a passenger in play inside an open-topped transport has no movement of its own; its position is the transport's)
+        _ if crate::transport::riding(w, id).is_some() => false,
         // spec: S-0504 claim 5 (a sinking vessel makes no progress by its locomotor, turning and speed-fraction updates included)
         _ if sinking => false,
         Some(Locomotor::Drive) if held => false,
@@ -189,6 +191,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         Some(Locomotor::Ship) => !held && crate::naval::tick(w, id),
         _ => false,
     };
+    // spec: S-0507 claim 15 (whenever the transport moves to a new position, its passengers' positions become its position at once)
+    crate::transport::sync(w, id);
     // spec: S-0614 claim 18 (an attached parasite acts late in its host's turn: after self-healing, behaviour processing and movement, before the separate firing update; a host killed by it does nothing more)
     crate::parasite::host_turn(w, id);
     if w.obj(id).is_none_or(crate::combat::damage::dead) {

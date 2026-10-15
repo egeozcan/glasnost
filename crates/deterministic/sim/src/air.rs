@@ -1148,12 +1148,34 @@ fn report_entered(w: &mut World, id: ObjectId, k: ObjectId) {
 /// started without a kill (its locomotor switched off). Returns whether a
 /// crash started.
 pub fn start_crash(w: &mut World, id: ObjectId, living: bool) -> bool {
+    start_crash_hit(w, id, living, None)
+}
+
+/// As [`start_crash`], with the killing hit that credits the passengers'
+/// deaths (S-0312 claim 16); without one, they are credited to no one.
+pub fn start_crash_hit(
+    w: &mut World,
+    id: ObjectId,
+    living: bool,
+    hit: Option<&crate::combat::damage::Hit>,
+) -> bool {
     if !is_aircraft(w, id) || height(w, id) <= 0 {
         return false;
     }
     if st(w, id).crash.is_some() {
         return true;
     }
+    let none = crate::combat::damage::Hit {
+        amount: 0,
+        warhead: None,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    };
+    // spec: S-0312 claim 16 (an object that starts to crash loses all its passengers, credited to the attacker, before its tumbling draws)
+    crate::transport::kill_passengers(w, id, hit.unwrap_or(&none));
     let mode = w.rules().mode;
     let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0312 claim 16 (tumbling: one unit-interval value, one ranged draw over 0 to 1, one more unit-interval value)

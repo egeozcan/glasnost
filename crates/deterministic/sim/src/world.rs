@@ -242,6 +242,10 @@ pub struct Object {
     /// Hover state of a vehicle with the hovering locomotor (S-0503).
     #[serde(default)]
     pub hover: Option<crate::hover::HoverState>,
+    /// Transport state: a transport's passengers, a passenger's transport
+    /// (S-0507).
+    #[serde(default)]
+    pub transport: crate::transport::TransportState,
     /// The crush-slowdown state (S-0210 claim 9).
     pub crush_slowdown: bool,
     /// Tick at which the targeting timer has run out (S-0215 claim 33).

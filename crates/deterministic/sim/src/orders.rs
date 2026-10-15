@@ -283,6 +283,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.dest = None;
                 ob.contact = None;
+                // spec: S-0213 claim 8 (an open-topped transport: its passengers lose their targets too)
+                let passengers = ob.transport.passengers.clone();
                 if ob.kind.is_mobile() {
                     // spec: S-0213 claim 8 (a mobile actor has no queued destinations left)
                     ob.queued_dests.clear();
@@ -293,6 +295,9 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 {
                     // spec: S-0213 claim 8 (a harvester in harvest or return gets guard at once)
                     ob.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);
+                }
+                if !passengers.is_empty() {
+                    crate::transport::clear_passenger_targets(w, actor);
                 }
             }
         }
@@ -568,6 +573,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     crate::infantry::destination_assigned(w, actor, ob.dest);
     // spec: S-0314 claim 23 (an enter order on a depot that holds no contact asks for entry at once)
     crate::depot::order_entered(w, actor, b, dest);
+    // spec: S-0213 table T3 (f) (an open-topped transport gives the same target to its passengers when the target is not nothing)
+    crate::transport::hand_down_target(w, actor);
 }
 
 /// Group destinations (S-0213 claim 7). Returns, per behaviour order, the
