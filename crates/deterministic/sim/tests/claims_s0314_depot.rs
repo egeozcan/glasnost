@@ -36,6 +36,7 @@ fn wheel(strength: i32) -> UnitType {
 /// - DEPOT2: the same with two places and two displacements;
 /// - YARD: a 3 × 3 vehicle factory with the repair flag (land, so a land
 ///   vehicle may use it: the naval match does not refuse);
+/// - WEED: DEPOT with the obsolete-unloading flag;
 /// - repair step 10, repair percentage 25 %: a step costs 3 credits.
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
@@ -47,6 +48,7 @@ fn rules() -> Ruleset {
     push("buildings", "DEPOT");
     push("buildings", "DEPOT2");
     push("buildings", "YARD");
+    push("buildings", "WEED");
     let s = &mut r.sim;
     s.vehicles.insert("TRUCK".into(), wheel(600));
     let mut hop = wheel(600);
@@ -70,9 +72,12 @@ fn rules() -> Ruleset {
         factory: Some("vehicle".into()),
         ..depot.clone()
     };
+    let mut weed = depot.clone();
+    weed.econ.weeder = Some(true);
     s.buildings.insert("DEPOT".into(), depot);
     s.buildings.insert("DEPOT2".into(), two);
     s.buildings.insert("YARD".into(), yard);
+    s.buildings.insert("WEED".into(), weed);
     s.general.repair_step = Some(10);
     s.general.repair_percent = Some(glasnost_rules::sim::Decimal("25%".into()));
     r
@@ -505,7 +510,7 @@ fn claim_17_early_guard_start() {
     }
 }
 
-// spec: S-0314 claim 18 (docking point: the foundation centre with height plus the sole displacement at a count of 1, the assigned place's at a count above 1; a vehicle-factory flag selects S-0504 claim 12's point instead)
+// spec: S-0314 claim 18 (docking point: the foundation centre with height plus the sole displacement at a count of 1, the assigned place's at a count above 1; the obsolete-unloading flag selects the fixed centre of the cell (2, 1) instead; the vehicle-factory flag does not)
 #[test]
 fn claim_18_docking_point() {
     let mut r = rules();
@@ -530,10 +535,13 @@ fn claim_18_docking_point() {
     let c2 = w.reference_point(d2);
     assert_eq!(depot::docking_point(&w, d2, b).x - c2.x, -256, "place 0");
     assert_eq!(depot::docking_point(&w, d2, e).x - c2.x, 256, "place 1");
-    let tl = w.obj(y).unwrap().pos.cell();
-    let yp = depot::docking_point(&w, y, a);
-    assert_eq!(yp.cell(), glasnost_map::CellXY::new(tl.x + 2, tl.y + 1));
-    assert_eq!((yp.x % 256, yp.y % 256), (128, 128), "the cell's centre");
+    // The vehicle-factory flag: the foundation centre (no displacement).
+    assert_eq!(depot::docking_point(&w, y, a), w.reference_point(y));
+    let k = spawn(&mut w, Kind::Building, "WEED", 0, 8, 6);
+    let tl = w.obj(k).unwrap().pos.cell();
+    let kp = depot::docking_point(&w, k, a);
+    assert_eq!(kp.cell(), glasnost_map::CellXY::new(tl.x + 2, tl.y + 1));
+    assert_eq!((kp.x % 256, kp.y % 256), (128, 128), "the cell's centre");
 }
 
 // spec: S-0314 claim 20 (an approaching vehicle given another order loses its contact at once; a repeated enter on the same depot while in enter is ignored)
@@ -820,7 +828,7 @@ fn s0215_claim_29_refusal_while_approaching() {
         != Some(Behaviour::Enter)));
 }
 
-// spec: S-0314 claims 6 and 18 and S-0504 claims 12 and 14 (a vehicle factory with the repair flag docks at its fixed point and repairs; the vehicle is then sent away)
+// spec: S-0314 claims 6 and 18 and S-0504 claims 12 and 14 (a vehicle factory with the repair flag docks at its foundation centre, the vehicle-factory flag selecting no fixed point, and repairs; the vehicle is then sent away)
 #[test]
 fn s0504_claim_14_yard_repair() {
     let r = rules();
@@ -831,7 +839,7 @@ fn s0504_claim_14_yard_repair() {
     click_enter(&mut w, v, y);
     assert!(run_until(&mut w, 900, |w| w.obj(v).unwrap().beh.current
         == Some(Behaviour::Sleep)));
-    assert_eq!(w.obj(v).unwrap().pos.cell(), testkit::mid(SIZE, 2, 1));
+    assert_eq!(w.obj(v).unwrap().pos.cell(), testkit::mid(SIZE, 1, 1));
     assert!(run_until(&mut w, 3000, |w| health(w, v) == 600));
     assert!(run_until(&mut w, 600, |w| contact(w, v).is_none()));
 }

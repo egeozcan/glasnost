@@ -20,7 +20,7 @@ use glasnost_map::CellXY;
 use serde::{Deserialize, Serialize};
 
 use crate::combat::heal::{self, StepOutcome};
-use crate::rules::{Behaviour, FactoryKind, Kind};
+use crate::rules::{Behaviour, Kind};
 use crate::world::{ObjectId, Pos, Target, World};
 
 /// A vehicle's depot contact (S-0314 claim 17): the place it holds and
@@ -233,19 +233,21 @@ fn release(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Whether `k` is a vehicle factory: S-0314 claim 18 gives such a building
-/// S-0504 claim 12's fixed docking point.
-fn vehicle_factory(w: &World, k: ObjectId) -> bool {
+/// Whether `k` has the obsolete-unloading flag: S-0314 claim 18 and S-0504
+/// claim 12 give such a building the fixed docking point; the
+/// vehicle-factory flag does not.
+fn obsolete_unloading(w: &World, k: ObjectId) -> bool {
     w.obj(k)
         .and_then(|b| w.rules().buildings.get(b.type_index as usize))
-        .is_some_and(|r| r.factory == Some(FactoryKind::Vehicle))
+        // spec: S-0314 Import mapping (building Weeder: the obsolete-unloading flag, absent no)
+        .is_some_and(|r| r.raw.econ.weeder.unwrap_or(false))
 }
 
 /// The docking point depot `k` supplies for vehicle `id` (S-0314 claim 18;
 /// S-0504 claim 12).
 pub fn docking_point(w: &World, k: ObjectId, id: ObjectId) -> Pos {
-    if vehicle_factory(w, k) {
-        // spec: S-0314 claim 18 and S-0504 claim 12 (a vehicle-factory flag takes precedence: the centre of the cell (2, 1) from the top-left cell, at the building's height)
+    if obsolete_unloading(w, k) {
+        // spec: S-0314 claim 18 and S-0504 claim 12 (the obsolete-unloading flag, not the vehicle-factory flag, selects the centre of the cell (2, 1) from the top-left cell, at the building's height, before pad displacements)
         if let Some(b) = w.obj(k) {
             let c = b.pos.cell();
             let cell = CellXY::new(c.x.wrapping_add(2), c.y.wrapping_add(1));
