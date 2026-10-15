@@ -1,9 +1,9 @@
 ---
 id: Q-0753
 title: A dropped paratrooper's behaviour and orders from drop to landing
-status: open
+status: answered
 related: [S-0522, S-0215, S-0214, S-0511]
-answered-by: []
+answered-by: [S-0522]
 ---
 
 ## Need

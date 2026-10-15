@@ -1,9 +1,9 @@
 ---
 id: Q-0736
 title: A paradrop payload entry that names no infantry type
-status: open
+status: answered
 related: [S-0522, S-0513]
-answered-by: []
+answered-by: [S-0522]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0754
 title: How a paratrooper's parachute is drawn
-status: open
+status: answered
 related: [S-0522, S-0109, S-0103, S-0104]
-answered-by: []
+answered-by: [S-0522]
 ---
 
 ## Need

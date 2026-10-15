@@ -1,9 +1,9 @@
 ---
 id: Q-0750
 title: In which order a paradrop drop attempt judges its conditions
-status: open
+status: answered
 related: [S-0522, S-0208, S-0209, S-0212, S-0202]
-answered-by: []
+answered-by: [S-0522]
 ---
 
 ## Need

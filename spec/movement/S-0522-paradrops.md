@@ -2,13 +2,13 @@
 id: S-0522
 title: Parachutes and drops
 topic: movement
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0736, Q-0750, Q-0751, Q-0752, Q-0753, Q-0754]
 supersedes: []
 ---
 
@@ -31,6 +31,14 @@ Pointers:
   here), and its table T2 leaves *paradrop approach* and *paradrop overfly* unchanged on a
   fall-back to rest.
 - S-0511 claim 10 and its Formula F3 give falling and the fall rate.
+
+Cross-spec coordination for this hand-off: S-0501 claims 13 to 15 and 20 and S-0301
+claims 1, 4, 10 and 15 need claim 11's drop-shot exception. S-0513 claim 43 needs claim 2's
+compact-list clarification. S-0109 claim 25 and S-0511 claim 10 need claim 13's absent-type
+fall-rate distinction; S-0103 claim 8 needs its corresponding absent-type default and
+open-question update. S-0215 claims 4 and 11 can use claim 17's fresh-paratrooper fixture
+for their previously unmeasured readiness cases. These are coordinated corrections, not
+alternative rules to apply alongside this spec.
 
 ## Terms
 
@@ -90,8 +98,25 @@ Pointers:
      warns (documented departure, design). A count list longer than the infantry list has its extra
      counts ignored (the original does the same).
 
+   Payload names are creating references of the infantry kind, not a filter against the
+   infantry type list (S-0004 claims 2, 4, 6 and 13). An unknown ordinary name creates an
+   infantry type of that name. A name otherwise used only by a vehicle or aircraft likewise
+   creates a separate infantry type; it does not carry that vehicle or aircraft. Its entry
+   sends one plane with its paired count of that infantry type, whose properties follow the
+   ordinary type-reading rules. There is no fallback infantry type. A lack of suitable art
+   or usable properties is not a reason to discard that payload entry at import.
+
+   Empty items and reserved no-type names are omitted from the infantry reference list.
+   The integer count list is independent: pairing uses the resulting compact infantry list,
+   not original text positions. Thus omitting a middle no-type item shifts later infantry
+   against the counts and can trigger the length rejection above. An unknown ordinary name
+   is retained, so it causes no shift. S-0513 claim 43's spy-plane count uses this resolved
+   list's length and its length-equality test, not the number of infantry names explicitly
+   listed in the rules.
+
    When the rules define no paradrop plane type, no plane is sent.
-   - Backing: `measurable` (scenario P2) for the list choice and one plane per entry; `unmeasured`
+   - Backing: `measurable` (scenario P2) for list choice, reference resolution, count pairing
+     and one plane per retained entry; `unmeasured`
      for the short count list, which is a design rule
    - Confidence: high
 
@@ -198,40 +223,83 @@ Pointers:
 9. **A drop attempt.** A drop attempt takes the plane's first passenger and decides its side and
    its drop point (Formula F4): the plane's ammunition (glossary *ammunition*) goes down by 1, and
    the new value's parity picks the side, odd to the left of the plane's body facing and even to the
-   right. A drop succeeds exactly when the following conditions all hold for cell *C* of the drop point and the standing position selected there: *C* gives the paratrooper entry outcome *clear* under S-0209, using the landing-entry rules of S-0208 claim 19 (initial reference level −1, deck objects and record on a high-bridge cell, and the bypass at terrain level −6 or lower); S-0208 claim 3 finds a standing position using the drop point as the desired point and the cell's ground occupancy record, including on a bridge cell; that position lies inside the usable area; a bridge cell has the deck-entry mark; and the cell meets S-0212 claim 25's nearby-cell qualification for the paratrooper's locomotion class and movement zone (the entire applicable occupancy record is empty and the cell is enterable by class, using the deck for a bridge cell). Reaching the centre-class row of the standing-position table consumes its R(0, 3) draw; other rows consume none. A refused drop that reaches that row still consumes that draw.
+   right. A drop succeeds exactly when the following conditions all hold for cell *C* of the drop point and the standing position selected there: *C* gives the paratrooper entry outcome *clear* under S-0209, using the landing-entry rules of S-0208 claim 19 (initial reference level −1, deck objects and record on a high-bridge cell, and the bypass at terrain level −6 or lower); S-0208 claim 3 finds a standing position using the drop point as the desired point and the cell's ground occupancy record, including on a bridge cell; that position lies inside the usable area; a bridge cell has the deck-entry mark; and the cell meets S-0212 claim 25's nearby-cell qualification for the paratrooper's locomotion class and movement zone (the entire applicable occupancy record is empty and the cell is enterable by class, using the deck for a bridge cell). The entry-outcome refusal suppresses standing-position selection entirely. Once entry is clear, selection precedes the usable-area, deck-entry-mark and whole-record/class qualification refusals. Consequently the centre-class row's R(0, 3) draw is allocated as follows; every row assumes a desired point of that class, and later refusals assume earlier conditions passed.
+
+   | Reason the attempt is refused | Standing-position draw |
+   |---|---|
+   | entry outcome is not clear, including an occupant or class restriction detected there | none |
+   | selected standing position is outside the usable area | one R(0, 3) |
+   | high-bridge cell lacks the deck-entry mark | one R(0, 3) |
+   | final whole-record/class qualification fails | one R(0, 3) |
+
+   A class restriction normally refuses the initial entry test and consumes no standing-position
+   draw. If an entry bypass such as the negative-level case lets it reach final qualification,
+   it does consume the centre-class draw. Other standing-position rows consume none. No
+   standing-position result also refuses the drop, without reaching the later conditions.
 
    On success the paratrooper appears at the standing position, at the plane's own world height,
    facing 32768 (map south), falling (claim 12), with a parachute (claim 13). The parachute sound
    (Import mapping) plays at the plane's position. A paratrooper whose cell is a bridge cell is on
-   the bridge deck.
+   the bridge deck. For an ordinary drop from above the deck, its standing-position mark is
+   in the deck occupancy record throughout descent and after landing, not the ground record
+   used to choose the position. Selection alone does not reserve a ground position. More
+   generally the marking test uses the unit's actual world height: at or above the local
+   terrain surface plus 416 leptons on a high-bridge cell it marks the deck, below that it
+   marks ground. These are exact integer-lepton comparisons and addition, without rounding.
+   Landing at deck height retains a deck mark.
 
    On failure the paratrooper stays in the plane as its first passenger, and the ammunition goes
    back up by 1, so the next attempt uses the same side. A failed attempt that reaches the
    standing-position table's centre-class row has still taken that row's draw.
-   - Backing: `measurable` (scenarios P4 and P6)
+   - Backing: `measurable` (scenarios P4 and P6) for ordinary above-deck releases and the
+     listed refusal/draw cases; `unmeasured` for actual-height marking below or exactly at
+     the bridge-height boundary, because those scenarios do not establish a release at
+     those heights
    - Confidence: high
 
 10. **Consequences of the drop rules.** These follow from claim 9 and are stated for clarity:
     - Successive drop points alternate sides, approximately half a cell from the plane by F4.
       The released unit appears at the selected standing position, not necessarily that point.
-    - A falling paratrooper occupies its destination cell's landing layer already, so another
-      drop into that layer is refused until the cell is freed. Standing infantry, vehicles and
+    - An ordinary drop from above the landing surface occupies its destination cell's landing
+      layer already, so another drop into that layer is refused until the cell is freed.
+      Unusually low releases use claim 9's actual-height marking rule. Standing infantry, vehicles and
       buildings on that layer also refuse a drop. This does not limit the cell to one infantry
       unit after ordinary ground movement, which follows S-0209 claim 1.
     - Over water, cliffs and other cells its class cannot enter, nothing is dropped; the plane keeps
       its paratroopers and tries again 5 ticks later from wherever it is.
     - Over a bridge, a paratrooper lands on the deck when the deck is free.
     - The paratrooper does not move sideways while it falls, so it lands at the standing position.
-    - Backing: `measurable` (scenario P6)
+    - Backing: `measurable` (scenario P6) for ordinary releases; the unusually low-release
+      marking exception is `unmeasured` for claim 9's reason
     - Confidence: high
 
 11. **A drop by a shot.** A shot of an aircraft that carries passengers is a drop attempt (S-0501
     claim 20), exactly as in claim 9, with no projectile. It has no usable-area condition of its
-    own; attempts occur when the aircraft fires (S-0501 claim 20). A successful drop clears the
-    aircraft's rearm wait and resets its pass counter as in claim 8.
+    own; attempts occur when the aircraft fires (S-0501 claim 20).
+
+    | Shot effect | Refused drop | Successful drop |
+    |---|---|---|
+    | rearm countdown | unchanged | expired now |
+    | ordinary full-delay or in-burst delay, including its random draw | none | none |
+    | burst-counter advance | none | none |
+    | weapon report, muzzle animation and spray draw | none | none |
+    | projectile | none | none |
+    | immediate ammunition change | none | minus one, as claim 9 |
+    | pass counter | unchanged | reset to 5 |
+    | parachute sound and applicable animation draws | none | claims 9 and 13 |
+
+    The absence of a projectile is not an ordinary void shot under S-0301 claim 15: it neither
+    reverses a successful release nor causes ordinary-shot effects. No ordinary delay is set
+    and then cleared. This exception applies only while a first passenger exists.
+
+    Attack-run bookkeeping is separate. A firing pass that reaches this attempt still makes
+    a round pending under S-0501 claim 15, even if every drop in that pass is refused. That
+    pending round is spent at the ordinary run boundary. Thus a successful drop spends its
+    immediate round in addition to the run's later pending round; a refused drop can still
+    belong to a run that spends that later round. The pass's flight/behaviour delay is not
+    the rearm countdown and remains governed by S-0501 claims 13 and 14.
     - Backing: `measurable` (scenario P7)
-    - Confidence: medium (reaching the shot with a carrying aircraft needs a passenger-carrying
-      armed aircraft type)
+    - Confidence: high
 
 12. **Falling.** A dropped paratrooper falls by S-0511 claim 10 and Formula F3, starting at the
     plane's world height with the fall rate it already holds (0 for a fresh unit). While an
@@ -254,9 +322,28 @@ Pointers:
     passes become 0, making the current pass its last; normal end and follow-up behaviour is
     S-0109 claims 15 and 16. Its creation draws are S-0202 claim 10's animation draws, after any
     standing-position draw of the same drop.
-    - Backing: `measurable` (scenario P8) for a defined animation; `unmeasured` for an absent
-      parachute type, because its creation-failure and attachment lifecycle is unresolved
-    - Confidence: high (defined animation); low (absent type)
+
+    A genuinely absent parachute type does not refuse release, play a visible parachute,
+    or take animation-creation random draws. For a fresh paratrooper released during its
+    plane's turn, with no other attached animation and the default attached-animation
+    fall-rate quirk, its release-tick fall update uses the parachute recurrence once.
+    From the next tick it uses the no-parachute recurrence. With
+    `quirks.paratrooper_any_animation_slow_fall` off, an absent type instead uses the
+    no-parachute recurrence from its first update. There is no durable parachute attachment.
+    Both recurrences and their number domains
+    and rounding are S-0511 claim 10 and Formula F3. A null-type release therefore must not
+    be equated with starting immediately with the no-parachute recurrence.
+
+    A non-reserved unlisted animation name is different: it creates an animation type by
+    S-0004 claims 2, 4, 6 and 13. Release then uses that type normally, including any
+    creation draws, playback, attachment and expiry. It can acquire art without being
+    explicitly listed. If no sprite resolves, invisible playback and the unsafe negative
+    playback-limit case are S-0109 claim 25 and its missing-sprite rule, not an absent-type
+    fallback. An absent or empty key in a higher rules layer retains the previous type.
+    The absent-type case requires no type to be held, not merely omission from the map.
+    - Backing: `measurable` (scenario P8)
+    - Confidence: high for release and creating references; medium for the absent-type
+      release-tick rate transition pending the discriminating P8 observation
 
 ### Deaths and losses
 
@@ -278,11 +365,54 @@ Pointers:
 16. **Random draws of a paradrop, in observable stream order.** The scenario-stream observations have these consequences:
     - For each payload entry, in payload-list order, the plane-creation draw precedes that plane's arrival-cell draw or draws; any placement draws precede the creation draws for that plane's passengers. Thus, for two entries, the observed stream order is plane 1 creation, plane 1 arrival, plane 1 placement if any, plane 1 passengers, plane 2 creation, plane 2 arrival, plane 2 placement if any, plane 2 passengers.
     - A drop attempt whose standing-position choice reaches the centre-class row of S-0208 claim 3's table consumes one R(0, 3), including when the attempt fails. Other rows consume none.
-    - A successful drop is followed by the parachute animation's creation draws (claim 13).
+    - A successful drop with a defined parachute type is followed by that animation's
+      applicable creation draws (claim 13). An absent type takes none.
 
     Target adjustment (claim 1), arrival-edge computation (claim 5), and the processing delays of claims 6 and 7 do not advance the scenario stream. Flight draws remain those of S-0501 claim 37. These statements constrain the observable stream state and its advancement, not the order of internal operations.
     - Backing: `measurable` (scenarios P1, P2, P3, P4 and P8, with the random-state recorder)
     - Confidence: high
+
+### Orders and presentation
+
+17. **The released infantry's standing order.** A fresh paratrooper receives the ordinary
+    placement fall-back to rest at release, not a special guard order at landing. Immediately
+    after placement its current behaviour is *none*, with *guard* queued, or *area guard*
+    queued when S-0215 claim 14's type/veterancy rule selects it. It has no target and no
+    destination. Falling makes it not ready to start that queued behaviour (S-0215 claim 11).
+    Landing does not issue, replace or clear an order, target or destination. The queued rest
+    behaviour becomes current when ordinary readiness next permits, and then makes ordinary
+    automatic searches by S-0215 claims 24 and 26 and S-0309. Thus nearby eligible enemies
+    can be acquired without a player order; landing grants neither an immediate target nor
+    an unconditional shot.
+
+    Player move clicks while falling are refused because the unit is not movable (S-0214
+    claims 7 to 9 and its movable definition). They are not saved as moves to execute after
+    landing. This does not erase a pre-existing order on a non-fresh passenger: release uses
+    the ordinary placement fall-back, which respects existing state by S-0215 claims 13 and 14.
+    - Backing: `measurable` (scenario P10) for fresh payload infantry and player orders,
+      `unmeasured` for retention combinations on a previously ordered passenger, because
+      no fixture here establishes all of those prior states
+    - Confidence: high
+
+18. **Parachute drawing.** The parachute and an ordinary walking paratrooper are both in the
+    ground render layer. Attachment is not a special instruction to paint behind the unit.
+    Their relative order is S-0102 claims 5 and 6's ground ordering: the parachute adds its
+    imported animation sort adjustment to the unit's position sum. A negative adjustment
+    puts it behind the unit; zero puts it after the already-placed unit, in front where their
+    opaque pixels overlap; a positive adjustment also puts it after the unit. Height does
+    not change that comparison. Ordinary depth acceptance still applies (S-0102 claim 10).
+
+    Palette and brightness are already specified by S-0103 claim 8, row 3, and S-0104 claim
+    13: an ordinary untiled parachute uses the carried infantry's house-colour unit palette,
+    not the ordinary animation palette. Its brightness is the unscaled ground light of the
+    infantry's cell sampled at parachute creation, without extra unit light or airborne-height
+    addition. S-0103 claim 8 owns the normal-light override, special palette precedence and
+    tiled-copy exception. No additional palette rule is introduced here.
+    - Backing: `measurable` (scenario P11) for sort, palette, light retention and the named
+      light/palette controls; `unmeasured` for distinguishing exact creation-tick brightness
+      sampling from sampling at first visible opening, because P11 establishes no separate
+      opening event. Palette and light also use the owning claims' scenarios
+    - Confidence: high for sort and palette; medium for creation-time brightness sampling
 
 ## Formulas
 
@@ -354,7 +484,7 @@ appears at the plane's height (claim 9).
 
 ## State and ordering
 
-**Paradrop plane behaviours.**
+**Paradrop plane behaviours.** Within each behaviour, the first applicable row governs.
 
 | State | Event | Result |
 |---|---|---|
@@ -376,7 +506,7 @@ How a queued behaviour becomes current is S-0501's (claim 31's three points and 
 
 | State | Event | Result |
 |---|---|---|
-| passenger | drop attempt succeeds | falling, under its parachute, at the plane's height |
+| passenger | drop attempt succeeds | falling at the plane's height; parachute as claim 13; placement rest as claim 17 |
 | passenger | drop attempt fails | stays first passenger |
 | passenger | plane starts to crash | dies, credited to the attacker |
 | passenger | plane removed by leaving | leaves play without a death or loss count (claim 8) |
@@ -408,13 +538,21 @@ How a queued behaviour becomes current is S-0501's (claim 31's three points and 
 
 | Section | Key | Feeds | Parse form | Absent |
 |---|---|---|---|---|
-| aircraft type list | type ID `PDPLANE` (a name fixed in the original, not a key) | paradrop plane type (claims 2, 3) | the aircraft type with this ID (S-0004) | no such type: no plane is sent |
+| aircraft type list | the original's fixed paradrop-plane type name (not an INI key) | paradrop plane type (claims 2, 3) | the aircraft type with this name (S-0004 claim 4) | no such type: no plane is sent |
 | `[General]` | `AllyParaDropInf`, `AllyParaDropNum` | payload of side position 0 | list of infantry type IDs; list of integers | empty lists: no plane |
 | `[General]` | `SovParaDropInf`, `SovParaDropNum` | payload of every side position other than 0 and 2 | as above | as above |
 | `[General]` | `YuriParaDropInf`, `YuriParaDropNum` | payload of side position 2 | as above | as above |
 | `[General]` | `AmerParaDropInf`, `AmerParaDropNum` | payload of the American paradrop | as above | as above |
 | `[General]` | `ParadropRadius` | paradrop radius (claims 6, 7) | integer, leptons | 1024 |
-| `[General]` | `Parachute` | parachute animation type (claim 13) | animation type ID | none; runtime outcome unresolved (Open questions) |
+| `[General]` | `Parachute` | parachute animation type (claim 13) | creating animation reference, case-insensitive; ordinary unlisted names create a type; `none` and `<none>` clear it (S-0004 claims 2 and 13) | initially none; omitted or empty layered value retains the held type |
+| `[General]`, payload infantry lists above | `AllyParaDropInf`, `SovParaDropInf`, `YuriParaDropInf`, `AmerParaDropInf` | claim 2's compact infantry references | creating infantry reference list, 127-byte text limit, S-0004 claim 13; empty items and `none`/`<none>` omitted; other names retained or created, even names of other type kinds | omitted or empty value retains the held list, initially empty |
+| parachute animation's art section | `YSortAdjust` | relative ground-layer order (claim 18) | integer, leptons; S-0102 claim 5 | 0 |
+| parachute animation's art section | `UseNormalLight`, `Tiled`, `AltPalette` | claim 18's light and palette exceptions | booleans, S-0103 claim 8 | no (false) for each of the three keys |
+| infantry type and veterancy lists | `DefaultToGuardArea`, `VeteranAbilities`, `EliteAbilities` | release-time resting behaviour (claim 17) | boolean and ability lists, respectively; S-0215 claim 14 and S-0311 claim 3 own their full mapping | no and empty lists, respectively |
+| aircraft weapon | `ROF` | ordinary rearm bypassed by claim 11 | integer ticks, S-0301 Import mapping | 0 |
+| aircraft weapon | `Burst` | ordinary burst advancement bypassed by claim 11 | integer shot count, S-0301 Import mapping | 1 |
+| aircraft weapon | `Report` | weapon report bypassed by claim 11 | sound-reference list, S-0701 claim 21 and Import mapping | held list, initially empty |
+| aircraft weapon | `Anim` | muzzle animation bypassed by claim 11 | creating animation-reference list, S-0004 claims 2 and 13 and Import mapping | held list, initially empty |
 | `[AudioVisual]` | `ChuteSound` | parachute sound (claim 9) | sound ID | none: no sound |
 | `[General]` | `ParachuteMaxFallRate`, `NoParachuteMaxFallRate` | fall-rate floors (S-0511 Import mapping) | integer, leptons per update | S-0511's |
 | `[CombatDamage]` | `FallingDamageMultiplier` | not applied to paradrops; magnetic-lift impact uses it (S-0607 claim 18 and F2) | see S-0607 Import mapping | see S-0607 Import mapping |
@@ -423,8 +561,8 @@ How a queued behaviour becomes current is S-0501's (claim 31's three points and 
 | superweapon type | `Type` | which launch kind (paradrop or American paradrop) is delivered; dispatch: S-0513 claim 42 | word | no kind |
 
 The superweapon kind mapping is given in S-0512's Import mapping. Charging and firing follow
-S-0512 claims 5 and 8; targeting and dispatch follow S-0513 claims 1 and 42. The type ID `PDPLANE` is a
-name fixed in the original, not a key; the user's rules must define an aircraft type with that ID
+S-0512 claims 5 and 8; targeting and dispatch follow S-0513 claims 1 and 42. The original fixes
+the paradrop-plane type name; the user's rules must define an aircraft type with that name
 for paradrops to work. Whether a skirmish player's house reads the map's house section for `Edge`
 is an open question; a house without a named edge uses its computed edge (claim 5).
 
@@ -463,6 +601,17 @@ proposal, not a change to the harness.
   approaches and then retreats; a missing plane type sends none. A contrary result falsifies
   the corresponding rule. Do not run the original with negative counts or a short second-group
   count list; those safe replacements are design rules, not oracle predictions.
+  Reference variants: supply three infantry names and counts 1, 2 and 3. Replace the middle
+  name first with an unlisted ordinary name supplied with a valid infantry rules section and
+  art, then with a name listed only as a vehicle or aircraft but also supplied with usable
+  infantry properties. Expect three planes carrying 1, 2 and 3 infantry, with the middle
+  passengers of the separately created infantry type, not the other object kind. A missing
+  middle plane or shifted third count falsifies claim 2. Replace the middle item with each
+  reserved no-type spelling, then an empty item: expect a compact two-type list and length
+  rejection for checked payloads. With a matching two-count list, expect the second retained
+  type to use the second count. Repeat spy-plane launches: S-0513 claim 43 predicts three
+  planes for the unlisted-name variants and none for the mismatched compact list. Record
+  imported type identities and passenger counts, not just visible sprites.
 - **P3 Arrival edge and cell (claims 4, 5, 16).** Place the construction yard near each of the four
   edges in turn (four maps or four starts). Launch; record the cell where the plane first appears
   and the draws taken. Expected: the plane appears just outside the usable area on the edge nearest
@@ -520,7 +669,15 @@ proposal, not a change to the harness.
   a drop on a free bridge deck lands on the deck. Named test-map variants place terrain at
   level −6 and just above it, vary ground occupancy beneath a free bridge deck, and put the
   desired standing position at the usable-area boundary. Log the drop point, entry outcome,
-  standing position, deck-entry mark and whole-record occupancy. Predict each success or
+  standing position, deck-entry mark and whole-record occupancy. With centre-class desired
+  points, isolate each claim-9 refusal and record random state: a non-clear entry consumes
+  no standing-position draw; usable-area, missing-deck-mark and final-qualification refusals
+  consume one R(0, 3) after a clear entry. In particular compare ordinary class refusal with
+  the same class restriction under the negative-level entry bypass. A different stream
+  advancement falsifies claim 9's conditional allocation. Observe both occupancy records
+  from a successful above-deck release until after landing: the chosen mark must be in deck
+  only, with no newly reserved ground position. Any ground-only or duplicate ground mark
+  attributable to that release falsifies the mark rule. Predict each success or
   refusal with claim 9 and the cited entry and standing-position rules; any disagreement
   falsifies claim 9, including a release outside the usable area. A release on a refused landing layer, a second
   release into a layer already occupied by a falling paratrooper, or a ground landing on the
@@ -528,10 +685,18 @@ proposal, not a change to the harness.
   landing falsifies claim 10. Move landed troops away and repeat to distinguish occupancy from
   a permanent one-unit-per-cell restriction.
 - **P7 Drop by a shot (claim 11).** With a test aircraft type that is armed and carries passengers
-  (named test-map override), order it to attack while loaded. Record passenger count, projectile
-  appearances, rearm wait and pass counter at each shot. Expected: each shot makes claim 9's
-  attempt, no projectile appears, and success clears rearm wait and resets the pass counter.
-  A projectile, different placement/refusal rule or retained rearm wait falsifies claim 11.
+  (named test-map override), order it to attack while loaded. Use one free-land run and one
+  water/occupied-cell refusal run, with enough passengers that the observed shots all still
+  have a first passenger. Record each attempt tick, passenger count, rearm countdown, burst
+  counter, ammunition, pending round, pass counter, projectile and report/muzzle effects,
+  plus both random streams. Expect claim 11's table: no ordinary delay, delay draw, spray
+  draw, burst advance, projectile or weapon report/muzzle animation; failure retains rearm
+  countdown, success expires it and resets passes to 5. Separate parachute sound and
+  animation draws from weapon effects. Observe the following run boundary: one pending
+  round is spent even for an entirely refused run, in addition to each successful drop's
+  immediate round. Compare a no-passenger aircraft as the ordinary-shot control. Any
+  contrary counter change, draw, effect or missing pending-round spending falsifies claim 11.
+  Do not conflate the attack behaviour's processing delay with the rearm countdown.
 - **P8 Fall (claims 12, 13).** Record a paratrooper's height per tick from its drop to its landing.
   Expected: S-0511 F3's parachute recurrence while an animation is attached, starting at the
   plane's world height; landing below 1 lepton above the landing surface, with no health loss.
@@ -540,24 +705,69 @@ proposal, not a change to the harness.
   lifetime and passes. Named test-map variants use a finite,
   short-lived parachute and an endless one, without follow-up effects, and omit the parachute.
   The finite one can finish before landing, after which the no-parachute recurrence applies.
-  The endless one stops looping on landing. Omission records whether the drop completes, what
-  animation remains attached and which fall rate applies; no outcome is yet asserted for it.
+  The endless one stops looping on landing. In fresh program runs, a named test rules file
+  removes the parachute reference from every applied layer, then a comparison file explicitly
+  clears it with a reserved no-type value. Expect successful release and no animation draws,
+  one release-tick update using the parachute recurrence, then the no-parachute recurrence
+  from the next tick under the default attached-animation quirk. On our engine only, repeat
+  with that quirk off: expect no-parachute recurrence from the first update. Use distinct
+  test fall-rate floors, including a parachute floor of 0
+  leptons per update and a negative no-parachute floor, to distinguish this transient from
+  starting immediately without an attachment. Log heights and rates from the release tick,
+  not only the first displayed image. Either an immediate no-parachute first rate update or
+  a lasting slow rate falsifies claim 13. Omission only in a map override is a retention
+  control, not the absent-type case.
+  Another named test file uses an unlisted ordinary animation name with valid supplied art:
+  expect ordinary attachment, draws and playback, not the no-type result. A spriteless
+  variant supplies explicit non-negative playback limits and tests S-0109 claim 25's invisible
+  expiry; do not exercise its known unsafe negative-limit case on the oracle. Rejection of
+  either unlisted name merely because it was not listed falsifies the creating-reference rule.
   A rate, landing tick, pass count or health change differing from the defined-animation
   predictions falsifies claims 12 or 13. Check animation-creation draws against S-0202 claim 10:
   they must follow any standing-position draw of that attempt. A different count or ordering
   falsifies claims 13 and 16. The non-parachute-attachment subcase remains unmeasured.
 - **P9 Deaths (claims 14, 15).** Shoot down a loaded paradrop plane with anti-air units; record the
-  attacker's kill count and experience. Expected: every passenger dies, credited to the attacker.
+  attacker's kill count and experience. Use named aircraft-type test variants selecting a crash
+  and an immediate explosion, and record passenger disappearance against crash-start or
+  explosion ticks, respectively. Expected: every passenger dies at that event, credited to
+  the attacker; passengers surviving until later crash impact falsify the crash-start rule.
   Kill ordinary human-type falling paratroopers: they disappear at once with no death sequence,
   and the cell becomes available for another drop. Kill the plane after several releases:
   already released units survive unless separately hit. A missing passenger credit, retained
   ordinary falling corpse, blocked vacated cell or remote death of a released unit falsifies
   claims 14 or 15. The not-human-type exception retains S-0107 claim 17's unresolved outcome.
 
+- **P10 Rest and orders (claim 17).** Use the common setup with fresh human-owned payload
+  infantry and an isolated enemy within the predicted landing cell's weapon range. Record
+  current and queued behaviours, target and destination from release until 60 ticks after
+  landing. Expect current *none*, queued ordinary rest and no target/destination at release,
+  followed by the readiness-dependent start of guard or area guard and ordinary acquisition
+  of the eligible enemy. Repeat with no enemy, and a named type override selecting area guard.
+  With scripted input, select a falling paratrooper and click a distinct free move cell before
+  landing. Record the order application and post-landing destination. Expect refusal and no
+  deferred move. A different initial order, landing-generated guard replacement, accepted
+  falling move, or a move emerging after landing without another order falsifies claim 17.
+  Guard-acquisition latency is predicted from S-0215 and S-0309, not fixed to the landing tick.
+- **P11 Parachute overlap and colour (claim 18).** Use the common setup and a named test art
+  file whose parachute contains opaque pixels overlapping the infantry and remap-range pixels.
+  Test animation sort adjustments below, at and above 0 in three runs each. Screenshot
+  mid-descent and record both keys. Expect the negative case behind, zero and positive in
+  front of the infantry wherever depth accepts both. Use two house colours: an ordinary
+  untiled parachute must show its carried infantry's colour and unit-palette colours, not
+  animation-palette colours. Change ambient light after release and screenshot before landing:
+  under S-0103 claim 8's original setting the parachute retains its creation brightness.
+  Add normal-light, alternative-palette and tiled-copy controls using that claim's predicted
+  precedence and exceptions. For each of those three flags, compare a new test animation
+  type whose art omits the flag with one explicitly setting it false: expect identical
+  results. A difference falsifies the corresponding absent-key default in Import mapping.
+  Exact creation-tick versus first-visible-opening sampling remains unmeasured. Wrong
+  overlap order, remap colour, palette or brightness falsifies claim 18 or its named owner.
+  These are named test-art exceptions, not claims about stock art's overlap pixels.
+
 ## Open questions
 
 1. Whether a skirmish player's house can receive a named arrival edge from the map (Import
    mapping, claim 5).
-2. Whether a drop with no parachute animation type completes normally, and which fall rate then
-   applies (claim 13). A missing type is not yet established to behave like an animation that
-   finishes in midair.
+2. Oracle confirmation of claim 13's transient absent-type fall-rate change is wanted (P8).
+   Release and the distinction between absent and unlisted names are settled; the rate
+   transition has medium confidence, not a completed measurement.

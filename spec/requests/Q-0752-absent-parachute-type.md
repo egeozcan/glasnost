@@ -1,9 +1,9 @@
 ---
 id: Q-0752
 title: A paradrop with no parachute animation type
-status: open
+status: answered
 related: [S-0522, S-0511, S-0109]
-answered-by: []
+answered-by: [S-0522]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0751
 title: What a carrying aircraft's drop shot does to its rearm, burst and ammunition
-status: open
+status: answered
 related: [S-0522, S-0501, S-0301]
-answered-by: []
+answered-by: [S-0522]
 ---
 
 ## Need
