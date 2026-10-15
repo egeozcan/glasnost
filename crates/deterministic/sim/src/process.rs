@@ -50,6 +50,10 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
     }
     match o.kind {
         Kind::Infantry => {
+            // spec: S-0215 claim 11 (infantry: falling, for example from a parachute; measurable with a fresh paratrooper, scenario B44: its queued rest does not start in the air)
+            if o.fall.falling {
+                return false;
+            }
             let seq = o.infantry.as_ref().and_then(|s| s.seq);
             // spec: S-0215 claim 11 (infantry: moving while not in guard, hunt or attack without a target)
             let excused = matches!(cur, Some(Behaviour::Guard | Behaviour::Hunt))

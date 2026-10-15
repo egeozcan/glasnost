@@ -531,7 +531,10 @@ fn claim49_an_off_map_destination_is_no_early_refusal() {
         "credited to the launcher"
     );
     assert_eq!(stage(&w, cart), Some(Stage::Pending), "it joined the warp");
-    assert!(w.notes.iter().any(|n| n.starts_with("Q-0850")), "the interim is noted");
+    assert!(
+        w.notes.iter().any(|n| n.starts_with("Q-0850")),
+        "the interim is noted"
+    );
     // The run goes on through arrival and the end of the hold without a refusal or a panic;
     // where it lands and whether it lives are unmeasured and are not asserted.
     run_through(&mut w, tl + 80);

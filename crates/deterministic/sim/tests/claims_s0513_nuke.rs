@@ -103,10 +103,16 @@ fn s0512_claim8_a_busy_silo_spends_readiness_without_another_missile_until_eight
             step(&mut w);
         }
         w.effects.clear();
-        assert!(rec(&w, ALPHA, STRIKE).ready, "ready again for the second order");
+        assert!(
+            rec(&w, ALPHA, STRIKE).ready,
+            "ready again for the second order"
+        );
         fire_now(&mut w, ALPHA, STRIKE, at(3, 3));
         assert!(!rec(&w, ALPHA, STRIKE).ready, "gap {gap}: readiness spent");
-        assert!(events(&w).iter().any(|e| e.0 == SwEvent::Siren), "gap {gap}: sounds");
+        assert!(
+            events(&w).iter().any(|e| e.0 == SwEvent::Siren),
+            "gap {gap}: sounds"
+        );
         for _ in 0..3 {
             step(&mut w);
         }

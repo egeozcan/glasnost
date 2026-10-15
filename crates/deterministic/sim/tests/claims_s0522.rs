@@ -587,6 +587,94 @@ fn claim11_a_refused_shot_drop_changes_nothing_but_still_counts_as_a_shot() {
     assert_eq!(transport::passengers(&w, g), vec![inf]);
 }
 
+/// The S-0301 claim tests of the drop attempt (revision 17), on a carrier whose weapon has a
+/// burst of 3.
+fn burst_carrier() -> (World, ObjectId, ObjectId) {
+    let mut r = rules();
+    let gun = r.sim.weapons.get_mut("Gun").unwrap();
+    gun.burst = Some(3);
+    // A projectile that always has a launch solution, so that the ordinary shot is not void.
+    gun.projectile = Some("Bullet".into());
+    carrier(&r, "WALKER")
+}
+
+#[test]
+fn s0301_claims_1_4_18_a_drop_attempt_takes_no_ordinary_delay_burst_step_or_draw() {
+    // spec: S-0301 claim 1 (a drop attempt leaves the countdown unchanged on refusal and expires it immediately on success; no ordinary shot delay), claim 4 (an attempt made while a first passenger exists never advances the burst counter or chooses an ordinary delay, draws included; once no first passenger remains, further attempts of the same burst are not cargo drops) and claim 18 (no ordinary-shot draws)
+    let (mut w, g, inf) = burst_carrier();
+    {
+        let t = w.tick;
+        let o = w.obj_mut(g).unwrap();
+        o.combat.rearm_until = t + 9;
+        o.combat.rearm_delay = 9;
+    }
+    let (mut twin, tg, _) = burst_carrier();
+    assert!(paradrop::attempt(&mut twin, tg));
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        g,
+        0,
+        Target::Cell(at(3, 3))
+    ));
+    let o = w.obj(g).unwrap();
+    assert!(w.obj(inf).unwrap().on_map, "released");
+    assert_eq!(
+        o.combat.rearm_until, w.tick,
+        "success expires the countdown"
+    );
+    assert_eq!(o.combat.burst, 0, "the burst counter did not advance");
+    assert_eq!(w.rng, twin.rng, "only the attempt's own draws");
+    // The exception ends with the cargo: the next attempt of the same burst is an ordinary shot.
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        g,
+        0,
+        Target::Cell(at(2, 1))
+    ));
+    let o = w.obj(g).unwrap();
+    assert_eq!(o.combat.burst, 1, "an ordinary shot advances the counter");
+    let wait = o.combat.rearm_until - w.tick;
+    assert!((3..=5).contains(&wait), "the in-burst delay, got {wait}");
+}
+
+#[test]
+fn s0301_claims_10_15_a_drop_spends_one_round_at_once_and_is_not_a_void_shot() {
+    // spec: S-0301 claim 10 (a successful drop spends one round immediately, a refused one changes nothing), claim 15 (a drop is not a void shot although it launches no projectile; its rearm countdown expires, a refusal retains it; neither produces ordinary-shot effects: no weapon report, no muzzle animation)
+    let (mut w, g, _) = burst_carrier();
+    let projectiles = w.projectiles.len();
+    w.effects.clear();
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        g,
+        0,
+        Target::Cell(at(3, 3))
+    ));
+    assert_eq!(w.obj(g).unwrap().combat.ammo, 2, "one round at once");
+    assert_eq!(w.projectiles.len(), projectiles);
+    assert!(
+        w.effects.iter().all(|e| !matches!(
+            e,
+            glasnost_sim::combat::effects::Effect::Shot { .. }
+                | glasnost_sim::combat::effects::Effect::Anim { .. }
+        )),
+        "no report and no muzzle animation"
+    );
+    // A refused drop: the round count and the countdown stay.
+    let r = rules();
+    let (mut w, g, inf) = carrier(&r, "STUCK");
+    let t = w.tick;
+    w.obj_mut(g).unwrap().combat.rearm_until = t + 9;
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        g,
+        0,
+        Target::Cell(at(3, 3))
+    ));
+    assert_eq!(w.obj(g).unwrap().combat.ammo, 3);
+    assert_eq!(w.obj(g).unwrap().combat.rearm_until, t + 9);
+    assert_eq!(transport::passengers(&w, g), vec![inf]);
+}
+
 // --- Claims 12 and 13 --------------------------------------------------------
 
 /// The per-update height changes of a paratrooper dropped from a held
@@ -807,6 +895,53 @@ fn claim17_released_infantry_rests_with_guard_queued_and_takes_no_move_while_fal
         o.beh.current
     );
     assert!(glasnost_sim::targeting::movable(&w, ALPHA, first));
+}
+
+#[test]
+fn s0215_claims_4_11_a_fresh_paratrooper_with_no_current_behaviour_waits_450_ticks() {
+    // spec: S-0215 claim 4 (a due processing with the current behaviour none does nothing and chooses exactly 450 ticks (no delay draw can be part of it), changing neither slot) and claim 11 (B44: placement queued rest, falling prevents its start; landing issues no order; the queued rest starts when ordinary readiness permits, without waiting for the 450-tick delay)
+    let mut w = game(&rules());
+    let p = launch(&mut w);
+    let (x, y) = west_of(at(1, 1));
+    hold(&mut w, p, x, y, 0, 3);
+    let first = transport::passengers(&w, p)[0];
+    assert!(paradrop::attempt(&mut w, p));
+    let queued = w.obj(first).unwrap().beh.queued;
+    assert!(matches!(
+        queued,
+        Some(Behaviour::Guard | Behaviour::AreaGuard)
+    ));
+    assert!(falling(&w, first));
+    // A due processing now (nothing has run for this unit yet).
+    glasnost_sim::process::turn(&mut w, first);
+    let at = w.tick;
+    let o = w.obj(first).unwrap();
+    assert_eq!(o.beh.current, None, "still none");
+    assert_eq!(o.beh.queued, queued, "the queued rest is untouched");
+    assert_eq!(o.beh.last, Some((at, 450)), "exactly 450 ticks");
+    // (A delay of exactly 450 leaves no room for the standard delay's 0 to 2 draw.)
+    assert!(o.target.is_none() && o.dest.is_none());
+    // While it falls the rest does not start; after landing it starts well before 450 ticks.
+    while falling(&w, first) {
+        assert_eq!(
+            w.obj(first).unwrap().beh.current,
+            None,
+            "not started in the air"
+        );
+        step(&mut w);
+    }
+    until(&mut w, 200, |w| w.obj(first).unwrap().beh.current.is_some());
+    assert!(
+        matches!(
+            w.obj(first).unwrap().beh.current,
+            Some(Behaviour::Guard | Behaviour::AreaGuard)
+        ),
+        "the queued rest started"
+    );
+    assert!(
+        w.tick < at + 450,
+        "started before the 450-tick delay was over"
+    );
 }
 
 // --- Claim 14 ----------------------------------------------------------------
