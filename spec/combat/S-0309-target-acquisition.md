@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,7 +20,7 @@ How objects pick targets by themselves in *automatic searches* (range, area and 
 search looks for, where and in which order it looks, which objects are candidates, the *threat
 score* and the winner, plus the retaliation conditions, the rules for dropping or replacing a
 self-chosen target, and the owner rules that the neutral and special houses keep. S-0215 owns when
-most searches run (claim 1 names the two contexts this spec owns). Skirmish only: network games and
+most searches run (claim 1 also names contexts owned by other specs). Skirmish only: network games and
 campaign missions are out of scope.
 
 ## Terms
@@ -41,7 +41,7 @@ root* (S-0204); *movement zone* (S-0211); *firing check* and its answers *illega
 (S-0303, Terms and F7); *land-targeting mode* (S-0308, table P and Import mapping); *spray-attack
 type* (S-0313, Terms); *spawner weapon*, *spawned aircraft* and *launching* (S-0301, Terms),
 *slave master* and *harvesting slave* (S-0215, Terms); *vehicle thief* (glossary); *draining weapon* and *locomotor warhead*
-(S-0308, table P, rows 7 and 8).
+(S-0308, table P, rows 7 and 8); *charging mark* (S-0518 claim 15).
 
 **Houses in our engine.** By the project lead's decision of 2026-10-09, an AI house follows the
 same unit rules as a human-controlled house (S-0215, Terms, *Houses in our engine*). That ruling
@@ -150,7 +150,8 @@ this spec:
 1. **Search contexts.** An infantry unit, vehicle or building runs an automatic search in these
    situations. S-0215 says when the first, third and fourth happen (claims 33, 26 and 27); claim
    23 here owns the second. S-0517 claim 16 owns the deployed-firing context, run by S-0215
-   claims 23 and 31, and S-0207 claim 20 f owns the phasing-in end that triggers the last:
+   claims 23 and 31. S-0518 claim 15 owns the charging break-off context, and S-0207
+   claim 20 f owns the phasing-in end that triggers the last:
 
    | Situation | Kind | Centre |
    |---|---|---|
@@ -159,11 +160,20 @@ this spec:
    | the processing of *area guard* (S-0215, claim 26) | area | the guard spot |
    | the processing of *hunt* (S-0215, claim 27) | map-wide | its position |
    | the deployed-firing rule of a deployed infantry unit (S-0517 claim 16), during the processing of S-0215 claims 23 or 31, when it has no target within the range of the weapon selected with no target supplied; no targeting-timer gate | range | its position |
+   | an infantry unit's *attack* processing while its charging mark is set (S-0518 claim 15); no targeting-timer gate or reset draw | range | its position |
    | phasing in after its own teleporting move ends (S-0207, claim 20 f), it has no target, and claim 2 and the opportunity gate of claim 3 allow it; never for a harvester-flag type, which does not phase in; a target it sets is an opportunity target as claim 24 gives | range | its position |
 
    S-0517 claim 16 owns the deployed-firing rule's target retention, replacement and fall-back
    outcomes. Its search context does not by itself settle whether claims 2 and 3 limit that
    search (S-0517, Open questions).
+
+   S-0518 claim 15 owns the charging search's replacement and mark-clearing outcomes: it
+   looks for a candidate despite the held charging target, and keeps that target if none is
+   found. It neither waits for nor restarts the targeting timer. The ordinary behaviour-delay
+   draws still apply (S-0215 claim 21). Whether claims 2 and 3 restrict this search remains
+   open in S-0518; the context here does not settle it. This is an explicit exception to
+   S-0215 claim 33's blanket statement that every search restarts the targeting timer:
+   that statement needs the coordinated correction listed in Changes for other specs below.
 
    An actor that carries an attack-move memory never runs the search of the first row, in any
    behaviour: it runs the search of the second row instead, which claim 23 describes. That search
@@ -187,10 +197,12 @@ this spec:
      hunt row by scenario A11, part a; the teleport case and its draw ordering by scenario A1,
      part f, with S-0207 scenario D22 runs 1, 2 and 7 for the phasing-in and conditional-draw
      conditions); the deployed-firing row by S-0517 scenario P7, parts b, c and f, including
-     runs with positive ticks left on the targeting timer in part b. The paragraph on
+     runs with positive ticks left on the targeting timer in part b; the charging break-off
+     row and its no-timer-draw rule by scenario A17 below, supplementing S-0518 scenario TC3
+     with positive remaining targeting-timer runs, a no-candidate case and random-state recording. The paragraph on
      other behaviours is a pointer to the specs that own those searches, not a claim of this spec,
      and carries no backing or confidence (Open questions).
-   - Confidence: high (the first four); medium (the deployed-firing context and the teleport case)
+   - Confidence: high (the first four and the charging break-off context); medium (the deployed-firing context and the teleport case)
 
 2. **Passive acquisition.** An object may pick a target in the range searches of the first and last
    rows of claim 1, and in the area search, only when all of these hold (the map-wide search of
@@ -239,8 +251,9 @@ this spec:
      arrival cases, and the flag lifting the area-fire exception in *guard*)
 
 4. **A search keeps a target unless it was an opportunity target that has become unusable (claim
-   23 gives the attack-move exceptions).** Every
-   search restarts the targeting timer (S-0215, F6), and that ranged draw is the search's first
+   23 gives the attack-move exceptions).** The charging break-off search is excluded from
+   this claim: claim 1 and S-0518 claim 15 give its outcomes instead. Every
+   search covered by this claim restarts the targeting timer (S-0215, F6), and that ranged draw is the search's first
    draw from the scenario random stream. In the teleport case this is separate from the
    conditional 4-to-8-tick draw before the search (claim 1). An opportunity target for which the firing check of the
    weapon the searcher would use against it answers *illegal*, *out of range* or *impossible* is
@@ -255,7 +268,7 @@ this spec:
    an order. This is retention within a search, not protection against other target-loss rules:
    before its behaviour processing, an aircraft clears even a living target whose in-the-air
    answer is yes (S-0501 claim 32, using the test defined in its Terms). The table *Search
-   outcome and target state* (State and ordering) gives every search case.
+   outcome and target state* (State and ordering) gives the cases covered by this claim.
    For a spawner, dropping an unusable opportunity target requests the conditional pending-target
    clear of S-0506 claim 25. A direct replacement by a nonempty target does not itself change
    pending, and a search that finds nothing while already targetless does not cancel pending.
@@ -414,7 +427,7 @@ this spec:
    object occupies. There is no distance limit. So an object that is neither an aircraft nor in
    the ground layer, such as a hovering unit with jumpjet movement (air or top layer, S-0102
    claim 3), is never found by a map-wide search, whatever the searcher's weapons can hit
-   (`quirks.hunt_ground_layer_only`, Edge cases). The
+   (`quirks.hunt_ground_layer_only`, Edge cases).
    A landed aircraft in the ground render layer is considered in both passes when the search
    looks for aircraft: it is not removed from the second pass after being considered in the first.
    Each consideration has its own candidate tests and score. The aircraft pass has no connected-region
@@ -605,7 +618,7 @@ this spec:
     - Confidence: high (weak-target preference); medium (suppression)
 
 15. **Expected remaining health.** An object's expected remaining health starts equal to its health.
-    It is lowered by the expected damage each time a search picks it as a target (claim 4) and each
+    It is lowered by the expected damage each time a search covered by claim 4 picks it as a target and each
     time a shot is fired at it (S-0302, claim 18). On every tick, in the object's own turn, it
     changes as F7 gives: a value above the health becomes the health, and on ticks whose tick
     number *t* has (⌊*t* / 4⌋ mod 2) = 1 (four ticks of every eight), a value below the health
@@ -700,8 +713,9 @@ this spec:
     whose opportunity target becomes illegal, moves out of range or becomes a target the firing check
     answers *impossible* for drops it (unless the answer is *impossible* and it controls spawned
     aircraft, claim 4) at its next search and picks a new target in the same search. An object whose
-    target came from an order keeps it through every search, except the attack-move searches of
-    claim 23 that run as for an object with no target. The behaviour rules of S-0215 (claims
+    target came from an order keeps it through searches covered by claim 4, except the attack-move
+    searches of claim 23 that run as for an object with no target. The charging break-off search
+    has its separate replacement rule in claim 1 and S-0518 claim 15. The behaviour rules of S-0215 (claims
     18, 26 and 33) add the other cases in which a target is dropped: retaliation replaces the
     target, the area-guard leash drops it, and some behaviours drop an opportunity target.
     - Backing: `measurable` (scenario A6: part a for a target out of range, part m for one that
@@ -822,6 +836,7 @@ this spec:
     | the object itself | its own cell |
     | an object that is dead or sinking, or an infantry unit whose current sequence is a death kind (S-0107: die 1 to 5, wet die 1 and 2, the three air-death kinds) | no target |
 
+    The bunker redirection also applies to temporal delivery (S-0514 claim 1).
     Any other target is held as set. The second and third rows judge the target as the first row
     leaves it. So a dead or sinking unit sitting in a tank bunker, set as the target of an object
     that the first row covers, gives the bunker building, and the third row then judges the
@@ -1179,7 +1194,8 @@ truncated toward zero (Notation above), so the difference is an integer.
 
 A building's *threat value* is defined in Terms.
 
-**Search outcome and target state** (one search, claim 4).
+**Search outcome and target state** (one search, claim 4; excluding the charging break-off
+search, whose outcomes belong to S-0518 claim 15).
 
 | Target before | Condition | Result |
 |---|---|---|
@@ -1201,9 +1217,11 @@ rows with the target before "none" are replaced by the table of claim 25, part i
 between the wall target *W*, the best candidate and no target.
 
 **Observable ordering.**
-- The search's targeting-timer draw is its first draw. A search takes no other draw, except the
-  disguise draws of a searcher of the neutral or special house (claims 12 and 25), which follow
-  it. The teleport case can additionally take claim 1's conditional draw before the search's
+- Except for the charging break-off search (claim 1), the search's targeting-timer draw is
+  its first draw. The charging break-off search takes no targeting-timer reset draw
+  (S-0518 claim 15, scenario A17 here). A search takes no other draw, except the
+  disguise draws of a searcher of the neutral or special house (claims 12 and 25). In searches
+  covered by claim 4 these follow the timer draw; the charging search has no such draw to precede them. The teleport case can additionally take claim 1's conditional draw before the search's
   timer draw (scenario A1, part f). Each part of the search itself is `measurable`:
   - that a search takes no fixed further draw besides the timer draw: scenario A15, part h, case
     i, where a search tick on which nothing else draws advances the stream by exactly the raw
@@ -1216,13 +1234,15 @@ between the wall target *W*, the best candidate and no target.
     ii. The two orders give the timer and the disguise test different raw values, so they predict
     different targeting-timer restarts and, with a list entry of 50, often a different pick.
 
-  S-0215 (State and ordering) places the search's draws after those of the processing on the same
-  tick.
-- A target picked by a search is first acted upon as S-0215 says (the per-tick search's target by a
-  later processing).
+  S-0215 claim 33 places the per-tick search's draws after those of the processing on the same
+  tick. This is not an ordering rule for a search inside processing: a charging break-off pick
+  can be attacked in that same processing (S-0518 claim 15).
+- A target picked by a search is first acted upon as its context's owner says (the per-tick
+  search's target by a later processing, S-0215 claim 33; the charging case by S-0518 claim 15).
 - Candidates found earlier in the scan win ties (claim 17); an early stop (claim 9) can end a search
   before an outer candidate with a higher score is reached.
-- A pick lowers the target's expected remaining health at once (claim 4), so of two searchers that
+- A pick covered by claim 4 lowers the target's expected remaining health at once, subject to
+  that claim's inaccurate-projectile and distributed-fire exceptions, so of two searchers that
   search in the same tick, the one that searches second sees the lowered value. For two searches in the same tick, the later-processed search (S-0203) sees the expected remaining health after the earlier search's pick has reduced it; consequently, in modes *strong* and *normal*, the picks can differ from the result of scoring both searches against tick-start health values.
   Scoring every searcher against the values at the start of the tick gives different picks in
   modes *strong* and *normal*.
@@ -2415,6 +2435,34 @@ different health ratios; for distance use different distances.
   supplies a nonzero type coefficient. This off-setting check is a test of our chosen alternative,
   not a measurement of the original.
 
+**A17: charging break-off search and targeting timer (claim 1).** Use S-0518 scenario TC3's
+infantry charging setup on a tiny flat skirmish map, one human house and one bystander computer
+player kept away. Game speed 6, director and mods off except named test-map overrides. Use an
+ordinary, non-distributed-fire infantry charger that passes claims 2 and 3, with no attack-move
+memory. Give the normal targeting delay a large test value so that several attack processings
+occur before it expires. Record current behaviour, charging mark, target, targeting timer and
+scenario random state each tick, and identify attack processings using the processing timer.
+- *Part a:* move an eligible enemy into range while the charger still has positive ticks on
+  its targeting timer. Record three fresh runs containing such a processing. *Expected:* the
+  next attack processing replaces the charging building with the enemy and clears the mark,
+  without restarting the targeting timer. A target held before the search does not prevent
+  replacement. Repeat with the timer already expired at that processing: replacement still
+  does not restart it.
+- *Part b:* leave no eligible enemy within range for three attack processings in each of three
+  fresh runs. *Expected:* the charging building and mark remain, and none of those processings
+  restarts the targeting timer. Positive remaining ticks decrease normally; an expired timer
+  remains expired rather than receiving the normal targeting delay.
+- *Draw observable:* for each counted processing, predict the scenario-stream draws of its
+  ordinary behaviour delay under S-0215 claim 21 and any firing under S-0301. Use a weapon
+  without random firing effects and keep all unrelated actors away. Compare the recorded state
+  with that prediction and with the prediction containing an additional targeting-delay draw.
+  Count only ticks with no unrelated random event; repeat until three isolated processing ticks
+  per part are recorded. *Expected:* only the ordinary processing/firing draws, no search-timer
+  draw. Do not discard a tick merely because its observed draw count differs from the prediction.
+- *Falsified if:* a qualifying positive-timer processing waits for expiry to replace the target,
+  a search restarts the timer in either part, a failed search discards the charging target or
+  mark, or an isolated processing tick contains the additional targeting-delay draw.
+
 ## Open questions
 
 - The order in which a cell holds its objects (claim 10): which object the search offers first
@@ -2460,13 +2508,24 @@ different health ratios; for distance use different distances.
 - The neutral and special houses (claim 25): S-0412 claim 5 establishes that their difficulty index is 1, selecting the second entry of per-difficulty lists; no difficulty row is applied to them. Scenario A15, parts c and g, avoid needing to distinguish list entries by setting every entry alike. Still open: whether the original ever makes these two houses choose a building for their engineers (part c), and whether they are allied with each other (part e).
 
 
+## Changes for other specs
+
+- **S-0215 claim 33:** replace the blanket “Every search, whoever runs it” timer-reset rule
+  with the rule for searches covered by S-0309 claim 4. Explicitly exclude the charging
+  break-off search of S-0518 claim 15 and S-0309 claim 1: it runs inside infantry attack
+  processing without waiting for or restarting the targeting timer and takes no timer-reset
+  draw. Its replacement can be attacked in that same processing; claim 33's ordering of
+  processing draws before per-tick-search draws does not apply to this inside-processing search.
+  Scenario A17 here supplements S-0518 scenario TC3. Confirm this coordinated correction
+  before handing the two specs off together.
+
 ## Questions for the project lead
 
 No open questions. Recorded decisions and settled points:
 
 - S-0215 claim 33 and the attack-move search: settled from the original's behaviour (this spec's
-  claims 1, 23 and 24 were right). S-0215 revision 12 points here for the attack-move search and
+  claims 1, 23 and 24 were right). S-0215 claim 33 points here for the attack-move search and
   for which targets are opportunity targets.
 - Neutral and special houses (project lead, 2026-10-10, afternoon, item 2): decided; applied in
-  Terms (*Houses in our engine*) and claim 25, and in S-0215 revision 12 (Terms and claim 18).
-- S-0215 claim 26 backing: S-0215 revision 12 points to claim 12 here for the search's draws.
+  Terms (*Houses in our engine*) and claim 25, and in S-0215 (Terms and claim 18).
+- S-0215 claim 26 backing: S-0215 claim 26 points to claim 12 here for the search's draws.
