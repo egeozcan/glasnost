@@ -2,7 +2,7 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -559,8 +559,8 @@ used by this spec only:
     | 4 | Its type is marked "not human" | A forced request for *die-1*, whatever the death kind *w* (0, 3, 5 and 8 included). When *w* = 8, the extra virus-death animation and particle delivery of S-0613 claim 3 also apply |
     | 5 | Any other case, with *w* = 1 | A forced request for *die-1* |
     | 6 | Any other case, with *w* = 2 | A forced request for *die-2* |
-    | 7 | Any other case, with *w* = 9 | A forced request for *die-2*, unless that kind's own replacement effect (another spec) takes place, in which case there is no sequence |
-    | 8 | Any other case, with any other *w* | For *w* = 8, the virus-death animation and particle delivery of S-0613 claim 2; for other kinds, animations that other specs describe. No sequence |
+    | 7 | Any other case, with *w* = 9 | A forced request for *die-2*, unless that kind's own replacement effect (S-0611 claims 6 and 7) takes place, in which case there is no sequence |
+    | 8 | Any other case, with any other *w* | For *w* = 8, the virus-death animation and particle delivery of S-0613 claim 2; for other kinds, the remaining death-kind effects of S-0615 claims 1 to 3 (kinds 0, 3 to 7, 10, and 11 and above). No sequence |
 
     In the rows that show no sequence (1, 2, 3, 8 and the replacement of row 7), the unit is
     removed at once, unless its type has the crash flag and a crash begins instead (jumpjet locomotor,
