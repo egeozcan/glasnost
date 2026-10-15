@@ -1,9 +1,9 @@
 ---
 id: Q-0703
 title: Which occupant supplies the alliance test of the unloading-cell choice
-status: open
+status: answered
 related: [S-0507]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need

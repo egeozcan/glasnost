@@ -1,9 +1,9 @@
 ---
 id: Q-0706
 title: The delay of a vehicle transport's finished unload phase
-status: open
+status: answered
 related: [S-0507, S-0215]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need

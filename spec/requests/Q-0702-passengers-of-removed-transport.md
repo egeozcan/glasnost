@@ -1,9 +1,9 @@
 ---
 id: Q-0702
 title: Passengers of a transport that leaves play without a death rule for them
-status: open
+status: answered
 related: [S-0507, S-0312, S-0408]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need

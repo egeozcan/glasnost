@@ -1,9 +1,9 @@
 ---
 id: Q-0704
 title: Which cells count as a tunnel's edge for unloading
-status: open
+status: answered
 related: [S-0507, S-0214]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need

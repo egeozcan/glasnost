@@ -1,9 +1,9 @@
 ---
 id: Q-0700
 title: Where a let-out passenger is put and which way it faces
-status: open
+status: answered
 related: [S-0507, S-0208]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need

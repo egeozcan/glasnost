@@ -1,9 +1,9 @@
 ---
 id: Q-0705
 title: An airborne air transport's unload transitions
-status: open
+status: answered
 related: [S-0507, S-0501]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need

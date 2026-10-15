@@ -1,9 +1,9 @@
 ---
 id: Q-0701
 title: The shore search of a vehicle transport unloading on water
-status: open
+status: answered
 related: [S-0507, S-0212]
-answered-by: []
+answered-by: [S-0507]
 ---
 
 ## Need
