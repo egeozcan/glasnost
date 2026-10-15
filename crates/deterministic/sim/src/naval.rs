@@ -64,7 +64,8 @@ pub struct NavalState {
 /// Sets a vessel sinking (S-0312 claim 10 at a killing hit; S-0614 claim 11
 /// for a cull, without a hit; S-0504 claim 5: other events that set a
 /// vehicle sinking). Its health is not changed here. The descent starts at
-/// its next own update (S-0504 claim 4).
+/// its next own update (S-0504 claim 4); for a vessel already sinking it
+/// continues from its current height (claim 13).
 pub fn start_sinking(w: &mut World, id: ObjectId) {
     if let Some(o) = w.obj_mut(id) {
         // spec: S-0504 Terms (sinking: the vessel goes down while it stays in play) and S-0614 claim 11 (whatever its type's weight; no hit)

@@ -703,10 +703,8 @@ fn killing_hit(
         }
         return HitResult::PostMortem;
     }
-    if crate::naval::sinking(w, id) {
-        // Q-0646 (interim): a killing hit on an already sinking vessel gives no second credit and no second death
-        return HitResult::NowDead;
-    }
+    // spec: S-0504 claim 13 (a further killing hit on a sinking vessel takes the ordinary path: no exception
+    // to credit or death effects; S-0312 claim 10 leaves it at 1 health, still sinking, its descent not restarted)
     if o.combat.delay_kill_until.is_some() && !rules.quirks.delay_kill_credited_again {
         // spec: S-0302 Edge cases (delay_kill_credited_again off: no further credit)
     } else {

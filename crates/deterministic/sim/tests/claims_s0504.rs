@@ -519,9 +519,10 @@ fn claim_5_sinking_in_play() {
         "no track transition"
     );
     // A body turn already under way is not claimed to stop (claim 5: not every facing change stops).
-    // S-0504 claim 10: no immunity, the hit is taken; Q-0646 (interim): no second death.
+    // S-0504 claims 10 and 13: no immunity, the hit is taken and the vessel stays sinking at 1 health.
     assert_eq!(kill(&mut w, skiff), HitResult::NowDead);
     assert!(naval::sinking(&w, skiff), "still sinking");
+    assert_eq!(w.obj(skiff).unwrap().health, 1);
 }
 
 // spec: S-0504 claim 11 (an absent weight is exactly 1.0: it sinks when the sinking weight is at most 1.0 and not above)
@@ -1115,4 +1116,89 @@ fn claim_12_yard_docking_point() {
     let want = Pos::centre(CellXY::new(c.x + 2, c.y + 1), o.pos.z);
     assert_eq!(naval::yard_docking_point(&w, yard), Some(want));
     assert_eq!(naval::yard_docking_point(&w, depot), None);
+}
+
+/// Kills a fresh SKIFF, runs 20 ticks of its descent, then hits it again
+/// lethally when `again`; returns the height and health just after, and the
+/// tick at which it leaves play.
+fn descent_with_second_kill(again: bool) -> (i32, i32, i32) {
+    let mut w = world(rules());
+    let skiff = at(&mut w, "SKIFF", 0, 0, 0);
+    open(&mut w);
+    kill(&mut w, skiff);
+    for _ in 0..20 {
+        tick::step(&mut w);
+    }
+    let before = w.obj(skiff).unwrap().pos.z;
+    let losses = |w: &World| w.houses[0].econ.result.stats.losses;
+    let l0 = losses(&w);
+    if again {
+        assert_eq!(kill(&mut w, skiff), HitResult::NowDead);
+        // No exception to the destruction credit for a vessel already descending (S-0312 owns it).
+        assert_eq!(losses(&w), l0 + 1, "credited again");
+    }
+    let o = w.obj(skiff).unwrap();
+    assert_eq!(o.pos.z, before, "the hit itself changes no height");
+    let (z, health) = (o.pos.z, o.health);
+    common::run_until(&mut w, 400, |w| w.obj(skiff).is_none());
+    (z, health, w.tick)
+}
+
+// spec: S-0504 claim 13 (a further killing hit on a sinking vessel that meets S-0312 claim 10's conditions leaves it at 1 health, still sinking; its descent continues from its current height and its removal tick does not move)
+#[test]
+fn claim_13_further_killing_hit_continues_descent() {
+    let (z0, _, gone0) = descent_with_second_kill(false);
+    let (z1, health, gone1) = descent_with_second_kill(true);
+    assert_eq!(health, 1);
+    assert_eq!(z1, z0, "not put back at the surface");
+    assert!(z1 < 0, "already descending");
+    assert_eq!(gone1, gone0, "removal not extended");
+}
+
+// spec: S-0504 claim 13 (a cull-started descent: a later killing hit is tested against the ordinary sinking conditions; a type failing them is not restored to 1 health, its death is S-0312's)
+#[test]
+fn claim_13_cull_started_type_failing_the_condition_dies() {
+    let mut w = world(rules());
+    let scow = at(&mut w, "SCOW", 0, 0, 0);
+    open(&mut w);
+    naval::start_sinking(&mut w, scow);
+    for _ in 0..5 {
+        tick::step(&mut w);
+    }
+    assert_eq!(kill(&mut w, scow), HitResult::NowDead);
+    assert!(
+        w.obj(scow).is_none_or(|o| o.health != 1),
+        "not restored to 1 health"
+    );
+    // The eligible type, cull-started, is restored to 1 health and keeps sinking.
+    let mut w = world(rules());
+    let skiff = at(&mut w, "SKIFF", 0, 0, 0);
+    open(&mut w);
+    naval::start_sinking(&mut w, skiff);
+    for _ in 0..5 {
+        tick::step(&mut w);
+    }
+    let z = w.obj(skiff).unwrap().pos.z;
+    assert_eq!(kill(&mut w, skiff), HitResult::NowDead);
+    let o = w.obj(skiff).unwrap();
+    assert_eq!((o.health, o.pos.z), (1, z));
+    assert!(naval::sinking(&w, skiff));
+}
+
+// spec: S-0504 claim 13; S-0314 claims 9 and 10 (a sinking vessel at 0 health is not revived by self-healing)
+#[test]
+fn claim_13_zero_health_sinking_vessel_not_self_healed() {
+    let mut r = rules();
+    r.sim.vehicles.get_mut("SKIFF").unwrap().combat.self_healing = Some(true);
+    let mut w = world(r);
+    let skiff = at(&mut w, "SKIFF", 0, 0, 0);
+    open(&mut w);
+    naval::start_sinking(&mut w, skiff);
+    w.obj_mut(skiff).unwrap().health = 0;
+    for _ in 0..30 {
+        tick::step(&mut w);
+        if let Some(o) = w.obj(skiff) {
+            assert_eq!(o.health, 0, "not revived at tick {}", w.tick);
+        }
+    }
 }
