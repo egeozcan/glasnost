@@ -277,6 +277,10 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
             h.rho = F64::from_i64(1, Rounding::TowardZero);
         }
     });
+    // spec: S-0503 claim 5 (it chooses a new heading point when it starts a move); Q-0695 (interim: at once, when the move is taken, so S-0417's ρ = ½ set right after it persists, claim 4)
+    if dest.is_some() && state(w, id).is_some_and(|h| h.point.is_none()) {
+        let _ = choose_next(w, id);
+    }
 }
 
 /// The fraction set after a factory exit instruction (S-0417 claim 5): it
@@ -945,6 +949,16 @@ pub fn switched(w: &mut World, id: ObjectId, off: bool, was_powered: bool) {
     }
 }
 
+/// Seam: a person's stop order (S-0213 claim 8) for a hovering vehicle.
+/// No spec says what it does to the heading point, throttle, hover speed
+/// and ρ (Q-0696); the order's own clearing of the destination and path is
+/// all that happens, so the hover travels on to its heading point and
+/// stops there.
+pub fn stop_order(w: &mut World, id: ObjectId) {
+    // Q-0696 (interim: the hover keeps its heading point, throttle, hover speed and ρ)
+    let _ = (w, id);
+}
+
 /// The stop request of claim 10: the destination and stored path are
 /// cleared only when the destination and heading point differ as full
 /// three-dimensional points; throttle and hover speed are not zeroed.
@@ -999,7 +1013,9 @@ fn sink_test(w: &mut World, id: ObjectId) {
         .cell(o.pos.cell())
         .is_some_and(|c| c.land == land::WATER);
     // spec: S-0503 claim 11 (a water cell, world height less than 104 leptons above the surface)
-    if !water || hover_height(w, id) >= SINK_LIMIT {
+    // The world height above the surface, not the hover height: on a deck the vehicle is 416 or more above it and survives.
+    let above = o.pos.z - w.surface_at(o.pos.x, o.pos.y);
+    if !water || above >= SINK_LIMIT {
         return;
     }
     // spec: S-0503 claim 11 (it is given the bomb mark)

@@ -182,6 +182,14 @@ fn a_hover_crosses_the_sea_to_a_land_goal() {
     let goal = glasnost_map::CellXY::new(yard.x + 1, yard.y + 5);
     assert!(!water(goal));
     let intruder = testkit::spawn(&mut g.world, Kind::Vehicle, "MINR", 1, goal, 0);
+    // The amphibious zone's reach region spans the sea and the land, so
+    // `Script::reachable` keeps the goal as ordered.
+    let zone = glasnost_rules::sim::MovementZone::Amphibious;
+    let mut probe = g.world.clone();
+    glasnost_sim::regions::ensure(&mut probe);
+    let from = glasnost_sim::regions::reach_in(&probe, start, zone);
+    assert!(matches!(from, glasnost_sim::regions::Reach::Region(_)));
+    assert_eq!(from, glasnost_sim::regions::reach_in(&probe, goal, zone));
     g.step();
     // With its own target dropped, the brain orders the hover at the intruder.
     let mut w = g.world.clone();
