@@ -2,11 +2,11 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0045, Q-0192, Q-0281]
 supersedes: []
@@ -79,7 +79,7 @@ S-0413 claim 6). In addition:
   family (Import mapping). Which family a mode is listed under decides some of its set-up rules
   (claim 13).
 - **Superweapon of a building type.** A building type names at most two superweapons, a first and
-  a second (superweapon specs, planned S-0512; a pointer only).
+  a second (S-0512 claim 3).
 - **Tech-lab list.** S-0407's term (Terms): a game-wide list of building types in the rules data
   (Import mapping). Here it matters only through S-0407 claim 7, which exempts its types from the
   build bar of the superweapon setting.
@@ -105,10 +105,7 @@ S-0413 claim 6). In addition:
 
 ### Setup values
 
-1. **Where each setup value comes from in a skirmish.** The table lists every setup value, its
-   source in the original and what reads it. In our engine the setup supplies every value; which
-   defaults the setup screen offers, and the ranges of its sliders, are interface matters (Import
-   mapping lists the rules keys the original uses for them).
+1. **Where each setup value comes from in a skirmish.** The table lists every setup value, alongside the game-wide values fixed or copied for a skirmish, its source in the original and what reads it. In our engine the setup supplies the setup values; which defaults the setup screen offers, and the ranges of its sliders, are interface matters (Import mapping lists the rules keys the original uses for them).
 
    | Setup value | Source in the original's skirmish | Read by |
    |---|---|---|
@@ -353,15 +350,15 @@ S-0413 claim 6). In addition:
      the build bar and its exemption for tech-lab list types; this spec states only the setting
      it reads. A building type that the bar refuses is never offered, so no house of the game owns
      one by building it.
-   - (b) **Granting.** No house is granted a disableable superweapon, whichever building would give
+   - (b) **Granting by buildings.** No house is granted a disableable superweapon by a building, whichever building would give
      it (first or second superweapon, built, captured or placed by the map, tech-lab list or
      not). A superweapon that is not disableable is granted as usual. Part (b) tests the flag of
      the superweapon, not the building's position in the list, so the exemption of S-0407 claim 7
      does not reach it.
-   With the setting on, neither rule applies. A one-time superweapon that a map trigger gives is
-   not covered by rule (b); trigger grants belong to the trigger specs. How a superweapon is
-   granted, charged and fired belongs to the superweapon specs (planned S-0512).
-   - Backing: `measurable` (scenario K6 for part b; part a is S-0407 scenario T7)
+   With the setting on, neither rule applies. One-time and permanent superweapon grants from map
+   triggers bypass rule (b), even for disableable types, and are not revoked by the setting
+   (S-0512 claims 12 and 13). How a superweapon is granted, charged and fired belongs to S-0512.
+   - Backing: `measurable` (scenario K6 for part b and the trigger exemptions; part a is S-0407 scenario T7)
    - Confidence: medium for part b (the granting rule is known for buildings the house owns,
      and captured buildings follow from it); part a is S-0407's
 
@@ -381,10 +378,11 @@ S-0413 claim 6). In addition:
     crates under the switch, so none when the crate minimum is 0. Integers, exact. Where each crate goes, the
     draws it takes, and how crates are replaced after being collected or after their time runs out,
     belong to the crate rules (no spec yet; S-0203 row 16 gives the place of crate replacement in
-    the tick). With the crate setting off, no crate is placed at game start and none is ever
-    replaced, so a skirmish then has no crates at all: a map's own crate overlays never appear in a
-    skirmish either way (S-0009 claim 12).
-    - Backing: `measurable` (scenario K7)
+    the tick). With the crate setting off, no crate is placed automatically at game start and none
+    is replaced. Map triggers can still create crates regardless of the setting (S-0524 claim 4).
+    While the setting is off, those crates do not expire, although they can still be collected.
+    A map's own pre-placed crate overlays never appear in a skirmish either way (S-0009 claim 12).
+    - Backing: `measurable` (scenario K7; S-0524 scenario C4 for trigger placement and disabled expiry)
     - Confidence: medium (the formula is clear; that *H* is 1 in a skirmish is known for a
       skirmish started the usual way, not for every way a skirmish can start). The case of no
       human participant is a rule of our engine and needs no backing.
@@ -849,16 +847,24 @@ engineer of the human captures T4. Superweapon setting off. Observable:
 which superweapon icons appear after building T2 and T3 and after capturing T4. Expected: no icon for
 any disableable superweapon. With the setting on: every icon shown. Falsified if a disableable
 superweapon's icon appears with the setting off, or if with the setting on an icon of T2, T3 or T4
-is missing. Whether T1-like types (first superweapon
+is missing. In separate runs with the setting off, no giving building and an initially ungranted
+disableable type, give the human that type by a one-time trigger grant and by a permanent trigger
+grant. Record its icon, readiness and continued availability through house rechecks. Expected:
+the one-time grant is ready at once; the permanent grant charges normally; neither is revoked
+because the setting is off (S-0512 claims 12 and 13; scenario X7). A refused or revoked grant
+falsifies the exemption. Whether T1-like types (first superweapon
 disableable, not listed) are offered is S-0407 scenario T7.
 
 **K7: crates at game start.** Setup: test rules file with crate minimum 0 and crate maximum 8,
 skirmish with the human and three computer players, crate setting on. Observable: the number of
 crates at tick 1 (screenshot after revealing the map with a test trigger). Expected: 1. Then crate
 minimum 3, maximum 8: expected 3; crate minimum 3, maximum 2: expected 2. With the crate setting
-off: 0 and none ever after 10 game minutes. Falsified if the first run shows a count other than 1
-(4 would mean all players are counted), if the second run shows a count other than 3 or the third one other than 2, or if any
-crate is present with the crate setting off.
+off, on a map with no crate-creation trigger: 0 and none after 10 game minutes. Falsified if the
+first run shows a count other than 1 (4 would mean all players are counted), if the second run
+shows a count other than 3 or the third one other than 2, or if any crate appears in that
+trigger-free crates-off control. Separately run S-0524 scenario C4 with the setting off: a
+successful trigger placement must appear and an uncollected crate must remain past its assigned
+lifetime; disappearance by expiry or refusal solely because crates are off falsifies claim 10.
 
 **K8: the mode that gives every base unit.** Setup: that game mode on a small map, a test rules file
 whose base-unit list has three vehicle types V1, V2 and V3 in that order, each owned by one side
