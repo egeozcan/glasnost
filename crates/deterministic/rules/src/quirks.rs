@@ -1377,6 +1377,66 @@ pub struct Quirks {
     // spec: S-0522 Edge cases
     #[serde(default = "on")]
     pub paratrooper_any_animation_slow_fall: bool,
+    /// A tech building's income cycle comes when one tick of its countdown is left, so the period is D − 1 ticks; off: when the full D ticks have passed, so the period is D. Not implemented yet (wave 2).
+    // spec: S-0515 claim 5, F1 and Edge cases
+    #[serde(default = "on")]
+    pub cash_cycle_one_short: bool,
+    /// An income cycle that falls while the building is being erased is lost with all later cycles until the next ownership change; off: the building's first turn at or after that tick has the cycle, and cycles continue from there. Not implemented yet (wave 2).
+    // spec: S-0515 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub cash_cycle_lapse: bool,
+    /// A docked vehicle ordered away keeps receiving paid repair steps wherever it stands still; off: a move or attack order ends its contact as for an approaching vehicle, so steps happen only at the depot. Not implemented yet.
+    // spec: S-0314 claim 21 and Edge cases; S-0504 claim 14
+    #[serde(default = "on")]
+    pub depot_remote_repair: bool,
+    /// After its depot is destroyed, a docked vehicle stays asleep and neither fires nor reacts until ordered; off: destruction gives contacts the sale's run-away notice and they switch to guard. Not implemented yet.
+    // spec: S-0314 claim 22 and Edge cases; S-0504 claim 14
+    #[serde(default = "on")]
+    pub depot_loss_leaves_sleep: bool,
+    /// A hovering vehicle whose depot is sold or destroyed after settling keeps its locomotor switched off and never moves again; off: losing contact with a depot switches its locomotor on. Not implemented yet.
+    // spec: S-0314 claim 22 and Edge cases
+    #[serde(default = "on")]
+    pub depot_loss_strands_hover: bool,
+    /// An engineer entering a building that is neither arrival-friendly nor capturable is used up and changes nothing; off: the entry is refused as in claim 4 and the engineer stays. Not implemented yet (wave 2).
+    // spec: S-0509 Edge cases (claim 3 row 5)
+    #[serde(default = "on")]
+    pub engineer_lost_on_uncapturable: bool,
+    /// An engineer reaching a damaged arrival-friendly building during its sale repairs it and is used up; off: sale-time entry is refused as in claim 4, regardless of health. Not implemented yet (wave 2).
+    // spec: S-0509 Edge cases (proposed, pending the lead's sign-off)
+    #[serde(default = "on")]
+    pub engineer_repairs_during_sale: bool,
+    /// A garrison's exit search never tries the corner cell (x₀ − 1, y₀ − 1); off: the corner is tried last. Not implemented yet (wave 2).
+    // spec: S-0508 Edge cases (claim 10)
+    #[serde(default = "on")]
+    pub garrison_exit_skips_corner: bool,
+    /// An eviction without inside fallback and with no qualifying exit cell removes every occupant; off: the eviction does nothing and the occupants stay inside. Not implemented yet (wave 2).
+    // spec: S-0508 Edge cases (claim 12)
+    #[serde(default = "on")]
+    pub garrison_no_exit_removes: bool,
+    /// An infiltrated building type that matches several effect rows gives only the first; off: every matching row applies in table order, and E3 requires only tech-lab-list membership. Not implemented yet (wave 2).
+    // spec: S-0510 claim 3 and Edge cases
+    #[serde(default = "on")]
+    pub infiltration_single_effect: bool,
+    /// A spy's thief gains the computed amount even when the victim pays less or the amount is negative; off: the amount is clamped to between 0 and the victim's balance. Not implemented yet (wave 2).
+    // spec: S-0510 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub spy_theft_unbacked_gain: bool,
+    /// A paradrop's west scan starts at local row r − 1, which is row −1 when r = 0; off: it starts at row r modulo 2·height and continues cyclically. Not implemented yet (wave 2).
+    // spec: S-0522 claim 4 and Edge cases
+    #[serde(default = "on")]
+    pub paradrop_west_edge_start_row: bool,
+    /// A second-stage superweapon order is accepted unchecked; off: it is refused unless the first stage is granted, not suspended and has an unconsumed source selection. Not implemented yet (wave 2).
+    // spec: S-0512 claim 10; S-0213 table T1 (fire superweapon)
+    #[serde(default = "on")]
+    pub second_stage_order_unchecked: bool,
+    /// The silo's weapon, a teleport-source pick's armed type and the radar's superweapon offers use a kind number as a position in the superweapon type list; off: each uses the type of that kind. Not implemented yet (wave 2).
+    // spec: S-0513 claim 8 and Edge cases; S-0410 claim 12
+    #[serde(default = "on")]
+    pub superweapon_kind_as_list_position: bool,
+    /// A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp. Not implemented yet (wave 2).
+    // spec: S-0513 claim 40; S-0214 Terms (being erased, phasing in)
+    #[serde(default = "on")]
+    pub warp_hold_persists: bool,
 }
 
 impl Default for Quirks {
@@ -1716,6 +1776,21 @@ impl Default for Quirks {
             sensor_count_negative: true,
             paradrop_fallback_point: true,
             paratrooper_any_animation_slow_fall: true,
+            cash_cycle_one_short: true,
+            cash_cycle_lapse: true,
+            depot_remote_repair: true,
+            depot_loss_leaves_sleep: true,
+            depot_loss_strands_hover: true,
+            engineer_lost_on_uncapturable: true,
+            engineer_repairs_during_sale: true,
+            garrison_exit_skips_corner: true,
+            garrison_no_exit_removes: true,
+            infiltration_single_effect: true,
+            spy_theft_unbacked_gain: true,
+            paradrop_west_edge_start_row: true,
+            second_stage_order_unchecked: true,
+            superweapon_kind_as_list_position: true,
+            warp_hold_persists: true,
         }
     }
 }
@@ -2547,6 +2622,42 @@ impl Quirks {
                 "paratrooper_any_animation_slow_fall",
                 self.paratrooper_any_animation_slow_fall,
             ),
+            ("cash_cycle_one_short", self.cash_cycle_one_short),
+            ("cash_cycle_lapse", self.cash_cycle_lapse),
+            ("depot_remote_repair", self.depot_remote_repair),
+            ("depot_loss_leaves_sleep", self.depot_loss_leaves_sleep),
+            ("depot_loss_strands_hover", self.depot_loss_strands_hover),
+            (
+                "engineer_lost_on_uncapturable",
+                self.engineer_lost_on_uncapturable,
+            ),
+            (
+                "engineer_repairs_during_sale",
+                self.engineer_repairs_during_sale,
+            ),
+            (
+                "garrison_exit_skips_corner",
+                self.garrison_exit_skips_corner,
+            ),
+            ("garrison_no_exit_removes", self.garrison_no_exit_removes),
+            (
+                "infiltration_single_effect",
+                self.infiltration_single_effect,
+            ),
+            ("spy_theft_unbacked_gain", self.spy_theft_unbacked_gain),
+            (
+                "paradrop_west_edge_start_row",
+                self.paradrop_west_edge_start_row,
+            ),
+            (
+                "second_stage_order_unchecked",
+                self.second_stage_order_unchecked,
+            ),
+            (
+                "superweapon_kind_as_list_position",
+                self.superweapon_kind_as_list_position,
+            ),
+            ("warp_hold_persists", self.warp_hold_persists),
         ]
     }
 
