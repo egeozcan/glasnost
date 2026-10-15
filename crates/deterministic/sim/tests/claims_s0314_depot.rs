@@ -970,7 +970,11 @@ fn hover_docks_at_a_three_by_three_depot_and_is_repaired() {
             && w.obj(d).unwrap().beh.current == Some(Behaviour::Repair)),
         "the hover docks and the depot starts repair"
     );
-    assert_eq!(w.obj(v).unwrap().pos.cell(), dock_cell(), "in the docking cell");
+    assert_eq!(
+        w.obj(v).unwrap().pos.cell(),
+        dock_cell(),
+        "in the docking cell"
+    );
     assert!(
         run_until(&mut w, 900, |w| health(w, v) > 300),
         "the depot repairs the hover"
