@@ -2,7 +2,7 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -674,12 +674,26 @@ tick the building disappears.
   survivor for that attempt (its draws up to then stay taken), and the importer warns for a side
   crew type or a technician type that is an engineer type (Terms). This is a safety departure, not
   a quirk switch.
-- **The original's computer player** (a note for the designers of our AI, not a rule of our
-  engine). Besides the full refund of claim 1, the original, when a building holding upgrades changes
-  owner to a computer-controlled house in a game that is not a campaign mission, sells its top upgrade
-  at once at its full refund. It also has its computer houses sell walls when they are close to
-  losing, which the wall rule of claim 12 refuses for walls they own. Low confidence; our AI may
-  reproduce such behaviour through ordinary orders.
+- **The original's computer player** (a note for the designers of our AI, not an automatic-sale
+  rule for AI player houses in our engine). S-0509 claim 16 owns the ownership-change sale:
+  in a non-campaign game, the new owner must be computer-controlled, different from the building's
+  initial owner (its owner when created), and that initial owner's country must not be passive.
+  The original repeatedly removes the currently counted top upgrade, using claim 5's selection
+  and count changes, until the count is 0, then puts the building up for sale. Each removed
+  upgrade pays the new owner its full refund under claim 1 with *r* = 1: the current country
+  and cost-bonus factors apply, and a nonzero refund override keeps its override formula.
+  This is not necessarily the upgrade's imported cost. A turret upgrade resets the count to 0,
+  so lower recorded upgrades can remain. This automatic sale does not apply to our AI player
+  houses; the neutral and special houses retain the original's rule (glossary *AI house*).
+  - Backing: `measurable` (S-0509 scenario E11) for sale and a single-upgrade refund after capture
+    from a player house; `unmeasured` for the initial-owner and passive-house exceptions,
+    repeated removal and turret reset, which that scenario does not vary independently
+  - Confidence: medium
+
+  Separately, the original has its computer houses attempt to sell walls when close to losing,
+  which claim 12 refuses for walls they own. This wall-sale note remains low confidence.
+  Our AI may choose ordinary sale orders instead; it gains no automatic-sale or full-refund
+  exception.
 
 ## Import mapping
 
