@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 27
+revision: 28
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -83,8 +83,8 @@ remembered point and absent new deck standing-position mark, and vehicles'
 remembered-point clearing and additional deck placement mark (S-0207 claim 20 a/e,
 S-0209 claim 1). The shared `quirks.teleport_vehicle_ground_reservation` governs
 vehicles, not infantry. Jump-time target loss follows S-0207 claim 20 e, including
-its exception for an attacker whose airstrike is aimed at the living target, not an
-erasing lock. Override reversion and preservation of a different restored target
+its exception for an attacker whose strike target is the living jumping object,
+even after a normal strike end (S-0519 claims 18 and 20), not an erasing lock. Override reversion and preservation of a different restored target
 remain S-0215 claim 10's rules for the jump, not new infantry landing-choice rules.
 
 ## Terms
@@ -889,8 +889,10 @@ used by this spec:
     no jump and the destination is removed. No path between departure and landing is required.
     The point is fixed when the destination is supplied, not followed as the object moves.
     S-0207 claim 20 e owns the height at the actual jump, which can differ from the point chosen
-    here on a bridge. It also owns jump-time target loss: an attacker whose airstrike is aimed
-    at the living jumping target retains it; an erasing lock gives no such exception.
+    here on a bridge. It also owns jump-time target loss: an attacker whose strike target
+    is the living jumping object retains it (S-0519 Terms). This includes a strike that
+    ended normally and kept its strike target (S-0519 claims 18 and 20); no strike need
+    be in progress. An erasing lock gives no such exception.
     Override reversion and retention of a different restored target follow S-0215 claim 10.
     These target-retention rules carry those claims' backing and confidence.
     An infantry unit reserves its chosen standing position, not a
