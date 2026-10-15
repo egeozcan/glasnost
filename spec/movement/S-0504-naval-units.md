@@ -2,13 +2,13 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0600, Q-0640, Q-0642, Q-0643, Q-0644]
+requests: [Q-0600, Q-0640, Q-0642, Q-0643, Q-0644, Q-0646]
 supersedes: []
 ---
 
@@ -305,8 +305,9 @@ a carrier's controller is launching ordinary aircraft.
     neither a new target nor a guaranteed impact to a projectile whose ordinary impact test
     misses. Claim 5's targeting and firing refusals therefore do not cancel airborne projectiles.
     Health-changing effects use the ordinary integer-health arithmetic of their owning specs.
-    sinking adds no health multiplier or rounding. Later killing-hit effects remain S-0312's
-    ownership, rather than a new naval death rule here.
+    Sinking adds no health multiplier or rounding. Claim 13 specifies the descent consequence
+    of a later killing hit. Its destruction credit, raises and death effects remain S-0312's
+    ownership (claims 2, 4 to 7, 10, 12 to 15 and 29), not a new naval death rule here.
     - Backing: `measurable` (N10).
     - Confidence: high (continuing updates and no damage/healing exemption); medium (isolating
       each stock effect within the short descent interval)
@@ -336,6 +337,59 @@ a carrier's controller is launching ordinary aircraft.
     Claim 8 uses this point for the waiting distance, not an assumed foundation centre.
     - Backing: `measurable` (N13).
     - Confidence: high (point selection and precedence); medium (stock approach observations)
+
+13. **Further killing hits during descent (Q-0646, naval part).** For a sinking vessel that
+    still meets S-0312 claim 10's ordinary killing-hit sinking conditions, another killing hit
+    leaves it at 1 health point again, still sinking and in play. It does not put the vessel
+    back at the surface or restart its descent: claim 4 continues from its current height.
+    Thus, absent another effect that changes height or removes it, a further killing hit does
+    not extend its removal tick. Healing between hits can allow a later hit to be nonlethal.
+    ordinary health arithmetic then applies (S-0302 claim 11).
+
+    The same descent rule applies when sinking began through a cull: the cull itself changes no
+    health, whereas a later killing hit is tested against the ordinary killing-hit conditions.
+    A cull does not make an underwater or insufficient-weight type satisfy those conditions.
+    The death outcome when they fail belongs to S-0312 claims 9 to 15, not an unconditional
+    naval restoration to 1 health. No exception to credit or death effects is implied by the
+    vessel already descending. Their repetition is the remaining S-0312 audit, including claim
+    29's destruction raises.
+
+    If a sinking vessel has 0 health, sinking does not waive the no-health exclusion on
+    ordinary damage or healing hits (S-0302 claim 8), individual self-healing (S-0314 claim 9),
+    or house-wide self-healing (S-0314 claim 10). In particular those two periodic heals do
+    not revive it. This conditional rule does not assert that every cull type remains in play
+    at 0 health or continues taking ordinary living updates.
+    - Backing: `measurable` (N14 for further hits and unchanged descent; N10 for positive-health
+      healing). The zero-health case inherits the cited claims' `unmeasured` limitations:
+      N14 does not establish a surviving zero-health vessel.
+    - Confidence: high (restoration under the ordinary sinking condition, no height reset and
+      unchanged healing exclusions); medium (isolating a later impact during descent)
+
+14. **Naval-yard interruptions and queued entry.** At a naval yard with the repair flag,
+    S-0314 claims 20 to 23's depot contact rules apply to vessels too. In particular an order
+    other than the ignored repeated approach releases an approaching vessel's contact, whereas
+    a docked vessel ordinarily retains contact and tether under a move or attack order.
+    The same-depot entry and successful entry elsewhere retain claim 20's exceptions. With
+    contact retained, waiting still requires claim 8's starting distance, but a stationary
+    vessel in the working phase can receive paid repair away from the yard. Settling has
+    S-0314 claim 21's approach/stop checks, not a universal repair-distance gate.
+
+    Sale gives the contacted vessels the run-away notice and releases contact at the yard's
+    next processing. Destruction releases contact without that notice: an approaching vessel
+    falls back to guard, and a docked vessel stays asleep until ordered. Low power or switching
+    the yard off does not stop repair already in contact; switching off refuses new acceptance.
+    Destruction of a contacted vessel frees its place. The shared switches
+    `quirks.depot_remote_repair` and `quirks.depot_loss_leaves_sleep`, including their alternatives,
+    are S-0314 claims 21 and 22's, not separate naval switches.
+
+    Simultaneous enter orders use S-0314 claim 23's event-order and queued-entry rules: a
+    damaged later vessel waits and retries for a place, while a full-health later vessel does
+    not queue. This is distinct from a later click whose permission fails and issues no enter
+    order. The serviced place and several-place departure remain S-0314's; this claim does
+    not promise parallel repair of every contact place.
+    - Backing: `measurable` (N15).
+    - Confidence: high (shared repair checks, power and queuing); medium (order and sale/removal
+      consequences); low (same-yard enter order while docked, inherited from S-0314 claim 20)
 
 ## Formulas
 
@@ -431,6 +485,11 @@ The following distinctions are not optional original-versus-fixed behaviours:
 | Rules, building section, `WeaponsFactory` | claim 12's vehicle-factory flag | boolean | no |
 | Rules, building section, `DockingOffset0` and subsequent numbered entries | pad docking displacements, S-0404 claim 15; do not override claim 12 | integer lepton triples; S-0404 | S-0404 |
 | Rules, `[AI]`, `PathDelay` | claim 9's shared retry-delay field | decimal game minutes, single precision held as a double | S-0212 |
+| Rules, building section, `NumberOfDocks` | contact-place count for claim 14; shared depot capacity and several-place handling | integer | 1; later absent entries preserve the value in force (S-0314) |
+
+Claims 13 and 14 add no imported damage immunity, descent-restart delay or naval interruption
+setting. Claim 13 uses the weight and sinking-condition rows above; healing amounts, periods and
+eligibility remain S-0314 claims 9 and 10's import mapping.
 
 ## Measurement scenarios
 
@@ -656,15 +715,60 @@ Record the second-ship, full-health and cancellation outcomes without assigning 
 expected handshake: they are proposals to finish Q-0641, not completed claims. The missing
 contact/event recorder capability should be proposed to the user, not installed or patched here.
 
+**N14. Killing hit during an existing descent (claim 13; Q-0646).** *Setup:* N10's water map
+and recorders, a stock surface vessel meeting the ordinary sinking condition, and two firers
+whose impacts can be separated in time. *Procedure:* start sinking with one killing hit, then
+let a previously fired slow shot or an applicable area hit arrive after at least ten descents.
+Repeat with a cull-started surface host meeting the same ordinary killing-hit conditions, and
+with healing timed between hits. One run per variant, plus a no-further-hit control.
+*Observable:* health and height immediately before and after the later hit, descent count,
+removal tick, kill counts, destruction raises, passengers, death effects and random draws.
+*Expected:* an otherwise ordinary later killing hit leaves 1 health; a nonlethal hit gives
+S-0302 claim 11's health result. Neither resets height or extends the descent. A cull's first
+killing hit uses the same ordinary sinking eligibility rather than bypassing weight or type.
+*Falsified if:* an eligible ordinary later killing hit leaves another health value, resets
+height, or extends removal without a separately recorded height-changing effect. A miss or
+filtered area candidate is inconclusive. Credit, raises and death-effect observations are
+for S-0312's audit, not predictions that they are suppressed. Record an ineligible cull host
+separately without assuming restoration to 1 or a terminal fate not yet specified by S-0312.
+If any run leaves a zero-health vessel in play, record through the next due healing ticks:
+no individual or house-wide self-heal should raise it, and an ordinary delivered healing hit
+must not revive it. Absence of such a state does not test that conditional exclusion.
+
+**N15. Naval-yard interruptions (claim 14).** *Setup:* N13's stock compatible damaged ships
+and yard with ample credits, a rally point, and a second ship. Use separate runs for approaching,
+waiting, settling and working, with the read-only recorder distinguishing contact and tether.
+*Procedure:* issue move, stop, attack and same-yard enter orders at each phase, one run per
+order/phase pair. In separate runs sell or destroy the yard during approach and after docking,
+switch it off or cause low power during repair, and send two damaged vessels in the same input
+tick. Repeat the latter with the later vessel at full health and with an ordinary later click.
+*Observable:* event order, destination, behaviour, contact place, tether, position, propulsion
+state, health, credits and processing ticks. *Expected:* S-0314 claims 20 to 23's outcomes with
+claim 8's ship threshold and claim 12's docking point. In particular approach contact releases
+under another order, docked working contact permits paid repair after standing still away,
+sale and destruction differ in their notice and behaviour, existing service survives power
+changes, a simultaneous damaged later entrant queues but a full-health one does not, and a
+permission-refused later click creates no queue. *Falsified if:* a recorded eligible exchange
+violates any of these shared outcomes. A refused click does not test an executed enter order.
+After a post-settling yard loss, try moving the ship in several directions and record whether
+propulsion remains off; this last probe is exploratory for the stranding question below,
+not a prediction that ships share the hovering failure. Use the arena or bench with read-only
+event recording; this proposes recording capability, not an oracle modification.
+
 ## Open questions
 
 - Q-0641 is partly answered: claims 8 and 12 fix the naval factory's waiting gate and docking
   point. Full approach handshake, contact reservation timing and failure/retry routing are not
   established here. Do not infer them from aircraft pads, land depots or production release.
   Q-0641 is therefore not included in the answered-request list.
-- Later killing hits on an already-sinking vessel can enter ordinary damage handling (claim 10).
-  Their repeated destruction credit, passenger and death-effect consequences need S-0312's
-  audit; no sinking immunity is supplied as a substitute.
+- Q-0646's destruction credit, raises and repeated death effects remain S-0312's audit
+  (claims 2, 4 to 7, 10, 12 to 15 and 29). Claim 13 answers continued descent for the ordinary
+  sinking-eligible case, not the terminal fate of every cull-started type that fails those
+  conditions. S-0302 claim 8 owns hit filtering at 0 health.
+- Whether a ship whose propulsion was switched off during settling becomes permanently
+  immobile after its naval yard is sold or destroyed. S-0314 claim 22 establishes this for
+  hovering vehicles, not ships. Claim 14 does not extend `quirks.depot_loss_strands_hover`
+  to ships without establishing that result; N15 includes a separate probe.
 - Whether concurrent launch and other movement waits produce an observable difference between
   ship and driving locomotors. This interaction is `unmeasured`: no setup or expected observable
   has been established. Claim 3 fixes only the ordinary launching-count hold, not precedence

@@ -1,9 +1,9 @@
 ---
 id: Q-0646
 title: What a further killing hit does to a vessel that is already sinking
-status: open
+status: answered
 related: [S-0504, S-0312, S-0302]
-answered-by: []
+answered-by: [S-0504]
 ---
 
 ## Need
