@@ -13,8 +13,8 @@
 //! [`DepotState::serviced`].
 //!
 //! Interim rules tied to requests: the tether moment and the stopping point
-//! (Q-0680), settling while the vehicle moves far away (Q-0681) and the exit
-//! cell of a vehicle sent away without a rally point (Q-0682).
+//! (Q-0680, kept for a depot without the pad flag) and the departure-cell
+//! tests (Q-0674).
 
 use glasnost_map::CellXY;
 use serde::{Deserialize, Serialize};

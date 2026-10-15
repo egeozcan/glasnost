@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(THREE_QUARTERS, dec("0.75"));
     }
 
-    // spec: S-0503 F6 (2π and m = 1.1 as the doubles nearest them, Q-0690 interim)
+    // spec: S-0503 F6 (2π and m = 1.1 as the binary64 numbers nearest the exact values; Q-0690 answered)
     #[test]
     fn hover_bob_constants() {
         assert_eq!(
