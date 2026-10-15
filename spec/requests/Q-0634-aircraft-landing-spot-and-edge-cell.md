@@ -32,5 +32,6 @@ chosen cells with the random-state recorder.
 
 F8's search is S-0212 claim 25's nearby search with the aircraft type's own movement zone, on the
 ground layer, with no draw; with no building the aircraft's own cell is used. The edge cell is the
-usable-area edge cell nearest the aircraft in its own row or column, with no draw (marked Q-0634
+nearest legal cell outside the usable area in the aircraft's own row or column, or else the first
+cell beyond the usable area there, with no draw (marked Q-0634
 in `glasnost_sim::air` and in docs/development.md, M6a interim rules).
