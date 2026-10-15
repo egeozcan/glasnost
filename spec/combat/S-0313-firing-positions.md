@@ -2,11 +2,11 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-10
+approved-on: 2026-10-15
 measurements: []
 requests: []
 supersedes: []
@@ -20,7 +20,8 @@ The world position at which a shot starts (its *fire point*), computed from the 
 its weapon slot's muzzle position, its turret displacement and facings, and its burst counter; the
 special fire points of garrisoned buildings, buildings with pixel muzzle shifts and passengers of
 open-topped transports; and the redirected targets of spray-attack firers. The fire point is game
-state: projectiles start there (S-0306), so it changes flight times and what a projectile passes.
+state: projectiles start there (S-0306 claim 1), so it changes flight times and what a projectile passes.
+This spec covers skirmish; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -43,7 +44,7 @@ S-0202: R(*a*, *b*). In addition:
   forward axis (the same field S-0105 uses for drawing).
 - **Alternate muzzle positions.** Five extra muzzle positions (numbered 0 to 4) that a transport's art
   data can give; passengers of an open-topped transport fire from them (claim 5).
-- **Pixel shift.** A pair of integers in screen pixels in the art data, converted to a lepton shift
+- **Pixel shift.** A pair of imported integers in screen pixels, converted to a lepton shift
   by F3.
 - **Muzzle point** *k* **of a garrisonable building.** The *k*-th pixel shift of the building type's
   list of garrison muzzle points (claim 6).
@@ -51,10 +52,10 @@ S-0202: R(*a*, *b*). In addition:
   shots of the building (claim 7).
 - **Dual-shift flag.** A building type's imported flag that makes its primary fire pixel shift
   apply to the fire point of claim 1 instead of to the base point (claim 7).
-- **A voxel turret, a voxel barrel.** A building's turret, or its barrel, that its type's art data marks
+- **A voxel turret, a voxel barrel.** A building's turret, or its barrel, that its type's rules data marks
   as a voxel model (claim 8).
-- **Turret anchor's pixel shift.** A pixel shift that a building type's art data gives for its
-  turret (claim 8).
+- **Turret anchor's pixel shift.** A pixel shift that a building type's rules data gives for its
+  turret (claim 8); the same imported pair places the drawn turret (S-0105 claim 9).
 - **Turret pivot.** The point from which a firer with a muzzle position of (0, 0, 0) would fire by
   claim 1: its base point shifted by the turret displacement in the frame of *M* (claims 1 and 5).
 - **Spray-attack type.** A type with the imported spray-attack flag (claim 9).
@@ -75,7 +76,9 @@ S-0202: R(*a*, *b*). In addition:
    The shift is (trunc *u*, trunc(−*v*), trunc *w*) leptons along map x, map y and up. Formulas F1
    and F2 give the arithmetic and its rounding. The model frame's +y is to the left of the forward
    axis, so map y, which grows towards map south, takes −*v*.
-   - Backing: `measurable` (scenario P1)
+   - Backing: `measurable` (scenarios P1 and P2) for the stated test transforms,
+     `unmeasured` for locomotor translations outside those tests: their complete reachable
+     conditions have not been established (Open questions).
    - Confidence: high (composition, the sign of *L*, the base point); medium (bit-exact single
      precision, which follows S-0105 F0)
 
@@ -104,7 +107,10 @@ S-0202: R(*a*, *b*). In addition:
 
    The angle is a double, narrowed to single precision before the table trigonometry of S-0105 F1
    is applied (F2).
-   - Backing: `measurable` (scenarios P1 and P3, part b)
+   - Backing: `measurable` (scenarios P1 and P3 parts b and c) for the reachable shots tested.
+     The building's no-target row is `unmeasured`: no reachable shot without a target has
+     been established to distinguish it. The aircraft's turret-versus-body distinction is
+     `unmeasured` until P1 part b establishes an ordinary attack with those facings different.
    - Confidence: high (vehicles, infantry, buildings); medium (aircraft)
 
 4. **The building turret displacement does not turn** (`quirks.building_fire_point_shift_fixed`).
@@ -117,13 +123,20 @@ S-0202: R(*a*, *b*). In addition:
 5. **Passengers of open-topped transports.** An infantry passenger firing from inside an
    open-topped transport fires from the transport's fire point computed with the transport's
    alternate muzzle position *n* − 1 in place of the weapon slot's, where *n* is the passenger's
-   position (1, 2, …) in the transport's passenger order (the transport specs own that order).
+   position (1, 2, …) in the transport's passenger order (S-0507 claim 3). Position 1 is
+   the passenger that boarded most recently; a passenger whose exit fails goes back to
+   position 1 (S-0507 claims 3 and 10). Thus alternate muzzle position 0 belongs to
+   position 1, not to the first passenger that boarded.
    Claim 1 applies with the transport's own position, facings, turret displacement and burst
-   counter. A passenger at position 6 or later fires from a muzzle position of (0, 0, 0) put through the
+   counter. This is a transport-frame rule, not an independently switched defect: the passenger
+   selects a muzzle, but its own facing, turret displacement and burst counter do not change
+   that muzzle's position on the transport. In particular, two passengers firing at the same
+   transport burst parity use the same lateral sign even if their own burst parities differ.
+   A passenger at position 6 or later fires from a muzzle position of (0, 0, 0) put through the
    same transform, so from the transport's turret pivot.
    - Backing: `measurable` (scenario P4)
-   - Confidence: medium (the slot numbering and the transport's burst counter); low (the
-     passenger order, which this spec does not own)
+   - Confidence: medium (the slot numbering and the transport's burst counter); high (the
+     passenger order, owned by S-0507 claim 3)
 
 6. **Garrisoned buildings.** A garrisoned building fires from its base point shifted by its muzzle
    point *k* (F3, map x and y only; the world height is the base point's), where *k* is the
@@ -132,7 +145,7 @@ S-0202: R(*a*, *b*). In addition:
    (*k* + 1) mod *n*, *n* being the occupant count then. Exception: a shot of a disc laser weapon
    (S-0301 claim 10) does not advance the index, so a garrison whose occupant weapon is a disc
    laser keeps the same muzzle point and the same occupant from shot to shot. It is set to 0 when
-   the occupants leave or are killed. The same index picks which occupant's weapon fires (S-0308). A muzzle point that the art data does not give, or gives as (65535, 65535), is
+   the building is emptied by occupants leaving or being killed. The same index picks which occupant's weapon fires (S-0308). A muzzle point that the art data does not give, or gives as (65535, 65535), is
    (0, 0).
    - Backing: `measurable` (scenario P5)
    - Confidence: high (the cycle and the reset when emptied); medium (the shift arithmetic, F3)
@@ -161,10 +174,13 @@ S-0202: R(*a*, *b*). In addition:
    | not garrisoned; no primary fire pixel shift; no voxel barrel; voxel turret | fire point of claim 1 shifted by the turret anchor's pixel shift (F3, map x and y only) |
    | not garrisoned; no primary fire pixel shift; neither voxel barrel nor voxel turret | fire point of claim 1 |
 
-   - Backing: `measurable` (scenario P6, with its part b)
+   - Backing: `measurable` (scenario P6) for the rows without a voxel barrel,
+     `unmeasured` for the barrel-following description: its transform is unresolved, so no
+     predicted start position or distinguishing scenario is established. The barrel row is
+     an explicit gap, not a complete fire-point rule.
    - Confidence: medium (voxel turret); low (voxel barrel)
 
-9. **Spray attack.** Every shot of a spray-attack firer is aimed not at its target but at the cell
+9. **Spray attack.** Every shot of a spray-attack firer redirects its shot target to the cell
    that holds the point at one of eight fixed lepton shifts from the firer's position (F4). The
    shift number *s* is drawn as R(0, 7) from the scenario random stream for the first shot of a
    burst (burst counter 0), and for each later shot of the burst it advances by trunc(8 / *B*)
@@ -214,6 +230,8 @@ height is unchanged. A pixel to the right on screen moves the point towards map 
 equally; a pixel down on screen moves it towards map east and map south.
 
 **F4. Spray shifts** (claim 9). Leptons, map x and y; the world height is unchanged.
+The shifts and direction indices are integers. For positive integer burst count *B*, divide 8
+by *B* with truncation toward zero; the direction sum wraps modulo 8 with no further rounding.
 
 | *s* | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 |---|---|---|---|---|---|---|---|---|
@@ -242,7 +260,7 @@ equally; a pixel down on screen moves it towards map east and map south.
 |---|---|---|
 | garrisoned building, muzzle index *k* | a shot is launched, other than a disc laser shot | *k* ← (*k* + 1) mod occupant count |
 | garrisoned building, muzzle index *k* | a disc laser shot is launched | *k* unchanged |
-| garrisoned building | occupants leave or are killed | *k* ← 0 |
+| garrisoned building | the building is emptied by occupants leaving or being killed | *k* ← 0 |
 | spray-attack firer, burst counter 0 | a shot | *s* ← R(0, 7), one draw before the projectile's draws (S-0301 claim 18) |
 | spray-attack firer, burst counter above 0 | a shot | *s* ← (*s* + trunc(8 / *B*)) mod 8, no draw |
 
@@ -255,13 +273,13 @@ that the shot uses (claim 2: the number of earlier shots in its burst).
 - **Fixed building turret displacement** (`quirks.building_fire_point_shift_fixed`, default on,
   claim 4). With the switch off, a building's turret displacement turns with its aiming angle:
   *T* = Rz(*θ*) · Tr(*δ*, 0, 0) · Tr(*F*, *σL*, *H*), composed and rounded as in F1.
-- **The transport's burst counter steers a passenger's side** (claim 5). Original behaviour; no
-  switch.
 - **More than ten garrison muzzle points** (*departure*). The original supports at most ten
   garrison muzzle points per building type, but reads as many as the type's maximum occupant
   count. With a maximum occupant count above ten its result is unspecified: reading the extra
   points changes other art settings of the type. Our engine uses every muzzle point up to the
   maximum occupant count, and the importer warns for a maximum occupant count above ten.
+  Backing: `unmeasured` for the original's unsupported excess entries: no stable observable
+  result is predicted for them. The deterministic extension and warning are design requirements.
 - **Spray steps for long bursts.** A burst count above 8 gives a step of 0 (every shot of the burst
   at the same shift); a burst count of 0 or less is S-0301's (treated as 1, with a warning).
 
@@ -277,16 +295,28 @@ that the shot uses (claim 2: the number of earlier shots in its burst).
 | `MaxNumberOccupants` (rules, building type) | how many garrison muzzle points are read | integer | 0 |
 | `PrimaryFirePixelOffset` (art, building image) | primary fire pixel shift | two integers, pixels | not given |
 | `PrimaryFireDualOffset` (art, building image) | dual-shift flag (claim 7) | boolean | no |
-| `TurretAnimX`, `TurretAnimY` (art, building image) | turret anchor's pixel shift (claim 8) | integers, pixels | 0 |
-| `TurretAnimIsVoxel`, `BarrelAnimIsVoxel` (art, building image) | voxel turret, voxel barrel | boolean | no |
+| `TurretAnimX`, `TurretAnimY` (rules, building type) | turret anchor's pixel shift (claim 8) | integers, pixels | 0 |
+| `TurretAnimIsVoxel`, `BarrelAnimIsVoxel` (rules, building type) | voxel turret, voxel barrel | boolean | no |
 | `SprayAttack` (rules, type) | spray-attack type | boolean | no |
 | `Turret` (rules, type) | turret flag (claim 3) | boolean | no |
 
 ## Measurement scenarios
 
-Stock data unless a test file is named; director and mods off; a small flat test map; any game
-speed. The fire point is read as the start position of the projectile in the measurement setup's
-object-state recorder (or, for instant weapons, from the start of the drawn beam, to the pixel).
+Use a small purpose-made skirmish map with a flat observed firing area, one human-controlled
+house owning the firers and one bystander computer player kept away as in the glossary. Place
+neutral durable targets in the observed area. Use game speed index 2 and 800 × 600 pixels,
+director, unrelated mods and engine add-ons off. Stock data applies except the named test rules
+and art files of each scenario, removed after that scenario.
+
+Procedure for every part: position the firer, load passengers or occupants where named, order an
+attack through ordinary input, and record complete bursts after the required facings settle.
+Where a part needs a changing facing, record that facing at each shot rather than inferring it
+from the order. A read-only object-state recorder logs ticks, firer and projectile positions,
+facings, burst counters, selected weapon slot and passenger or occupant identities. Compare the
+projectile's launch position before its first movement with F1 or F3 in integer leptons. A beam
+image can corroborate placement but cannot establish lepton-exact arithmetic. For disc lasers
+record the effect's origin. A missing recorder capability is a proposed harness addition for
+the user, not a request to alter the game.
 
 **P1. Vehicle fire point.**
 - Setup: a stock turreted vehicle with known muzzle position and turret displacement, on flat
@@ -296,22 +326,34 @@ object-state recorder (or, for instant weapons, from the start of the drawn beam
 - Observable: projectile start positions relative to the vehicle's position.
 - Expected: F1 with *D* the flat body rotation; the turret-less vehicle's shift rotates with the
   body only.
-- Falsified if: any shift differs by more than 1 lepton from F1 (exact values with nearest
-  rounding differ by at most 1).
-- Runs: 1 (no random draw decides the observable).
+- Falsified if: any recorded integer launch shift differs from F1; a one-lepton difference is
+  significant and must not be hidden by a tolerance.
+- Part b: named test art gives distinct non-zero forward, lateral and height muzzle components
+  and a non-zero turret displacement. Repeat across all 32 body and aiming steps reachable by
+  ordinary attacks, including steps around the facing wrap. Repeat with infantry and aircraft
+  (named test rules may give the aircraft an ordinary visible projectile). Record both body and
+  turret facings. Expected: claim 3's infantry row has no relative rotation, while the aircraft
+  row uses turret minus body facing even without a turret flag. Falsified by any F1 mismatch or
+  by aircraft starts following the body instead of the recorded turret facing when they differ.
+  If the ordinary attack cannot separate the aircraft facings, that case is inconclusive.
+- Part c: repeat with a driving vehicle stationary on each reachable slope orientation of the
+  test map, recording its settled body transform (S-0106). Expected: F1 tilts the muzzle and
+  turret displacement with that transform. Falsified by any different integer start position.
+- Runs: one full burst per facing/transform combination; no random draw decides the start shift.
 
 **P2. Burst alternation.**
-- Setup: a test rules file gives a stock vehicle with a non-zero lateral muzzle position a burst
-  count of 2, then 3.
+- Setup: named test art gives a stock vehicle a non-zero lateral muzzle position; named test
+  rules give its weapon a burst count of 1, then 2, then 3.
 - Observable: start positions of consecutive shots.
-- Expected: burst 2: +*L*, −*L*, +*L*, −*L* …; burst 3: +*L*, −*L*, +*L*, then +*L* again for the
-  next burst.
+- Expected: burst 1 always uses +*L*; burst 2: +*L*, −*L*, +*L*, −*L* …; burst 3:
+  +*L*, −*L*, +*L*, then +*L* again for the next burst.
 - Falsified if: the sides do not follow the burst counter.
 - Runs: 1 per burst count (no random draw decides the observable).
 
 **P3. Building turret displacement.**
 - Setup: a test art file gives a stock turreted defence a turret displacement of 512 leptons and a
-  zero muzzle position; targets placed east, south, west and north of it.
+  zero muzzle position; targets placed east, south, west and north of it. Omit its primary fire
+  pixel shift and, in named test rules, disable voxel turret and barrel flags to isolate F1.
 - Observable: start positions.
 - Expected: always 512 leptons towards map east of the foundation's top corner (at the building's
   height), whatever the target's direction.
@@ -320,16 +362,39 @@ object-state recorder (or, for instant weapons, from the start of the drawn beam
   forward and lateral parts (a test art file); a second, non-turreted defence given the same muzzle
   position. Expected: shifts as F1 with *M* the identity and *θ* from the building rows of claim
   3: the turreted one's from its turret facing, the other's from the direction of its target.
-  Falsified if: any shift differs by more than 1 lepton from F1.
+  Falsified if: any integer shift differs from F1.
+- Part c: named test rules give an upgrade the turret flag and install it on an otherwise
+  non-turreted test building. Keep primary pixel shifts and voxel barrels absent. Expected:
+  claim 3's turreted-building row follows the recorded turret facing. Falsified if the target
+  direction is used instead when the recorded facings differ.
 - Runs: 1 per target position (no random draw decides the observable).
 
 **P4. Open-topped passengers.**
-- Setup: a stock open-topped transport with five or six infantry passengers attacking a target.
-- Observable: start positions of each passenger's shots.
+- Setup: a stock open-topped transport and distinguishable infantry passengers. Named test
+  rules give it room for six passengers; named test art gives its five alternate muzzle positions
+  distinct non-zero forward, lateral and height components and gives it a non-zero turret
+  displacement. Board passengers one at a time, recording identities and boarding order, then
+  order an attack.
+- Observable: start positions of each passenger's shots and its current passenger position.
 - Expected: each passenger's shots start at the transport's fire point for its alternate muzzle
-  position; a sixth passenger fires from the turret pivot.
-- Falsified if: passengers fire from their own positions.
-- Runs: 1 (no random draw decides the observable).
+  position. The last passenger boarded is at position 1 and uses alternate muzzle position 0.
+  Earlier passengers follow in reverse boarding order (S-0507 claim 3). A passenger at
+  position 6 fires from the turret pivot.
+- Failed-exit variant: block exits during unloading as in S-0507 claim 10, then resume attacking
+  without anyone leaving. Expected: the passenger whose exit failed is still at position 1 and
+  uses alternate muzzle position 0.
+- Counter variant: named test rules give the transport its own burst weapon and give a passenger
+  a burst of at least two shots. Record attacks during which the transport's burst parity is
+  different from the passenger's. Expected: the passenger's muzzle uses the transport's parity,
+  displacement and facings in F1. Repeat with the transport not firing, its counter at zero:
+  every passenger shot uses +*L*, including the passenger's odd-numbered counter. Falsified if
+  the passenger's counter negates the lateral component or any integer start differs from F1.
+  If no differing-parity shot occurs, repeat; equal parities alone are inconclusive.
+- Falsified if: passengers fire from their own positions, their muzzle assignment follows
+  first-boarded-first order, the failed-exit passenger loses position 1, or a sixth passenger
+  does not fire from the recorded turret pivot.
+- Runs: one completed boarding/attack/unload sequence per variant, with at least two full
+  passenger bursts and one differing-parity shot in the counter variant.
 
 **P5. Garrison muzzles.**
 - Setup: a stock garrisonable building with 1, 3 and its maximum number of occupants attacking a
@@ -337,41 +402,64 @@ object-state recorder (or, for instant weapons, from the start of the drawn beam
 - Observable: start positions and which occupant fired, shot by shot.
 - Expected: the muzzle points cycle 0, 1, …, *n* − 1, 0, …; positions follow F3 from the
   foundation's top corner.
-- Falsified if: the cycle skips or the positions differ from F3 by more than 1 lepton.
+- Falsified if: the cycle skips or any integer start position differs from F3.
+- Reset variant: after firing from a non-zero muzzle index, empty the building by evacuation,
+  reoccupy it and attack again. Repeat after all occupants are killed without destroying the
+  building, using a named test occupant-killing weapon if needed. Expected: each first shot
+  after reoccupation uses muzzle 0. Falsified if it resumes the old index.
+- Data variant: named test art supplies distinct muzzle pixel pairs, including a missing entry,
+  the not-given pair from Constants, and positive and negative unequal components. Expected:
+  missing and not-given entries use (0, 0); others give exactly F3 at unchanged world height.
+  Repeat with a building on raised flat terrain. Falsified by any different start or height.
 - Part b: repeat with an occupant type whose occupying weapon is a disc laser weapon (a test rules
   file). Expected: the index does not move, so every shot starts at the same muzzle point and
   comes from the same occupant. Falsified if the muzzle points or occupants cycle.
-- Runs: 1 per occupant count (no random draw decides the observable).
+- Runs: one run per occupant count and variant, recording at least two complete muzzle cycles
+  (or two disc-laser shots). No random draw decides the predicted muzzle.
 
 **P6. Building pixel shifts.**
-- Setup: a stock building with a primary fire pixel shift; a test art file adding the dual-shift
-  flag; a stock voxel-turret defence.
+- Setup: named test rules and art create building variants with primary fire pixel shift
+  present/absent, dual-shift flag on/off, voxel turret on/off, and no voxel barrel. Give distinct
+  muzzle and turret displacement values and a non-zero turret-anchor pair. Set the anchor and
+  voxel flags in rules; put conflicting anchor/flag values in art as a negative control.
 - Observable: start positions.
-- Expected: the stock building fires from its base point shifted by its primary fire pixel shift
+- Expected: the primary-shift variant fires from its base point shifted by its primary fire pixel shift
   (F3), at the base point's world height; with the dual-shift flag, from the fire point of claim 1
-  shifted by that pixel shift; the voxel-turret defence from the fire point of claim 1 shifted by
+  shifted by that pixel shift; the no-primary voxel-turret variant from the fire point of claim 1 shifted by
   its turret anchor's pixel shift (F3, map x and y only) (claims 7 and 8).
-- Falsified if: the shifts are not applied as stated.
-- Part b: a test art file marks the barrel of a voxel-turret defence with a non-zero turret anchor
-  pixel shift as a voxel model. Expected: its shots do not start where the voxel-turret row of
-  claim 8 puts them. Falsified if: they start at the fire point of claim 1 shifted by the turret
-  anchor's pixel shift.
-- Runs: 1 per building (no random draw decides the observable).
+- Falsified if: any integer shift differs from claims 7 and 8, an art-only anchor/voxel-flag
+  change affects the result, or a rules-anchor change does not affect the voxel-turret result.
+- Part b: for the primary-shift variants, fire with primary and secondary weapons, then their
+  elite versions, using named test weapons with different muzzle triples. Give the primary
+  pixel pair positive and negative unequal components in turn, then omit it, then use the
+  not-given pair. Expected: with the dual-shift flag off, all weapon slots start at base + F3
+  and ignore F1; with it on, each starts at its own F1 + F3. Absent and not-given select the
+  appropriate no-primary row of claim 8. Repeat on raised flat terrain: the F3 addition never
+  changes world height. Falsified by any slot-dependent shift in the first case, any ignored
+  F1 shift in the second, or any non-zero F3 height change.
+- Runs: one full burst per building/data/weapon variant. No barrel-position prediction is made
+  while that rule remains an open question.
 
 **P7. Spray attack.**
-- Setup: a test rules file gives a stock vehicle the spray-attack flag and a weapon with burst
-  count 4, attacking an enemy; the random-state recorder runs.
-- Observable: the impact cells of each shot and the recorded draw.
-- Expected: the first shot hits the cell at shift *s*₁ = the recorded draw; the next three at
-  *s*₁ + 2, + 4, + 6 (mod 8).
-- Falsified if: impacts follow the target, or the steps differ.
-- Runs: 1 (the random-state recorder reads the draw).
+- Setup: named test rules give a stock vehicle the spray-attack flag and a weapon with burst
+  count 4, then 3, then 9, attacking a target away from the eight shifted cells. Use a visible
+  inaccurate arcing projectile in a separate draw-order variant; the random-state recorder runs.
+- Observable: the projectile's stored target cell and target point, not its impact cell, plus
+  firer position, burst counters and all scenario draws. Impacts alone are not evidence of the
+  redirected target because launch aim can still follow the firer's target (S-0306 claim 3 a).
+- Expected: the first shot's cell contains the firer's position plus F4 shift *s*₁ = R(0, 7).
+  Burst 4 advances by 2 per shot, burst 3 by 2, and burst 9 by 0; all wrap modulo 8. The next
+  burst takes a new ranged draw. The recorded random stream contains exactly one spray ranged draw per burst, before any projectile scatter draws, and no spray draw for later shots in that burst. Count underlying random draws as S-0202 claim 4 specifies for a ranged draw. Other launch draws follow S-0301 claim 18.
+- Falsified if: a stored target cell differs from F4, later shots consume a spray draw, a new
+  burst reuses its previous shift without a draw, or spray selection follows projectile draws.
+- Runs: record at least two full bursts per burst count, and repeat until the recorded first
+  shifts cover all eight directions. Use recorded values, not a chosen seed; report any
+  directions not yet observed as incomplete coverage.
 
 ## Open questions
 
 - The fire point of a building whose barrel is a voxel model follows the barrel's elevation
   (claim 8); its rule is not yet worked out.
-- The passenger order of an open-topped transport (claim 5) belongs to the transport specs.
 - For infantry and aircraft, *D* is the locomotor's body transform; whether any of their
   locomotors adds a translation to *D* that would move the fire point (as a hover bob would) is not
   checked.
