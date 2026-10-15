@@ -13,7 +13,7 @@
 use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;
 
-use super::{ProtectKind, Protection, SwEvent};
+use super::{ProtectKind, Protection, SwEvent, Tint};
 use crate::rules::Kind;
 use crate::world::{HouseId, ObjectId, Pos, World};
 
@@ -21,10 +21,13 @@ use crate::world::{HouseId, ObjectId, Pos, World};
 // spec: S-0513 Constants (invoke animation lift 5 leptons; claims 22, 31, 33 and 34)
 pub const INVOKE_LIFT: i32 = 5;
 
-/// The tint's pulsing phase begins this many ticks after protection
-/// starts (claim 29, "about 10 ticks"; the exact tick is Q-0733's).
-// spec: S-0513 claim 29 (about 10 ticks after protection starts; confidence medium: 10 or 11 ticks; Q-0733 interim: 10)
-pub const TINT_PHASE: i32 = 10;
+/// The length of the envelope's Initial rise (claim 29).
+// spec: S-0513 claim 29 (Initial rise: 6 ticks, starting at q)
+pub const TINT_RISE: i32 = 6;
+
+/// The length of the envelope's Bright hold (claim 29).
+// spec: S-0513 claim 29 (Bright hold: 4 ticks)
+pub const TINT_HOLD: i32 = 4;
 
 /// The tint draw's range (Constants).
 // spec: S-0513 Constants (tint draw range −5 … 5 ticks)
@@ -55,8 +58,8 @@ pub fn start(w: &mut World, id: ObjectId, kind: ProtectKind, duration: i32) {
         start: t,
         duration,
         kind,
-        // spec: S-0513 claim 29 (each start of protection restarts the tint's timing)
-        tint_due: Some(t + TINT_PHASE),
+        // spec: S-0513 claim 29 (reapplication restarts the envelope, even with another kind)
+        tint: Tint::BeforeFirstTurn,
     };
     let keep_old = !replaces
         && in_force
@@ -231,30 +234,31 @@ pub fn fade_update(w: &mut World, h: HouseId) {
     }
 }
 
-/// The tint's pulsing-phase draw in the object's own turn (claim 29).
+/// The protection envelope's phases up to its draw, in the object's own
+/// turn (claim 29).
 pub fn tint_turn(w: &mut World, id: ObjectId) {
     let t = w.tick;
-    let Some(due) = w
-        .obj(id)
-        .and_then(|o| o.sw.protection)
-        .and_then(|p| p.tint_due)
-    else {
+    let Some(p) = w.obj(id).and_then(|o| o.sw.protection) else {
         return;
     };
     if !super::protected(w, id) {
-        // spec: S-0513 claim 29 (protection that expired before the pulsing phase takes no draw for that start)
-        if let Some(p) = w.obj_mut(id).and_then(|o| o.sw.protection.as_mut()) {
-            p.tint_due = None;
-        }
+        // spec: S-0513 claim 29 (expiry before Initial dimming prevents the draw; no turns while unprotected advance the envelope)
         return;
     }
-    if t < due {
-        return;
-    }
+    // spec: S-0513 claim 29 (at most one phase transition per turn, when t − s ≥ L; the next phase is entered in that turn's tick)
+    let next = match p.tint {
+        // spec: S-0513 claim 29 (Initial rise starts at q, the first turn while this application protects the object)
+        Tint::BeforeFirstTurn => Tint::Rise(t),
+        Tint::Rise(s) if t - s >= TINT_RISE => Tint::BrightHold(t),
+        Tint::BrightHold(s) if t - s >= TINT_HOLD => Tint::Dimming,
+        _ => return,
+    };
     if let Some(p) = w.obj_mut(id).and_then(|o| o.sw.protection.as_mut()) {
-        p.tint_due = None;
+        p.tint = next;
     }
-    let half = w.rules().quirks.ranged_draw_half_span;
-    // spec: S-0513 claim 29 (one ranged draw R(−5, 5) from the scenario stream; the phase length it sets is presentation)
-    let _ = w.rng.ranged(TINT_DRAW.0, TINT_DRAW.1, half);
+    if next == Tint::Dimming {
+        let half = w.rules().quirks.ranged_draw_half_span;
+        // spec: S-0513 claim 29 (exactly one ranged draw R(−5, 5) from the scenario stream on entering Initial dimming; its length 20 + the draw is presentation)
+        let _ = w.rng.ranged(TINT_DRAW.0, TINT_DRAW.1, half);
+    }
 }

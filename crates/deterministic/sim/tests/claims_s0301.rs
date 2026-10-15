@@ -2099,3 +2099,238 @@ fn edge_burst_count_below_one_is_one() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// S-0308 claim 12 and S-0215 claim 32: upgrade weapons and the upgrade
+// weapon gate (upgrades installed by S-0406's placement, `add_upgrade`).
+
+/// An upgrade type: (name, primary, secondary, elite slots).
+type Up<'a> = (
+    &'a str,
+    Option<&'a str>,
+    Option<&'a str>,
+    Option<[&'a str; 2]>,
+);
+
+/// TOWERZ with its own `host` primary (none: unarmed), the upgrade types
+/// `ups`, and the weapon ZAPB with burst count 2.
+fn upgrade_rules(host: Option<&str>, ups: &[Up]) -> Ruleset {
+    let mut r = tower_rules(-1);
+    r.sim.weapons.insert(
+        "ZAPB".into(),
+        WeaponType {
+            burst: Some(2),
+            ..zap(25)
+        },
+    );
+    let tower = r.sim.buildings.get_mut("TOWERZ").unwrap();
+    tower.primary = host.map(Into::into);
+    tower.econ.upgrades = Some(3);
+    for &(name, p, s, elite) in ups {
+        r.registries.get_mut("buildings").unwrap().push(name.into());
+        r.sim.buildings.insert(
+            name.into(),
+            BuildingType {
+                strength: Some(100),
+                foundation: Some([1, 1]),
+                primary: p.map(Into::into),
+                secondary: s.map(Into::into),
+                combat: CombatFields {
+                    elite_weapon_slots: elite.map(|e| e.iter().map(|x| x.to_string()).collect()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+    }
+    r
+}
+
+/// The tower duel with the named upgrades installed in this order.
+fn upgraded(r: &Ruleset, names: &[&str]) -> (World, ObjectId, ObjectId) {
+    let (mut w, t, b) = tower_duel(r);
+    for n in names {
+        let u = glasnost_sim::objects::type_index(w.rules(), Kind::Building, n.as_bytes()).unwrap();
+        glasnost_sim::econ::placement::add_upgrade(&mut w, t, u);
+    }
+    (w, t, b)
+}
+
+/// A weapon by name.
+fn wid(w: &World, name: &str) -> glasnost_sim::combat::data::WeaponId {
+    let r = w.rules();
+    (0..r.combat.weapons.len())
+        .map(|i| i as u32)
+        .find(|&x| r.combat.weapon(x).name == name)
+        .unwrap()
+}
+
+/// The weapons of the projectiles in flight, in creation order.
+fn launched(w: &World) -> Vec<glasnost_sim::combat::data::WeaponId> {
+    w.projectiles.values().map(|p| p.weapon).collect()
+}
+
+// spec: S-0308 claim 12 (slot i comes from the first installed upgrade, in installation order, whose type has a weapon there; always its ordinary slot, whatever the host's rank; only then the building's own slot)
+#[test]
+fn s0308_claim_12_upgrades_supply_weapons() {
+    use glasnost_sim::combat::weapon::slot_weapon;
+    let r = upgrade_rules(
+        Some("ZAP2"),
+        &[
+            ("U1", Some("ZAP"), None, Some(["ZAPB", "ZAPB"])),
+            ("U2", Some("ZAP2"), Some("ZAPB"), None),
+        ],
+    );
+    let (mut w, t, _) = upgraded(&r, &["U1", "U2"]);
+    assert_eq!(
+        slot_weapon(&w, t, 0),
+        Some(wid(&w, "ZAP")),
+        "slot 0 from U1"
+    );
+    assert_eq!(
+        slot_weapon(&w, t, 1),
+        Some(wid(&w, "ZAPB")),
+        "slot 1 from U2"
+    );
+    set_rank(&mut w, t, 2);
+    assert_eq!(
+        slot_weapon(&w, t, 0),
+        Some(wid(&w, "ZAP")),
+        "never U1's elite slot"
+    );
+    let (w, t, _) = upgraded(&r, &["U2", "U1"]);
+    assert_eq!(
+        slot_weapon(&w, t, 0),
+        Some(wid(&w, "ZAP2")),
+        "U2 installed first"
+    );
+    // No upgrade: the building's own slot.
+    let r = upgrade_rules(Some("ZAP2"), &[("U1", None, Some("ZAP"), None)]);
+    let (w, t, _) = upgraded(&r, &["U1"]);
+    assert_eq!(slot_weapon(&w, t, 0), Some(wid(&w, "ZAP2")));
+    assert_eq!(slot_weapon(&w, t, 1), Some(wid(&w, "ZAP")));
+}
+
+// spec: S-0215 claim 32 (the gate: the first installed upgrade's ordinary weapons; a primary, and both slots the same type, a primary burst above 1, or a secondary burst above 1)
+#[test]
+fn s0215_claim_32_upgrade_gate_predicate() {
+    let cases: [(Option<&str>, Option<&str>, Option<[&str; 2]>, bool); 8] = [
+        (Some("ZAP"), None, None, false),
+        (Some("ZAP"), Some("ZAP"), None, true),
+        (Some("ZAPB"), None, None, true),
+        (Some("ZAP"), Some("ZAPB"), None, true),
+        (Some("ZAP"), Some("ZAP2"), None, false),
+        (None, Some("ZAPB"), None, false),
+        // Identical elite weapons do not pass; identical ordinary ones do,
+        // whatever the elite ones.
+        (Some("ZAP"), Some("ZAP2"), Some(["ZAP", "ZAP"]), false),
+        (Some("ZAP"), Some("ZAP"), Some(["ZAP", "ZAP2"]), true),
+    ];
+    for (i, (p, s, e, pass)) in cases.into_iter().enumerate() {
+        let r = upgrade_rules(Some("ZAP"), &[("U1", p, s, e)]);
+        let (mut w, t, _) = upgraded(&r, &["U1"]);
+        assert_eq!(behave::upgrade_gate(&w, t), Some(pass), "case {i}");
+        set_rank(&mut w, t, 2);
+        assert_eq!(
+            behave::upgrade_gate(&w, t),
+            Some(pass),
+            "case {i}, elite host"
+        );
+    }
+    let r = upgrade_rules(Some("ZAP"), &[]);
+    let (w, t, _) = upgraded(&r, &[]);
+    assert_eq!(behave::upgrade_gate(&w, t), None, "no upgrade: no gate");
+    // The first installed upgrade decides, whichever supplies the weapon.
+    let r = upgrade_rules(
+        None,
+        &[
+            ("U1", None, Some("ZAP"), None),
+            ("U2", Some("ZAP"), Some("ZAP"), None),
+        ],
+    );
+    let (w, t, _) = upgraded(&r, &["U1", "U2"]);
+    assert_eq!(behave::upgrade_gate(&w, t), Some(false));
+    let (w, t, _) = upgraded(&r, &["U2", "U1"]);
+    assert_eq!(behave::upgrade_gate(&w, t), Some(true));
+}
+
+// spec: S-0215 claim 32 (an upgrade-only building searches and starts attack; a failed gate makes no attempt on can fire, keeps its target and attack, sets the ready mark and chooses 1 tick with no draw)
+#[test]
+fn s0215_claim_32_failed_gate_attacks_without_shots() {
+    let r = upgrade_rules(None, &[("U1", Some("ZAP"), None, None)]);
+    let (mut w, t, b) = upgraded(&r, &["U1"]);
+    // Guard with a target: armed through the upgrade, so it starts attack.
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(w.obj(t).unwrap().beh.current, Some(Behaviour::Attack));
+    for _ in 0..3 {
+        w.obj_mut(t).unwrap().beh.ready_mark = false;
+        assert_eq!(ask(&w, t, 0), Answer::CanFire);
+        let before = w.rng.taken();
+        assert_eq!(behave::building_process(&mut w, t), 1);
+        assert_eq!(w.rng.taken(), before, "no draw");
+        let o = w.obj(t).unwrap();
+        assert!(launched(&w).is_empty());
+        assert_eq!(o.last_fired, -100);
+        assert_eq!(o.target, Some(Target::Object(b)));
+        assert_eq!(o.beh.current, Some(Behaviour::Attack));
+        assert!(o.beh.ready_mark);
+        w.tick += 1;
+    }
+}
+
+// spec: S-0215 claim 32 and S-0301 claim 9 (a passing gate: a primary attempt, then a secondary attempt with no firing check, despite the primary's rearm; slots 0 and 1 resolved by S-0308 claim 12, not necessarily from one upgrade)
+#[test]
+fn s0215_claim_32_passing_gate_paired_attempts() {
+    let r = upgrade_rules(
+        None,
+        &[
+            ("U1", Some("ZAPB"), None, None),
+            ("U2", Some("ZAP"), Some("ZAP2"), None),
+        ],
+    );
+    let (mut w, t, _) = upgraded(&r, &["U1", "U2"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(launched(&w), [wid(&w, "ZAPB"), wid(&w, "ZAP2")]);
+    // Same-weapon upgrade, single shots: both attempts though the primary
+    // began its rearm countdown.
+    let r = upgrade_rules(None, &[("U1", Some("ZAP"), Some("ZAP"), None)]);
+    let (mut w, t, _) = upgraded(&r, &["U1"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(launched(&w), [wid(&w, "ZAP"), wid(&w, "ZAP")]);
+    // Q-0798 interim: a secondary attempt with no weapon does nothing.
+    let r = upgrade_rules(None, &[("U1", Some("ZAPB"), None, None)]);
+    let (mut w, t, _) = upgraded(&r, &["U1"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(launched(&w), [wid(&w, "ZAPB")]);
+}
+
+// spec: S-0215 claim 32 (quirks.upgrade_attack_weapon_gate off: a failed gate permits the ordinary selected-weapon attempt; a passing gate still pairs; no upgrade: the ordinary attempt either way)
+#[test]
+fn s0215_quirk_upgrade_attack_weapon_gate_off() {
+    let mut r = upgrade_rules(
+        Some("ZAP2"),
+        &[
+            ("U1", Some("ZAP"), None, None),
+            ("U2", Some("ZAP"), Some("ZAP"), None),
+        ],
+    );
+    r.globals.quirks.upgrade_attack_weapon_gate = false;
+    let (mut w, t, _) = upgraded(&r, &["U1"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(launched(&w), [wid(&w, "ZAP")]);
+    let (mut w, t, _) = upgraded(&r, &["U2"]);
+    attack(&mut w, t);
+    assert_eq!(behave::building_process(&mut w, t), 1);
+    assert_eq!(launched(&w), [wid(&w, "ZAP"), wid(&w, "ZAP")]);
+    for gate in [true, false] {
+        r.globals.quirks.upgrade_attack_weapon_gate = gate;
+        let (mut w, t, _) = upgraded(&r, &[]);
+        attack(&mut w, t);
+        assert_eq!(behave::building_process(&mut w, t), 1);
+        assert_eq!(launched(&w), [wid(&w, "ZAP2")], "gate {gate}");
+    }
+}

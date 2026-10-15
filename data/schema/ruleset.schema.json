@@ -8740,6 +8740,11 @@
           "type": "boolean",
           "default": true
         },
+        "upgrade_attack_weapon_gate": {
+          "description": "A non-SAM building with an installed upgrade fires on a *can fire* answer only when its first installed upgrade's ordinary weapons pass the gate (a primary, and the same weapon in both slots or a burst count above 1); off: a failed gate permits the ordinary selected-weapon attempt.",
+          "type": "boolean",
+          "default": true
+        },
         "upgrade_fields_carry_over": {
           "description": "An absent upgrade name field of a map building entry keeps the type the same field named in an earlier entry; off: it means no upgrade.",
           "type": "boolean",

@@ -471,6 +471,10 @@ pub struct Quirks {
     // spec: S-0215 Edge cases and F8
     #[serde(default = "on")]
     pub turret_snap_bound_wraps: bool,
+    /// A non-SAM building with an installed upgrade fires on a *can fire* answer only when its first installed upgrade's ordinary weapons pass the gate (a primary, and the same weapon in both slots or a burst count above 1); off: a failed gate permits the ordinary selected-weapon attempt.
+    // spec: S-0215 claim 32
+    #[serde(default = "on")]
+    pub upgrade_attack_weapon_gate: bool,
     /// Start-next and force leave the suspended behaviour and the put-aside target and destination in place, so a late revert can bring them back; off: an effective start-next or force empties them.
     // spec: S-0215 claims 8 to 10 and Edge cases
     #[serde(default = "on")]
@@ -1913,6 +1917,7 @@ impl Default for Quirks {
             deck_side_step_ground_level: true,
             gate_reverse_snaps: true,
             turret_snap_bound_wraps: true,
+            upgrade_attack_weapon_gate: true,
             stale_suspended_revert: true,
             disarm_bomb_needs_weapon: true,
             berserk_carrier_tote: true,
@@ -2509,6 +2514,10 @@ impl Quirks {
             ),
             ("gate_reverse_snaps", self.gate_reverse_snaps),
             ("turret_snap_bound_wraps", self.turret_snap_bound_wraps),
+            (
+                "upgrade_attack_weapon_gate",
+                self.upgrade_attack_weapon_gate,
+            ),
             ("stale_suspended_revert", self.stale_suspended_revert),
             ("disarm_bomb_needs_weapon", self.disarm_bomb_needs_weapon),
             ("berserk_carrier_tote", self.berserk_carrier_tote),

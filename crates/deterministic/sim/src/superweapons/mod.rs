@@ -791,8 +791,24 @@ pub struct Protection {
     pub duration: i32,
     /// The kind.
     pub kind: ProtectKind,
-    /// The tick of the tint's pulsing-phase draw, while it is due (claim 29).
-    pub tint_due: Option<i32>,
+    /// The brightness envelope's phase, up to its draw (claim 29).
+    pub tint: Tint,
+}
+
+/// The protection brightness envelope's phases up to its draw (S-0513
+/// claim 29). Only the draw is game state; the phases after Initial
+/// dimming, their factors and F9 are presentation and not built.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Tint {
+    /// Before the first protected turn *q*.
+    #[default]
+    BeforeFirstTurn,
+    /// Initial rise, entered in this tick.
+    Rise(i32),
+    /// Bright hold, entered in this tick.
+    BrightHold(i32),
+    /// Initial dimming entered and its draw taken.
+    Dimming,
 }
 
 /// An object's superweapon state.

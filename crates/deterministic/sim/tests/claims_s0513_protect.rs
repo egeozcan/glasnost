@@ -352,23 +352,88 @@ fn claim28_player_houses_may_fire_at_protected_objects() {
 
 // --- Claim 29 ------------------------------------------------------------------
 
+/// Steps both worlds until their streams differ (at most `max` ticks);
+/// returns the tick in which they first differ.
+fn first_divergence(a: &mut World, b: &mut World, max: i32) -> Option<i32> {
+    for _ in 0..max {
+        let t = a.tick;
+        step(a);
+        step(b);
+        if a.rng != b.rng {
+            return Some(t);
+        }
+    }
+    None
+}
+
 #[test]
-fn claim29_tint_draw_taken_once_about_ten_ticks_after_start() {
-    // spec: S-0513 claim 29 (one ranged draw R(−5, 5) in the object's turn when the tint enters its pulsing phase; Q-0733 interim tick t₀ + 10)
+fn claim29_tint_draw_in_turn_q_plus_ten() {
+    // spec: S-0513 claim 29 (one ranged draw R(−5, 5) on entering Initial dimming, in turn q + 10 with uninterrupted turns; q the first protected turn, here the tick of the start, before its turn pass)
+    let r = ruleset();
+    let mut a = game(&r);
+    let mut b = game(&r);
+    let ca = spawn(&mut a, "CART", BETA, 0, 0);
+    let _cb = spawn(&mut b, "CART", BETA, 0, 0);
+    let q = a.tick;
+    protect::start(&mut a, ca, ProtectKind::Curtain, 100);
+    assert_eq!(first_divergence(&mut a, &mut b, 30), Some(q + 10));
+    // Exactly one draw per application: the gap stays through the rest of
+    // the protection and after it.
+    let gap = a.rng.taken() - b.rng.taken();
+    assert!(gap > 0);
+    for _ in 0..120 {
+        step(&mut a);
+        step(&mut b);
+    }
+    assert_eq!(a.rng.taken() - b.rng.taken(), gap);
+}
+
+#[test]
+fn claim29_launch_after_the_turn_pass_draws_at_t0_plus_eleven() {
+    // spec: S-0513 claim 29 (a launch applied after the turn pass in tick t₀: q = t₀ + 1, the draw in tick t₀ + 11, not t₀ + 10)
+    let r = ruleset();
+    let mut a = game(&r);
+    spawn(&mut a, "IRONB", ALPHA, -5, -5);
+    let cart = spawn(&mut a, "CART", BETA, 0, 0);
+    ready_tick(&mut a, ALPHA, CURTAIN, 200);
+    fire(&mut a, ALPHA, CURTAIN, at(0, 0));
+    let t0 = a.tick;
+    step(&mut a);
+    let p = a.obj(cart).unwrap().sw.protection.unwrap();
+    assert_eq!(p.start, t0, "applied in the order step of tick t₀");
+    assert_eq!(p.tint, superweapons::Tint::BeforeFirstTurn);
+    // The twin: the same world without the protection takes no tint draw.
+    let mut b = a.clone();
+    b.obj_mut(cart).unwrap().sw.protection = None;
+    assert_eq!(first_divergence(&mut a, &mut b, 30), Some(t0 + 11));
+}
+
+#[test]
+fn claim29_reapplication_restarts_the_envelope() {
+    // spec: S-0513 claim 29 (reapplication restarts the envelope, even with another kind; expiry or restart before turn q + 10 prevents that application's draw)
     let r = ruleset();
     let mut a = game(&r);
     let mut b = game(&r);
     let ca = spawn(&mut a, "CART", BETA, 0, 0);
     let _cb = spawn(&mut b, "CART", BETA, 0, 0);
     protect::start(&mut a, ca, ProtectKind::Curtain, 100);
-    for _ in 0..protect::TINT_PHASE {
+    for _ in 0..7 {
         step(&mut a);
         step(&mut b);
     }
-    assert_eq!(a.rng, b.rng, "no draw before the pulsing phase");
-    step(&mut a);
-    step(&mut b);
-    assert_ne!(a.rng, b.rng, "the draw in the pulsing-phase turn");
+    assert!(matches!(
+        a.obj(ca).unwrap().sw.protection.unwrap().tint,
+        superweapons::Tint::BrightHold(_)
+    ));
+    let q = a.tick;
+    protect::start(&mut a, ca, ProtectKind::ForceShield, 100);
+    assert_eq!(first_divergence(&mut a, &mut b, 30), Some(q + 10));
+    let gap = a.rng.taken() - b.rng.taken();
+    for _ in 0..30 {
+        step(&mut a);
+        step(&mut b);
+    }
+    assert_eq!(a.rng.taken() - b.rng.taken(), gap, "one draw in all");
 }
 
 #[test]
