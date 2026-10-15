@@ -2,7 +2,7 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -157,8 +157,8 @@ used by this spec only:
   tests whether the fill fraction is exactly 1, which holds when the amount carried equals the
   capacity.
 - **Harvesting:** the unit is carrying out a harvest order (economy specs).
-- **Designating an airstrike:** the unit is marking a target for an airstrike that is linked to it
-  (superweapon specs).
+- **Designating an airstrike:** the unit is a designator (S-0519 Terms) and has a target.
+  Its strike need not be in progress. S-0519 claims 16 to 20 own the strike mechanics.
 - **Laser-fence building:** a building whose type has the laser-fence flag (structures specs).
 
 ## Behaviour
