@@ -2,7 +2,7 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -377,8 +377,15 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
     It therefore looks ahead along the path rather than necessarily along its direction of travel.
     How the movement heading controls throttle and travel is S-0503 claims 2, 5 and 6.
     The body facing does not steer the vehicle.
-    - Backing: `measurable` (S-0503 scenario H2 for heading rate and body aim)
-    - Confidence: medium
+
+    A newly attached hovering locomotor starts with movement heading at map north (0 facing
+    units), independently of the placement body facing. Putting the vehicle back on the map
+    with its existing hovering locomotor retains the heading and any turn in progress; ordinary
+    placement, factory release and teleportation do not reset it. Attaching a new hovering
+    locomotor starts the heading north again (S-0503 claim 15).
+    - Backing: `measurable` (S-0503 scenario H2 for heading rate and body aim; H13 for initial
+      and retained placement headings)
+    - Confidence: high for initial north; medium for the remaining rules
 
 14. **The jumpjet locomotor.** A jumpjet keeps a movement heading that turns at the type's jumpjet
     turn-rate field (absent-key default 4, passed through claim 6). When a unit gets the jumpjet
@@ -636,6 +643,11 @@ vehicle, turning routes and per-tick recorder. Compare the recorded movement hea
 at twice the imported turn-rate field after claim 6's conversion, and the body facing with
 S-0503 claim 5's look-ahead aim at the type's own rate. A different heading rate, or body aim
 following travel direction instead of the look-ahead point on the turn, falsifies claim 13.
+Use S-0503 scenario H13 for placement: record the movement heading separately from the body
+before any move, after factory release, and across teleportation retaining the same locomotor.
+Expected: newly attached headings are north regardless of body placement; the existing heading
+and turn survive replacement on the map. A heading copied from the body, or a reset of an
+existing heading or turn on replacement, falsifies claim 13's placement rule.
 
 **jumpjet heading and crash spin (claim 14).** Use S-0502 scenarios J7 and J12 with their
 measurement setup, flight routes and crash procedure. Record the movement heading and its target
