@@ -110,6 +110,17 @@ pub enum Effect {
         /// What happened.
         event: crate::cloak::machine::CloakEvent,
     },
+    /// A superweapon presentation event (S-0512 claim 5, S-0513 claim 5).
+    Superweapon {
+        /// What happened.
+        event: crate::superweapons::SwEvent,
+        /// The house it concerns (the launching or record house), if any.
+        house: Option<crate::world::HouseId>,
+        /// The superweapon type, by list position, if any.
+        sw: Option<u32>,
+        /// Where, if positional.
+        pos: Option<Pos>,
+    },
 }
 
 /// The sounds of [`Effect::Sound`].

@@ -803,6 +803,10 @@ fn sell_upgrade(w: &mut World, id: ObjectId, u: Option<u32>) {
     // spec: S-0408 claim 5 (the house works out its power again, S-0405 claim 7)
     crate::econ::power::make_due(w, house);
     crate::econ::radar::mark_due(w, house);
+    if let Some(u) = u {
+        // spec: S-0512 claim 2 (d) (a building losing an upgrade: the availability check at once)
+        crate::superweapons::charge::upgrade_lost(w, id, u);
+    }
 }
 
 /// A building type's adjusted cost *C*′ (S-0408 claim 2, F2), which the

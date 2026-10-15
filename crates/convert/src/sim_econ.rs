@@ -158,6 +158,13 @@ const BUILDING_ECON: &[Row] = &[
     ("water_bound", "WaterBound", Bool, "S-0406"),
     ("wall", "Wall", Bool, "S-0403, S-0406"),
     ("to_overlay", "ToOverlay", Ref(Kind::Overlays), "S-0406"),
+    ("nuke_silo", "NukeSilo", Bool, "S-0513"),
+    (
+        "psychic_detection_radius",
+        "PsychicDetectionRadius",
+        Int,
+        "S-0513",
+    ),
     ("laser_fence_post", "LaserFencePost", Bool, "S-0406"),
     ("guard_range", "GuardRange", Dec, "S-0406"),
     (
@@ -279,7 +286,33 @@ const SUPERWEAPON_FIELDS: &[Row] = &[
         Bool,
         "S-0407, S-0412",
     ),
-    ("kind", "Type", Text, "S-0407"),
+    ("kind", "Type", Text, "S-0407, S-0512"),
+    ("recharge_time", "RechargeTime", Dec, "S-0512"),
+    ("is_powered", "IsPowered", Bool, "S-0512"),
+    ("show_timer", "ShowTimer", Bool, "S-0512"),
+    (
+        "flash_sidebar_tab_frames",
+        "FlashSidebarTabFrames",
+        Int,
+        "S-0512",
+    ),
+    ("pre_click", "PreClick", Bool, "S-0512"),
+    ("post_click", "PostClick", Bool, "S-0512"),
+    ("pre_dependent", "PreDependent", Text, "S-0512"),
+    ("action", "Action", Text, "S-0512"),
+    ("use_charge_drain", "UseChargeDrain", Bool, "S-0512"),
+    ("manual_control", "ManualControl", Bool, "S-0512"),
+    (
+        "aux_building",
+        "AuxBuilding",
+        Ref(Kind::Buildings),
+        "S-0512",
+    ),
+    ("ui_name", "UIName", Text, "S-0512"),
+    ("sidebar_image", "SidebarImage", Text, "S-0512"),
+    ("weapon_type", "WeaponType", Ref(Kind::Weapons), "S-0513"),
+    ("start_sound", "StartSound", Text, "S-0512, S-0513"),
+    ("special_sound", "SpecialSound", Text, "S-0512, S-0513"),
 ];
 
 const GENERAL: &[u8] = b"General"; // spec: S-0004 Import mapping (the general settings section)
@@ -660,6 +693,273 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
     ("ai_difficulty", DIALOG, "AIDifficulty", Int, "S-0011"),
 ];
 
+/// Game-wide superweapon values (`general.superweapons`): our field, the
+/// section, the key, the form and the spec.
+const GENERAL_SW: &[(&str, &[u8], &str, Form, &str)] = &[
+    (
+        "charge_to_drain_ratio",
+        GENERAL,
+        "ChargeToDrainRatio",
+        Dec,
+        "S-0512",
+    ),
+    (
+        "nuke_take_off",
+        GENERAL,
+        "NukeTakeOff",
+        Ref(Kind::Animations),
+        "S-0513",
+    ),
+    ("dig_sound", AUDIO_VISUAL, "DigSound", Text, "S-0513"),
+    (
+        "lightning_deferment",
+        GENERAL,
+        "LightningDeferment",
+        Int,
+        "S-0513",
+    ),
+    (
+        "lightning_storm_duration",
+        GENERAL,
+        "LightningStormDuration",
+        Int,
+        "S-0513",
+    ),
+    (
+        "lightning_hit_delay",
+        GENERAL,
+        "LightningHitDelay",
+        Int,
+        "S-0513",
+    ),
+    (
+        "lightning_scatter_delay",
+        GENERAL,
+        "LightningScatterDelay",
+        Int,
+        "S-0513",
+    ),
+    (
+        "lightning_cell_spread",
+        GENERAL,
+        "LightningCellSpread",
+        Int,
+        "S-0513",
+    ),
+    (
+        "lightning_separation",
+        GENERAL,
+        "LightningSeparation",
+        Int,
+        "S-0513",
+    ),
+    (
+        "lightning_damage",
+        GENERAL,
+        "LightningDamage",
+        Int,
+        "S-0513",
+    ),
+    (
+        "lightning_warhead",
+        GENERAL,
+        "LightningWarhead",
+        Ref(Kind::Warheads),
+        "S-0513",
+    ),
+    (
+        "lightning_print_text",
+        GENERAL,
+        "LightningPrintText",
+        Bool,
+        "S-0513",
+    ),
+    (
+        "weather_con_clouds",
+        GENERAL,
+        "WeatherConClouds",
+        Refs(Kind::Animations),
+        "S-0513",
+    ),
+    (
+        "weather_con_bolts",
+        GENERAL,
+        "WeatherConBolts",
+        Refs(Kind::Animations),
+        "S-0513",
+    ),
+    (
+        "weather_con_bolt_explosion",
+        GENERAL,
+        "WeatherConBoltExplosion",
+        Ref(Kind::Animations),
+        "S-0513",
+    ),
+    ("storm_sound", AUDIO_VISUAL, "StormSound", Text, "S-0513"),
+    (
+        "lightning_sounds",
+        AUDIO_VISUAL,
+        "LightningSounds",
+        Texts,
+        "S-0513",
+    ),
+    (
+        "iron_curtain_duration",
+        COMBAT_DAMAGE,
+        "IronCurtainDuration",
+        Int,
+        "S-0513",
+    ),
+    (
+        "iron_curtain_invoke_anim",
+        GENERAL,
+        "IronCurtainInvokeAnim",
+        Ref(Kind::Animations),
+        "S-0513",
+    ),
+    (
+        "force_shield_invoke_anim",
+        GENERAL,
+        "ForceShieldInvokeAnim",
+        Ref(Kind::Animations),
+        "S-0513",
+    ),
+    (
+        "force_shield_radius",
+        GENERAL,
+        "ForceShieldRadius",
+        Int,
+        "S-0513",
+    ),
+    (
+        "force_shield_duration",
+        GENERAL,
+        "ForceShieldDuration",
+        Int,
+        "S-0513",
+    ),
+    (
+        "force_shield_blackout_duration",
+        GENERAL,
+        "ForceShieldBlackoutDuration",
+        Int,
+        "S-0513",
+    ),
+    (
+        "force_shield_play_fade_sound_time",
+        GENERAL,
+        "ForceShieldPlayFadeSoundTime",
+        Int,
+        "S-0513",
+    ),
+    (
+        "iron_curtain_color",
+        AUDIO_VISUAL,
+        "IronCurtainColor",
+        Int,
+        "S-0513",
+    ),
+    (
+        "force_shield_color",
+        AUDIO_VISUAL,
+        "ForceShieldColor",
+        Int,
+        "S-0513",
+    ),
+    (
+        "chrono_placement",
+        GENERAL,
+        "ChronoPlacement",
+        Ref(Kind::Animations),
+        "S-0513",
+    ),
+    (
+        "chrono_blast",
+        GENERAL,
+        "ChronoBlast",
+        Ref(Kind::Animations),
+        "S-0513",
+    ),
+    (
+        "chrono_blast_dest",
+        GENERAL,
+        "ChronoBlastDest",
+        Ref(Kind::Animations),
+        "S-0513",
+    ),
+    ("chrono_delay", GENERAL, "ChronoDelay", Int, "S-0513"),
+    (
+        "chrono_reinf_delay",
+        GENERAL,
+        "ChronoReinfDelay",
+        Int,
+        "S-0513",
+    ),
+    (
+        "ally_para_drop_inf",
+        GENERAL,
+        "AllyParaDropInf",
+        Refs(Kind::Infantry),
+        "S-0522, S-0513",
+    ),
+    (
+        "ally_para_drop_num",
+        GENERAL,
+        "AllyParaDropNum",
+        Maxima,
+        "S-0522, S-0513",
+    ),
+    (
+        "sov_para_drop_inf",
+        GENERAL,
+        "SovParaDropInf",
+        Refs(Kind::Infantry),
+        "S-0522",
+    ),
+    (
+        "sov_para_drop_num",
+        GENERAL,
+        "SovParaDropNum",
+        Maxima,
+        "S-0522",
+    ),
+    (
+        "yuri_para_drop_inf",
+        GENERAL,
+        "YuriParaDropInf",
+        Refs(Kind::Infantry),
+        "S-0522",
+    ),
+    (
+        "yuri_para_drop_num",
+        GENERAL,
+        "YuriParaDropNum",
+        Maxima,
+        "S-0522",
+    ),
+    (
+        "amer_para_drop_inf",
+        GENERAL,
+        "AmerParaDropInf",
+        Refs(Kind::Infantry),
+        "S-0522",
+    ),
+    (
+        "amer_para_drop_num",
+        GENERAL,
+        "AmerParaDropNum",
+        Maxima,
+        "S-0522",
+    ),
+    (
+        "spy_plane_camera",
+        AUDIO_VISUAL,
+        "SpyPlaneCamera",
+        Text,
+        "S-0513",
+    ),
+];
+
 /// The coverage rows of the keys this module converts: (category, key,
 /// spec).
 pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
@@ -692,7 +992,7 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     for k in NO_EFFECT_FACTORS {
         out.push(("countries", k.to_owned(), "S-0413"));
     }
-    for (_, section, k, _, spec) in GENERAL_ECON {
+    for (_, section, k, _, spec) in GENERAL_ECON.iter().chain(GENERAL_SW) {
         let cat = match *section {
             s if s == AI => "global:AI",
             s if s == AUDIO_VISUAL => "global:AudioVisual",
@@ -1276,6 +1576,36 @@ impl Builder<'_> {
     /// A superweapon record.
     pub(super) fn superweapon(&mut self, rec: &mut Rec, t: &TypeRec) {
         self.efields(rec, t, Kind::Superweapons, SUPERWEAPON_FIELDS);
+    }
+
+    /// The game-wide superweapon values (`general.superweapons`).
+    pub(super) fn general_sw(&mut self, rec: &mut Rec) {
+        let mut sw = Rec::default();
+        let globals = &self.i.outcome.globals;
+        let rows: Vec<_> = GENERAL_SW
+            .iter()
+            .map(|&(field, section, k, form, _)| {
+                (
+                    field,
+                    globals
+                        .get(section)
+                        .and_then(|s| s.get(k.as_bytes()))
+                        .cloned(),
+                    form,
+                    section,
+                    k,
+                )
+            })
+            .collect();
+        for (field, state, form, section, k) in rows {
+            let what = format!("[{}] {k}", show(section));
+            if let Some(n) = self.field(state.as_ref(), form, &what) {
+                sw.put(field, n);
+            }
+        }
+        if !sw.0.is_empty() {
+            rec.put("superweapons", sw.node());
+        }
     }
 
     /// The game-wide economy values (`general.economy`).

@@ -777,3 +777,205 @@ fn a_left_click_sets_a_rally_point_that_new_vehicles_drive_to() {
         })
     });
 }
+
+/// The synthetic skirmish with the NUKE type's kind word set to `kind`,
+/// the types `extra` (name, kind word) added after it, and
+/// `quirks.superweapon_kind_as_list_position` set to `list_position`.
+fn sw_start(kind: &str, extra: &[(&str, &str)], list_position: bool) -> Play {
+    let mut r = fixture::ruleset();
+    r.sim.superweapons.get_mut("NUKE").unwrap().kind = Some(kind.into());
+    for (name, k) in extra {
+        r.sim.superweapons.insert(
+            (*name).into(),
+            glasnost_rules::sim_econ::SuperweaponType {
+                kind: Some((*k).into()),
+                ..Default::default()
+            },
+        );
+        r.registries
+            .get_mut("superweapons")
+            .unwrap()
+            .push((*name).into());
+    }
+    r.globals.quirks.superweapon_kind_as_list_position = list_position;
+    start_with(std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &r,
+        "synthetic-skirmish",
+    )))
+}
+
+/// Gives the local house a powered missile silo and charges its record
+/// fully; returns the silo.
+fn ready_silo(p: &mut Play) -> ObjectId {
+    step_until(p, 10, |p| p.world().tick >= 4);
+    let mcv = *own(p, Kind::Vehicle).first().expect("a base unit");
+    let c = p.world().obj(mcv).unwrap().pos.cell();
+    let local = p.local.0;
+    testkit::spawn(
+        &mut p.game.world,
+        Kind::Building,
+        "POWR",
+        local,
+        CellXY::new(c.x + 4, c.y - 6),
+        0,
+    );
+    let silo = testkit::spawn(
+        &mut p.game.world,
+        Kind::Building,
+        "SILO",
+        local,
+        CellXY::new(c.x - 6, c.y - 6),
+        0,
+    );
+    step_until(p, 10, |p| {
+        charge::get(p.world(), p.local, 0).is_some_and(|r| r.granted)
+    });
+    charge::set_charge(&mut p.game.world, p.local, 0, 100);
+    step_until(p, 10, |p| charge::offers_targeting(p.world(), p.local, 0));
+    silo
+}
+
+fn fired(p: &Play) -> Vec<Order> {
+    p.game
+        .replay()
+        .orders
+        .iter()
+        .filter(|(_, h, o)| *h == p.local && matches!(o, Order::FireSuperweapon { .. }))
+        .map(|(_, _, o)| o.clone())
+        .collect()
+}
+
+/// spec: S-0512 claim 16 (a ready icon arms its type); S-0513 claims 1 and 2 (a click fires it at the cell; the order names the selected type); S-0004 claim 11 (superweapons in the 2nd tab)
+#[test]
+fn s0512_claim_16_icon_arms_and_a_click_fires() {
+    let mut p = sw_start("MultiMissile", &[], true);
+    ready_silo(&mut p);
+    let entries = hud::entries(p.world(), p.local, hud::SW_TAB);
+    let n = entries
+        .iter()
+        .position(|e| *e == hud::Entry::Superweapon(0))
+        .expect("the silo's superweapon in the 2nd tab");
+    p.tab = hud::SW_TAB;
+    p.selection.clear();
+    p.cameo_click(n, Button::Left, false);
+    let armed = Tool::Superweapon {
+        sw: 0,
+        from_source: false,
+    };
+    assert_eq!(p.tool, armed);
+    // spec: S-0410 claim 12 (a nuclear strike has an explicit radar offer)
+    assert_eq!(p.radar_aims(), Some(0));
+    let at = CellXY::new(10, 10);
+    p.click_map(Button::Left, None, at, Modifiers::default());
+    assert_eq!(p.tool, Tool::Select);
+    assert_eq!(fired(&p), vec![Order::FireSuperweapon { sw: 0, cell: at }]);
+}
+
+/// spec: S-0214 claim 28 and S-0513 claim 1 (a right click cancels the aim with no order)
+#[test]
+fn s0513_claim_1_right_click_cancels_the_aim() {
+    let mut p = sw_start("MultiMissile", &[], true);
+    ready_silo(&mut p);
+    p.selection.clear();
+    p.tool = Tool::Superweapon {
+        sw: 0,
+        from_source: false,
+    };
+    p.click_map(
+        Button::Right,
+        None,
+        CellXY::new(10, 10),
+        Modifiers::default(),
+    );
+    assert_eq!(p.tool, Tool::Select);
+    assert!(fired(&p).is_empty());
+}
+
+/// spec: S-0513 claim 1 (a force shield is offered only over an own or allied building; elsewhere a click sends no order and keeps the charge)
+#[test]
+fn s0513_claim_1_force_shield_only_over_own_buildings() {
+    let mut p = sw_start("ForceShield", &[], true);
+    let silo = ready_silo(&mut p);
+    p.selection.clear();
+    let armed = Tool::Superweapon {
+        sw: 0,
+        from_source: false,
+    };
+    p.tool = armed;
+    // spec: S-0410 claim 12 (under the switch the list position 0, the nuclear strike's row, picks the offer, not the kind)
+    assert_eq!(p.radar_aims(), Some(0));
+    p.click_map(
+        Button::Left,
+        None,
+        CellXY::new(10, 10),
+        Modifiers::default(),
+    );
+    assert_eq!(p.tool, armed, "the aim stays");
+    assert!(fired(&p).is_empty(), "no order");
+    let at = p.world().obj(silo).unwrap().pos.cell();
+    p.click_map(Button::Left, Some(silo), at, Modifiers::default());
+    assert_eq!(p.tool, Tool::Select);
+    assert_eq!(fired(&p), vec![Order::FireSuperweapon { sw: 0, cell: at }]);
+}
+
+/// spec: S-0513 claim 1 (a non-empty unit selection takes precedence over the aim)
+#[test]
+fn s0513_claim_1_a_selection_takes_precedence() {
+    let mut p = sw_start("MultiMissile", &[], true);
+    ready_silo(&mut p);
+    p.selection = own(&p, Kind::Vehicle);
+    assert!(!p.selection.is_empty());
+    p.tool = Tool::Superweapon {
+        sw: 0,
+        from_source: false,
+    };
+    let selected = p.selection.clone();
+    p.click_map(
+        Button::Left,
+        None,
+        CellXY::new(10, 10),
+        Modifiers::default(),
+    );
+    assert!(fired(&p).is_empty());
+    assert_eq!(p.selection, selected, "the units stay selected");
+    assert!(
+        matches!(p.tool, Tool::Superweapon { sw: 0, .. }),
+        "the aim stays"
+    );
+}
+
+fn source_pick(p: &mut Play, house: HouseId) {
+    p.effects = vec![Effect::Superweapon {
+        event: SwEvent::SourceMarker,
+        house: Some(house),
+        sw: None,
+        pos: None,
+    }];
+}
+
+const FOUR_MORE: [(&str, &str); 4] = [
+    ("SWA", "ChronosphereWarp"),
+    ("SWB", "LightningStorm"),
+    ("SWC", "IronCurtain"),
+    ("SWD", "MultiMissile"),
+];
+
+/// spec: S-0513 claim 33 (a source pick arms the type at list position 4, the warp kind's number)
+#[test]
+fn s0513_claim_33_source_pick_arms_position_4() {
+    let mut p = sw_start("Chronosphere", &FOUR_MORE, true);
+    let local = p.local;
+    source_pick(&mut p, local);
+    assert_eq!(p.source_aim(), Some(4));
+    source_pick(&mut p, HouseId(1 - local.0));
+    assert_eq!(p.source_aim(), None, "another house's pick arms nothing");
+}
+
+/// spec: S-0513 Edge cases (quirks.superweapon_kind_as_list_position off: a source pick arms the warp kind's type)
+#[test]
+fn s0513_claim_33_source_pick_switch_off() {
+    let mut p = sw_start("Chronosphere", &FOUR_MORE, false);
+    let local = p.local;
+    source_pick(&mut p, local);
+    assert_eq!(p.source_aim(), Some(1));
+}

@@ -270,6 +270,9 @@ pub struct Object {
     /// Cloak and disguise state (S-0516).
     #[serde(default)]
     pub cloak: crate::cloak::ObjCloak,
+    /// Superweapon state: protection, warp, silo launch (S-0513).
+    #[serde(default)]
+    pub sw: crate::superweapons::ObjSw,
 }
 
 /// One house in the game setup.
@@ -367,6 +370,9 @@ pub struct World {
     /// Cloak fields, sensor and disguise-detector coverage (S-0516).
     #[serde(default)]
     pub cloak: crate::cloak::CloakWorld,
+    /// Superweapon records, the storm and its clouds (S-0512, S-0513).
+    #[serde(default)]
+    pub sw: crate::superweapons::SwWorld,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.

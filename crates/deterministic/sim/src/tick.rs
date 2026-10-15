@@ -31,7 +31,10 @@ pub fn step(w: &mut World) {
     // bombs detonate in their carrier's turn in row 5 (S-0203 claim 1, S-0519 claim 4), not here.
     // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted-bomb maintenance (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
     crate::spawn::kamikaze_orders(w);
-    // Rows 10, 11, 12, 3 and 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
+    // Rows 10, 11 and 12 have no topic yet: empty seams.
+    // spec: S-0203 claim 1 row 3 (the weather storm's own update and bolt strikes, after rows 10 to 12 and before row 14 and the turn pass; S-0513 claims 14 to 19)
+    crate::superweapons::storm::update(w);
+    // Rows 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
     // maintenance) takes no draws (S-0203 row 13) and is not built yet.
     // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
     // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)
@@ -90,6 +93,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.last_turn = t;
     }
+    // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
+    crate::superweapons::protect::tint_turn(w, id);
     if dead {
         if kind == Kind::Building {
             // spec: S-0312 claim 21 (a building awaiting removal: the general part of its turn, then its removal)
@@ -115,6 +120,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
         }
         // A killed object that stays in play (an infantry unit in its death sequence) only plays it out.
         crate::combat::death::infantry_death_turn(w, id);
+        return;
+    }
+    // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); Q-0738 interim: until its arrival effects the warp update is its whole turn
+    if crate::superweapons::warp::turn(w, id) {
         return;
     }
     // spec: S-0504 claim 4 (a sinking vessel's own update first descends, and may leave play at once)
@@ -143,6 +152,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::cloak::turn(w, id);
     }
     if kind == Kind::Building {
+        // spec: S-0513 claims 8 and 13 (a silo's accepted launch leaves on its next update)
+        crate::superweapons::nuke::silo_turn(w, id);
         crate::combat::behave::delayed_shot_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);

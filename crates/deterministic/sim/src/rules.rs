@@ -857,6 +857,8 @@ pub struct SimRules {
     pub air: crate::air::AirRules,
     /// Cloak and disguise (S-0516).
     pub cloak: crate::cloak::CloakRules,
+    /// Superweapons (S-0512, S-0513).
+    pub superweapons: crate::superweapons::SwRules,
 }
 
 fn dec(d: &Option<Decimal>, mode: Rounding) -> Option<F64> {
@@ -1260,7 +1262,9 @@ impl SimRules {
         );
         let econ = crate::econ::EconRules::new(r, mode);
         let missiles = crate::spawn::MissileRules::new(s, &names, &combat.warheads, mode);
+        let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, mode);
         Self {
+            superweapons,
             missiles,
             air: crate::air::AirRules::new(r, mode),
             cloak: crate::cloak::CloakRules::new(g, &names, mode),

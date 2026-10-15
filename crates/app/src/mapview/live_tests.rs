@@ -1208,3 +1208,76 @@ fn animation_events_play_their_art_and_end() {
     assert_eq!(live.counts.anims_drawn, 1);
     assert_eq!(effect_items(&scene, true), 0);
 }
+
+/// spec: S-0513 claims 33 and 34 (the source marker is shown to the
+/// launching player only, a new pick replaces it, and the launch ends it)
+#[test]
+fn source_marker_shows_for_the_launching_player_until_the_launch() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::superweapons::SwEvent;
+    use glasnost_sim::world::{HouseId, Pos};
+    let (import, catalogue, assets) = anim_context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut rules = (*testkit::rules()).clone();
+    rules.superweapons.chrono_placement = Some("boomx".into());
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (
+            testkit::new_game(5),
+            std::sync::Arc::new(rules),
+            testkit::setup(5),
+            Vec::new(),
+        ),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.set_viewer(Some(HouseId(0)));
+    live.step();
+    let pos = Pos {
+        x: 5 * 256 + 128,
+        y: 5 * 256 + 128,
+        z: 0,
+    };
+    let marker = |event, house| Effect::Superweapon {
+        event,
+        house: Some(HouseId(house)),
+        sw: None,
+        pos: Some(pos),
+    };
+    let base = live.counts.anims;
+    live.world.effects.push(marker(SwEvent::SourceMarker, 1));
+    live.after_tick();
+    assert_eq!(
+        live.counts.anims, base,
+        "another house's pick shows nothing"
+    );
+    live.world.effects.push(marker(SwEvent::SourceMarker, 0));
+    live.after_tick();
+    assert_eq!(live.counts.anims, base + 1);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.counts.anims_drawn, 1);
+    live.world.effects.push(marker(SwEvent::SourceMarker, 0));
+    live.after_tick();
+    assert_eq!(live.counts.anims, base + 2);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.counts.anims_drawn, 1, "a new pick replaces the marker");
+    live.world.effects.push(marker(SwEvent::MarkerEnd, 0));
+    live.after_tick();
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.counts.anims_drawn, 0, "the launch ends it");
+}

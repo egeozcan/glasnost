@@ -280,6 +280,14 @@ pub struct EconFields {
     /// Buildings: `SuperWeapon2`, the second superweapon; absent: none.
     #[serde(default)]
     pub super_weapon2: Option<String>,
+    /// Buildings: `NukeSilo`, the missile-silo flag (S-0513 claim 7);
+    /// absent: no.
+    #[serde(default)]
+    pub nuke_silo: Option<bool>,
+    /// Buildings: `PsychicDetectionRadius`, cells (S-0513 claim 11); absent:
+    /// 0.
+    #[serde(default)]
+    pub psychic_detection_radius: Option<i32>,
     /// Buildings: `SecretLab` (S-0407 claims 4 and 14); absent: no.
     #[serde(default)]
     pub secret_lab: Option<bool>,
@@ -476,6 +484,216 @@ pub struct SuperweaponType {
     /// `Type`, the kind word as written (S-0407 claim 12 j); absent: none.
     #[serde(default)]
     pub kind: Option<String>,
+    /// `RechargeTime`, the charge time in game minutes, single precision
+    /// (S-0512 claim 21, F1); absent or 0: the previous value, engine default
+    /// 4500 ticks.
+    #[serde(default)]
+    pub recharge_time: Option<Decimal>,
+    /// `IsPowered`, power-dependent (S-0512 Import mapping); absent: yes.
+    #[serde(default)]
+    pub is_powered: Option<bool>,
+    /// `ShowTimer`, the countdown flag (S-0512 claim 18); absent: no.
+    #[serde(default)]
+    pub show_timer: Option<bool>,
+    /// `FlashSidebarTabFrames`, the flash window in ticks, −1 unlimited
+    /// (S-0512 claim 17); absent: −1.
+    #[serde(default)]
+    pub flash_sidebar_tab_frames: Option<i32>,
+    /// `PreClick`, the first-stage flag (S-0512 Terms); absent: no.
+    #[serde(default)]
+    pub pre_click: Option<bool>,
+    /// `PostClick`, the second-stage flag (S-0512 Terms); absent: no.
+    #[serde(default)]
+    pub post_click: Option<bool>,
+    /// `PreDependent`, the second stage's link, a kind word (S-0512 claim
+    /// 11); absent: none.
+    #[serde(default)]
+    pub pre_dependent: Option<String>,
+    /// `Action`, the aim action word as written (S-0512 claim 23); absent:
+    /// none.
+    #[serde(default)]
+    pub action: Option<String>,
+    /// `UseChargeDrain`, the drain-mode flag (S-0512 claim 19); absent: no.
+    #[serde(default)]
+    pub use_charge_drain: Option<bool>,
+    /// `ManualControl`, the manual-charge flag (S-0512 claim 20); absent: no.
+    #[serde(default)]
+    pub manual_control: Option<bool>,
+    /// `AuxBuilding`, a building type key (S-0512 Terms, giving building);
+    /// absent: none.
+    #[serde(default)]
+    pub aux_building: Option<String>,
+    /// `UIName`, the display-name label (S-0512 claim 18); absent: none.
+    #[serde(default)]
+    pub ui_name: Option<String>,
+    /// `SidebarImage`, the icon art name (S-0512 Import mapping, S-0007 claim
+    /// 31); absent: none.
+    #[serde(default)]
+    pub sidebar_image: Option<String>,
+    /// `WeaponType`, the silo's upward weapon, a weapon key (S-0513 claim 8);
+    /// absent: none.
+    #[serde(default)]
+    pub weapon_type: Option<String>,
+    /// `StartSound`, the effect start sound (S-0513 claim 32); absent: none.
+    #[serde(default)]
+    pub start_sound: Option<String>,
+    /// `SpecialSound`, the effect fading sound (S-0513 claim 32); absent:
+    /// none.
+    #[serde(default)]
+    pub special_sound: Option<String>,
+}
+
+/// Game-wide superweapon values (written into `general.superweapons`) from
+/// `[General]`, `[AudioVisual]`, `[CombatDamage]` and the fixed type names
+/// of S-0512 and S-0513 (Import mapping).
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SwGeneral {
+    /// `[General] ChargeToDrainRatio` ρ, a double (S-0512 F5); absent: 3.
+    #[serde(default)]
+    pub charge_to_drain_ratio: Option<Decimal>,
+    /// `[General] NukeTakeOff`, the silo take-off animation (S-0513 claim 8);
+    /// absent: none.
+    #[serde(default)]
+    pub nuke_take_off: Option<String>,
+    /// `[AudioVisual] DigSound`, the nuclear siren (S-0513 claim 5); absent:
+    /// none.
+    #[serde(default)]
+    pub dig_sound: Option<String>,
+    /// `[General] LightningDeferment`, the storm countdown *L* in ticks
+    /// (S-0513 claim 14); absent: 250.
+    #[serde(default)]
+    pub lightning_deferment: Option<i32>,
+    /// `[General] LightningStormDuration`, the storm duration *D* in ticks,
+    /// −1 endless (S-0513 claim 15); absent: 900.
+    #[serde(default)]
+    pub lightning_storm_duration: Option<i32>,
+    /// `[General] LightningHitDelay`, the hit period in ticks (S-0513 claim
+    /// 16); absent: 90.
+    #[serde(default)]
+    pub lightning_hit_delay: Option<i32>,
+    /// `[General] LightningScatterDelay`, the scatter period in ticks
+    /// (S-0513 claim 16); absent: 10.
+    #[serde(default)]
+    pub lightning_scatter_delay: Option<i32>,
+    /// `[General] LightningCellSpread` *s*, cells (S-0513 F6); absent: 10.
+    #[serde(default)]
+    pub lightning_cell_spread: Option<i32>,
+    /// `[General] LightningSeparation`, cells (S-0513 F6); absent: 3.
+    #[serde(default)]
+    pub lightning_separation: Option<i32>,
+    /// `[General] LightningDamage`, health points (S-0513 claim 18); absent:
+    /// 200.
+    #[serde(default)]
+    pub lightning_damage: Option<i32>,
+    /// `[General] LightningWarhead`, a warhead key (S-0513 claim 18);
+    /// absent: none.
+    #[serde(default)]
+    pub lightning_warhead: Option<String>,
+    /// `[General] LightningPrintText`, the storm-message flag (S-0513 claim
+    /// 14); absent: yes.
+    #[serde(default)]
+    pub lightning_print_text: Option<bool>,
+    /// `[General] WeatherConClouds`, the cloud animation list (S-0513 claim
+    /// 17); absent: empty.
+    #[serde(default)]
+    pub weather_con_clouds: Option<Vec<String>>,
+    /// `[General] WeatherConBolts`, the bolt animation list (S-0513 claims
+    /// 17 and 18, F4); absent: empty.
+    #[serde(default)]
+    pub weather_con_bolts: Option<Vec<String>>,
+    /// `[General] WeatherConBoltExplosion`, the storm explosion animation
+    /// (S-0513 claim 18); absent: none.
+    #[serde(default)]
+    pub weather_con_bolt_explosion: Option<String>,
+    /// `[AudioVisual] StormSound` (S-0513 claim 15); absent: none.
+    #[serde(default)]
+    pub storm_sound: Option<String>,
+    /// `[AudioVisual] LightningSounds` (S-0513 claim 18); absent: empty.
+    #[serde(default)]
+    pub lightning_sounds: Option<Vec<String>>,
+    /// `[CombatDamage] IronCurtainDuration`, ticks (S-0513 claim 26);
+    /// absent: 0.
+    #[serde(default)]
+    pub iron_curtain_duration: Option<i32>,
+    /// `[General] IronCurtainInvokeAnim` (S-0513 claim 22); absent: none.
+    #[serde(default)]
+    pub iron_curtain_invoke_anim: Option<String>,
+    /// `[General] ForceShieldInvokeAnim` (S-0513 claim 31); absent: none.
+    #[serde(default)]
+    pub force_shield_invoke_anim: Option<String>,
+    /// `[General] ForceShieldRadius` *R*, cells (S-0513 F3); absent: 10.
+    #[serde(default)]
+    pub force_shield_radius: Option<i32>,
+    /// `[General] ForceShieldDuration` *D*, ticks (S-0513 claim 31);
+    /// absent: 400.
+    #[serde(default)]
+    pub force_shield_duration: Option<i32>,
+    /// `[General] ForceShieldBlackoutDuration`, ticks (S-0513 claim 30);
+    /// absent: 800.
+    #[serde(default)]
+    pub force_shield_blackout_duration: Option<i32>,
+    /// `[General] ForceShieldPlayFadeSoundTime` *P*, ticks (S-0513 claim
+    /// 32); absent: 50.
+    #[serde(default)]
+    pub force_shield_play_fade_sound_time: Option<i32>,
+    /// `[AudioVisual] IronCurtainColor`, a tint selector (S-0513 Import
+    /// mapping); absent: 0.
+    #[serde(default)]
+    pub iron_curtain_color: Option<i32>,
+    /// `[AudioVisual] ForceShieldColor`, a tint selector (S-0513 Import
+    /// mapping); absent: 0.
+    #[serde(default)]
+    pub force_shield_color: Option<i32>,
+    /// `[General] ChronoPlacement`, the source marker (S-0513 claim 33);
+    /// absent: none.
+    #[serde(default)]
+    pub chrono_placement: Option<String>,
+    /// `[General] ChronoBlast`, the blast at the source (S-0513 claim 34);
+    /// absent: none.
+    #[serde(default)]
+    pub chrono_blast: Option<String>,
+    /// `[General] ChronoBlastDest`, the blast at the destination (S-0513
+    /// claim 34); absent: none.
+    #[serde(default)]
+    pub chrono_blast_dest: Option<String>,
+    /// `[General] ChronoDelay`, the teleport delay in ticks (S-0513 claim
+    /// 40); absent: 60.
+    #[serde(default)]
+    pub chrono_delay: Option<i32>,
+    /// `[General] ChronoReinfDelay`, the reinforcement delay in ticks
+    /// (S-0513 claim 40); absent: 60.
+    #[serde(default)]
+    pub chrono_reinf_delay: Option<i32>,
+    /// `[General] AllyParaDropInf`, infantry keys (S-0522 claim 2, S-0513
+    /// claim 43); absent: empty.
+    #[serde(default)]
+    pub ally_para_drop_inf: Option<Vec<String>>,
+    /// `[General] AllyParaDropNum`, counts (S-0522 claim 2); absent: empty.
+    #[serde(default)]
+    pub ally_para_drop_num: Option<Vec<i32>>,
+    /// `[General] SovParaDropInf` (S-0522 claim 2); absent: empty.
+    #[serde(default)]
+    pub sov_para_drop_inf: Option<Vec<String>>,
+    /// `[General] SovParaDropNum` (S-0522 claim 2); absent: empty.
+    #[serde(default)]
+    pub sov_para_drop_num: Option<Vec<i32>>,
+    /// `[General] YuriParaDropInf` (S-0522 claim 2); absent: empty.
+    #[serde(default)]
+    pub yuri_para_drop_inf: Option<Vec<String>>,
+    /// `[General] YuriParaDropNum` (S-0522 claim 2); absent: empty.
+    #[serde(default)]
+    pub yuri_para_drop_num: Option<Vec<i32>>,
+    /// `[General] AmerParaDropInf` (S-0522 claim 2); absent: empty.
+    #[serde(default)]
+    pub amer_para_drop_inf: Option<Vec<String>>,
+    /// `[General] AmerParaDropNum` (S-0522 claim 2); absent: empty.
+    #[serde(default)]
+    pub amer_para_drop_num: Option<Vec<i32>>,
+    /// `[AudioVisual] SpyPlaneCamera`, the camera sound (S-0513 claim 44);
+    /// absent: none.
+    #[serde(default)]
+    pub spy_plane_camera: Option<String>,
 }
 
 /// Game-wide economy values (written into `general.economy`), from the

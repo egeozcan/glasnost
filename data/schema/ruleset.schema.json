@@ -2644,6 +2644,14 @@
           ],
           "default": null
         },
+        "nuke_silo": {
+          "description": "Buildings: `NukeSilo`, the missile-silo flag (S-0513 claim 7);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "number_of_docks": {
           "description": "Buildings: the rules `NumberOfDocks`, docks the building adds to the\nhouse total (S-0407 claim 16); absent: 0.",
           "type": [
@@ -2771,6 +2779,15 @@
             "string",
             "null"
           ],
+          "default": null
+        },
+        "psychic_detection_radius": {
+          "description": "Buildings: `PsychicDetectionRadius`, cells (S-0513 claim 11); absent:\n0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "queueing_cell": {
@@ -5239,6 +5256,10 @@
             "type": "string"
           }
         },
+        "superweapons": {
+          "description": "Game-wide superweapon values (M6b, S-0512 and S-0513).",
+          "$ref": "#/$defs/SwGeneral"
+        },
         "technician": {
           "description": "`[General] Technician` (S-0312 F4).",
           "type": [
@@ -7069,6 +7090,11 @@
           "type": "boolean",
           "default": true
         },
+        "curtain_organic_vehicle_defended": {
+          "description": "The curtain's hit on an organic vehicle or aircraft does not ignore defences and credits nobody; off: it ignores defences and credits the launching house.",
+          "type": "boolean",
+          "default": true
+        },
         "damaging_entry_cursor_retained": {
           "description": "Hovering an engineer over a building above its capture threshold retains the preceding cursor; off: it uses the capture cursor of table C.",
           "type": "boolean",
@@ -7231,6 +7257,11 @@
         },
         "double_start_resolution": {
           "description": "Start positions are resolved twice, from three start lists, the assignment against the early phase's list 2; off: one list after the terrain is loaded.",
+          "type": "boolean",
+          "default": true
+        },
+        "drain_orders_bypass_normal_checks": {
+          "description": "Drain-mode orders change the drain state without testing grant, readiness, the clock or suspension, restart the clock even when suspended, and do not consume a one-time record; off: they need a granted record that is not suspended, and a one-time record is consumed on launch.",
           "type": "boolean",
           "default": true
         },
@@ -7694,6 +7725,11 @@
           "type": "boolean",
           "default": true
         },
+        "missile_without_launcher_consumes_charge": {
+          "description": "A missile superweapon whose house cannot start a launch sequence consumes its charge and launches nothing; off: the order is refused and the record stays ready.",
+          "type": "boolean",
+          "default": true
+        },
         "missing_sample_silences_entry": {
           "description": "One sample missing from the audio archive silences the whole sound entry; off: the missing sample is left out of the list and the rest play.",
           "type": "boolean",
@@ -7769,6 +7805,11 @@
           "type": "boolean",
           "default": true
         },
+        "nuke_silo_first_type_only": {
+          "description": "Only the first silo type in type-list order that names the superweapon can launch it; off: every such silo type is considered, in type-list order.",
+          "type": "boolean",
+          "default": true
+        },
         "observer_position_handoff": {
           "description": "An observer's drawn position is handed to the next player needing one.",
           "type": "boolean",
@@ -7811,6 +7852,11 @@
         },
         "one_sided_building_distance": {
           "description": "The building reduction applies only to the second object of a distance.",
+          "type": "boolean",
+          "default": true
+        },
+        "one_time_grant_keeps_stale_suspension": {
+          "description": "A one-time grant keeps the suspension of a record lost while suspended; off: it ends any suspension.",
           "type": "boolean",
           "default": true
         },
@@ -7949,6 +7995,11 @@
           "type": "boolean",
           "default": true
         },
+        "permanent_grant_freezes_suspension": {
+          "description": "A permanent grant on a suspended record leaves it suspended for good; off: the grant also resumes it.",
+          "type": "boolean",
+          "default": true
+        },
         "persistent_event_latch": {
           "description": "A latchable event of a repeating tag stays satisfied after its first satisfaction (only timer-position alias clearing undoes it); off: a trigger instance's latches are cleared each time it fires.",
           "type": "boolean",
@@ -7976,6 +8027,11 @@
         },
         "placement_shroud_at_cursor": {
           "description": "A person's placement click takes the shroud result from when the cursor entered the cell.",
+          "type": "boolean",
+          "default": true
+        },
+        "predependent_kind_as_list_position": {
+          "description": "A second stage's link names a kind whose number is a position in the superweapon type list; off: the first stage is the first type in the list of that kind.",
           "type": "boolean",
           "default": true
         },
@@ -8016,6 +8072,11 @@
         },
         "prone_noncrawler_speedup": {
           "description": "A prone unit whose type cannot crawl walks half as fast again.",
+          "type": "boolean",
+          "default": true
+        },
+        "protection_restart_replaces": {
+          "description": "Starting protection on a protected object replaces its timer and kind; off: the longer remaining time is kept, with the kind of the effect that gave it.",
           "type": "boolean",
           "default": true
         },
@@ -8215,7 +8276,7 @@
           "default": true
         },
         "second_stage_order_unchecked": {
-          "description": "A second-stage superweapon order is accepted unchecked; off: it is refused unless the first stage is granted, not suspended and has an unconsumed source selection. Not implemented yet (wave 2).",
+          "description": "A second-stage superweapon order is accepted unchecked; off: it is refused unless the first stage is granted, not suspended and has an unconsumed source selection.",
           "type": "boolean",
           "default": true
         },
@@ -8241,6 +8302,11 @@
         },
         "sensor_count_negative": {
           "description": "Building removals have no floor, so a cell's sensor count can go negative; off: removal undoes exactly what was added.",
+          "type": "boolean",
+          "default": true
+        },
+        "set_charge_keeps_ready": {
+          "description": "Setting a superweapon's charge keeps an existing ready state; off: it clears readiness and the new clock completes normally.",
           "type": "boolean",
           "default": true
         },
@@ -8311,6 +8377,11 @@
         },
         "sight_centre_off_map": {
           "description": "A sight whose centre is not a legal cell reveals nothing.",
+          "type": "boolean",
+          "default": true
+        },
+        "silo_target_of_current_owner": {
+          "description": "A silo launches at the target last recorded for its current owner; off: at the target recorded when it accepted the launch.",
           "type": "boolean",
           "default": true
         },
@@ -8394,6 +8465,11 @@
           "type": "boolean",
           "default": true
         },
+        "spy_plane_count_from_paradrop_list": {
+          "description": "The spy plane count is the length of the first side group's paradrop infantry list, and none when that list and its count list differ in length; off: exactly one plane.",
+          "type": "boolean",
+          "default": true
+        },
         "spy_satellite_first_building_decides": {
           "description": "Only the first qualifying spy-satellite building is looked at.",
           "type": "boolean",
@@ -8455,22 +8531,47 @@
           "default": true
         },
         "superweapon_block_one_layer": {
-          "description": "In a high-bridge cell of an effect block only the deck layer's objects are reached, elsewhere only the ground layer's; off: both layers of a high-bridge cell are reached, deck-layer effects first. Not implemented yet (wave 2).",
+          "description": "In a high-bridge cell of an effect block only the deck layer's objects are reached, elsewhere only the ground layer's; off: both layers of a high-bridge cell are reached, deck-layer effects first.",
+          "type": "boolean",
+          "default": true
+        },
+        "superweapon_grant_suspends_by_house_power": {
+          "description": "A superweapon granted by buildings while its house has low power starts suspended, whether or not the type is power-dependent, and no other condition suspends it at the grant; off: the grant suspends exactly when the claim 6 test would.",
           "type": "boolean",
           "default": true
         },
         "superweapon_kind_as_list_position": {
-          "description": "The silo's weapon, a teleport-source pick's armed type and the radar's superweapon offers use a kind number as a position in the superweapon type list; off: each uses the type of that kind. Not implemented yet (wave 2).",
+          "description": "The silo's weapon, a teleport-source pick's armed type and the radar's superweapon offers use a kind number as a position in the superweapon type list; off: each uses the type of that kind.",
           "type": "boolean",
           "default": true
         },
         "superweapon_list_cut_by_removal": {
-          "description": "When a reached object leaves its cell immediately during its own effect, later listed objects in that cell are not reached; off: objects listed when the effect begins stay eligible. Not implemented yet (wave 2).",
+          "description": "When a reached object leaves its cell immediately during its own effect, later listed objects in that cell are not reached; off: objects listed when the effect begins stay eligible.",
+          "type": "boolean",
+          "default": true
+        },
+        "superweapon_order_first_type_of_action": {
+          "description": "A superweapon fire order fires the first type in list order whose aim action is the selected type's; off: it fires the selected type.",
+          "type": "boolean",
+          "default": true
+        },
+        "superweapon_order_tests_clock": {
+          "description": "A fire order needs a granted, ready record whose clock is running; off: it needs a granted, ready record that is not suspended.",
+          "type": "boolean",
+          "default": true
+        },
+        "superweapon_restart_ignores_suspension": {
+          "description": "A second-stage launch and a set-charge action start the clock running even on a suspended record; off: a suspended record's clock stays stopped at the new remaining time.",
           "type": "boolean",
           "default": true
         },
         "superweapon_setting_tests_first_only": {
           "description": "The superweapon setting's build bar tests only a building type's first superweapon.",
+          "type": "boolean",
+          "default": true
+        },
+        "superweapon_upgrade_second_removal_waits": {
+          "description": "Removing an upgrade makes the immediate superweapon availability check only when the upgrade names a first superweapon; off: an upgrade naming either superweapon field makes it.",
           "type": "boolean",
           "default": true
         },
@@ -8715,7 +8816,22 @@
           "default": true
         },
         "warp_hold_persists": {
-          "description": "A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp. Not implemented yet (wave 2).",
+          "description": "A superweapon teleport's arrival hold uses the member's held delay, which nothing resets after a redirected landing; off: the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp.",
+          "type": "boolean",
+          "default": true
+        },
+        "warp_kill_before_protection": {
+          "description": "A warp kills an organic object without the teleporter flag even when it is protected; off: a protected organic object is left alone.",
+          "type": "boolean",
+          "default": true
+        },
+        "warp_naval_road_cell": {
+          "description": "A naval warp member landing on a road cell sinks; off: a road cell that is water is not counted.",
+          "type": "boolean",
+          "default": true
+        },
+        "warp_redirect_as_tracked": {
+          "description": "A blocked warp landing searches with the track locomotion class and a simplified movement zone; off: with the member's own class and zone.",
           "type": "boolean",
           "default": true
         },
@@ -8954,8 +9070,41 @@
       "description": "A superweapon type (S-0407 and S-0412 Import mapping).",
       "type": "object",
       "properties": {
+        "action": {
+          "description": "`Action`, the aim action word as written (S-0512 claim 23); absent:\nnone.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "aux_building": {
+          "description": "`AuxBuilding`, a building type key (S-0512 Terms, giving building);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "disableable_from_shell": {
           "description": "`DisableableFromShell` (S-0412 claim 9 b, S-0407 claim 7); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "flash_sidebar_tab_frames": {
+          "description": "`FlashSidebarTabFrames`, the flash window in ticks, −1 unlimited\n(S-0512 claim 17); absent: −1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "is_powered": {
+          "description": "`IsPowered`, power-dependent (S-0512 Import mapping); absent: yes.",
           "type": [
             "boolean",
             "null"
@@ -8969,6 +9118,488 @@
             "null"
           ],
           "default": null
+        },
+        "manual_control": {
+          "description": "`ManualControl`, the manual-charge flag (S-0512 claim 20); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "post_click": {
+          "description": "`PostClick`, the second-stage flag (S-0512 Terms); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "pre_click": {
+          "description": "`PreClick`, the first-stage flag (S-0512 Terms); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "pre_dependent": {
+          "description": "`PreDependent`, the second stage's link, a kind word (S-0512 claim\n11); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "recharge_time": {
+          "description": "`RechargeTime`, the charge time in game minutes, single precision\n(S-0512 claim 21, F1); absent or 0: the previous value, engine default\n4500 ticks.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "show_timer": {
+          "description": "`ShowTimer`, the countdown flag (S-0512 claim 18); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "sidebar_image": {
+          "description": "`SidebarImage`, the icon art name (S-0512 Import mapping, S-0007 claim\n31); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "special_sound": {
+          "description": "`SpecialSound`, the effect fading sound (S-0513 claim 32); absent:\nnone.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "start_sound": {
+          "description": "`StartSound`, the effect start sound (S-0513 claim 32); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "ui_name": {
+          "description": "`UIName`, the display-name label (S-0512 claim 18); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "use_charge_drain": {
+          "description": "`UseChargeDrain`, the drain-mode flag (S-0512 claim 19); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "weapon_type": {
+          "description": "`WeaponType`, the silo's upward weapon, a weapon key (S-0513 claim 8);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "SwGeneral": {
+      "description": "Game-wide superweapon values (written into `general.superweapons`) from\n`[General]`, `[AudioVisual]`, `[CombatDamage]` and the fixed type names\nof S-0512 and S-0513 (Import mapping).",
+      "type": "object",
+      "properties": {
+        "ally_para_drop_inf": {
+          "description": "`[General] AllyParaDropInf`, infantry keys (S-0522 claim 2, S-0513\nclaim 43); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "ally_para_drop_num": {
+          "description": "`[General] AllyParaDropNum`, counts (S-0522 claim 2); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "amer_para_drop_inf": {
+          "description": "`[General] AmerParaDropInf` (S-0522 claim 2); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "amer_para_drop_num": {
+          "description": "`[General] AmerParaDropNum` (S-0522 claim 2); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "charge_to_drain_ratio": {
+          "description": "`[General] ChargeToDrainRatio` ρ, a double (S-0512 F5); absent: 3.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "chrono_blast": {
+          "description": "`[General] ChronoBlast`, the blast at the source (S-0513 claim 34);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_blast_dest": {
+          "description": "`[General] ChronoBlastDest`, the blast at the destination (S-0513\nclaim 34); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_delay": {
+          "description": "`[General] ChronoDelay`, the teleport delay in ticks (S-0513 claim\n40); absent: 60.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "chrono_placement": {
+          "description": "`[General] ChronoPlacement`, the source marker (S-0513 claim 33);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "chrono_reinf_delay": {
+          "description": "`[General] ChronoReinfDelay`, the reinforcement delay in ticks\n(S-0513 claim 40); absent: 60.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "dig_sound": {
+          "description": "`[AudioVisual] DigSound`, the nuclear siren (S-0513 claim 5); absent:\nnone.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "force_shield_blackout_duration": {
+          "description": "`[General] ForceShieldBlackoutDuration`, ticks (S-0513 claim 30);\nabsent: 800.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "force_shield_color": {
+          "description": "`[AudioVisual] ForceShieldColor`, a tint selector (S-0513 Import\nmapping); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "force_shield_duration": {
+          "description": "`[General] ForceShieldDuration` *D*, ticks (S-0513 claim 31);\nabsent: 400.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "force_shield_invoke_anim": {
+          "description": "`[General] ForceShieldInvokeAnim` (S-0513 claim 31); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "force_shield_play_fade_sound_time": {
+          "description": "`[General] ForceShieldPlayFadeSoundTime` *P*, ticks (S-0513 claim\n32); absent: 50.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "force_shield_radius": {
+          "description": "`[General] ForceShieldRadius` *R*, cells (S-0513 F3); absent: 10.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "iron_curtain_color": {
+          "description": "`[AudioVisual] IronCurtainColor`, a tint selector (S-0513 Import\nmapping); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "iron_curtain_duration": {
+          "description": "`[CombatDamage] IronCurtainDuration`, ticks (S-0513 claim 26);\nabsent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "iron_curtain_invoke_anim": {
+          "description": "`[General] IronCurtainInvokeAnim` (S-0513 claim 22); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "lightning_cell_spread": {
+          "description": "`[General] LightningCellSpread` *s*, cells (S-0513 F6); absent: 10.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "lightning_damage": {
+          "description": "`[General] LightningDamage`, health points (S-0513 claim 18); absent:\n200.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "lightning_deferment": {
+          "description": "`[General] LightningDeferment`, the storm countdown *L* in ticks\n(S-0513 claim 14); absent: 250.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "lightning_hit_delay": {
+          "description": "`[General] LightningHitDelay`, the hit period in ticks (S-0513 claim\n16); absent: 90.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "lightning_print_text": {
+          "description": "`[General] LightningPrintText`, the storm-message flag (S-0513 claim\n14); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "lightning_scatter_delay": {
+          "description": "`[General] LightningScatterDelay`, the scatter period in ticks\n(S-0513 claim 16); absent: 10.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "lightning_separation": {
+          "description": "`[General] LightningSeparation`, cells (S-0513 F6); absent: 3.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "lightning_sounds": {
+          "description": "`[AudioVisual] LightningSounds` (S-0513 claim 18); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "lightning_storm_duration": {
+          "description": "`[General] LightningStormDuration`, the storm duration *D* in ticks,\n−1 endless (S-0513 claim 15); absent: 900.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "lightning_warhead": {
+          "description": "`[General] LightningWarhead`, a warhead key (S-0513 claim 18);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "nuke_take_off": {
+          "description": "`[General] NukeTakeOff`, the silo take-off animation (S-0513 claim 8);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "sov_para_drop_inf": {
+          "description": "`[General] SovParaDropInf` (S-0522 claim 2); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "sov_para_drop_num": {
+          "description": "`[General] SovParaDropNum` (S-0522 claim 2); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "spy_plane_camera": {
+          "description": "`[AudioVisual] SpyPlaneCamera`, the camera sound (S-0513 claim 44);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "storm_sound": {
+          "description": "`[AudioVisual] StormSound` (S-0513 claim 15); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "weather_con_bolt_explosion": {
+          "description": "`[General] WeatherConBoltExplosion`, the storm explosion animation\n(S-0513 claim 18); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "weather_con_bolts": {
+          "description": "`[General] WeatherConBolts`, the bolt animation list (S-0513 claims\n17 and 18, F4); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "weather_con_clouds": {
+          "description": "`[General] WeatherConClouds`, the cloud animation list (S-0513 claim\n17); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "yuri_para_drop_inf": {
+          "description": "`[General] YuriParaDropInf` (S-0522 claim 2); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "yuri_para_drop_num": {
+          "description": "`[General] YuriParaDropNum` (S-0522 claim 2); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
         }
       },
       "additionalProperties": false
@@ -10405,6 +11036,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "nuke_maker": {
+          "description": "`NukeMaker`, the missile-maker flag (S-0513 claim 8).",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "paralyzes": {

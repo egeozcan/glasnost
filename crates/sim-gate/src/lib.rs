@@ -138,13 +138,43 @@ fn riders(
         .collect()
 }
 
+/// Whether a house holds a superweapon record that is granted and still
+/// charging (S-0512 claims 3 and 5).
+fn charging(w: &glasnost_sim::world::World) -> bool {
+    w.sw.houses
+        .iter()
+        .any(|h| h.records.iter().any(|r| r.granted && !r.ready))
+}
+
+/// Whether the tick just run launched a superweapon (S-0513 claim 5: the
+/// launch event).
+fn launched(w: &glasnost_sim::world::World) -> bool {
+    w.effects.iter().any(|e| {
+        matches!(
+            e,
+            glasnost_sim::combat::effects::Effect::Superweapon {
+                event: glasnost_sim::superweapons::SwEvent::Launch,
+                ..
+            }
+        )
+    })
+}
+
 /// The state hash of an AI duel after each tick until the game is over or
 /// `ticks` ticks ran; saved and loaded halfway, at the first tick with a
-/// rocket in flight, with an aircraft in the air and with a passenger
-/// aboard a transport (panics when the loaded game hashes differently).
-/// With `flies`, a full run must have flown both. Every full run must have
-/// loaded a passenger into a transport and let one out (M6b, S-0507).
-fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<String> {
+/// rocket in flight, with an aircraft in the air, with a passenger aboard a
+/// transport and with a superweapon charging (panics when the loaded game
+/// hashes differently). With `flies`, a full run must have flown both.
+/// Every full run must have loaded a passenger into a transport and let
+/// one out (M6b, S-0507); with `launches`, it must have launched a
+/// superweapon (M6b, S-0512 and S-0513).
+fn duel(
+    map: &glasnost_map::Map,
+    name: &str,
+    ticks: i32,
+    flies: bool,
+    launches: bool,
+) -> Vec<String> {
     let mut g = Game::new(
         fixture::rules(),
         map,
@@ -156,6 +186,7 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<Str
     let mut out = Vec::new();
     let (mut rocket_saved, mut plane_saved) = (false, false);
     let (mut aboard_saved, mut loads, mut unloads) = (false, 0, 0);
+    let (mut charge_saved, mut launch_seen) = (false, false);
     let mut before = riders(&g.world);
     while g.world.tick < ticks {
         let (rocket, plane) = in_flight(&g.world);
@@ -165,7 +196,10 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<Str
         rocket_saved |= rocket;
         plane_saved |= plane;
         aboard_saved |= !before.is_empty();
-        if g.world.tick == ticks / 2 || first_rocket || first_plane || first_aboard {
+        let first_charge = !charge_saved && charging(&g.world);
+        charge_saved |= first_charge;
+        if g.world.tick == ticks / 2 || first_rocket || first_plane || first_aboard || first_charge
+        {
             let loaded = Game::load(&g.save(), fixture::rules(), fixture::catalogue())
                 .expect("the duel's save loads");
             assert_eq!(
@@ -177,6 +211,9 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<Str
         }
         g.step();
         out.push(g.state_hash());
+        // Effects are presentation only (neither saved nor hashed).
+        launch_seen |= launched(&g.world);
+        g.world.effects.clear();
         let now = riders(&g.world);
         let alive = |id| g.world.obj(id).is_some_and(|o| o.on_map && o.health > 0);
         loads += now.iter().filter(|r| !before.contains(r)).count();
@@ -198,6 +235,12 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<Str
             "{name}: the full duel loads a transport ({loads}) and unloads one ({unloads})"
         );
     }
+    if launches && ticks >= SKIRMISH_TICKS {
+        assert!(
+            charge_saved && launch_seen,
+            "{name}: the full duel charges ({charge_saved}) and launches ({launch_seen}) a superweapon"
+        );
+    }
     if flies && ticks >= SKIRMISH_TICKS {
         assert!(
             rocket_saved && plane_saved,
@@ -211,23 +254,33 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<Str
 /// skirmish and the duels stop earlier when their game is over).
 pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
     match scenario {
-        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, true),
+        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, true, true),
         // The diagonal game ends before a launcher is sent; the straight
         // duel flies both a rocket and an aircraft. Since S-0507 revision 4
         // (eb0224c: the ferried infantry's course differs from about tick
         // 10000) the naval game no longer reaches a launcher shot within the
         // full run, and no fixture change kept both it and the naval
-        // skirmish tests, so the naval duel is not required to fly.
+        // skirmish tests, so the naval duel is not required to fly. Short of
+        // credits, it never reaches the LAB that the superweapon building
+        // needs either (M6b), so it is not required to launch one; the
+        // straight and the diagonal duels launch.
         Scenario::DuelDiagonal => {
             return duel(
                 &fixture::map_diagonal(),
                 "synthetic-duel-diagonal",
                 ticks,
                 false,
+                true,
             );
         }
         Scenario::DuelNaval => {
-            return duel(&fixture::map_naval(), "synthetic-duel-naval", ticks, false);
+            return duel(
+                &fixture::map_naval(),
+                "synthetic-duel-naval",
+                ticks,
+                false,
+                false,
+            );
         }
         _ => {}
     }

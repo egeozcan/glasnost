@@ -1644,3 +1644,13 @@ fn claim_18_deliveries_in_host_order() {
     }
     assert_eq!(seen, Some(vec![h1, h2]), "host order, not parasite order");
 }
+
+// spec: S-0513 claim 34 and Constants (a teleport warp releases a naval parasite with 500 ticks of suppression; S-0614 claim 12: it exits at launch)
+#[test]
+fn s0513_claim_34_warp_releases_a_naval_parasite_with_suppression() {
+    let (mut w, squid, boat, _) = grappled(&ruleset());
+    let t = w.tick;
+    parasite::superweapon_teleport(&mut w, boat);
+    assert_eq!(parasite::host_of(&w, squid), None);
+    assert_eq!(ps(&w, squid).suppressed_until, Some(t + 500));
+}

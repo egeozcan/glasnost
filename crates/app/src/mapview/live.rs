@@ -302,6 +302,9 @@ pub struct Live {
     /// The house whose eyes the cloak drawing uses (S-0516 claims 28 and
     /// 29); `None` (the viewer) draws every object as its owner sees it.
     viewer: Option<HouseId>,
+    /// The serial of the teleport source marker shown to the viewer
+    /// (S-0513 claim 33), while it plays.
+    source_marker: Option<u32>,
 }
 
 /// An animation type of the import, for playback.
@@ -673,6 +676,7 @@ impl Live {
             debug_markers: true,
             move_flash,
             viewer: None,
+            source_marker: None,
         };
         // The skirmish's AI houses are played by the script (S-0412
         // claim 12: AI houses; the script is our own opponent).
@@ -901,6 +905,42 @@ impl Live {
         sprite
     }
 
+    /// The viewer's teleport source marker (S-0513 claims 33 and 34): a
+    /// source pick places the marker animation over the picked cell,
+    /// replacing an earlier one, and the launch removes it. Presentation
+    /// only, with cosmetic draws (Q-0741 interim: no scenario draws).
+    fn source_marker_event(
+        &mut self,
+        event: glasnost_sim::superweapons::SwEvent,
+        pos: Option<glasnost_sim::world::Pos>,
+        now: i32,
+    ) {
+        use glasnost_sim::superweapons::SwEvent;
+        match event {
+            SwEvent::SourceMarker => {
+                // spec: S-0513 claim 33 (the source marker over the cell, seen by the launching player only; a new pick replaces it)
+                self.drop_source_marker();
+                let name = self.rules.superweapons.chrono_placement.clone();
+                if let (Some(name), Some(pos)) = (name, pos) {
+                    let serial = self.anim_serial;
+                    self.counts.anims += 1;
+                    self.create_anim(&name_bytes(&name), pos, now, None);
+                    self.source_marker = Some(serial);
+                }
+            }
+            // spec: S-0513 claim 34 (the launch ends the source marker)
+            SwEvent::MarkerEnd => self.drop_source_marker(),
+            _ => {}
+        }
+    }
+
+    /// Removes the viewer's source marker, if it still plays.
+    fn drop_source_marker(&mut self) {
+        if let Some(s) = self.source_marker.take() {
+            self.anims.retain(|a| a.serial != s);
+        }
+    }
+
     /// Every playing animation's update of tick `now` (S-0109 claim 5: one
     /// update per tick from its first); ended ones leave.
     fn update_anims(&mut self, now: i32) {
@@ -935,6 +975,14 @@ impl Live {
         let effects = std::mem::take(&mut self.world.effects);
         let mut art_cells = BTreeSet::new();
         for e in &effects {
+            if let Effect::Superweapon {
+                event, house, pos, ..
+            } = e
+                && house.is_some()
+                && *house == self.viewer
+            {
+                self.source_marker_event(*event, *pos, now);
+            }
             if let Effect::Anim { name, pos, delay } = e {
                 self.counts.anims += 1;
                 // spec: S-0109 claims 5 and 29 (created before or during the turn pass: first update
@@ -974,6 +1022,7 @@ impl Live {
                 | Effect::Trigger { .. }
                 | Effect::Hit { .. }
                 | Effect::OverlayCrushed { .. }
+                | Effect::Superweapon { .. }
                 | Effect::Cloak { .. } => continue,
             };
             self.transients.push(Transient {

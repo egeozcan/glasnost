@@ -100,6 +100,8 @@ pub struct WeaponRules {
     pub decloak_to_fire: bool,
     /// Lobber flag.
     pub lobber: bool,
+    /// The radiation level *L*<sub>w</sub> (S-0525 claim 1; S-0513 claim 12).
+    pub rad_level: i32,
     /// Never-use flag.
     pub never_use: bool,
     /// Draining weapon.
@@ -310,6 +312,8 @@ pub struct WarheadRules {
     pub temporal: bool,
     /// Disguise flag (S-0516 claim 31).
     pub makes_disguise: bool,
+    /// The missile-maker flag (S-0513 claim 8).
+    pub nuke_maker: bool,
 }
 
 impl WarheadRules {
@@ -1012,6 +1016,8 @@ pub fn tables(
                 temporal: b(h.temporal),
                 // spec: S-0516 Import mapping (MakesDisguise absent: no)
                 makes_disguise: b(h.makes_disguise),
+                // spec: S-0513 Import mapping (NukeMaker absent: no)
+                nuke_maker: b(h.nuke_maker),
             }
         })
         .collect();
@@ -1064,6 +1070,8 @@ pub fn tables(
                 // spec: S-0301 Import mapping (DecloakToFire absent: yes)
                 decloak_to_fire: w.decloak_to_fire.unwrap_or(true),
                 lobber: b(w.lobber),
+                // spec: S-0513 Import mapping and S-0525 Import mapping (RadLevel absent: 0 radiation-level units)
+                rad_level: w.rad_level.unwrap_or(0),
                 never_use: b(w.never_use),
                 drain: b(w.drain_weapon),
                 // spec: S-0310 Import mapping (FireWhileMoving absent: yes)

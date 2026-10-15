@@ -834,7 +834,7 @@ fn take_contact(w: &mut World, harvester: ObjectId, refinery: ObjectId) {
 }
 
 /// The harvester breaks off contact and frees its dock slot.
-fn break_contact(w: &mut World, harvester: ObjectId) {
+pub(crate) fn break_contact(w: &mut World, harvester: ObjectId) {
     let Some(r) = w.obj(harvester).and_then(|o| o.contact) else {
         return;
     };

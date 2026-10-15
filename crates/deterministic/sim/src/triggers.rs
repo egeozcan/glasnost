@@ -884,12 +884,14 @@ fn fire_actions(w: &mut World, tag: u32, inst: &Instance) {
     let _ = tag;
     // spec: S-0011 claim 11 (every action takes effect, in list order, even when an earlier one had no effect)
     for a in &actions {
-        action(w, a);
+        action(w, a, inst.trigger);
     }
 }
 
-fn action(w: &mut World, a: &glasnost_map::triggers::Action) {
+fn action(w: &mut World, a: &glasnost_map::triggers::Action, trigger: u32) {
     let t = w.tick;
+    // spec: S-0011 Terms (owner house: the first house in house order playing the trigger's owner country)
+    let owner = |w: &World| owner_country(w, trigger).and_then(|c| house_of_country(w, c));
     // Mission timer lengths: 15 × v (claim 31).
     let len = UNIT.wrapping_mul(a.number);
     match a.code {
@@ -982,9 +984,64 @@ fn action(w: &mut World, a: &glasnost_map::triggers::Action) {
                 present(w, a, Some(c));
             }
         }
-        // spec: S-0011 claim 30 (actions that hand over to other specs: recognised, their effects belong to other topics: teams (no spec yet), crates (S-0520) and superweapons (S-0512, S-0513), not built yet)
-        4 | 5 | 7 | 80 | 102 | 108 | 135 => {
-            w.note("S-0011 claim 30: a trigger action hands over to a topic not built yet (teams, crates, superweapons, computer targeting); no effect");
+        // spec: S-0011 claim 30 (actions that hand over to other specs: recognised, their effects belong to other topics: teams (no spec yet), crates (S-0520) and computer targeting, not built yet)
+        4 | 5 | 7 | 80 | 108 | 135 => {
+            w.note("S-0011 claim 30: a trigger action hands over to a topic not built yet (teams, crates, computer targeting); no effect");
+        }
+        // spec: S-0011 I4 (33 one-time superweapon grant: number slot as superweapon type index, trigger owner house; S-0512 claim 12)
+        33 => {
+            if let (Some(h), Ok(i)) = (owner(w), u32::try_from(a.number)) {
+                crate::superweapons::charge::one_time_grant(w, h, i);
+            }
+        }
+        // spec: S-0011 I4 (34 permanent superweapon grant; S-0512 claim 13)
+        34 => {
+            if let (Some(h), Ok(i)) = (owner(w), u32::try_from(a.number)) {
+                crate::superweapons::charge::permanent_grant(w, h, i);
+            }
+        }
+        // spec: S-0011 I4 (129 set superweapon charge: the kind 11 second number slot as percentage; S-0512 claim 14)
+        129 => {
+            if let (Some(h), Ok(i)) = (owner(w), u32::try_from(a.number)) {
+                crate::superweapons::charge::set_charge(w, h, i, a.number2);
+            }
+        }
+        // spec: S-0011 I4 (133 reset superweapon charge; S-0512 claim 15)
+        133 => {
+            if let (Some(h), Ok(i)) = (owner(w), u32::try_from(a.number)) {
+                crate::superweapons::charge::reset(w, h, i);
+            }
+        }
+        // spec: S-0524 claim 1 (102 lightning storm at a waypoint: the imported duration and deferment, owned by the trigger's owner house, possibly no house)
+        102 => {
+            if let Some(c) = waypoint_cell(w, a.waypoint) {
+                let h = owner(w);
+                let (dur, def) = {
+                    let s = &w.rules().superweapons.storm;
+                    (s.duration, s.deferment)
+                };
+                crate::superweapons::storm::request(w, h, c, dur, def);
+            }
+        }
+        // spec: S-0513 claim 20 and S-0524 Summary (44 storm start: a storm whose duration is the action's number, the game-wide countdown, a random legal cell, no owner)
+        44 => {
+            crate::superweapons::storm::start_action(w, a.number);
+        }
+        // spec: S-0513 claim 20 and S-0524 Summary (45 storm stop: clearing begins while raging)
+        45 => {
+            crate::superweapons::storm::stop(w);
+        }
+        // spec: S-0524 claim 2 (90 lightning strike at a waypoint: a cloud whether or not a storm is active)
+        90 => {
+            if let Some(c) = waypoint_cell(w, a.waypoint) {
+                crate::superweapons::storm::cloud(w, c);
+            }
+        }
+        // spec: S-0524 claim 3 (95 nuclear strike at a waypoint: no firer and no owning house; the number slot is unused)
+        95 => {
+            if let Some(c) = waypoint_cell(w, a.waypoint) {
+                crate::superweapons::nuke::waypoint(w, c);
+            }
         }
         // spec: S-0011 I4 (14 change owner, 32 destroy attached, 42 explosion, 113 cheer, 8 drop-zone animation, 41 play an animation)
         14 | 32 | 42 | 113 | 8 | 41 => {

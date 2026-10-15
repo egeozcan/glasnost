@@ -19,6 +19,11 @@
 //! - Naval: NAVY (naval yard, 3 × 3, needs FACT) and BOAT (a gunboat with
 //!   the ship locomotor, float class and water zone); water is open only
 //!   to the float, hover and amphibious classes, ground closed to float.
+//! - Superweapon (S-0512, S-0513): NUKE (the missile kind, charge 1
+//!   minute = 900 ticks), granted by SILO (a 2 × 2 missile silo, needs
+//!   LAB); the upward weapon LIFT (warhead MAKER with the missile-maker
+//!   flag, projectile UPSHOT) and the falling NukePayload (projectile
+//!   FALL, warhead RKTW).
 //! - Hover: HOVR (a gun hovercraft with the hovering locomotor and class
 //!   and the amphibious zone, built at FACT once NAVY and LAB stand; S-0503).
 //! - Transports (S-0507): TRUK (an unarmed wheeled transport for four,
@@ -39,9 +44,9 @@ use glasnost_map::{CellXY, Map};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     BuildingType, CombatFields, Decimal, LandRow, LandType, LocomotionClass, Locomotor,
-    MovementZone, OverlayType, UnitType, WarheadType, WeaponType,
+    MovementZone, OverlayType, ProjectileType, UnitType, WarheadType, WeaponType,
 };
-use glasnost_rules::sim_econ::TiberiumType;
+use glasnost_rules::sim_econ::{SuperweaponType, TiberiumType};
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::rules::SimRules;
 use glasnost_sim::testkit;
@@ -162,6 +167,10 @@ pub fn ruleset() -> Ruleset {
     navy.factory = Some("vehicle".into());
     navy.naval = Some(true);
     navy.econ.prerequisite = Some(vec!["FACT".into()]);
+    let mut silo = building(2, 2, 1500, -50);
+    silo.econ.prerequisite = Some(vec!["LAB".into()]);
+    silo.econ.super_weapon = Some("NUKE".into());
+    silo.econ.nuke_silo = Some(true);
     for (n, b) in [
         ("YARD", yard),
         ("POWR", powr),
@@ -172,6 +181,7 @@ pub fn ruleset() -> Ruleset {
         ("LAB", lab),
         ("NAVY", navy),
         ("HPAD", hpad),
+        ("SILO", silo),
     ] {
         r.sim.buildings.insert(n.into(), b);
         push(&mut r, "buildings", n);
@@ -359,7 +369,58 @@ pub fn ruleset() -> Ruleset {
         },
     );
     push(&mut r, "tiberiums", "ORE");
+    superweapon(&mut r);
     r
+}
+
+/// The superweapon of the skirmish: NUKE, its weapons, warhead and
+/// projectiles (test data of our own).
+fn superweapon(r: &mut Ruleset) {
+    r.sim.superweapons.insert(
+        "NUKE".into(),
+        SuperweaponType {
+            kind: Some("MultiMissile".into()),
+            action: Some("Nuke".into()),
+            recharge_time: dec("1"),
+            weapon_type: Some("LIFT".into()),
+            ..Default::default()
+        },
+    );
+    push(r, "superweapons", "NUKE");
+    r.sim.warheads.insert(
+        "MAKER".into(),
+        WarheadType {
+            nuke_maker: Some(true),
+            verses: Some((0..11).map(|_| Decimal("1".into())).collect()),
+            ..Default::default()
+        },
+    );
+    for (n, alt) in [("UPSHOT", 900), ("FALL", 50_000)] {
+        r.sim.projectiles.insert(
+            n.into(),
+            ProjectileType {
+                vertical: Some(true),
+                detonation_altitude: Some(alt),
+                ..Default::default()
+            },
+        );
+    }
+    for (n, damage, speed, projectile, warhead) in [
+        ("LIFT", 100, 255, "UPSHOT", "MAKER"),
+        ("NukePayload", 300, 40, "FALL", "RKTW"),
+    ] {
+        r.sim.weapons.insert(
+            n.into(),
+            WeaponType {
+                damage: Some(damage),
+                speed: Some(speed),
+                range: dec("1"),
+                projectile: Some(projectile.into()),
+                warhead: Some(warhead.into()),
+                ..Default::default()
+            },
+        );
+    }
 }
 
 /// The skirmish rules.

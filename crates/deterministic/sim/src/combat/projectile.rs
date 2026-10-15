@@ -1241,6 +1241,18 @@ pub fn turn(w: &mut World, id: ObjectId) {
             let arrival = rows.arrival || (rows.passed && jumpjet);
             let reached = rows.reached;
             let pt = detonation_point(w, &pr, &p, point, arrival, reached, speed_start);
+            if rules
+                .combat
+                .warhead_of(pr.weapon)
+                .is_some_and(|h| h.nuke_maker)
+            {
+                // spec: S-0513 claim 8 (a missile-maker warhead does no damage at its burst: it is replaced by the falling missile, claim 9)
+                pr.pos = pt;
+                crate::superweapons::nuke::burst(w, &pr);
+                remove(w, id);
+                crate::parasite::carrier_ended(w, id, pr.weapon, false);
+                return;
+            }
             if rules.combat.warhead_of(pr.weapon).is_some_and(|h| h.nuke) {
                 // spec: S-0306 claim 25 (the nuclear warhead waits for its fireball animation)
                 if rules.animation("NUKEBALL").is_some() {
@@ -1375,6 +1387,8 @@ fn detonation_point(
 /// effects (S-0303 claims 21 and 22).
 fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, _after_wait: bool) {
     let rules = w.rules_arc();
+    // spec: S-0513 claim 12 and S-0525 claim 1 (a weapon with a positive radiation level leaves radiation at the detonation cell; seam)
+    crate::superweapons::nuke::radiation_seam(w, pr.weapon, point.cell());
     let half = rules.quirks.ranged_draw_half_span;
     let wr = rules.combat.weapon(pr.weapon).clone();
     // spec: S-0303 claim 2, S-0306 claim 21 and S-0614 claim 1 (a parasite-flag warhead's projectile makes no area hits; its animation and debris stay)
@@ -1597,7 +1611,13 @@ fn detonation_inner(
 
 /// The explosion animation of S-0303 F5 (with the electromagnetic case's
 /// draw when it applies).
-fn explosion_anim(w: &mut World, h: WarheadId, d: i32, q: Pos, hit: bool) -> Option<String> {
+pub(crate) fn explosion_anim(
+    w: &mut World,
+    h: WarheadId,
+    d: i32,
+    q: Pos,
+    hit: bool,
+) -> Option<String> {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     let g = &rules.combat.general;
