@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -198,13 +198,19 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    - Confidence: high for the choice and the formula; medium for the multi-turret case; low for
      the position used by the land-type tests and the debris
 
-7. **Attached bombs go off.** A bomb attached to the dying object (an infantry-planted time bomb,
-   special-abilities specs) detonates at the end of the shared effects, whether or not the object
-   is exploding. This applies only to a bomb still attached at death. A building ownership
-   change removes its planted bomb without detonation, and that bomb never goes off later,
-   except on a garrisonable type, where the bomb stays and keeps counting down (S-0509 claim 13).
-   - Backing: `measurable` (scenario D6, variant c; S-0509 scenario E8 for ownership changes)
-   - Confidence: medium
+7. **Attached bombs at death and removal.** A planted bomb still attached to a dying object
+   on the map detonates at the end of the shared effects, whether or not the object is
+   exploding (S-0519 claim 5). The bomb is detached before its damage is dealt, so a carrier
+   killed by that detonation does not detonate the same bomb again. If death sets off an
+   attached bomb while its carrier is off the map, the bomb is removed with no detonation,
+   animation or damage (S-0519 claim 6). Removal of the carrier other than by death disarms
+   its bomb with no damage, animation or credit (S-0519 claim 7).
+   A building ownership change likewise removes its planted bomb without detonation, and
+   that bomb never goes off later, except on a garrisonable type, where the bomb stays and
+   keeps counting down (S-0509 claim 13).
+   - Backing: `measurable` (scenario D6, variant c; S-0519 scenarios T7 to T9 for lethal
+     detonation, off-map deaths and non-death removal; S-0509 scenario E8 for ownership changes)
+   - Confidence: high
 
 8. **Infantry.** A killed infantry unit takes the shared effects of claims 4 to 7 and then the death
    sequence or removal of S-0107 claim 17, which also owns its corpse. Nothing further belongs to
@@ -320,10 +326,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       the behaviour
 
 14. **Crates from crate-carrying vehicles.** A destroyed vehicle whose type carries a crate leaves a
-    random crate on a free cell near its position, when the game's crate setting allows crates
-    (crate specs).
-    - Backing: `measurable` (scenario D10, variant c)
-    - Confidence: low (the exact condition on the game settings is not known)
+    crate with random contents on a free cell near its position, when the game's crate setting
+    allows crates. S-0520 claim 5 owns its contents and collection rules.
+    - Backing: `measurable` (scenario D10, variant c; S-0520 scenario CR3 for contents)
+    - Confidence: high for random contents; low for the exact condition on the game settings
 
 15. **Crashing vehicles and removal.** A destroyed vehicle whose type can crash, and which is above
     the terrain, starts to crash (claim 16) and stays in play until it hits the ground. A vehicle
@@ -492,11 +498,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     type it is: `quirks.rubble_overlay_by_index`, Edge cases), with its overlay data value left as
     it was, and the building's top-left cell remembers the building's type for drawing the rubble
     (rendering specs). When the type has a crate beneath, a crate appears
-    on the building's top-left foundation cell: a money crate when the type says so, otherwise a crate
-    of a kind the crate specs choose.
-    - Backing: `measurable` (scenario D14, variant b)
-    - Confidence: medium (the rubble condition and the crate cell); low (the kind of a crate that is
-      not money)
+    on the building's top-left foundation cell: a money crate (power-up 0) when the type says
+    so, otherwise a crate with random contents (S-0520 claim 5).
+    - Backing: `measurable` (scenario D14, variant b; S-0520 scenario CR3 for contents)
+    - Confidence: medium for the rubble condition and the crate cell; high for the contents
 
 21. **When a destroyed building leaves play.** Here only the type's explodes flag counts (a
     veterancy ability or a weapon's suicide flag, which make an object exploding elsewhere in this
@@ -902,7 +907,7 @@ otherwise. No measurement has been completed for this revision.
 | 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. Failed survivor placement and the eight-cell 3 × 3 foundation are also unmeasured here: D13 uses free positions and a full nine-cell foundation and supplies no blocked-survivor or eight-cell run. |
 | 18 | `unmeasured`, low confidence, for equating the owner's survivor-suppression state with defeat: no setup separates the two possible moments in Open questions. Ordinary undefeated-owner runs test the rest. |
 | 19(f) | `unmeasured` for the exact eligibility kinds, suppression by an attached system and the below-terrain height boundary: D14 f tests creation and displacement only, not these conditions. |
-| 20 | `unmeasured` for the sprite-frame threshold and kind of a non-money crate: D14 b tests a type already having a rubble image and a money crate, not the threshold or the crate selector. Remembering the building type for rubble drawing is a pointer to the rendering specs, not independently tested by D14 b. |
+| 20 | `unmeasured` for the sprite-frame threshold: D14 b tests a type already having a rubble image, not the threshold. Crate contents use S-0520 claim 5 and scenario CR3. Remembering the building type for rubble drawing is a pointer to the rendering specs, not independently tested by D14 b. |
 | 24 | `unmeasured` for vehicle passenger placement and credit to a separately remembered planter: D16 establishes neither vehicle absorption nor a surviving planter for failed releases. |
 | 26, F2 | `unmeasured` for the zero-coordinate anchor, footprints beyond legal map cells and nearby-point fallback beyond coordinate 511: no reachable death/smudge setup exercising those boundaries is supplied. D17 tests fitting within the map. Negative tile numbers other than the no-tile marker retain claim 26's backing. |
 | Edge-case departures on bad data | `unmeasured` for the original's out-of-list, missing-type, hang and beyond-foundation results: no scenario here isolates those bad-data outcomes. The safe alternatives, warnings and non-default quirk settings are design rules, not observations of the original. |
@@ -1035,7 +1040,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | before 1 | slave master | hidden slaves removed, on-map slaves freed or hit when no new owner exists (claim 30); after the master's killing-hit destruction raises | resulting slave notifications and damage effects; release-draw details remain open |
 | 1 | all | debris (claim 4, F1); skipped for a bomb-marked vehicle low over water (claim 11) | F1 |
 | 2 | all, exploding | passengers die (claim 5), then death weapon (claim 6); both skipped for a bomb-marked vehicle low over water (claim 11) | passenger-trigger actions and their effects, then the detonation's |
-| 3 | all | attached bomb (claim 7) | the bomb's |
+| 3 | all | still-attached bomb detonates on the map, or is removed without effects off the map (claim 7); detachment before damage prevents a second detonation from the carrier's death | the bomb's, only when it detonates |
 | 4 | infantry | death sequence or removal (S-0107 claim 17) | S-0107 |
 | 4 | vehicle | sinking (claim 10), or wake and splash (claim 11), or explosion and destruction animations (claim 9) | up to two list picks (claim 9); none for sinking or for claim 11 |
 | 5 | vehicle | passengers (claim 12): they get out, or die, or stay inside as the table of claim 12 gives (a vehicle with the bomb mark that cannot crash kills them) | their scatter requests' |
