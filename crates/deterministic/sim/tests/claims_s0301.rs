@@ -2401,7 +2401,11 @@ fn s0301_claim_14_passing_gate_beats_animation_delay() {
         [wid(&w, "ZAP"), wid(&w, "ZAP")],
         "the pair, at once"
     );
-    assert_eq!(w.obj(t).unwrap().combat.delayed_shot, None, "no delayed shot");
+    assert_eq!(
+        w.obj(t).unwrap().combat.delayed_shot,
+        None,
+        "no delayed shot"
+    );
     // The empty secondary: only the primary, immediately, no delayed shot.
     let r = delayed_upgrade_rules(None, &[("U1", Some("ZAPB"), None, None)]);
     let (mut w, t, _) = upgraded(&r, &["U1"]);
@@ -2419,12 +2423,19 @@ fn s0301_claim_14_failed_gate_and_bypass_with_animation_delay() {
     attack(&mut w, t);
     assert_eq!(behave::building_process(&mut w, t), 1);
     assert!(launched(&w).is_empty());
-    assert_eq!(w.obj(t).unwrap().combat.delayed_shot, None, "no delayed shot");
+    assert_eq!(
+        w.obj(t).unwrap().combat.delayed_shot,
+        None,
+        "no delayed shot"
+    );
     r.globals.quirks.upgrade_attack_weapon_gate = false;
     let (mut w, t, _) = upgraded(&r, &["U1"]);
     attack(&mut w, t);
     assert_eq!(behave::building_process(&mut w, t), 1);
-    assert!(launched(&w).is_empty(), "the ordinary delayed shot, not yet made");
+    assert!(
+        launched(&w).is_empty(),
+        "the ordinary delayed shot, not yet made"
+    );
     assert_eq!(w.obj(t).unwrap().combat.delayed_shot, Some(w.tick + 19));
     let (mut w, t, _) = upgraded(&r, &[]);
     attack(&mut w, t);
@@ -2443,7 +2454,12 @@ fn s0406_claim_12_level_skip_bypasses_the_gate() {
             ("U2", Some("ZAPB"), Some("ZAPB"), None),
         ],
     );
-    r.sim.buildings.get_mut("U1").unwrap().econ.powers_up_to_level = Some(2);
+    r.sim
+        .buildings
+        .get_mut("U1")
+        .unwrap()
+        .econ
+        .powers_up_to_level = Some(2);
     let (w, t, _) = upgraded(&r, &["U1", "U2"]);
     let b = &w.obj(t).unwrap().econ.building;
     assert_eq!(b.upgrade_count, 3);
@@ -2456,7 +2472,11 @@ fn s0406_claim_12_level_skip_bypasses_the_gate() {
     );
     let order: Vec<u32> = installed_upgrades(&w, t).collect();
     assert_eq!(order, [b.upgrades[1].unwrap(), b.upgrades[2].unwrap()]);
-    assert_eq!(slot_weapon(&w, t, 0), Some(wid(&w, "ZAP")), "position 2 first");
+    assert_eq!(
+        slot_weapon(&w, t, 0),
+        Some(wid(&w, "ZAP")),
+        "position 2 first"
+    );
     assert_eq!(
         slot_weapon(&w, t, 1),
         Some(wid(&w, "ZAPB")),
@@ -2483,7 +2503,11 @@ fn s0406_claim_12_count_zero_retains_positions_without_effect() {
     };
     // A turret-upgrade sale leaves count 0 and the recorded types.
     w.obj_mut(t).unwrap().econ.building.upgrade_count = 0;
-    assert_eq!(installed_upgrades(&w, t).count(), 0, "no provider at count 0");
+    assert_eq!(
+        installed_upgrades(&w, t).count(),
+        0,
+        "no provider at count 0"
+    );
     assert_eq!(behave::upgrade_gate(&w, t), None, "no gate at count 0");
     assert_eq!(
         slot_weapon(&w, t, 0),
@@ -2498,7 +2522,11 @@ fn s0406_claim_12_count_zero_retains_positions_without_effect() {
     assert_eq!((b.upgrade_count, b.upgrades[0]), (1, Some(u3)));
     assert_eq!(b.upgrades[1], Some(u2), "position 2 stays recorded");
     assert_ne!(Some(u1), b.upgrades[0]);
-    assert_eq!(behave::upgrade_gate(&w, t), Some(false), "position 1's gate");
+    assert_eq!(
+        behave::upgrade_gate(&w, t),
+        Some(false),
+        "position 1's gate"
+    );
     assert_eq!(
         installed_upgrades(&w, t).collect::<Vec<_>>(),
         [u3],

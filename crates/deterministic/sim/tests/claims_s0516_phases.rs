@@ -72,7 +72,11 @@ fn claim_20_new_generator_is_idle_at_radius_zero() {
     assert!(field_offsets(&w, ALPHA).is_empty());
     switch_on(&mut w, g);
     run(&mut w, 1);
-    assert_eq!(radius(&w, g), 1, "growth in the turn that detects the change");
+    assert_eq!(
+        radius(&w, g),
+        1,
+        "growth in the turn that detects the change"
+    );
     assert_eq!(phase(&w, g), FieldPhase::Growing);
     run(&mut w, 2);
     assert_eq!(radius(&w, g), GEN_RADIUS);
@@ -90,7 +94,10 @@ fn claim_20_partial_shrink_reverses_on_restored_operation() {
     let mut w = game(&r);
     let g = spawn(&mut w, "GENNY", ALPHA, 0, 0);
     run(&mut w, 6);
-    assert_eq!((radius(&w, g), phase(&w, g)), (GEN_RADIUS, FieldPhase::Idle));
+    assert_eq!(
+        (radius(&w, g), phase(&w, g)),
+        (GEN_RADIUS, FieldPhase::Idle)
+    );
     switch_off(&mut w, g);
     run(&mut w, 2);
     assert_eq!(radius(&w, g), 1, "two shrink steps, still positive");
@@ -192,7 +199,10 @@ fn claim_20_manual_power_off_at_radius_zero() {
         assert_eq!((radius(&w, g), phase(&w, g)), (0, FieldPhase::Idle));
         cloak::field::switched_off(&mut w, g);
         if on {
-            assert_eq!((radius(&w, g), phase(&w, g)), (GEN_RADIUS, FieldPhase::Shrinking));
+            assert_eq!(
+                (radius(&w, g), phase(&w, g)),
+                (GEN_RADIUS, FieldPhase::Shrinking)
+            );
             assert!(field_offsets(&w, ALPHA).is_empty(), "no coverage added");
             run(&mut w, GEN_RADIUS + 1);
             assert_eq!((radius(&w, g), phase(&w, g)), (0, FieldPhase::Idle));

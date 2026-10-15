@@ -84,10 +84,17 @@ fn claim_22_warp_member_disc_transfers_at_the_arrival_effects() {
             }
         }
     }
-    assert!(matches!(seen.last(), Some(Some(Stage::Hold(_)))), "it arrived");
+    assert!(
+        matches!(seen.last(), Some(Some(Stage::Hold(_)))),
+        "it arrived"
+    );
     let o = w.obj(m).unwrap();
     assert_eq!(o.pos.cell(), new);
-    assert_eq!(o.cloak.disc, Some((ALPHA, new)), "transferred at the arrival effects");
+    assert_eq!(
+        o.cloak.disc,
+        Some((ALPHA, new)),
+        "transferred at the arrival effects"
+    );
     assert_ne!(state_of(&w, m), CloakState::Cloaked, "the adjacency reveal");
 }
 

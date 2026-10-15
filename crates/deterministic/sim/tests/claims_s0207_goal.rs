@@ -18,7 +18,14 @@ const SIZE: i32 = 40;
 fn game() -> (World, ObjectId) {
     let r = testkit::ruleset();
     let mut w = testkit::game_with(&r, SIZE, 3);
-    let v = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, testkit::mid(SIZE, 0, 0), 0);
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     while w.tick < 4 {
         tick::step(&mut w);
     }
@@ -75,7 +82,11 @@ fn claim_26_final_track_leaves_the_cell_goal_for_the_next_update() {
     assert!(completed.is_some(), "the track completes");
     let o = w.obj(v).unwrap();
     assert_eq!(o.pos.cell(), dest, "standing in the goal cell");
-    assert_eq!(o.dest, Some(Target::Cell(dest)), "completion keeps the goal");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(dest)),
+        "completion keeps the goal"
+    );
     assert!(!drive::goal_present(&w, v), "completion cleared the point");
     // The next tick's locomotion update has no active track and removes it.
     tick::step(&mut w);
@@ -94,7 +105,11 @@ fn claim_26_approach_destinations_fall_back() {
     drive::tick(&mut w, v);
     let o = w.obj(v).unwrap();
     assert_ne!(o.dest, Some(Target::Cell(here)), "the old goal is gone");
-    assert_eq!(o.dest, Some(Target::Cell(far)), "the fallback supplies the next");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(far)),
+        "the fallback supplies the next"
+    );
     assert!(o.queued_dests.is_empty());
 }
 
@@ -111,7 +126,11 @@ fn s0215_claim_22_cleanup_is_the_locomotions_and_leaves_the_timer() {
     }
     process::turn(&mut w, v);
     let o = w.obj(v).unwrap();
-    assert_eq!(o.dest, Some(Target::Cell(here)), "processing keeps the goal");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(here)),
+        "processing keeps the goal"
+    );
     let (at, d) = o.beh.last.unwrap();
     assert_eq!(at, t);
     assert!((14..=16).contains(&d), "the standard delay, got {d}");
@@ -125,5 +144,8 @@ fn s0215_claim_22_cleanup_is_the_locomotions_and_leaves_the_timer() {
     process::turn(&mut w, v);
     let b = &w.obj(v).unwrap().beh;
     assert_eq!(b.last, Some((w.tick, 1)));
-    assert!(b.queued.is_some(), "a fallback behaviour is queued (S-0215 claim 13)");
+    assert!(
+        b.queued.is_some(),
+        "a fallback behaviour is queued (S-0215 claim 13)"
+    );
 }

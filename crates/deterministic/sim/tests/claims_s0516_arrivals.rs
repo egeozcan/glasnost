@@ -80,7 +80,11 @@ fn claim_22_teleport_disc_moves_in_the_jump_tick() {
     let (before, after) = until_cell_changes(&mut w, j);
     assert_eq!(before, 0);
     assert_eq!(after, 6, "relocated in the jump tick itself");
-    assert_eq!(count_at(&w, ALPHA, 3, 0), 0, "no cell between became a centre");
+    assert_eq!(
+        count_at(&w, ALPHA, 3, 0),
+        0,
+        "no cell between became a centre"
+    );
 }
 
 // spec: S-0516 claims 13 and 22 (a fully cloaked teleporting mover takes the adjacent sensor test in the jump tick: an enemy sensor in a cell next to the landing cell reveals it then)
@@ -100,7 +104,11 @@ fn claim_13_teleport_arrival_reveals_a_cloaked_jumper() {
         assert_eq!(state(&w, j), CloakState::Cloaked, "before the jump");
     }
     assert_ne!(w.obj(j).unwrap().pos.cell(), c0, "it jumped");
-    assert_ne!(state(&w, j), CloakState::Cloaked, "revealed in the jump tick");
+    assert_ne!(
+        state(&w, j),
+        CloakState::Cloaked,
+        "revealed in the jump tick"
+    );
 }
 
 // spec: S-0516 claim 22 (Q-0795: movement outside the table's rows, here a type with a locomotor the engine does not move (a jumpjet's touchdown is S-0502's seam), supplies no cell-arrival update from a changed centre cell: the disc stays where entering play left it)
@@ -126,7 +134,11 @@ fn claim_22_entering_play_adds_the_disc_without_an_adjacency_test() {
     let g = spawn_cloaked(&mut w, "SEEKGHOST", ALPHA, 0, 0);
     assert_eq!(count_at(&w, ALPHA, 0, 0), 1, "the disc is added at once");
     run(&mut w, 4);
-    assert_eq!(state(&w, g), CloakState::Cloaked, "placement revealed nothing");
+    assert_eq!(
+        state(&w, g),
+        CloakState::Cloaked,
+        "placement revealed nothing"
+    );
 }
 
 // spec: S-0516 claim 22 (Drops: a completed fall landing is a cell-arrival update, also in the same cell, after the height becomes 0 and falling ends; descent moves nothing: a cloaked faller next to an enemy sensor stays cloaked in the air and is revealed by the landing)

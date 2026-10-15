@@ -1601,7 +1601,8 @@ fn arrive_or_rest(w: &mut World, id: ObjectId) {
 fn goal_cleanup(w: &mut World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let Some(dest) = o.dest else { return false };
-    let building = matches!(dest, Target::Object(t) if w.obj(t).is_some_and(|x| x.kind == Kind::Building));
+    let building =
+        matches!(dest, Target::Object(t) if w.obj(t).is_some_and(|x| x.kind == Kind::Building));
     let goal_c = path::goal_cell(w, id);
     let here = o.pos.cell();
     // spec: S-0207 claim 26 (an order-level cell destination, the vehicle occupying that cell: removed; a building destination never, by cell equality alone). Q-0830 (interim: a destination naming a unit is taken as a cell destination, its heading point's cell)
