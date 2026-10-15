@@ -138,6 +138,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none() {
         return;
     }
+    if kind.is_mobile() {
+        // spec: S-0516 claim 42 and S-0203 (the ordinary cloak update follows due behaviour processing, its shots included, and precedes ordinary locomotion and the separate infantry and vehicle firing)
+        crate::cloak::turn(w, id);
+    }
     if kind == Kind::Building {
         crate::combat::behave::delayed_shot_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)

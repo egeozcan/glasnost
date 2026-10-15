@@ -347,7 +347,7 @@ fn claim_11_uncloak_causes() {
     let r = ruleset();
     // (a) firing.
     let mut w = game(&r);
-    let g = spawn(&mut w, "GUNSHIP", ALPHA, 0, 0);
+    let g = spawn_cloaked(&mut w, "GUNSHIP", ALPHA, 0, 0);
     let foe = spawn(&mut w, "PLAIN", BETA, 3, 0);
     assert_eq!(state(&w, g), CloakState::Cloaked);
     assert!(attack(&mut w, g, foe));
@@ -355,7 +355,7 @@ fn claim_11_uncloak_causes() {
     assert_eq!(t.first().map(|x| x.1), Some(CloakState::Uncloaking));
     // (c) crushing: a vehicle, not an infantry unit.
     let mut w = game(&r);
-    let v = spawn(&mut w, "GHOST", ALPHA, 0, 0);
+    let v = spawn_cloaked(&mut w, "GHOST", ALPHA, 0, 0);
     let i = spawn(&mut w, "SHADE", ALPHA, 4, 0);
     force_cloaked(&mut w, i);
     machine::crushed(&mut w, v);
@@ -364,7 +364,7 @@ fn claim_11_uncloak_causes() {
     assert_eq!(state(&w, i), CloakState::Cloaked);
     // (e) a blocked mover.
     let mut w = game(&r);
-    let hidden = spawn(&mut w, "GHOST", BETA, 3, 0);
+    let hidden = spawn_cloaked(&mut w, "GHOST", BETA, 3, 0);
     let mover = spawn(&mut w, "PLAIN", ALPHA, -3, 0);
     move_to(&mut w, mover, at(3, 0));
     let t = transitions(&mut w, hidden, 200);
@@ -376,8 +376,8 @@ fn claim_11_uncloak_causes() {
 fn claim_12_hits_uncloak() {
     let r = ruleset();
     let mut w = game(&r);
-    let a = spawn(&mut w, "GHOST", ALPHA, -4, 0);
-    let b = spawn(&mut w, "GHOST", ALPHA, 0, 0);
+    let a = spawn_cloaked(&mut w, "GHOST", ALPHA, -4, 0);
+    let b = spawn_cloaked(&mut w, "GHOST", ALPHA, 0, 0);
     let c = spawn(&mut w, "SHADE", ALPHA, 4, 0);
     let d = spawn(&mut w, "PLAIN", ALPHA, 0, 4);
     set_health(&mut w, b, 100);
@@ -398,7 +398,7 @@ fn claim_12_hits_uncloak() {
 fn claim_13_adjacent_sensor_reveal() {
     let r = ruleset();
     let mut w = game(&r);
-    let g = spawn(&mut w, "GHOST", ALPHA, -5, 0);
+    let g = spawn_cloaked(&mut w, "GHOST", ALPHA, -5, 0);
     spawn(&mut w, "SEEKER", BETA, 0, 1);
     move_to(&mut w, g, at(5, 0));
     let t = transitions(&mut w, g, 200);
@@ -407,13 +407,13 @@ fn claim_13_adjacent_sensor_reveal() {
     let mut w = game(&r);
     ally(&mut w, ALPHA, BETA);
     ally(&mut w, BETA, ALPHA);
-    let g = spawn(&mut w, "GHOST", ALPHA, -5, 0);
+    let g = spawn_cloaked(&mut w, "GHOST", ALPHA, -5, 0);
     spawn(&mut w, "SEEKER", BETA, 0, 1);
     move_to(&mut w, g, at(5, 0));
     assert!(transitions(&mut w, g, 200).is_empty());
     // A sensor that walks up to a still cloaked object.
     let mut w = game(&r);
-    let g = spawn(&mut w, "GHOST", ALPHA, 0, 0);
+    let g = spawn_cloaked(&mut w, "GHOST", ALPHA, 0, 0);
     let s = spawn(&mut w, "SEEKER", BETA, 6, 1);
     move_to(&mut w, s, at(1, 1));
     assert!(transitions(&mut w, g, 200).is_empty());
@@ -491,7 +491,7 @@ fn claim_15_cloak_sound() {
     assert_eq!(cloak_sounds(&w), 0, "repeated cause");
 }
 
-// spec: S-0516 claim 16 (a vehicle with its own flag enters play fully cloaked; infantry and aircraft start uncloaked)
+// spec: S-0516 claim 16 (ordinary placement within the usable area does not force a vehicle cloaked, even with its own flag; infantry and aircraft start uncloaked; only a vehicle with its own flag placed outside the usable area is forced fully cloaked, tested afresh at each placement)
 #[test]
 fn claim_16_vehicles_placed_cloaked() {
     let r = ruleset();
@@ -500,9 +500,56 @@ fn claim_16_vehicles_placed_cloaked() {
     let i = spawn(&mut w, "SHADE", ALPHA, 3, 0);
     let a = spawn(&mut w, "WRAITH", ALPHA, -3, 0);
     machine::grant_own_flag(&mut w, a);
-    assert_eq!(state(&w, v), CloakState::Cloaked);
+    assert_eq!(state(&w, v), CloakState::Uncloaked);
     assert_eq!(state(&w, i), CloakState::Uncloaked);
     assert_eq!(state(&w, a), CloakState::Uncloaked);
+    // Outside the usable area: forced fully cloaked; a vehicle without the
+    // flag and infantry are not.
+    // A usable cell of the top row of the usable area, raised one level so
+    // that it falls outside it (S-0009 claim 4).
+    let width = i64::from(w.cells.footprint().width);
+    let outside = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .find(|&c| w.cells.usable(c) && c.s() == width + 1)
+        .expect("a cell of the usable area's top row");
+    w.cells.grid.get_mut(outside).unwrap().level = 1;
+    assert!(!w.cells.usable(outside));
+    let place = |w: &mut glasnost_sim::world::World, name: &str| {
+        use glasnost_sim::rules::Kind;
+        let kind = [Kind::Vehicle, Kind::Infantry]
+            .into_iter()
+            .find(|&k| w.rules().index_of(k, name).is_some())
+            .unwrap();
+        let ti = w.rules().index_of(kind, name).unwrap();
+        let id = glasnost_sim::objects::create(w, kind, ti, Some(ALPHA));
+        let p = glasnost_sim::world::Pos::centre(outside, 0);
+        let z = w.surface_at(p.x, p.y);
+        glasnost_sim::objects::place(w, id, glasnost_sim::world::Pos::new(p.x, p.y, z), 0);
+        id
+    };
+    let v = place(&mut w, "GHOST");
+    let p = place(&mut w, "PLAIN");
+    let s = place(&mut w, "SHADE");
+    assert_eq!(state(&w, v), CloakState::Cloaked);
+    assert_eq!(stage(&w, v), 0);
+    assert_eq!(state(&w, p), CloakState::Uncloaked);
+    assert_eq!(state(&w, s), CloakState::Uncloaked);
+}
+
+// spec: S-0516 claim 16 (boarding and unloading preserve the passenger's cloak state and stage: an uncloaked self-cloaking vehicle unloads uncloaked, a cloaked one cloaked)
+#[test]
+fn claim_16_exit_keeps_the_state() {
+    let r = ruleset();
+    let mut w = game(&r);
+    let v = spawn(&mut w, "GHOST", ALPHA, 0, 0);
+    machine::entered_map(&mut w, v);
+    assert_eq!(state(&w, v), CloakState::Uncloaked);
+    let c = spawn_cloaked(&mut w, "GHOST", ALPHA, 4, 0);
+    machine::entered_map(&mut w, c);
+    assert_eq!(state(&w, c), CloakState::Cloaked);
 }
 
 // spec: S-0516 claim 17 (an aircraft cloaks only while landed; once airborne and fully cloaked it stays cloaked)
@@ -567,7 +614,7 @@ fn claim_18_buildings() {
     );
 }
 
-// spec: S-0516 claim 41 (an underwater type with the cloak flag is submerged while not uncloaked, and enters play already submerged)
+// spec: S-0516 claim 41 (an underwater type with the cloak flag is submerged while not uncloaked; placed within the usable area it starts surfaced and submerges on an eligible update)
 #[test]
 fn claim_41_submerging() {
     let mut r = ruleset();
@@ -580,7 +627,11 @@ fn claim_41_submerging() {
         .push("DIVER2".into());
     let mut w = game(&r);
     let d = spawn(&mut w, "DIVER2", ALPHA, 0, 0);
-    assert!(glasnost_sim::naval::submerged(&w, d));
+    assert!(!glasnost_sim::naval::submerged(&w, d), "starts surfaced");
+    run(&mut w, 1);
+    assert_eq!(state(&w, d), CloakState::Cloaking);
+    assert!(glasnost_sim::naval::submerged(&w, d), "begins submerging");
+    force_cloaked(&mut w, d);
     hit(&mut w, d, 1);
     assert!(glasnost_sim::naval::submerged(&w, d), "surfacing");
     // The hit falls between ticks: the uncloak completes in the turn of the
@@ -601,8 +652,8 @@ fn claim_11e_cloaked_infantry_walker_rows() {
     let armed = spawn(&mut w, "WALKER", ALPHA, 0, 4);
     let foe_i = spawn(&mut w, "SHADE", BETA, 1, 0);
     let foe_i2 = spawn(&mut w, "SHADE", BETA, 1, 4);
-    let foe_v = spawn(&mut w, "GHOST", BETA, -1, 0);
-    spawn(&mut w, "GHOST", BETA, -1, 4);
+    let foe_v = spawn_cloaked(&mut w, "GHOST", BETA, -1, 0);
+    spawn_cloaked(&mut w, "GHOST", BETA, -1, 4);
     force_cloaked(&mut w, foe_i);
     force_cloaked(&mut w, foe_i2);
     let out = |w: &glasnost_sim::world::World, m, c| {
@@ -613,4 +664,65 @@ fn claim_11e_cloaked_infantry_walker_rows() {
     assert_eq!(state(&w, foe_v), CloakState::Cloaked);
     assert_eq!(out(&w, unarmed, at(-1, 0)), Outcome::CloakedBlocker);
     assert_eq!(out(&w, armed, at(-1, 4)), Outcome::CloakedBlocker);
+}
+
+// spec: S-0516 claim 13 (the candidate distance is the table root of u² + w², u and w the position residues mod 256, height ignored; ties go to the first object in the cell-layer list)
+#[test]
+fn claim_13_candidate_distance_and_ties() {
+    use glasnost_sim::world::Layer;
+    let r = ruleset();
+    let mut w = game(&r);
+    let d = |w: &glasnost_sim::world::World, x, y| machine::sensor_candidate_distance(w, x, y);
+    assert_eq!(d(&w, 0, 0), 0);
+    assert_eq!(d(&w, 5 * 256 + 30, 7 * 256 + 40), d(&w, 30, 40));
+    assert_eq!(d(&w, -1, 0), d(&w, 255, 0), "residues from 0 to 255");
+    assert!(d(&w, 30, 40) <= 50 && d(&w, 30, 40) >= 49, "a floored root");
+    // Two infantry at the same cell centre position: a tie, the first in
+    // the list wins.
+    let a = spawn(&mut w, "SHADE", BETA, 2, 0);
+    let b = spawn(&mut w, "SHADE", BETA, 2, 0);
+    let pa = w.obj(a).unwrap().pos;
+    let pb = w.obj(b).unwrap().pos;
+    let c = at(2, 0);
+    let list = w.cells.list(c, Layer::Ground).to_vec();
+    assert!(list.contains(&a) && list.contains(&b));
+    if d(&w, pa.x, pa.y) == d(&w, pb.x, pb.y) {
+        let first = *list.iter().find(|&&x| x == a || x == b).unwrap();
+        assert_eq!(
+            machine::nearest_top_corner(&w, c, Layer::Ground),
+            Some(first)
+        );
+    }
+}
+
+// spec: S-0516 claim 43 (a negative stage speed advances one stage per ordinary update in both directions, as speed 1 does, not a stall; a nonpositive stage count imports as 1)
+#[test]
+fn claim_43_degenerate_inputs() {
+    let run_with = |s: i32| {
+        let mut r = ruleset();
+        r.sim
+            .infantry
+            .get_mut("SHADE")
+            .unwrap()
+            .combat
+            .cloaking_speed = Some(s);
+        let mut w = game(&r);
+        let id = spawn(&mut w, "SHADE", ALPHA, 0, 0);
+        let mut t = transitions(&mut w, id, 60);
+        t.truncate(2);
+        force_cloaked(&mut w, id);
+        hit(&mut w, id, 1);
+        let u = transitions(&mut w, id, 60);
+        (t, u.first().copied())
+    };
+    let neg = run_with(-5);
+    assert_eq!(neg, run_with(1));
+    assert_eq!(neg.0.last().map(|x| x.1), Some(CloakState::Cloaked));
+    assert_eq!(neg.1.map(|x| x.1), Some(CloakState::Uncloaked));
+    for n in [0, -3] {
+        let mut r = ruleset();
+        r.sim.general.cloaking_stages = Some(n);
+        let w = game(&r);
+        assert_eq!(w.rules().cloak.stages, 1);
+    }
 }

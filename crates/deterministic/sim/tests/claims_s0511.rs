@@ -840,24 +840,46 @@ fn claim_7_start_search_passes_over_a_gap() {
     }
 }
 
-// spec: S-0511 claims 6 and 7 (a direct pier collapse checks both adjacent spans, the start-side span first; Q-0678 interim: the far-side search accepts the collapsed pier as its span's start)
+// spec: S-0511 claims 6 and 7 and Edge cases (a direct pier collapse searches from its start-side and then its far-side named cell on the post-collapse tiles; a collapsed pier never qualifies as a start piece and, with quirks.collapsed_pier_span_search, is passed over at the far end too, so both checks select the same outer-ramp-to-outer-ramp extent and raise its band n + 2 times for n isolated losses in the first; off: each former span is checked on its own)
 #[test]
-fn claim_7_pier_collapse_checks_both_spans() {
-    for (tag, name) in [(at(2, 0), "start side"), (at(8, 0), "far side")] {
-        let mut m = base();
-        high_x(&mut m, Family::Bridge, 0, 12, &[5]);
-        tagged(&mut m, &[tag]);
-        let mut w = game(&ruleset(), &m);
-        // A missing section in each span.
-        bridges::attempts(&mut w, at(3, 0), 2);
-        bridges::attempts(&mut w, at(9, 0), 2);
-        assert_eq!(data(&w, at(3, 0)), None);
-        assert_eq!(data(&w, at(9, 0)), None);
-        let f0 = fired(&w);
-        assert!(!bridges::attempt(&mut w, at(5, 0)));
-        assert!(bridges::attempt(&mut w, at(5, 0)));
-        assert_eq!(pier_k(&w, at(5, 0)), Some(4));
-        assert_eq!(fired(&w) - f0, 1, "{name}: one band pass");
+fn claim_7_pier_collapse_checks_the_combined_extent() {
+    for search in [true, false] {
+        for (tag, name) in [(at(2, 0), "start side"), (at(8, 0), "far side")] {
+            let mut m = base();
+            high_x(&mut m, Family::Bridge, 0, 12, &[5]);
+            tagged(&mut m, &[tag]);
+            let mut r = ruleset();
+            r.globals.quirks.collapsed_pier_span_search = search;
+            let mut w = game(&r, &m);
+            // A missing section in each former span.
+            bridges::attempts(&mut w, at(3, 0), 2);
+            bridges::attempts(&mut w, at(9, 0), 2);
+            assert_eq!(data(&w, at(3, 0)), None);
+            assert_eq!(data(&w, at(9, 0)), None);
+            let f0 = fired(&w);
+            assert!(!bridges::attempt(&mut w, at(5, 0)));
+            assert!(bridges::attempt(&mut w, at(5, 0)));
+            assert_eq!(pier_k(&w, at(5, 0)), Some(4));
+            let kept = |x: i32| data(&w, at(x, 0)).is_some();
+            // The outer runs touch the extent's first or last cell and stay.
+            for x in [0, 1, 2, 10, 11] {
+                assert!(kept(x), "{search} {name}: cell {x} stays");
+            }
+            if search {
+                // The far side's run 6..=8 lies inside the combined extent:
+                // three isolated losses, 3 + 1 raises, and one more from the
+                // repeated check.
+                for x in 6..=8 {
+                    assert!(!kept(x), "{name}: cell {x} lost");
+                }
+                assert_eq!(fired(&w) - f0, 5, "{name}: n + 2 band raises");
+            } else {
+                for x in 6..=8 {
+                    assert!(kept(x), "{name}: cell {x} stays");
+                }
+                assert_eq!(fired(&w) - f0, 1, "{name}: one band pass over its span");
+            }
+        }
     }
 }
 
@@ -1018,6 +1040,37 @@ fn claim_10_falling_and_landing() {
     assert!(!alive(&w, top));
 }
 
+// spec: S-0511 claim 10 (landing does not spend or clear the bomb mark: a grounded survivor holding it takes no hit on later updates, and a later fall that adds no new mark still ends with the landing hit; an unmarked object's fall does not)
+#[test]
+fn claim_10_retained_bomb_mark() {
+    let m = base();
+    let mut w = game(&ruleset(), &m);
+    let marked = spawn(&mut w, Kind::Vehicle, "CART", at(2, 4));
+    let plain = spawn(&mut w, Kind::Vehicle, "CART", at(6, 4));
+    // A survivor of an earlier marked landing.
+    w.obj_mut(marked).unwrap().fall.bomb_mark = true;
+    let h = w.obj(marked).unwrap().health;
+    for _ in 0..10 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert_eq!(w.obj(marked).unwrap().health, h, "no hit while grounded");
+    assert!(w.obj(marked).unwrap().fall.bomb_mark);
+    // A later fall without a new mark.
+    for id in [marked, plain] {
+        w.obj_mut(id).unwrap().pos.z += 200;
+        glasnost_sim::fall::start(&mut w, id, false);
+    }
+    for _ in 0..40 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    assert!(
+        !alive(&w, marked),
+        "the retained mark gives the landing hit"
+    );
+    assert!(alive(&w, plain));
+    assert!(!w.obj(plain).unwrap().fall.falling);
+}
+
 // spec: S-0511 claim 10 and S-0301 claim 9 rank 4 (the fall step precedes behaviour processing, locomotion and the firing check; a falling firer is illegal; a still-falling unit neither advances nor fires)
 #[test]
 fn claim_10_falling_unit_neither_moves_nor_fires() {
@@ -1050,7 +1103,7 @@ fn centre(c: CellXY, z: i32) -> Pos {
     Pos::new(256 * c.x + 128, 256 * c.y + 128, z)
 }
 
-// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to P, the cell's centre at floor + 416: walk by its heading point's cell and stored height within 104 leptons; drive by its current track's end cell with its own height; a destination without a heading point does not count)
+// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to P, the cell's centre at floor + 416: walk by its heading point's cell and stored height within 104 leptons; drive by its current track's end cell with its stored track-start height (S-0207 claim 24) or its own height; a destination without a heading point does not count)
 #[test]
 fn claim_11_units_heading_onto_a_lost_deck() {
     for occupied in [true, false] {
@@ -1071,20 +1124,39 @@ fn claim_11_units_heading_onto_a_lost_deck() {
         // A deck vehicle on a track that ends in c; its destination is elsewhere.
         let tank = spawn(&mut w, Kind::Vehicle, "CART", at(2, 0));
         onto_deck(&mut w, tank);
+        let track_to_c = |height: i32| glasnost_sim::drive::Track {
+            d: 2,
+            e: None,
+            target: (256 * c.x + 128, 256 * c.y + 128),
+            target_cell: c,
+            height,
+            next: 0,
+            last: (256 * c.x - 128, 256 * c.y + 128),
+            cells: vec![c],
+            crush: false,
+            exit: false,
+        };
         {
             let o = w.obj_mut(tank).unwrap();
             o.dest = Some(Target::Cell(at(6, 0)));
-            o.drive.as_mut().unwrap().track = Some(glasnost_sim::drive::Track {
-                d: 2,
-                e: None,
-                target: (256 * c.x + 128, 256 * c.y + 128),
-                target_cell: c,
-                next: 0,
-                last: (256 * c.x - 128, 256 * c.y + 128),
-                cells: vec![c],
-                crush: false,
-                exit: false,
-            });
+            let z = o.pos.z;
+            o.drive.as_mut().unwrap().track = Some(track_to_c(z));
+        }
+        // A ground vehicle under the deck whose track began at floor height
+        // heading to c: neither test holds.
+        let under = spawn(&mut w, Kind::Vehicle, "CART", at(2, 0));
+        {
+            let o = w.obj_mut(under).unwrap();
+            let z = o.pos.z;
+            o.drive.as_mut().unwrap().track = Some(track_to_c(z));
+        }
+        // A descending vehicle: its stored track-start height is within 104
+        // of P, its current height more than 104 below (S-0207 claim 24).
+        let down = spawn(&mut w, Kind::Vehicle, "CART", at(4, 2));
+        {
+            let o = w.obj_mut(down).unwrap();
+            assert!(deck_z - o.pos.z > 104);
+            o.drive.as_mut().unwrap().track = Some(track_to_c(deck_z - 50));
         }
         if occupied {
             // The high walker's reservation is in c's deck record.
@@ -1095,6 +1167,12 @@ fn claim_11_units_heading_onto_a_lost_deck() {
         assert_eq!(alive(&w, high), !occupied, "occupied {occupied}");
         assert_eq!(alive(&w, tank), !occupied, "occupied {occupied}");
         assert!(alive(&w, low), "a heading point at floor height");
+        assert!(alive(&w, under), "a floor-start track under the deck");
+        assert_eq!(
+            alive(&w, down),
+            !occupied,
+            "the stored heading height qualifies"
+        );
         assert!(alive(&w, car), "a destination is not a heading point");
     }
 }

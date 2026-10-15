@@ -248,6 +248,7 @@ fn claim_5a_track_suppresses_only_with_a_positive_integer_step() {
         e: None,
         target: (pos.x, pos.y),
         target_cell: pos.cell(),
+        height: pos.z,
         next: 0,
         last: (pos.x, pos.y),
         cells: vec![pos.cell()],

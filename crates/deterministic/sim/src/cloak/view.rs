@@ -192,7 +192,7 @@ pub fn owner_real_look(w: &World, id: ObjectId, v: Option<HouseId>) -> Option<Lo
 
 /// The house whose colour a disguised unit shows on *V*'s radar (S-0516
 /// claim 38): the owner's when the owner allies *V*, otherwise the disguise
-/// house's. Q-0728 (interim: the owner's when the disguise house is none).
+/// house's, which is none (the neutral fallback colour) for a disguise without a house.
 pub fn radar_house(w: &World, id: ObjectId, v: Option<HouseId>) -> Option<HouseId> {
     let o = w.obj(id)?;
     let Some(d) = o.cloak.disguise else {
@@ -202,8 +202,8 @@ pub fn radar_house(w: &World, id: ObjectId, v: Option<HouseId>) -> Option<HouseI
     if (v.is_some() && o.owner == v) || w.allied(o.owner, v) {
         return o.owner;
     }
-    // spec: S-0516 claim 38 (otherwise the disguise house's colour)
-    d.house.or(o.owner)
+    // spec: S-0516 claim 38 (otherwise the disguise house's colour; none, so the neutral fallback, when the disguise has no house)
+    d.house
 }
 
 /// Whether the hover health bar shows for a disguised unit that appears

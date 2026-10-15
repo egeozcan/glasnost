@@ -168,7 +168,7 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
             house: None,
             pos: Some(cr.pos),
         });
-        // spec: S-0516 claim 11 (c) (a vehicle that crushes something starts uncloaking); Q-0723
+        // spec: S-0516 claim 11 (c) and S-0210 claim 4 (actually crushing an object, infantry or vehicle, starts the crusher's uncloak; a repeated cause while uncloaking plays no second sound)
         crate::cloak::machine::crushed(w, id);
     }
 }
@@ -204,8 +204,7 @@ fn crush_overlay(w: &mut World, id: ObjectId, c: CellXY) {
             pos,
         });
     }
-    // spec: S-0516 claim 11 (c) (a vehicle that crushes something starts uncloaking); Q-0723
-    crate::cloak::machine::crushed(w, id);
+    // spec: S-0516 claim 11 (c) and S-0210 claim 8 (crushing only an overlay or wall does not uncloak the crusher)
     if !ov.wall && r.quirks.crushable_overlay_stays {
         // spec: S-0210 claim 8 (a crushable overlay that is not a wall stays, quirks.crushable_overlay_stays)
         return;

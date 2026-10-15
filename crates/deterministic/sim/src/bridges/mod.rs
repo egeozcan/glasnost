@@ -171,7 +171,7 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
         let ok = high::attempt_section(w, s, ctx);
         if ok {
             // spec: S-0511 claim 7 (the span check from the named loss cell, the lost section's cell)
-            high::span_check(w, s.cell, None, ctx);
+            high::span_check(w, s.cell, ctx);
             // spec: S-0511 claim 12 (the lost section's section cell is named)
             high::name_cell(w, s.cell, false);
         }
@@ -186,9 +186,9 @@ fn attempt_in(w: &mut World, c: CellXY, ctx: &mut Ctx) -> bool {
         let ok = high::attempt_pier(w, r, family, line, k, ctx);
         if ok {
             let f = line.step();
-            // spec: S-0511 claims 6 and 7 (the named loss cells: the reference cell's start-side neighbour, then its far-side neighbour; the start-side span is checked to completion first)
-            high::span_check(w, pieces::at(r, f, -1), None, ctx);
-            high::span_check(w, pieces::at(r, f, 1), Some(r), ctx);
+            // spec: S-0511 claims 6 and 7 (after the tile replacement and both notices, searches from the reference cell's start-side neighbour, then its far-side neighbour; the first check completes before the second, and both can select the same combined extent)
+            high::span_check(w, pieces::at(r, f, -1), ctx);
+            high::span_check(w, pieces::at(r, f, 1), ctx);
             // spec: S-0511 claim 12 (a collapsed pier's reference cell is named)
             high::name_cell(w, r, false);
         }

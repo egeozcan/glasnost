@@ -6,6 +6,7 @@ use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{BuildingType, LocomotionClass, Locomotor, MovementZone, UnitType};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::combat::effects::{Effect, Sound};
+use glasnost_sim::drive::Track;
 use glasnost_sim::econ::sell;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
@@ -1165,8 +1166,9 @@ fn claim_17_pad_exchange_place_zero_distance() {
         depot::pad_exchange(&w, d, v),
         "a destination on a stationary vehicle is not a moving destination"
     );
-    // A stored step: the locomotor reports movement.
-    w.obj_mut(v).unwrap().path.steps.push(0);
+    // A destination away from its cell: the locomotor destination point is
+    // present and the locomotor reports movement.
+    w.obj_mut(v).unwrap().dest = Some(Target::Cell(testkit::mid(SIZE, 10, 10)));
     for (off, want) in [(128, false), (129, true)] {
         w.obj_mut(first).unwrap().pos = Pos::new(c.x + off, c.y, c.z);
         assert_eq!(depot::pad_exchange(&w, d, v), want, "place 0 at {off}");
@@ -1178,4 +1180,107 @@ fn claim_17_pad_exchange_place_zero_distance() {
     open(&mut w2);
     assert!(depot::request(&mut w2, v2, d2, false));
     assert!(!depot::pad_exchange(&w2, d2, v2));
+}
+
+// spec: S-0314 claim 17 and Terms (the movement report of a driving vehicle: its locomotor destination point present, or its heading point present and differing from its horizontal position, x and y only; a turn in place, a track in progress or stored steps are not sufficient by themselves; the order-level destination is needed in every row); Q-0794 (interim: the destination point is present while the destination's goal cell differs from the vehicle's)
+#[test]
+fn claim_17_driving_movement_report() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD");
+    let v = truck(&mut w, 0, 1, 1, 300);
+    open(&mut w);
+    assert!(depot::request(&mut w, v, d, false));
+    let c = w.reference_point(d);
+    // Place 0 holds the requester itself, at the centre: the distance never
+    // passes, so the exchange tethers exactly when no moving destination.
+    let still = |w: &World| depot::pad_exchange(w, d, v);
+    w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
+    assert!(still(&w), "a destination at its own cell: no report");
+    let pos = w.obj(v).unwrap().pos;
+    let track = |target: (i32, i32), z: i32| Track {
+        d: 2,
+        e: None,
+        target,
+        target_cell: Pos::new(target.0, target.1, z).cell(),
+        height: z,
+        next: 0,
+        last: (pos.x, pos.y),
+        cells: vec![pos.cell()],
+        crush: false,
+        exit: false,
+    };
+    // Stored steps, a turn in place and a track whose heading point is at
+    // the current horizontal position (only its height differs) do not
+    // report movement.
+    w.obj_mut(v).unwrap().path.steps.push(0);
+    w.obj_mut(v)
+        .unwrap()
+        .drive
+        .as_mut()
+        .unwrap()
+        .turning_in_place = true;
+    w.obj_mut(v).unwrap().drive.as_mut().unwrap().track = Some(track((pos.x, pos.y), pos.z + 100));
+    assert!(still(&w), "steps, a turn and a same-position heading point");
+    // A heading point differing in x only reports movement.
+    w.obj_mut(v).unwrap().drive.as_mut().unwrap().track = Some(track((pos.x + 1, pos.y), pos.z));
+    assert!(!still(&w), "heading point one lepton away");
+    // Without the order-level destination there is no moving destination.
+    w.obj_mut(v).unwrap().dest = None;
+    assert!(still(&w), "no order-level destination");
+    // A destination point away from its cell reports movement without a
+    // heading point.
+    w.obj_mut(v).unwrap().drive.as_mut().unwrap().track = None;
+    w.obj_mut(v).unwrap().dest = Some(Target::Cell(testkit::mid(SIZE, 10, 10)));
+    assert!(!still(&w), "destination point present");
+    assert_eq!(w.obj(v).unwrap().pos.cell(), c.cell());
+}
+
+// spec: S-0314 claim 17 (with place 0 empty, a requester with a moving destination cannot tether through the exchange; one without a moving destination still can)
+#[test]
+fn claim_17_pad_exchange_empty_place_zero() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD2");
+    let first = truck(&mut w, 0, 8, 8, 300);
+    let v = truck(&mut w, 0, 1, 1, 300);
+    open(&mut w);
+    assert!(depot::request(&mut w, first, d, false));
+    assert!(depot::request(&mut w, v, d, false));
+    assert_eq!(depot::link(&w, v).unwrap().place, 1);
+    depot::stop_order(&mut w, first);
+    assert!(depot::link(&w, first).is_none(), "place 0 empty");
+    w.obj_mut(v).unwrap().dest = Some(Target::Cell(testkit::mid(SIZE, 10, 10)));
+    assert!(
+        !depot::pad_exchange(&w, d, v),
+        "moving destination: no substitute position"
+    );
+    w.obj_mut(v).unwrap().dest = None;
+    assert!(depot::pad_exchange(&w, d, v), "no moving destination");
+}
+
+// spec: S-0314 claim 17 and S-0215 claim 29 (reaching the docking-point cell during movement sets the depot's ready mark and queues repair at the depot and sleep at the vehicle, neither started at once, and creates no tether)
+#[test]
+fn claim_17_movement_arrival_sets_the_ready_mark() {
+    for name in ["DEPOT", "PAD"] {
+        let r = rules();
+        let mut w = game(&r);
+        let d = depot_at(&mut w, name);
+        let v = truck(&mut w, 0, 1, 1, 300);
+        open(&mut w);
+        assert!(depot::request(&mut w, v, d, false));
+        w.obj_mut(v).unwrap().beh.current = Some(Behaviour::Enter);
+        w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
+        w.obj_mut(d).unwrap().beh.ready_mark = false;
+        let before = w.obj(d).unwrap().beh.current;
+        depot::movement_arrival(&mut w, v);
+        let b = &w.obj(d).unwrap().beh;
+        assert!(b.ready_mark, "{name}: ready mark set");
+        assert_eq!(b.queued, Some(Behaviour::Repair), "{name}: repair queued");
+        assert_eq!(b.current, before, "{name}: not started at once");
+        let o = w.obj(v).unwrap();
+        assert_eq!(o.beh.queued, Some(Behaviour::Sleep), "{name}: sleep queued");
+        assert_eq!(o.beh.current, Some(Behaviour::Enter));
+        assert!(!docked(&w, v), "{name}: no tether");
+    }
 }

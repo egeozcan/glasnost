@@ -109,6 +109,12 @@ impl Loaded {
             .collect()
     }
 
+    /// The neutral radar fallback colour for the radar's 5-6-5 display
+    /// (S-0410 claim 8, S-0516 claim 38).
+    pub fn neutral_radar_colour(&self) -> [u8; 3] {
+        build::neutral_radar_colour(&self.import, super::radar::DISPLAY_BITS.0)
+    }
+
     /// Runs one tick of the live game and redraws its objects into
     /// [`Built::scene`] (headless use; the viewer keeps its scene apart).
     pub fn tick(&mut self) {

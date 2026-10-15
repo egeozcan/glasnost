@@ -703,7 +703,7 @@ pub fn compose(
             // spec: S-0410 claim 6 (the colour of the first object shown at the pixel)
             if let Some(id) = arrivals.winner(w, h, (p, q), g, img) {
                 let o = w.obj(id);
-                // spec: S-0410 claim 8 and S-0516 claim 38 (a disguised unit: its owner's colour when the owner allies H, otherwise its disguise house's; Q-0728 interim for a disguise without a house)
+                // spec: S-0410 claim 8 and S-0516 claim 38 (a disguised unit: its owner's colour when the owner allies H, otherwise its disguise house's, the neutral fallback when the disguise has no house)
                 let c = crate::cloak::view::radar_house(w, id, Some(h))
                     .map_or(view.neutral, |ow| (view.house_colour)(ow));
                 let mut rc = radar_colour(c, view.bits);

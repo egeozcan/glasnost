@@ -57,7 +57,7 @@ fn step(w: &mut World, id: ObjectId) -> (bool, Option<Behaviour>, i32) {
     )
 }
 
-// spec: S-0215 claim 1 (at game set-up: the idle body and guard queued, not a construction body or construction queued)
+// spec: S-0215 claim 1 (at game set-up: the idle body and guard queued, not a construction body or construction queued; the grand opening sets the ready mark)
 #[test]
 fn claim_1_set_up_building_has_guard_queued() {
     let (w, id) = hut([0, 3, 4], false);
@@ -70,29 +70,33 @@ fn claim_1_set_up_building_has_guard_queued() {
     let body = o.econ.idle_body.expect("the idle body");
     // spec: S-0108 claim 6 (an immediate change at set-up: stage a, raw d for art not marked normalised)
     assert_eq!((body.stage, body.delay), (0, 4));
-    assert!(!o.beh.ready_mark);
+    // spec: S-0215 claim 1 (the grand opening later in the placement sets the ready mark)
+    assert!(o.beh.ready_mark);
 }
 
-// spec: S-0215 claim 11 (a building without a turret: landing on the last stage sets the ready mark, so the queued guard starts; the wrap alone does not set it); S-0108 claim 6 (a wrap restarts at a with N(d, s) for idle)
+// spec: S-0215 claim 1 (set-up guard becomes current at the first per-tick start, which clears the mark) and claim 11 (a building without a turret: landing on the last stage sets the ready mark; the wrap alone does not); S-0108 claim 6 (a wrap restarts at a with N(d, s) for idle)
 #[test]
 fn claim_11_last_stage_sets_the_mark_wrap_does_not() {
     let (mut w, id) = hut([0, 3, 4], false);
     let speed = w.game_speed;
-    let mut stage = 0;
-    // Until the stage lands on 2, the last of 0 … 2, guard stays queued.
+    let (mark, cur, k) = step(&mut w, id);
+    assert_eq!(
+        (mark, cur, k),
+        (false, Some(Behaviour::Guard), 0),
+        "first turn"
+    );
+    // Until the stage lands on 2, the last of 0 … 2, no mark.
     loop {
         let (mark, cur, k) = step(&mut w, id);
+        assert_eq!(cur, Some(Behaviour::Guard));
         if k == 2 {
-            // The mark set by the body, cleared by the successful per-tick start.
-            assert_eq!(cur, Some(Behaviour::Guard));
-            assert!(!mark);
+            assert!(mark, "landing on the last stage");
             break;
         }
-        assert_eq!((mark, cur), (false, None), "stage {k}");
-        stage = k;
+        assert!(!mark, "stage {k}");
     }
-    assert_eq!(stage, 1);
-    // Guard is current and nothing is queued: a mark set now stays set.
+    // Clear the mark; the wrap to stage 0 does not set it again.
+    w.obj_mut(id).unwrap().beh.ready_mark = false;
     loop {
         let (mark, _, k) = step(&mut w, id);
         if k == 0 {
@@ -139,9 +143,9 @@ fn placed(owner: &str, ty: &str, c: glasnost_map::CellXY) -> Placed {
     }
 }
 
-// spec: S-0215 claim 1 (a map-placed armed turreted building starts with the idle body, guard queued, no current behaviour and the ready mark clear; not being ready, its queue stays pending under claim 11 for the bounded run, its weapon setting no mark)
+// spec: S-0215 claim 1 (a map-placed armed turreted building ends set-up with the idle body, guard queued, no current behaviour and the ready mark set by its grand opening; guard is current from its first per-tick start)
 #[test]
-fn claim_1_set_up_turreted_defence_is_queued_not_current() {
+fn claim_1_set_up_turreted_defence_starts_guard_on_its_first_turn() {
     let mut s = Scene::new();
     s.ruleset = glasnost_sim::testkit::combat_ruleset();
     s.map.objects.structures.push(Structure {
@@ -161,25 +165,23 @@ fn claim_1_set_up_turreted_defence_is_queued_not_current() {
     assert!(o.econ.idle_body.is_some());
     assert_eq!(
         (o.beh.queued, o.beh.current, o.beh.ready_mark),
-        (Some(Behaviour::Guard), None, false)
+        (Some(Behaviour::Guard), None, true)
     );
-    for _ in 0..300 {
-        glasnost_sim::tick::step(&mut w);
-        let o = w.obj(tower).unwrap();
-        assert_eq!(
-            (o.beh.queued, o.beh.current),
-            (Some(Behaviour::Guard), None)
-        );
-    }
+    glasnost_sim::tick::step(&mut w);
+    let o = w.obj(tower).unwrap();
+    assert_eq!(
+        (o.beh.queued, o.beh.current),
+        (None, Some(Behaviour::Guard))
+    );
 }
 
-// spec: S-0215 claim 11 (a turreted building's idle body range sets no ready mark) and claim 1 (set-up leaves the mark clear, so its queued guard does not become current)
+// spec: S-0215 claim 11 (a turreted building's idle body range sets no ready mark) and claim 1 (its set-up guard is current from the first per-tick start, which clears the grand opening's mark)
 #[test]
 fn claim_11_turreted_idle_range_sets_no_mark() {
     let (mut w, id) = hut([0, 3, 0], true);
-    assert!(!w.obj(id).unwrap().beh.ready_mark);
+    assert!(w.obj(id).unwrap().beh.ready_mark);
     let (mark, cur, _) = step(&mut w, id);
-    assert_eq!((mark, cur), (false, None));
+    assert_eq!((mark, cur), (false, Some(Behaviour::Guard)));
     for _ in 0..20 {
         let (mark, _, _) = step(&mut w, id);
         assert!(!mark);

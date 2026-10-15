@@ -110,6 +110,10 @@ pub struct HoverState {
     /// cleared the order-level destination while *D* and *P* were equal
     /// (claim 16).
     pub retained: Option<Pos>,
+    /// The point a held assignment supplied as *D* for a cell destination,
+    /// kept until another assignment, stopping, completion or failure
+    /// (claim 18).
+    pub held: Option<Pos>,
 }
 
 impl HoverState {
@@ -136,6 +140,7 @@ impl HoverState {
             requests: None,
             bomb_mark: false,
             retained: None,
+            held: None,
         }
     }
 }
@@ -222,6 +227,13 @@ fn destination_point(w: &World, id: ObjectId) -> Option<Pos> {
         // spec: S-0503 claim 16 (the locomotor's D, distinct from the order-level destination)
         return o.hover.as_ref().and_then(|h| h.retained);
     };
+    if let Some(h) = o.hover.as_ref()
+        && h.for_dest == Some(dest)
+        && let Some(p) = h.held
+    {
+        // spec: S-0503 claim 18 (the held assignment's remembered D: expiry, searches and point choices do not adjust it)
+        return Some(p);
+    }
     match dest {
         Target::Cell(c) => {
             // spec: S-0204 claim 3 (the cell centre)
@@ -298,9 +310,18 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
     let powered = powered(w, id);
     let now = moving_now(w, id);
     if crate::parasite::held(w, id) {
-        // spec: S-0503 claims 5 and 17 (a held vehicle, its parasite hold timer running, merely remembers the supplied destination: no immediate choice); Q-0679 (interim: the remembered point takes the ordinary height)
+        // spec: S-0503 claim 18 (a cell supplies (256x + 128, 256y + 128, its terrain surface height at the centre): no 416-lepton deck lift, not the unit's height)
+        let supplied = match dest {
+            Some(Target::Cell(c)) => {
+                let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
+                Some(Pos::new(x, y, w.surface_at(x, y)))
+            }
+            _ => None,
+        };
+        // spec: S-0503 claims 5, 17 and 18 (a held vehicle, its parasite hold timer running, merely remembers the supplied point as D: no immediate choice and no destination-height adjustment; the order-level destination changes as usual)
         with(w, id, |h| {
             h.for_dest = dest;
+            h.held = supplied;
             if dest.is_some() {
                 h.retained = None;
             }
@@ -313,6 +334,8 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
     let restart = dest.is_some() && powered && now && no_point;
     with(w, id, |h| {
         h.for_dest = dest;
+        // spec: S-0503 claim 18 (an assignment after hold expiry applies the ordinary height adjustment anew, even for the same cell)
+        h.held = None;
         if dest.is_some() {
             // A new order-level destination replaces a kept one (claim 16).
             h.retained = None;
@@ -601,7 +624,11 @@ fn drop_dest(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.dest = None;
     }
-    with(w, id, |h| h.retained = None);
+    with(w, id, |h| {
+        h.retained = None;
+        // spec: S-0503 claim 18 (stopping, completion or failure clears the remembered D)
+        h.held = None;
+    });
 }
 
 /// Chooses the next heading point (claim 5), with S-0207 claim 19 c and d
@@ -669,7 +696,10 @@ fn choose_next(w: &mut World, id: ObjectId, old: Option<Pos>) -> Choice {
     let c = step_check(w, id, false);
     if c == (Choice::Refused { gave_up: true }) {
         // A give-up ends the move: a kept D goes with the order-level one.
-        with(w, id, |h| h.retained = None);
+        with(w, id, |h| {
+            h.retained = None;
+            h.held = None;
+        });
     }
     c
 }
@@ -1204,7 +1234,11 @@ pub fn stop_order(w: &mut World, id: ObjectId) {
     let p = state(w, id).and_then(|h| h.point);
     // spec: S-0503 claim 16 (it keeps its heading point, throttle, hover speed and ρ; the order-level destination is cleared, but the locomotor's D is kept when D and P are equal as full three-dimensional points, else cleared with the stored path)
     let keep = d.is_some() && d == p;
-    with(w, id, |h| h.retained = if keep { d } else { None });
+    with(w, id, |h| {
+        h.retained = if keep { d } else { None };
+        // spec: S-0503 claim 18 (a stop clears the held assignment's remembered D; a kept D is the retained one)
+        h.held = None;
+    });
     let t = w.tick;
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0503 claim 16 (clearing the order-level destination makes the ordinary retry timer immediately eligible)

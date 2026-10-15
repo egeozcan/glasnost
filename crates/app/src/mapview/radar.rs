@@ -20,9 +20,8 @@ pub const SIZE: (i32, i32) = (140, 108); // spec: S-0410 Constants (radar map 14
 /// 5, 6 and 5 (S-0410 Terms).
 pub(crate) const DISPLAY_BITS: Bits = Bits([5, 6, 5]); // spec: S-0410 Terms (5 bits red, 6 green, 5 blue)
 
-/// The fixed colour of an object without an owner (our placeholder: the
-/// neutral grey of the viewer's house colours).
-const NEUTRAL: Rgb = [160, 160, 160]; // nocite: placeholder colour of our viewer
+/// The colour of a house index the colour list lacks (our placeholder).
+const NO_HOUSE_COLOUR: Rgb = [160, 160, 160]; // nocite: placeholder colour of our viewer
 
 /// The radar state of one game.
 pub struct Radar {
@@ -32,18 +31,23 @@ pub struct Radar {
     arrivals: Arrivals,
     /// Each house's colour, by house index (S-0410 claim 8).
     colours: Vec<Rgb>,
+    /// The neutral fallback colour (S-0410 claim 8, S-0516 claim 38).
+    neutral: Rgb,
 }
 
 impl Radar {
     /// The radar of a game, from each cell's tile radar colour (S-0010
     /// claim 20), with each house's colour by house index
     /// ([`super::load::Loaded::house_radar_colours`]); `None` when the map
-    /// has no usable cell.
+    /// has no usable cell. `neutral` is the fixed neutral fallback colour
+    /// of an ownerless radar object and of a disguise without a disguise
+    /// house ([`super::load::Loaded::neutral_radar_colour`]).
     pub fn new(
         w: &World,
         theater: Theater,
         tile_colours: &BTreeMap<CellXY, Rgb>,
         colours: Vec<Rgb>,
+        neutral: Rgb,
     ) -> Option<Self> {
         let grid = minimap::grid(w)?;
         let img = minimap::image(&grid);
@@ -72,6 +76,7 @@ impl Radar {
             terrain,
             arrivals: Arrivals::default(),
             colours,
+            neutral,
         })
     }
 
@@ -97,13 +102,13 @@ impl Radar {
             self.colours
                 .get(usize::from(h.0))
                 .copied()
-                .unwrap_or(NEUTRAL)
+                .unwrap_or(NO_HOUSE_COLOUR)
         };
         let flash = |_| 0;
         let view = View {
             house,
             house_colour: &colour,
-            neutral: NEUTRAL,
+            neutral: self.neutral,
             flash: &flash,
             flash_frame_time: 1, // nocite: no object flashes in the viewer yet
             bits: DISPLAY_BITS,

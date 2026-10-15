@@ -677,6 +677,30 @@ fn claim_7_naval_match() {
     assert!(!naval::naval_match_refuses(&w, depot, amphi), "amphibious");
 }
 
+// spec: S-0504 claim 7 (only the plain amphibious zone bypasses the naval-flag comparison; amphibious-crusher and amphibious-destroyer must match the building's naval flag)
+#[test]
+fn claim_7_other_amphibious_zones_match_the_flag() {
+    for z in [
+        MovementZone::AmphibiousCrusher,
+        MovementZone::AmphibiousDestroyer,
+    ] {
+        let mut r = rules();
+        r.sim.vehicles.get_mut("AMPHI").unwrap().movement_zone = Some(z);
+        let mut w = world(r);
+        let yard = at(&mut w, "NAVYARD", 0, -8, -6);
+        let depot = at(&mut w, "DEPOT", 0, 13, 0);
+        let amphi = at(&mut w, "AMPHI", 0, 0, 2);
+        assert!(
+            naval::naval_match_refuses(&w, yard, amphi),
+            "{z:?} at a naval yard"
+        );
+        assert!(
+            !naval::naval_match_refuses(&w, depot, amphi),
+            "{z:?} at a land depot"
+        );
+    }
+}
+
 // spec: S-0504 claim 8 and F3 (the starting distance, 200 for ship and hovering locomotors and 100 for others, strictly; the spatial distance with height, truncated)
 #[test]
 fn claim_8_waiting_gate() {

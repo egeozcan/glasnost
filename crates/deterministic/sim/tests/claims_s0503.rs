@@ -935,6 +935,40 @@ fn claim_17_held_assignment_remembers_only() {
     );
 }
 
+// spec: S-0503 claim 18 (a cell assigned while held supplies its centre at terrain surface height as D, not 0 and not the unit's height; the order-level destination changes at once; D survives the hold's expiry unadjusted; a later assignment clears it)
+#[test]
+fn claim_18_held_destination_point() {
+    use glasnost_sim::world::{Pos, Target};
+    let mut w = world();
+    // Raised flat ground everywhere.
+    let all: Vec<_> = w.cells.grid.iter().map(|(c, _)| c).collect();
+    for c in all {
+        w.cells.grid.get_mut(c).unwrap().level = 2;
+    }
+    let id = at(&mut w, "HOVER", 0, 0, 0, 16384);
+    settle(&mut w);
+    let c = cell(6, 0);
+    let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
+    let z = w.surface_at(x, y);
+    assert!(z > 0, "raised ground");
+    hold(&mut w, id, 10);
+    order(&mut w, id, c);
+    assert_eq!(w.obj(id).unwrap().dest, Some(Target::Cell(c)));
+    assert_eq!(hs(&w, id).held, Some(Pos::new(x, y, z)));
+    common::run(&mut w, 12);
+    assert_eq!(w.obj(id).unwrap().dest, Some(Target::Cell(c)));
+    assert_eq!(
+        hs(&w, id).held,
+        Some(Pos::new(x, y, z)),
+        "unchanged through expiry"
+    );
+    common::order_move(&mut w, id, cell(0, 2));
+    common::run_until(&mut w, 20, |w| {
+        w.obj(id).unwrap().dest == Some(Target::Cell(cell(0, 2)))
+    });
+    assert_eq!(hs(&w, id).held, None, "a later assignment");
+}
+
 // spec: S-0503 claim 17 (a held heading-point choice clears its old reservation and point but refuses as blocked); claim 12 (no point, throttle, hover speed and ρ at 0); claim 15 (no actual-position restoration from a refusal)
 #[test]
 fn claim_17_held_choice_refuses() {

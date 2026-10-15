@@ -218,7 +218,7 @@ pub fn naval_match_refuses(w: &World, building: ObjectId, unit: ObjectId) -> boo
         .obj(unit)
         .and_then(|o| w.rules().unit(o.kind, o.type_index))
         .map(|u| u.zone);
-    // spec: S-0504 claim 7 (the amphibious movement zone is the exception); Q-0643 (interim: only that zone, not the amphibious destroyer or crusher zones)
+    // spec: S-0504 claim 7 (only the plain amphibious movement zone is the exception; amphibious-crusher and amphibious-destroyer are not)
     if zone == Some(MovementZone::Amphibious) {
         return false;
     }
