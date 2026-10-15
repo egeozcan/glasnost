@@ -1777,6 +1777,7 @@ impl Run<'_> {
 
     fn finish(&mut self) {
         // spec: S-0004 claim 3 (at game start the fixed particle system is created if missing; it reads no section)
+        // spec: S-0613 claim 1 and Edge cases (a missing shared gas system type is created, not rejected and not warned about)
         if self
             .find(Kind::ParticleSystems, refs::GAS_CLOUD_SYSTEM)
             .is_none()

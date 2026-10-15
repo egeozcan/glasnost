@@ -499,6 +499,7 @@ fn smoke_feeds_two_fields() {
 }
 
 /// spec: S-0004 claim 3 (the fixed particle system is created at game start when missing, and reads no section)
+/// spec: S-0613 claim 1 and Edge cases (a missing shared gas system type is created, not rejected; an unregistered section supplies nothing)
 #[test]
 fn game_start_particle_system() {
     let o = base("[GasCloudSys]\nLifetime=3\n");
