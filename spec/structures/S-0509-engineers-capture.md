@@ -2,11 +2,11 @@
 id: S-0509
 title: Engineers and capture
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: []
 supersedes: []
@@ -168,14 +168,19 @@ Neighbouring specs own the rest:
    - Both entry raises precede the capture's ownership and tag changes. Without intervening
      trigger changes they see the old owner and tag. Trigger actions can themselves change that
      state, and later raises see those changes.
-   - The tag carry-over happens after both entry raises. Its order relative to the ownership
-     change is not established by E6; this spec leaves that relative order unresolved.
+   - The ownership change itself raises neither the replaced old tag nor the carried new tag. Without
+     carry-over the old tag remains, but receives no ownership-change raise either. The relative order
+     of tag carry-over and the ownership change is not established here; no observable consequence
+     requiring one order over the other is specified.
    - The scatter of claim 9 comes after the ownership change.
    - The engineer's destroyed raise (claim 10) comes after the ownership change. When the tag
      carried over, that raise acts on the tag the building now shares.
 
    - Backing: `measurable` (scenarios E2 and E6) for raises before takeover, carry-over before
-     the destroyed raise, and takeover before that raise. `unmeasured` for scatter ordering
+     the destroyed raise, and takeover before that raise; E6's notification variant tests the
+     absence of an ownership-change raise. Carry-over already attached at ownership change is
+     `unmeasured`: no intervening building-tag raise exists, so E6 cannot distinguish that
+     relative ordering. `unmeasured` for scatter ordering
      (claim 9 has no reliable fixture) and which owner receives the lost-to-capture mark after
      a second-raise transfer (E7 has no such intervening transfer).
    - Confidence: high (the raises, the carry-over, the ownership change and the established
@@ -321,8 +326,8 @@ Neighbouring specs own the rest:
     - a building ownership change to the unit's house follows, with announcements,
     - claim 9's scatter follows,
     - if the unit carries a tag whose trigger chain includes the carry-over flag, the building
-      receives it after the ownership change. Claim 8 leaves capture's corresponding relative
-      order unresolved.
+      receives it. The relative order of this tag transfer and the ownership change is not established
+      here; no observable consequence requiring one order over the other is specified.
 
     The unit's own tag then receives a destroyed-by-anything raise, and the unit is removed from play
     without being killed, as in claim 10. The lost-to-capture mark is not set.
@@ -384,14 +389,14 @@ length rounded down.
 |---|---|---|
 | engineer walking in *capture*, *area guard* or *patrol* | building entry, arrival-friendly building at full health | one entry raise; refused; engineer scatters away from the building centre |
 | same | building entry, arrival-friendly building damaged | one entry raise; repaired; engineer's destroyed raise; engineer removed |
-| same | building entry, capturable building that is not arrival-friendly, not sold and not erased | two entry raises; capture and tag carry-over under claim 8's partial ordering; infantry scatter (claim 9); engineer's destroyed raise and removal |
+| same | building entry, capturable building that is not arrival-friendly, not sold and not erased | two entry raises; capture and tag carry-over (claim 8; relative order of tag carry-over and ownership change unspecified); infantry scatter (claim 9); engineer's destroyed raise and removal |
 | same | building entry, capturable building being sold or erased, not arrival-friendly | one entry raise; refused |
 | same | building entry, building of a type that is not capturable, not arrival-friendly | one entry raise; engineer's destroyed raise; engineer removed |
 | any infantry in those behaviours, except claim 1's garrison route | arrival in a vehicle-like destination building's own cell | entry raise, ownership change, infantry scatter, tag carry-over, unit's destroyed raise, unit removed |
 
-The tables summarise the default outcomes, not a total order of effects. In particular, they
-establish no order between capture's tag carry-over and ownership change. Backing and confidence
-are those of the numbered claims.
+The tables summarise the default outcomes, not a total order of effects. Capture's ownership
+change raises neither the old nor the carried-over tag (claim 8). Backing and confidence are
+those of the numbered claims.
 
 Ordering consequences:
 - Neither the capture's ownership change nor its tag carry-over occurs between its two entry
@@ -522,6 +527,14 @@ Trigger-counter effects must be calibrated to distinguish two firings in one tic
   trigger changes, unlike capture's own transfer, can occur between entry raises. These results
   do not distinguish tag carry-over before ownership change from carry-over after it; neither
   order alone is confirmed or falsified by E6.
+  Notification variant (also S-0524 claim 10): repeat with and without carry-over, recording
+  tag raises, causing objects and owners read-only, not only visible firings. Expected: two
+  building entry raises, no additional raise on either building tag merely for capture's
+  ownership change, then one engineer own-tag destruction raise. An ownership-only raise
+  falsifies this prediction. Tag replacement is not a raise; existing event latches must be
+  distinguished from new raises (S-0011 claim 9). If the recorder cannot resolve raises
+  independently, this variant is inconclusive. It does not measure the relative ordering of
+  tag carry-over and ownership change.
 - **E7. Lost-to-capture mark (claim 11).** Use a read-only recorder to observe house X's mark
   before and after an engineer captures an X building. Expected: initially clear, then set.
   Return the building by trigger and observe the mark for a further 90 ticks: expected to stay
@@ -609,9 +622,9 @@ Trigger-counter effects must be calibrated to distinguish two firings in one tic
 
 ## Open questions
 
-- Does capture tag carry-over precede the ownership change or follow it? E6 establishes only
-  that both follow the entry raises and precede the engineer's destroyed raise. No discriminating
-  scenario is yet proposed; the relative order is unmeasured and not prescribed (claim 8).
+- A discriminating observable for carry-over already attached at capture's ownership change
+  (claim 8) remains unavailable: no intervening building-tag raise exists. E6's notification
+  variant tests absence of an ownership-change raise, not that relative ordering.
 - Claim 17 rests on one reading of the arrival rule and has no stock case. Low confidence.
 
 ## Questions for the project lead
