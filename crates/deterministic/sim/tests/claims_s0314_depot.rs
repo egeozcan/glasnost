@@ -1122,6 +1122,17 @@ fn common_wait(w: &mut World, n: i32) {
     }
 }
 
+/// Gives `v` the order-level destination `t` as after a qualifying track
+/// completion: the locomotor destination point it supplied is already
+/// cleared (S-0207 claim 25).
+fn arrived(w: &mut World, v: ObjectId, t: Target) {
+    let o = w.obj_mut(v).unwrap();
+    o.dest = Some(t);
+    let d = o.drive.as_mut().unwrap();
+    d.for_dest = Some(t);
+    d.goal = None;
+}
+
 // spec: S-0314 claim 17 (a pad depot's repeated request tethers a vehicle in the foundation centre's cell with no moving destination; the completed-entry exchange then turns it toward 16384 facing units; an ordinary depot's request sets no tether)
 #[test]
 fn claim_17_pad_depot_tethers_in_the_enter_processing() {
@@ -1133,7 +1144,7 @@ fn claim_17_pad_depot_tethers_in_the_enter_processing() {
         open(&mut w);
         assert!(depot::request(&mut w, v, d, false));
         w.obj_mut(v).unwrap().beh.current = Some(Behaviour::Enter);
-        w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
+        arrived(&mut w, v, Target::Object(d));
         depot::process_enter(&mut w, v);
         assert_eq!(docked(&w, v), want, "{name}");
         if want {
@@ -1161,10 +1172,10 @@ fn claim_17_pad_exchange_place_zero_distance() {
     assert_eq!(depot::link(&w, first).unwrap().place, 0);
     let c = w.reference_point(d);
     assert_eq!(w.obj(v).unwrap().pos.cell(), c.cell());
-    w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
+    arrived(&mut w, v, Target::Object(d));
     assert!(
         depot::pad_exchange(&w, d, v),
-        "a destination on a stationary vehicle is not a moving destination"
+        "a destination whose point a completion cleared is not a moving destination"
     );
     // A destination away from its cell: the locomotor destination point is
     // present and the locomotor reports movement.
@@ -1182,7 +1193,7 @@ fn claim_17_pad_exchange_place_zero_distance() {
     assert!(!depot::pad_exchange(&w2, d2, v2));
 }
 
-// spec: S-0314 claim 17 and Terms (the movement report of a driving vehicle: its locomotor destination point present, or its heading point present and differing from its horizontal position, x and y only; a turn in place, a track in progress or stored steps are not sufficient by themselves; the order-level destination is needed in every row); Q-0794 (interim: the destination point is present while the destination's goal cell differs from the vehicle's)
+// spec: S-0314 claim 17 and Terms, S-0207 claim 25 (the movement report of a driving vehicle: its locomotor destination point present, even in its own cell, or its heading point present and differing from its horizontal position, x and y only; a turn in place, a track in progress or stored steps are not sufficient by themselves; the order-level destination is needed in every row)
 #[test]
 fn claim_17_driving_movement_report() {
     let r = rules();
@@ -1196,7 +1207,13 @@ fn claim_17_driving_movement_report() {
     // passes, so the exchange tethers exactly when no moving destination.
     let still = |w: &World| depot::pad_exchange(w, d, v);
     w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
-    assert!(still(&w), "a destination at its own cell: no report");
+    assert!(!still(&w), "a point assigned in its own cell is present");
+    // Its point cleared by a qualifying completion: no report.
+    arrived(&mut w, v, Target::Object(d));
+    assert!(
+        still(&w),
+        "the point cleared, the destination kept: no report"
+    );
     let pos = w.obj(v).unwrap().pos;
     let track = |target: (i32, i32), z: i32| Track {
         d: 2,
@@ -1234,6 +1251,42 @@ fn claim_17_driving_movement_report() {
     w.obj_mut(v).unwrap().dest = Some(Target::Cell(testkit::mid(SIZE, 10, 10)));
     assert!(!still(&w), "destination point present");
     assert_eq!(w.obj(v).unwrap().pos.cell(), c.cell());
+}
+
+// spec: S-0314 claims 17 and 18, S-0207 claim 25 (Q-0794 question 3: an accepted enter order from rest in the supplied docking point's cell supplies that point to the driving locomotor despite cell equality, with no search or track; the retained order-level destination makes it a moving destination, so the pad exchange does not tether at the repeated request); Q-0797 (interim: the next drive update at rest in the goal cell removes the order-level destination, and the point with it)
+#[test]
+fn claim_17_same_cell_enter_supplies_the_point() {
+    let mut r = rules();
+    r.sim.buildings.get_mut("PAD").unwrap().econ.docking_offsets = Some(vec![[0, 512, 0]]);
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "PAD");
+    let v = truck(&mut w, 0, 1, 3, 300);
+    open(&mut w);
+    let dp = depot::docking_point(&w, d, v);
+    assert_eq!(
+        dp.cell(),
+        w.obj(v).unwrap().pos.cell(),
+        "standing in its cell"
+    );
+    assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
+    orders::apply_pending(&mut w);
+    assert_eq!(contact(&w, v), Some(d), "accepted");
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(d)));
+    assert_eq!(glasnost_sim::drive::goal(&w, v), Some(dp), "point present");
+    assert!(w.obj(v).unwrap().drive.as_ref().unwrap().track.is_none());
+    assert!(
+        !depot::pad_exchange(&w, d, v),
+        "a moving destination despite no translation"
+    );
+    // The repeated request of the first enter processing finds it so.
+    let pos = w.obj(v).unwrap().pos;
+    depot::process_enter(&mut w, v);
+    assert!(!docked(&w, v), "no tether at the repeated request");
+    assert_eq!(w.obj(v).unwrap().pos, pos);
+    // Q-0797 interim: the drive update at rest in the goal cell removes
+    // the order-level destination, and with it the point.
+    tick::step(&mut w);
+    assert!(!glasnost_sim::drive::goal_present(&w, v));
 }
 
 // spec: S-0314 claim 17 (with place 0 empty, a requester with a moving destination cannot tether through the exchange; one without a moving destination still can)

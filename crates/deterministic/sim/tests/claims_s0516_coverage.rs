@@ -506,21 +506,33 @@ fn claim_22_walk_and_hover_arrival_updates() {
         assert_eq!(disc_x(&w, ALPHA), 0);
         move_to(&mut w, s, at(4, 0));
         let mut lagged = false;
+        let mut moves = 0;
         for _ in 0..300 {
+            let x0 = w.obj(s).unwrap().pos.cell().x - at(0, 0).x;
+            let d0 = disc_x(&w, ALPHA);
             run(&mut w, 1);
             let x = w.obj(s).unwrap().pos.cell().x - at(0, 0).x;
-            if x != disc_x(&w, ALPHA) {
+            let d = disc_x(&w, ALPHA);
+            if x != d {
                 lagged = true;
+            }
+            if d != d0 {
+                moves += 1;
+                if name == "SKIMMER" {
+                    // A hover's update uses its actual position at the
+                    // choice, before that tick's travel.
+                    assert_eq!(d, x0, "the pre-travel cell");
+                } else {
+                    // A walker's arrival snaps it: its cell at the update.
+                    assert_eq!(d, x, "the arrival cell");
+                }
             }
         }
         assert_eq!(w.obj(s).unwrap().pos.cell(), at(4, 0), "{name}");
+        assert!(moves > 0, "{name}");
         if name == "SCOUT" {
             // The walker's final arrival and snap is an update.
             assert_eq!(disc_x(&w, ALPHA), 4);
-        } else {
-            // A hover's update uses its actual position at its last heading
-            // choice, before the final travel: the disc may stay behind.
-            assert!((1..=4).contains(&disc_x(&w, ALPHA)));
         }
         assert!(lagged, "{name}: the cell changes before the arrival update");
     }

@@ -297,6 +297,52 @@ fn claim_6_speed_fraction() {
     }
 }
 
+// spec: S-0417 claim 5, S-0207 claims 24 and 25 (the exit track's stored heading height is 0 leptons throughout, not the vehicle's starting height; the successful instruction also supplies the locomotor destination point at E's horizontal centre with height 0; the vehicle's own height still follows the surface)
+#[test]
+fn claim_5_exit_points_store_height_zero() {
+    let mut w = game(&ruleset_with([3, 2]));
+    let k = building(&mut w, "VF", 0, 0, 0);
+    let v = new_unit(&mut w, Kind::Vehicle, "TANK");
+    assert_eq!(release::release(&mut w, k, v), Outcome::Released);
+    let e = release::apron(&w, k).expect("an apron");
+    let mut seen = 0;
+    for _ in 0..600 {
+        // A raised starting height: an exit begun now must not copy it.
+        let o = w.obj_mut(v).unwrap();
+        let on_exit = o
+            .drive
+            .as_ref()
+            .is_some_and(|d| d.track.as_ref().is_some_and(|t| t.exit));
+        if !on_exit {
+            o.pos.z = 300;
+        }
+        step(&mut w);
+        let o = w.obj(v).unwrap();
+        let d = o.drive.as_ref().unwrap();
+        let Some(t) = d.track.as_ref().filter(|t| t.exit) else {
+            if seen > 0 {
+                break;
+            }
+            continue;
+        };
+        if seen == 0 {
+            let (x, y) = (256 * e.x + 128, 256 * e.y + 128);
+            assert_eq!(
+                glasnost_sim::drive::goal(&w, v),
+                Some(glasnost_sim::world::Pos::new(x, y, 0)),
+                "the exit instruction's locomotor destination point"
+            );
+        }
+        seen += 1;
+        assert_eq!(t.height, 0, "stored heading height");
+        if t.next > 0 {
+            // Past the first point: surface-derived, not forced to 0.
+            assert_eq!(o.pos.z, w.surface_at(o.pos.x, o.pos.y), "own height");
+        }
+    }
+    assert!(seen > 0, "the exit track ran");
+}
+
 // spec: S-0417 claim 8 (U8: the saved rally is the destination at the report, with no further move queued; a later rally change is not read; without a rally, a scatter destination)
 #[test]
 fn claim_8_run_away() {

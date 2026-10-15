@@ -423,7 +423,9 @@ Provisional rules of M6b depot cycle, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `depot::moving_destination` | a driving or ship vehicle's locomotor destination point counts as present while its order-level destination's goal cell differs from its own cell | Q-0794 |
+| `drive::arrive_or_rest` | a driving or ship vehicle at rest in its order-level destination's goal cell has that destination removed at its locomotion update (track end with no further step, or standing there with no track), and the locomotor destination point with it; a same-cell enter order's point is present for the enter processing before that update only | Q-0797 |
+
+S-0314 revision 20 with S-0207 revision 27 answers Q-0794 (claim 17 and S-0207 claim 25). The driving and ship locomotor keeps its own destination point (`DriveState::goal`). An accepted instruction installs it at the destination's assignment (`drive::take_destination`, from `infantry::destination_assigned`; a depot's first contact re-supplies the docking point, `depot::take`). It is not tied to a search or a track. A stop clears it, as does a qualifying final track completion (in the point's cell, height within 208), and a give-up through the destination's removal. The movement report tests its presence (`drive::goal_present`), with an untaken assignment counting at once. Its row is retired. The order-level destination's removal at the goal cell is Q-0797's.
 
 S-0314 revision 19 answers Q-0790 (claim 17): an empty place 0 fails the pad exchange's distance test; the movement arrival sets the depot's ready mark (S-0215 claim 29); a driving or ship vehicle reports movement by claim 17's table (destination point, or a heading point that differs horizontally), a hover by S-0503 claim 5's *is moving*. Its row is retired.
 
@@ -651,6 +653,7 @@ S-0511 (bridges) is built in `glasnost_sim::bridges` and `glasnost_sim::fall`. T
 - **Save format 21.** `Object::fall`, `Cells::alternate`, `Cells::pier_levels` and `World::map_rng` are new state, and they are hashed.
 - **Save format 24.** `Cells::section_self` and `Cells::covered_by` (claim 2's responsible section) are new state, and they are hashed.
 - **Save format 25.** `Track::height` (S-0207 claim 24, the heading point's stored height) is new state, and it is hashed. A landing keeps the bomb mark (claim 10).
+- **Save format 27.** `DriveState::goal` and `DriveState::for_dest` (S-0207 claim 25, the locomotor destination point) are new state, and they are hashed.
 - **Not built.**
   - The own AI does not repair bridges, because it needs S-0509's entry.
   - The bridge-repaired and repair sounds are effects, but audio does not play them.
@@ -664,9 +667,9 @@ S-0511 (bridges) is built in `glasnost_sim::bridges` and `glasnost_sim::fall`. T
 
 Provisional rules of M6b bridges, each tied to a request:
 
-| Where | Interim rule | Request |
-|---|---|---|
-| `drive::begin_exit_track` | an exit track's heading point also stores the vehicle's height when the track starts | Q-0793 |
+None at present.
+
+S-0207 revision 27 answers Q-0793 (claim 24, S-0417 claim 5, S-0511 claims 9 and 11). The factory exit track's heading point stores world height 0 (`drive::begin_exit_track`). The successful exit instruction also sets the locomotor destination point to the apron centre at height 0. S-0511 claim 9's reservation clearing and claim 11's stored-height test therefore use 0, while claim 11's track test still uses the current height. Its row is retired.
 
 S-0511 revision 5 with S-0207 revision 26 answers Q-0676 (claim 11 and S-0207 claim 24: a track's heading point keeps the height at its start, `Track::height`), Q-0677 (claim 10: the bomb mark is kept on landing) and Q-0678 (claim 7: a collapsed pier never qualifies as a start piece and, with `quirks.collapsed_pier_span_search`, not as a far piece either); their rows are retired.
 
@@ -721,7 +724,7 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - `quirks.sensor_building_activation_once`;
   - `quirks.sensor_count_negative`;
   - `quirks.uncloak_from_cloaking_full_duration`.
-- **Save format 22.** `Object::cloak`, `Object::disguise` and `World::cloak` are new state, and they are hashed.
+- **Save format 22.** `Object::cloak`, `Object::disguise` and `World::cloak` are new state, and they are hashed. Format 27 adds `cloak::Generator::phase` (S-0516 claim 20: growth or shrinking pending).
 - **Not built.**
   - The app does not draw the disguise image (claim 37), and the cursor, insignia and hover name of claim 36 are not wired into the status drawing.
   - Buildings drawn as static map scenery get no translucency.
