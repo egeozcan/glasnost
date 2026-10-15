@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -310,8 +310,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
      below gives,
    - stops being an active control centre (claim 13), stops its gap (claim 16), and produces no
      credits from a cash-producing type (S-0515 claims 5 to 7),
-   - releases every controlled unit it holds and lets go of its held unit (Terms; the
-     special-abilities specs own what release does),
+   - releases every controlled unit it holds (S-0601 claims 9–10 own the release effects and
+     release order) and lets go of its held unit (Terms; the special-abilities specs own
+     what letting go does),
    - stops the effects of sensor types (visibility specs), and its lights and working animations
      (rendering specs).
 
