@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841]
 supersedes: []
 ---
 
@@ -46,9 +46,14 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
 - **aircraft** (glossary): in this spec, an object of an aircraft type that moves with the flying
   locomotor. Rocket-driven missiles are S-0506.
-- **height** *h*: the height above the terrain (glossary), in leptons. In ordinary altitude
-  calculations on a bridge cell, the bridge deck replaces terrain when the aircraft is not
-  flagged as standing on the bridge and is at least the bridge height above terrain.
+- **aircraft deck mark**: the aircraft's own standing-on-deck state (claim 43), distinct
+  from its render layer, its presence in a cell's occupant list and that cell's occupancy
+  flags. This is what “marked on a bridge deck” means in S-0105 claim 40.
+- **height** *h*: signed integer world height minus terrain surface height at the aircraft's
+  horizontal position, minus 416 leptons when its aircraft deck mark is set. In ordinary
+  altitude calculations on a high-bridge cell, an unmarked aircraft at least 416 leptons
+  above terrain also uses the deck as its reference. Claim 43 distinguishes that temporary
+  altitude reference from the aircraft deck mark.
 - **cruise height** *FL*: the type's flight-level field, or the game-wide flight level when the
   type's field is absent (Import mapping). The locomotor keeps a **held height** *FL*ₕ, which is
   *FL* during ordinary cruise and the landing height (0) while landing. Near a destination,
@@ -1029,6 +1034,36 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Confidence: high for the order within an update, the zero-fraction test, the facings
       requested, the retained flight point and the stated design alternative; medium for the strafer's 8192-unit exception
 
+43. **Aircraft deck marking (Q-0841).** Ordinary flight can land an aircraft on a
+    high bridge and give it the aircraft deck mark. The mark is not inferred from the
+    render layer or from either cell layer's occupancy flags. For a living aircraft,
+    the following transitions apply; all height comparisons use signed integer leptons.
+
+    | Situation | Result for the aircraft deck mark |
+    |---|---|
+    | An unmarked aircraft flies across or hovers above a high bridge without settling onto it | Remains clear, even above deck height |
+    | Ordinary descent uses the high bridge as its reference and its descent step reaches or passes height 0 above that deck | Set, with resulting height 0 above the deck |
+    | Landing finishes on a high-bridge cell while the aircraft's world height is at least terrain surface height plus 416 leptons | Set before settling at landing height |
+    | An ordinary altitude adjustment climbs toward the held height | Cleared in that movement tick, including the first climbing tick after deck take-off |
+    | A touchdown is refused under claim 7 | Cleared as take-off restarts |
+    | Horizontal flight or hovering alone, without one of these altitude or landing transitions | Unchanged |
+
+    Thus landing can produce a deck-marked aircraft, but merely hovering over a bridge
+    cannot acquire the mark. A previously marked aircraft does not lose it merely because
+    it is above the deck or crosses a cell boundary. Normal climbing take-off does clear
+    it: ordinary cruise over the bridge is not marked just because the aircraft once
+    landed there. Render-layer selection still follows claim 7's height test, now with
+    the deck mark included in height. A marked aircraft at deck height therefore has
+    height 0 and the ground render layer; this is not a separate bridge render layer.
+    A positive-height aircraft may retain a mark when it is not climbing, so render layer
+    alone cannot recover the mark. S-0105 claim 40 owns the shadow consequence and its
+    additional neighbouring-cell qualification. S-0209 claim 13 owns occupant listing.
+    Listing and occupancy must not be substituted for the aircraft's own mark.
+    Claim 1's ordinary fresh ground placement still replaces the requested height with
+    terrain height; requesting an elevated placement is not a way to require a deck landing.
+    - Backing: `measurable` (scenario AC27)
+    - Confidence: high
+
 ## Formulas
 
 All heights and positions are integers in leptons (S-0204). "⌊ ⌋" on a quotient of integers is
@@ -1414,6 +1449,7 @@ attacking in that same pass; it does not require either neighbour to have been r
 | `SlowdownDistance` | rules, type | slowdown distance *S* | integer, leptons | 500 |
 | `Speed` | rules, type | converted integer *V* and *V*ₜ, including F6's zero-divisor warning | S-0207 claim 1; not the raw value in F6 | S-0207 claim 1 |
 | none | — | layer boundary, entry delays, service start, search and edge constants | fixed engine rules, not new import fields | — |
+| none | map terrain and high-bridge presence | aircraft deck mark and the 416-lepton deck reference (claim 43) | fixed runtime transitions; terrain and bridge inputs follow S-0106 claim 2 and S-0211 claim 15 | no mark is granted merely by an aircraft type or a pad |
 | `Ammo` | rules, type | maximum ammunition *A* | integer | −1 (unlimited) |
 | `Selectable` | rules, object type | visiting test | boolean | yes |
 | `Strength`, `Cost` | rules, type | F11 | integer | S-0302, S-0403 |
@@ -1980,6 +2016,29 @@ listed in Open questions are not claimed confirmed by these scenarios.
   (S-0204 claim 8 (a)). On the westward flight, on every step with body facing 49148 to 49155
   the y coordinate falls by exactly 1 lepton. An x (or y) that does not change on those steps
   falsifies the round-toward-zero sum of F3 and matches F3 with `quirks.chop_rounding` off. Repeat due north and due east as controls: no sideways change.
+
+- **AC27 Aircraft deck mark, hover and departure (claim 43; Q-0841).** Use the common
+  setup with a high bridge over level traversable ground, an otherwise empty landing
+  cell, and a human-owned landable aircraft. If necessary, name a test-map override
+  making an ordinary flying aircraft landable and not pad-bound; retain its ordinary
+  flying movement. Use an interior bridge cell with the neighbour required by S-0105
+  claim 40, and a non-bridge control. Fly across the bridge, land on it from above,
+  remain at rest, then take off across it. Repeat five times. Record per tick world
+  height, terrain surface height, the aircraft's own deck mark, render layer, both
+  occupant lists and occupancy flags separately, plus the shadow anchor as in S-0105
+  MS-30. Expect no mark on the initial flyover, a mark when descent settles at deck
+  height, height 0 and ground rendering at deck rest, and clearing in the first ordinary
+  climbing tick. The shadow follows S-0105 claim 40 with that recorded mark, not a
+  guessed layer. A fresh requested elevated placement instead follows claim 1.
+  For retention above deck, use a named test-map flight-level override equal to the
+  deck-relative height reached by a marked aircraft when it crosses from a bank onto
+  lower bridge terrain, so it neither climbs nor descends there; record whether such
+  a positive-height marked crossing is actually reached. Expect horizontal movement
+  alone to retain its prior mark, and hovering without a prior mark never to acquire
+  it. Failure to reach that retention state is inconclusive, not evidence that the mark
+  is equivalent to ground rendering. Any isolated transition or shadow anchor contrary
+  to these predictions falsifies the corresponding rule. Do not write the mark with a
+  recorder or assume that a pad can legally be built on the bridge.
 
 ## Open questions
 

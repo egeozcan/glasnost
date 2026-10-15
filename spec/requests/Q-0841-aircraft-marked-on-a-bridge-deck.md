@@ -1,9 +1,9 @@
 ---
 id: Q-0841
 title: When an aircraft counts as marked on a bridge deck for its shadow anchor
-status: open
+status: answered
 related: [S-0105, S-0501, S-0209]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
