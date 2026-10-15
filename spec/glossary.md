@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 36
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -63,7 +63,7 @@ not rules for implementing them.
   draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are approved. S-0503,
   S-0507, S-0511, S-0512, S-0513, S-0516, S-0522 and S-0524 are approved.
   S-0508, S-0509, S-0510, S-0515, S-0502, S-0514, S-0517 and S-0525 are approved.
-  S-0603, S-0605, S-0606 and S-0607 are drafts in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
+  S-0608, S-0611, S-0612 and S-0615 are drafts in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
   change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
@@ -1376,6 +1376,10 @@ damage. S-0519 claims 2, 3 and 7 own planting, firing legality and disarming.
 planted, or can see through an own-house bomb detector in range. S-0519 claim 10 owns the
 visibility updates and range test; visibility does not change bomb timing or damage.
 
+**burning walker.** An animation whose current type has the burning-walker flag. It uses
+special running and expiry behaviour instead of normal playback, preferring water when choosing
+where to run. S-0615 claims 4 to 11 own it.
+
 **burst counter.** A per-firer count of the shots made in the current burst, shared by all weapons
 of the firer. S-0301 owns it (Terms, claim 4); S-0313 (claim 2) uses it.
 
@@ -1402,6 +1406,13 @@ whose separate weapon-range condition does not require the flag.
 **consumption.** The moment a recycling building takes in an entrant and removes it from the
 game: a removal, not a destruction. S-0603 claims 5 to 11 own the event and its effects.
 
+**conversion.** In mutation, the replacement of a killed infantry unit's death sequence by
+its leaving play and a conversion animation. S-0611 claims 6 and 7 own the conversion test,
+its refusals and the victim's removal, including the crash exception.
+
+**conversion animation.** The animation type named by the rules' general mutation setting,
+created at a converted victim's position. S-0611 claim 8 owns its creation and ownership.
+
 **current weapon.** The weapon in the slot of an object's weapon number when its type is a
 multi-weapon type, and the weapon in its slot 0 otherwise. See S-0309 (Terms), with S-0308 for
 the weapon number; S-0312 uses it.
@@ -1415,6 +1426,10 @@ to the superweapon specs.
 **damage that ignores defences.** A hit delivered with a marker that tells the target to
 disregard its defences. S-0302 owns which hits carry it (claim 1) and what it skips (claim 9).
 S-0107 and S-0312 use it, S-0312 as the *ignore-defences marker*.
+
+**death kind.** The integer chosen for a dying infantry unit by S-0107 claim 17, which can
+differ from the killing warhead's infantry-death kind. S-0615 claim 1 identifies each kind's
+effect, with virus death owned by S-0613 and mutation by S-0611.
 
 **death weapon.** The weapon that an exploding object's death detonates. S-0312 owns it (Terms,
 claim 6); S-0303 gives the detonation.
@@ -1434,6 +1449,14 @@ point*, with a damage amount, a warhead, and optionally the object and the house
 S-0303 owns what a detonation does (Terms, claims 1 to 23). Projectiles (S-0306), damaging
 animations (S-0109), deaths (S-0312) and other specs produce detonations, and each says what it
 passes. S-0302 turns each resulting *hit* into a health change.
+
+**drainable type.** A type whose drainable flag is set, which a draining weapon may target.
+Only buildings can actually receive a drain link (S-0608 claim 2).
+
+**drainer, drain link, draining.** A drain link joins one object, the drainer, to one building,
+which is then being drained. An object is draining while it is the drainer of a link.
+S-0608 claims 1, 2 and 5 own the attempt and link formation; claim 7 owns credit transfers.
+This is distinct from a drain-mode superweapon.
 
 **drone parasite, grappling parasite.** A parasite whose type is both naval and organic is
 a *grappling parasite*; every other parasite is a *drone parasite*. S-0614 claims 6 and 10
@@ -1536,6 +1559,11 @@ from the electromagnetic-pulse disable called *paralysed* by S-0214.
 and deployed without becoming another object (S-0517 Terms and claim 3). Not a vehicle that
 deploys into a building under S-0415.
 
+**infantry-making animation.** An animation whose type has a make-infantry index other than
+−1. The index selects its made type from the rules' animation-to-infantry list. S-0611 claim 9
+owns the attempt to create one unit at its end, including follow-up, invalid-index and owner
+rules; claims 10 and 11 own placement and retries.
+
 **known attacker.** Damage has a known attacker when it comes with the object that caused it.
 See S-0107 (Terms); S-0208 (claim 15) uses it for the scatter requests that damage sends. S-0302
 (Terms, claim 1) calls that object the *attacker*, adds the *attacking house* that a hit credits,
@@ -1559,6 +1587,10 @@ count is above 0. S-0506 claim 10 owns the resulting lockouts; its Terms define 
 **leading attacker.** Of the attackers whose temporal beams are attached to one target, the one
 that carries the erasure amount. When it lets go, the most recent remaining joiner takes over
 without losing progress (S-0514 claim 9).
+
+**mutating death kind, mutating warhead.** The mutating death kind is infantry-death kind 9.
+A mutating warhead has that kind. It can convert a killed infantry unit when S-0107 claim 17
+reaches the mutation case (S-0611 claim 1).
 
 **overpowered.** The state of an overpowerable building with at least three registered
 chargers, or at least one while switched on with its owner at full power. It is decided in
@@ -1612,6 +1644,10 @@ claim 13), not this one.
 to an ordered attack or a target picked in an automatic search. S-0309 owns when an object
 retaliates (claim 18), S-0304 (claim 3) its versus-value condition and S-0215 (claims 18 and 19)
 what retaliation does; S-0308 uses it.
+
+**ring point.** One of the 16 points on a circle of radius 240 leptons around a disc-laser
+firer's fire point, between which its arc beams run. S-0615 claims 15 and 17 own their placement
+and use.
 
 **rocket missile.** An aircraft-kind object of one of the three rocket types flying under
 rocket-flight movement to a fixed aim point, not an ordinary projectile. S-0506 claims
@@ -1872,9 +1908,9 @@ S-0416 uses the term.
 owns how many bales a resource cell holds and what each is worth (Terms, claim 2); S-0402 counts a
 harvester's *load* in bales.
 
-**being drained.** The state of a building to which an enemy unit with a draining weapon is
-attached. S-0405 owns the term (Terms) and what it changes in power (claim 5); S-0408 (claim 3)
-uses it. How the attaching starts and ends belongs to the special-abilities specs.
+**being drained.** The state of a building attached to a drainer by a drain link. S-0608 owns
+how the link forms and ends (claims 2, 5 and 11 to 14). S-0405 claim 5 owns what it changes in
+power; S-0408 claim 3 uses it. S-0608 claim 7 owns its credit transfers.
 
 **collector.** The object that picks up a crate by committing to a ground step into its cell,
 by landing in it as a jumpjet, or after landing in it through its own teleporting locomotor
@@ -1905,7 +1941,7 @@ lifetime timer (S-0520 claim 1).
 **credit balance.** A house's own stock of credits, not counting resources held in storage (see
 *available credits*). S-0412 (claim 2) gives its starting value in a skirmish, S-0402 (claim 12)
 what harvesting adds, S-0404 (claims 4 and 6) what production takes and gives back, and S-0408
-(claims 1 and 10) what a sale adds.
+(claims 1 and 10) what a sale adds. S-0608 claim 7 gives what drain payouts take and add.
 
 **credits.** The unit of money: costs, refunds, harvested resources and a house's balance are given
 in credits. Each economy spec states the number domain and rounding of the amounts it computes:
@@ -2131,6 +2167,10 @@ lasting its held delay in ticks (S-0513 claim 40).
 **camera sight.** The spy plane's own sight with its radius replaced by its primary weapon's
 damage, subject to the radius cap and zero-damage fallback of S-0513 claim 44.
 
+**cell mode, explosion mode.** The two ways a genetic mutation launch reaches infantry,
+chosen by one game-wide rules boolean: explosion mode delivers an area hit; cell mode hits
+infantry in the target cell's effect block. S-0611 claims 3 and 4 own the deliveries.
+
 **charge clock, remaining time.** A superweapon record's running or stopped countdown toward
 readiness, with remaining time in ticks. A running clock counts down by one per tick, never
 below zero; a stopped clock keeps its remaining time. S-0512 claim 5 owns completion.
@@ -2143,6 +2183,13 @@ S-0512 claim 16 owns the display, including drain-mode exceptions.
 with damage it makes when it matures. S-0513 claims 16 to 18 own them.
 
 **countdown row.** One line of the on-screen superweapon countdown (S-0512 claim 18).
+
+**dominating house.** The house whose launch started a psychic domination, fixed at launch.
+S-0612 claim 17 owns this ownership rule.
+
+**domination, domination in force.** Domination is the game-wide state started by a psychic
+domination launch. It is in force from the launch that starts it until it is over, with at
+most one for all houses together (S-0612 claims 3 and 7).
 
 **drain-mode superweapon.** A type with the imported drain-mode flag, whose record has the
 states charging, ready and active. Its orders can restart the clock despite suspension, and
@@ -2182,6 +2229,9 @@ curtain or force shield (S-0513 claims 25 and 26).
 (S-0512 claim 5). S-0411's sidebar sense additionally requires no suspension and being inside
 the flash window (S-0512 claim 17).
 
+**start object.** In a psychic domination's swept cell, the object its sweep examines first.
+S-0612 claim 12 owns its selection and which later objects are examined.
+
 **storm, weather storm.** The single game-wide storm of the weather superweapon, with states
 idle, counting down, raging and clearing (S-0513 claims 14 to 19). S-0524 claim 1 uses
 *weather storm* for this same effect; S-0104 calls it the *ion storm*.
@@ -2197,8 +2247,12 @@ and normally stops its charge clock. It may still be ready. S-0512 claims 4 and 
 suspension; claims 10 and 14 give running-through-suspension exceptions. Specs write
 *suspended*, not *held*: the latter is the mobile-unit countdown.
 
+**sweep (psychic domination).** The single moment of a domination at which its area damage
+and takeovers happen. S-0612 claim 4 owns its timing and claims 8 to 15 its effects.
+
 **swept layer.** The cell layer whose listed objects an area superweapon reaches in one cell
-(S-0513 claim 4).
+(S-0513 claim 4). For psychic domination this is the ground layer under S-0612 claims 11 and 12,
+subject to that spec's bridge-deck alternative.
 
 **warning marker.** The animation at a nuclear strike's target shown only to qualifying
 non-allied viewers with psychic detection (S-0513 claim 11).
