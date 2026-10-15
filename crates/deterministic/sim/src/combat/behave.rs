@@ -44,8 +44,8 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
     match answer {
         Answer::CanFire => {
             if u.vehicle.deploy_to_fire {
-                // spec: S-0310 claim 9 (a deploy-to-fire type deploys instead of firing; the deploy specs own the deploy)
-                w.note("S-0310 claim 9: deploy-to-fire vehicles do not deploy yet (deploy specs)");
+                // spec: S-0310 claim 9 and S-0517 claim 13 (a deploy-to-fire type queues *unload* instead of firing, without starting it immediately)
+                w.note("S-0310 claim 9: deploy-to-fire vehicles do not queue unload yet (S-0517 claim 13)");
             } else {
                 // spec: S-0310 claim 9 (any other vehicle fires; a visceroid's animation stage is presentation)
                 crate::combat::fire::shot(w, id, slot, t);

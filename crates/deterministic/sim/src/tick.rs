@@ -21,7 +21,7 @@ pub fn ticks_run(w: &World) -> i32 {
 
 /// Runs one tick (S-0203 claim 1, the draw order of its rows).
 pub fn step(w: &mut World) {
-    // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 13, 14, then the turn pass, row 5)
+    // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 14, then the turn pass, row 5; row 13, radiation maintenance, takes no draws)
     // spec: S-0203 row 1 and S-0011 claim 6 (the poll of every polled tag, at the start of the tick)
     crate::triggers::poll(w);
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
@@ -29,7 +29,8 @@ pub fn step(w: &mut World) {
     // Row 2 (planted bombs) has no topic yet: an empty seam.
     // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted bombs (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
     crate::spawn::kamikaze_orders(w);
-    // Rows 10, 11, 12, 3, 13 and 14 (and row 4) have no topic yet: empty seams.
+    // Rows 10, 11, 12, 3 and 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
+    // maintenance) takes no draws (S-0203 row 13) and is not built yet.
     // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
     // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)
     crate::econ::shroud::regrowth(w);
