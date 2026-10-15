@@ -264,17 +264,19 @@ pub fn depot_distance(p: Pos, dock: Pos) -> i32 {
     i32::try_from(root_floor(n, false, glasnost_num::Rounding::TowardZero)).unwrap_or(i32::MAX)
 }
 
-/// The docking point of a naval yard marked as a vehicle factory (S-0504
-/// claim 12): the centre of the cell (2, 1) cells from its top-left
-/// foundation cell, at the yard's own height; `None` for any other
-/// building. It takes precedence over imported pad docking displacements.
+/// The fixed docking point of a building with the obsolete-unloading flag
+/// (S-0504 claim 12): the centre of the cell (2, 1) cells from its top-left
+/// foundation cell, at the building's own height; `None` for any other
+/// building, a naval vehicle factory included (it uses S-0314 claim 18's
+/// point). It takes precedence over imported pad docking displacements.
 pub fn yard_docking_point(w: &World, yard: ObjectId) -> Option<Pos> {
     let o = w.obj(yard)?;
     if o.kind != Kind::Building {
         return None;
     }
     let b = w.rules().buildings.get(o.type_index as usize)?;
-    if !(b.naval && b.factory == Some(crate::rules::FactoryKind::Vehicle)) {
+    // spec: S-0504 claim 12 (the obsolete-unloading flag, not the vehicle-factory flag, selects the fixed point)
+    if !b.raw.econ.weeder.unwrap_or(false) {
         return None;
     }
     let c = o.pos.cell();

@@ -80,7 +80,8 @@ fn ship() -> UnitType {
 /// - ships SKIFF (surface), LIGHT (weight below the sinking weight),
 ///   DIVER (underwater, cloakable), SCOW (no weight);
 /// - HOVER (the hovering locomotor), AMPHI (amphibious zone);
-/// - buildings NAVYARD (naval vehicle factory with the repair flag) and
+/// - buildings NAVYARD (naval vehicle factory with the repair flag, its
+///   sole docking displacement to the cell (2, 1) from its top-left) and
 ///   DEPOT (land, repair flag);
 /// - the game-wide wake animation `Ripple`.
 fn rules() -> Ruleset {
@@ -124,7 +125,7 @@ fn rules() -> Ruleset {
         r.sim.vehicles.insert(n.into(), u);
         push(&mut r, "vehicles", n);
     }
-    let yard = BuildingType {
+    let mut yard = BuildingType {
         strength: Some(500),
         foundation: Some([2, 2]),
         factory: Some("vehicle".into()),
@@ -135,11 +136,15 @@ fn rules() -> Ruleset {
         cost: Some(1000),
         ..Default::default()
     };
-    let depot = BuildingType {
+    // The sole docking displacement from the foundation centre to the centre
+    // of the cell (2, 1) cells from the top-left cell (S-0314 claim 18).
+    yard.econ.docking_offsets = Some(vec![[384, 128, 0]]);
+    let mut depot = BuildingType {
         naval: None,
         factory: None,
         ..yard.clone()
     };
+    depot.econ.docking_offsets = None;
     r.sim.buildings.insert("NAVYARD".into(), yard);
     r.sim.buildings.insert("DEPOT".into(), depot);
     push(&mut r, "buildings", "NAVYARD");
@@ -1105,17 +1110,24 @@ fn carrier_and_missile_ship_fight() {
     );
 }
 
-// spec: S-0504 claim 12 (a naval vehicle-factory yard docks at the centre of the cell (2, 1) cells from its top-left foundation cell, at its own height; a land building supplies no such point)
+// spec: S-0504 claim 12 (the obsolete-unloading flag, not the vehicle-factory flag, selects the centre of the cell (2, 1) cells from the top-left foundation cell, at the building's height; an ordinary naval repair yard uses S-0314 claim 18's foundation centre plus its sole docking displacement)
 #[test]
 fn claim_12_yard_docking_point() {
-    let mut w = world(rules());
+    let mut r = rules();
+    r.sim.buildings.get_mut("DEPOT").unwrap().econ.weeder = Some(true);
+    let mut w = world(r);
     let yard = at(&mut w, "NAVYARD", 0, -4, -4);
     let depot = at(&mut w, "DEPOT", 0, 5, 7);
-    let o = w.obj(yard).unwrap();
-    let c = o.pos.cell();
-    let want = Pos::centre(CellXY::new(c.x + 2, c.y + 1), o.pos.z);
-    assert_eq!(naval::yard_docking_point(&w, yard), Some(want));
-    assert_eq!(naval::yard_docking_point(&w, depot), None);
+    let skiff = at(&mut w, "SKIFF", 0, -8, 0);
+    assert_eq!(naval::yard_docking_point(&w, yard), None);
+    let c = w.reference_point(yard);
+    let p = glasnost_sim::depot::docking_point(&w, yard, skiff);
+    assert_eq!((p.x - c.x, p.y - c.y, p.z - c.z), (384, 128, 0));
+    let o = w.obj(depot).unwrap();
+    let tl = o.pos.cell();
+    let want = Pos::centre(CellXY::new(tl.x + 2, tl.y + 1), o.pos.z);
+    assert_eq!(naval::yard_docking_point(&w, depot), Some(want));
+    assert_eq!(glasnost_sim::depot::docking_point(&w, depot, skiff), want);
 }
 
 /// A damaged SKIFF clicked onto a repairing NAVYARD on the lake, run until
@@ -1164,7 +1176,7 @@ fn ship_docked_at_yard() -> (World, ObjectId, ObjectId) {
     (w, yard, skiff)
 }
 
-// spec: S-0504 claims 8, 12 and 14 and S-0314 claims 6 and 16 to 18 (a damaged ship clicked onto its repairing yard docks at the yard's fixed point, passes the 200-lepton waiting gate, is repaired step by step at its owner's cost and is sent away)
+// spec: S-0504 claims 8, 12 and 14 and S-0314 claims 6 and 16 to 18 (a damaged ship clicked onto its repairing yard docks at the yard's docking point, passes the 200-lepton waiting gate, is repaired step by step at its owner's cost and is sent away)
 #[test]
 fn claim_14_ship_repaired_at_yard() {
     let (mut w, yard, skiff) = ship_docked_at_yard();
