@@ -127,6 +127,21 @@ pub fn walking_speed(w: &World, id: ObjectId) -> i32 {
 
 /// The step of S-0208 F3 from (x, y) towards facing `f` at speed `s`.
 pub fn step_point(x: i32, y: i32, f: u16, s: i32, table: bool, mode: Rounding) -> (i32, i32) {
+    let (dx, dy) = step_components(f, s, table, mode);
+    // spec: S-0208 F3 (x′ = trunc(x + s × cosT θ), y′ = trunc(y − s × sinT θ))
+    let nx = F64::from_i64(i64::from(x), mode)
+        .add(dx, mode)
+        .to_i32_common();
+    let ny = F64::from_i64(i64::from(y), mode)
+        .add(dy, mode)
+        .to_i32_common();
+    (nx, ny)
+}
+
+/// The unrounded displacement (s × cosT θ, −s × sinT θ) of S-0208 F3's
+/// step along facing `f` (negation is exact, so adding the y component
+/// equals subtracting s × sinT θ).
+pub fn step_components(f: u16, s: i32, table: bool, mode: Rounding) -> (F64, F64) {
     // spec: S-0208 F3 (f̂ = f or f − 65536)
     let fh = if f <= 32767 {
         i64::from(f)
@@ -143,14 +158,11 @@ pub fn step_point(x: i32, y: i32, f: u16, s: i32, table: bool, mode: Rounding) -
         F64::from_i64(fh - 16384, mode).mul(c, mode) // spec: S-0208 F3 (f̂ − 16384 with the switch off)
     };
     let sf = F64::from_i64(i64::from(s), mode);
-    // spec: S-0208 F3 (x′ = trunc(x + s × cosT θ), y′ = trunc(y − s × sinT θ))
-    let nx = F64::from_i64(i64::from(x), mode)
-        .add(sf.mul(trig::cos_t(theta, mode), mode), mode)
-        .to_i32_common();
-    let ny = F64::from_i64(i64::from(y), mode)
-        .sub(sf.mul(trig::sin_t(theta, mode), mode), mode)
-        .to_i32_common();
-    (nx, ny)
+    // spec: S-0208 F3 (the components s × cosT θ and −s × sinT θ)
+    (
+        sf.mul(trig::cos_t(theta, mode), mode),
+        sf.mul(trig::sin_t(theta, mode), mode).negated(),
+    )
 }
 
 fn dist2(a: (i32, i32), b: (i32, i32)) -> u64 {

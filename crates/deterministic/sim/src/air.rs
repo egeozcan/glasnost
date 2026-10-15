@@ -548,20 +548,38 @@ pub fn descend(h: i32, held: i32, dead: bool) -> i32 {
 }
 
 /// F3: the horizontal step from (x, y) along facing `f` by ⌊V × f⌋.
+/// `unit_stall` is `quirks.aircraft_unit_step_stall`.
 pub fn step(
     x: i32,
     y: i32,
     facing: Facing,
     v: i32,
     frac: F64,
+    unit_stall: bool,
     mode: glasnost_num::Rounding,
 ) -> (i32, i32) {
+    let s = step_length(v, frac, mode);
+    // spec: S-0501 F3 (the table step of S-0208 F3 with θ = (Fₛ − 16383) × k, k = −2π / 65534; each new coordinate truncated, no remainder kept, so a 1-lepton step at facings 16391 to 32766 changes neither coordinate: quirks.aircraft_unit_step_stall)
+    let (nx, ny) = crate::walk::step_point(x, y, facing, s, true, mode);
+    if unit_stall || s < 1 || (nx, ny) != (x, y) {
+        return (nx, ny);
+    }
+    // spec: S-0501 F3 and Edge cases (quirks.aircraft_unit_step_stall off: a step of at least 1 lepton that would change neither coordinate moves 1 lepton along the axis of the larger component, in its direction, x on equal magnitudes)
+    let (dx, dy) = crate::walk::step_components(facing, s, true, mode);
+    let unit = |c: F64| if c.is_sign_negative() { -1 } else { 1 };
+    if dx.abs().ge(dy.abs()) {
+        (x + unit(dx), y)
+    } else {
+        (x, y + unit(dy))
+    }
+}
+
+/// F3's step length s = ⌊V × f⌋.
+pub fn step_length(v: i32, frac: F64, mode: glasnost_num::Rounding) -> i32 {
     // spec: S-0501 F3 (s = ⌊V × f⌋ in double precision, truncated toward zero)
-    let s = F64::from_i64(i64::from(v), mode)
+    F64::from_i64(i64::from(v), mode)
         .mul(frac, mode)
-        .to_i32_common();
-    // spec: S-0501 F3 (the table step of S-0208 F3 with θ = (Fₛ − 16383) × k, k = −2π / 65534)
-    crate::walk::step_point(x, y, facing, s, true, mode)
+        .to_i32_common()
 }
 
 /// One adjustment of the current fraction toward τ by at most 0.1 (claim 5).
@@ -1344,7 +1362,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let mut removed = false;
     if !a.ground {
         let facing = w.obj(id).map_or(0, |ob| ob.body.value(tick_now));
-        let (nx, ny) = step(here.x, here.y, facing, t.speed, a.cur, mode);
+        let unit_stall = w.rules().quirks.aircraft_unit_step_stall;
+        let (nx, ny) = step(here.x, here.y, facing, t.speed, a.cur, unit_stall, mode);
         if (nx, ny) != (here.x, here.y) {
             let mut np = Pos::new(nx, ny, here.z);
             let legal = |p: Pos| w.cells.cell(p.cell()).is_some();
@@ -2776,9 +2795,16 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             }
             let in_range = crate::combat::range::in_range(w, id, primary(w, id), Some(tgv), None);
             // spec: S-0501 T1 and claim 42 (a strafer within range, a fighter, or another aircraft whose current speed fraction, left by the previous movement tick, is exactly 0: firing, the destination kept; 1 tick)
+            let ordinary = !is_strafer && !is_fighter;
+            // spec: S-0501 claim 42 and Edge cases (quirks.aircraft_zero_step_attack_stall off: an ordinary attacker whose positive current fraction gives F3 step length 0 leptons also moves to firing, the destination kept; 1 tick. A 1-lepton step that changes neither coordinate does not count)
+            let zero_step = ordinary
+                && !w.rules().quirks.aircraft_zero_step_attack_stall
+                && a.cur.gt(F64::ZERO)
+                && step_length(ty(w, id).map_or(0, |t| t.speed), a.cur, w.rules().mode) == 0;
             if (is_strafer && in_range)
                 || (!is_strafer && is_fighter)
-                || (!is_strafer && !is_fighter && a.cur.eq_num(F64::ZERO))
+                || (ordinary && a.cur.eq_num(F64::ZERO))
+                || zero_step
             {
                 set_stage(w, id, Stage::Firing);
                 return Some(1);

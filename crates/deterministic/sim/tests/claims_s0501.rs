@@ -1105,35 +1105,108 @@ struct Approach {
     near_aims: i32,
     /// The current fraction is positive at the end.
     positive_at_end: bool,
+    /// At the end: the position, the distance to the flight point, the
+    /// body facing, the current fraction, and for how many ticks the
+    /// position, fraction and body facing have not changed.
+    end: Option<(Pos, i32, Facing, glasnost_num::F64, i32)>,
+    /// The ticks spent in *approaching* with a positive current fraction
+    /// whose F3 step length is 0 leptons, while at least 16 leptons from
+    /// the flight point.
+    zero_steps: i32,
+    /// The last tick counted in `zero_steps`, and the first tick in *firing*.
+    last_zero_step: Option<i32>,
+    firing_tick: Option<i32>,
+    /// The flight point at the end.
+    point: Option<Pos>,
+    /// In each tick ending in *approaching* whose fraction gives the
+    /// next step 1 lepton: the body facing and the offset (x, y) from
+    /// the flight point.
+    unit: Vec<(Facing, i32, i32)>,
+}
+
+/// Where an AC24 run starts relative to its flight point.
+#[derive(Clone, Copy, Debug)]
+enum Start {
+    /// The attacker's placement of [`attacker`], 12 cells west of the target.
+    Placed,
+    /// `cells` cells from the flight point toward the map direction
+    /// (dx, dy), and `side` leptons off the point's row or column (north
+    /// or west negative), measured from the logged flight point (Q-0653).
+    Axis {
+        dx: i32,
+        dy: i32,
+        cells: i32,
+        side: i32,
+    },
+}
+
+/// Moves the airborne `a` to `p` (x and y only), its body facing set to
+/// `body`.
+fn relocate(w: &mut World, a: ObjectId, p: Pos, body: Facing) {
+    let from = w.obj(a).unwrap().pos;
+    let layer = glasnost_sim::world::Layer::Ground;
+    w.cells.leave(from.cell(), layer, a);
+    let o = w.obj_mut(a).unwrap();
+    o.pos.x = p.x;
+    o.pos.y = p.y;
+    o.body = glasnost_sim::turning::Turning::at(body);
+    w.cells.enter(p.cell(), layer, a, false);
+}
+
+/// The world's rounding mode.
+fn mode() -> glasnost_num::Rounding {
+    game(&rules()).rules().mode
 }
 
 /// AC24: JET with raw speed `speed` (converted ⌊256 × speed / 100⌋, S-0207
-/// F1) and slowdown distance `s` attacks VICTIM; checks claim 42's
-/// guidance requests in every tick before the first shot. With `west` the
-/// attacker starts east of the target and flies west, so a 1-lepton step
-/// has a negative x component, which F3's truncation lengthens to a whole
-/// lepton.
-fn close_approach(speed: i32, s: i32, west: bool) -> Approach {
+/// F1) and slowdown distance `s` attacks VICTIM from `start`, with
+/// `quirks` applied to the switches; checks claim 42's guidance requests
+/// in every tick before the first shot.
+fn close_approach_with(
+    speed: i32,
+    s: i32,
+    start: Start,
+    quirks: impl FnOnce(&mut glasnost_rules::quirks::Quirks),
+) -> Approach {
     let mut r = rules();
     r.sim.general.economy.curley_shuffle = Some(true);
+    quirks(&mut r.globals.quirks);
     let j = r.sim.aircraft.get_mut("JET").unwrap();
     j.speed = Some(speed);
     j.slowdown_distance = Some(s);
-    let (mut w, a, v) = if west {
-        let mut w = game(&r);
-        ready(&mut w);
-        let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, -8, 0);
-        let a = put(&mut w, Kind::Aircraft, "JET", 0, 4, 0);
-        (w, a, v)
-    } else {
-        attacker(&r, "JET")
-    };
+    let (mut w, a, v) = attacker(&r, "JET");
     let full = w.obj(v).unwrap().health;
     click(&mut w, a, ClickOn::Object(v));
+    if let Start::Axis {
+        dx,
+        dy,
+        cells,
+        side,
+    } = start
+    {
+        // In cruise flight, after take-off.
+        assert!(run_until(&mut w, 200, |w| {
+            let s = st(w, a);
+            s.stage == air::Stage::Approaching
+                && w.obj(a).unwrap().dest.is_some()
+                && !s.taking_off
+                && air::height(w, a) == s.held
+        }));
+        let p = air::flight_point(&w, a, w.obj(a).unwrap().dest.unwrap());
+        // spec: S-0501 AC24 (b) (the start along one axis, the side distance across it); S-0204 claim 2 (256 leptons per cell)
+        let (sx, sy) = if dx != 0 { (0, side) } else { (side, 0) };
+        let at = Pos::new(p.x + dx * cells * 256 + sx, p.y + dy * cells * 256 + sy, 0);
+        let body = bearing(&w, at, p);
+        relocate(&mut w, a, at, body);
+    }
     let zero = glasnost_num::F64::ZERO;
+    let mode = w.rules().mode;
+    let v_conv = speed * 256 / 100; // spec: S-0207 F1 (⌊256 × speed / 100⌋)
     let mut out = Approach::default();
     let mut flown = false;
     let mut prev_body = w.obj(a).unwrap().body;
+    let mut last: Option<(Pos, Facing, glasnost_num::F64)> = None;
+    let mut still = 0;
     for _ in 0..2000 {
         step(&mut w);
         let o = w.obj(a).unwrap().clone();
@@ -1169,23 +1242,78 @@ fn close_approach(speed: i32, s: i32, west: bool) -> Approach {
         if s.cur.gt(zero) {
             flown = true;
         }
+        let point = o.dest.or(s.flying_to).map(|d| air::flight_point(&w, a, d));
         if flown && out.zero.is_none() && s.cur.eq_num(zero) {
-            let d = o.dest.or(s.flying_to).expect("a flight point");
-            let p = air::flight_point(&w, a, d);
+            let p = point.expect("a flight point");
             out.zero = Some((guide_dist(&w, o.pos, p), o.dest.is_some(), o.pos));
         }
         if s.stage == air::Stage::Firing && out.firing.is_none() {
             out.firing = Some((o.dest, s.flying_to));
+            out.firing_tick = Some(w.tick);
+        }
+        let body = o.body.value(w.tick);
+        if let Some(p) = point {
+            let d = guide_dist(&w, o.pos, p);
+            // spec: S-0501 F3 (s = ⌊V × f⌋) and claim 42 (at least 16 leptons from the point)
+            if s.stage == air::Stage::Approaching
+                && s.cur.gt(zero)
+                && air::step_length(v_conv, s.cur, mode) == 0
+                && d >= 16
+            {
+                out.zero_steps += 1;
+                out.last_zero_step = Some(w.tick);
+            }
+            if s.stage == air::Stage::Approaching
+                && air::step_length(v_conv, s.cur, mode) == 1
+                && d < 1000
+            {
+                out.unit.push((body, o.pos.x - p.x, o.pos.y - p.y));
+            }
+            out.point = Some(p);
+            let now = (o.pos, body, s.cur);
+            still = if last.is_some_and(|l| l.0 == now.0 && l.1 == now.1 && l.2.eq_num(now.2)) {
+                still + 1
+            } else {
+                0
+            };
+            last = Some(now);
+            out.end = Some((o.pos, d, body, s.cur, still));
         }
         out.positive_at_end = s.cur.gt(zero);
     }
     out
 }
 
+fn close_approach(speed: i32, s: i32, start: Start) -> Approach {
+    close_approach_with(speed, s, start, |_| {})
+}
+
+/// AC24 (b)'s starts by name: 20 cells from the flight point along one
+/// axis and 11 leptons off its row or column (Q-0653).
+fn ac24_b(name: &str) -> Start {
+    let (dx, dy, side) = match name {
+        "b1" => (-1, 0, -11), // from the west, north of the row
+        "b2" => (-1, 0, 11),  // from the west, south of the row
+        "b3" => (0, -1, -11), // from the north, west of the column
+        "b4" => (0, -1, 11),  // from the north, east of the column
+        "b5n" => (1, 0, -11), // from the east, north of the row
+        "b5s" => (1, 0, 11),  // from the east, south of the row
+        "b6w" => (0, 1, -11), // from the south, west of the column
+        "b6e" => (0, 1, 11),  // from the south, east of the column
+        _ => unreachable!(),
+    };
+    Start::Axis {
+        dx,
+        dy,
+        cells: 20,
+        side,
+    }
+}
+
 // spec: S-0501 claims 5 and 42, F4 and T1 (AC24 variant a, converted speed 35 and S = 500: the ordinary attacker slows to fraction 0 at a post-step distance below min(86, S / 10) and above 16 leptons, moves to firing with its destination kept, and fires from where it hovers; the body never turns to the target, the aiming facing turns to it only below 256 leptons)
 #[test]
 fn claim_42_close_approach_hovers_short_and_fires() {
-    let x = close_approach(14, 500, false);
+    let x = close_approach(14, 500, Start::Placed);
     let (d, kept, at) = x
         .zero
         .unwrap_or_else(|| panic!("reaches fraction 0: {x:?}"));
@@ -1200,36 +1328,254 @@ fn claim_42_close_approach_hovers_short_and_fires() {
     assert!(x.near_aims > 0, "{x:?}");
 }
 
-// spec: S-0501 claims 5 and 42, F4 and T1 (AC24 variant b, converted speed 12 and S = 1000, flying west: fraction 0 below 86 and above 16 leptons, then firing with the destination kept, and the shot from the hover; F3 (the westward 1-lepton steps advance); the heading of this setup avoids the question of Q-0653)
+// spec: S-0501 claims 4, 5 and 42, F3, F4 and T1 (AC24 variants b2, b5 and b6, converted speed 12 and S = 1000, Q-0653: fraction 0 at a post-step distance below min(86, S / 10) and above 16 leptons, then firing with the destination kept, and the shot from the hover)
 #[test]
 fn claim_42_slow_close_approach_hovers_short_and_fires() {
-    let x = close_approach(5, 1000, true);
-    let (d, kept, at) = x
-        .zero
-        .unwrap_or_else(|| panic!("reaches fraction 0: {x:?}"));
-    assert!(d > 16 && d < 86, "{x:?}");
-    assert!(kept, "{x:?}");
-    assert!(x.firing.is_some_and(|(d, _)| d.is_some()), "{x:?}");
-    assert_eq!(x.shot, Some(at), "{x:?}");
+    for name in ["b2", "b5n", "b5s", "b6w", "b6e"] {
+        let x = close_approach(5, 1000, ac24_b(name));
+        let (d, kept, at) = x
+            .zero
+            .unwrap_or_else(|| panic!("{name} reaches fraction 0: {x:?}"));
+        assert!(d > 16 && d < 86, "{name}: {x:?}");
+        assert!(kept, "{name}: {x:?}");
+        assert!(x.firing.is_some_and(|(d, _)| d.is_some()), "{name}: {x:?}");
+        assert_eq!(x.shot, Some(at), "{name}: {x:?}");
+        if name == "b2" {
+            // spec: S-0501 AC24 (b2: the drift north stops about 2 leptons south of the row when the body faces exactly east, 16383, and the 1-lepton steps then go east)
+            let p = x.point.unwrap();
+            assert!((1..=3).contains(&(at.y - p.y)), "{x:?}");
+            let tail: Vec<_> = x.unit.iter().rev().take(30).collect();
+            assert_eq!(tail.len(), 30, "{x:?}");
+            for w in tail.windows(2) {
+                assert_eq!(w[0].0, 16383, "{x:?}");
+                assert_eq!(w[0].2, at.y - p.y, "{x:?}");
+                assert_eq!(w[0].1, w[1].1 + 1, "one lepton east per tick: {x:?}");
+            }
+        }
+    }
+}
+
+// spec: S-0501 claim 5 (converted speed of at least 20 takes no 1-lepton step outside the halving zone, so AC24 variant a flown from the b1, b3 and b4 starts reaches fraction 0 and fires)
+#[test]
+fn claim_5_fast_aircraft_do_not_stall() {
+    for name in ["b1", "b3", "b4"] {
+        let x = close_approach(14, 500, ac24_b(name));
+        let (d, kept, at) = x
+            .zero
+            .unwrap_or_else(|| panic!("{name} reaches fraction 0: {x:?}"));
+        // spec: S-0501 F4 (d / S in double precision with S-0205 claim 5's rounding: 50 / 500 rounds below 0.1, so d = 50 is in the halving zone)
+        assert!(d > 16 && d <= 50, "{name}: {x:?}");
+        assert!(kept, "{name}: {x:?}");
+        assert_eq!(x.shot, Some(at), "{name}: {x:?}");
+    }
+}
+
+// spec: S-0501 claims 4, 5 and 42, F3 and Edge cases (AC24 variants b1, b3 and b4, converted speed 12 and S = 1000, Q-0653; quirks.aircraft_unit_step_stall on: once the step falls to 1 lepton, about 166 leptons short, at a body facing in 16391 to 32766 the position stops changing with the fraction positive and steady; it never reaches firing and fires no shot within 2000 ticks)
+#[test]
+fn claim_5_unit_step_hover_between_east_and_south() {
+    let mode = mode();
+    for name in ["b1", "b3", "b4"] {
+        let x = close_approach(5, 1000, ac24_b(name));
+        assert_eq!(x.shot, None, "{name}: {x:?}");
+        assert!(x.firing.is_none(), "{name}: {x:?}");
+        assert!(x.zero.is_none(), "{name}: {x:?}");
+        let (_, d, body, f, still) = x.end.unwrap();
+        assert!(still > 1000, "{name} hovers: {x:?}");
+        assert!((16391..=32766).contains(&body), "{name}: {x:?}");
+        // spec: S-0501 AC24 (b1, b3 and b4: post-step distance about 166, the first d with ⌊V × d / S⌋ = 1)
+        assert!((160..=170).contains(&d), "{name}: {x:?}");
+        assert_eq!(air::step_length(12, f, mode), 1, "{name}: {x:?}");
+        let (at, p) = (x.end.unwrap().0, x.point.unwrap());
+        match name {
+            // spec: S-0501 AC24 (b1: the facing about 16892; the side distance stays 11 leptons, the southward component of each step truncating away)
+            "b1" => {
+                assert!((16700..=17100).contains(&body), "{x:?}");
+                assert_eq!(at.y - p.y, -11, "{x:?}");
+            }
+            // S-0501 AC24 expects b3's facing about 32076 with the side
+            // distance 11; under quirks.chop_rounding each step at facings
+            // 32767 to 32772 also moves 1 lepton west, so it drifts (Q-0654).
+            "b3" => {}
+            // spec: S-0501 AC24 (b4: 32766, the westward drift ended 1 lepton east of the column)
+            _ => {
+                assert_eq!(body, 32766, "{x:?}");
+                assert_eq!(at.x - p.x, 1, "{x:?}");
+            }
+        }
+    }
+}
+
+// spec: S-0501 AC24 (b3, converted speed 12 and S = 1000: the hover at about 166 leptons with the facing about 32076 and the side distance 11), here with quirks.chop_rounding off, where F3's table holds at every facing (Q-0654)
+#[test]
+fn claim_5_unit_step_hover_from_the_north_without_chop() {
+    let x = close_approach_with(5, 1000, ac24_b("b3"), |q| q.chop_rounding = false);
+    assert_eq!(x.shot, None, "{x:?}");
+    let (at, d, body, _, still) = x.end.unwrap();
+    let p = x.point.unwrap();
+    assert!(still > 1000, "{x:?}");
+    assert!((160..=170).contains(&d), "{x:?}");
+    assert!((31800..=32400).contains(&body), "{x:?}");
+    assert_eq!(at.x - p.x, -11, "{x:?}");
+}
+
+/// A *move* of JET (raw speed 5, converted 12; S = 1000) from a pad to a
+/// cell, flown in cruise from 20 cells west of the destination point and
+/// 11 leptons north of its row; whether it lands within 2000 ticks, and
+/// its fraction at the end.
+fn unit_step_move(stall: bool) -> (bool, glasnost_num::F64, String) {
+    let mut r = rules();
+    r.globals.quirks.aircraft_unit_step_stall = stall;
+    let j = r.sim.aircraft.get_mut("JET").unwrap();
+    j.speed = Some(5);
+    j.slowdown_distance = Some(1000);
+    let (mut w, _k, a) = built_with(&r, "JET");
+    let goal = testkit::mid(SIZE, 8, 6);
+    click(&mut w, a, ClickOn::Cell(goal));
+    assert!(run_until(&mut w, 300, |w| {
+        let s = st(w, a);
+        !s.taking_off
+            && !s.ground
+            && air::height(w, a) == s.held
+            && w.obj(a).unwrap().dest.is_some()
+    }));
+    let p = air::flight_point(&w, a, w.obj(a).unwrap().dest.unwrap());
+    let at = Pos::new(p.x - 20 * 256, p.y - 11, 0); // spec: S-0204 claim 2 (256 leptons per cell)
+    let body = bearing(&w, at, p);
+    relocate(&mut w, a, at, body);
+    let landed = run_until(&mut w, 2000, |w| air::on_ground(w, a));
+    (landed, st(&w, a).cur, describe(&w, a))
+}
+
+// spec: S-0501 claims 5 and 6, Edge cases (quirks.aircraft_unit_step_stall on: the 1-lepton hover between east and south also stops a move short of landing, with a positive fraction; off: it lands)
+#[test]
+fn claim_6_unit_step_hover_stops_a_move() {
+    let (landed, f, d) = unit_step_move(true);
+    assert!(!landed, "{d}");
+    assert!(f.gt(glasnost_num::F64::ZERO), "{d}");
+    let (landed, _, d) = unit_step_move(false);
+    assert!(landed, "{d}");
+}
+
+// spec: S-0501 F3 and Edge cases (quirks.aircraft_unit_step_stall off: the stalled 1-lepton step moves 1 lepton along its larger component, so AC24 b1, b3 and b4 reach fraction 0 in the halving zone and fire)
+#[test]
+fn claim_5_unit_step_stall_off_advances_and_fires() {
+    for name in ["b1", "b3", "b4"] {
+        let x = close_approach_with(5, 1000, ac24_b(name), |q| {
+            q.aircraft_unit_step_stall = false;
+        });
+        let (d, kept, at) = x
+            .zero
+            .unwrap_or_else(|| panic!("{name} reaches fraction 0: {x:?}"));
+        assert!(d > 16 && d < 86, "{name}: {x:?}");
+        assert!(kept, "{name}: {x:?}");
+        assert_eq!(x.shot, Some(at), "{name}: {x:?}");
+    }
+}
+
+/// The change of one 1-lepton step from (5000, 5000) at facing `f`.
+fn unit_step(f: Facing, stall: bool, mode: glasnost_num::Rounding) -> (i32, i32) {
+    let one = glasnost_num::F64::from_i64(1, mode);
+    let (x, y) = air::step(5000, 5000, f, 1, one, stall, mode);
+    (x - 5000, y - 5000)
+}
+
+// spec: S-0501 F3 (with s = 1, by body facing: 0 to 16379 (0, −1); 16380 to 16386 (+1, 0); 16387 to 16390 (0, −1); 16391 to 32766 (0, 0), quirks.aircraft_unit_step_stall; 32767 to 32772 (0, +1); 32773 to 49155 (−1, 0); 49156 to 65531 (−1, −1); 65532 to 65535 (0, −1); a step of two or more leptons always changes a coordinate); Edge cases (off: the stalled facings move 1 lepton along the larger component, x on equal magnitudes; every other step unchanged). With quirks.chop_rounding on, the rows at 32767 to 32772 and 49148 to 49155 differ and are not asserted (Q-0654)
+#[test]
+fn f3_unit_step_by_facing() {
+    for chop in [false, true] {
+        let mut r = rules();
+        r.globals.quirks.chop_rounding = chop;
+        let mode = game(&r).rules().mode;
+        let one = glasnost_num::F64::from_i64(1, mode);
+        for f in 0..=u16::MAX {
+            let got = unit_step(f, true, mode);
+            let want = match f {
+                0..=16379 => (0, -1),
+                16380..=16386 => (1, 0),
+                16387..=16390 => (0, -1),
+                16391..=32766 => (0, 0),
+                32767..=32772 => (0, 1),
+                32773..=49155 => (-1, 0),
+                49156..=65531 => (-1, -1),
+                65532..=65535 => (0, -1),
+            };
+            let open = chop && ((32767..=32772).contains(&f) || (49148..=49155).contains(&f));
+            if !open {
+                assert_eq!(got, want, "facing {f}, chop {chop}");
+            }
+            let off = unit_step(f, false, mode);
+            if want == (0, 0) {
+                assert!(off == (1, 0) || off == (0, 1), "facing {f}: {off:?}");
+            } else {
+                assert_eq!(off, got, "facing {f}");
+            }
+            let s2 = air::step(5000, 5000, f, 2, one, true, mode);
+            assert_ne!(s2, (5000, 5000), "facing {f}");
+        }
+        // spec: S-0501 F3 (off: x on equal magnitudes)
+        let mut ties = 0;
+        for f in 16391..=32766u16 {
+            let (dx, dy) = glasnost_sim::walk::step_components(f, 1, true, mode);
+            ties += i32::from(dx.abs().eq_num(dy.abs()));
+            let want = if dx.abs().ge(dy.abs()) {
+                (1, 0)
+            } else {
+                (0, 1)
+            };
+            assert_eq!(unit_step(f, false, mode), want, "facing {f}");
+        }
+        assert!(ties > 0, "the table has facings with equal magnitudes");
+        // Off: x near east, y near south (the larger component).
+        assert_eq!(unit_step(16500, false, mode), (1, 0));
+        assert_eq!(unit_step(32600, false, mode), (0, 1));
+    }
 }
 
 // spec: S-0501 claims 12 and 42 and T1 (AC24 variant c, converted speed 35 and S = 100: within 16 leptons with a positive fraction the destination is cleared, the flight point remains, and it fires)
 #[test]
 fn claim_42_short_slowdown_clears_the_destination_keeps_the_point() {
-    let x = close_approach(14, 100, false);
+    let x = close_approach(14, 100, Start::Placed);
     let (dest, point) = x.firing.unwrap_or_else(|| panic!("firing: {x:?}"));
     assert_eq!(dest, None, "destination cleared: {x:?}");
     assert!(point.is_some(), "the flight point remains: {x:?}");
     assert!(x.shot.is_some(), "fires: {x:?}");
 }
 
-// spec: S-0501 claim 42 and Edge cases (AC24 variant d, converted speed 7 and S = 500: it hovers with a positive fraction and fires no shot within 2000 ticks)
+// spec: S-0501 claim 42 and Edge cases (AC24 variant d, converted speed 7 and S = 500, flown from the west south of the row, as b2, so that its 1-lepton steps advance; quirks.aircraft_zero_step_attack_stall on: it hovers with a positive fraction and F3 step length 0 at least 16 leptons from the point, and fires no shot within 2000 ticks)
 #[test]
 fn claim_42_slow_attacker_never_fires() {
-    let x = close_approach(3, 500, false);
+    let x = close_approach(3, 500, ac24_b("b2"));
     assert_eq!(x.shot, None, "{x:?}");
     assert!(x.firing.is_none(), "{x:?}");
     assert!(x.positive_at_end, "{x:?}");
+    assert!(x.zero_steps > 1000, "{x:?}");
+}
+
+// spec: S-0501 claim 42, T1 and Edge cases (quirks.aircraft_zero_step_attack_stall off: AC24 variant d, flown as b2, moves to firing at the first approach processing with step length 0, keeping its destination, and fires; F3 and F4 are unchanged, so it never reaches fraction 0)
+#[test]
+fn claim_42_zero_step_stall_off_fires() {
+    let x = close_approach_with(3, 500, ac24_b("b2"), |q| {
+        q.aircraft_zero_step_attack_stall = false;
+    });
+    let (dest, _) = x.firing.unwrap_or_else(|| panic!("firing: {x:?}"));
+    assert!(dest.is_some(), "the destination kept: {x:?}");
+    assert!(x.zero.is_none(), "{x:?}");
+    assert!(x.shot.is_some(), "fires: {x:?}");
+    let first = x
+        .last_zero_step
+        .unwrap_or_else(|| panic!("a zero step: {x:?}"));
+    assert_eq!(x.firing_tick, Some(first + 1), "the next processing: {x:?}");
+}
+
+// spec: S-0501 claim 42 and Edge cases (quirks.aircraft_zero_step_attack_stall off alone: a 1-lepton step that changes neither coordinate is not a length-0 step, so AC24 b1 remains approaching and fires no shot)
+#[test]
+fn claim_42_zero_step_switch_leaves_the_unit_step_hover() {
+    let x = close_approach_with(5, 1000, ac24_b("b1"), |q| {
+        q.aircraft_zero_step_attack_stall = false;
+    });
+    assert_eq!(x.shot, None, "{x:?}");
+    assert!(x.firing.is_none(), "{x:?}");
+    assert!(x.end.unwrap().4 > 1000, "hovers: {x:?}");
 }
 
 // spec: S-0501 claim 39 (the firing spot: a cell on the largest circle of radius ρ − 256 around the target, the last or the preceding record by distance to the attacker, here the cells of facings 49152 and 45056)
