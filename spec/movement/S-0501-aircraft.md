@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651]
 supersedes: []
 ---
 
@@ -167,26 +167,50 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    fraction is 0 and *d* > 0, the current fraction becomes 0.05. An
    aircraft that is taking off keeps its target unchanged until its height reaches half its
    cruise height. At the end of every living movement tick the current fraction moves toward
-   *τ* by at most 0.1. This is the ordinary fraction calculation, not the only approach control.
-   After that adjustment, a living aircraft flying toward a destination, neither landing nor
-   taking off, can get a replacement target fraction for its next movement tick. With the
-   fixed-full-speed exception below inactive and no fly-by flag, the replacement is 0 below
-   128 leptons, 0.5 from 128 up to but not including 512, and 0.75 from 512 up to but not
-   including 768. At 768 leptons or farther, the ordinary target remains. Distances are raw planar point
-   distances after any pad-position adjustment, not building-adjusted object distances.
-   - Backing: `measurable` for resulting fractions and next-target replacement (AC3).
-     The clamp's exact placement among the ordinary halving, creep and adjustment is
-     `unmeasured`: with integer distance and fractions in 0 … 1, it changes only the
-     zero-distance case, where several alternative intermediate orders give the same final
-     zero fraction. F4 fixes the calculation but AC3 does not distinguish those equivalent
-     intermediate orders.
+   *τ* by at most 0.1.
+
+   **Order within one movement tick (Q-0651).** The forward step of claim 4 comes first and
+   uses the current fraction left by the previous movement tick. The distance *d* is then
+   measured from the position after that step. The fraction calculation and the 0.1 adjustment
+   follow, and their result moves the aircraft only in the next movement tick. Because *τ* = 0
+   whenever the creep restart applies, the 0.1 adjustment in the same tick always brings the
+   restarted fraction back to 0: the creep restart never moves an aircraft, and an
+   implementation that omits it behaves identically.
+
+   **Consequence: ordinary slowing ends at fraction 0 short of the point.** Without the
+   fixed-full-speed case below, an aircraft whose converted speed *V* is at least 10 slows
+   until, after some step, *d* < 86 and *d* < *S* / 10. From then on each tick halves its
+   fraction and lowers it by 0.1, so it reaches exactly 0 within a few ticks, normally in one,
+   and stays there while the destination point is unchanged: it hovers that far short of the
+   point and makes no further forward progress. The stopping distance is therefore normally
+   below min(86, *S* / 10) leptons and not necessarily below 16. With a small *S* the aircraft
+   can instead come within 16 leptons while its fraction is still positive. With *V* < 10 the
+   step ⌊*V* × *f*⌋ can become 0 while *f* is still at least 0.1, before that zone is reached; the
+   aircraft then hovers with a positive fraction indefinitely (Edge cases).
+
+   **Approach target replacement.** After the adjustment, a living aircraft flying toward a
+   destination, neither landing nor taking off, can get a replacement target fraction. With
+   the fixed-full-speed exception below inactive and no fly-by flag, the replacement is 0
+   below 128 leptons, 0.5 from 128 up to but not including 512, and 0.75 from 512 up to but
+   not including 768. At 768 leptons or farther, the ordinary target remains. Distances are
+   raw planar point distances after any pad-position adjustment, not building-adjusted object
+   distances. The next movement tick's ordinary calculation recomputes *τ* before its 0.1
+   adjustment, so a replacement has no effect when that calculation runs. It governs an
+   adjustment only in a later tick in which the ordinary calculation is skipped and nothing
+   else has set the target, such as a take-off restarted below half its cruise height by a
+   refused touchdown (claim 7). Landing and take-off set their own targets (claims 7 and 8).
+   - Backing: `measurable` for resulting fractions, the stopping distance and the ineffective
+     replacement (AC3 and AC24). The clamp's exact placement among the ordinary halving,
+     creep and adjustment is `unmeasured`: with integer distance and fractions in 0 … 1, it
+     changes only the zero-distance case, where several alternative intermediate orders give
+     the same final zero fraction.
    The target is instead fixed at 1 (no slowing down) while the aircraft carries the run lock,
    and while it holds its height (claim 6) and either its type has the fly-by flag or it is a
    strafer or fighter (claim 11) with ammunition left. This fixed-full-speed case does not apply
-   the halving, distance clamp or creep restart. The ordinary 0.1 adjustment follows any
-   applicable clamp and creep restart; the later approach target replacement changes only the
-   next tick's target, not the already adjusted current fraction.
-   - Confidence: high (formula and constants); medium (the full-speed conditions)
+   the halving, distance clamp or creep restart; while it applies the fraction does not fall to 0.
+   - Confidence: high (formula, constants, order within the tick and the stopping
+     consequence); medium (the full-speed conditions and the skipped-calculation cases of the
+     replacement)
 
 6. **Holding height and the landing trigger.** An aircraft is marked as holding height while
    any of these holds: its destination point is more than 120 leptons above terrain there,
@@ -459,7 +483,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     rounded to 8 directions. With neither it uses the game-wide pose-direction integer as an
     eight-direction index: the resulting facing is that integer times 8192, modulo 65536.
     This differs from the pose-direction conversion used for production placement (S-0404
-    claim 13). The exact time this choice becomes the requested heading remains open.
+    claim 13). Claim 42 gives one use: guidance requests the aiming facing toward it below
+    256 leptons of the flight point when the aircraft lacks a target or ammunition. When other
+    uses make it the requested heading remains open.
     - Backing: `measurable` (scenario AC14); `unmeasured` for the time of application, which
       has not been traced
     - Confidence: high (the choice and conversion); low (its application timing)
@@ -759,16 +785,19 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     height for an armed approach. Pad guidance can subsequently replace a building point
     with the contacting aircraft's docking position (S-0404 claim 15).
 
-    For *move* completion and T1's ordinary-attacker approach, **stopped** is not the
-    zero-current-fraction test. A movement point accepted by the locomotor remains an
+    For *move* completion, **stopped** is not the zero-current-fraction test. A movement
+    point accepted by the locomotor remains an
     **unfinished flight** until landing has settled in its destination cell, or on its contact
     building. That completion clears the unfinished flight and destination. The locomotor
     reports stopped only with no unfinished flight and no positive forward pitch (the pitch
     comparison is single precision against 0). Thus a holding or non-landable aircraft
     which has accepted a movement point does not report stopped merely by hovering at that
     point with speed fraction 0. A freshly placed aircraft with no unfinished flight can
-    nevertheless report stopped above terrain.
-    - Backing: `measurable` (scenario AC23)
+    nevertheless report stopped above terrain. T1's ordinary-attacker approach uses the other
+    test: it moves to *firing* when the current speed fraction is exactly 0, whether or not the
+    flight is unfinished (claim 42). A positive fraction whose forward step truncates to 0 does
+    not count as stopped there.
+    - Backing: `measurable` (scenarios AC23 and AC24)
     - Confidence: high for destination selection, draws and the stopped test; medium for
       unusual object heading-point cases inherited from S-0506 claim 14
 
@@ -800,13 +829,83 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     With no successful object choice, it returns the aircraft's own current cell without
     another free-cell search. No random draw belongs to these nearby searches.
 
+    **Own-cell search with no result (Q-0650).** When a building is chosen below the
+    256-lepton threshold and the search around the aircraft's own cell finds no cell, the
+    landing spot is not the spot near the building, not the other-object fallback and not the
+    aircraft's own cell. The original uses the search's no-result value unchecked: the landing
+    destination becomes the cell position with map coordinates (0, 0). No map has a cell
+    there, so the destination is a placeholder cell located at that corner position, whose
+    centre is 128 leptons from the map origin in each axis. Any aircraft whose destination or
+    target is this placeholder discards both at the end of its update, after its behaviour
+    processing and movement, and falls back to rest again (claim 18). Unless the situation has
+    changed, that repeats the same search and destination. A *move* toward the placeholder
+    first applies claim 40: the placeholder fails F7 because it lies outside the usable area,
+    so claim 40's replacement search runs around cell (0, 0), with its direction draws, and a
+    usable cell it finds becomes a real destination that is not discarded. On maps where none
+    is found the aircraft keeps being given and discarding the placeholder in every update.
+    Its flight point is the placeholder's centre, so it heads toward the map's (0, 0) corner
+    until its own-cell search succeeds or its weighted building distance reaches 256 leptons.
+    Because the other-object fallback is never reached here, the question whether it skips
+    the chosen building does not arise in the original (`quirks.landing_own_cell_no_result`
+    gives the fixed alternative).
+
     The edge half of Q-0634 is already answered by claim 34, claim 37 and S-0522 claims 4
     and 5: retreat uses the arrival edge, spy overfly the opposite computed edge, with one
     ranged draw except two on south. It is not a nearest-cell projection with no draws.
-    - Backing: `measurable` (AC23); footprint qualification and candidate choice also have
+    - Backing: `measurable` (AC23 and AC25); footprint qualification and candidate choice also have
       S-0212 claim 25a's scenario P28
-    - Confidence: high for caller settings, object preference and empty-house fallback.
-      Candidate choice inherits S-0212 claim 25a's confidence
+    - Confidence: high for caller settings, object preference, empty-house fallback, the
+      own-cell no-result destination and its discard. Candidate choice inherits S-0212 claim
+      25a's confidence. Medium for the resulting flight path while the placeholder repeats
+
+42. **Close approach and guidance facings (Q-0651).** In each update of an aircraft, the
+    processing of its behaviour (when due) comes before its movement tick, and the movement
+    tick (claims 4 and 5) comes before the guidance described here. So T1's test of the
+    current speed fraction reads the value left by the previous movement tick, and the
+    guidance requests are the last facing requests made in the update. A facing turns toward
+    the last direction requested in a tick (S-0206 claim 1); an earlier request in the same
+    tick that is replaced has no lasting effect.
+
+    **Guidance.** After each movement tick of a living aircraft that has a flight point, is
+    neither landing nor taking off, and is above the terrain:
+    - **Body.** Unless it carries the run lock, its body facing is requested toward its flight
+      point, using the bearing of S-0204 claim 8 from its current position. Exception: a
+      strafer at most 768 leptons from that point makes this request only when the bearing
+      differs from its current body facing by at most 8192 facing units; otherwise there is
+      no body request in that tick.
+    - **Aiming.** Unless it carries the run lock: when its distance to the flight point (after
+      any pad-position adjustment) is below 256 leptons, its type lacks the fly-by flag, and it
+      is not a strafer with a target and ammunition left, its aiming facing is requested toward
+      its target if it has a target and ammunition left, otherwise toward its landing direction
+      (claim 25's heading). In every other case its aiming facing is requested toward the flight
+      point.
+
+    The body facing alone gives the direction of travel (claim 4). Clearing the destination of
+    an aircraft in *attack* (current or queued) that has a target does not end its flight: the
+    flight point and unfinished flight remain, so guidance and claim 5's slowing go on toward
+    the former firing spot.
+
+    **The ordinary attacker (not a strafer or fighter, no fixed full speed).** Consequences:
+    - It flies toward its firing spot throughout the approach. T1's steering rows turn only
+      its aiming facing; between 512 and 256 leptons guidance turns that facing back toward the
+      spot in the same update, and below 256 leptons guidance also aims it at the target. Its
+      direction of travel never turns toward the target.
+    - It slows to a fraction of exactly 0 short of the spot (claim 5) and keeps no minimum
+      speed. At the next processing of *approaching* it moves to *firing* where it hovers,
+      keeping its destination. If it first comes within 16 leptons with a positive fraction,
+      the distance row applies instead and it then stops the same way.
+    - In *firing*, its request to turn the body toward the target is replaced in the same
+      update by guidance's request toward the spot point, so the body stays pointed at the
+      spot. Its aiming facing is requested toward the target by both, and the firing check's
+      facing test (claim 19) uses the aiming facing, so it fires from where it hovers once
+      that facing is within 2048 facing units of the target and the other firing conditions
+      hold. A refusal is handled by T1 as usual.
+    - With converted speed below 10 it can hover with a positive fraction and never reach
+      *firing* (Edge cases).
+    - Backing: `measurable` (scenario AC24)
+    - Confidence: high for the order within an update, the zero-fraction test, the facings
+      requested and the retained flight point; medium for the strafer's 8192-unit exception,
+      which this request did not exercise
 
 ## Formulas
 
@@ -839,8 +938,12 @@ division truncated toward zero.
 > is 0.05 when *τ* = 0, *f*꜀ = 0 and *d* > 0, and *f*꜀ otherwise.
 > The adjusted fraction is min(*τ*, *f*ₚ + 0.1) when *f*ₚ < *τ*, max(*τ*, *f*ₚ − 0.1)
 > when *f*ₚ > *τ*, and *f*ₚ when equal. Thus halving precedes the distance clamp, which
-> precedes creep restart and the 0.1 adjustment. Claim 5's subsequent approach replacement
-> sets the target for the next movement tick without recalculating this adjusted fraction.
+> precedes creep restart and the 0.1 adjustment. *f*₀ is the fraction that the same tick's
+> forward step (F3) has just used, and *d* is measured from the position after that step; the
+> adjusted fraction is the one the next tick's step uses. When the creep restart applies,
+> *τ* = 0 and the adjusted fraction is max(0, 0.05 − 0.1) = 0, so the restart never changes
+> the outcome. Claim 5's subsequent approach replacement does not recalculate this adjusted
+> fraction, and the next tick's calculation of *τ* replaces it before that tick's adjustment.
 > All fractions and their arithmetic use double precision with S-0205 claim 5's rounding
 > mode; there is no integer conversion of a fraction.
 
@@ -876,6 +979,8 @@ division truncated toward zero.
 > eligible building on a tie. Below 256 leptons seek a free cell near the aircraft's own cell.
 > Otherwise use the free spot near the chosen building. Without dock types, or when no building
 > yields a spot, use claim 41's other-object fallback and ultimately the aircraft's own cell.
+> When the own-cell search below 256 leptons finds no cell, the result is claim 41's
+> placeholder at map cell (0, 0), not either fallback (`quirks.landing_own_cell_no_result`).
 > Claim 41 supplies caller settings and fallback-object preference; S-0212 claim 25a supplies
 > footprint qualification, unchanged result cells and candidate choice.
 
@@ -928,7 +1033,10 @@ division truncated toward zero.
 | Strafe aiming retry | 45 | ticks | claim 13 |
 | Ordinary aiming retry | 1 | tick | table T1 |
 | Aircraft aiming tolerance | 2048 | facing units of 65536 | claim 19 |
-| Approach turn-in distance | 512 | leptons | table T1 |
+| Approach turn-in distance | 512 | leptons | table T1 (aiming facing only) |
+| Guidance aiming distance | 256 | leptons (distance < 256) | claim 42 |
+| Strafer body re-aim window | 768, 8192 | leptons (at most), facing units (at most) | claim 42 |
+| No-result landing cell | (0, 0) | map cell coordinates | claim 41 |
 | Firing spot reached | 16 | leptons (distance < 16) | table T1 |
 | Spy-plane overfly distance | 769 | leptons (distance < 769) | claim 34 |
 | Ticks per game minute | 900 | ticks | F10 (S-0215 claim 6) |
@@ -944,7 +1052,9 @@ division truncated toward zero.
 ## State and ordering
 
 **T1. Attack run.** The delay is the number of ticks before the next processing of *attack*.
-"Ammunition left" counts the round of the run still to be spent.
+"Ammunition left" counts the round of the run still to be spent. The run's facing requests are
+made before that update's movement tick; claim 42 gives the guidance requests that follow them,
+which decide the direction of travel.
 
 | State | Event | Result |
 |---|---|---|
@@ -954,12 +1064,12 @@ division truncated toward zero.
 | *choosing* | no target or no ammunition | *done*; standard delay |
 | *approaching* | pending round spent, run lock off; no target or no ammunition | *done*; standard delay |
 | *approaching* | strafer, target at or beyond weapon range | keep flying at the destination (row "steer") |
-| *approaching* | strafer, target within range; or fighter; or other aircraft whose locomotor has stopped | *firing* |
+| *approaching* | strafer, target within range; or fighter; or other aircraft whose current speed fraction is exactly 0 (claim 42) | *firing*, the destination kept; 1 tick |
 | *approaching* (steer) | no destination | *choosing* |
-| *approaching* (steer) | distance to destination ≥ 512 | turn toward the destination; 1 tick |
-| *approaching* (steer) | distance < 512 | turn toward the target; if distance ≥ 16, 1 tick; else the destination is cleared and *firing* |
+| *approaching* (steer) | distance to destination ≥ 512 | request the aiming facing toward the destination; 1 tick |
+| *approaching* (steer) | distance < 512 | request the aiming facing toward the target (the body is not turned); if distance ≥ 16, 1 tick; else the destination is cleared, the flight point kept, and *firing*; 1 tick |
 | *firing* | no target or no ammunition | *done* |
-| *firing* | non-strafer turns body to the target; the firing check answers *ready* | full burst fired, a round becomes pending, scatter. Strafer: *strafe pass 2*, run lock on, one rate of fire. Otherwise fighter: run lock on, *choosing* (or *done* with no ammunition), one rate of fire. Other: *refiring*, 1 tick |
+| *firing* | non-strafer requests body and aiming facing toward the target (claim 42 decides which request lasts); the firing check answers *ready* | full burst fired, a round becomes pending, scatter. Strafer: *strafe pass 2*, run lock on, one rate of fire. Otherwise fighter: run lock on, *choosing* (or *done* with no ammunition), one rate of fire. Other: *refiring*, 1 tick |
 | *firing* | answer *not facing* | no ammunition: *done*. Strafer or not close enough: *choosing*. Else fighter: *firing*; other: *choosing* with the re-approach flag on, *firing* with it off. 45 ticks for a strafer, else 1 |
 | *firing* | answer *rearming* | 1 tick |
 | *firing* | answer *cloaked* | uncloak; 1 tick |
@@ -1060,6 +1170,16 @@ attacking in that same pass; it does not require either neighbour to have been r
   re-approach flag off, an ordinary non-fighter, non-strafer repeats burst-plus-single-shot
   cycles without spending its pending round. Off: end each such cycle as one run, spending
   its round and selecting a new approach regardless of that flag.
+- **Own-cell landing search with no result** (`quirks.landing_own_cell_no_result`, default
+  on = original). Claim 41: the landing destination becomes the placeholder at map cell
+  (0, 0), which the aircraft discards and requests again, possibly heading for that map corner.
+  Off: treat the failed own-cell search as no successful building choice and continue with the
+  other-object fallback, in which the chosen building counts like any other own-house object,
+  and finally the aircraft's own cell.
+- **Slow ordinary attacker never fires.** With converted speed below 10, an ordinary attacker
+  (claim 42) can come to rest with a positive speed fraction whose forward step truncates to 0,
+  more than 16 leptons from its firing spot; it then never reaches *firing*. This follows from
+  claims 4, 5 and T1 without a separate rule, so it has no switch.
 - **Damage smoke consumes game-state randomness** (`quirks.aircraft_smoke_scenario_draw`,
   default on = original). Claim 37's damage-smoke chance uses the scenario stream, including
   updates that show no smoke. This can change later game-state random outcomes, so it is not
@@ -1155,7 +1275,8 @@ listed in Open questions are not claimed confirmed by these scenarios.
   to separate the forward formula from claim 4's additional descent step. On approach to a cell destination, log distance
   and fractions around each F4 threshold, including distance 0, and around 128, 512 and 768
   leptons. Expected: F4's halving, then distance clamp, then creep restart, then the 0.1
-  adjustment, followed by claim 5's target replacement for the next movement tick. At *d* = 0
+  adjustment, followed by claim 5's target replacement, which the next movement tick's own
+  calculation replaces (AC24 isolates this). At *d* = 0
   in ordinary slowing with positive incoming fraction, the adjusted fraction must be 0.
   Record the pre-slowing and adjusted fractions separately; a result differing from F4
   falsifies the resulting-fraction rule, not every observationally equivalent intermediate
@@ -1504,15 +1625,64 @@ listed in Open questions are not claimed confirmed by these scenarios.
     that part. Own-cell 1 × 1 replacement instead uses reference-distance choice; compare
     equal-distance candidates at different search ticks to distinguish its stable collection
     tie from the no-reference searches' tick-modulo choice. No search takes a random draw.
+- **AC24 Ordinary attacker close approach (claims 5, 40 and 42; Q-0651).** Named test map
+  `aircraft-close-approach`: a test-map override gives a landable, non-pad-bound aircraft type an
+  ordinary attack: a primary weapon whose projectile has a turn rate above 1 and is visible,
+  no fighter or fly-by flag, several rounds. One durable stationary enemy vehicle stands in open
+  level ground; the aircraft starts parked at a distance of at least 20 cells. Issue one attack
+  order and log per tick, with the read-only recorder: position, body facing, aiming facing,
+  current and target fractions, distance to the destination point, behaviour stage, destination
+  and flight point, and shot events. Run three type variants: (a) speed field and slowdown
+  distance chosen so the converted speed is about 35 and *S* = 500; (b) converted speed about
+  12 with *S* = 1000; (c) converted speed about 35 with *S* = 100. Expected:
+  - in each tick the forward step equals ⌊*V* × *f*⌋ for the fraction logged at the end of the
+    previous tick, and the distance used for slowing is the post-step distance.
+  - a logged target replacement (0, 0.5 or 0.75) never survives into the next tick's
+    adjustment: the next adjusted fraction follows F4 from min(1, *d* / *S*).
+  - no tick shows fraction 0.05 at its end, and once the fraction is 0 the position stops changing.
+  - (a) and (b): the fraction reaches 0 at a post-step distance below min(86, *S* / 10) and
+    above 16 leptons (about 48 leptons in variant a and about 80 to 85 in variant b), the run moves to *firing*
+    at the next processing with the destination still set, and the first shot leaves from that
+    hovering position.
+  - (c): the aircraft comes within 16 leptons with a positive fraction, the destination is
+    cleared, the flight point remains and the fraction then falls to 0.
+  - in every variant the body facing keeps pointing at the firing spot point and never turns to
+    the target, including in *firing*; the aiming facing begins turning to the target only once
+    the distance to the point is below 256 leptons, not at 512.
+
+  An implementation that turns the direction of travel toward the target at 512 leptons and
+  reaches *firing* only below 16 leptons or with no unfinished flight fails this scenario:
+  variants (a) and (b) then never fire. A hover with fraction 0 that is not
+  followed by *firing* at the next processing falsifies the zero-fraction test, and a body
+  turning to the target before the first shot falsifies the guidance rule. A fourth variant
+  (d) with converted speed 7 (raw speed field 3) and *S* = 500 should hover with a positive
+  fraction and fire no shot within 2000 ticks (Edge cases).
+- **AC25 Own-cell landing search with no result (claim 41, F8; Q-0650).** Named test map
+  `aircraft-no-own-cell`: a house owns one building of the aircraft type's first dock type and
+  no free pad. 1 to 3 cells from that building (weighted distance below 256 leptons) lies a
+  patch of ground-unreachable or fully occupied cells, for example a cliff-enclosed or walled
+  area whose free cells are all occupied. Fly a landable, non-pad-bound, unarmed aircraft of
+  that type over the patch and end its order there (for example with a stop order, or by
+  removing its move destination), so that it falls back to rest in flight with no pad granting
+  contact. If no normal order reaches that fallback over the patch, record a coverage gap. Log its destination object and coordinates, flight point, behaviour
+  and random-state draws per update. Expected: the destination becomes the cell position
+  (0, 0), not a cell near the building or near another own-house object; it is discarded at
+  the end of the same update and given again; a *move* attempt takes claim 40's direction draws
+  around cell (0, 0). On a small map where a usable cell lies within 31 cells of (0, 0), the
+  aircraft adopts that cell and flies to it; on a large map it heads toward the (0, 0) corner and
+  is redirected to the building's spot once its weighted distance reaches 256 leptons. A landing
+  spot near the building or another object while the own-cell search still fails falsifies the
+  claim. Repeat with the first variant's patch freed: the own-cell spot must then be used.
 
 ## Open questions
 
 1. Q-0630 is answered by claims 12 and 39; no firing-spot geometry question remains.
-2. Q-0631 is answered by claims 33 and 40; the stopped test is distinct from speed fraction.
+2. Q-0631 is answered by claims 33 and 40; *move*'s stopped test is distinct from speed
+   fraction, while T1's ordinary-attacker test is the zero fraction (claim 42).
 3. The planned-route exception of claim 6 belongs with the order specs' waypoint planning; this
    spec states only that it stops a landing.
-4. The exact application timing of the landing-facing choice (claim 25) remains unresolved.
-   Do not infer height stages from the take-off rules.
+4. The application timing of the landing-facing choice (claim 25) is resolved only for
+   claim 42's aiming request. Do not infer height stages from the take-off rules.
 5. Q-0634 is answered by claim 41 and F8 with S-0212 claim 25a for footprint qualification,
    unchanged result cells and candidate choice. Equal-distance fallback objects favour
    earliest creation; map-edge destinations are claims 34 and 37 with S-0522 claims 4 and 5.
@@ -1526,3 +1696,10 @@ listed in Open questions are not claimed confirmed by these scenarios.
 11. The two game-wide rocket types whose in-the-air answer comes from their locomotor (Terms) are
     missiles in stock use (S-0506); whether any aircraft of those types reaches this spec's rules
     was not checked.
+12. Q-0651 is answered by claims 5 and 42, F4 and table T1: the order within an update, the
+    ineffective creep restart and approach replacement, the stop at fraction 0 short of the spot,
+    the facings and the zero-fraction test. The strafer's body exception in claim 42 was traced
+    but not exercised by a scenario.
+13. Q-0650 is answered by claim 41 and F8: the placeholder destination at map cell (0, 0) and its
+    discard. The net flight path while the placeholder repeats has medium confidence; AC25
+    measures it.

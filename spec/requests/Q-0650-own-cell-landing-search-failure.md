@@ -1,9 +1,9 @@
 ---
 id: Q-0650
 title: Landing spot when the own-cell search near a close building finds nothing
-status: open
+status: answered
 related: [S-0501, S-0212]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

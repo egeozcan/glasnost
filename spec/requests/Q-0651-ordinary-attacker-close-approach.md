@@ -1,9 +1,9 @@
 ---
 id: Q-0651
 title: How an ordinary attacking aircraft closes the last leptons to its firing spot
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
