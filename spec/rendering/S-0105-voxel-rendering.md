@@ -2,13 +2,13 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 17
+revision: 18
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470]
+requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799]
 supersedes: []
 ---
 
@@ -16,7 +16,10 @@ supersedes: []
 
 ## Summary
 
-**Revision scope.** Q-0470 adds a 4096-pixel largest side for part and shadow images,
+**Revision scope.** Q-0799 is answered by claim 40: aircraft shadow anchors follow
+terrain, or a qualifying high-bridge deck, independently of flight height. It also
+fixes the original's extra displacement with non-flying locomotors, without a switch.
+Q-0470 adds a 4096-pixel largest side for part and shadow images,
 centred copy-rectangle clipping, suppression of non-finite placement and one importer
 warning per oversized model. These are lead-confirmed engine rules, tested against
 this spec rather than the original. Fifteen lead-classified presentation glitches remain
@@ -102,8 +105,14 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   empty cells or a number of consecutive voxels.
 - **Draw point.** The screen point a part image is placed around: the object's position (S-0101)
   plus any shift its locomotor applies when drawing (claim 25).
-- **Shadow draw point.** The screen point a shadow image is placed around: the point on the
-  ground below the object that its locomotor gives (S-0102, S-0106; open questions).
+- **Shadow draw point.** The screen point a shadow image is placed around. Claim 40
+  gives it for aircraft; vehicle placement outside that claim remains open. The
+  footprint's own displacement and scale (claim 31) are relative to this point.
+- **Aircraft shadow height** *a*. For claim 40 only, the aircraft's signed integer
+  height above its current surface, in leptons: *a = z − H − b*, where *z* is its
+  world height, *H* is the terrain surface height at its exact horizontal position
+  (S-0106 claim 2), and *b* is 416 leptons while the aircraft is marked on a bridge
+  deck, otherwise 0. This is not S-0501's altitude-guidance height.
 - **Aircraft-like type.** A type with the aircraft-like flag (import mapping); its shadow is
   half size (claim 31).
 - **Depth-option type.** A type with the per-type depth-buffer option (claim 24).
@@ -906,6 +915,46 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       cached footprint. No old-pose cutouts persist.
     - Backing: `measurable` (MS-27; fresh exclusions are oracle-testable, corrected
       reuse is a lead-confirmed departure tested against this spec)
+    - Confidence: high
+
+40. **Aircraft shadow anchor (Q-0799).** For an aircraft drawn as a voxel model,
+    let *P* be the screen projection of its horizontal position at terrain height
+    *H*, using S-0101 claims 1 and 3. Its shadow draw point is *P*, except that a
+    qualifying high bridge raises that point by exactly 60 screen pixels. Claim 31's
+    footprint shift and scale and F10's copy placement still apply around this anchor.
+    The anchor is not the body's lifted point or the centre of its visible silhouette.
+    - **Bridge qualification.** The current cell must be a high-bridge cell
+      (S-0211 claim 15), and so must its neighbour one cell towards *y − 1* for a
+      bridge whose axis is along cell x, or towards *x − 1* for an axis along cell y.
+      The bridge axis is the one used by S-0212 claim 3's bridge links. In addition,
+      *a ≥ 416* leptons when the aircraft is not marked on the deck, or *a ≥ 0*
+      when it is marked on the deck. Otherwise use terrain. Thus a flight above a
+      continuous deck can cast its shadow at deck height, but not every marked edge
+      cell qualifies. A destroyed deck that has lost its high-bridge marking cannot
+      qualify. No building roof or helipad surface is substituted for terrain.
+    - **Height dependence.** Away from a change in the bridge qualification,
+      changing world height alone does not move the anchor. It changes the separation
+      from the body, not the shadow's surface point. The terrain height is sampled at
+      the exact horizontal position, including its slope, not just the cell's whole
+      height level. There is no clamp to the aircraft's own world height.
+    - **Landing and pads.** The same rule applies during take-off, hovering above a
+      pad, landing and rest, including *a = 0* and *a < 0*. Negative height does not
+      raise the terrain anchor with the body or itself suppress the shadow. A
+      non-deck aircraft below deck height uses terrain even over a high-bridge cell.
+      A deck-marked aircraft at *a = 0* can still qualify for the deck.
+    - **Locomotors.** Our engine uses this anchor for every aircraft locomotor,
+      whenever it supplies an otherwise eligible voxel shadow (claim 31); locomotor
+      eligibility and shadow shape are not made universal by this placement rule.
+      The original uses the stated anchor for the flying locomotor, but for the
+      other locomotors it places the anchor *L(a)* rows below *P* even over a
+      qualifying deck, where *L* is S-0101 claim 3's signed height lift; this
+      height-dependent presentation glitch is corrected here without a switch.
+    All height subtractions and threshold tests above are exact signed integer
+    operations; 60 is an integer pixel translation, with no further rounding.
+    S-0101 claim 3 owns the projection's height rounding. S-0102 claim 18 still owns
+    the shadow's render layer, scene-depth test and own-body overlap, not its anchor.
+    - Backing: `measurable` (MS-30; the non-flying placement correction is engine
+      conformance, not a prediction of identical original pixels)
     - Confidence: high
 
 ## Formulas
@@ -1836,6 +1885,8 @@ own name, even when the type's image names a different section.
 | `TurretCount` | Rules [type] | integer | 0 | Turret count; above 0 makes a multi-turret type unless the type has rotating-barrel weapon stages (Terms, claim 12) |
 | `IsGattling` | Rules [type] | boolean | no | Rotating-barrel weapon stages; here only its effect on the multi-turret rule (claim 12) |
 | `UseTurretShadow` | Art [image], vehicles | boolean | no | Read, no effect (`quirks.no_turret_shadow`) |
+| `Locomotor` | Rules [type] | class identifier in hyphen-separated hexadecimal groups of 8, 4, 4, 4 and 12 digits, enclosed in paired brace characters, letters in either case (S-0207 claim 14) | keeps value in force; engine default teleporting locomotor (S-0207 claim 14) | Original aircraft displacement differs between the flying and other locomotors; corrected anchor is independent of this selection (claim 40) |
+| none: terrain and high-bridge marks | Map terrain and overlay data | terrain height and slope, high-bridge cells and bridge axis, as S-0106 claim 2, S-0211 claim 15 and S-0212 claim 3 specify | no deck where no intact high bridge marks the cell | Surface anchor and neighbour qualification in claim 40; no shadow-height INI key or helipad-height substitute |
 
 **Importer warnings.** The importer warns, naming the file and the place in it, in these cases. A
 warning never changes the imported result (glossary, *importer warning*), and the warnings do not
@@ -3088,14 +3139,58 @@ conformance for lead-confirmed departures, not an oracle experiment.
   model gives zero or multiple size-limit warnings. An ordinary screen clip or an
   incorrectly constructed copy size makes that variant inconclusive rather than a pass.
 
+**MS-30 — Aircraft surface anchors (claim 40; Q-0799).**
+
+- *Setup:* the common skirmish measurement setup, speed index 2, 800×600,
+  director and mods off, one human house and one bystander computer player outside
+  the observed area. Use a tiny purpose-made map with flat ground at two levels,
+  a slope, an intact high bridge in each axis with visible terrain beneath, and
+  a stock landing pad. Observe a stock voxel plane and a stock rotor aircraft that
+  cast shadows. Run three times per type and route. Use screen capture plus a
+  read-only recorder of tick, horizontal position, world height and deck mark.
+- *Procedure:* record cruise over each terrain level, the slope and each bridge,
+  record descent, pad hovering, landing, rest and take-off. Include the outermost
+  marked bridge row with no qualifying neighbour and the first interior row.
+  Compare equal horizontal positions at different heights where available. Record
+  a collapse control only after the deck's marks are removed. Void a run if the
+  bystander affects the observed area.
+- *Observable:* recover the shadow anchor by matching the known claim 30/F10
+  footprint, rather than equating a silhouette's centre with the object's point.
+  Record its screen coordinates, terrain projection, bridge qualification and
+  aircraft height for every selected drawn frame. Scene-depth occlusion may hide
+  footprint pixels; a frame without enough visible pixels is inconclusive.
+- *Expected:* the anchor is the terrain projection or exactly 60 rows above it
+  according to claim 40, never the body's lifted point. Over ordinary terrain it
+  stays fixed at equal horizontal positions as height changes. The bridge threshold
+  includes equality; its neighbour test rejects the unpaired edge row. A pad adds
+  no new surface. A missing deck returns to terrain.
+- *Named test-data extensions:* when stock routes cannot sample exact thresholds,
+  use a test map and named type overrides for landing/cruise positions, and a
+  named placement fixture for signed heights, without altering the executable.
+  Sample *a = −1, 0, 1* on terrain and *415, 416, 417* over the bridge, with and
+  without the deck mark where legal. A state that normal placement cannot produce
+  is instead an engine-conformance fixture, not an oracle measurement. Replay
+  aircraft with the jumpjet and rocket locomotors and each further supported
+  locomotor using named test types, comparing only appearances that actually cast
+  voxel shadows. The corrected-engine expectation is always claim 40; record the
+  original's non-flying anchor *P + (0, L(a))* separately, not as its target.
+- *Falsified if:* an eligible flying-locomotor shadow's recovered anchor differs
+  from the surface rule, moves with height away from a bridge threshold, uses a
+  pad roof, clamps to the body, or selects a deck without the specified neighbour.
+  The engine-conformance extension fails if a non-flying aircraft uses a different
+  anchor under equal surface inputs. A reproducible original non-flying anchor
+  other than *P + (0, L(a))* falsifies that recorded original rule, not the corrected
+  surface rule. Negative-height and artificial-locomotor
+  variants that cannot be created in the original remain conformance tests only.
+
 ## Open questions
 
 - **Turretless vehicle with a barrel part.** A vehicle with a barrel part but no turret is drawn
   differently, with a shift derived from its weapon position and a pitch correction. Not yet
   understood; left out.
-- **Shadow vertical placement.** Where an airborne unit's shadow footprint lands vertically (its
-  ground point) is decided by the locomotor and is left to S-0102 and S-0106; the one-pixel
-  adjustment for airborne units seen in the original is unconfirmed.
+- **Vehicle shadow vertical placement.** Claim 40 settles aircraft, including
+  bridge qualification and non-positive heights. Vehicle anchors outside that
+  claim, including the earlier suspected one-pixel airborne adjustment, remain open.
 - **Own-image exclusion outside vehicles.** Claim 39 fixes vehicles, including hovering
   vehicles, only. Whether other voxel object kinds also exclude their own images is not
   determined here; S-0102 owns the aircraft observable.

@@ -1,9 +1,9 @@
 ---
 id: Q-0799
 title: Where an airborne aircraft's voxel shadow is drawn
-status: open
+status: answered
 related: [S-0102, S-0105, S-0501]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
