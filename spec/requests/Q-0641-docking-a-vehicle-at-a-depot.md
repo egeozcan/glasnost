@@ -1,9 +1,9 @@
 ---
 id: Q-0641
 title: How a vehicle reaches and docks at a repair depot or naval yard
-status: open
+status: answered
 related: [S-0504, S-0314, S-0214, S-0215]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0341]
+requests: [Q-0341, Q-0641]
 supersedes: []
 ---
 
@@ -69,6 +69,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 - **Depot contact, docking place.** Contact and tether have S-0215's Terms meanings. A docking
   place is one of the depot's contact places, reserved by an accepted entry request (claim 17).
   Contact can exist before the vehicle reaches the building.
+- **Queued entry.** A vehicle's standing intention to enter one depot. While it holds one, the
+  vehicle requests a contact place again on every tick (claim 23).
 - **Docking point.** The world position the depot supplies for that vehicle's approach and
   waiting-distance check (claim 18 for ordinary land depots; S-0504 claim 12 for vehicle factories).
 - **Building repair.** The repair state of a building that its owner turns on and off with the
@@ -198,8 +200,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 ### Repair depot, hospital and building repair
 
 6. **Repair depot.** Write *K*<sub>u</sub> for the vehicle repair count and *D* for the depot's
-   processing delay (Formulas F1). Claims 16 to 18 describe the established parts of contact and
-   entry. A repair depot treats a vehicle docked on it in three phases:
+   processing delay (Formulas F1). Claims 16 to 18 describe contact and entry, and claims 20 to 24
+   how contact ends. A repair depot treats a vehicle docked on it in three phases:
    - *Waiting.* At each processing, normally *D* ticks apart, the depot checks whether the
      vehicle stands still within the starting distance of its docking point: strictly less than
      100 leptons for ordinary locomotors, or 200 leptons for ship and hovering locomotors.
@@ -481,7 +483,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 
 ### Docking at a land repair depot
 
-16. **Permission and player entry (Q-0641, partial).** S-0214 claim 8, table V row n3,
+16. **Permission and player entry (Q-0641).** S-0214 claim 8, table V row n3,
     already supplies the ordinary click's *enter* action over an accepting allied building.
     Its claim 10, table M, supplies the enter order. S-0215 claim 29 owns the repeated entry
     requests. The depot's permission does not require damage or affordable repair: a full-health
@@ -496,7 +498,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     - Confidence: high (no damage or money gate, alliance and contact-place tests), medium
       (input consequences of the refusal cases)
 
-17. **Contact is earlier than repair (Q-0641, partial).** A depot has max(*d*, 1) contact
+17. **Contact is earlier than repair (Q-0641).** A depot has max(*d*, 1) contact
     places, where *d* is its imported docking-place count. A successful entry request establishes
     contact in the first free place before the vehicle has reached the docking point. It is
     this assigned vehicle, not the nearest damaged vehicle, that the depot services. At a
@@ -514,8 +516,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     foundation centre, causes the depot to queue repair with a 1-tick processing delay.
     This guard test uses floating-point Euclidean distance truncated toward zero to integer
     leptons. It is not claim 6's distance to the docking point and never takes a paid step.
-    Simultaneous requests issued before either contact exists and servicing with multiple
-    imported contact places remain open below.
+    Simultaneous requests are claim 23's; servicing with more than one imported contact place
+    is in Edge cases.
     - Backing: `measurable` (H16 a and c; contact, tether, behaviours and processing ticks
       recorded separately).
     - Confidence: high (capacity and completed entry), medium (reservation timing and early
@@ -536,9 +538,10 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     The depot directs the vehicle toward the building as its movement destination; the supplied
     docking point, not a searched neighbouring exit cell or the rally point, is the destination
     position. The vehicle remains on the map. Foundation blocking is still S-0209 claim 5's:
-    the repair flag does not make all blocking foundation cells traversable. The exact approach
-    and stopping exchange is left to S-0215 claim 29 and the open question below, not replaced
-    here by a teleport or an unconditional permission to cross the foundation.
+    the repair flag does not make all blocking foundation cells traversable. The general approach
+    and stopping exchange is S-0215 claim 29's, not replaced here by a teleport or an
+    unconditional permission to cross the foundation. Claims 20 to 23 give the depot-specific
+    interruptions.
     - Backing: `measurable` (H16 a and e).
     - Confidence: high (point selection, precedence and integer arithmetic), medium (approach
       destination and stock route)
@@ -550,6 +553,115 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     5 and 10). This does not grant depot contact or another healing-weapon target.
     - Backing: `measurable` (H17; S-0504 N10).
     - Confidence: high
+
+### Ending and losing depot contact
+
+In claims 20 to 24 a vehicle is *approaching* a depot while it holds contact with it but is not
+yet tethered to it, and *docked* once the completed entry exchange (claim 17) has tethered it.
+The *serviced place* is the depot's first contact place (place 0): every check of claim 6 reads
+only the vehicle in that place.
+
+20. **A new order.** When an order is executed for a vehicle in contact with a depot:
+    - An enter order on the same depot, given while the vehicle already holds contact with it
+      and has *enter* as its behaviour, is ignored entirely.
+    - An *approaching* vehicle given any other order loses its contact at once, so the place is
+      free for another vehicle in the same tick. Its queued entry (claim 23) is cleared too.
+    - A *docked* vehicle keeps both contact and tether whatever order it is given, with two
+      exceptions. First, a vehicle holds one contact, so a successful entry request to another
+      building releases the depot. Second, an enter order on the same depot ends the docking.
+      A damaged vehicle takes claim 23's queued entry, and on the next tick the permission
+      refusal for a vehicle standing on the depot (claim 16) clears its contact and queued
+      entry. A vehicle at full health loses its contact at once. Otherwise the order runs
+      normally, and claim 21 decides what the depot then does.
+    - Backing: `measurable` (H18 a).
+    - Confidence: high (approaching release, ignored repeat), medium (docked retention under
+      each order kind), low (same-depot enter order while docked)
+
+21. **Moving away while docked.** The depot's checks of claim 6 continue for a docked vehicle
+    wherever it goes:
+    - *Waiting:* the vehicle advances only from inside the starting distance. A vehicle that has
+      left keeps its contact place, receives no step and blocks that place until it returns,
+      leaves by claim 20, or is destroyed.
+    - *Settling:* while the vehicle is within 200 leptons of its docking point (the same
+      truncated spatial distance as claim 6) and still moving, the depot holds settling and
+      checks again on the next tick. Once it stands still there, the depot switches its
+      locomotor off (claim 22) before stepping. A vehicle whose locomotor is already off and
+      which has a destination has its movement stopped. Beyond 200 leptons there is no
+      distance test.
+    - *Working:* only movement defers a step (claim 6). A docked vehicle standing still at any
+      distance from the depot, for example after a move order or while it attacks without moving,
+      receives its steps and pays for them (`quirks.depot_remote_repair`).
+    - When the depot sends the vehicle away at full health (claim 6), the destination it gives
+      replaces any destination the player gave while docked. The repair-complete announcement
+      follows claim 6.
+    - Backing: `measurable` (H18 b).
+    - Confidence: high (no distance test in the working phase, override at release), medium
+      (settling hold and the one-tick recheck)
+
+22. **Sale, destruction and power.**
+    - *Sale.* When the depot starts selling, every vehicle in contact with it, docked or
+      approaching, receives a run-away notice:
+      - it clears its destination if that destination is the depot,
+      - a vehicle in *sleep* or *enter* switches to *guard* (from *sleep* at once, from *enter*
+        when its current processing ends),
+      - a vehicle with no destination left can be sent a scatter request, which S-0215 claim 19
+        accepts or refuses. A further vehicle-state condition on sending it is not established.
+
+      At its next processing the selling depot releases every contact. A selling depot already
+      refuses new entry (claim 16).
+    - *Destruction or other removal.* Every contact is released without a run-away notice.
+      An approaching vehicle loses its target and falls back to *guard* where it stands.
+      A docked vehicle stays in *sleep*: it does nothing until it receives an order
+      (`quirks.depot_loss_leaves_sleep`).
+    - *Locomotor switched off.* The settling step switches the docked vehicle's locomotor off
+      (claim 21). Normally it is switched on again when the vehicle receives a destination
+      while a depot or tank bunker occupies its cell. A hovering vehicle with its locomotor
+      switched off cannot move. If its depot is sold or destroyed after settling, nothing switches
+      it on again, and the vehicle stays immobile under every later order
+      (`quirks.depot_loss_strands_hover`). No such effect was found for other land locomotors.
+    - *A vehicle destroyed while in contact* frees its place. A depot left without any contact
+      plays its idle animations and returns to *guard*.
+    - *Power.* Neither the owner's low power nor the depot being switched off stops or slows the
+      servicing of a vehicle already in contact: steps, costs and timings are claim 6's. Being
+      switched off refuses only new acceptance, including a queued vehicle's (claims 16 and 23).
+      Low power refuses nothing here.
+    - Backing: `measurable` (H18 c, d and e).
+    - Confidence: high (sale notice and release, no power test), medium (behaviour after
+      destruction, hover stranding), low (the scatter request, no stranding for other land
+      locomotors)
+
+23. **Simultaneous and queued entry.** Orders execute one at a time in event order (S-0213), so
+    two vehicles sent together are resolved in that order. The first entry request finds a free
+    place and takes contact (claim 17). For a later enter order on a depot that holds *any*
+    contact, whatever its place count:
+    - a vehicle below full health (health ratio below 1) gets no destination and no contact. It
+      stays where it is with a *queued entry* for that depot. On every tick it asks again for a
+      contact place (claim 16's alliance and free-place tests). While none is free it keeps
+      waiting. When one is free it takes it and asks permission. If permission is granted, it
+      switches to *enter* and approaches as in claim 17. If permission is refused (for example the
+      depot is switched off), it gives up: contact, queued entry and
+      destination are cleared and it falls back to rest.
+    - a vehicle at full health also gets no destination and no queued entry: the order ends,
+      and the vehicle stays put.
+
+    Any later order clears the queued entry (claim 20). So at a one-place depot the second
+    vehicle enters by itself as soon as the first leaves. The sequential case of claim 17 differs:
+    a click made while the place is held gives no enter order at all. With an enter order on a
+    depot that holds no contact, the vehicle asks for entry at once. If it is refused, it takes
+    no contact and does not queue.
+    - Backing: `measurable` (H18 f).
+    - Confidence: high (event order, queued wait and automatic entry), medium (refusal on
+      permission and the full-health case)
+
+24. **No automatic return for repair.** No original rule sends a damaged vehicle of a player
+    house to a depot by itself, at any health. The only automatic movements related to a depot
+    are claim 23's queued entry, which needs a prior enter order, and claim 6's release
+    destinations, including the original's guard-spot return for owners that are not
+    human-controlled. The original computer player's own choice to send units for repair belongs
+    to its scripts and is out of scope. Our AI sends vehicles to a depot only by ordinary enter
+    orders, which follow claims 16 to 23.
+    - Backing: `measurable` (H18 g).
+    - Confidence: medium
 
 ## Formulas
 
@@ -640,6 +752,9 @@ Backing and confidence are claim 15's.
 | Waiting-to-settling delay | 3 | ticks | Claim 6 |
 | Early guard repair-start distance | 64 | leptons, strict upper bound | Claim 17; measured to foundation centre, not docking point |
 | Arrival body facing | 16384 | facing units | Claim 17; map east |
+| Settling hold distance | 200 | leptons, strict upper bound | Claim 21; measured to the docking point |
+| Settling recheck while moving | 1 | ticks | Claim 21 |
+| Serviced contact place | 0 | place index | Claims 20 to 23; Edge cases |
 | Infantry and vehicle self-heal intervals, absent-key default | 1000 | ticks | Claim 10 |
 | Infantry and vehicle self-heal amounts, absent-key default | 1 | health points per source | Claim 10 |
 | Infantry and vehicle self-heal counts of a building type, absent-key default | 0 | sources | Claim 10 |
@@ -668,6 +783,15 @@ Backing and confidence are claim 15's.
 | working | step reports *more needed* | stays |
 | working | step reports *done* or *not needed* | sent away (rally point or exit cell); repair-complete announcement as claim 6 says |
 | working | step reports *cannot pay* | contact retained; settling retry next tick, then unsuccessful retries every *D* ticks; low-funds announcement as claim 6 says |
+| approaching vehicle | any order other than a repeated enter on this depot | contact released at once; queued entry cleared (claim 20) |
+| docked vehicle | any order, unless it gains contact elsewhere | contact and tether kept; the phase continues (claims 20 and 21) |
+| settling, vehicle within 200 leptons and moving | processing | recheck next tick (claim 21) |
+| working, vehicle standing still at any distance | a step falls due | repair step (`quirks.depot_remote_repair`) |
+| any phase | depot starts selling | run-away notice to every contact; contacts released at the next processing (claim 22) |
+| any phase | depot destroyed | contacts released; docked vehicle stays in *sleep* (claim 22) |
+| depot holds any contact | enter order for a damaged vehicle | queued entry; no destination (claim 23) |
+| queued entry | tick with a free place and permission | contact taken; *enter* (claim 23) |
+| queued entry | tick with a free place, permission refused | gives up (claim 23) |
 | infantry inside a hospital | a step falls due (claim 7) | repair step at cost 0 |
 | same | *more needed* | stays |
 | same | *done* or *not needed* | put out; announcements as claim 7 says |
@@ -746,6 +870,33 @@ alternatives are design rules, not claims of oracle measurements.
   threshold-specific alternative, warning or new quirk. Neither the credit split, the once-per-tick
   repair start nor the sale tests are treated as defects requiring switches. In particular, the
   sale draw's use of tech level rather than a percentage is reproduced as a rule.
+- **Repair away from the depot** (quirk `quirks.depot_remote_repair`, default: the original's
+  behaviour). A docked vehicle that is ordered away and stands still anywhere keeps receiving
+  paid working-phase steps (claim 21), and in settling beyond 200 leptons too. With the switch off,
+  a docked vehicle given a move or attack order loses its contact as an approaching one does
+  (claim 20), so steps happen only at the depot.
+- **Docked vehicle left asleep** (quirk `quirks.depot_loss_leaves_sleep`, default: the
+  original's behaviour). After its depot is destroyed, a docked vehicle stays in *sleep* and
+  neither fires nor reacts until ordered (claim 22). With the switch off, destruction treats
+  contacts as a sale does: each receives the run-away notice and switches to *guard*.
+- **Hovering vehicle stranded** (quirk `quirks.depot_loss_strands_hover`, default: the
+  original's behaviour). A hovering vehicle whose depot is sold or destroyed after the settling
+  step keeps its locomotor switched off and never moves again (claim 22). With the switch off,
+  losing contact with a depot switches the vehicle's locomotor on. S-0504 owns the same
+  question for naval yards.
+- **Several contact places** (departure). The original services only place 0 (claims 20 to
+  23). With an imported docking-place count above 1, a queued second vehicle can take place 1.
+  It is then accepted, approaches its own docking point and docks, but receives no step while
+  the first vehicle is serviced. When place 0 is then released while place 1 is still held, the
+  original's next depot processing reads a vehicle that does not exist. The outcome is undefined:
+  the expected result is a program error. Stock data is not believed to reach
+  this case. Our engine services the vehicle in the lowest-numbered occupied place, one at a time,
+  with claim 6's phases. When the serviced place changes, the phases restart at *waiting*.
+  The importer warns for a count above 1 on a repair depot.
+  - Backing: `measurable` for the unserviced second place (H18 h). The original's outcome when
+    place 0 empties is `unmeasured`: it is a fault, not a defined behaviour to reproduce.
+  - Confidence: high (only place 0 is read), medium (a second place can be taken through a
+    queued entry)
 - **The original's computer player** passes claim 8's gate at the absent-key default maximum
   level and threshold. Its difficulty-related repair-start pacing is recorded in claim 15 and
   F4; its separate strategy for repair or sale is not specified here. Our AI can use ordinary
@@ -1301,10 +1452,9 @@ body facing, contact places, tether, behaviour, building processing and health e
   sells or loses the allied test depot.
 - *c, contention:* send the first vehicle, wait until its contact is recorded, then click with
   the second selected. At a one-place depot expect no second enter order, no displacement and
-  no repair of the second vehicle. Repeat the click after release: entry can succeed. A queued
+  no repair of the second vehicle. Repeat the click after release: entry can succeed. A
   second vehicle automatically entering without another order falsifies this sequential case.
-  Also issue both orders before either contact and record the outcome as exploration only:
-  this proposal makes no prediction for the still-open simultaneous-request case.
+  H18 f covers orders issued before either contact.
 - *d, refusal controls:* attempt entry during build-up, after switching off, and with a vehicle
   already standing on the same depot. Expected: no new acceptance in each case. Restore the
   operational depot and move the vehicle off it: the ordinary accepting case returns. Any
@@ -1328,17 +1478,54 @@ height and removal follow the same sinking rule as the control. No healing, a ch
 or amount, or recovery that cancels sinking falsifies claim 19. Void a run that destroys the
 vessel outright instead of entering sinking.
 
+**H18: ending and losing depot contact (claims 20 to 24; Q-0641).** H16's map, settings, repeat
+count and recorder, with credits, contact places, tether, queued entry, locomotor state and
+health logged every tick. Use one stock land depot and stock tracked and hovering vehicles,
+damaged to half strength unless a part says otherwise.
+- *a, orders:* give a move, stop or attack order (i) while the vehicle approaches, (ii) after it
+  docks. Repeat the enter order on the same depot while approaching. Expected: (i) contact
+  released in the order's tick, and a second vehicle can then take the place; (ii) contact and
+  tether kept; the repeated enter changes nothing. Release while docked, or a reset approach on
+  the repeated order, falsifies claim 20. (iii) Give a docked damaged vehicle an enter order on
+  the same depot through scripted input. Expected: contact ends one tick later and repair stops.
+  Repeat at full health: contact ends in the order's tick.
+- *b, moving away:* order a docked vehicle 6 cells away during working and let it stand still.
+  Expected: health keeps rising by steps, credits fall, and at full health the vehicle is sent to
+  the rally point or exit cell, not left at the ordered cell. Repeat during waiting: no step while
+  away, place still held. Repeat during settling within 200 leptons: the depot rechecks each tick
+  until the vehicle stands still. Any distance-based stop in working falsifies claim 21.
+- *c, sale:* sell the depot (i) with a docked vehicle, (ii) with an approaching one. Expected:
+  both switch to *guard*, the depot destination is cleared, contacts end one depot processing
+  later; record any scatter movement.
+- *d, destruction:* destroy the depot (scripted damage outside the vehicle) in the same two
+  cases. Expected: contacts released; the approaching vehicle falls back to *guard*; the docked
+  vehicle stays in *sleep* and does not fire at an enemy test unit placed in range. Then
+  destroy a docked vehicle instead: the depot returns to *guard* and accepts another vehicle.
+- *e, locomotors:* repeat c and d with a hovering vehicle after its settling step, then give
+  move orders. Expected: it never moves. Repeat with a tracked vehicle and record whether
+  it moves (claim 22's low-confidence part).
+- *f, power and simultaneous orders:* (i) during working, drop the owner's power below demand,
+  then switch the depot off. Expected: steps, costs and timing unchanged. (ii) Select two
+  damaged vehicles and click the depot once, so both orders execute before either contact.
+  Expected: one approaches; the other stays put with a queued entry and enters by itself at most
+  one tick after the first leaves. Repeat with the second at full health: it stays put and never
+  enters. Repeat with the depot switched off before the first leaves: the queued vehicle gives
+  up when the place frees.
+- *g, no automatic return:* leave a damaged vehicle of the human house idle near the depot for
+  9000 ticks with no orders. Expected: it never enters. Any automatic entry falsifies claim 24.
+- *h, two places:* a named test depot type with a docking-place count of 2 and two invented
+  displacements. Order the second vehicle in the same tick as the first. Expected: it takes place
+  1, docks at its own point, and receives no step while the first is serviced. Stop recording
+  before the first leaves, because the original's outcome there is undefined.
+
 ## Open questions
 
-- Q-0641 remains partial: exact approach/stopping and contact-break timing for move, stop,
-  attack and replacement enter orders; the fate and destination of a vehicle when its depot
-  is sold or destroyed; power loss during an existing exchange; simultaneous entry requests
-  and servicing with more than one imported place. The established point and completed-entry
-  handshake do not by themselves settle those paths. S-0215 claim 29 owns the general approach
-  and interruption behaviour; claims 16 to 18 here supply depot-specific inputs.
-- Q-0641's original computer-player automatic retreat condition remains untraced. AI script
-  choices are out of scope; our AI may send vehicles only through ordinary legal orders.
-  Whether a shared skill-gated unit rule also initiates repair remains to be checked by S-0215.
+- Whether drive and other non-hovering land locomotors ignore being switched off entirely
+  (claim 22, low confidence). H18 e records it.
+- Whether a scatter request after the sale's run-away notice moves a vehicle that is already
+  standing on or beside the depot (claim 22; S-0215 claim 19 owns acceptance).
+- Movement blocking near an allied depot for a damaged vehicle may differ from the ordinary
+  rule. S-0215 or S-0212 owns that test, not this spec.
 - The exact phase of the second depot step and the first hospital step (±1 tick), and whether a
   depot's settling step can be retried before *D* ticks; scenarios H4 and H6 record them.
 - Where a vehicle goes when the depot has no rally point and no exit cell is found (claim 6).
