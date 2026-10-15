@@ -446,7 +446,7 @@ S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its ga
   - lift stops.
   - At the spin's end, a hover over water below 104 leptons gets the bomb mark (`hover::bomb_mark`) and starts to fall.
 - **Hooks elsewhere.**
-  - `infantry::destination_assigned` gives ρ = 1 (`hover::take_destination`).
+  - `infantry::destination_assigned` gives ρ = 1 and chooses the first heading point at once (`hover::take_destination`, Q-0695).
   - `econ::release::send_out` sets ρ = ½ after a factory exit; the hover leaves by its own locomotor towards (x₀ + 4, y₀ + 1).
   - `path::failed` clears a hover's destination like a driving unit's.
   - `occupancy::in_progress`, `path::heading_cell` and the claim 19 count see a hover's heading point and φ.
@@ -457,7 +457,8 @@ S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its ga
   - the fall (`hover::start_fall`, S-0511 claim 10);
   - the cloaked reveal (`hover::reveal_cloaked`, S-0516);
   - crate collection (`hover::collect_crate`, S-0520);
-  - the chase cut (`hover::chase_cut`, S-0212 claim 20).
+  - the chase cut (`hover::chase_cut`, S-0212 claim 20);
+  - the stop order (`hover::stop_order`, Q-0696).
   - S-0312 claim 11's low-water death of a marked vehicle is not built.
 - **Quirks.** `quirks.hover_brake_undershoot`, `quirks.hover_elevated_heading_point` and `quirks.hover_stalled_start_reset` are now implemented.
 - **Rendering.** The map view draws every mobile object at its world position, z included (`mapview::live`, `build::height_lift`), so the hover height and the bob show with no new drawing code.
@@ -483,6 +484,8 @@ Provisional rules of M6b hover and amphibious movement, each tied to a request:
 | `hover::fresh_search`, `hover::search_and_recheck`, `hover::travel_turn` | every fresh search, the immediate ones of table T1 included, starts R; a failed search at an arrival does not suppress the already computed step | Q-0692 |
 | `hover::travel_turn` | each arrival at a heading point (F5) is a cell-arrival update (S-0417 claim 7), after the next heading point is chosen; a cell-edge crossing is not | Q-0693 |
 | `objects::place_with` | the movement heading η is set to the body facing each time the vehicle is put on the map | Q-0694 |
+| `hover::take` | a hover without a heading point chooses its first one at once when it is given a move (path search and step check), so the ρ = ½ of a factory exit reaches the exit move (claim 4); the "moving, no heading point" row applies only when that choice gave none | Q-0695 |
+| `hover::stop_order` (from `orders`, the stop order) | a person's stop order only clears what S-0213 claim 8 clears; the hover keeps its heading point, throttle, hover speed and ρ, and stops at the heading point | Q-0696 |
 
 ## Own AI (M5b)
 
