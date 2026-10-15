@@ -2,11 +2,11 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340]
 supersedes: []
@@ -20,7 +20,9 @@ Sound data, selection and order responses, event sounds, announcements, mixing l
 placement and traced random choices in skirmish; network games and campaigns are out of scope.
 Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
 Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Which files hold the samples
-is claim 34; the byte formats of those files are outside this spec. Revision 8 fixes duplicate
+is claim 34; the byte formats of those files are outside this spec. Revision 9 removes
+previous-strike lightning suppression and aligns superweapon-ready requests with S-0512 claim 5.
+Revision 8 fixes duplicate
 damage-sound playback as a lead-approved presentation departure without a quirk switch.
 Revision 7 cites
 S-0410 claims 14–15 for radar-event zoom timing and S-0411 claim 18 for scroll dispatch,
@@ -530,11 +532,11 @@ normalisation N of its Formulas F3. In addition:
     synchronised game state, taken whether or not anyone hears it, whatever the sound settings, the
     view or the shroud. Within one strike it comes after the raw value that chooses the bolt's
     animation and that animation's creation draws, and before the draws of the strike's explosion
-    animation and of its damage. No value is taken when the game-wide lightning sound list is empty,
-    nor when the strike falls on exactly the same point as the previous strike, which ends that
-    strike right after its bolt animation.
+    animation and of its damage. No sound-choice value is taken when the game-wide lightning
+    sound list is empty. Repeating the previous strike's point does not suppress the sound
+    choice or the later strike effects and draws (S-0513 claim 18).
     - Backing: `measurable` (scenario F6)
-    - Confidence: high (stream, guard, position within the strike); medium (the same-point case)
+    - Confidence: high
 
 ### Announcements
 
@@ -595,7 +597,7 @@ normalisation N of its Formulas F3. In addition:
     | structure garrisoned, structure abandoned | the local player's building gets its first occupant or its last leaves | F7 for abandoned |
     | cannot deploy here | S-0415, S-0406 and a refused placement (S-0411 claim 10, claim 24) | none |
     | building online, building offline | S-0405 | none |
-    | superweapon ready | the local player's superweapon finishes charging | none |
+    | superweapon ready | an ordinary superweapon record of the local player becomes ready under S-0512 claim 5; its kind selects the entry through that spec's Import mapping and this spec's Import mapping | none beyond claim 27 |
     | superweapon detected | another, non-allied house places a superweapon building | none |
     | superweapon activated or launched | any house's superweapon fires; heard by every player | none |
     | victory, defeat, player defeated | S-0414 | none |
@@ -604,14 +606,18 @@ normalisation N of its Formulas F3. In addition:
     already active line does not request another building or training announcement; it still
     requests the build-click sound. These rules describe announcement requests, not guaranteed
     playback through claim 27's queue. F11 tests this distinction.
+    Drain-mode charge completion requests no ready announcement (S-0512 claim 19).
+    Ordinary readiness timing and request eligibility belong to S-0512 claim 5, not to
+    announcement playback: a request can still be dropped or delayed by claim 27.
     No announcement takes a random draw.
     The table lists common announcements, not every skirmish announcement: infiltration,
     alliances, beacons, crates and specialised abilities also raise announcements whose complete
     conditions belong to their feature specs. Superweapon launch and detection announcements
     additionally respect the game's announcement-muting setting; detection has type-specific
     eligibility conditions not resolved here.
-    - Backing: `measurable` (scenario G3) for ready, low funds, low power, base and harvester
-      attack, and F11 for production announcement kinds; other rows inherit the scenarios
+    - Backing: `measurable` (scenario G3) for low funds, low power, base and harvester
+      attack, S-0512 X1 and X11 for ordinary readiness and drain-mode completion,
+      and F11 for production announcement kinds; other rows inherit the scenarios
       of their cited specs where those establish the
       feedback. Announcement draw absence is `measurable` for G1's tested events and
       `unmeasured` exhaustively: G1 does not exercise every announcer event. Remaining
@@ -1132,7 +1138,10 @@ rules keys and do not specify sample names: the voice-set fields above specify t
 | building offline | `[EVA_BuildingOffLine]` |
 
 Superweapon category bindings for claim 36, using the same literal-section-header notation
-and case-insensitive lookup:
+and case-insensitive lookup. The ready bindings apply only when S-0512 claim 5 requests
+an announcement, with its Import mapping selecting the kind; drain-mode completion requests
+none (S-0512 claim 19). A teleport second-stage type and a type with no kind have no ready
+binding:
 
 | Category | Ready section header | Activation or launch section header |
 |---|---|---|
@@ -1640,14 +1649,18 @@ A cut at the stop alone, loss of the old sample solely on restart, grace delay o
 and strike positions with a read-only recorder. Repeat with a named test rules file giving
 an empty lightning sound list: expect no sound-choice value, without deleting the bolt or
 explosion animation's own draws. An extra sound-choice value falsifies that guard.
-For the same-point guard, compare consecutive recorded strike positions; if no exact repeat
-occurs, that sub-test is inconclusive rather than confirmed. An exact repeat must omit the
-sound choice as well as the later explosion/damage draws of claim 25.
-*Expected:* for each non-repeated strike point with a nonempty sound list, one raw value after
-the bolt animation's creation draws and before explosion creation and damage, whose modulo
-selects the audible entry. A repeated point has no sound draw. Account for animation draws using
-S-0109 and damage effects using S-0302; replay the logged seed's mathematical stream rather than
-setting a seed inside the original. *Falsified if:* the choice or its position differs.
+Compare consecutive recorded strike positions. To obtain exact repeats, use a tiny named
+map with the lightning-strike-at-waypoint trigger of S-0524 claim 2, requesting two strikes
+at the same waypoint with enough time between them for each cloud to strike. Record 20
+pairs, including each bolt, explosion and damage event and the scenario-stream state.
+*Expected:* for every strike with a nonempty sound list, including the second of each pair,
+one raw value after the bolt animation's creation draws and before explosion creation and
+damage, whose modulo selects the audible entry. Repeating the point suppresses neither that
+choice nor later strike effects. Account for animation draws using S-0109 and damage effects
+using S-0302; replay the logged seed's mathematical stream rather than setting a seed inside
+the original. *Falsified if:* the choice or its position differs, or an exact repeat suppresses
+that choice or later strike effects. If no exact repeat is recorded, the repeat comparison
+remains inconclusive.
 
 **F7. Building fallbacks.** Damage a local building whose type names no damage sound through the
 yellow and then the red threshold, then destroy one whose type has an empty death list. Then
