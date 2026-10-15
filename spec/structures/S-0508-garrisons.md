@@ -2,7 +2,7 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -32,7 +32,7 @@ Neighbouring specs own the rest:
 - when a sale puts the occupants out (S-0408 claim 9) and how a destroyed building's contacts and
   survivors leave (S-0312 claims 17 and 18),
 - the effects of a building ownership change (S-0509 claim 12),
-- engineers and capture (S-0509), transports (S-0507) and special attacks (planned S-0519),
+- engineers and capture (S-0509), transports (S-0507) and special attacks (S-0519),
 - the drawing of occupied buildings (S-0108 claim 2) and the announcements (S-0701 claim 28).
 
 Cross-spec change required at hand-off: S-0311 claim 9 must include claim 14's reversed assault
