@@ -2,11 +2,11 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0110, Q-0111, Q-0460]
 supersedes: []
@@ -136,9 +136,7 @@ S-0101 claim 3. In addition:
    every cover count is 1, every hostile gap count is 0 and no pending mark is set. When the rules'
    lobby shroud setting is off (Import mapping), the whole map is revealed for every player house
    at game start and its whole-map-revealed mark is set; the original does this for the local
-   player's house. This reveal makes every legal cell explored but changes no cover count and does
-   not make cells seen; it marks as surrounded each cell whose eight map neighbours are all
-   legal and explored, which excludes the cells on the border of the map's diamond (S1 row 10). The skirmish lobby
+   player's house. This reveal makes every legal cell explored but changes no cover count and does not make cells seen; it marks as surrounded each cell whose eight map neighbours are explored. A non-legal neighbour uses the shared explored state described in claim 14, so a border cell can be marked surrounded when that shared state is explored. The skirmish lobby
    has no control of its own for this setting, so the rules value decides. A consequence for reveal on fire in such a game is in claim 16.
    - Backing: `measurable` for initial exploration and the whole-map reveal (scenario V1,
      part A; part B with a named test copy of the rules). Initial seen states and counts are
@@ -417,8 +415,10 @@ S-0101 claim 3. In addition:
       standing allied unit's surroundings stay covered after a re-cover until it moves (Edge cases,
       `quirks.recover_skips_allied_units`). The same removal and re-application happens when two
       houses ally or stop being allied (Edge cases).
-    - *Radar infiltration.* When an enemy spy infiltrates a radar building of *H*, *H*'s whole map is re-covered, unless *H* has an active spy satellite. Infiltration
-      itself belongs to the special-abilities specs.
+    - *Radar infiltration.* When a spy of another house infiltrates a radar building of *H*,
+      *H*'s whole map is re-covered, unless *H* has an active spy satellite (S-0510 claim 3,
+      row E1). Alliance is not tested for the effect: this includes an allied spy if it reaches
+      entry. Entry conditions and the single-effect precedence belong to S-0510 claims 1 and 3.
     - *Defeat.* When a player house is defeated, and its whole-map-revealed mark is clear, the whole
       map becomes explored for it as in claim 3 (explored, not seen; cover counts, hostile gap counts
       and pending marks unchanged, S1 row 10) and the mark is set. The pending marks the house holds
@@ -428,7 +428,8 @@ S-0101 claim 3. In addition:
       map except for the few cells that were pending at the moment of defeat (Edge cases,
       `quirks.defeat_reveal_keeps_pending`). This does not prevent the satellite-loss re-cover
       at a later recheck described above.
-    - Backing: `measurable` (scenario V9; the surviving marks by scenario V13 parts B and B2, the
+    - Backing: `measurable` (scenario V9; conditional allied infiltration and effect precedence
+      by S-0510 scenarios I5 and I2; the surviving marks by scenario V13 parts B and B2, the
       single-sight, single-generator creation-order prediction by part D); `unmeasured`
       for queued selling and the ownership-order rule for acquired satellite buildings (V9
       does not isolate these conditions), for new-mark outcomes with several sights or
@@ -446,7 +447,8 @@ S-0101 claim 3. In addition:
       Our engine instead lets the defeated person keep watching, but that departure is not
       the measurement oracle
     - Confidence: high for the reveal, the re-cover, the gap fields covering again after the
-      reveal and the infiltration; medium for the list of conditions, for power not being tested,
+      reveal and ordinary radar infiltration; medium for conditional allied infiltration,
+      for the list of conditions, for power not being tested,
       for the allied-unit gap, for the surviving marks and for the defeat reveal; low for the
       creation-order prediction for new marks, for the survival of a mark
       after a reveal and for the pending marks of the defeat reveal; high for a second re-applied
