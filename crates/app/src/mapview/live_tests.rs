@@ -15,7 +15,7 @@ use glasnost_sim::world::{HouseId, ObjectId, Target};
 use glasnost_sim::{save, testkit};
 
 use super::build::{
-    InfantryFrame, Inputs, LiveBuilding, Mobile, Options, build_parts, infantry_frame,
+    InfantryFrame, Inputs, LiveBuilding, Mobile, Options, ShadowAnchor, build_parts, infantry_frame,
 };
 use super::live::{Entrant, GroundLayer, Live, Pacer, period_ms, sim_code};
 use super::tests::{RULES, context, context_with, scene_map_text, shp};
@@ -199,6 +199,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         }),
         object,
         harvesting: None,
+        shadow: None,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -259,6 +260,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         infantry: None,
         object: sim_code(ObjectId(9)),
         harvesting,
+        shadow: None,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1369,9 +1371,8 @@ fn parachute_follows_its_paratrooper() {
     assert!(live.attached().is_empty(), "it disappears with its owner");
 }
 
-/// Q-0799 interim (S-0102 claim 18 leaves the airborne shadow point open): a flying
-/// aircraft's body is drawn at its lifted point and its shadow on the ground under it; an
-/// aircraft on the ground draws both at one point.
+/// S-0105 claim 40 (Q-0799): a flying aircraft's body is drawn at its lifted point and its shadow at the
+/// terrain surface under it, 60 pixels higher over a qualifying high bridge; on the ground both share a point.
 #[test]
 fn flying_aircraft_shadow_lies_on_the_ground() {
     use glasnost_convert::art::TypeArt;
@@ -1426,6 +1427,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         infantry: None,
         object: sim_code(ObjectId(5)),
         harvesting: None,
+        shadow: None,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1445,4 +1447,74 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         shadow.unwrap() - body.unwrap(),
         reference + glasnost_render::projection::height_lift(1500)
     );
+    // spec: S-0105 claim 40 (a qualifying high bridge raises the anchor by exactly 60 pixels; the
+    // terrain height, not the flight height, places it)
+    let mut shadow_y = |anchor| {
+        let m = Mobile {
+            shadow: Some(anchor),
+            ..jet(1500)
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        entries[0]
+            .items
+            .iter()
+            .find(|i| i.paint == Paint::Shadow)
+            .map(|s| s.y)
+            .unwrap()
+    };
+    let flat = shadow_y(ShadowAnchor {
+        ground: 0,
+        deck: false,
+    });
+    assert_eq!(
+        shadow_y(ShadowAnchor {
+            ground: 0,
+            deck: true
+        }),
+        flat - 60
+    );
+    assert_eq!(
+        shadow_y(ShadowAnchor {
+            ground: 208,
+            deck: false
+        }),
+        flat - glasnost_render::projection::height_lift(208)
+    );
+}
+
+/// S-0105 claim 40: the bridge qualification of the aircraft shadow anchor (a high-bridge cell and
+/// its neighbour towards y - 1 for an axis along cell x; a >= 416 unmarked, a >= 0 marked), and the
+/// terrain anchor otherwise, whatever the flight height.
+#[test]
+fn aircraft_shadow_anchor_bridge_qualification() {
+    use glasnost_sim::cells::Axis;
+    use glasnost_sim::world::Layer;
+    let mut w = testkit::new_game(5);
+    let c = glasnost_map::CellXY::new(testkit::SIZE, testkit::SIZE);
+    let n = glasnost_map::CellXY::new(c.x, c.y - 1);
+    let i = w.cells.idx(c).unwrap();
+    let j = w.cells.idx(n).unwrap();
+    w.cells.deck[i] = true;
+    w.cells.bridge_axis[i] = Axis::X;
+    let id = testkit::spawn(&mut w, glasnost_sim::rules::Kind::Vehicle, "CART", 0, c, 0);
+    let ground = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+    let anchor = |w: &mut glasnost_sim::world::World, z: i32, layer| {
+        let o = w.obj_mut(id).unwrap();
+        o.pos.z = ground + z;
+        o.layer = layer;
+        let o = w.obj(id).unwrap().clone();
+        super::live::shadow_anchor(w, &o)
+    };
+    // The neighbour is no high-bridge cell: terrain, at any height.
+    assert!(!anchor(&mut w, 1500, Layer::Ground).deck);
+    w.cells.deck[j] = true;
+    assert!(!anchor(&mut w, 415, Layer::Ground).deck, "a = 415 is below the deck");
+    assert!(anchor(&mut w, 416, Layer::Ground).deck, "a = 416 qualifies");
+    assert_eq!(anchor(&mut w, 416, Layer::Ground).ground, ground);
+    // Marked on the deck, b = 416: a = z - 416 >= 0.
+    assert!(!anchor(&mut w, 415, Layer::Deck).deck);
+    assert!(anchor(&mut w, 416, Layer::Deck).deck);
+    // A destroyed deck (no mark) cannot qualify.
+    w.cells.deck[i] = false;
+    assert!(!anchor(&mut w, 1500, Layer::Ground).deck);
 }

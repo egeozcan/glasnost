@@ -382,6 +382,29 @@ impl anims::Env for AnimEnv<'_> {
     }
 }
 
+/// The surface anchor of an aircraft's voxel shadow (S-0105 claim 40): the
+/// terrain height at its exact position, and whether a qualifying high
+/// bridge raises the anchor.
+pub fn shadow_anchor(w: &World, o: &Object) -> ShadowAnchor {
+    use glasnost_sim::cells::Axis;
+    let ground = w.surface_at(o.pos.x, o.pos.y);
+    let marked = o.layer == Layer::Deck;
+    // spec: S-0105 Terms (a = z − H − b, b = 416 while marked on a bridge deck, otherwise 0)
+    let a = o.pos.z - ground - if marked { 416 } else { 0 };
+    let c = o.pos.cell();
+    // spec: S-0105 claim 40 (the neighbour one cell towards y − 1 for an axis along cell x, towards x − 1 for an axis along cell y)
+    let neighbour = match w.cells.axis(c) {
+        Axis::X => Some(CellXY::new(c.x, c.y - 1)),
+        Axis::Y => Some(CellXY::new(c.x - 1, c.y)),
+        Axis::None => None,
+    };
+    // spec: S-0105 claim 40 (a high-bridge cell and neighbour, and a ≥ 416 when not marked on the deck, a ≥ 0 when marked)
+    let deck = w.cells.is_bridge(c)
+        && neighbour.is_some_and(|n| w.cells.is_bridge(n))
+        && a >= if marked { 0 } else { 416 };
+    ShadowAnchor { ground, deck }
+}
+
 /// The import kind of a simulation kind.
 pub fn import_kind(k: SimKind) -> Option<Kind> {
     match k {
