@@ -2,7 +2,7 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -87,8 +87,9 @@ vehicle's movement is heading to (S-0207). In addition:
    conditions therefore does not deploy through *unload*. The importer warns about such types.
    - Backing: `measurable` (scenarios D1 and D9; S-0517 scenario P2 for the deploy-fire weapon,
      own-cell target and delay, including P2 R for draw attribution); the bunkered condition is `unmeasured`
-     (scenario D9, Not covered; S-0606 claim 11's qualified finding that no player-input route
-     to *unload* is known, not proof that every input route is excluded). Precedence between two higher-priority rules applying together
+     (scenario D9, Not covered; S-0606 claim 11 establishes ordinary band-box exclusion,
+     not universal click-selection refusal, and leaves end-to-end player-input reachability
+     of *unload* unresolved). Precedence between two higher-priority rules applying together
      is `unmeasured`: D9 isolates each rule, not their overlapping combinations.
      The delay draw at the processing that completes a deploy is
      `unmeasured`: the vehicle is removed in that tick, so its processing timer cannot be read, and
@@ -886,11 +887,14 @@ are repetitions that guard against void runs.
   (b)'s slot-0 firing at its own cell and 14 … 16 tick processing delays, including refusal
   and attributed-draw controls; D9 tests only the exclusion of building deployment.
 - Falsified if: any of (a) to (d) deploys, or (e) does not.
-- Not covered: the bunkered exception to passenger unloading. No scripted input is known that gives
-  a deploy order to a bunkered vehicle, so that part of claim 1 is `unmeasured` (S-0606 claim 11).
-  Fresh selection supplies no route; hotkeys, pre-existing selection and queued orders have not
-  been exhaustively excluded. D9 also does not distinguish which unload behaviour wins when
-  two of the higher-priority rules apply together.
+- Not covered: the bunkered exception to passenger unloading. S-0606 claim 11 establishes
+  exclusion of the bunkered vehicle and occupied bunker from ordinary band-box selection,
+  not a universal click-selection refusal. The bunker link alone does not exclude ordinary
+  click selection. An end-to-end player-input route through selection and deploy to the
+  vehicle's *unload* remains unresolved; S-0606 scenario K6 tests those boundaries separately.
+  That part of claim 1 therefore remains `unmeasured`, not proved unreachable by band-box
+  exclusion. D9 also does not distinguish which unload behaviour wins when two of the
+  higher-priority rules apply together.
 
 **D10. Pack-up sound on a sale.**
 - Setup: (a) a construction-yard test type with a pack-up sound, the redeploy setting off; a sell
