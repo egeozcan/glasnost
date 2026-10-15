@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -385,7 +385,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     | (h) A spy of the house infiltrates a building | claim 6 |
     | (i) A sale ends without removing the building | a rule of our engine; no such sale is known in the original |
     | (j) The house launches a superweapon of the missile kind | the kind whose launch sends a missile to the chosen target cell (Import mapping, superweapon kind); the launch of a superweapon of any other kind is no event |
-    | (k) One of the house's superweapons is suspended, resumed or lost | suspended and resumed: its charge is held or released (S-0405 claim 15; the superweapon specs say when); lost: the house no longer has it; the timing inside the house update is given above the table |
+    | (k) One of the house's superweapons is suspended, resumed or lost | suspended and resumed: its charge is held or released (S-0405 claim 15; S-0512 claims 2, 6 and 7 give the checks and conditions); lost: the house no longer has it; the timing inside the house update is given above the table |
 
     These are *not* events, in our engine as in the original (each with the switch that would make
     it one; the switches default to the original):
@@ -429,7 +429,7 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       shows every earlier change).
     - Confidence: high: the timing (including S-0414 V12's same-update destruction test), and events (a) to (d), (f) and (h). Medium: events (e), (g)
       and (j), the whole-set rule and the non-events. Low: event (k), since when a superweapon is
-      suspended or resumed belongs to the superweapon specs. Medium: the completeness of the list,
+      suspended or resumed belongs to S-0512 claims 2, 6 and 7. Medium: the completeness of the list,
       since the original's own list may hold more events (Open question 1).
 
 13. **Build orders follow the offer.** In the original the offer is made by the local player's
