@@ -2,13 +2,13 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671]
+requests: [Q-0260, Q-0264, Q-0265, Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671]
 supersedes: []
 ---
 
@@ -24,6 +24,8 @@ is claim 34; the byte formats of those files are outside this spec. Claim 21 ali
 spin-sound choices and ordinary report suppression with S-0609 claim 13.
 
 **Coverage boundary.** This is a partial sound specification, not an exhaustive event catalogue.
+Claim 40 indexes every question of Q-0260, Q-0264 and Q-0265 against the established answers
+and explicitly unmeasured remainder; listing those requests does not close that remainder.
 The following are deferred, with no conformance rule or implied silence: complete delayed-mode
 attack/decay playback and draw totals; total infantry death-sound multiplicity across specialised
 death reactions; specialised movement-state and building-deploy response gates; alliance
@@ -437,7 +439,9 @@ normalisation N of its Formulas F3. In addition:
     the playing mark's lifecycle and the attached positional sound's start and end rules.
     A shot fired by occupants from inside a building instead chooses its report afresh
     per shot, taking one unsynchronised raw value (F5). These rules cover ordinary firing, spin sounds and occupant fire only; they do not
-    classify other special weapon effects.
+    classify other special weapon effects. S-0615 claims 12, 15, 16 and 18 already specify
+    the disc laser's absence of a shot-time report, separate charge cue, final-step report
+    and creation-derived variant; those are not deferred here.
     - Backing: `measurable` (F2 for normal firing and occupant choices,
       S-0609 claim 13 and its G10 for spin-sound choices and per-shot suppression).
     - Confidence: high (fixed variant, no draw, spin-sound choice triggers and slot,
@@ -818,6 +822,56 @@ normalisation N of its Formulas F3. In addition:
     Their feature specs must establish eligibility before these bindings can be extended to them.
     - Backing: `measurable` (G5) for ordinary engineer captures
     - Confidence: high (entry selection and missing-custom silence)
+
+### Request coverage and remaining limits
+
+40. **Sound requests, entry settings and response choices are distinct.** A sound reference
+    selects an entry, not a same-named sample. Choosing that entry at a game event and choosing
+    its samples during playback are separate choices. Thus a one-entry response list still
+    takes one raw choice value (F5), even when its entry has only one sample; a single response
+    reference takes none. Either entry can later take the instance draws of claims 13 and 14.
+    Neither an entry's delay nor its loop count imposes a minimum interval between independent
+    requests of that entry. Delay controls waits within each instance; overlapping requests
+    remain subject to placement, entry limits, channels and any event-specific gate.
+    Screen versus positional placement and local-owner eligibility belong to the requesting
+    event, not to a universal rule that every sound is heard only by its owner. Claim 2's
+    established placement words then modify positional requests as claim 6 specifies.
+    - Backing: `measurable` (D2 for list versus single choices, E1 for playback choices,
+      C1 with a nonzero pre-delay for independent overlapping instances, B1/B2 for placement)
+    - Confidence: high
+
+    The following table locates every part of the three requests. References to Import mapping
+    mean the rows for the named concept, with their parse forms and absent-key defaults.
+    These answers replace the requests' interim rules only within the stated coverage.
+
+    | Request question | Answer and import concepts |
+    |---|---|
+    | Q-0260, 1: name resolution | claim 1: case-insensitive entry lookup, 31-character listed-name cap, full reference comparison, unknown reference means no entry; Import mapping: entry names and reference retention rules |
+    | Q-0260, 2: samples, order, repeats and draws | claims 2, 13 and 14, F5 and State and ordering: sample list versus event-choice list, immediate order and looping, pitch/shift/pre-delay draws; claim 34: bank lookup, not separate same-named files; Import mapping: samples, control, attack/decay counts, loop and delay; complete delayed-mode totals remain unmeasured below |
+    | Q-0260, 3: volume, pitch, priority, limits, gaps, placement, owner and range | claims 2, 3, 5 to 15, 35 and this claim; Constants and Import mapping give entry and game-wide defaults; request-specific owner checks are claims 16 to 23; remaining placement-word semantics remain unmeasured below |
+    | Q-0260, 4: missing samples | claim 4 and its quirk: one missing bank sample silences the whole entry; A1 and A4 distinguish missing bank samples from loose files |
+    | Q-0264, 1: firing and spin sounds | claims 21 and 32: weapon report list, fixed creation-derived ordinary variant with no per-shot choice draw; occupant and spin exceptions; S-0609 claim 13 owns spin lifecycle; Import mapping: weapon report list; special-effect classification remains unmeasured below |
+    | Q-0264, 2: death sounds and draws | claim 20: local death-response choice before any-owner death-sound choice, each F5; claim 22: separate animation sounds under S-0109 claim 13; claim 37: building death fallback; Import mapping: the two death lists, building death fallback and animation sounds; total specialised infantry multiplicity remains unmeasured below |
+    | Q-0264, 3: building threshold damage sound | claim 37: game-wide building damage fallback only when the type names no damage sound; claim 20's own damage sound instead belongs to unchanged-hit feedback, not a guaranteed threshold sound; Import mapping: type damage sound and game-wide building damage sound; S-0302 claim 12 owns result classification |
+    | Q-0264, 4: owner and audibility | claims 20 to 22 and 37: death response local only, death sound/report/animation/building fallback any owner, all positional; claims 6 and 7 still govern actual audibility, not ownership alone |
+    | Q-0265, 1: each order and empty-list fallback | claim 18 and F6 give every requested ordinary order kind, weapon-specific singles and repair exception, fallback exhaustion means silence, never the selection list; Import mapping: order lists and single responses; building unload/deploy exceptions remain unmeasured below |
+    | Q-0265, 2: choice algorithm | claim 18 and F5: exactly one unsynchronised raw value modulo list length, including a one-entry list; none for an empty list or a single response reference; claims 13 and 14 govern separate playback draws |
+    | Q-0265, 3: selection and repeat selection | claims 16 and 17: first newly selected object only, specialised selection lists, ordinary re-click versus modifier deselection and type-select silence; claim 18 gives resulting selection order for subsequent orders; Import mapping: the three selection lists |
+
+    **Unsettled parts are not silence or substitute rules.** For Q-0260, the complete
+    delayed attack/decay sequence, terminal lifetime and draw totals are `unmeasured`, low
+    confidence: the established preparation and completion choices have not been composed
+    into a complete sequence (E3). Playback semantics of the remaining recognised placement
+    words, including any additional owner-only restriction, are `unmeasured`, low confidence:
+    the positional rules alone do not establish their effect at every requesting event (A6).
+    For Q-0264, total specialised infantry death multiplicity and report choices of special
+    weapon effects outside claim 21 are `unmeasured`, low confidence: the common reactions
+    do not establish those paths' total requests (F9 and F13). For Q-0265, building
+    unload/deploy response gates and specialised deploy-response suppression are `unmeasured`,
+    low confidence: F6's ordinary-object controls do not establish those exceptions (D5).
+    These deferred values have settling scenarios, not provisional conformance values.
+    The request IDs in front matter include this explicit partial disposition, not a claim
+    that these remaining questions are closed.
 
 ## Formulas
 
@@ -1274,8 +1328,19 @@ form and defaults above. Their detailed triggers remain with the structures spec
 | `CreateUnitSound` | factory unit-creation sound |
 | building entry and exit sounds | building entry and exit sounds |
 | `WorkingSound`, `NotWorkingSound` | working and not-working sounds |
-Weapon sections: `Report` (list, claim 21). Animation sections: `StartSound` (or `Report`, S-0109) and
-`StopSound` (claim 22).
+| Key (weapon section) | Concept | Parse form | Default when absent |
+|---|---|---|---|
+| `Report` | weapon report list (claim 21) | comma-separated sound-entry names, first 127 value characters, case-insensitive references, listed order, unknown names dropped | retains earlier list, initially empty; present nonempty value replaces it |
+
+| Key (animation section) | Concept | Parse form | Default when absent |
+|---|---|---|---|
+| `StartSound` | start-event sound (claim 22; S-0109 claim 13) | single sound-entry name, case-insensitive, first 127 value characters; unknown retains earlier reference | retains earlier reference, initially no sound |
+| `Report` | legacy start-event alias, not an additional sound | same single-reference form; read only when the start reference after reading `StartSound` is still no sound | no sound |
+| `StopSound` | end sound (claim 22) | single-reference form above; unknown retains earlier reference | retains earlier reference, initially no sound |
+
+A valid retained `StartSound` therefore also prevents the alias from being read in a later
+layer that omits that key. These animation-reference rules are high confidence, `measurable`
+in F3 with distinct aliases, repeated import layers and omitted/unknown references.
 
 Rules file, `[AudioVisual]`, sound names: `CreateUnitSound`, `CreateInfantrySound`, `CreateAircraftSound`
 (claim 23), `BuildingSlam` (placement), `SellSound`,
@@ -1351,6 +1416,20 @@ pitch and loop forms, B2 tests placement words, C1 tests limit. No no-effect cla
 F1's exact 16383 full-volume integer result is `unmeasured`, high confidence: loopback capture
 cannot distinguish it independently from the later percentage conversion.
 
+**A6. Remaining placement words and owner-only playback (Q-0260).** Named sound data gives
+otherwise identical one-sample entries each remaining recognised placement word from Import
+mapping, separately and combined with the established positional words. Use a timed
+sound-at-waypoint request, a normal report and an unchanged-hit damage sound, each in range,
+with local, allied and enemy sources where the event has an owner. Compare a screen response
+control. Keep sample, level, view and explored state identical. A proposed read-only request
+recorder distinguishes an absent request, a rejected instance and an inaudible instance.
+Loopback records identity and stereo level. Run three repetitions per fixture at normal speed.
+Alternatives are no additional restriction, an owner restriction, or an event-dependent
+restriction; identical accepted requests with different playback by owner reject the first,
+while any audible enemy request rejects a universal owner-only rule. Record per-word results
+rather than inferring behaviour from the word's name. This exploratory scenario has no
+selected alternative yet and does not weaken the established event-owner tests.
+
 **A3. Default priority.** Defaults section priority set to critical; 17 positional instances of an
 entry without its own priority are started while 16 channels are busy with a *normal* entry.
 Repeat with 16 busy *high*-priority channels instead. Set per-entry limits to 0 so they do not
@@ -1414,7 +1493,12 @@ and the indefinitely looping sound can resume. *Falsified if:* either one-shot f
 placement rule, a stopped finite damage sound resumes solely from scrolling, or the loop cannot
 resume.
 
-**C1. Per-entry limit.** An entry with limit 2, with and without *interrupt*; start 3 equal
+**C1. Per-entry limit.** Also run two identical requests with a nonzero fixed pre-delay,
+long samples and limit 0, close enough that the first still waits when the second is requested.
+Expected: each waits from its own start opportunity; neither waits for a shared per-entry
+cooldown and they can overlap once started. A second instance delayed until the first ends,
+with channels available, falsifies claim 40's absence of a shared entry gap.
+An entry with limit 2, with and without *interrupt*; start 3 equal
 instances in sequence. *Expected:* without *interrupt* the third is never heard; with it the first is
 cut when the third starts. Repeat with a quieter and a louder third request, and levels on
 both sides of the integer equal-loudness band in claim 8, computed from F2 and the imported
@@ -1517,6 +1601,20 @@ rather than three. Repeat with a pending-order list full under S-0213's limit: a
 suppresses the cue. The planning-mode guard control requests no ordinary guard cue.
 *Falsified if:* a request count or order-failure gate differs, guard/stop/scatter requests the
 wrong entry, or the deploy key plays a game-wide sound.
+
+**D5. Specialised unload/deploy responses (Q-0265).** D2's named distinct response entries,
+quiet map and read-only request/order recorder. Separately test a building that unloads a
+harvesting vehicle, ordinary vehicle unloading, and an infantry or vehicle deploy cycle.
+Request another legal deploy/unload while the earlier cycle is pending and again after it
+ends; log the issued order kind, cycle state, queued response entry, unsynchronised choices
+and eventual playback. Distinguish the building's harvest, deploy and move responses in the
+fixture. Repeat three times for each reachable control at normal speed. Alternatives for the
+building are F6's ordinary deploy response, a harvest response during unloading, or silence.
+For repeated deploy they are a response on each accepted request or state-dependent
+suppression. An observed queued entry or choice count different from a candidate rejects it.
+An input that issues no order does not establish a response-suppression gate. This is a
+settling test, not an extension of F6; unreachable states remain unresolved rather than
+being created by a state-writing recorder.
 
 **E1. Draws inside an instance.** Named test files: entries with (a) no pitch or volume shift and no
 words, (b) a pitch shift and a volume shift whose ranges are powers of two minus one (one raw value
@@ -1654,12 +1752,35 @@ These are conformance tests, not oracle observations.
 a gattling shot adds an ordinary report, a spin choice occurs without an eligible trigger,
 or the spin-sound list or choice count differs from the stated rules.
 
+**F13. Special-effect reports and report position (Q-0264).** F2's quiet-map setup and named
+report entries without instance draws. Fire a sonic-effect weapon using its legal firing
+setup. Give the weapon's report list identifiable entries and record effect-creation times,
+every requested report entry and position, both streams, and stereo playback for three
+repetitions at normal speed. Compare ordinary firing and S-0615 claims 12, 15, 16 and 18's
+already specified disc-laser timing and variant as separate controls. For the sonic effect,
+alternatives are claim 21's fixed variant only, a fresh unsynchronised list choice at effect
+creation, and an additional effect-specific request. Each candidate is rejected by a different
+recorded request or choice count. Do not count an animation's independently requested sound
+as a second weapon report. In the ordinary control use a unit with a visibly displaced muzzle,
+record its shot's fire point under S-0313 claim 1 and the report position, and pan the view
+to put that displacement across the view edge. Claim 21 predicts the firing position, not
+a screen request or target position. A different recorded position falsifies that prediction.
+The sonic-effect classification remains unmeasured until these alternatives are discriminated.
+This does not reopen the disc laser's feature-owned timing and variant.
+
 **F3. Impact.** A weapon whose warhead creates an explosion animation with a start sound, fired at
 ground. Use named test art to give the animation distinguishable start and stop samples, with
 an otherwise silent weapon. *Expected:* the start sample at the animation's start event and
 the stop sample at its end, placed at the animation. Repeat with both animation sounds absent:
 expect no impact sample. *Falsified if:* a sound with no animation sound configured, a missing
 start/stop sample, or a screen-centred sound independent of animation position.
+For import precedence, give the animation's start reference and legacy alias distinct samples.
+Expected: the valid start reference wins, never both; a newly imported animation without a
+valid start reference uses its valid alias. In a later import layer omit or give an unknown
+start reference while retaining a valid earlier one: that earlier reference remains and the
+new alias is not used. Omitted or unknown stop references likewise retain an earlier valid
+stop reference. Record loaded references and requested entries as well as playback; a different
+retained reference or two start requests for one start event falsifies the import rules.
 
 **F4. Event sounds.** Produce a unit (creation sound), place a building (placement sound, screen),
 sell a building (sell and pack-up sounds), sell an ordinary wall (screen sell sound), move a
@@ -2045,7 +2166,14 @@ covers lethal-damage reactions, not sale, crushing or script removal.
 
 ## Changes for other specs
 
-Current changes required by Q-0671's schedule:
+Q-0264 companion import clarification:
+- S-0109 Import mapping: include the animation start-sound reference and stop-sound
+  reference as well as the existing legacy start-sound alias. Their exact input bindings
+  and fallback precedence are specified in this spec's Import mapping. Keep S-0109 claim 13
+  as owner of start-event timing; these bindings do not add a second start sound.
+
+Q-0671's schedule corrections below are already present in the approved companions.
+Retain them at joint hand-off, with no further change requested:
 - glossary, *audio clock*: retain the original-only real-time definition, but replace the
   statement that claim 30 defers the schedule with a pointer to its logical cycle-end clock,
   completion deadlines and waits. Retain the existing *departure* rule unchanged.
