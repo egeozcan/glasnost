@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1514,7 +1514,9 @@ damaged to half strength unless a part says otherwise.
   it moves (claim 22's low-confidence part).
 - *f, power and simultaneous orders:* (i) during working, drop the owner's power below demand,
   then switch the depot off. Expected: steps, costs and timing unchanged. (ii) Select two
-  damaged vehicles and click the depot once, so both orders execute before either contact.
+  damaged vehicles and click the depot once, so both orders are issued before either vehicle
+  takes contact. The first applied enter order takes contact before the second is applied
+  (S-0213 claim 3).
   Expected: one approaches; the other stays put with a queued entry and enters by itself at most
   one tick after the first leaves. Repeat with the second at full health: it stays put and never
   enters. Repeat with the depot switched off before the first leaves: the queued vehicle gives
@@ -1532,8 +1534,9 @@ damaged to half strength unless a part says otherwise.
   (claim 22, low confidence). H18 e records it.
 - Whether a scatter request after the sale's run-away notice moves a vehicle that is already
   standing on or beside the depot (claim 22; S-0215 claim 19 owns acceptance).
-- Movement blocking near an allied depot for a damaged vehicle may differ from the ordinary
-  rule. S-0215 or S-0212 owns that test, not this spec.
+- The former allied-depot blocking question concerns route-point action selection, owned by
+  S-0215 claim 13, not a separate permission to cross a blocking foundation. Foundation entry
+  remains S-0209 claim 5's.
 - The exact phase of the second depot step and the first hospital step (±1 tick), and whether a
   depot's settling step can be retried before *D* ticks; scenarios H4 and H6 record them.
 - Where a vehicle goes when the depot has no rally point and no exit cell is found (claim 6).
