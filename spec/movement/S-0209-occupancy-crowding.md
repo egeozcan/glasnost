@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 27
+revision: 28
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -310,6 +310,18 @@ rank* and *elite weapon*), *n*
   not to the parasite's exit test. S-0614 claim 13 owns that separate test: the host blocks its own
   cell, so a non-naval parasite must search for another exit cell. This pointer carries that
   claim's medium confidence and `measurable` backing (its scenarios P4 and P9).
+  Ordinary return placement uses the ground occupants and ground occupancy record, without
+  an approach direction or source elevation. Only *clear* accepts placement under the entry
+  tables of claims 4 and 5; every other outcome refuses immediately, without waiting,
+  re-routing, scatter requests, gate opening, uncloaking or attacking an obstruction.
+  S-0614 claim 20 owns this single placement attempt, its silent removal on failure and the
+  additional infantry standing-position choice. By contrast, S-0614 claim 23's host-loss
+  fallback chooses a standing position using ground occupancy even when the accepted point
+  will finally be placed on a bridge deck. Its final forced placement bypasses entry legality.
+  It is not an ordinary movement ask. That claim owns the fallback's failures and bridge
+  surface rule. These placement pointers have `measurable` backing (S-0614 scenario P10),
+  high confidence for clear-only acceptance and no movement reactions, and medium confidence
+  for uncommon entry-table exceptions and fallback bridge consequences.
 - **Enslaved unit, master, master's unloading cell.** An *enslaved unit* is a unit that works for
   another object, its *master* (for example the slaves of a slave-miner harvester); the economy specs
   own them. The *master's unloading cell* is the cell the master stands in, or, for a master that is
@@ -468,8 +480,11 @@ rank* and *elite weapon*), *n*
      full cell (claim 2), for the record table of claim 4 (part 4d), and for the clearing rule above. When the
      terrain object is removed, the same positions are cleared, and the infantry house is left as
      it is.
-   - *Other objects.* An aircraft on the ground sets the object-present flag of its cell. Which other
-     kinds set it is not known.
+   - *Other objects.* An ordinary landed aircraft sets the object-present flag of its cell.
+     A rocket missile using rocket-flight movement sets no object-present flag, even during
+     pause, tilt or raise at its launch point (S-0506 claim 23). This exception has high
+     confidence and `measurable` backing (S-0506 scenario R17). Which other kinds set the
+     flag is not known.
    - *Teleporting aircraft.* S-0207 claim 20 a and e owns this lifecycle. Fixing a
      landing point reserves its ground object-present flag, even on a high bridge.
      Deck placement also marks the deck object-present flag without clearing ground:
@@ -540,6 +555,8 @@ rank* and *elite weapon*), *n*
      in play.
    - Backing: `measurable` (scenario C2, parts a to d, scenario C10, parts a and b, and scenario
      C13 for the enslaved walker), and scenario C30 for the object-present flag's isolated refusal.
+     `unmeasured` for the open-gate exception to that refusal: C30 has no open gate, and no
+     scenario here isolates a retained object-present flag together with an open gate.
    - Confidence: high for the vehicle-present flag. Medium for the object-present flag, the
      building-present flag and the vehicle that has started a step into the cell.
 
@@ -977,7 +994,9 @@ rank* and *elite weapon*), *n*
      that tick and reacts to its outcome then. So while the obstacle stays, the walker searches a new path on every tick, and a
      route that has opened is taken from the first asking tick after it opens.
    - Backing: `measurable` (scenario C19, parts a to d, for the asking tick, and part e for later
-     ticks; scenarios C3, C4 and C8 for the reactions)
+     ticks; scenarios C3, C4 and C8 for the reactions). `unmeasured` for the possible short-path
+     exception of a walking jumpjet type (Open questions): these scenarios use ordinary walking
+     types and establish no setup isolating that exception.
    - Confidence: medium. Low for an infantry type whose own locomotor is a jumpjet locomotor (Open
      questions).
 
@@ -1137,7 +1156,11 @@ rank* and *elite weapon*), *n*
     lists. At height 0 above that surface it is listed in the ground layer. The surface is the
     terrain height at its horizontal position (S-0106 claim 2), not the projected cell beneath its
     drawn image.
-    Taking off removes its listing and landing adds it again. A render layer is not a cell layer.
+    Taking off removes its listing and landing adds it again. A rocket missile using
+    rocket-flight movement is instead absent from both cell-layer lists in every phase,
+    including pause, tilt and raise at its launch point; crossing cells never adds it to
+    those lists (S-0506 claim 23). This exception has high confidence and `measurable`
+    backing (S-0506 scenario R17). A render layer is not a cell layer.
     Consequently an aircraft passing over an otherwise empty foundation cell does not block
     building placement through S-0406 claim 3 (b)'s aircraft-list test; a landed aircraft does.
 
@@ -1216,8 +1239,12 @@ rank* and *elite weapon*), *n*
     S-0207 claim 5 already gives the equivalent boundary-time rule for driving vehicles, not for
     walkers; S-0208 claims 1 and 3 already give target heights and reservations, but their surface
     choice must use the height test here rather than the walker's current surface alone.
-    - Backing: `measurable` (scenario C22, parts e and f). `unmeasured` for the uneven-ground
-      conditional examples: no valid bridge layout with that ground has been established here.
+    - Backing: `measurable` (scenario C22, parts e and f, for boundary-time layer changes and
+      reservations on the established flat-ground routes). `unmeasured` for the exact
+      312-lepton target-surface boundary, including equality: those routes do not isolate that
+      boundary, and no ordinary-walking fixture that does is established here. Also `unmeasured`
+      for the uneven-ground conditional examples: no valid bridge layout with that ground has
+      been established here.
     - Confidence: high for the boundary-time transition and the strict target-surface comparison,
       medium for their conditional uneven-ground consequences.
 
@@ -1286,8 +1313,10 @@ Ordering stated as consequences:
   another unit vacated in its own turn earlier in the same tick counts as vacated; one that a unit
   later in the update order vacates in that tick still counts as taken.
 - A position counts as taken from the tick on which a walker chose it as its walking target. Its
-  previous position counts as free from that same tick (claim 1). So two walkers never choose the
-  same position.
+  previous position counts as free from that same tick (claim 1). A later occupant-aware choice
+  therefore cannot take that marked position while the mark remains. This does not cover
+  choices that ignore occupants (claim 3), or promise that a mark cannot be cleared by another
+  unit's clearing operation (claim 1).
 - A cell-wide request reaches every occupant on the tick it is sent. Each occupant's random draw
   (S-0208 claim 12 or 13) happens then, in listing order (claim 13).
 
@@ -2577,11 +2606,14 @@ Edge cases).**
 - *Expected:* (e) the asking tick changes the reservation but not membership. The first boundary
   crossing onto the bridge changes membership to deck, and the first crossing off it changes
   membership to ground, before arrival. (f) every third-cell crossing follows claim 15's table,
-  not the walking target's surface. Target choice reads deck exactly above the strict 312-lepton
-  threshold and marks the chosen-height record immediately; crossing alone transfers no mark.
+  not the walking target's surface. On the flat-ground route, target choice reads deck when
+  the walker is at deck height above the desired point's ground and marks that deck record
+  immediately; crossing alone transfers no mark. These runs do not isolate the exact
+  312-lepton threshold or its equality case.
 - *Falsified if:* membership changes at target choice or only at arrival; a third-cell crossing
-  uses the target's layer instead of the table; or reservation and listing are always forced to
-  the same surface. If no valid third-cell route is obtained, that sub-test is inconclusive.
+  uses the target's layer instead of the table; the flat-ground deck-height choice marks ground
+  instead of deck or fails to mark deck on the asking tick; or reservation and listing are always
+  forced to the same surface. If no valid third-cell route is obtained, that sub-test is inconclusive.
 - *Conditional uneven-ground probe:* if a valid high bridge spanning a one-level ground change is
   established, repeat (e) in both directions across that change, recording the target-surface
   choice as well as the entry check's record. A flat departure deck 416 leptons above its ground
@@ -2925,7 +2957,8 @@ That moment is called the *window*. Common setup:
   in a cell, and a test map trigger destroys it.
 - *Recorder:* on every tick, *U*'s position, the vehicle-present flags of the ground layer of the
   cells of the route, and the tick number.
-- *Procedure:* order *U* along the route (parts a and b) and record until it arrives.
+- *Procedure:* order *U* along the route (parts a and b) and record until it arrives. In (c),
+  fire the destruction trigger and record through *U*'s removal.
 - *Observable:* the tick on which each cell's flag is set and cleared, against *U*'s position.
 - *Runs:* 1 each (no random draw is involved).
 - *Expected:*
@@ -2995,8 +3028,7 @@ That moment is called the *window*. Common setup:
   distinct pending ground reservation retained, with old ground already clear after
   replacement. A missed pre-jump interval is inconclusive. Apply the separate entry
   and standing-position probes above to each isolated aircraft ground flag.
-- *Tool:* read-only state recorder and scripted normal input. No result is yet an
-  M-record.
+- *No result is yet an M-record.*
 
 ## Open questions
 
