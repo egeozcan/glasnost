@@ -2,11 +2,11 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0221, Q-0222, Q-0223]
 supersedes: []
@@ -320,14 +320,20 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     - a type that must return to a dock refuses the request, so the release does not tether it.
       Contact is established in both cases.
 
-    **Take-off hypothesis:** a release-tethered aircraft loses its tether when it leaves the
-    ground. This spec owns that testable hypothesis (U12); the glossary's provisional pointer
-    is not evidence for it. Where the docked aircraft appears is S-0404 claim 15 (pad positions). The
+    **Destination and pad contact.** An aircraft standing on a pad ends its contact with that
+    pad when it takes a destination other than the pad (S-0501 claim 8). Contact release can
+    therefore precede physical lift-off; it is not conditional on leaving the foundation.
+    **Take-off hypothesis:** a release-tethered aircraft has lost its tether by the time it
+    leaves the ground. Destination-triggered contact release supports this hypothesis but
+    does not establish the exact tether-loss tick. U12 distinguishes the two events; the
+    glossary's provisional pointer is not evidence for either timing. Where the docked aircraft
+    appears is S-0404 claim 15 (pad positions). The
     destination of an aircraft entering from the map edge without a rally point is claim 14.
-    - Backing: `measurable` (U1 for no unloading; U12 for release tethering and its end on
-      take-off). A branch with no stock docked-release setup available is `unmeasured` for that
+    - Backing: `measurable` (U1 for no unloading; U12 for release tethering,
+      destination-triggered pad-contact release and tether loss by take-off). A branch with no stock docked-release setup available is `unmeasured` for that
       reason; an edge-entry release does not test docked tethering.
-    - Confidence: high (no unloading); medium (tether at release, both branches); low (end on
+    - Confidence: high (no unloading, destination-triggered pad-contact release, inherited
+      from S-0501 claim 8); medium (tether at release, both branches); low (tether lost by
       take-off hypothesis)
 
 12. **Random-stream consequences.** Each vehicle-factory unloading processing assigns exactly
@@ -733,12 +739,17 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   or the delay draw assigned before the scatter draws.
 - **U12, aircraft tether.** Produce from an aircraft factory with a free docking place a stock
   type that need not return to a dock, and one that must. Record contact and tether on the
-  aircraft and K from the release tick, then order each to take off. Expect: the first is tethered
-  on its release tick and untethered when it leaves the ground. Both have contact at release.
-  the second has no tether. Falsifiers: missing release contact in either branch,
-  either release branch reversed, or the first losing its
-  tether before take-off or retaining it after leaving the ground. If a stock type cannot be
-  produced docked for a branch, record that branch as untested, not confirmed.
+  aircraft and K from the release tick, then order each to a destination other than K.
+  Record destination assignment, pad-contact release, tether loss, height and ground render
+  layer separately, including their tick numbers. Expect: the first is tethered on its release
+  tick and has lost the tether by the time it leaves the ground. Both have contact at release.
+  The second has no tether. Contact with K ends on taking the different destination, without
+  waiting for physical lift-off. Earlier tether loss does not falsify the take-off hypothesis:
+  record whether it coincides with destination-triggered contact release instead.
+  Falsifiers: missing release contact in either branch, either release branch reversed,
+  contact retained after taking the different destination, or the first retaining its tether
+  after leaving the ground. If a stock type cannot be produced docked for a branch, record
+  that branch as untested, not confirmed.
 
 - **U13, release details.** Part a: an infantry factory with no rally point. Hold the first
   released unit inside the foundation (U10 b), without issuing it any new order, and order a
@@ -763,7 +774,9 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
 ## Open questions
 
 1. Aircraft docking position: resolved, S-0404 claim 15 owns pad positions. Still open: test
-   claim 11's take-off tether hypothesis with U12; it is not inherited from the glossary.
+   claim 11's take-off tether hypothesis and exact tether-loss tick with U12, distinguishing
+   destination-triggered pad-contact release from physical lift-off; neither tether timing is
+   inherited from the glossary.
 2. The aircraft's cell near K without a rally point: resolved by claim 14.
 3. What moves a released infantry unit off the foundation when there is no rally point, or the
    rally point is its own cell (Q-0120). The release and its placement give no destination
