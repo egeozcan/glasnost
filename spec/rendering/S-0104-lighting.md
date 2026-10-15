@@ -2,11 +2,11 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 18
+revision: 19
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0013, Q-0050]
 supersedes: []
@@ -37,7 +37,7 @@ This spec covers skirmish rendering only; campaigns and network games are out of
   - *Target*: where the light is heading.
   - *Current*: what is shown. It steps towards the target.
 - **Global effect.** One of: *nuke flash* (brightening phase), *chrono flash*, *ion storm*, *psychic dominator* (any phase), or none. This is narrower than the glossary's entry: here the nuke flash counts as a global effect only in its brightening phase.
-- **Ion storm.** The weather superweapon's storm. Its superweapon or a trigger action starts it. A start may be delayed, and the storm then starts on the tick the delay runs out. A start while a storm is in force does not start a second one. The storm is *in force* from the tick it starts to the tick it ends. It ends once its duration has run out and none of its lightning clouds is still pending. Both of those ticks are lighting re-evaluations (claim 5). How long a storm lasts and what it does apart from lighting belong to the superweapons specs.
+- **Ion storm.** The weather superweapon's storm. Its superweapon or a trigger action starts it. A start may be delayed, and the storm then starts on the tick the delay runs out. A start while a storm is in force does not start a second one. The storm is *in force* from the tick it starts to the tick it ends. After its duration runs out or it receives a stop request, it remains in force while clearing: it ends in the first weather update after clearing began that finds no present cloud at its start, one weather update after the last present cloud is removed (S-0513 claim 19). With no clouds, it ends in the update after clearing begins. Both of those ticks are lighting re-evaluations (claim 5). How long a storm lasts and what it does apart from lighting belong to the superweapons specs.
 - **Chrono flash.** The full-screen chrono warp effect that a trigger action starts, counted as in force from the tick the action runs until the effect finishes. It is **not** the chronosphere superweapon: a chronosphere jump does not start it and causes no lighting re-evaluation.
 - **Nuke flash phases.** The *brightening phase* starts on the tick a nuclear missile detonates. The *fading phase* follows it. Then the nuke flash is over (claim 5).
 - **Psychic dominator phases.** The dominator is *in force* from the tick it is launched until it is over. Its *final phase* starts when its animation reaches its last image frame. The dominator is over on the first tick after that on which the current ambient equals the target ambient (claim 5). The phases before the final one are its *active phases*.
@@ -79,8 +79,8 @@ This spec covers skirmish rendering only; campaigns and network games are out of
 
    The global choice takes effect only at a lighting re-evaluation (claim 5); between two re-evaluations the target ambient and the tints stay as the last one set them, whatever effects start or end in between. Trigger actions are the exception: one that changes the base ambient can set the target (claim 14), and one that changes the map tint retints every tintable table (claim 17). The height terms and the choice for a newly built table follow the effects in force at the moment the cell is updated or the table is built. The chrono flash does not affect the height terms. A table built while an effect is in force (e.g. a tile table first needed during a storm) takes that effect's tint. Existing tables keep the one from the last global choice.
 
-   So when a storm and a dominator overlap with a nuke flash, the tint follows the nuke and the height terms follow the storm or dominator. A tile table first created during a storm and nuke overlap gets the storm tint while the rest of the map shows the nuke tint. In the dominator's final phase, the tint and target ambient have already reverted (to normal, or to the storm's while a storm is in force), while the height terms, the fade interval (claim 4) and newly built tables still use the dominator's values. A chrono flash changes the target and the tints only if a lighting re-evaluation happens while it is in force (claim 5).
-   - Backing: `measurable` (Scenarios L2, L16). `unmeasured` for the nuke-versus-dominator overlap without a storm: L2 tests each against a storm, not against each other.
+   So when a storm and a dominator overlap with a nuke flash, the tint follows the nuke and the height terms follow the storm or dominator. A tile table first created during a storm and nuke overlap gets the storm tint while the rest of the map shows the nuke tint. In the dominator's final phase, the tint and target ambient have already reverted (to normal, or to the storm's while a storm is in force), while the height terms, the fade interval (claim 4) and newly built tables still use the dominator's values. A chrono flash changes the target and the tints only if a lighting re-evaluation happens while it is in force (claim 5). A clearing ion storm still counts in all three rankings until it ends, one weather update after the final present cloud is removed (S-0513 claim 19; Terms gives the no-cloud case).
+   - Backing: `measurable` (Scenarios L2, L16; S-0513 scenario SW8 for storm clearing). `unmeasured` for the nuke-versus-dominator overlap without a storm: L2 tests each against a storm, not against each other.
    - Confidence: high for each of the three orders and for the extent of the dominator's final phase
 
 3. **Who takes which tint.**
@@ -226,7 +226,7 @@ This spec covers skirmish rendering only; campaigns and network games are out of
     - Backing: `measurable` (Scenarios L9 for the animations and the terrain tile, L10, L14, L15 for vehicles and infantry in shadowed cells, L23 for buildings, terrain objects, wall and other overlays, deck overlays and the animations of row 3, L3 Setup A for the tint of plain terrain objects, and S-0112 OV1, OV2 and OV11 for untinted ore-spawning terrain objects and smudges; S-0103 PE for undeploy animations and its repeat of L23 Part B for a terrain-palette building's own animation). `unmeasured` for the infantry equality boundary at exactly 208 leptons and the vehicle boundary at that height: L10 and L15 observe stock flight or falls, but do not guarantee a sample exactly at that height. `unmeasured` for the exceptional second tile pass: its selecting condition is not established, so no scenario isolates it. The terrain-palette building's even-centre rule and own-animation source are `unmeasured` unless the corresponding L23 or S-0103 setup identifies a suitable stock subject. Its voxel-part source is `unmeasured`: L23 Part E tests voxel parts of ordinary buildings only. The parachute's exact creation-tick sampling is `unmeasured`: L23 Part D tests the retained brightness during the fall but does not distinguish creation from first visible opening. The normal-light override for row-3 animations is `unmeasured`: L9 supplies a row-5 subject, not a drawing-with-object subject with that flag. The timing of an object's added λ term after a dominator ends is `unmeasured`: L16 observes ground and ordinary infantry, not the deck or airborne subjects that would distinguish the alternatives.
     - Confidence: high for vehicles on and off bridge decks, for the −500 being added (not replacing the brightness) and for ore and gems; high for the 208-lepton height step and the infantry and aircraft rules; high for an ordinary building's top-left cell; high for terrain tiles (the only tile-drawing path reads the scaled value); medium for the animation rules, terrain-palette buildings, terrain objects, wall, deck and other overlays; medium for which cells count as shadowed (Terms)
 
-14. **Trigger-action ambient changes.** The effect lighting sets are read once with the map. Trigger actions that change the base ambient set the target as well, unless an ion storm is in force, in which case only the base changes. Fading then proceeds as in claim 4.
+14. **Trigger-action ambient changes.** The effect lighting sets are read once with the map. The set-base-ambient action, code 73 (S-0524 claim 7), assigns its integer number slot directly to the base ambient in hundredths, without division or rounding. It sets the target as well, unless an ion storm is in force, in which case only the base changes. Fading then proceeds as in claim 4.
     - Backing: `measurable` (Scenario L13) for normal conditions and the ion-storm exception. `unmeasured` for an ambient-changing action during other global effects: L13 does not arrange those overlaps. Reading the effect lighting sets only once is `unmeasured`: no supported action in this spec changes their imported values during play.
     - Confidence: medium (trigger actions are covered by the trigger specs)
 
@@ -661,7 +661,7 @@ The nuke flash set has no keys (fixed constants). The rows whose source is the r
 - *Falsified if:* the first step is not on tick 1; the tint returns on any tick other than 31; a 3.9 rate gives 4-tick steps; or the 3-tick steps continue after tick 50 (or stop before it).
 
 **Scenario L13: trigger-action ambient changes during an ion storm** (claim 14). Two runs.
-- *Setup:* neutral test lighting and a trigger that sets the base ambient to 0.50 at a fixed time.
+- *Setup:* neutral test lighting and a trigger using code 73 with integer number slot 50 (S-0524 claim 7), setting the base ambient to 50 hundredths (0.50) at a fixed time.
 - *Procedure:* run 1: start an ion storm before the trigger fires and keep it going for at least 300 ticks after it. Run 2: the same with no storm.
 - *Observable:* per tick, the brightness of a tile pixel.
 - *Expected:* run 2: the fade towards 0.50 starts after the trigger fires. Run 1: during the storm the brightness stays at the storm's ambient after the trigger fires. When the storm ends, it fades towards 0.50, not back to 1.00.
