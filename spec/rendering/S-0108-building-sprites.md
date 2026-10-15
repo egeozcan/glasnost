@@ -2,11 +2,11 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0540]
 supersedes: []
@@ -52,6 +52,7 @@ are out of scope.
   occupant.
 - **Held infantry:** infantry taken inside a building that absorbs infantry (claim 17). Held
   infantry are not occupants: they never make a building occupied.
+- **Recycling building:** a building that consumes entrants for credits (S-0603 claim 1).
 - **Slot animation:** an independent animation drawn on top of the body and kept in one of the
   building's 21 **slots**: *idle*, *active-1*, *active-2*, *active-3*, *active-4*, *pre-production*,
   *production*, *turret*, *special-1*, *special-2*, *special-3*, *special-4*, *super-1*, *super-2*,
@@ -246,11 +247,7 @@ are out of scope.
    | Stage passes the end of the range (*k* ≥ *a* + *c*): it wraps | *a* | N(*d*, *s*) for *construction* and *idle*, raw *d* otherwise (`quirks.building_wrap_normalisation`) |
 
    An immediate change applies even when the new state equals the current one, and it cancels every
-   deferred change requested before it that has not yet taken effect. A deferred change that the
-   building's own behaviour requests shows on the tick of the request. One that anything else
-   requests shows on the same tick or the next one: on the same tick when the request comes before
-   the building's own per-tick processing in the original's order of objects within a tick, and on
-   the next tick otherwise. When several
+   deferred change requested before it that has not yet taken effect. A deferred change requested by the building's own behaviour is visible on the request tick. A deferred change requested by anything else is visible either on the request tick or on the following tick: it is visible on the request tick if the request is processed before the building's update, and on the following tick otherwise. When several
    deferred changes are requested before any of them takes effect, only the last one requested
    takes effect.
 
@@ -429,9 +426,11 @@ are out of scope.
     is stopped and *active-1* is started if absent. When *T* ≥ 1, *active-1* is stopped and
     *active-2* is started if absent. Both starts allow occupied variants. A building that holds only
     infantry whose sizes are each below 1 therefore shows the empty-building slot.
-    - Backing: `measurable` (B16 for non-negative sizes and the two sub-unit-size passengers).
-      `unmeasured` for held infantry leaving while the building survives (no release path is
-      established), occupied variants (held infantry do not garrison), and negative sizes
+    The owner's deploy order can release held infantry while the building survives (S-0605
+    claims 11 to 13). The same periodic check then selects the slot for the remaining held size.
+    - Backing: `measurable` (B16 for non-negative sizes, the two sub-unit-size passengers and
+      voluntary release using S-0605 claims 11 to 13).
+      `unmeasured` for occupied variants (held infantry do not garrison) and negative sizes
       (their ordering is not characterised; Open questions).
     - Confidence: high
 
@@ -464,7 +463,7 @@ are out of scope.
       is `unmeasured` here: B17 has neither voxel-art flag variant.
     - Confidence: medium (the turret facing is defined in S-0206, Terms)
 
-20. **Repair-depot and delayed-fire slot rules.** These apply only to the building kinds named in
+20. **Repair-depot, recycling and delayed-fire slot rules.** These apply only to the building kinds named in
     each row.
 
     | Building | Event | Result |
@@ -474,10 +473,12 @@ are out of scope.
     | Repair depot not repairing a docked unit | *special-1* ends (on its own, or removed by anything but the building stopping or replacing it) | *idle* starts (normal or damaged variant) |
     | Repair depot | *special-3* finishes on its own | *idle* starts (normal or damaged variant) |
     | Delayed-fire type that is not a repair depot | *special-1* finishes on its own | *active-1* starts (occupied variants allowed) |
+    | Recycling building | *special-1* ends (on its own, or removed by anything but the building stopping or replacing it) | *active-1* starts (damaged variant when the health ratio is at or below the yellow ratio, F3; normal otherwise), provided the selected variant exists (S-0603 claim 12) |
 
-    No other building reacts to *special-1* or *special-3* ending.
+    No building other than the kinds listed reacts to *special-1* or *special-3* ending.
     - Backing: `measurable` (B18 for natural completion during repair, leaving repair and
-      delayed fire). `unmeasured` for non-natural removal of *special-1* and its completion while
+      delayed fire; S-0603 scenario G10 for recycling-building completion and external removal).
+      `unmeasured` for repair-depot non-natural removal of *special-1* and its completion while
       not repairing: B18 establishes neither event. The exhaustive other-types assertion is
       `unmeasured`: a finite set of types cannot establish it.
     - Confidence: medium (the triggers of the repair behaviour belong to the repair spec)
@@ -1120,13 +1121,20 @@ expected numbers are computed from the type's own fields at measurement time.
     absorbing building has room for two passengers and positive extra power.
   - Procedure: use a fresh completed building per case. Send in one stock infantry, one size-0.75
     infantry, two size-0.75 infantry, or one size-1.5 infantry. Record each intake and next update.
-  - Observable: which of *active-1* and *active-2* is present, per tick.
+    Then give the owner's deploy order to release the passengers, using S-0605 claims 11 to 13
+    and scenario A5's voluntary-release setup, with open exits. Keep recording through the final
+    passenger's exit and the next building update. Keep the common setup's game speed and runs.
+  - Observable: held passenger sizes and count, exit ticks, and which of *active-1* and
+    *active-2* is present, per tick.
   - Runs: one per passenger configuration.
   - Expected: *active-1* while empty; the stock-size case follows F9. One or two size-0.75
     passengers retain *active-1*, because each addition is truncated. One size-1.5 passenger gives
-    *active-2*. Any necessary swap is visible at the next building update, at most one tick after intake.
+    *active-2*. Any necessary swap is visible at the next building update, at most one tick after intake
+    or successful release. After the final passenger leaves, *active-2* stops and *active-1*
+    runs by that update. The sub-unit-size cases retain *active-1* throughout their release.
   - Falsified if: both or neither slot is present after that update, the swap is later, two
-    size-0.75 passengers give *active-2*, or one size-1.5 passenger retains *active-1*.
+    size-0.75 passengers give *active-2*, one size-1.5 passenger retains *active-1*, or
+    *active-2* persists after the update following the final successful release.
 - **B17 (claim 19).**
   - Setup: a building with a sprite (not voxel) turret, and enemy targets placed at the eight
     compass directions around it.
