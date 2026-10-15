@@ -1445,6 +1445,9 @@ pub struct CombatFields {
     /// `Underwater` (S-0308 table N, S-0303 claim 21).
     #[serde(default)]
     pub underwater: Option<bool>,
+    /// `Cloakable`: whether an underwater type can be submerged (S-0504 Terms; planned S-0516).
+    #[serde(default)]
+    pub cloakable: Option<bool>,
     /// `Organic` (S-0308 table N, S-0314 claim 10).
     #[serde(default)]
     pub organic: Option<bool>,

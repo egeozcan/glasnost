@@ -21,7 +21,8 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
     ("is_charge_turret", "IsChargeTurret", Bool, "S-0301, S-0308"),
     ("land_targeting", "LandTargeting", Int, "S-0308"),
     ("naval_targeting", "NavalTargeting", Int, "S-0308"),
-    ("underwater", "Underwater", Bool, "S-0308"),
+    ("underwater", "Underwater", Bool, "S-0308, S-0504"),
+    ("cloakable", "Cloakable", Bool, "S-0504, S-0516"),
     ("organic", "Organic", Bool, "S-0308, S-0314"),
     ("unnatural", "Unnatural", Bool, "S-0308"),
     ("naval", "Naval", Bool, "S-0308"),
@@ -692,7 +693,7 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         GENERAL,
         "Wake",
         Ref(Kind::Animations),
-        "S-0614, S-0207, S-0312",
+        "S-0614, S-0207, S-0312, S-0504",
     ),
     (
         "splash_list",
@@ -2410,6 +2411,11 @@ impl Builder<'_> {
             let what = format!("[{}] {k}", show(section));
             if let Some(n) = self.field(state.as_ref(), form, &what) {
                 rec.put(field, n);
+            } else if field == "wake" {
+                // spec: S-0504 claim 4 and Import mapping (no wake animation: ships make no wakes and a sinking vessel takes its draws and makes none; the importer warns)
+                self.warn(0, 0, format!(
+                    "{what} is given by no rules layer: ships make no wakes, and a sinking vessel takes its wake draws and makes no wake (S-0504 claim 4, a design rule)"
+                ));
             }
         }
         // spec: S-0303 Import mapping, S-0309 Import mapping (HarvesterUnit: a vehicle-type list)
