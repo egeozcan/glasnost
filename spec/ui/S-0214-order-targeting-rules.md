@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -164,8 +164,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   disabled, not inside a tunnel, and it deploys into a building, carries passengers, deploys in
   place, sits in a tank bunker or has a deploy weapon; but not when it deploys into a building
   while a parasite is on it, not when it deploys into a construction yard while it is
-  mind-controlled, and not when it unloads passengers on a bridge, next to a bridge, onto water in
-  some cases, or into a building cell other than a tank bunker's (low for the details).
+  mind-controlled. For a vehicle transport, the unload exclusions are S-0507 claim 7's:
+  on a bridge, on a cell or straight-neighbour cell carrying a bridge deck, on water, or on a
+  building's cell other than a tank bunker's, as well as that claim's disabled and tunnel cases.
+  The water refusal applies equally to human and AI player houses; neutral and special houses
+  retain the original's non-human exemption (S-0507 claim 7). Row VD7 adds independent cursor
+  refusals; passing it does not establish readiness.
 - **In-place deployer.** An infantry or vehicle type that deploys in place and later undeploys (it
   changes between a deployed and an undeployed state without becoming another object).
 - **Representative.** The selected object whose action is shown as the cursor (claim 1).
@@ -173,8 +177,13 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   floating point (Formulas F2). *Full health* means a health ratio of exactly 1.
 - **Garrison.** Infantry entering a building to fight from inside it.
 - **Recycling building.** A building whose type turns units that enter it into credits.
-- **Bridge repair hut.** A building type that, when an engineer enters it, rebuilds the bridge
-  linked to it.
+- **Bridge repair hut.** A building type that an engineer enters to repair a bridge. The cursor's
+  destroyed-bridge test is S-0511 claim 21's, around the hut, not the actual repair selection
+  around the entering engineer of S-0511 claim 18. They can disagree; no discriminating layout
+  is established. Entry effects check neither the hut's owner nor alliance and, with
+  `quirks.repair_consumes_engineer_always` at its original default, use up the engineer even
+  when nothing is repaired (S-0511 claim 17). With that switch off, entry is refused when
+  claim 18 would repair nothing, leaving the engineer alive; S-0511 owns the switch.
 - **Docking building.** A building listed in an aircraft type's dock list, such as a landing pad.
 - **Vehicle-like building.** A building whose type undeploys into a vehicle and has a 1 × 1
   foundation. Rules below that speak of "a building" exclude it where they say so.
@@ -196,8 +205,12 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Can be selected.** An object that a click may put into the selection. Its type's selection
   flag must permit selection. Zero health alone does not exclude a building still in play
   (claim 16). Units and buildings can, unless something excludes them; a building whose type is invisible in the game is believed
-  not to be selectable (low). Whether a unit that is below the surface, or one that is cloaked, can
-  be selected is not identified (low; Open questions). Rows G2, G10, claim 3 and claim 12 all ask this one question.
+  not to be selectable (low). A fully cloaked object that the viewer neither owns nor senses
+  cannot be clicked, even if allied. Drawn fading objects can be clicked, subject to ordinary
+  selection exclusions (S-0516 claim 26). A unit disguised as terrain or an overlay that appears
+  disguised to the viewer cannot be selected (S-0516 claim 36). Whether a unit below the surface
+  can be selected remains unidentified (low; Open questions). Rows G2, G10, claim 3 and claim 12
+  all ask this one question.
 - **Passive neutral house.** A house whose type carries the passive flag (Import mapping). Its
   buildings count as engineer-friendly for table I.
 - **Self-teleporting type.** A type that teleports itself to where it is sent (the teleporter flag of
@@ -212,7 +225,13 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   ringed by cliffs. It is not the same as an impassable cell.
 - **Docking answer.** When a row asks whether the target accepts the actor now, the target answers
   through the contact exchange of S-0215 (and the building-kind behaviours). The answer is
-  *accepts*, *refuses* or neither. A full building or transport refuses. A building also refuses
+  *accepts*, *refuses* or *neither*. A capacity refusal is distinct from an eligibility exclusion.
+  A full building or an otherwise eligible full transport refuses. A vehicle transport answers
+  *neither* to a non-allied or mind-controlled candidate, an infantry or vehicle candidate carrying
+  a parasite, or a candidate controlling another object; it also answers *neither* while being
+  erased or standing on a building's cell (S-0507 claim 4). An air transport answers *neither* to
+  a non-allied candidate (S-0507 claim 2). The transport verdicts below give no entry verdict for
+  *neither*: they keep their other result, not necessarily *no-enter*. A building also refuses
   when exactly one of it and the unit is naval, unless the unit's movement zone is *amphibious*
   (S-0504 claim 7). That exception removes only the naval-mismatch refusal, not other reasons
   to refuse. Asking changes nothing,
@@ -390,14 +409,17 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 7. **Infantry on an object.** The final action of an own infantry actor on a target object is
    given by table I, a precedence list over the generic result and the actor's and target's
    properties.
-   - Backing: `measurable` (Scenarios T5 and T10). The rows that the list after Scenario T10 gives
+   - Backing: `measurable` (Scenarios T5 and T10; S-0511 claim 21, B13 for row I3's cursor
+     test, and claims 17 and 18, B12 and B14 for hut-entry effects and repair selection).
+     The rows that the list after Scenario T10 gives
      as `unmeasured` have no step, each with its reason.
    - Confidence: medium (low where a row says so)
 
 8. **Vehicles, aircraft and buildings on an object.** The final action of an own vehicle follows
    table V, of an own aircraft table AC and of an own building table B, in the same way.
    - Backing: `measurable` (Scenarios T6, T9 part D and T10; S-0504 claim 7 and scenario N7
-     for the naval-mismatch docking refusal and amphibious exception). Rows that the list after Scenario
+     for the naval-mismatch docking refusal and amphibious exception; S-0507 claims 2, 4 and 7,
+     T2, T4 and T7 for transport answers and readiness). Rows that the list after Scenario
      T10 gives as `unmeasured` have no step, each with its reason.
    - Confidence: medium for table V; low for tables AC and B
 
@@ -501,8 +523,14 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     whole milliseconds, so a gap of 500 counts and a gap of 501 does not (Constants). The
     original reads a real-time clock in whole milliseconds; our engine's interface applies the same
     rule to the whole-millisecond times of its input events (Edge cases, departure).
+    Cloaking can remove an object from an existing selection: at cloak start every non-owner
+    viewer loses it, even with sensors; at later re-evaluation a fully cloaked object is removed
+    from a non-owner viewer's selection when unsensed (S-0516 claim 26). Owning the object and
+    being allied with its owner are not interchangeable for these tests.
     - Backing: `measurable` (Scenarios T1 and T2 for selection order; S-0701 scenarios D2 and D3
-      for selection-response lists and silence), except two parts, which are `unmeasured`. (1) The last
+      for selection-response lists and silence; S-0516 claims 26 and 36, CS9 part e and CS15
+      for cloak/scenery click exclusions and cloak selection
+      loss), except two parts, which are `unmeasured`. (1) The last
       millisecond of the interval (500 against 501): the timing of scripted input is not exact to
       a millisecond, so Scenario T2 only separates 200 ms from 1 s. (2) The fallback of *toggle
       select* to *select* when the first selected object is not the acting house's own while an
@@ -1160,7 +1188,7 @@ undefined.
 |---|---|---|
 | I1 | *g* is toggle select | toggle select |
 | I2 | Engineer; the target carries an active planted bomb | disarm bomb |
-| I3 | Engineer; the target a repairable building, not vehicle-like, that is a bridge repair hut | repair building if the linked bridge is destroyed, else no-repair |
+| I3 | Engineer; the target a repairable building, not vehicle-like, that is a bridge repair hut | repair building when S-0511 claim 21's cursor test reports a destroyed bridge, else no-repair; no owner or alliance test |
 | I4 | Engineer below full health (the engineer's own health ratio, F2); the target an engineer-friendly building that is a hospital | enter |
 | I5 | Engineer; the target an engineer-friendly building at full health | recycle if the building recycles, else no-repair |
 | I6 | Engineer; the target any other engineer-friendly building | repair building |
@@ -1263,8 +1291,8 @@ gives an unarmed actor no generic *attack* (claim 6 (c)).
 | VD4 | Its type carries no passengers, it has no deploy weapon, and it is not held in a tank bunker | nothing |
 | VD5 | It is held in a tank bunker, or its type carries no passengers and it has a deploy weapon | deploy if it has deploy readiness, else no-deploy |
 | VD6 | A transport that carries no passengers now | no-deploy |
-| VD7 | A transport, carrying passengers, not on a bridge, and either its first passenger could not move on the land type of the cell (a land multiplier below 0.01 there, Formulas F4, the land not being water), or the transport is in the air while its type does not hover | no-deploy |
-| VD8 | Otherwise | deploy if it has deploy readiness, else no-deploy |
+| VD7 | A transport, carrying passengers, not on a bridge, and either its first passenger could not move on the land type of the cell (a land multiplier below 0.01 there, Formulas F4, the land not being water), or the transport is in the air while its type does not hover | no-deploy; independent of the readiness exclusions of S-0507 claim 7 |
+| VD8 | Otherwise | deploy if it has deploy readiness (for transports, S-0507 claim 7), else no-deploy |
 
 **Table AC: aircraft on an object** (claim 8). When multiple row conditions hold, the final action is the one in the highest-priority applicable row. Row order specifies precedence between outcomes, not the order or method of testing conditions. All rows: low.
 
@@ -1346,7 +1374,7 @@ cell is inside the usable area.
 | Row | Infantry and cell | Final action |
 |---|---|---|
 | IC1 | *c*′ is move; not a jumpjet type; not an in-place deployer in its deployed state; the cell is a tunnel entrance | enter tunnel if it can use the tunnel, else no-enter tunnel |
-| IC2 | Engineer; fog of war is on, and the cell shows a remembered building under fog that is a bridge repair hut | repair building if its bridge is destroyed, else no-repair (low) |
+| IC2 | Engineer; fog of war is on, and the cell shows a remembered building under fog that is a bridge repair hut | repair building when S-0511 claim 21's cursor test reports a destroyed bridge, else no-repair; no owner or alliance test (low for the fog case) |
 | IC3 | Engineer; fog of war is on, and the cell shows a remembered repairable building under fog | capture (low) |
 | IC4 | Healing actor; *c*′ is attack | area guard |
 | IC5 | A jumpjet type; *c*′ is move or no-move; a tunnel cell | nothing |
@@ -1689,7 +1717,11 @@ scenario says "alone", that object is the only one selected, so that it is the r
 
 The cross-spec input checks use S-0506 claim 10's R6 for the launching-count exclusion,
 S-0614 claims 7 and 8's P1 and P9 for the hold exclusion, and S-0504 claim 7's N7 for
-naval-mismatch refusal with the amphibious exception. Those scenarios own the setups,
+naval-mismatch refusal with the amphibious exception. S-0507 claims 2, 4 and 7 supply T2,
+T4 and T7 for air-transport alliance, vehicle eligibility answers and unload readiness.
+S-0511 claims 17, 18 and 21 supply B12–B14 for engineer entry, repair selection and cursor
+selection; S-0516 claims 26 and 36 supply CS9 part e and CS15 for cloak selection loss,
+click exclusions and scenery-disguise selection. Those scenarios own the setups,
 procedures and falsifiers for these shared rules.
 
 **Scenario T1: representative (claim 1).** Select an unarmed engineer and an armed tank, with the
@@ -1855,7 +1887,8 @@ cell, by table GC). Falsified if any of these differs.
   and a deployer infantry, deployed and not. Targets: an enemy capturable building at full
   health and at a health ratio below the capture field (a named test rules file sets the capture
   field to 50 %), an enemy building that is neither capturable nor spyable, an own damaged
-  building, an own undamaged building, a bridge repair hut with its bridge destroyed and intact, a
+  building, an own undamaged building, a bridge repair hut with its bridge destroyed and intact
+  under S-0511 claim 21's cursor test (repeat with own, allied and enemy huts), a
   neutral garrisonable building, an allied hospital (tried with a plain armed infantry unit, hurt
   and unhurt, since a healing actor's own rows come first), an allied hospital whose type is repairable
   (a named test rules file makes it so if needed), at full health and damaged, tried with the
@@ -1876,7 +1909,12 @@ cell, by table GC). Falsified if any of these differs.
   over the neutral garrisonable building, and a capture order, and with force-fire held over it
   not that action (row I8 needs force-fire not held). The orders: a capture order for capture,
   damaging entry and repair building alike (table M: *as for capture*, which needs only that
-  the actor is movable).
+  the actor is movable). For the hut, *repair building* or *no-repair* follows S-0511 claim 21's
+  cursor test regardless of hut owner. Do not infer claim 18's actual repair choice from that
+  cursor: B12 and B13 test the two separately, and B14 tests entry effects. A refused repair
+  click does not use up the engineer; a completed entry does, even when repair changes nothing
+  at the original setting of S-0511 claim 17's switch. An intact-bridge entry remains unmeasured
+  until a fixture establishes it, as that claim states.
 - *Healing actor against the glossary's healer.* A named test file defines an infantry type whose
   default weapon heals and whose other weapon slot does large positive damage, so that its mean
   damage over the slots is above 0. Alone, over an enemy tank. Expected: *idle* (row I10), and a
@@ -2593,8 +2631,7 @@ or gives a selection response falsifies its corresponding type-expansion rule.
 - Which disguises are overlay types (scenery check), and how often a disguise belongs to no house
   in stock data.
 - Several low-confidence details are stated only by their effect and are not identified: the rule
-  by which a cell counts as lying at the edge of a tunnel (Terms, *tunnel cell*); the bridge,
-  water and building-cell cases in which a vehicle may not unload (Terms, *deploy readiness*); the
+  by which a cell counts as lying at the edge of a tunnel (Terms, *tunnel cell*); the
   neighbour step that anchors a foundation wider or deeper than 2 cells (row VD2); and the relaxed
   entry test of row GC10.
 - Row BC3: a building with no weapon in its first slot gets *attack* on a cell. Since row GC4
@@ -2614,8 +2651,11 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   monster (row AC5).
 - Whether the recorder can log a vehicle as inside a tunnel for long enough to click (Scenario T9
   part D).
-- Whether a unit that is below the surface, or one that is cloaked, can be selected (Terms, *can
-  be selected*; the T10 line for row b2 records it for a unit below the surface).
+- Whether a unit below the surface can be selected (Terms, *can be selected*; the T10 line for
+  row b2 records it). Cloak and scenery-disguise exclusions are settled by S-0516 claims 26 and 36.
+- Transport readiness is S-0507 claim 7's. Its tunnel-edge classification and unreachable
+  tube-interior and non-bunker building-cell witnesses remain that claim's stated uncertainties,
+  not an open bridge or water rule here.
 - Whether an object of the allied bystander can be clicked while it stands in shroud, which Scenario T7
   step (c) needs.
 - Which movement zone a building type has when its section sets none (row B10), and whether S-0211's
