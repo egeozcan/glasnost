@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 34
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1362,7 +1362,7 @@ S-0109 (Terms) and S-0214 (Terms).
 
 **berserk.** The state of a unit that a berserk-causing warhead has put out of its owner's
 control. S-0301 (claim 8) and S-0302 (claim 10) give what it changes in firing and in damage, and
-S-0309 uses it. How it starts and ends is left to a later warhead spec.
+S-0309 uses it. S-0610 claims 4 and 5 own entry into the state, its countdown and expiry.
 
 **bomb detector.** An object on the map whose type has a positive bomb-sight range in whole
 cells. It lets its owner see planted bombs within that range (S-0519 claim 10).
