@@ -2,7 +2,7 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,8 +20,10 @@ The world position at which a shot starts (its *fire point*), computed from the 
 its weapon slot's muzzle position, its turret displacement and facings, and its burst counter; the
 special fire points of garrisoned buildings, buildings with pixel muzzle shifts and passengers of
 open-topped transports; and the redirected targets of spray-attack firers. The fire point is game
-state: projectiles start there (S-0306 claim 1), so it changes flight times and what a projectile passes.
-This spec covers skirmish; network games and campaigns are out of scope.
+state: projectiles normally start there (S-0306 claim 8), so it changes flight times and what a projectile passes.
+The placement exceptions are owned by S-0306 claim 5, including dropping projectiles, which
+start at the firer's own position rather than its fire point. This spec covers skirmish; network
+games and campaigns are out of scope.
 
 ## Terms
 
@@ -34,7 +36,7 @@ composition convention (F2), the *model frame* (+x forward, +y to the left, +z u
 S-0202: R(*a*, *b*). In addition:
 
 - **Fire point.** The world position, in leptons (x, y and world height), at which a shot's
-  projectile starts.
+  projectile normally starts, subject to S-0306 claim 5's placement exceptions.
 - **Base point.** For a building, the top corner of its foundation, at the building's world height.
   For every other firer, its position (its reference point, with its world height).
 - **Muzzle position (F, L, H).** Three integers in leptons that the art data gives per weapon slot of
@@ -42,8 +44,9 @@ S-0202: R(*a*, *b*). In addition:
   (positive to the left) and up. Which slot a shot uses is S-0308's.
 - **Turret displacement** *δ*. The type's imported turret displacement, in leptons along the
   forward axis (the same field S-0105 uses for drawing).
-- **Alternate muzzle positions.** Five extra muzzle positions (numbered 0 to 4) that a transport's art
-  data can give; passengers of an open-topped transport fire from them (claim 5).
+- **Alternate muzzle positions.** Five extra muzzle positions (numbered 0 to 4) that a type's art
+  data can give. Passengers of an open-topped transport fire from them (claim 5); they also
+  anchor mind-control link lines (S-0601 claim 17).
 - **Pixel shift.** A pair of imported integers in screen pixels, converted to a lepton shift
   by F3.
 - **Muzzle point** *k* **of a garrisonable building.** The *k*-th pixel shift of the building type's
@@ -78,7 +81,9 @@ S-0202: R(*a*, *b*). In addition:
    axis, so map y, which grows towards map south, takes −*v*.
    - Backing: `measurable` (scenarios P1 and P2) for the stated test transforms,
      `unmeasured` for locomotor translations outside those tests: their complete reachable
-     conditions have not been established (Open questions).
+     conditions have not been established (Open questions). Intermediate single-precision
+     store placement not distinguished by these integer launch positions is also `unmeasured`:
+     no separating launch-position case is established here.
    - Confidence: high (composition, the sign of *L*, the base point); medium (bit-exact single
      precision, which follows S-0105 F0)
 
@@ -97,20 +102,26 @@ S-0202: R(*a*, *b*). In addition:
 
    | Firer | Aiming facing *a* | *θ* |
    |---|---|---|
-   | vehicle with the turret flag (S-0310, claim 1) | its turret facing | −(π/16) × (*a*₃₂ − *b*₃₂) |
+   | vehicle with the turret flag (S-0310, claim 1) | its turret facing | F2, locomotor case |
    | vehicle without the turret flag (S-0310, claim 1) | its body facing | 0 |
    | infantry | its body facing, always | 0 |
-   | aircraft | its turret facing, always (S-0310, claim 5) | −(π/16) × (*a*₃₂ − *b*₃₂) |
-   | turreted building (its type or an installed upgrade has the turret flag, S-0310 claim 4) | its turret facing | −(π/16) × (*a*₃₂ − 8) |
-   | other building, with a target | the direction of its current target from its reference point | −(π/16) × (*a*₃₂ − 8) |
-   | other building, with no target | its turret facing | −(π/16) × (*a*₃₂ − 8) |
+   | aircraft | its turret facing, always (S-0310, claim 5) | F2, locomotor case |
+   | turreted building (its type or an installed upgrade has the turret flag, S-0310 claim 4) | its turret facing | F2, building case |
+   | other building, with a target | the direction of its current target from its reference point | F2, building case |
+   | other building, with no target | its turret facing | F2, building case |
 
-   The angle is a double, narrowed to single precision before the table trigonometry of S-0105 F1
-   is applied (F2).
+   F2 defines the exact angle arithmetic: in the locomotor case the two facing products are
+   separately rounded as doubles before their difference is rounded as a double. The result
+   is narrowed to single precision before the table trigonometry of S-0105 F1 is applied.
+   Replacing this with a single product of the facing difference is not the specified arithmetic.
+   When aiming and body facings agree, the locomotor case gives 0, including the two zero rows.
    - Backing: `measurable` (scenarios P1 and P3 parts b and c) for the reachable shots tested.
      The building's no-target row is `unmeasured`: no reachable shot without a target has
      been established to distinguish it. The aircraft's turret-versus-body distinction is
      `unmeasured` until P1 part b establishes an ordinary attack with those facings different.
+     The exact double intermediate rounding in F2 is `unmeasured`: P1 and P3 compare integer
+     launch positions, and no launch-position case separating algebraic rearrangements has
+     been established.
    - Confidence: high (vehicles, infantry, buildings); medium (aircraft)
 
 4. **The building turret displacement does not turn** (`quirks.building_fire_point_shift_fixed`).
@@ -134,9 +145,12 @@ S-0202: R(*a*, *b*). In addition:
    transport burst parity use the same lateral sign even if their own burst parities differ.
    A passenger at position 6 or later fires from a muzzle position of (0, 0, 0) put through the
    same transform, so from the transport's turret pivot.
-   - Backing: `measurable` (scenario P4)
+   These five alternate positions are not exclusive to transport passengers: the same imported
+   triples also anchor a controller's mind-control link lines. S-0601 claim 17 owns those
+   lines and their anchor selection; passenger order does not select a control-link anchor.
+   - Backing: `measurable` (scenario P4 for passengers, P9 for shared link-anchor data)
    - Confidence: medium (the slot numbering and the transport's burst counter); high (the
-     passenger order, owned by S-0507 claim 3)
+     passenger order, owned by S-0507 claim 3, and shared control-link anchor data)
 
 6. **Garrisoned buildings.** A garrisoned building fires from its base point shifted by its muzzle
    point *k* (F3, map x and y only; the world height is the base point's), where *k* is the
@@ -186,7 +200,7 @@ S-0202: R(*a*, *b*). In addition:
    burst (burst counter 0), and for each later shot of the burst it advances by trunc(8 / *B*)
    modulo 8, *B* being the burst count. That cell becomes the shot's target; how the projectile
    uses it (its stored target point and speed follow the cell, while the launch still points at
-   the firer's own target) is S-0306's (claim 3 a). No stock type has the flag.
+   the firer's own target) is S-0306's (claim 3 a).
    - Backing: `measurable` (scenario P7, test data)
    - Confidence: high (shifts, steps, and that the cell replaces the target)
 
@@ -228,7 +242,10 @@ F3:
 > *θ* = *s*₅₃(*s*₅₃((*a*₃₂ − 8) × *c*) − *s*₅₃((*b*₃₂ − 8) × *c*)) for a firer with a locomotor,
 > *θ* = *s*₅₃((*a*₃₂ − 8) × *c*) for a building,
 
-then narrowed to single precision before the table trigonometry.
+Each subtraction of 8 is exact integer arithmetic. The products and the locomotor-case
+difference use double precision with *s*₅₃ rounding at the places shown. The resulting *θ*,
+in radians, is narrowed by *s*₂₄ (F3) before the table trigonometry. Thus both double arithmetic
+and the final single-precision narrowing follow S-0205 claim 5's rounding mode.
 
 **F3. Pixel shift to leptons** (claims 6 to 8). For a pixel pair (*p*, *q*), each first converted to
 single precision:
@@ -303,7 +320,7 @@ that the shot uses (claim 2: the number of earlier shots in its burst).
 | `PrimaryFireFLH`, `SecondaryFireFLH`, `ElitePrimaryFireFLH`, `EliteSecondaryFireFLH` (art, type image) | muzzle positions (*F*, *L*, *H*) of the primary and secondary slots | three integers, leptons | 0, 0, 0 |
 | `Weapon`*n*`FLH` and its elite form, the same key with `Elite` in front (art, type image) | muzzle positions of numbered weapons | three integers | 0, 0, 0 |
 | `TurretOffset` (art, type image) | turret displacement *δ* | integer, leptons | 0 |
-| `AlternateFLH` followed by 0 to 4 (art, transport image) | alternate muzzle positions | three integers | 0, 0, 0 |
+| `AlternateFLH` followed by 0 to 4 (art, type image) | alternate muzzle positions, also used as mind-control link anchors (S-0601 claim 17) | three integers, leptons | 0, 0, 0 |
 | `MuzzleFlash` followed by 0, 1, … (art, building image) | garrison muzzle points | two integers, pixels | (0, 0) |
 | `MaxNumberOccupants` (rules, building type) | how many garrison muzzle points are read | integer | 0 |
 | `PrimaryFirePixelOffset` (art, building image) | primary fire pixel shift | two integers, pixels | not given |
@@ -351,7 +368,9 @@ the user, not a request to alter the game.
   significant and must not be hidden by a tolerance.
 - Part b: named test art gives distinct non-zero forward, lateral and height muzzle components
   and a non-zero turret displacement. Repeat across all 32 body and aiming steps reachable by
-  ordinary attacks, including steps around the facing wrap. Repeat with infantry and aircraft
+  ordinary attacks, including steps around the facing wrap. Compute the predictions with F2's
+  separately rounded facing products and final single-precision narrowing, not a simplified
+  facing-difference product. Repeat with infantry and aircraft
   (named test rules may give the aircraft an ordinary visible projectile). Record both body and
   turret facings. Expected: claim 3's infantry row has no relative rotation, while the aircraft
   row uses turret minus body facing even without a turret flag. Falsified by any F1 mismatch or
@@ -502,6 +521,20 @@ the user, not a request to alter the game.
 - Falsified if: any effective setting follows art, an art-only value replaces the absent
   default, or firing and aiming use different imported anchor pairs or voxel-turret flags.
 - Runs: two fresh games per file/setting variant, recording at least one full burst each.
+
+**P9. Shared alternate positions for control links.**
+- Setup: use the common skirmish setup with a multi-victim controller and six capturable
+  neutral vehicles. Named link-anchor test art gives its five alternate muzzle positions
+  distinct invented triples, different from its primary weapon's muzzle position.
+- Procedure: acquire the six victims through ordinary attacks, select the controller, and
+  capture the visible lines. Repeat with only the five alternate triples changed.
+- Observable: each line's starting pixel relative to the controller, with its position,
+  facings and burst counter recorded read-only.
+- Expected: the line starts follow the alternate triples transformed by claim 1, with anchor
+  selection as in S-0601 claim 17. Changing the alternate triples moves the corresponding
+  starts even though the primary weapon muzzle is unchanged.
+- Falsified if: link starts ignore the alternate triples or instead follow the primary muzzle.
+- Runs: one six-victim acquisition per art variant, at unchanged settled facings.
 
 ## Open questions
 
