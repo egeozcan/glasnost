@@ -455,7 +455,7 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
                 }
             }
             match heal::repair_step(w, v) {
-                // spec: S-0314 claim 6 (settling, not needed: sent away at once, no announcement; a failed departure while already settling retains that phase and retries after D ticks)
+                // spec: S-0314 claim 6 (settling, not needed: sent away at once, no announcement, also for the retries after a failed working departure; a failed departure while already settling retains that phase and retries after D ticks)
                 Some(StepOutcome::NotNeeded) | None => {
                     if send_away(w, k, v) {
                         1
@@ -481,7 +481,7 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
             match heal::repair_step(w, v) {
                 // spec: S-0314 claim 6 (more needed: the vehicle stays; the next step K_u ticks later)
                 Some(StepOutcome::MoreNeeded) => ku,
-                // spec: S-0314 claim 6 (done or not needed: the repair-complete announcement for the depot's owner, and the vehicle is sent away)
+                // spec: S-0314 claim 6 (done or not needed: the repair-complete announcement for the depot's owner, attempted even when the departure then fails; the vehicle is sent away)
                 Some(StepOutcome::Done | StepOutcome::NotNeeded) | None => {
                     announce(w, k, v, crate::combat::effects::Sound::UnitRepaired);
                     if !send_away(w, k, v) {
@@ -649,7 +649,7 @@ fn exit_cell(w: &World, k: ObjectId, v: ObjectId) -> Option<CellXY> {
     exit_candidates(w, k, v)
         .into_iter()
         .find(|&(c, _loco)| {
-            // spec: S-0314 claim 25 (a legal map cell giving free from the vehicle's cell-entry test, S-0209 claim 5 and S-0211; every non-free result rejects it). Q-0674 interim: the locomotion-specific test of the door and perimeter rows adds nothing to that entry test.
+            // spec: S-0314 claim 25 (a legal map cell giving free from the vehicle's cell-entry test, S-0209 claim 5 and S-0211; every non-free result rejects it; the locomotion-specific test of the door and perimeter rows always gives free for driving, hovering and ship locomotion)
             w.cells.footprint().is_legal(c)
                 && crate::occupancy::vehicle_outcome(w, v, c, reference)
                     == crate::occupancy::Outcome::Clear

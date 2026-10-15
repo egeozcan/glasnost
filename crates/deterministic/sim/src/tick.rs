@@ -193,12 +193,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
         Some(Locomotor::Ship) => !held && crate::naval::tick(w, id),
         _ => false,
     };
-    if kind == Kind::Vehicle {
-        // spec: S-0314 claim 23 (the queued-entry retry, once per ordinary living vehicle turn, after that turn's locomotor movement, self-healing and due behaviour processing; not before movement and not an extra behaviour processing; Q-0683 answered)
+    // spec: S-0507 claim 15 (whenever the transport moves to a new position, its passengers' positions become its position at once); S-0314 claim 23 (with the position change, before the queued-entry retry)
+    crate::transport::sync(w, id);
+    if kind == Kind::Vehicle && !crate::teleport::phasing_in(w, id) {
+        // spec: S-0314 claim 23 (the queued-entry retry, once per ordinary living vehicle turn, after that turn's locomotor movement, self-healing and due behaviour processing; not before movement and not an extra behaviour processing; skipped, the queued entry kept, only while chrono phase-in is still active, not for a hold, pulse disable, deactivation, lift or locomotor replacement; before the attached parasite's step)
         crate::depot::vehicle_turn(w, id);
     }
-    // spec: S-0507 claim 15 (whenever the transport moves to a new position, its passengers' positions become its position at once)
-    crate::transport::sync(w, id);
     // spec: S-0614 claim 18 (an attached parasite acts late in its host's turn: after self-healing, behaviour processing and movement, before the separate firing update; a host killed by it does nothing more)
     crate::parasite::host_turn(w, id);
     if w.obj(id).is_none_or(crate::combat::damage::dead) {

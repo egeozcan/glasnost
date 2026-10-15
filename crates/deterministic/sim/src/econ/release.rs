@@ -487,8 +487,9 @@ pub fn exit_list(fw: i32, fh: i32, refinery: bool, exact: bool) -> Vec<(i32, i32
 
 /// The foundation exit list of S-0404 Constants when one is present: with
 /// `quirks.foundation_exit_lists` off the ring alternative; on, the listed
-/// word's list, or `None` for a foundation size without one (S-0314 claim
-/// 25's "when present"; Q-0674 interim).
+/// word's list. Every imported foundation word has a present list (S-0314
+/// claim 25; S-0108 claim 8's parser falls back to a supported word), so
+/// `None`, a size without a listed word, arises only from synthetic data.
 pub fn present_exit_list(fw: i32, fh: i32, refinery: bool, exact: bool) -> Option<Vec<(i32, i32)>> {
     if !exact {
         return Some(ring(fw, fh));

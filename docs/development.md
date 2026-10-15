@@ -423,10 +423,10 @@ Provisional rules of M6b depot cycle, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `depot::process_enter`, `depot::accepts` | the vehicle is tethered in its *enter* processing once it stands in a foundation cell of the depot or in the docking point's cell; the standing-on-the-depot refusal applies to the click and the queued-entry retry only; a driving vehicle ends at the docking cell's centre | Q-0680 |
-| `depot::exit_cell`, `econ::release::present_exit_list` | the locomotion-specific entry test of claim 25's door and perimeter rows adds nothing to the entry test; with `quirks.foundation_exit_lists` on, a foundation size without a listed word has no list (the perimeter applies); the repair-complete announcement is made even when the working departure then fails | Q-0674 |
-| `tick::object_turn` | no state skips the queued-entry retry (the immobilized check); it runs before the passenger sync and parasite step | Q-0674 |
 
 S-0314 revision 17 answers Q-0681 (claim 21: distant settling), Q-0682 (claims 6 and 25: the departure cell and the failed departure) and Q-0683 (claim 23: the retry after movement, readiness-dependent start); their rows are retired. Q-0680 is answered too, but its tether rule (only at a depot with the pad flag) leaves the ordinary depot's tether unexplained, so its row stays with Q-0674.
+
+S-0314 revision 18 answers Q-0674. Claim 25's locomotion-specific test always gives free for driving, hovering and ship locomotion, which was our interim; every imported foundation word has a present exit list (the 0 × 0 list is present and empty), so `present_exit_list`'s `None` arises only from synthetic data; claim 6's repair-complete announcement is attempted even when the working departure fails, as coded. Claim 23's retry is skipped only during chrono phase-in (`teleport::phasing_in`), and the passenger sync of an open-topped transport now runs before it (`tick::object_turn`).
 
 ## Simulation (M6b: walls and gates)
 
