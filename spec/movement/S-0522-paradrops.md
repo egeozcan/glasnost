@@ -2,7 +2,7 @@
 id: S-0522
 title: Parachutes and drops
 topic: movement
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -118,7 +118,7 @@ Pointers:
    ((*i* + *r* − 1) mod *L*w, 0), for integer *i* from 0 through *L*w* − 1. The first acceptable point in this cyclic order is selected.
    For east, draw *r* = R(1, 2*L*h). The candidate sequence is (*L*w*, ((*i* + *r* − 1) mod 2*L*h)) for integer *i* from 0 through 2*L*h* − 1; the first acceptable point in that cyclic order is selected.
    For west, draw *r* = R(0, 2*L*h), and let *b*₀ = *r* − 1. The candidate sequence is (0, rem(*b*₀ + *i*, 2*L*h)) for integer *i* from 0 through 2*L*h* − 1, where `rem` has the dividend's sign. The first acceptable point in that sequence is selected; in particular, when *r* = 0 its first row is −1.
-   For south, first draw R(1, *L*w*) and discard its result. For each integer column *a* from 0 through *L*w* − 1, consider its acceptable points among (*a*, 2*L*h* + *j*) for *j* = 0 through 14, retaining only the first acceptable point in that column. Let *n* be the number retained. Draw *k* = R(0, *n* − 1), and select retained point *k*, with retained points ordered by increasing *a*. Column 0 always contributes: *j* is 0 or 1, whichever makes *b* + *L*y* even. Thus *n* ≥ 1 and the second draw is always made.
+   For the south edge, the draw sequence has two members. The first is R(1, *L*w*), whose value does not affect the selected cell. For each column *a* in 0 … *L*w* − 1, define its retained candidate as the acceptable point (*a*, 2*L*h* + *j*) with the smallest *j* in 0 … 14; if the column has no acceptable point in that range, it contributes no candidate. Order the retained candidates by increasing *a*. Column 0 always contributes: its retained row is the one of 2*L*h* and 2*L*h* + 1 for which *b* + *L*y* is even. Therefore the candidate count *n* is at least 1. The second draw is R(0, *n* − 1), and its value selects that zero-based position in the ordered candidate list.
    - **No acceptable candidate** on the north, east or west edge: the arrival cell is the cell of
      local point (1, ⌊*L*w / 2⌋). On a local area with positive width and height this does not arise
      on the east and west edges: by F2 and S-0009 claim 4, every point of column *L*w, and every point
@@ -275,16 +275,12 @@ Pointers:
     - Backing: `measurable` (scenario P9)
     - Confidence: high
 
-16. **Random draws of a paradrop, in order.** On the scenario stream:
-    - at the launch, for each payload entry in list order: the plane's creation draw, its arrival
-      cell's draws (claim 4), any draws of the plane's placement (S-0501), then one creation draw per
-      paratrooper,
-    - at each drop attempt whose standing-position choice in claim 9 reaches the centre-class row of S-0208 claim 3's
-      table: one R(0, 3),
-    - at each successful drop: the parachute animation's creation draws (claim 13).
+16. **Random draws of a paradrop, in observable stream order.** The scenario-stream observations have these consequences:
+    - For each payload entry, in payload-list order, the plane-creation draw precedes that plane's arrival-cell draw or draws; any placement draws precede the creation draws for that plane's passengers. Thus, for two entries, the observed stream order is plane 1 creation, plane 1 arrival, plane 1 placement if any, plane 1 passengers, plane 2 creation, plane 2 arrival, plane 2 placement if any, plane 2 passengers.
+    - A drop attempt whose standing-position choice reaches the centre-class row of S-0208 claim 3's table consumes one R(0, 3), including when the attempt fails. Other rows consume none.
+    - A successful drop is followed by the parachute animation's creation draws (claim 13).
 
-    The target adjustment (claim 1), the arrival-edge computation (claim 5) and the processing
-    delays of claims 6 and 7 take no draw. Draws of the flight itself are S-0501's (its claim 37).
+    Target adjustment (claim 1), arrival-edge computation (claim 5), and the processing delays of claims 6 and 7 do not advance the scenario stream. Flight draws remain those of S-0501 claim 37. These statements constrain the observable stream state and its advancement, not the order of internal operations.
     - Backing: `measurable` (scenarios P1, P2, P3, P4 and P8, with the random-state recorder)
     - Confidence: high
 
@@ -405,8 +401,8 @@ How a queued behaviour becomes current is S-0501's (claim 31's three points and 
   test leaves the passenger marked as falling while it waits in the plane. This has no observable
   effect; our engine does not mark a passenger that stays aboard.
 - **Attached-animation fall rate** (`quirks.paratrooper_any_animation_slow_fall`, default on: use the parachute recurrence while any animation is attached to the falling object; off: use it only while the parachute animation is attached).
-- **No fall damage.** A rules value for falling damage exists in the rules but is never applied
-  (Import mapping).
+- **No paradrop fall damage.** The falling-damage multiplier is not applied to paradrops
+  (claim 12, Import mapping); magnetic-lift impact uses it (S-0607 claim 18 and F2).
 
 ## Import mapping
 
@@ -421,7 +417,7 @@ How a queued behaviour becomes current is S-0501's (claim 31's three points and 
 | `[General]` | `Parachute` | parachute animation type (claim 13) | animation type ID | none; runtime outcome unresolved (Open questions) |
 | `[AudioVisual]` | `ChuteSound` | parachute sound (claim 9) | sound ID | none: no sound |
 | `[General]` | `ParachuteMaxFallRate`, `NoParachuteMaxFallRate` | fall-rate floors (S-0511 Import mapping) | integer, leptons per update | S-0511's |
-| `[CombatDamage]` | `FallingDamageMultiplier` | nothing: read, never applied | — | — |
+| `[CombatDamage]` | `FallingDamageMultiplier` | not applied to paradrops; magnetic-lift impact uses it (S-0607 claim 18 and F2) | see S-0607 Import mapping | see S-0607 Import mapping |
 | aircraft type | `Ammo` | the plane's starting ammunition, whose parity picks the first drop side (claim 9, F4) | integer | −1 (S-0301 claim 10 and its Import mapping) |
 | map house section | `Edge` | the house's named arrival edge (claim 5) | one of `North`, `East`, `South`, `West`, `Air`, compared case-insensitively; `Air` and any other word leave the edge unnamed | unnamed |
 | superweapon type | `Type` | which launch kind (paradrop or American paradrop) is delivered; dispatch: S-0513 claim 42 | word | no kind |
