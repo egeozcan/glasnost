@@ -2,13 +2,13 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 3
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616]
+requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645]
 supersedes: []
 ---
 
@@ -34,13 +34,8 @@ Boundaries:
 - The nuclear missile superweapon is S-0513. Its missile is not a spawned object and nothing in
   this spec applies to it.
 
-**Required companion change.** This draft depends on S-0204 claim 13's exact raw-angle
-contract. That claim is present in the companion draft but absent from the currently approved
-S-0204. The two must be handed off together: S-0204 must supply the complete raw-angle contract
-before these rocket formulas can be implemented exactly. Its existing claim 8's facing surrogate
-alone is insufficient. This is a named cross-spec dependency, not a claim that the missing
-contract is already approved. Scenario R20 below states the local angle test without relying
-on a scenario absent from the approved companion.
+S-0204 claim 13 supplies the exact raw angles used by the rocket pitch formulas. Its claim 8's
+integer-facing surrogate is not a substitute. Scenario R20 tests selected raw-angle contributions.
 
 ## Terms
 
@@ -260,12 +255,11 @@ above the terrain*.
     body facing (Formulas F8). From then on the game re-orders it every 30 ticks to attack the
     release cell; these orders do not change its flight, because a rocket missile's aim point is
     fixed by its first move order (claim 14) and never changes afterwards. The 30-tick interval
-    belongs to a shared re-order cycle, not a fresh per-missile delay; normal salvo release or reset
-    brings its next update forward to 2 ticks later. A released object of a type without the
-    missile-spawn flag instead starts to crash at once (S-0312, claim 16).
-    - Backing: `measurable` for fixed aim and non-missile crash (R7, R14); `unmeasured` for
-      release-cell selection and repeated orders: a rocket ignores them after its aim is fixed,
-      and no setup separating their effects has been established.
+    belongs to a shared re-order cycle, not a fresh per-missile delay; claim 26 defines its
+    deadlines and ordering. A released object of a type without the missile-spawn flag instead
+    starts to crash at once (S-0312, claim 16).
+    - Backing: `measurable` for fixed aim and non-missile crash (R7, R14), and for release-cell
+      selection and repeated orders with an ordinary-flight flagged aircraft (R21).
     - Confidence: high
 
 13. **When the spawner dies, changes hands or loses its locomotor.** The controller *clears its
@@ -519,6 +513,47 @@ above the terrain*.
       Its adoption rule is nevertheless fully specified above.
     - Confidence: high
 
+26. **Shared kamikaze re-orders (Q-0645).** The shared cycle is checked once per tick,
+    outside object turns, after planted-bomb detonations and before diving-aircraft steering
+    and the turn pass (S-0203 claim 1, rows 2, 10 and 5). Its ammunition, target and queued
+    behaviour changes are already available to each aircraft's turn in that tick. Spawn
+    controllers act within their spawners' turns (claim 24), so a missile released by such a
+    turn cannot receive a shared-cycle order in that same tick, even if a cycle was due then.
+    This cycle is distinct from the carrier-slot orders of S-0501 claim 35.
+
+    In a newly loaded skirmish the first cycle is due at tick number 1, not tick 0. A cycle
+    schedules the next for its own tick plus 30, even when no kamikaze exists. Thus an
+    uninterrupted empty game has due ticks 1, 31, 61 and so on; emptying the enrolled group
+    does not stop or restart that cadence.
+
+    A normal salvo release (claim 8), or a reset that actually releases at least one
+    preparing flagged aircraft (claim 11), replaces the shared deadline with the release
+    tick plus 2. At release tick *r*, neither *r* nor *r* + 1 is due from that replacement:
+    the next cycle is in *r* + 2, followed by *r* + 32 unless another release intervenes.
+    These are integer tick-number additions, with no rounding, counted in exactly the same
+    way as the 30-tick interval. It is a replacement, not a minimum: a release can postpone
+    an already imminent cycle, and repeated releases can keep postponing it. A reset that
+    releases none changes no deadline. Clearing slots under claim 13 enrolls surviving
+    flagged aircraft but does not itself replace the shared deadline.
+
+    At each due cycle every still-enrolled aircraft gets ammunition set to exactly 1 round,
+    its target set to its release cell and *attack* queued without forcing an immediate
+    behaviour start. These changes themselves take no scenario random draws; later aircraft
+    behaviour processing and firing retain their ordinary draws and gates. Orders are
+    assigned in enrollment order, not aircraft creation or placement order. Removing an
+    enrolled aircraft preserves the relative order of the others; later enrollments follow
+    them. Within a salvo release or reset, enrollment follows increasing slot index.
+    Claim 13's slot clearing instead enrolls in descending slot index. The cycle affects
+    the whole enrolled group, including older salvos, not only the release that set its
+    deadline. Release does not itself queue the first shared-cycle *attack*.
+    - Backing: `measurable` (R21) for release deadlines, orders, ammunition, release-cell
+      choice, enrollment order, turn-pass precedence and absence of immediate draws.
+      `unmeasured` for the initial and empty-group cadence: an empty cycle changes no
+      gameplay observable, and ordinary salvo release replaces its deadline before its
+      first distinguishing order. R21's slot-clear variant tests only inherited deadlines
+      that it can establish independently, not the otherwise hidden startup cadence.
+    - Confidence: high
+
 ## Formulas
 
 Number domains: positions and recorded distances are integer leptons; table-root results before
@@ -531,7 +566,7 @@ S-0205 claims 4, 5 and 7 own the shared rounding-mode switch and conversion rule
 toward zero. Every sine and cosine below is the table trigonometry of S-0105 Formulas F1,
 including its negative-angle quirk, not a mathematical-library sine or cosine. The table square
 root *r* is defined by S-0204 claim 5, the tangent step *σ* by S-0204 claim 8, and the exact
-raw angles *T* by the required companion S-0204 claim 13. *trunc* truncates toward zero.
+raw angles *T* by S-0204 claim 13. *trunc* truncates toward zero.
 
 **F1. Rocket step** (claim 18). With *s* = trunc(*v*), *F* the body facing read as a signed 16-bit
 value, θ = (*F* − 16383) × (−2π / 65536) (double precision):
@@ -644,7 +679,9 @@ only after adding the missile's position. The trigonometry is floating point.
 | Launch spacing, other spawner | 20 | ticks | Claim 6 |
 | Launch rise | 10 | leptons of world height | Claim 7 |
 | Set-C placement shift | 40, 40 | leptons towards map west, map north | Claim 7 |
-| Release re-order interval | 30 | ticks | Claim 12 |
+| Release re-order interval | 30 | ticks | Claims 12 and 26 |
+| First shared re-order cycle | 1 | tick number | Claim 26 |
+| Salvo/reset re-order delay | 2 | ticks after release | Claim 26 |
 | Return height margin (non-missile) | 20 | leptons | State table; S-0501 |
 | Rocket trailer interval | 3 | ticks | Claim 21 |
 | Set-C pause and raise animation interval | 24 | ticks | Claim 21 |
@@ -751,6 +788,7 @@ Ordering consequences:
 
 | Key (file, section) | Concept | Parse form | Absent-key default |
 |---|---|---|---|
+| No data key | shared re-order deadlines, enrollment priority and tick placement (claim 26) | fixed integer-tick behaviour; no per-type or per-house interval | not imported |
 | No data key | raw pitch angles (claim 17), airborne answer (claim 22), cell exclusion (claim 23), tick boundaries (claim 24), pending-clear conditions (claim 25) | fixed behaviour; raw angles from S-0204 claim 13 | not imported |
 | `Spawns` (rules, object type) | spawned type | aircraft type name | none (no controller) |
 | `SpawnsNumber` (rules, object type) | spawn count *N* | integer | 0 |
@@ -1002,6 +1040,44 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   observation only of drawn orientation or integer positions are inconclusive, not coverage.
   Entries without a valid distinguishing update remain unmeasured; this scenario does not
   test every entry or either shared quirk's alternative setting.
+
+- **R21. Shared release orders (claims 12 and 26; Q-0645).** Use the common skirmish
+  setup and five runs per variant. A named ordinary-flight release test map gives a carrier
+  a spawned ordinary aircraft type with the missile-spawn flag, not named as any rocket
+  type, and enough health to survive the observation. Give it an ordinary weapon; retain
+  all other flight rules. Record release tick, release cell, enrollment sequence, ammunition,
+  target, current/queued behaviours, due shared deadlines and scenario random state, with
+  samples separating the shared changes from object turns. Use a read-only recorder and
+  scripted ordinary attack input, never state writes. Expected after an isolated normal
+  release in *r*: no shared attack in *r* or *r* + 1; ammunition becomes 1, target becomes
+  the release cell and attack is queued in *r* + 2, before any object's turn, then every
+  30 ticks. Move the original target after release: the ordered cell stays the release
+  cell. Repeat a targetless reset with different body facings: the release cell is F8's
+  neighbour. The aircraft's own turn can consume the order or ammunition, so end-of-tick
+  values alone are inconclusive about the pre-turn changes.
+
+  Release a second spawner's salvo while the first survives. Expected: both receive orders
+  on the second release's replacement deadline. Arrange separate releases one tick apart,
+  and another one tick before the existing deadline: each replaces it with its own tick
+  plus 2, even where this postpones the older aircraft's order. Compare releases exactly
+  on an old due tick: the older group receives that tick's pre-turn orders, the newly
+  released object does not. A reset with no preparing flagged object leaves the deadline
+  unchanged. For enrollment priority, vary spawner placement/creation order independently
+  of release order, use multiple slots, then remove a middle enrolled aircraft normally.
+  Record the within-cycle target/queued-behaviour changes: surviving enrollment order is
+  retained, increasing slot index within normal release/reset, not creation order.
+
+  In a separate variant clear a spawner's slots during preparation by capture or destruction.
+  Expected: flagged survivors join in descending slot index without replacing the known
+  shared deadline. Establish that deadline with an earlier normal release; do not infer it
+  from an empty initial game. Arrange a slot-clearing release before an already due cycle
+  through a planted-bomb event where reachable: it can receive that cycle's order, whereas release
+  during the turn pass cannot. Record zero scenario draws across the shared assignment
+  itself; exclude later behaviour processing, firing and damage from that sample. A
+  different tick, cell, ammunition reset, enrollment priority, pre-turn boundary or draw
+  count falsifies the corresponding prediction. If sub-tick sampling cannot resolve order
+  assignment, that priority/boundary test is inconclusive, not established by equal
+  end-of-tick values. Startup and empty-group cadence remain unmeasured as claim 26 states.
 
 ## Open questions
 

@@ -1,9 +1,9 @@
 ---
 id: Q-0645
 title: When in the tick does the shared kamikaze re-order cycle run?
-status: open
+status: answered
 related: [S-0506, S-0501, S-0201]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
