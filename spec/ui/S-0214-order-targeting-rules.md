@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -177,7 +177,11 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Representative.** The selected object whose action is shown as the cursor (claim 1).
 - **Health ratio.** An object's current hit points divided by its type's hit points, computed in
   floating point (Formulas F2). *Full health* means a health ratio of exactly 1.
-- **Garrison.** Infantry entering a building to fight from inside it.
+- **Garrison.** Infantry entering a building to fight from inside it. "Can garrison" in
+  row I8 means the occupation test of S-0508 claim 1, not merely matching type flags.
+- **Damaging entry.** The above-threshold engineer action of row I7: a cursor/order
+  distinction, not a promise of damage on arrival. It issues the same capture order as
+  *capture*. Skirmish arrival outcomes follow S-0509 claims 6 and 7.
 - **Recycling building.** A building whose type turns units that enter it into credits.
 - **Bridge repair hut.** A building type that an engineer enters to repair a bridge. The cursor's
   destroyed-bridge test is S-0511 claim 21's, around the hut, not the actual repair selection
@@ -413,7 +417,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    given by table I, a precedence list over the generic result and the actor's and target's
    properties.
    - Backing: `measurable` (Scenarios T5 and T10; S-0511 claim 21, B13 for row I3's cursor
-     test, and claims 17 and 18, B12 and B14 for hut-entry effects and repair selection).
+     test, and claims 17 and 18, B12 and B14 for hut-entry effects and repair selection,
+     S-0508 claim 1, G1 and G2 for row I8's occupation test; S-0509 claims 6 and 7,
+     E4 for the distinction between engineer click action and arrival outcome).
      The rows that the list after Scenario T10 gives
      as `unmeasured` have no step, each with its reason.
    - Confidence: medium (low where a row says so)
@@ -422,7 +428,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    table V, of an own aircraft table AC and of an own building table B, in the same way.
    - Backing: `measurable` (Scenarios T6, T9 part D and T10; S-0504 claim 7 and scenario N7
      for the naval-mismatch docking refusal and amphibious exception; S-0507 claims 2, 4 and 7,
-     T2, T4 and T7 for transport answers and readiness). Rows that the list after Scenario
+     T2, T4 and T7 for transport answers and readiness; S-0314 claim 16 and H16 a, b and d,
+     plus Scenario T6 below, for depot permission and click outcomes). Rows that the list after Scenario
      T10 gives as `unmeasured` have no step, each with its reason.
    - Confidence: medium for table V; low for tables AC and B
 
@@ -962,7 +969,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 > exactly. Since *p* and *P* are integers, *h* = 1 exactly when *p* = *P*. Rounding of the
 > quotient is owned by S-0205 (number domains). Row I4 tests the acting engineer's own *h* < 1,
 > while rows I5 and I12 and value *b* of table V test the target's *h*. The hospital part of value *e*
-> in table I compares the actor's integers *p* < *P* directly.
+> in table I compares the actor's integers *p* < *P* directly. Row I7's threshold comparison
+> chooses only the click action, not an arrival damage/capture outcome: in skirmish an
+> otherwise eligible engineer captures at any health (S-0509 claims 6 and 7).
 
 > **F3 (attackable height).** The target can be attacked at all when *z*<sub>s</sub> > −20, where
 > *z*<sub>s</sub> is its height above the surface in leptons. Integer comparison, exact.
@@ -1085,7 +1094,7 @@ imported cursor image, not action numbers. All multi-frame rows animate with cla
 | area guard | Guard the target object (escort), or guard a cell |
 | patrol | A route action of route mode on a cell (S-0213, claim 16) |
 | capture | Capture, garrison, infiltrate or hijack |
-| damaging entry | An engineer entering an enemy capturable building that is above the capture threshold, to damage it instead of capturing it (special-abilities specs) |
+| damaging entry | The above-threshold engineer cursor/order action of row I7, producing a capture order, not a promised damaging hit on arrival (S-0509 claims 6 and 7) |
 | repair building, no-repair | An engineer repairing an own or allied building or a bridge, or refused |
 | recycle | Enter a recycling building to be recycled |
 | heal, repair vehicle | Heal infantry, or repair a vehicle |
@@ -1195,8 +1204,8 @@ undefined.
 | I4 | Engineer below full health (the engineer's own health ratio, F2); the target an engineer-friendly building that is a hospital | enter |
 | I5 | Engineer; the target an engineer-friendly building at full health | recycle if the building recycles, else no-repair |
 | I6 | Engineer; the target any other engineer-friendly building | repair building |
-| I7 | Engineer; the target a repairable building, not vehicle-like and not engineer-friendly, of a capturable type | capture if *h* ≤ *c* (Formulas F2), else damaging entry |
-| I8 | The target a building, not being erased, that this infantry can garrison; force-fire not held | capture (garrison) |
+| I7 | Engineer; the target a repairable building, not vehicle-like and not engineer-friendly, of a capturable type | capture if *h* ≤ *c* (Formulas F2), else damaging entry; this distinguishes click actions only, not arrival outcomes (S-0509 claims 6 and 7) |
+| I8 | The target a building that this infantry can garrison under S-0508 claim 1; force-fire not held | capture (garrison) |
 | I9 | Engineer; *g* is attack | no-move |
 | I10 | Healing actor; the target an enemy | idle |
 | I11 | Healing actor; the target is the actor itself | area guard |
@@ -1247,7 +1256,20 @@ exclude each other.
 | b4 | Otherwise, and for every vehicle that is not a healing actor | *k* |
 
 *Building-entry value n.* An *accepting allied building* is a building allied with the actor, not being erased,
-whose docking answer is *accepts*.
+whose docking answer is *accepts*. For a repair depot, permission is S-0314 claim 16's:
+the depot's owner must also count the vehicle as allied, the depot must not be under
+construction, being sold, still in its build-up state or switched off, and a contact place
+must be free for this vehicle. A place assigned to this vehicle counts as available to it.
+The naval-match rule of S-0504 claim 7 applies. A vehicle already standing on that very
+depot gets no new acceptance. Neither full health nor zero funds prevents acceptance.
+These permission tests do not replace the table's actor-side alliance and generic-action
+tests. Repair after arrival belongs to S-0314 claim 6.
+
+At an ordinary one-place depot whose contact is already held by another vehicle, an ordinary
+second vehicle click with *b* = *select* keeps *select* through n4: it does not produce an
+enter order or enqueue a waiting vehicle. This is not automatically *no-enter*. Claim 3
+then makes it a selection click. Simultaneous clicks resolved before any contact exists
+remain subject to claim 2's shared-state rule, not this already-busy case.
 
 | Row | Condition | *n* |
 |---|---|---|
@@ -1493,8 +1515,10 @@ Ordering consequences:
 ## Edge cases and quirks
 
 - **Damaging entry.** An engineer's action on an enemy capturable building above the capture
-  threshold is *damaging entry*. It produces a capture order like any other (table M). What the
-  engineer does on arrival belongs to the special-abilities specs.
+  threshold is *damaging entry*. This is only a cursor/order distinction: it produces the same
+  capture order as *capture* (table M), not a promised damaging hit. Skirmish arrival outcomes
+  follow S-0509 claims 6 and 7: the multi-engineer damage rule is off, and an otherwise eligible
+  engineer captures at any health, including full health.
 - **Full health is exact.** Rows I4, I5, I12 and value *b* of table V test *h* = 1 and *h* < 1
   exactly (Formulas F2). Hit points are integers, so this is not a defect. No switch.
 - **No-move still moves.** This is the rule, not a quirk. *No-move* is the action that the
@@ -1914,7 +1938,14 @@ cell, by table GC). Falsified if any of these differs.
   damaging entry and repair building alike (table M: *as for capture*, which needs only that
   the actor is movable). For the hut, *repair building* or *no-repair* follows S-0511 claim 21's
   cursor test regardless of hut owner. Do not infer claim 18's actual repair choice from that
-  cursor: B12 and B13 test the two separately, and B14 tests entry effects. A refused repair
+  cursor: B12 and B13 test the two separately, and B14 tests entry effects. For the enemy
+  capturable building, let the engineer arrive in both health cases, with no intervening
+  owner change, sale or erasure. Expected: capture in both, not a damage-only entry above
+  the click threshold (S-0509 claims 6 and 7, E4). A damage-only outcome falsifies this
+  skirmish distinction. For garrison permission, repeat the hover with an allied non-owned
+  building, full capacity, badly damaged building and mind-controlled entrant as in S-0508
+  claim 1, G1 and G2: none passes row I8 merely because both type flags allow occupation.
+  A refused repair
   click does not use up the engineer; a completed entry does, even when repair changes nothing
   at the original setting of S-0511 claim 17's switch. An intact-bridge entry remains unmeasured
   until a fixture establishes it, as that claim states.
@@ -1945,7 +1976,18 @@ Each actor is tried alone. The cursor gives its action, and the recorder its ord
   while route mode is held. Expected: deploy, no-deploy, no-deploy.
 - An empty transport and a loaded one, each clicked on itself. Expected: the empty one no-deploy
   and no order, the loaded one deploy and an unload order.
-- A vehicle clicked on an own repair depot. Expected: enter, and an enter order.
+- A vehicle clicked on an own repair depot. Expected: enter, and an enter order. Repeat
+  at full health, at zero credits, and with a mutually allied depot: none of these alone
+  prevents entry. Use S-0314 H16 a, b and d for permission controls (construction, sale,
+  build-up, switched-off state, naval mismatch and already standing on that depot).
+  At a one-place depot, wait until another vehicle has established contact but has not yet
+  arrived, then select the second vehicle and click the depot without modifiers. Expected:
+  select, the depot becomes selected, no second enter order and no waiting entry queue.
+  Record the action, selection, orders and existing contact separately. A second enter order
+  after the place is already assigned falsifies this case; two orders issued before any
+  contact exists do not. Use the recorder and scripted input in the shared stock skirmish
+  setup, three valid runs per case. See S-0314 claim 16 for permission and claim 17 for
+  reservation timing.
 - A carrier aircraft and an allied tank. Expected: tote, and a move order with the tank as
   destination.
 - An aircraft and its own landing pad whose type lacks the repair-depot flag (a named test rules
