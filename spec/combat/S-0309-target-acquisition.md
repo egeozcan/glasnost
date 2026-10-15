@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -149,7 +149,8 @@ this spec:
 
 1. **Search contexts.** An infantry unit, vehicle or building runs an automatic search in these
    situations. S-0215 says when the first, third and fourth happen (claims 33, 26 and 27); claim
-   23 here owns the second, and S-0207 claim 20 f owns the phasing-in end that triggers the last:
+   23 here owns the second. S-0517 claim 16 owns the deployed-firing context, run by S-0215
+   claims 23 and 31, and S-0207 claim 20 f owns the phasing-in end that triggers the last:
 
    | Situation | Kind | Centre |
    |---|---|---|
@@ -157,7 +158,12 @@ this spec:
    | its targeting timer has run out while it carries an attack-move memory, whatever its current behaviour, in the cases of claim 23 that run a search (in the others no search runs and the timer is not restarted) | range | its position |
    | the processing of *area guard* (S-0215, claim 26) | area | the guard spot |
    | the processing of *hunt* (S-0215, claim 27) | map-wide | its position |
+   | the deployed-firing rule of a deployed infantry unit (S-0517 claim 16), during the processing of S-0215 claims 23 or 31, when it has no target within the range of the weapon selected with no target supplied; no targeting-timer gate | range | its position |
    | phasing in after its own teleporting move ends (S-0207, claim 20 f), it has no target, and claim 2 and the opportunity gate of claim 3 allow it; never for a harvester-flag type, which does not phase in; a target it sets is an opportunity target as claim 24 gives | range | its position |
+
+   S-0517 claim 16 owns the deployed-firing rule's target retention, replacement and fall-back
+   outcomes. Its search context does not by itself settle whether claims 2 and 3 limit that
+   search (S-0517, Open questions).
 
    An actor that carries an attack-move memory never runs the search of the first row, in any
    behaviour: it runs the search of the second row instead, which claim 23 describes. That search
@@ -180,10 +186,11 @@ this spec:
      scenario A6, parts d and g; the area-guard row by scenario A1, part g, and A11, part d; the
      hunt row by scenario A11, part a; the teleport case and its draw ordering by scenario A1,
      part f, with S-0207 scenario D22 runs 1, 2 and 7 for the phasing-in and conditional-draw
-     conditions). The paragraph on
+     conditions); the deployed-firing row by S-0517 scenario P7, parts b, c and f, including
+     runs with positive ticks left on the targeting timer in part b. The paragraph on
      other behaviours is a pointer to the specs that own those searches, not a claim of this spec,
      and carries no backing or confidence (Open questions).
-   - Confidence: high (the first four); medium (the teleport case)
+   - Confidence: high (the first four); medium (the deployed-firing context and the teleport case)
 
 2. **Passive acquisition.** An object may pick a target in the range searches of the first and last
    rows of claim 1, and in the area search, only when all of these hold (the map-wide search of
