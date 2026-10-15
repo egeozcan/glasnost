@@ -1727,7 +1727,9 @@ fn deck_bridge(w: &glasnost_sim::world::World, c: CellXY) -> bool {
     if !w.high_bridge(c) {
         return false;
     }
-    let Some(i) = w.cells.idx(c) else { return false };
+    let Some(i) = w.cells.idx(c) else {
+        return false;
+    };
     // spec: S-0105 claim 40 (towards y − 1 for an axis along cell x, towards x − 1 for an axis along cell y; S-0212 claim 3's axis)
     let n = match w.cells.bridge_axis[i] {
         Axis::X => CellXY::new(c.x, c.y - 1),

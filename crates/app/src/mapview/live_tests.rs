@@ -1438,6 +1438,13 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         let items = &entries[0].items;
         let shadow = items.iter().find(|i| i.paint == Paint::Shadow);
         let body = items.iter().find(|i| i.paint != Paint::Shadow);
+        if let (Some(s), Some(b)) = (shadow, body) {
+            // spec: S-0102 claim 18 (the shadow is a depth reader with the body's own bias and the upright profile, drawn in the object's own drawing before its body, so an aircraft's body is never darkened by its own shadow)
+            assert_eq!(s.test, DepthTest::Reader);
+            assert_eq!(s.depth, b.depth, "the body's bias and profile");
+            let at = |p: Paint| items.iter().position(|i| i.paint == p);
+            assert!(at(Paint::Shadow) < items.iter().position(|i| i.paint != Paint::Shadow));
+        }
         (shadow.map(|s| s.y), body.map(|b| b.y))
     };
     let (shadow, body) = offset(0);
@@ -1505,7 +1512,12 @@ fn claim40_the_anchor_is_the_terrain_projection() {
     }
     // A slope shape 1 rises with the in-cell x: the exact position is sampled.
     let slope = flat_grid(0, 1);
-    let at = |dx| aircraft_shadow_point(&slope, &jet_at((9 * 256 + dx, 9 * 256 + 100, 2000), false, false));
+    let at = |dx| {
+        aircraft_shadow_point(
+            &slope,
+            &jet_at((9 * 256 + dx, 9 * 256 + 100, 2000), false, false),
+        )
+    };
     assert_eq!(at(0), project_lifted(9 * 256, 9 * 256 + 100, 0));
     assert_eq!(at(255), project_lifted(9 * 256 + 255, 9 * 256 + 100, 103));
 }
