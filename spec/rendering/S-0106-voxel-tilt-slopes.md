@@ -2,11 +2,11 @@
 id: S-0106
 title: Slope shapes, terrain surface height and voxel tilt on slopes
 topic: rendering
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: []
 supersedes: []
@@ -61,7 +61,7 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
 - **Tilt transform** *R*<sub>s</sub>. A fixed 3 × 3 rotation for each slope shape (claim 4), in
   the model frame of S-0105 (model +x = map east, +y = map north, +z = up).
 - **Tilt orientation** *q*<sub>s</sub>. A fixed, approximately unit quaternion (x, y, z, w) for each slope shape,
-  used only while a tilt changes (claim 7, Constants table C3). It describes nearly, but not exactly,
+  used only while a tilt changes (claim 7, Constants C3's construction rule). It describes nearly, but not exactly,
   the same rotation as *R*<sub>s</sub>.
 - **Tilt state** of a unit with a tilting locomotor: its *current shape* *s*<sub>c</sub>, its
   *previous shape* *s*<sub>p</sub>, and the tick *t*<sub>0</sub> at which the current shape was last
@@ -86,11 +86,13 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
 - **Teleporting locomotor, rocket locomotor.** Two further locomotors selectable by a type's
   locomotor field, named after how they move their units. A *rocket* is a unit with the rocket
   locomotor. Their movement belongs to the movement and aircraft specs.
-- **Powered down.** A hovering locomotor is *powered* while its unit is switched on, and also,
-  whatever that switch, while its unit has a positive height above the surface (claim 5; which
-  height exactly is an open question); otherwise it is *powered down*. A unit is switched off when it is deactivated, for example when its owner loses the
-  building that a powered-unit type depends on; which events switch units off and on belongs to
-  the vehicle specs.
+- **Powered down.** A hovering locomotor is *powered* while its unit is switched on, or while its
+  hover height is strictly positive; otherwise it is *powered down*. Hover height is the unit's
+  world height minus the terrain surface height at its own position (claim 2), minus a further
+  416 leptons when it is on a bridge deck. These are exact integer subtractions in leptons,
+  with no rounding. S-0503 claims 8 and 10 own settling, switching off and re-enabling: a
+  switched-off hovering unit remains powered until its hover height reaches 0. Loss of the
+  control building on which the type depends can switch it off.
 
 ## Behaviour
 
@@ -134,9 +136,14 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
 ### Tilt of each shape
 
 4. **Fixed tilt per shape.** A unit whose body is tilted to slope shape *s* (claims 5 to 9) is drawn
-   with the tilt transform *R*<sub>s</sub> of Formulas F2. Its up axis leans away from the uphill
-   direction, so the uphill end of the body is raised. The tilt angles are not those of the surface
-   of claim 2 as it is drawn (Terms, level height in model units):
+   with the corrected tilt transform *R*<sub>s</sub> of Formulas F2. Its up axis leans away from the
+   uphill direction, so the uphill end of the body is raised. The nominal tilt follows the surface
+   as drawn: arctan(1/√6) radians for edge slopes and π/6 radians for corner, valley and steep
+   slopes, with the table-trigonometry precision of F2. This is a presentation-only correction:
+   surface heights, movement, collision and firing calculations are unchanged. There is no switch.
+   The original used mismatched shape-dependent angles, making voxel bodies and shadows appear
+   too steep on edge slopes and too shallow on corner and valley slopes.
+   For oracle comparisons only, its angles were:
 
    | Shapes | Tilt of the up axis | Angle of the surface as drawn |
    |---|---|---|
@@ -145,19 +152,15 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    | 13 … 16 (steep) | 29.3115° | 30° |
    | 0 and 17 … 20 | none (identity) | 0 for flat terrain / saddle tile geometry unresolved |
 
-   So edge slopes tilt the body more steeply than their surface, and corner and valley slopes less
-   steeply. This difference is specified as the original's shape-dependent rendering, not as
-   an established defect requiring a geometric replacement. A corner slope and the valley slope with the same uphill
-   direction (5 and 9, 6 and 10, 7 and 11, 8 and 12) give identical tilts. The angles come from
-   arctangents taken from a table with a coarse step (Formulas F2), and the rotations use the table
-   trigonometry of S-0105 (F1), which is why the tilts are 29.3115° and 21.3574° rather than the
-   nominal arctangents (Formulas F2).
-   - Backing: `measurable` (scenario T2) for visible transforms. Exact floating-point
-     values that give the same captured pixels are `unmeasured`: T2 observes images,
-     not transform components, and cannot separate such values.
-   - Confidence: high (the transforms reproduce the original's own arithmetic exactly); medium
-     for the reading that the angles do not match the surface (it rests on the scales of S-0105 F2
-     and F3 and S-0101 claims 1 and 4, through *η* and *ρ*)
+   A corner slope and the valley slope with the same uphill direction (5 and 9, 6 and 10,
+   7 and 11, 8 and 12) give identical tilts in both renderings. Flat and saddle shapes retain
+   identity tilt; unresolved saddle artwork does not define a replacement orientation.
+   - Backing: `measurable` (T2: original transforms against the oracle, corrected transforms
+     as engine conformance). Exact floating-point values that give the same captured pixels
+     are `unmeasured`: T2 cannot separate them. Unchanged game calculations are
+     `unmeasured` here: the scenario compares images, not every possible gameplay outcome.
+   - Confidence: high for the original transforms and the correction's definition; medium
+     for the surface-angle comparison, which uses S-0105 F2 and F3 and S-0101 claims 1 and 4
 
 ### Which bodies tilt
 
@@ -166,7 +169,7 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    | Locomotor | Body tilt |
    |---|---|
    | driving, naval | tilt state with transitions (claims 6 and 7) |
-   | hovering | *R*<sub>s</sub> of the cell under the unit, applied at once, only while the unit is not rocking and its locomotor is powered down (Terms: a unit with a positive height counts as powered, so a hovering unit is tilted only once it rests on the surface); a powered hovering unit is never tilted by slopes |
+   | hovering | *R*<sub>s</sub> of the cell under the unit, applied at once, only while the unit is not rocking and its locomotor is powered down (Terms: a unit with strictly positive hover height counts as powered, so a switched-off hovering unit is tilted only once it settles to hover height 0); a powered hovering unit is never tilted by slopes |
    | tunnelling | *R*<sub>s</sub> of the cell under the unit, applied at once, while the locomotor is in its surface state; in its other states (digging in, underground, surfacing) no slope tilt (the pitch it shows while digging in and surfacing belongs to the vehicle specs) |
    | walking, mechanical walking, drop-pod, teleporting, jumpjet | never tilted by slopes (the jumpjet's rocking aside, claim 9) |
    | flying, rocket | no tilt from slopes |
@@ -177,9 +180,9 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
      (walking, mechanical walking, drop-pod, tunnelling, naval, given to a voxel vehicle by named
      test data) and T7 for a powered-down hovering unit
    - Confidence: high for driving, naval, walking, mechanical walking, drop-pod, teleporting and
-     jumpjet; medium for hovering and tunnelling (which events power a hovering locomotor down
-     and which height its test uses, and the states of the tunnelling locomotor, belong to the
-     vehicle specs); medium for flying and rocket, whose bodies take their orientation from rules
+     jumpjet; high for hovering's powered-height test (S-0503 claims 8 and 10),
+     medium for tunnelling (its surface states belong to the vehicle specs),
+     medium for flying and rocket, whose bodies take their orientation from rules
      of the aircraft specs that this spec does not fix
 
 6. **Tilt state of the tilting locomotors.** On each ground-layer movement tick on which the slope shape of the cell
@@ -209,8 +212,9 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    For a restart it is claim 6's interrupted orientation. This interpolation is combined
    with its 32-step body rotation, as in claim 8. From tick *t*<sub>0</sub> + 3
    on, the body is settled and drawn with *R*<sub>s<sub>c</sub></sub> (claim 8). Because the
-   interpolated orientations describe slightly different rotations from the table transforms, two
-   small endpoint differences occur in an uninterrupted transition: at *j* = 0 the old tilt is drawn as
+   interpolated orientations describe slightly different rotations from the table transforms, small
+   endpoint differences can occur in an uninterrupted transition. The following numeric examples
+   describe the original angles only, not claim 4's corrected rendering: at *j* = 0 the old tilt is drawn as
    *q*<sub>s<sub>p</sub></sub> (for an edge slope 29.3555° instead of 29.3115°), and at
    *t*<sub>0</sub> + 3 the tilt snaps from the two-thirds orientation to the table transform. For
    example, driving from flat ground onto an edge slope the drawn tilt is 0°, 9.756°, 19.600°, then
@@ -357,7 +361,20 @@ trigonometry for every sine and cosine (S-0105 F1) and single-precision stores t
 | 13, 14, 15, 16 | 5π/4, 3π/4, π/4, 7π/4 | *τ*<sub>A</sub> |
 | 0, 17, 18, 19, 20 | *R* is the identity | |
 
-The two angles are values of the original's table arctangent arctan<sub>t</sub>, a tabulated
+For the corrected rendering, replace the angle column above with arctan(1/√6) radians for
+shapes 1 … 4 and π/6 radians for shapes 5 … 16. Evaluate these mathematical angles in double
+precision, rounded toward zero under S-0105 F0 (to nearest with its rounding switch off).
+No integer rounding is applied to these angles. The rotation operations and single-precision stores
+still follow S-0105 F0 and F2. Thus the nominal angle matches the drawn terrain, subject only
+to the shared table-trigonometry resolution, rather than to the coarse arctangent grid.
+Flat and saddle shapes keep identity. Use these corrected angles for bodies, turrets, barrels,
+shadows and the construction of transition orientations alike; there is no mixed-angle mode.
+The original-angle column above and tables C3 and C4 below are historical oracle references,
+not corrected engine constants. Corrected orientations are defined by C3's construction rule
+with the corrected angles; corrected matrices are defined by this rotation formula.
+
+For the original-angle references only, the two angles are values of the original's table
+arctangent arctan<sub>t</sub>, a tabulated
 arctangent on a grid of arguments with step *Δ* = 0.024413354694843292 (a single-precision number:
 4096 steps reach an argument of about 100, 4096*Δ* ≈ 99.997):
 
@@ -379,9 +396,11 @@ claim 4 (29.3115°, 21.3574°) differs again from *τ* because the three rotatio
 trigonometry. Constants table C4 gives the resulting matrices.
 
 **F3. Interpolated tilt (claim 7).** Let *q*<sub>0</sub> be the start orientation
-(*q*<sub>s<sub>p</sub></sub> from table C3 for an uninterrupted transition, or claim 6's
-interrupted quaternion for a restart), *q*<sub>1</sub> = *q*<sub>s<sub>c</sub></sub>
-(table C3), and *t* = *p* stored in single precision. Let *δ* be the four-component dot product *q*<sub>0</sub> · *q*<sub>1</sub>, stored in single precision. Define the interpolation weights by
+(*q*<sub>s<sub>p</sub></sub> from C3's corrected-angle construction for an uninterrupted
+transition, or claim 6's interrupted quaternion for a restart), *q*<sub>1</sub> = *q*<sub>s<sub>c</sub></sub>
+(C3's construction rule using claim 4's corrected angle), and *t* = *p* stored in single precision.
+For the uninterrupted start, likewise use that construction rule rather than C3's historical
+numeric row. Oracle comparisons instead use the original numeric rows for both endpoints. Let *δ* be the four-component dot product *q*<sub>0</sub> · *q*<sub>1</sub>, stored in single precision. Define the interpolation weights by
 
 > *(*k*<sub>0</sub>, *k*<sub>1</sub>)* = (*1 − t*, *t*) when *1 − δ ≤ 10⁻⁵*,
 >
@@ -454,7 +473,9 @@ and then south-east.
 | 9 | 1 | 1 | 0 | 104 | | 19 | 0 | 0 | 52 | 52 |
 | 10 | −1 | 1 | 104 | 104 | | 20 | 0 | 0 | 52 | 52 |
 
-**C3. Tilt orientations** *q*<sub>s</sub> = (x, y, z, w), single precision, dimensionless.
+**C3. Original tilt orientations and the construction rule.** *q*<sub>s</sub> = (x, y, z, w),
+single precision, dimensionless. The numeric rows are oracle references only; corrected engine
+orientations use the rule following the table with F2's corrected angles.
 
 | Shapes | *q* |
 |---|---|
@@ -481,8 +502,9 @@ table square root of S-0105 F1, so a diagonal axis has components ±0.7071284 ra
 which is why the x and y entries of shapes 5 … 16 are not the half-angle sine divided by √2. Values to
 7 decimals; the original's are the single-precision numbers nearest to them.
 
-**C4. Tilt transforms** *R*<sub>s</sub> (F2), rows listed top to bottom, single precision,
-dimensionless. Shapes
+**C4. Original tilt transforms** (oracle references only), rows listed top to bottom,
+single precision, dimensionless. Corrected *R*<sub>s</sub> is F2 with claim 4's angles, not
+these numeric rows. Shapes
 9 … 12 equal 5 … 8; shapes 0 and 17 … 20 are the identity.
 
 | *s* | row 1 | row 2 | row 3 |
@@ -512,8 +534,8 @@ which does not give exact zeros at multiples of π/2 (S-0105 F1). They are part 
 | Saddle rise | 52 | leptons | Shapes 17 … 20, claim 2 |
 | Transition length | 3 | ticks | Claims 6 and 7 |
 | Table arctangent step | 0.024413354694843292 | argument units per entry | F2; 4096 steps reach about 100 (99.997) |
-| *τ*<sub>A</sub> | 0.51163476705551147 | radians | F2 |
-| *τ*<sub>B</sub> | 0.37238854169845581 | radians | F2 |
+| Original *τ*<sub>A</sub> | 0.51163476705551147 | radians | F2, oracle reference only |
+| Original *τ*<sub>B</sub> | 0.37238854169845581 | radians | F2, oracle reference only |
 | Interpolation linear threshold | 10⁻⁵ | dimensionless | F3 |
 | Rocking threshold | 0.005 | radians | S-0105 claim 26 |
 
@@ -541,19 +563,20 @@ for the table are those of claims 6 and 7.
 
 All switches default to the original behaviour.
 
-- **Shape-dependent angles.** Claim 4 specifies the original angles without an optional
-  geometric replacement. The comparison with the drawn surface establishes a mismatch,
-  but not whether the intended visual convention is the drawn-surface angle or the angle
-  in world leptons. The previously proposed angle switch is withdrawn rather than choosing
-  an unapproved alternative. This does not affect surface height, movement or collisions.
+- **Shape-dependent angles.** Claim 4 corrects this drawing artefact unconditionally under
+  the presentation-only bug policy. The reference is the terrain as drawn, not its angle in
+  world leptons: the comparison concerns visual alignment in model space. F2 and C3 define
+  the corrected rendering; their historical values and C4 support oracle comparisons only.
 - **`quirks.negative_level_floor_raised`.** Original: below level 0 the surface is 1 lepton higher
   than 104ℓ (claim 3). Fixed: *B*(ℓ) = 104ℓ for every level.
 - **Continuous restart.** Claim 6 removes the original's presentation-only restart jump
   unconditionally. T11 separates its oracle comparison from engine conformance.
 - **`quirks.tilter_flag_ignored`.** Original: the tilter flag has no effect (claim 10). Fixed: a
   vehicle whose flag is no is never tilted by slopes (its body and shadow drawn as on flat ground).
-- **Interpolated endpoints.** The jumps of claim 7 at *j* = 0 and on settling are part of the
-  original's look. They come from the difference between C3 and C4 and get no switch of their own.
+- **Interpolated endpoints.** The small endpoint differences of claim 7 arise from the
+  quaternion construction versus the settled matrix construction. Both use the same corrected
+  nominal angles in our engine. Historical numeric examples use C3/C4's original angles.
+  These numerical rendering differences get no switch of their own.
 - **Shape values outside 0 … 20.** If the tile cell that gives a cell its slope shape (S-0010
   claim 6) carries a slope code outside 0 … 20 (the slope code of S-0010's Terms), the original's
   result is unspecified. Our engine treats such a cell as flat (shape 0) and the importer warns
@@ -587,12 +610,16 @@ or inconclusive runs. Every comparison uses the recorded positions, cells, facin
 an event that a scenario needs may fail to happen, the scenario says what is recorded instead.
 
 *Renders* below are golden images made with S-0105's pipeline and the transforms of this spec at
-the stated facing: the *C4 render* uses table C4 (and F3 during an uninterrupted transition).
-The *geometric comparison renders* replace only F2's nominal tilt angle: one uses
+the stated facing: the *C4 render* uses table C4 (and F3 with C3's original numeric endpoints
+ during an uninterrupted transition).
+The *corrected renders* use claim 4's angles for F2 and for C3's construction, and F3
+with those corrected endpoints during transitions. The *geometric comparison renders*
+replace only the original F2's nominal tilt angle: one uses
 arctan(1/√6) for shapes 1 … 4 and π/6 for shapes 5 … 16, the other uses
 arctan(104/256) and arctan(208/(256√2)), respectively. These angles are double-precision
 radians, rounded as S-0105 F0 specifies; all other F2 operations are unchanged. They are
-falsifying hypotheses for the oracle, not alternative engine behaviours. A *C4 shadow render* is
+falsifying hypotheses for the oracle. The first is also the corrected engine's settled
+render; the second is not an engine alternative. A *C4 shadow render* is
 S-0105 claim 30's footprint with *S* = *R*<sub>s</sub> · Rz(*θ*<sub>body</sub>). The *flat image*
 of a unit is its capture on flat ground at the same facing.
 
@@ -601,6 +628,16 @@ of potential shadow pixels. Golden images also apply S-0105 claim 39's vehicle o
 exclusions from the current completed own-part image on every appearance; screen darkening
 follows S-0102. Corrected reuse comparisons are engine conformance, not oracle checks.
 A missing or retained pixel explained by those rules does not falsify the slope transform.
+
+Unless a part explicitly says engine conformance, its numeric angles, C4 images and F3
+endpoint rows below describe oracle expectations using the original angles. Replay each
+image-comparison part on our engine with the same recorded pose and controls, replacing only
+the historical tilt matrices and endpoint orientations with the corrected renders. Expected:
+every eligible body and shadow matches the corrected render, including transitions and
+settled placement. An image matching only the original-angle render, an incorrect transition
+duration, or a body/shadow using different angle conventions falsifies the corrected rule.
+Pixel-identical renders are inconclusive. Corrected restarts also use the continuous-start
+rule already specified in T11; no oracle run is expected to reproduce either correction.
 
 **T1. Surface height (claims 1 to 3).**
 - *Setup:* a map with one cell of each slope shape 1 … 20 at height level 2, each surrounded by
@@ -744,17 +781,26 @@ A missing or retained pixel explained by those rules does not falsify the slope 
   depends (a type whose units are switched off when their owner loses that building; stock data
   has one), and one unit of that type, parked on a shape-1 cell at body facing 0, and one on flat
   ground at the same facing.
-- *Procedure:* the building is sold or destroyed. One capture per tick, and the recorder's height
-  of the unit, from before the loss until the unit has rested at height 0 above the surface for
-  some seconds.
-- *Observable:* body and shadow images, and the unit's height above the surface, per tick.
+- *Procedure:* the building is sold or destroyed. Capture and record each tick from before the
+  loss until the units have rested at hover height 0 for some seconds. Repeat the flat-ground
+  control on a high bridge deck. Restore the control building and record the surviving units
+  rising again (S-0503 claims 8 and 10).
+- *Observable:* body and shadow images, world position and height, terrain surface height at
+  that position, deck state, and current body facing per tick. Compute hover height as in Terms.
+  Switch-off may spin the body (S-0503 claim 10), so compare renders at each recorded facing,
+  not necessarily the initial facing 0.
 - *Expected:* while switched on, the body on the slope shows its flat image. After the switch-off,
   the body still shows the flat image while its height above the surface is positive; from the
   first tick on which that height is 0, it shows the C4 render of shape 1, with no intermediate
-  tilts. The shadow matches the C4 shadow render of shape 1 throughout.
+  tilts. The shadow matches the C4 shadow render of shape 1 throughout. On the deck control,
+  hover height 0 means world height equals terrain surface height plus 416 leptons, not terrain
+  surface height alone. Re-enabling removes the slope tilt at once, even before lift has
+  raised the unit above hover height 0. This control asserts no slope-tilt rule for a driving
+  unit on a bridge deck (claim 6 leaves that separate case open).
 - *Falsified if:* the body is tilted while switched on or while its height is positive; it stays
   flat after resting at height 0 above the surface switched off; intermediate tilts appear; the
-  shadow is flat. (If the switched-off unit never comes down to height 0 above the surface, the
+  shadow is flat; the deck control settles to a different world height; or the slope body
+  remains tilted after re-enabling. (If the switched-off unit never comes down to height 0 above the surface, the
   scenario tests only the first half,
   and records the height it keeps.)
 
@@ -854,8 +900,9 @@ A missing or retained pixel explained by those rules does not falsify the slope 
   orientation, not the partially tilted flat-to-1 pose, then follows F3 from 1 to 4
   for a new 3-tick transition. A continuous continuation from the interrupted pose
   or retention of the first settling deadline falsifies that original-behaviour account.
-  Engine-conformance expectation: at the second crossing, evaluate the first transition's
-  quaternion at its recorded elapsed fraction, use that as the new F3 start orientation,
+  Engine-conformance expectation: use corrected-angle endpoints throughout. At the second
+  crossing, evaluate the first transition's quaternion at its recorded elapsed fraction,
+  use that as the new F3 start orientation,
   and settle to shape 4 three ticks later. A jump to shape 1's full tilt, any image
   inconsistent with that restarted interpolation, or a different settling deadline
   falsifies the corrected rule. Shadow tilt remains immediate in both comparisons.
@@ -924,9 +971,9 @@ A missing or retained pixel explained by those rules does not falsify the slope 
   saddle surface: an alternative that follows the corners cannot be defined without them.
 - Where an airborne unit's shadow lands vertically (also open in S-0105), and which of an
   aircraft's facings turns its shadow (claim 11).
-- Which events switch a hovering unit off and on, which height its powered test uses, and which
-  states of the tunnelling locomotor count as its surface state (claim 5). This belongs to the
-  vehicle specs.
+- Which states of the tunnelling locomotor count as its surface state (claim 5). This belongs
+  to the vehicle specs. Hovering power and the height used by its test are resolved by
+  S-0503 claims 8 and 10.
 - Whether a stationary unit reacts to a change of its cell's slope shape, and whether
   a unit on a high bridge deck tilts to the ground cell below it. These cases are not
   fixed by claim 6 or the state table in this revision.
