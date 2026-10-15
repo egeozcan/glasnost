@@ -2,7 +2,7 @@
 id: S-0510
 title: Spies and infiltration
 topic: infantry
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -68,7 +68,8 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
    destination building is S-0209 (claim 4, mission-target override). A spy whose type also has
    the engineer flag is handled as an engineer and never infiltrates (S-0509). A destination that
    is a vehicle-like building, reached at the building's own cell, is handled by a different entry
-   rule that does not look at the spy flag (S-0509); no infiltration happens then.
+   rule that does not look at the spy flag (S-0509 claim 17); no infiltration happens then.
+   The building's entry raise is the shared raise of S-0509 claim 2, described in claim 9 here.
    - Backing: `measurable` (scenarios I1 and I6) for ordinary *capture* arrival and engineer
      precedence; `unmeasured` for *area guard*, *patrol*, target-only arrival, the absence of
      extra entry gates and the vehicle-like exception: no scenario here establishes those
@@ -172,7 +173,8 @@ satellite*, *tech-lab list*, *superweapon record*, *trigger, tag*, *entry raise*
 ### Triggers
 
 9. **Trigger raises.** An entry by claim 1 raises the building's tag with the entered-by code and
-   the spy as causing object (an entry raise, S-0011 claim 18) before the effect, so the actions of
+   the spy as causing object (an entry raise, S-0011 claim 18). This is the same raise as
+   S-0509 claim 2, not an additional raise. It happens before the effect, so the actions of
    that raise see the state before the effect: for example the victim's balance before a theft and
    the building's owner at the time. After the effect and before its removal, the spy's own tag
    is raised with the destroyed-by-anything code, with the spy as causing object (S-0011 claim 19).
@@ -422,5 +424,3 @@ proposals, not assertions that an existing harness already exposes them.
   quirk switch for it (fixed behaviour: the spy does not enter a building of its own house) may be
   wanted. Scenario I5's two runs test this, with a stop-short outcome remaining inconclusive
   about the entry effect.
-- The entry rule for a vehicle-like destination building (claim 1) is not specified here; S-0509
-  should own it.
