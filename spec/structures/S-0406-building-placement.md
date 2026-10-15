@@ -2,11 +2,11 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798]
 supersedes: []
@@ -639,7 +639,8 @@ names the top-left cell of the foundation. In addition:
 ### When construction begins and whether it ends
 
 17. **From entry to the first construction processing.** A building that enters play under
-    construction (claim 1, or a deploy under S-0415 claim 6) begins its construction state at
+    construction (claim 1, a restored replacement under S-0524 claim 15, or a deploy under
+    S-0415 claim 6) begins its construction state at
     entry: its stage is 0 and its stage timing counts from the entry tick (S-0108 claim 5). At
     entry it has no current behaviour and *construction* queued. A rule that asks for its
     behaviour while none is current sees the queued *construction*. The queued *construction*
@@ -652,7 +653,10 @@ names the top-left cell of the foundation. In addition:
     onto the last stage of the range, stage *a* + *c* − 1 of S-0108 claim 5, or (b) the range's
     delay is 0, so that its stage does not advance. A stage that runs past the end and wraps
     (S-0108 claim 6) does not set it. A deploy also sets the ready mark when the building enters
-    play. The results, for uninterrupted play (F7):
+    play. A place order and a restored replacement instead leave the mark clear at entry,
+    even without a build-up sprite. Healing an existing building through restoration does not
+    restart construction or change its mark (S-0524 claim 15). The results, for uninterrupted
+    play (F7):
     - **Placed building, at least 2 stages and a positive delay.** The place order is applied in
       the orders part of tick *T* (S-0203 claim 7), so the building's first turn is on *T* + 1. The
       build-up runs once from entry and lands on its last stage at *R* = *T* + (*n* − 1) × *d_b*,
@@ -663,6 +667,14 @@ names the top-left cell of the foundation. In addition:
       on tick *R* only (`quirks.placed_buildup_twice`).
     - **Placed building, zero-delay range** (including a type with no build-up sprite): the mark
       is set at the first turn, *T* + 1, so *C* = *T* + 2 and *H* = *T* + 3.
+    - **Restored replacement (S-0524 claim 15).** The same range-reporting and restart rules
+      apply as for a placed building, including two build-up runs for at least 2 stages and a
+      positive delay. Let *U* be its actual first eligible building turn, not an assumed tick
+      after the restoration action. For a zero-delay range, the mark is first set at *U*,
+      *C* = *U* + 1 and *H* = *U* + 2. For a positive-delay multi-stage range, let *R* be the
+      turn that first lands on the last stage: *C* = *R* + 1 and *H* follows F6. The order-tick
+      expressions above do not fix *U* or *R* for restoration. Claim 18's non-completion rule
+      applies to restored replacements as to placed buildings.
     - **Deployed building:** the mark is already set at entry, so *construction* becomes current
       at the second per-tick start of the building's first turn *U*, whatever its range, and
       *C* = *U* + 1. The handover follows F6. Which tick *U* is, relative to the deploy, is
@@ -674,9 +686,11 @@ names the top-left cell of the foundation. In addition:
     None of these steps takes a draw from the scenario random stream. A tick on which the
     building's update does not run (S-0215 claim 2) delays the processing steps and the
     ready-mark turns. Stage timing still runs on the tick number (S-0203 claim 9).
-    - Backing: `measurable` (PL11 a to d and f)
-    - Confidence: medium (the second run of a placed building's build-up, and *R*, *C* and *H*
-      for placed buildings); high (no draw; the deploy's mark at entry and *C* = *U* + 1)
+    - Backing: `measurable` (PL11 a to d and f; S-0524 claim 15 for restored replacements,
+      with its proposed restoration readiness scenario)
+    - Confidence: medium (the second build-up run and resulting *R*, *C* and *H* for placed
+      buildings and restored replacements); high (no draw; the clear entry mark for placement
+      and restoration, including missing art; the deploy's mark at entry and *C* = *U* + 1)
 
 18. **Ranges that never report completion.** The ready mark of claim 17 (a) needs the stage to
     land on the last stage, and the stage is advanced before it is compared. A range with a
@@ -783,7 +797,11 @@ names the top-left cell of the foundation. In addition:
 > Deployed, with *U* the building's first turn: *C* = *U* + 1, and *H* by F6. With
 > `quirks.placed_buildup_twice` off, a placed building is treated like a deployed one with
 > *U* = *T* + 1: *C* = *T* + 2 and *H* by F6. Integers in ticks, exact, no rounding; the same
-> assumptions as F6.
+> assumptions as F6. Restored replacements use claim 17's actual eligible turns, not the
+> orders-part assumption above: zero delay gives *C* = *U* + 1, *H* = *U* + 2; a positive-delay
+> multi-stage range gives *C* = *R* + 1, *H* by F6. With the shared switch off, restoration
+> gives *C* = *U* + 1 and *H* by F6. Here *U* is its first eligible building turn and *R* its
+> first last-stage report turn. All are integer ticks with exact addition, no rounding.
 
 ## Constants
 
@@ -817,7 +835,7 @@ names the top-left cell of the foundation. In addition:
 | Item done, placement mode on (human input) | click | For ordinary placement, adjacency (claim 4) and the cursor shroud result (claims 5 and 6; with `quirks.placement_shroud_at_cursor` off, explored ground judged now) decide whether an order is issued. An upgrade uses claim 12's target condition instead of adjacency, retaining the shroud condition; on failure the placement refusal announcement is requested and no order is issued. Placement mode is offered only while the item is done (S-0411) |
 | Item done (an AI house) | place order issued | Ordinary placement judges adjacency and explored ground at issue (claim 6). An upgrade uses claim 12's target condition instead of adjacency, retaining explored ground |
 | Place order issued | order applied (order application of S-0213) | The order is applied only when the item is done and a factory building could make the type; without such a factory building it does nothing and no sound plays (claim 1). When it is applied, the cell test (claims 3 and 8), or for an upgrade type the upgrade rule (claim 12), decides the outcome; claims 4 and 5 are not judged again. If that test fails, nothing is placed and, for a local player's house, the placement refusal announcement is requested, without the game-wide refusal sound |
-| Placed under construction, *construction* queued, no current behaviour | building turn lands on the last build-up stage, or any turn of a zero-delay range | Ready mark set; *construction* becomes current at the second per-tick start of that tick; first construction processing on the next tick, restarting at stage 0 (claims 14 and 17) |
+| Placed or restored under construction, *construction* queued, no current behaviour | building turn lands on the last build-up stage, or any turn of a zero-delay range | Ready mark set; *construction* becomes current at the second per-tick start of that tick; first construction processing on the next tick, restarting at stage 0 (claims 14 and 17) |
 | Deployed under construction, ready mark set at entry | the building's first turn | *construction* becomes current at its second per-tick start; first processing on the next tick (claim 17) |
 | Under construction, positive-delay range of 1 stage or fewer | any turn | No ready mark from the range; construction never completes (claim 18) |
 | *construction*, after its first processing | last build-up stage reached, or zero-delay completion report | Construction completes, idle body requested and guard becomes current in this tick (claim 15) |
@@ -871,7 +889,12 @@ Observable consequences:
   tick (F7). A deployed building runs it once. `quirks.placed_buildup_twice` (default on). Off: a
   place order sets the ready mark at entry, as a deploy does. *construction* then becomes current
   at the first turn, *T* + 1, *C* = *T* + 2, and the build-up is seen once, ending at
-  *T* + 2 + (*n* − 1) × *d_b* (F7). Every other rule of claims 14 and 15 is unchanged.
+  *T* + 2 + (*n* − 1) × *d_b* (F7). The same switch covers restored replacements
+  (S-0524 claim 15): on leaves their mark clear at entry, including absent build-up art.
+  Off sets it at entry and uses the deployed-style start. For restoration, use the actual first
+  eligible building turn *U*, not *T* + 1: with the switch off, *C* = *U* + 1 and handover
+  follows F6. With it on, claim 17's range report determines the start. Every other rule of
+  claims 14, 15 and 18 is unchanged.
 - **Single-stage build-up never completes** (claim 18). A positive-delay construction range of
   one stage or fewer never reports completion, so the building stays under construction for good.
   `quirks.single_stage_buildup_never_completes` (default on). Off: such a range reports
