@@ -1,9 +1,9 @@
 ---
 id: Q-0614
 title: Where does a tracked flying object stand in its new sector's order after crossing?
-status: open
+status: answered
 related: [S-0303, S-0506]
-answered-by: []
+answered-by: [S-0303]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0020, Q-0060, Q-0061]
+requests: [Q-0020, Q-0060, Q-0061, Q-0614]
 supersedes: []
 ---
 
@@ -244,11 +244,26 @@ addition:
     observable before the effects and draws of the next entry. Thus an earlier entry's death
     weapon can kill an object before its later entry, making that later entry ineffective for
     the object (claim 9); damage without death can instead change its remaining health.
-    - Backing: `measurable` (scenario A11, including variant d for newly placed objects), and
-      `unmeasured` for the complete F7 sector and within-sector hit order: A16 tests membership,
-      not pairwise hit ordering, and sector-crossing registration order remains unresolved
-    - Confidence: high for the order of cells and hits; medium for the order among several tracked
-      flying objects (F7)
+    Within a sector, a newly tracked object follows every object already registered there.
+    A tracked object crossing into another sector likewise follows every object already in its
+    destination sector, regardless of when it first became tracked. Objects remaining in the
+    old sector keep their relative order. Movement within the same sector leaves the order
+    unchanged. Leaving and later returning to a sector puts the returning object after its
+    current occupants. These rules apply to every tracked flying kind, including rocket missiles
+    (S-0506 claims 15 and 19); the movement owner determines when tracking starts and ends.
+    Thus a resident's earlier hit can trigger a death effect before a later-arriving object's
+    outer hit, even when that arriving object first became tracked earlier than the resident.
+    With `quirks.flying_search_sectors` off, the order instead follows the start of each object's
+    current uninterrupted period of tracking, globally across all sectors. Sector crossings
+    never change that order. Ending tracking removes the object from it; starting tracking
+    again places the object after all currently tracked objects. This off-state rule is a
+    design choice of the alternative search, not an observation of the original.
+    - Backing: `measurable` (scenario A11, including variant d for newly placed objects, and
+      scenario A20 for sector arrival, departure, return and same-sector ordering), and
+      `unmeasured` for the complete order between sectors: A16 tests membership, not every
+      pairwise sector hit order. The off-state order is a design rule (A20's replay check).
+    - Confidence: high for cells, hits and within-sector registration changes; medium for the
+      complete order between sectors (F7)
 
 ### How much damage
 
@@ -644,10 +659,11 @@ sectors *C* + *k*(*d*ₓ, *d*ᵧ) for *k* = 1, 2, …, each clamped as above, an
 order: north and west with (−1, −1), south and west with (−1, +1), north and east with (+1, −1),
 and south and east with (+1, +1).
 
-The ordered sector set consists of *C*, followed by the nonempty east, north, south and west runs, then the four diagonal groups, in the orders defined above. Within each diagonal group, sectors follow the stated outward-diagonal order and then the stated order of its two extra sectors. Every tracked flying object registered in one of these sectors is a candidate exactly once. Candidates in different sectors follow the sector order; candidates within one sector follow registration order. No tracked flying object registered in a sector outside this set is a candidate under this search. For example, (−3, −1) from *C* is not searched when every run is at least 3 long. Units: cells, sectors.
+The ordered sector set consists of *C*, followed by the nonempty east, north, south and west runs, then the four diagonal groups, in the orders defined above. Within each diagonal group, sectors follow the stated outward-diagonal order and then the stated order of its two extra sectors. Every tracked flying object registered in one of these sectors is a candidate exactly once. Candidates in different sectors follow the sector order; candidates within one sector follow arrival order as defined by claim 11, not the order in which they first became tracked. No tracked flying object registered in a sector outside this set is a candidate under this search. For example, (−3, −1) from *C* is not searched when every run is at least 3 long. Units: cells, sectors.
 
-With `quirks.flying_search_sectors` off, the candidates are every tracked flying object, in the
-order of registration, each once.
+With `quirks.flying_search_sectors` off, the candidates are every tracked flying object, each
+once, in the global order of starting their current uninterrupted tracking periods (claim 11).
+Crossing a sector boundary does not change this alternative order.
 
 ## Constants
 
@@ -778,7 +794,9 @@ A projectile that is no longer in play after its area damage creates nothing (cl
   considered only when *P* lies above the terrain at the centre of the centre cell (claim 6). Off:
   they are considered for every detonation.
 - **`quirks.flying_search_sectors`** (default: on). The flying-object search reads only the sectors
-  of F7, so it can miss a flying object within *R*. Off: every tracked flying object is a candidate once, in registration order.
+  of F7, so it can miss a flying object within *R*. Off: every tracked flying object is a
+  candidate once, in claim 11's global order of starting the current tracking period; sector
+  changes do not reorder it.
 - **`quirks.flying_candidates_unfiltered`** (default: on). A tracked flying object found by claim 6
   is not left out for being the source object or a listed harvester (claim 9). Off: the same two
   exclusions apply to it as to objects in scanned cells.
@@ -851,6 +869,7 @@ warnings above are design rules, not claimed oracle observations.
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | rules, warhead section, `CellSpread` | spread *S* | decimal (single) | 0 |
+| no user-data key | within-sector arrival order and alternative global tracking order (claim 11, F7) | fixed behaviour; `quirks.flying_search_sectors` is an engine option, not an imported field | sector search on |
 | rules, warhead section, `Parasite` | parasite flag: projectile area damage replaced by attachment (claim 2; S-0614 claim 1) | boolean | no |
 | rules, warhead section, `PercentAtMax` | edge fraction *p* | decimal (single) | 1.0 |
 | rules, warhead section, `Verses` | versus values *v* (F3; S-0003 claim 13 owns the parse, S-0305 the order of the armour classes) | percent list | 100 % each |
@@ -1331,6 +1350,36 @@ draw count falsifies that prediction. This test deliberately stops the original;
 unsaved game. Our engine's warned, continuing result under S-0205 claim 3 is a departure and
 has no oracle value to compare.
 
+**A20. Sector arrival order (claim 11; Q-0614).** *Setup:* A16's sector geometry,
+with two stock jumpjet infantry types, *A* and *B*, kept airborne in one sector and away from
+other units. A named test map gives *A* a death weapon and the exploding-on-death flag under
+S-0312 claim 6. Its death weapon reaches and kills *B*. An unrelated human-owned launcher *F*
+fires an elevated test detonation reaching both with lethal damage, edge fraction 1 and no
+other effects. Use the recorder to verify positions, tracking periods and the outer detonation
+point; both objects must qualify for claim 6 and neither may appear in a scanned cell layer.
+Void runs where either lands, takes an unrelated hit, or moves out of reach. Use game speed 2,
+the measurement setup, director and mods off except that named map, and a bystander computer
+player outside the test area. *Procedure:* make *A* become tracked first in an adjacent sector,
+then make *B* become tracked in the destination sector, then fly *A* across into *B*'s sector.
+Detonate after the crossing. *Observable:* whether *B*'s destruction is credited to *F*, read
+from its kill count or experience, together with recorded health and positions. *Expected:*
+*B* precedes the later arrival *A*, so *F* kills *B* before *A*'s death weapon can do so.
+Keeping first-tracking order would instead let *A*'s death weapon kill *B* without credit to *F*.
+*Variants:* start both in one sector with *A* tracked first, then move *A* between cells within
+that sector: no credit to *F* for *B*. Send *A* out of that sector and back, without ending
+tracking: credit to *F* for *B*. Add a third harmless airborne object between *A* and *B* in
+arrival order, send it out, and repeat the pair test: the remaining *A*, *B* order is unchanged.
+*Runs:* three qualifying runs per variant, with scripted ordinary movement and firing input
+where useful. *Falsified if:* kill credit differs from these predictions at the recorded positions.
+The same arrival rule applies to aircraft and rocket missiles; these jumpjets separate its
+hit-order consequence from aircraft crash timing.
+
+*Alternative replay check (not an oracle measurement):* replay the main crossing and the
+out-and-back variant on our engine with `quirks.flying_search_sectors` off. *A* stays before
+*B*, so *B* is killed by *A*'s death weapon, not credited to *F*. Ending *A*'s tracking and
+starting it again while *B* remains tracked instead makes *B* precede *A*. This validates
+claim 11's design rule, not any off-state behaviour of the original.
+
 ## Open questions
 
 - S-0209 claim 13 excludes an aircraft using ordinary flight at positive terrain-relative
@@ -1339,10 +1388,8 @@ has no oracle value to compare.
   two entries. Claim 10 would halve both entries for an aircraft in the air, not just one.
 - Exactly when flying kinds other than rocket missiles are registered and unregistered
   (lift-off, landing, leaving the map), which the movement specs own; rocket-missile boundaries
-  are S-0506 claims 15 and 19. F7 relies only on the registration order. In
-  particular, where an object that crosses into a sector in flight comes in that sector's order
-  (after the objects already registered there, or by its first registration), which fixes the
-  hit order among tracked flying objects (claim 11, medium confidence).
+  are S-0506 claims 15 and 19. Once an object is tracked, sector-crossing order is specified
+  by claim 11 and F7 (Q-0614), not an open question.
 - The order of several eligible bridge tests on one cell (claim 18) lacks a fixture that
   distinguishes every pair. Bridge-piece acceptance and attempt effects are specified by
   S-0511 claims 1 to 15, not open here.
