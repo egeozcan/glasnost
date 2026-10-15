@@ -131,3 +131,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 3 | approved | — |
 | [S-0501](movement/S-0501-aircraft.md) | Aircraft flight, attack runs and pads | movement | 10 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 1 | approved | — |
+| [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 1 | approved | — |
