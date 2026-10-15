@@ -1001,6 +1001,11 @@ pub enum SwEvent {
     Radar,
     /// The spy plane's camera sound.
     Camera,
+    /// The teleport source marker over a picked source, for the launching
+    /// player only (S-0513 claim 33).
+    SourceMarker,
+    /// The source marker ends (S-0513 claim 34).
+    MarkerEnd,
 }
 
 /// Pushes a superweapon presentation event.

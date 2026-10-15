@@ -1,35 +1,710 @@
-//! The teleport (S-0513 claims 33 to 41).
+//! The teleport (S-0513 claims 33 to 41): the source pick, the warp group
+//! and each member's warp (State and ordering, T2).
+//!
+//! A member's warp runs in its own updates (S-0513 State and ordering: "a
+//! warp member's later draws come in its own updates"): [`turn`] is called
+//! at the start of the member's living turn. Until its arrival effects the
+//! warp update is the member's whole turn (Q-0738 interim).
 
 use glasnost_map::CellXY;
+use glasnost_map::terrain::land;
+use glasnost_rules::sim::{LocomotionClass, MovementZone};
 use serde::{Deserialize, Serialize};
 
-use crate::world::{HouseId, World};
+use super::SwEvent;
+use crate::combat::effects::Sound;
+use crate::rules::{Kind, Locomotor};
+use crate::world::{HouseId, Layer, ObjectId, Pos, World};
+
+/// The leaving stage's fixed wait (Constants).
+// spec: S-0513 Constants (warp leaving wait 60 elapsed ticks; claim 39: an engine constant, not the rules' teleport delay)
+const LEAVING_WAIT: i32 = 60;
+
+/// A warp member's stage (T2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Stage {
+    /// Joined the group; its first update comes next.
+    Pending,
+    /// The leaving stage, waiting since the tick held.
+    Leaving(i32),
+    /// The leaving stage, the wait expired; departs on the next update.
+    Expired,
+    /// Off the map, its landing check failed (claim 37).
+    Blocked,
+    /// Off the map, its landing check passed: placed on the next update.
+    Away,
+    /// Placed at its landing point: arrival effects on the next update.
+    Placed,
+    /// The arrival hold since the tick of the arrival effects (claim 40).
+    Hold(i32),
+}
 
 /// A warp member's state (T2).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Member {
     /// The stage.
-    pub stage: u8,
+    pub stage: Stage,
+    /// The launching house (claims 35 and 41).
+    pub house: HouseId,
+    /// The landing point (claim 36), moved by a redirection (claim 37).
+    pub landing: Pos,
+    /// This warp's landing was redirected (claim 40, quirk off).
+    pub redirected: bool,
 }
 
 impl Member {
-    /// In the leaving stage.
+    /// In the leaving stage (Terms): from its first update after launch
+    /// until departure, the expiry update included (claim 39).
     pub fn leaving(&self) -> bool {
-        false
+        matches!(self.stage, Stage::Leaving(_) | Stage::Expired)
     }
 
-    /// Warp pending or leaving.
+    /// Warp pending or leaving (claims 22 and 34).
     pub fn pending_or_leaving(&self) -> bool {
-        false
+        self.stage == Stage::Pending || self.leaving()
+    }
+
+    /// Phasing in (Terms): from departure until the arrival hold ends.
+    pub fn phasing(&self) -> bool {
+        matches!(
+            self.stage,
+            Stage::Blocked | Stage::Away | Stage::Placed | Stage::Hold(_)
+        )
     }
 }
 
-/// A source pick (claim 33).
+fn member(w: &World, id: ObjectId) -> Option<Member> {
+    w.obj(id).and_then(|o| o.sw.warp.clone())
+}
+
+fn set_member(w: &mut World, id: ObjectId, m: Option<Member>) {
+    if let Some(o) = w.obj_mut(id) {
+        o.sw.warp = m;
+    }
+}
+
+/// Whether an object is phasing in by a superweapon warp (Terms).
+pub fn phasing(w: &World, id: ObjectId) -> bool {
+    member(w, id).is_some_and(|m| m.phasing())
+}
+
+/// Seam: S-0514's chrono weapons and the types that cannot be teleported.
+/// An object that S-0514 keeps out of the warp group (one being erased by
+/// a chrono weapon, or of a type that cannot be teleported) would be left
+/// in place; no such weapon or type exists in our engine yet.
+pub fn chrono_seam(w: &World, id: ObjectId) -> bool {
+    let _ = (w, id);
+    false
+}
+
+/// A source pick (claim 33). The record side (the source, its retention
+/// and the charge) is S-0512 claim 10's, done by the fire order.
 pub fn pick_source(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
-    let _ = (w, h, i, cell);
+    let mut p = super::cell_point(w, cell, true);
+    p.z += super::protect::INVOKE_LIFT;
+    // spec: S-0513 claim 33 (the source marker over the cell, seen and heard by the launching player only; a new pick replaces it; claim 5: no announcement, no radar event); Q-0741 interim: a player-local marker takes no creation draws
+    super::event(w, SwEvent::SourceMarker, Some(h), Some(i), Some(p));
+}
+
+/// Where in a cell a member keeps its position (claim 36).
+fn within(p: Pos) -> (i32, i32) {
+    // spec: S-0204 claim 2 (the position within its cell, 0 … 255 per axis)
+    (p.x.rem_euclid(256), p.y.rem_euclid(256))
+}
+
+/// The landing point in cell `c` of an object at `from` (claim 36).
+fn landing_in(w: &World, kind: Kind, from: Pos, c: CellXY) -> Pos {
+    let centre = Pos::centre(c, 0);
+    let (x, y) = if kind == Kind::Vehicle {
+        // spec: S-0513 claim 36 (a vehicle lands at that cell's centre)
+        (centre.x, centre.y)
+    } else {
+        // spec: S-0513 claim 36 (an infantry unit or aircraft keeps its position within the cell)
+        let (dx, dy) = within(from);
+        (c.x * 256 + dx, c.y * 256 + dy) // spec: S-0204 claim 2 (256 leptons per cell)
+    };
+    let mut z = w.surface_at(x, y);
+    if w.high_bridge(c) {
+        // spec: S-0513 claim 36 (on a high-bridge cell the bridge lift is added)
+        z += crate::teleport::DECK_HEIGHT;
+    }
+    Pos::new(x, y, z)
+}
+
+/// Whether the object is in the air (claim 34: an aircraft or jumpjet in
+/// flight).
+fn in_air(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind == Kind::Aircraft {
+        return !crate::air::on_ground(w, id);
+    }
+    o.pos.z > w.surface_for(id)
+}
+
+/// The organic flag without the teleporter flag (claim 35).
+fn dies(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let organic = crate::combat::veterancy::type_combat(w, id).is_some_and(|t| t.organic);
+    let teleporter = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .and_then(|u| u.raw.teleporter)
+        .unwrap_or(false);
+    organic && !teleporter
+}
+
+/// A vehicle still inside the vehicle factory it is in contact with
+/// (claim 34).
+fn in_factory(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind != Kind::Vehicle {
+        return false;
+    }
+    let Some(k) = o.contact else { return false };
+    let Some(b) = w.obj(k) else { return false };
+    crate::econ::release::vehicle_factory(w, k)
+        && crate::econ::placement::foundation_cells(w, b.type_index, b.pos.cell())
+            .contains(&o.pos.cell())
 }
 
 /// A warp launch (claim 34).
 pub fn launch(w: &mut World, h: HouseId, source: CellXY, dest: CellXY) {
-    let _ = (w, h, source, dest);
+    // spec: S-0513 claim 5 (teleport warp: activation announcement; radar events at the source and destination cells)
+    super::event(w, SwEvent::Launch, Some(h), None, None);
+    let ps = super::cell_point(w, source, false);
+    super::event(w, SwEvent::Radar, Some(h), None, Some(ps));
+    let pd = super::cell_point(w, dest, false);
+    super::event(w, SwEvent::Radar, Some(h), None, Some(pd));
+    let (blast, blast_dest) = {
+        let s = &w.rules().superweapons;
+        (s.chrono_blast.clone(), s.chrono_blast_dest.clone())
+    };
+    // spec: S-0513 claim 34 (the blast animations, one at the source centre, one at the destination centre; Constants: 5 leptons lift)
+    super::protect::invoke_anim(w, blast, source, true);
+    super::protect::invoke_anim(w, blast_dest, dest, true);
+    // spec: S-0513 claim 34 (the launch ends the source marker)
+    super::event(w, SwEvent::MarkerEnd, Some(h), None, None);
+    let targets: Vec<(usize, CellXY)> = super::block(w, dest);
+    for (i, c) in super::block(w, source) {
+        // spec: S-0513 F1 (a warp maps source cell i to destination cell i)
+        let to = targets.iter().find(|(j, _)| *j == i).map(|&(_, d)| d);
+        for l in super::swept_layers(w, c) {
+            super::walk_list(w, c, l, &mut |w, id| examine(w, h, id, to));
+        }
+    }
+}
+
+/// One examined object of the source block (claims 34 and 35).
+fn examine(w: &mut World, h: HouseId, id: ObjectId, to: Option<CellXY>) {
+    let Some(o) = w.obj(id) else { return };
+    if !o.kind.is_mobile() {
+        // spec: S-0513 claim 34 (buildings and other objects are never moved)
+        return;
+    }
+    if in_air(w, id) {
+        // spec: S-0513 claim 34 (an object in the air, an aircraft or jumpjet in flight, is left alone)
+        return;
+    }
+    // spec: S-0513 claim 34 (a naval parasite inside is released with 500 ticks of suppression before any other effect of the warp on that object; S-0614 claim 12)
+    crate::parasite::superweapon_teleport(w, id);
+    let protected = super::protected(w, id);
+    if dies(w, id) && (!protected || w.rules().quirks.warp_kill_before_protection) {
+        // spec: S-0513 claim 35 (organic without the teleporter flag: a whole-strength demolition hit ignoring defences, the launching house; quirks.warp_kill_before_protection: protection does not prevent it)
+        super::demolish(w, id, true, Some(h));
+        return;
+    }
+    let busy = w.obj(id).is_some_and(|o| o.sw.warp.is_some());
+    // spec: S-0513 claim 34 (left in place if protected, already has a warp pending, is being erased, is in a leaving stage, is phasing in, or is a vehicle still inside the vehicle factory it is in contact with)
+    if protected
+        || busy
+        || crate::econ::power::being_erased(w, id)
+        || crate::teleport::phasing_in(w, id)
+        || in_factory(w, id)
+        || chrono_seam(w, id)
+    {
+        return;
+    }
+    let Some(to) = to else {
+        // Q-0741 interim: destination cell i off the map leaves the object in place.
+        w.note("Q-0741: a warp object whose destination cell is off the map is left in place (interim)");
+        return;
+    };
+    join(w, h, id, to);
+}
+
+/// The object joins the warp group (claim 34).
+fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    // Tank bunkers are not built (S-0606, structures specs): no bunker link exists to end.
+    // spec: S-0513 claim 34 (its docking, repair and similar contact links end)
+    if crate::depot::link(w, id).is_some() {
+        crate::depot::release(w, id);
+    }
+    if o.econ.harvest.is_some() {
+        crate::econ::harvest::break_contact(w, id);
+    }
+    let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
+    for x in ids {
+        if let Some(ob) = w.obj_mut(x)
+            && ob.contact == Some(id)
+        {
+            ob.contact = None;
+        }
+    }
+    if o.kind == Kind::Vehicle {
+        // spec: S-0513 claim 34 (a vehicle ceases to occupy its cell)
+        crate::drive::release_claims(w, id);
+        if let Some(ob) = w.obj_mut(id)
+            && ob.drive.is_some()
+        {
+            ob.drive = Some(crate::drive::DriveState::new());
+        }
+    }
+    let landing = landing_in(w, o.kind, o.pos, to);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.contact = None;
+        // Q-0738 interim: a member stops moving; the warp update replaces its turn.
+        ob.dest = None;
+        ob.queued_dests.clear();
+        ob.path.steps.clear();
+        if let Some(t) = ob.teleport.as_mut() {
+            t.landing = None;
+            t.for_dest = None;
+            t.mark = None;
+        }
+        // spec: S-0513 claim 34 and T2 (warp pending; landing point fixed)
+        ob.sw.warp = Some(Member {
+            stage: Stage::Pending,
+            house: h,
+            landing,
+            redirected: false,
+        });
+    }
+}
+
+/// A member's warp update at the start of its living turn (T2). Returns
+/// whether the update was its whole turn (Q-0738 interim).
+pub fn turn(w: &mut World, id: ObjectId) -> bool {
+    let Some(m) = member(w, id) else {
+        return false;
+    };
+    let t = w.tick;
+    match m.stage {
+        Stage::Pending => {
+            // spec: S-0513 claim 39 and T2 (the leaving stage in t_L + 1; the fixed wait starts)
+            set_member(
+                w,
+                id,
+                Some(Member {
+                    stage: Stage::Leaving(t),
+                    ..m
+                }),
+            );
+            true
+        }
+        Stage::Leaving(since) => {
+            if t.wrapping_sub(since) >= LEAVING_WAIT {
+                // spec: S-0513 claim 39 and T2 (the wait expires 60 elapsed ticks later; it stays at its old position, still being erased)
+                set_member(
+                    w,
+                    id,
+                    Some(Member {
+                        stage: Stage::Expired,
+                        ..m
+                    }),
+                );
+                // spec: S-0513 claim 39 (when the wait expires, a member with no target tries a target search with the conditional 4-to-8-tick draw of S-0207 claim 20 f)
+                crate::teleport::phasing_search(w, id);
+            }
+            true
+        }
+        Stage::Expired => {
+            depart(w, id, m);
+            true
+        }
+        Stage::Blocked => {
+            check_or_redirect(w, id);
+            true
+        }
+        Stage::Away => {
+            place(w, id, m);
+            true
+        }
+        Stage::Placed => {
+            arrive(w, id, m);
+            true
+        }
+        Stage::Hold(ta) => {
+            let held = w.obj(id).map_or(0, |o| o.sw.held_delay);
+            let hold = if w.rules().quirks.warp_hold_persists || m.redirected {
+                held
+            } else {
+                // spec: S-0513 claim 40 (quirks.warp_hold_persists off: 0 for a warp that was not redirected)
+                0
+            };
+            // spec: S-0513 claim 40 (phasing in ends in tick t_A + max(1, H))
+            if t.wrapping_sub(ta) >= hold.max(1) {
+                set_member(w, id, None);
+                // spec: S-0513 claim 39 and T2 (when the hold ends, a member with no target tries a target search)
+                crate::teleport::phasing_search(w, id);
+            }
+            false
+        }
+    }
+}
+
+/// The departure in t_L + 62 (claim 39).
+fn depart(w: &mut World, id: ObjectId, m: Member) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let warp_out = w.rules().warp_out.clone();
+    if let Some(a) = warp_out {
+        // spec: S-0513 claim 39 (the warp-out animation at its old position, with its creation draws)
+        crate::combat::effects::anim(w, &a, o.pos);
+    }
+    // spec: S-0513 claim 39 (the departure sound at its old position)
+    crate::teleport::chrono_sound(w, &o, Sound::ChronoOut, o.pos);
+    // The parasite is not released here: a naval parasite already left at
+    // launch (claim 34), and a drone parasite's release at this departure is
+    // unresolved (S-0513 claim 39; S-0614 claim 12, P7). So neither
+    // `parasite::host_jumps` nor `objects::take_inside` (which releases it,
+    // S-0614 claim 15) is used.
+    // spec: S-0513 claim 39 (every object targeting it drops it as in S-0207 claim 20 e)
+    crate::teleport::targeters_drop(w, id);
+    lift_off(w, id);
+    // spec: S-0513 claim 39 and T2 (it leaves the map; being erased ends; phasing in; the landing check)
+    set_member(
+        w,
+        id,
+        Some(Member {
+            stage: Stage::Blocked,
+            ..m
+        }),
+    );
+    check_or_redirect(w, id);
+}
+
+/// Takes the member off the map without leaving the update order and
+/// without releasing a parasite (claim 39).
+fn lift_off(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    crate::econ::events::leaving_map(w, id, false);
+    if o.kind == Kind::Aircraft {
+        // spec: S-0209 claim 1 (an aircraft leaving clears its object-present mark)
+        crate::air::clear_mark(w, id);
+    }
+    if o.kind == Kind::Vehicle {
+        crate::drive::release_claims(w, id);
+    }
+    let cell = o.pos.cell();
+    w.cells.leave(cell, o.layer, id);
+    let q = crate::objects::occ_quirks(w);
+    if let Some(wt) = o.walk.as_ref().and_then(|s| s.target) {
+        w.cells.clear_infantry(wt.cell(), o.layer, id, q);
+    }
+    w.cells.clear_infantry(cell, o.layer, id, q);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.on_map = false;
+        if let Some(s) = ob.walk.as_mut() {
+            *s = crate::walk::WalkState::default();
+        }
+    }
+    if o.layer == Layer::Ground {
+        // spec: S-0202 claim 14 (taking an object out of its occupied ground cell recalculates it)
+        crate::load::recalc_cells(w, &[cell]);
+    }
+    crate::regions::cell_changed(w, cell);
+}
+
+/// The movement zone of the redirect search (claim 37).
+fn redirect_zone(z: MovementZone) -> MovementZone {
+    use MovementZone as Z;
+    match z {
+        // spec: S-0513 claim 37 (fly and destroyer read as normal, amphibious destroyer as amphibious)
+        Z::Fly | Z::Destroyer => Z::Normal,
+        Z::AmphibiousDestroyer => Z::Amphibious,
+        other => other,
+    }
+}
+
+/// What the landing check found (claim 37).
+enum Check {
+    Pass,
+    Blocked,
+    Killed,
+}
+
+/// The landing check (claim 37), then the redirection of a blocked member.
+fn check_or_redirect(w: &mut World, id: ObjectId) {
+    let Some(m) = member(w, id) else { return };
+    match check(w, id, &m) {
+        Check::Killed => {}
+        Check::Pass => {
+            // spec: S-0513 T2 (check passed: placed on the next update)
+            set_member(
+                w,
+                id,
+                Some(Member {
+                    stage: Stage::Away,
+                    ..m
+                }),
+            );
+        }
+        Check::Blocked => redirect(w, id, m),
+    }
+}
+
+/// The landing check of claim 37.
+fn check(w: &mut World, id: ObjectId, m: &Member) -> Check {
+    let Some(o) = w.obj(id).cloned() else {
+        return Check::Killed;
+    };
+    let c = m.landing.cell();
+    let r = w.rules_arc();
+    if w.high_bridge(c) {
+        let (class, zone) = r
+            .unit(o.kind, o.type_index)
+            .map_or((None, MovementZone::Normal), |u| (u.class, u.zone));
+        // spec: S-0513 claim 37 (a high-bridge cell whose deck may not be entered blocks the landing; S-0211 claim 10 ii)
+        if !crate::passability::enterable_by_class(&r, w, c, class, zone, true) {
+            return Check::Blocked;
+        }
+    }
+    let mut blocked = false;
+    let mut killed = false;
+    for l in super::swept_layers(w, c) {
+        super::walk_list(w, c, l, &mut |w, v| {
+            if killed || v == id {
+                return;
+            }
+            let Some(vo) = w.obj(v) else { return };
+            let vk = vo.kind;
+            let vpos = vo.pos;
+            if super::protected(w, v) {
+                // spec: S-0513 claim 37 (any protected object, a shielded building too, kills the member: whole strength, distance 0, demolition warhead, ignoring defences, no attacker and no attacking house)
+                super::demolish(w, id, true, None);
+                killed = true;
+                return;
+            }
+            match vk {
+                Kind::Infantry if o.kind == Kind::Infantry => {
+                    if vpos.x == m.landing.x && vpos.y == m.landing.y {
+                        // spec: S-0513 claim 37 (an unprotected infantry unit, the member infantry too, is killed only when it stands exactly on the landing point)
+                        super::demolish(w, v, true, None);
+                    }
+                    // spec: S-0513 claim 37 (otherwise both share the cell)
+                }
+                Kind::Infantry | Kind::Vehicle | Kind::Aircraft => {
+                    // spec: S-0513 claim 37 (any other unprotected infantry unit, vehicle or aircraft is killed)
+                    super::demolish(w, v, true, None);
+                }
+                // spec: S-0513 claim 37 (any other object, an unprotected building or a terrain object, blocks the landing)
+                _ => blocked = true,
+            }
+        });
+    }
+    if killed || w.obj(id).is_none_or(crate::combat::damage::dead) {
+        set_member(w, id, None);
+        return Check::Killed;
+    }
+    if blocked { Check::Blocked } else { Check::Pass }
+}
+
+/// A blocked member's redirected landing (claims 37 and 40).
+fn redirect(w: &mut World, id: ObjectId, m: Member) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let r = w.rules_arc();
+    let Some(u) = r.unit(o.kind, o.type_index) else {
+        return;
+    };
+    let c = m.landing.cell();
+    let (class, zone) = if r.quirks.warp_redirect_as_tracked {
+        // spec: S-0513 claim 37 (locomotion class track whatever the member's own; its zone with fly and destroyer as normal, amphibious destroyer as amphibious; quirks.warp_redirect_as_tracked)
+        (Some(LocomotionClass::Track), redirect_zone(u.zone))
+    } else {
+        // spec: S-0513 claim 37 (quirk off: the member's own class and unsimplified zone)
+        (u.class, u.zone)
+    };
+    crate::regions::ensure(w);
+    let deck = w.high_bridge(c);
+    // spec: S-0513 claim 37 (reach region of the member's current cell)
+    let reach = crate::regions::reach_read(w, o.pos.cell(), zone, o.layer == Layer::Deck);
+    // spec: S-0513 claim 37 (the nearby-cell search of S-0212 claim 25 centred on the landing cell: no height condition, bridge cells allowed, deck mode on a deck landing cell, no reference cell)
+    let settings = crate::path::NearbySettings {
+        class,
+        zone,
+        reach: Some(reach),
+        deck,
+        height: false,
+        reference: None,
+        no_bridges: false,
+        no_overlay: false,
+    };
+    let found = crate::path::nearby(w, c, crate::path::NearbyUse::Settings(settings));
+    let landing = match found {
+        Some(f) => {
+            // spec: S-0513 claim 37 (its landing point moves to the found cell with the same position within the cell)
+            landing_in(w, o.kind, m.landing, f)
+        }
+        None => {
+            // Q-0741 interim: no cell found keeps the landing point; the check is made again next update.
+            w.note("Q-0741: a blocked warp member with no nearby cell keeps its landing point (interim)");
+            m.landing
+        }
+    };
+    let delay = r.superweapons.chrono_delay;
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0513 claim 40 (a landing that had to be redirected sets the held delay to the rules' teleport delay; nothing resets it)
+        ob.sw.held_delay = delay;
+    }
+    // spec: S-0513 T2 (check failed: the check again in each later update)
+    set_member(
+        w,
+        id,
+        Some(Member {
+            stage: Stage::Blocked,
+            landing,
+            redirected: true,
+            ..m
+        }),
+    );
+}
+
+/// The placement at the landing point (T2: check passed, next update).
+fn place(w: &mut World, id: ObjectId, m: Member) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let c = m.landing.cell();
+    let layer = crate::teleport::landing_layer(w, c);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.layer = layer;
+        if let Some(t) = ob.teleport.as_mut() {
+            *t = crate::teleport::TeleportState::default();
+        }
+    }
+    let facing = o.body.value(w.tick);
+    // spec: S-0513 claim 39 (appears at its landing point in its next update)
+    crate::objects::place(w, id, m.landing, facing);
+    // spec: S-0507 claim 15 (its passengers' positions become its position at once)
+    crate::transport::sync(w, id);
+    set_member(
+        w,
+        id,
+        Some(Member {
+            stage: Stage::Placed,
+            ..m
+        }),
+    );
+}
+
+/// Whether the member hovers (claim 38).
+fn hovering(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let r = w.rules();
+    let hover = r
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.locomotor == Locomotor::Hover);
+    if !hover {
+        return false;
+    }
+    let powered = o.kind == Kind::Vehicle
+        && r.econ
+            .power
+            .powered_unit
+            .get(o.type_index as usize)
+            .copied()
+            .unwrap_or(false);
+    // spec: S-0513 claim 38 (a hover type counts as not hovering when its type has the powered-unit flag and its owner has no active control centre, S-0405 claim 13)
+    !(powered
+        && o.owner
+            .is_none_or(|h| !crate::econ::power::has_centre(w, h, o.type_index)))
+}
+
+/// The arrival effects (claims 38, 39 and 41).
+fn arrive(w: &mut World, id: ObjectId, m: Member) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    let t = w.tick;
+    // spec: S-0513 claim 39 (the arrival sound)
+    crate::teleport::chrono_sound(w, &o, Sound::ChronoIn, o.pos);
+    let c = o.pos.cell();
+    let ground_protected = w
+        .cells
+        .list(c, Layer::Ground)
+        .to_vec()
+        .into_iter()
+        .any(|x| x != id && super::protected(w, x));
+    let r = w.rules_arc();
+    let tc = crate::combat::veterancy::type_combat(w, id);
+    let naval = tc.as_ref().is_some_and(|t| t.naval);
+    let (land_type, deck) = (
+        w.cells.cell(c).map_or(land::CLEAR, |x| x.land),
+        o.layer == Layer::Deck,
+    );
+    let water = land_type == land::WATER;
+    let infantry = o.kind == Kind::Infantry;
+    let (class, zone) = r
+        .unit(o.kind, o.type_index)
+        .map_or((None, MovementZone::Normal), |u| (u.class, u.zone));
+    let mut fate_done = false;
+    if ground_protected {
+        // spec: S-0513 claim 38 (a protected object listed in the landing cell's ground layer, even under a deck, kills the member as in claim 37)
+        super::demolish(w, id, true, None);
+        fate_done = true;
+    } else if water && !infantry && !naval && !hovering(w, id) && !deck {
+        // spec: S-0513 claims 38 and 41 (a non-infantry, non-naval, non-hovering member on water off a deck sinks, its kill credited to the launching house)
+        sink(w, id, Some(m.house));
+        fate_done = true;
+    } else {
+        let road = land_type == land::ROAD && (r.quirks.warp_naval_road_cell || !water);
+        let enters = crate::passability::enterable_by_class(&r, w, c, class, zone, deck);
+        // spec: S-0513 claim 38 (a member for which the cell cannot be entered, or a naval member on a deck or road cell; quirks.warp_naval_road_cell)
+        if !enters || (naval && (deck || road)) {
+            if water && !infantry {
+                // spec: S-0513 claims 38 and 41 (sinks with no credit on a water tile when not infantry)
+                sink(w, id, None);
+            } else {
+                // spec: S-0513 claims 38 and 41 (otherwise killed with no credit, as in claim 37)
+                super::demolish(w, id, true, None);
+            }
+            fate_done = true;
+        }
+    }
+    let warp_out = r.warp_out.clone();
+    let pos = w.obj(id).map_or(o.pos, |x| x.pos);
+    if let Some(a) = warp_out {
+        // spec: S-0513 claim 39 (the warp-out animation at the new position)
+        crate::combat::effects::anim(w, &a, pos);
+    }
+    if fate_done
+        && w.obj(id)
+            .is_none_or(|x| crate::combat::damage::dead(x) || crate::naval::sinking(w, id))
+    {
+        set_member(w, id, None);
+        return;
+    }
+    // spec: S-0513 claims 39 and 40 (the arrival hold starts)
+    set_member(
+        w,
+        id,
+        Some(Member {
+            stage: Stage::Hold(t),
+            ..m
+        }),
+    );
+}
+
+/// A sinking on arrival, credited to `house` or to nobody (claims 38 and
+/// 41; as a cull's sinking, S-0614 claim 11, without a hit).
+fn sink(w: &mut World, id: ObjectId, house: Option<HouseId>) {
+    let warhead = w.rules().combat.general.c4_warhead;
+    let hit = crate::combat::damage::Hit {
+        amount: 0,
+        warhead,
+        distance: 0,
+        attacker: None,
+        house,
+        ignore_defences: true,
+        no_escape: false,
+    };
+    // spec: S-0513 claim 41 (the sinking's kill credited to the launching house, or to nobody)
+    crate::combat::damage::credit(w, id, &hit);
+    crate::naval::start_sinking(w, id);
 }

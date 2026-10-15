@@ -498,9 +498,10 @@ fn melee_held(_w: &World, _id: ObjectId) -> bool {
     false
 }
 
-/// Being erased (S-0214 Terms): no erasing weapon before M4.
-fn being_erased(_w: &World, _id: ObjectId) -> bool {
-    false
+/// Being erased (S-0214 Terms): a superweapon warp member in its leaving
+/// stage (S-0513 claim 39); the erasing weapons are S-0514's seam.
+fn being_erased(w: &World, id: ObjectId) -> bool {
+    crate::econ::power::being_erased(w, id)
 }
 
 /// Mind-controlled (S-0214 Terms; the combat topic owns mind control).

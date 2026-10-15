@@ -895,7 +895,7 @@ pub fn unit_disabled(w: &World, id: ObjectId) -> bool {
 /// Whether the house has an active control centre for a vehicle type
 /// (claim 13; the per-type count with `quirks.shared_control_centre_count`
 /// off).
-fn has_centre(w: &World, h: HouseId, unit: u32) -> bool {
+pub(crate) fn has_centre(w: &World, h: HouseId, unit: u32) -> bool {
     let p = &w.houses[usize::from(h.0)].econ.power;
     if w.rules().quirks.shared_control_centre_count {
         p.centres > 0

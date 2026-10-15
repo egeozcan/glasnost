@@ -161,6 +161,8 @@ pub fn phasing_in(w: &World, id: ObjectId) -> bool {
     w.obj(id)
         .and_then(|o| o.teleport.as_ref())
         .is_some_and(|t| t.phasing.is_some())
+        // spec: S-0513 Terms and claims 39 and 40 (a superweapon warp member phases in from departure until its arrival hold ends)
+        || crate::superweapons::warp::phasing(w, id)
 }
 
 /// The cell holding the object's vehicle-present mark.
@@ -584,44 +586,7 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     let Some(o) = w.obj(id).cloned() else { return };
     let tick = w.tick;
     let r = w.rules_arc();
-    // spec: S-0207 claim 20 (e) (every object that has it as its target drops it)
-    // spec: S-0215 claim 10 (the target's own jump: an overridden attacker reverts first, then drops the jumper if it is still its target; a restored other target is kept)
-    // The one exception, an attacker whose airstrike is aimed at the living target (S-0207 claim 20 (e),
-    // S-0215 claim 10; not an erasing-weapon exception), is a seam: air strikes and their
-    // designators (S-0519 claims 16 to 20, wave 2) are not built, so no airstrike
-    // aiming exists in our engine.
-    let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
-    for x in ids {
-        let Some(ob) = w.obj_mut(x) else { continue };
-        if ob.target != Some(Target::Object(id)) {
-            continue;
-        }
-        let mut restored = None;
-        if ob.beh.suspended.is_some()
-            && let Some((t, d)) = ob.beh.revert()
-        {
-            crate::spawn::set_own_target(ob, t);
-            if ob.kind.is_mobile() {
-                restored = Some(ob.dest);
-                ob.dest = d;
-            }
-        }
-        if ob.target == Some(Target::Object(id)) {
-            crate::spawn::clear_own_target(ob);
-        }
-        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-        if let Some(before) = restored {
-            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
-            crate::infantry::destination_assigned(w, x, before);
-        }
-    }
-    // spec: S-0306 claim 17 (a projectile whose target becomes untargetable by teleporting: the cell the target stood in when not airborne, else nothing)
-    let airborne = crate::combat::weapon::airborne_by_height(w, id);
-    for p in w.projectiles.values_mut() {
-        if p.target == Some(Target::Object(id)) {
-            p.target = (!airborne).then_some(Target::Cell(o.pos.cell()));
-        }
-    }
+    targeters_drop(w, id);
     // spec: S-0207 claim 20 (e) and (i) (a warp animation at the old point, an ordinary animation creation with every applicable creation draw of S-0202 claim 10, before the landing-point animation's; landing choice and position change take no draw of their own; the sounds take no draw)
     if let Some(warp) = r.warp_out.clone() {
         crate::combat::effects::anim(w, &warp, o.pos);
@@ -723,9 +688,56 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     );
 }
 
+/// Every object that has `id` as its target drops it, and a projectile
+/// aimed at it retargets (S-0207 claim 20 e, S-0306 claim 17): at a jump,
+/// and at a superweapon warp's departure (S-0513 claim 39).
+pub(crate) fn targeters_drop(w: &mut World, id: ObjectId) {
+    let Some(pos) = w.obj(id).map(|o| o.pos) else {
+        return;
+    };
+    // spec: S-0207 claim 20 (e) (every object that has it as its target drops it)
+    // spec: S-0215 claim 10 (the target's own jump: an overridden attacker reverts first, then drops the jumper if it is still its target; a restored other target is kept)
+    // The one exception, an attacker whose airstrike is aimed at the living target (S-0207 claim 20 (e),
+    // S-0215 claim 10; not an erasing-weapon exception), is a seam: air strikes and their
+    // designators (S-0519 claims 16 to 20, wave 2) are not built, so no airstrike
+    // aiming exists in our engine.
+    let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
+    for x in ids {
+        let Some(ob) = w.obj_mut(x) else { continue };
+        if ob.target != Some(Target::Object(id)) {
+            continue;
+        }
+        let mut restored = None;
+        if ob.beh.suspended.is_some()
+            && let Some((t, d)) = ob.beh.revert()
+        {
+            crate::spawn::set_own_target(ob, t);
+            if ob.kind.is_mobile() {
+                restored = Some(ob.dest);
+                ob.dest = d;
+            }
+        }
+        if ob.target == Some(Target::Object(id)) {
+            crate::spawn::clear_own_target(ob);
+        }
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        if let Some(before) = restored {
+            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, x, before);
+        }
+    }
+    // spec: S-0306 claim 17 (a projectile whose target becomes untargetable by teleporting: the cell the target stood in when not airborne, else nothing)
+    let airborne = crate::combat::weapon::airborne_by_height(w, id);
+    for p in w.projectiles.values_mut() {
+        if p.target == Some(Target::Object(id)) {
+            p.target = (!airborne).then_some(Target::Cell(pos.cell()));
+        }
+    }
+}
+
 /// The departure or arrival sound of `o`'s own jump at `pos` (S-0207 claim
 /// 20 e); the view picks the type's sound or the game-wide one.
-fn chrono_sound(w: &mut World, o: &crate::world::Object, sound: Sound, pos: Pos) {
+pub(crate) fn chrono_sound(w: &mut World, o: &crate::world::Object, sound: Sound, pos: Pos) {
     w.effects.push(Effect::Sound {
         sound,
         of: Some(crate::econ::TypeRef {
@@ -765,14 +777,20 @@ pub fn delay(w: &World, from: Pos, l: Pos) -> i64 {
 
 /// The end of phasing in (claim 20 f).
 fn end_phasing(w: &mut World, id: ObjectId) {
-    let tick = w.tick;
-    let half = w.rules().quirks.ranged_draw_half_span;
-    let Some(o) = w.obj(id).cloned() else { return };
     if let Some(ob) = w.obj_mut(id)
         && let Some(t) = ob.teleport.as_mut()
     {
         t.phasing = None;
     }
+    phasing_search(w, id);
+}
+
+/// The target search at the end of phasing in (S-0207 claim 20 f), also
+/// made by a superweapon warp member (S-0513 claim 39).
+pub(crate) fn phasing_search(w: &mut World, id: ObjectId) {
+    let tick = w.tick;
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let Some(o) = w.obj(id).cloned() else { return };
     if o.target.is_none() && o.targeting_timer.wrapping_sub(tick) > TIMER_THRESHOLD {
         // spec: S-0207 claim 20 (f) (no target and more than 10 ticks left: one draw over 4 to 8 ticks)
         let v = w.rng.ranged(TIMER_DRAW.0, TIMER_DRAW.1, half);

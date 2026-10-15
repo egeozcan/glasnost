@@ -122,6 +122,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::death::infantry_death_turn(w, id);
         return;
     }
+    // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); Q-0738 interim: until its arrival effects the warp update is its whole turn
+    if crate::superweapons::warp::turn(w, id) {
+        return;
+    }
     // spec: S-0504 claim 4 (a sinking vessel's own update first descends, and may leave play at once)
     if crate::naval::sinking_turn(w, id) {
         return;

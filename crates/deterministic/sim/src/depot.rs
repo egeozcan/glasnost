@@ -218,7 +218,7 @@ pub fn request(w: &mut World, id: ObjectId, k: ObjectId, standing: bool) -> bool
 }
 
 /// Releases vehicle `id`'s depot contact and queued entry.
-fn release(w: &mut World, id: ObjectId) {
+pub(crate) fn release(w: &mut World, id: ObjectId) {
     let strand = w.rules().quirks.depot_loss_strands_hover;
     if let Some(o) = w.obj_mut(id) {
         if o.depot.link.is_some_and(|l| o.contact == Some(l.depot)) {

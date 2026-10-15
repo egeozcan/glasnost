@@ -25,6 +25,7 @@ const LATCH_BLOCK: i32 = 20; // spec: S-0614 Constants (latch block length 20 ti
 const HEIGHT_LIMIT: i32 = 208; // spec: S-0614 Constants (2 levels, 208 leptons)
 /// Suppression set by curtain protection, unloading or consumption, ticks.
 const EXIT_SUPPRESSION: i32 = 50; // spec: S-0614 claim 12 and Constants (50 ticks, set by curtain protection, unloading or consumption)
+const WARP_SUPPRESSION: i32 = 500; // spec: S-0513 Constants (warp parasite suppression 500 ticks, claim 34)
 /// The grab phase ends, and the first push starts, this many ticks after its first tick.
 const GRAB_END: i32 = 29; // spec: S-0614 F3 (grab of 10 frames × 3 ticks, its first frame counted in its first tick: the first push starts at g + 29, so that the first strike is at g + 69)
 /// A push lasts this many ticks; the strike follows in the next tick.
@@ -1089,6 +1090,11 @@ pub fn superweapon_teleport(w: &mut World, host: ObjectId) {
     if let Some(p) = parasite_of(w, host)
         && naval(w, p)
     {
+        let now = w.tick;
+        if let Some(s) = state_mut(w, p) {
+            // spec: S-0513 claim 34 and Constants (a naval parasite is released with 500 ticks of suppression before any other effect of the warp)
+            s.suppressed_until = Some(now.wrapping_add(WARP_SUPPRESSION));
+        }
         // spec: S-0614 claim 12 (a naval parasite exits at launch, before the teleport)
         leave_living(w, p, Leave::Exit);
     }

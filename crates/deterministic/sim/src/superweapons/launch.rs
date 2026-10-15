@@ -128,12 +128,10 @@ fn consume(
     }
 }
 
-/// The second stage's order (S-0512 claims 10 and 11).
-fn second_stage(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
-    let t = w.tick;
-    let ty = w.rules().superweapons.types[i as usize].clone();
+/// The first stage a second-stage type links to (S-0512 claim 11).
+fn linked_first(w: &World, ty: &super::SwType) -> Option<u32> {
     let n = w.rules().superweapons.types.len() as u32;
-    let first = ty.pre_dependent.and_then(|k| {
+    ty.pre_dependent.and_then(|k| {
         if w.rules().quirks.predependent_kind_as_list_position {
             // spec: S-0512 claim 11 (quirks.predependent_kind_as_list_position: the kind number as a list position, whatever type stands there)
             (k < n).then_some(k)
@@ -141,7 +139,14 @@ fn second_stage(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
             // spec: S-0512 claim 11 (quirk off: the first type in the list of the named kind)
             SwKind::from_number(k).and_then(|k| w.rules().superweapons.first_of_kind(k))
         }
-    });
+    })
+}
+
+/// The second stage's order (S-0512 claims 10 and 11).
+fn second_stage(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
+    let t = w.tick;
+    let ty = w.rules().superweapons.types[i as usize].clone();
+    let first = linked_first(w, &ty);
     let Some(first) = first else {
         // spec: S-0512 claim 11 (a link outside the type list: our engine refuses the second-stage order, a departure)
         w.note(
@@ -289,10 +294,8 @@ fn effect(
         Some(SwKind::ChronoWarp) => {
             // A warp-kind type fired without the second-stage flag: the
             // warp from the linked first stage's source, as claim 34 says.
-            let first = w.rules().superweapons.types[i as usize]
-                .pre_dependent
-                .and_then(|k| SwKind::from_number(k))
-                .and_then(|k| w.rules().superweapons.first_of_kind(k));
+            let ty = w.rules().superweapons.types[i as usize].clone();
+            let first = linked_first(w, &ty);
             let source = first.and_then(|f| record(w, h, f).and_then(|r| r.source));
             if let Some(s) = source {
                 super::warp::launch(w, h, s, cell);
