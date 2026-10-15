@@ -2,7 +2,7 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -44,6 +44,9 @@ Glossary terms are used as defined there, in particular *aircraft*, *facing*, *s
 (S-0303), *firing check* and *answer* (S-0301), *movable* (S-0214), *veterancy rank* and *height
 above the terrain*.
 
+- **Seized.** The magnetic-lift state of S-0607 claims 5 and 20, lasting until the unit gets
+  its own locomotor back, including after the grip ends and during a drop. It is distinct from
+  the parasite hold of S-0614 claim 8.
 - **Spawn controller.** The part of an object (the *spawner*) whose type names a spawned type and
   a positive spawn count. It holds a fixed number of *spawn slots*, and is created with the spawner.
 - **Spawned type, spawn count.** The aircraft type that the spawner's type names as the type it
@@ -150,8 +153,7 @@ above the terrain*.
      launch, where *s* = 9 when the **spawner's own type** has the missile-spawn flag and *s* = 20
      otherwise (`quirks.launch_spacing_from_spawner_type`),
    - the controller is not cooling down,
-   - the spawner, when it is a mobile unit, is not restrained by a magnetic beam (distinct from
-     the parasite hold of S-0614 claim 8),
+   - the spawner, when it is a mobile unit, is not seized (S-0607 claims 5 and 20),
    - for a missile slot only: the spawner's locomotor reports that it is not moving.
 
    With passes every 10 ticks a spacing of 9 allows one launch per pass and a spacing of 20 one
@@ -222,7 +224,7 @@ above the terrain*.
     - A spawner weapon none of whose slot objects is alive gets *rearming* (S-0301, claim 9, rank 4).
     - A mobile spawner under the parasite hold of S-0614 claim 8 gets *impossible* for its
       spawner weapon, regardless of whether its type is organic (S-0301 claim 9, rank 4).
-      This is distinct from magnetic restraint in claim 6 and can cause the reset of claim 11
+      This is distinct from the seized state in claim 6 and can cause the reset of claim 11
       when a firing attempt is made.
     - While the launching count is above 0, a spawner that moves with the driving or ship
       locomotor cannot start another track. An existing track finishes; between tracks the
@@ -263,8 +265,8 @@ above the terrain*.
     - Confidence: high
 
 13. **When the spawner dies, changes hands or loses its locomotor.** The controller *clears its
-    slots* when the spawner is destroyed or starts to crash (unless it is held by a magnetic beam
-    at that moment), when the spawner changes house (mind control, capture), when a locomotor
+    slots* when the spawner is destroyed or starts to crash (unless it is seized
+    at that moment; S-0607 claims 5 and 20), when the spawner changes house (mind control, capture), when a locomotor
     warhead replaces the spawner's locomotor, when the spawner is hit by an erasing weapon, and when
     the spawner is removed. Any crash-start draws for released aircraft occur in descending slot index, so earlier
     draw values belong to higher-index occupied slots. Its effects per slot are:
@@ -865,8 +867,8 @@ applies throughout that area. These are data-only tests, not stock-data measurem
 - **R3. Launch spacing and blockers (claims 6, 8).** A named test map gives a stock launcher two
   slots and varies only its own missile-spawn flag. Record appearance ticks: expected 20 ticks
   apart without the flag and 10 with it. In separate runs order movement before the first launch,
-  or restrain the launcher with a magnetic beam. Expected: no rocket placement while its locomotor
-  reports motion or while magnetically restrained, then placement on the first eligible pass. A named
+  or seize the launcher by magnetic lift. Expected: no rocket placement while its locomotor
+  reports motion or while seized, then placement on the first eligible pass. A named
   ordinary carrier variant confirms that aircraft launch is not blocked merely by carrier motion.
   A named variant removes the missile-spawn flag from a named rocket type; its released slot
   enters attacking rather than the rail interval. Another gives an ordinary spawned aircraft
@@ -920,9 +922,9 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   Separately apply a locomotor-changing weapon or an erasing weapon during preparation: the
   preparing missile is released, whereas a rail-linked missile vanishes. For carriers include
   docked, reloading, preparing, attacking and returning aircraft: silent removal in the first two
-  cases, crash in the latter three (claim 13). Repeat death during magnetic-beam hold:
-  destruction or crash start alone does not clear slots while held; a later removal does.
-  Record missile existence between those events. Vanishing at the held death/crash event,
+  cases, crash in the latter three (claim 13). Repeat death while seized by magnetic lift:
+  destruction or crash start alone does not clear slots while seized; a later removal does.
+  Record missile existence between those events. Vanishing at the seized death/crash event,
   before removal, falsifies that exception. A carrier aircraft starting to crash also clears its
   own spawned slots if given them by a named map variant; compare with ground destruction.
   These variants name only the aircraft's spawned type and positive spawn count as extra data.
