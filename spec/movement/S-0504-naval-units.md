@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -26,7 +26,7 @@ This spec does not repeat what other specs own. Entering water, the land-type an
 ship substitutions are S-0211 (claims 10 to 12) and S-0209 (claim 5f). The naval weapon choice is
 S-0308 (claim 11 and table N). Release of a new vessel from a yard is S-0404 (claim 13) and S-0417
 (claim 9). The sinking condition at a killing hit is S-0312 (claim 10). A vessel's crush handling
-is S-0210 (claim 9). Cloaking, cloak timing and detection are S-0516; this spec only says which
+is S-0210 (claim 9). Cloaking, cloak timing and detection are planned S-0516; this spec only says which
 naval states those rules produce (Terms, *submerged*). The squid's grappling is S-0614.
 
 **Carrier and missile vessels.** S-0506 claims 1 to 9 and 11 to 13 own the shared spawn-controller
@@ -38,14 +38,6 @@ Shared salvo release (S-0506 claim 8) is distinct from the end of the missile ra
 between-track hold while its launching count is positive; that hold does not apply merely because
 a carrier's controller is launching ordinary aircraft.
 
-**Paired corrections required at hand-off.** S-0506 claim 10 must replace its approved
-whole-tick movement stop with claim 3's between-track hold: an active track finishes, and no
-new track starts while the launching count is positive. Its single-slot example must likewise
-say that starting a new track is prevented, not that all movement stops. The current S-0506
-draft already makes this correction; hand off the two drafts together. S-0314 claim 6 must also
-replace its approved immediate-on-rest settling rule with claim 8's waiting-distance gate and
-3-tick delay. Its current draft already does so; confirm that paired correction at hand-off.
-
 ## Terms
 
 - **Ship locomotor.** The locomotor whose class identifier is the "ship" row of S-0207 table T3.
@@ -55,7 +47,7 @@ replace its approved immediate-on-rest settling rule with claim 8's waiting-dist
   and a type with the underwater flag.
 - **Submerged.** An underwater-type vehicle whose cloak state is cloaking, cloaked or uncloaking
   (the same states S-0308 table N tests). Submerging and surfacing are therefore the cloak
-  transitions of S-0516; this spec adds no state of its own. An underwater type without the
+  transitions of planned S-0516; this spec adds no state of its own. An underwater type without the
   ability to cloak is never submerged (claim 6).
 - **Wake.** An instance of the game-wide wake animation (Import mapping) created by a vessel on the
   water (claims 2 and 4). It uses ordinary animation rules (S-0109); these claims add no
@@ -179,7 +171,7 @@ replace its approved immediate-on-rest settling rule with claim 8's waiting-dist
    Its effects covered here are: it makes no wakes while moving (claim 2), it does not enter
    sinking from the ordinary killing-hit condition (S-0312 claim 10), and it is tested by area damage (S-0303 claim 21), the naval weapon choice
    (S-0308 table N, which also tests whether it is submerged) and the threat search (S-0309 F1).
-   Whether other objects see it while it is submerged is S-0516's cloak rule.
+   Whether other objects see it while it is submerged is planned S-0516's cloak rule.
    The underwater flag and the ability to cloak are independent type settings. Without that
    ability, a vehicle remains surfaced for S-0308 claim 11's naval weapon choice; the underwater
    flag still suppresses moving-ship wakes and excludes ordinary killing-hit sinking. This is
@@ -209,12 +201,14 @@ replace its approved immediate-on-rest settling rule with claim 8's waiting-dist
    and is closer than the starting distance, 200 leptons for a vehicle with the ship or the hovering
    locomotor and 100 leptons for every other locomotor (strictly less in both cases), the depot ends
    waiting and its next processing comes 3 ticks later, in the settling phase of S-0314 claim 6.
-   The first repair step additionally depends on that claim's contact and locomotor-readiness
-   conditions; scheduling settling does not guarantee a paid repair on that tick.
+   At that later processing, the first repair step additionally requires continued contact,
+   continued stillness and completed locomotor settling (S-0314 claim 6); scheduling settling
+   does not guarantee a paid repair on that tick.
    An unsuccessful waiting check instead uses the depot's processing delay *D* of S-0314 claim 6.
    Thus settling is scheduled 3 ticks after the processing that first finds the vehicle at rest
-   within the starting distance, not in the tick it comes to rest. This starting-distance gate
-   does not assert a second distance gate on every repair step.
+   within the starting distance, not in the tick it comes to rest. The settling phase's separate
+   200-lepton distance check controls approach and stopping, not eligibility for a repair step.
+   It is not a second repair-distance gate.
    - Backing: `measurable` (N8) for thresholds, spatial distance and delays. Complete docking-point
      selection is `unmeasured` here: no scenario covers every building and dock-place combination.
    - Confidence: high for thresholds, locomotor test, spatial distance and 3-tick delay,
@@ -300,7 +294,7 @@ original-versus-fixed behaviours:
 | Rules, type section, `Locomotor` | ship locomotor (claim 1; S-0207 claim 14 owns the field) | class identifier | S-0207 |
 | Rules, type section, `Naval` | naval flag (claim 7; S-0303 and S-0312 also use it) | boolean | no |
 | Rules, type section, `Underwater` | underwater type (claims 2, 6) | boolean | no |
-| Rules, type section, `Cloakable` | whether an underwater type can be submerged (Terms; S-0516 owns it) | boolean | no |
+| Rules, type section, `Cloakable` | whether an underwater type can be submerged (Terms; planned S-0516 owns it) | boolean | no |
 | Rules, type section, `MovementZone` | the *amphibious* exception of the naval match (claim 7; S-0211 owns the field) | movement zone name | S-0211 |
 | Rules, `[General]`, `Wake` | the game-wide wake animation (claims 2, 4) | animation type name | none (engine default): a ship makes no wakes (claim 2); a sinking vessel takes its draws and makes no wake, with an importer warning (claim 4) |
 | Rules, building section, `UnitRepair` | repair flag of a depot or yard (claim 8; S-0314 owns it) | boolean | no |
@@ -411,8 +405,10 @@ craft and a damaged drive vehicle at a land depot. *Procedure:* dock each; read 
 100 leptons (drive vehicle) of its docking point (F3), the waiting-to-settling tick from a read-only recorder, and first repair
 (health and credits change). Give its owner ample credits. *Expected:* the depot enters its settling processing
 3 ticks after the successful waiting gate. If contact persists, the vehicle remains still and
-its locomotor is ready for the repair step of S-0314 claim 6, the first repair occurs then.
-Otherwise record the later repair separately. Unsuccessful waiting processings recur at *D*.
+its locomotor has finished settling as required by S-0314 claim 6, the first repair occurs then.
+Otherwise record the later repair separately; the 3-tick transition alone does not guarantee
+repair. The settling phase's 200-lepton check must not be treated as a second repair-distance
+gate. Unsuccessful waiting processings recur at *D*.
 *Falsified if:* the gate accepts a
 drive vehicle at 100 leptons or more, refuses a still ship from 100 inclusive to 200 exclusive,
 accepts exactly 200, the gate-to-settling interval differs from 3 ticks, the first paid repair
