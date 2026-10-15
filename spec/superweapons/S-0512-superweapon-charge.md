@@ -2,7 +2,7 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -193,9 +193,9 @@ between a fire order and the effect.
    order-level refusal: a ready suspended record whose clock was restarted by claim 14 or a
    one-time grant can accept an already-issued order, although its sidebar does not offer one
    (`quirks.superweapon_order_tests_clock`, default on = original; off: require granted, ready
-   and not suspended instead). An order that S-0513 refuses for its
-   effect's state (a storm already pending or raging, a domination already under way) keeps the
-   charge and the ready state; the local player gets a refusal message if the order was its own.
+   and not suspended instead). An order refused because a storm is already pending or raging
+   (S-0513 claim 14), or because a domination is in force (S-0612 claim 3), keeps the charge and
+   the ready state; the local player gets a refusal message if the order was its own.
    When the order is carried out, it requests the effect (S-0513 claim 3), the record stops being ready, and its
    clock restarts with remaining time *T*, so it becomes ready again in tick *L* + *T* for an order
    applied in tick *L*. The exceptions are one-time records (claim 12), first stages (claim 10) and
