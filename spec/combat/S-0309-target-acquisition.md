@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -80,8 +80,7 @@ this spec:
   already aimed at it (claim 15).
 - **Anger, enemy house.** Each house keeps an *anger* value for every other house, and an *enemy
   house*, or none (claim 16).
-- **Sensed cell.** A cell in which a house can see cloaked objects (by a sensor). The visibility
-  specs own the test.
+- **Sensed cell.** As defined by S-0516 (Terms, claims 21–23), which owns sensor coverage.
 - **On the playfield.** An object inside the usable area that takes part in play; the visibility
   specs own the exact test.
 - **Ring *r*.** The cells whose larger coordinate difference from the centre cell is exactly *r*
@@ -138,8 +137,11 @@ this spec:
 - **Threat value.** Of a building: its occupant count times the game-wide threat per occupant when
   it holds occupants; otherwise the threat-posed field of the unit in its tank bunker, if one is
   there, otherwise its own type's threat-posed field (table C, row "harmless building").
-- **Fully cloaked.** The cloak state that table C's row "cloak" tests; the visibility specs own
-  the test.
+- **Fully cloaked.** The *cloaked* state of S-0516 (Terms, claim 1), tested by table C's row
+  "cloak".
+- **Appears disguised to a house.** The game-state test of S-0516 claim 35. S-0516 (Terms,
+  claim 40) owns the disguise-detector coverage supplied by detector buildings, distinct from
+  the sensor coverage used by table C's row "cloak".
 
 ## Behaviour
 
@@ -2127,7 +2129,7 @@ range; the part says which object.
   in range: never attacked while in it, attacked once it leaves it.
 - *Part g (cloak):* an enemy vehicle of a type that cloaks (or covered by a cloaking building of its
   owner), fully cloaked, in range. *Expected:* never attacked by itself; when a sensor of the
-  firer's house (a building or unit that senses cloaked objects, visibility specs) covers its cell,
+  firer's house (S-0516 claims 21–23) covers its cell,
   it is attacked.
 - *Part h (playfield):* an enemy vehicle that arrives from beyond the map edge (a reinforcement
   that a map trigger sends in, S-0011 claim 30), with the firer standing at the edge of the usable
