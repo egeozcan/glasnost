@@ -276,6 +276,7 @@ Provisional rules of combat, each tied to a request:
 | Where | Interim rule | Request |
 |---|---|---|
 | `combat::range::approach_search` | the two edges S-0307 leaves open: a vehicle alternative off the map's legal cells never passes the clear-cell test; claim 22 (e) withdraws a close-range attacker's own entry on a copy of the cell's record for the clear-cell test, so the order of the cell's occupants never changes | Q-0172 |
+| `combat::damage` (berserk hit), `combat::fire`, `combat::acquire::friendly_exception`, `targeting::berserk` | the berserk code predates S-0610 and follows only S-0302 claim 10 and F3: a berserk hit sets `berserk_until` = now + *T*, read by the halved rearm and the friendly-target exception; `targeting::berserk` is still a seam (always false). Not built yet (S-0610 is wave 2): the firing refusals of berserk weapons (claim 3), dropping the target and queuing *hunt* on going berserk (claim 4), the countdown in the unit's own updates and the *guard* or *hunt* at expiry (claim 5), the order block and other while-berserk rules (claim 6); a hit with *T* ≤ 0 has no effect, which is the off state of `quirks.berserk_zero_duration` rather than its default | none (S-0610, wave 2) |
 
 ## Simulation (M5a: economy and base building)
 
