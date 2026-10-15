@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -169,9 +169,12 @@ a carrier's controller is launching ordinary aircraft.
      ammunition or that is cloaked gets that answer instead,
    - retains its horizontal position during ordinary descent. Continued blocking in every
      occupancy test is not established here.
-   Other events that set a vehicle sinking (a jumpjet falling into water, a teleport arrival on
-   water) belong to S-0502 and S-0207. A squid's cull is S-0614 claim 11, not an ordinary killing
-   hit. Once sinking is set, claims 4 and 5 apply in the same way, without adding health loss
+   Other sinking triggers belong to their movement specs. S-0502 claim 19 owns the
+   jumpjet trigger after a magnetic-lift drop onto water where the vehicle cannot stand,
+   not on a deck or beach; an ordinary shot-down jumpjet is not set sinking by its movement.
+   Magnetic lift itself belongs to planned S-0607. Other possible movement triggers remain
+   outside this claim. A squid's cull is S-0614 claim 11, not an ordinary killing hit.
+   Once sinking is set, claims 4 and 5 apply in the same way, without adding health loss
    or destruction credit to the cull.
    - Backing: `measurable` (N6) for firing prevention, rejection of new target assignments and
      horizontal position. Locomotor-only turning suppression is `unmeasured`: N6 does not
@@ -263,10 +266,9 @@ a carrier's controller is launching ordinary aircraft.
 
    The ship also shares that claim's chase-path shortening with driving and hovering vehicles:
    for a vehicle or infantry destination it cuts the stored path at ⌊*D* / 256⌋ steps when that
-   count is below 24, with *D* the distance just defined. These are extensions of S-0212's
-   currently drive-only last-step wording and drive/hover chase wording; there is no new search
-   algorithm or ship-specific path buffer. Hovering vehicles do not make the last-step refresh
-   (S-0503); driving vehicles do (S-0207 and S-0212).
+   count is below 24, with *D* the distance just defined. S-0212 claim 20 includes ships in
+   both rules; there is no new search algorithm or ship-specific path buffer. Hovering vehicles
+   do not make the last-step refresh; driving vehicles do (S-0212 claim 20).
 
    The ordinary no-path search waits for expiry of the same retry timer. Its delay is S-0212
    F3's *R* = trunc(*P* × 900) ticks, with *P* the imported path delay in game minutes:
