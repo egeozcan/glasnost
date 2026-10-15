@@ -1174,6 +1174,7 @@ pub fn type_combat(
         immune: false,
         type_immune: b(c.type_immune),
         immune_radiation: false,
+        // spec: S-0610 claim 1 (both psychic immunities absent: no here; building types take yes in `building_rules`)
         immune_psionic_weapons: b(c.immune_to_psionic_weapons),
         immune_poison: b(c.immune_to_poison),
         immune_psionics: b(c.immune_to_psionics),

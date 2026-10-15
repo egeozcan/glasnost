@@ -910,6 +910,35 @@ fn warhead_kind_immunities_stop_every_hit() {
     }
 }
 
+// spec: S-0610 claim 1 and S-0302 claim 8 (with the psychic-weapon immunity absent from every layer a building type is immune and a vehicle type is not; an explicit value wins for either kind; scenario P8 a)
+#[test]
+fn s0610_claim_1_psychic_immunity_defaults_by_kind() {
+    let mut r = testkit::combat_ruleset();
+    building(&mut r, "SHED", |_| {});
+    building(&mut r, "OPEN", |b| {
+        b.combat.immune_to_psionic_weapons = Some(false)
+    });
+    vehicle(&mut r, "BOX", |_| {});
+    vehicle(&mut r, "CALM", |t| {
+        t.combat.immune_to_psionic_weapons = Some(true)
+    });
+    warhead(&mut r, "PSI", |h| {
+        h.verses = every("1");
+        h.psychic_damage = Some(true);
+    });
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let h = wh(&w, "PSI");
+    for (kind, ty, x, lost) in [
+        (Kind::Building, "SHED", -6, 0),
+        (Kind::Building, "OPEN", -3, 100),
+        (Kind::Vehicle, "BOX", 3, 100),
+        (Kind::Vehicle, "CALM", 6, 0),
+    ] {
+        let t = put(&mut w, kind, ty, BETA, x);
+        assert_eq!(loss!(w, t, hit(100, h)).0, lost, "{ty}");
+    }
+}
+
 // spec: S-0302 claim 8 (stage 2: a warhead that does not affect allies stops a hit whose attacker's owner is allied with the target's owner; a hit with no attacker is never stopped by it)
 #[test]
 fn warheads_that_spare_allies() {

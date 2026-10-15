@@ -1411,7 +1411,7 @@
           "default": null
         },
         "immune_to_psionic_weapons": {
-          "description": "`ImmuneToPsionicWeapons` (S-0302 claim 8).",
+          "description": "`ImmuneToPsionicWeapons` (S-0302 claim 8). Absent from every layer:\nyes for building types, no for infantry, vehicle and aircraft types\n(S-0610 claim 1).",
           "type": [
             "boolean",
             "null"
@@ -1419,7 +1419,7 @@
           "default": null
         },
         "immune_to_psionics": {
-          "description": "`ImmuneToPsionics` (S-0302 claim 10).",
+          "description": "`ImmuneToPsionics` (S-0302 claim 10). Absent from every layer: yes\nfor building types, no for infantry, vehicle and aircraft types\n(S-0610 claim 1).",
           "type": [
             "boolean",
             "null"

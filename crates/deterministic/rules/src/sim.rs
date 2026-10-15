@@ -1493,13 +1493,17 @@ pub struct CombatFields {
     /// `TypeImmune` (S-0302 claim 8).
     #[serde(default)]
     pub type_immune: Option<bool>,
-    /// `ImmuneToPsionicWeapons` (S-0302 claim 8).
+    /// `ImmuneToPsionicWeapons` (S-0302 claim 8). Absent from every layer:
+    /// yes for building types, no for infantry, vehicle and aircraft types
+    /// (S-0610 claim 1).
     #[serde(default)]
     pub immune_to_psionic_weapons: Option<bool>,
     /// `ImmuneToPoison` (S-0302 claim 8).
     #[serde(default)]
     pub immune_to_poison: Option<bool>,
-    /// `ImmuneToPsionics` (S-0302 claim 10).
+    /// `ImmuneToPsionics` (S-0302 claim 10). Absent from every layer: yes
+    /// for building types, no for infantry, vehicle and aircraft types
+    /// (S-0610 claim 1).
     #[serde(default)]
     pub immune_to_psionics: Option<bool>,
     /// `DamageSelf` (S-0302 claim 8, S-0303 claim 9).

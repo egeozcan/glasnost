@@ -1489,6 +1489,9 @@ fn building_rules(
     combat.immune = bt.immune.unwrap_or(false);
     // spec: S-0302 Import mapping (ImmuneToRadiation absent: no)
     combat.immune_radiation = bt.immune_to_radiation.unwrap_or(false);
+    // spec: S-0610 claim 1 (both psychic immunities absent from every layer: yes for building types)
+    combat.immune_psionic_weapons = bt.combat.immune_to_psionic_weapons.unwrap_or(true);
+    combat.immune_psionics = bt.combat.immune_to_psionics.unwrap_or(true);
     let b = |x: Option<bool>| x.unwrap_or(false);
     let building = crate::combat::data::BuildingCombat {
         defense: b(bt.defense),

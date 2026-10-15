@@ -272,13 +272,14 @@ Q-0236 is answered by S-0312 claim 16: a killed aircraft with an empty explosion
 
 Q-0230 and Q-0237 are answered by S-0307 claims 21 and 25: an outside-area alternative fails a non-winged actor's clear-cell region test, a *winged* actor's clear-cell test accepts without the occupancy, region, land and wall tests (`combat::range::approach_search`), and after the close-range shortcut an actor of any locomotor but walking gets only the destination (`approach::shortcut`).
 
+Q-0661 is answered by S-0610 revision 3, claim 1: a psychic-weapon or psionics immunity that no rules layer gives is *yes* for building types and *no* for infantry, vehicle and aircraft types (an initial default, not a reset by a later layer that omits the key). `building_rules` in `glasnost_sim::rules` applies it, so an otherwise damageable building ignores a psychic-damage hit unless its data turns the immunity off (`claims_s0302::s0610_claim_1_psychic_immunity_defaults_by_kind`). The psionics immunity's other consumers (the berserk-weapon firing check of S-0610 claim 3 and the control effects of S-0601) are not built; berserk hits already exclude buildings by S-0302 claim 10.
+
 Provisional rules of combat, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
 | `combat::range::approach_search` | the two edges S-0307 leaves open: a vehicle alternative off the map's legal cells never passes the clear-cell test; claim 22 (e) withdraws a close-range attacker's own entry on a copy of the cell's record for the clear-cell test, so the order of the cell's occupants never changes | Q-0172 |
 | `combat::damage` (berserk hit), `combat::fire`, `combat::acquire::friendly_exception`, `targeting::berserk` | the berserk code predates S-0610 and follows only S-0302 claim 10 and F3: a berserk hit sets `berserk_until` = now + *T*, read by the halved rearm and the friendly-target exception; `targeting::berserk` is still a seam (always false). Not built yet (S-0610 is wave 2): the firing refusals of berserk weapons (claim 3), dropping the target and queuing *hunt* on going berserk (claim 4), the countdown in the unit's own updates and the *guard* or *hunt* at expiry (claim 5), the order block and other while-berserk rules (claim 6); a hit with *T* ≤ 0 has no effect, which is the off state of `quirks.berserk_zero_duration` rather than its default | none (S-0610, wave 2) |
-| `combat::data` (type immunities) | an absent psychic-weapon or psionics immunity key is *no* for every type, buildings included (S-0302 Import mapping); S-0610 claim 1 gives buildings *yes* | Q-0661 |
 | (garrisons, not built) | nothing reads or resets the garrison occupant index yet; S-0311 Terms reset it whenever occupants leave or are killed, S-0308 claim 13 and S-0313 claim 6 only when the building is emptied | Q-0660 |
 | `convert::layers` (`finish`) | a missing gas-cloud particle system is created at game start, reading no section (S-0004 claim 3), not rejected as S-0613 claim 1 says; gas clouds are not built | Q-0662 |
 
