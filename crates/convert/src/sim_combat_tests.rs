@@ -131,7 +131,7 @@ fn weapon_fields_and_not_given_values() {
                 IsSonic=yes\nUseSparkParticles=no\nUseFireParticles=1\nIsRailgun=yes\nIsMagBeam=no\n\
                 Temporal=yes\nSpawner=no\nDiskLaser=yes\nDecloakToFire=no\nLobber=yes\nNeverUse=no\n\
                 DrainWeapon=yes\nFireWhileMoving=no\nSuicide=yes\nSupress=yes\nFireOnce=no\nRevealOnFire=yes\nCamera=yes\n\
-                Warhead=Boom\nProjectile=Dart\nDamage=10\n[Boom]\nCellSpread=1\n[Dart]\nROT=0\n";
+                Warhead=Boom\nProjectile=Dart\nDamage=10\n[Boom]\nCellSpread=1\nTemporal=yes\n[Dart]\nROT=0\n";
     let (s, w) = direct(&[base], "", &["Zap"], &["Dart"], IniQuirks::default());
     let z = &s.weapons["Zap"];
     assert_eq!((z.rof, z.burst, z.speed), (Some(40), Some(2), Some(30)));
@@ -146,10 +146,9 @@ fn weapon_fields_and_not_given_values() {
         (z.use_fire_particles, z.is_railgun),
         (Some(true), Some(true))
     );
-    assert_eq!(
-        (z.is_mag_beam, z.temporal, z.spawner),
-        (Some(false), Some(true), Some(false))
-    );
+    assert_eq!((z.is_mag_beam, z.spawner), (Some(false), Some(false)));
+    // spec: S-0301 Import mapping and S-0514 Import mapping (Temporal is a warhead key, not a weapon key)
+    assert_eq!(s.warheads["Boom"].temporal, Some(true));
     assert_eq!((z.disk_laser, z.decloak_to_fire), (Some(true), Some(false)));
     assert_eq!(
         (z.lobber, z.never_use, z.drain_weapon),

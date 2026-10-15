@@ -160,10 +160,23 @@ fn handed_health(w: &World, old: ObjectId, strength: i32) -> i32 {
         .max(1)
 }
 
+/// Which rule a vehicle's *unload* processing followed (S-0415 claim 1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnloadRule {
+    /// The deploy-fire rule (rank 2), with its delay already chosen and
+    /// its draw taken.
+    DeployFire(i32),
+    /// A deploy attempt (rank 4): the standard delay of S-0215 claim 6
+    /// follows.
+    Deploy,
+}
+
+/// The deploy-fire base delay (S-0517 F3).
+const DEPLOY_FIRE_DELAY: i32 = 14; // spec: S-0517 F3 and Constants (deploy-fire base delay 14 ticks); S-0415 claim 1
+
 /// What the *unload* of a vehicle does, by the ranks of S-0415 claim 1.
-/// `None`: a rule that is not this spec's (transports, deploy fire,
-/// harvesting).
-pub fn process_unload(w: &mut World, id: ObjectId) -> Option<()> {
+/// `None`: a rule that is not this spec's (transports, harvesting).
+pub fn process_unload(w: &mut World, id: ObjectId) -> Option<UnloadRule> {
     let o = w.obj(id)?;
     let r = w.rules();
     let u = r.unit(o.kind, o.type_index)?;
@@ -173,7 +186,14 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> Option<()> {
     }
     // spec: S-0415 claim 1 rank 2 (deploy fire without the simple-deployer flag)
     if u.combat.deploy_fire && !u.simple_deployer {
-        return None;
+        let half = r.quirks.ranged_draw_half_span;
+        // The shot itself (slot 0 at its own cell, through the firing check) is S-0517 claim 2's seam.
+        w.note(
+            "S-0517 claim 2: a deploy-fire vehicle's shot at its own cell is not implemented yet; only its processing delay is",
+        );
+        // spec: S-0415 claim 1 and S-0517 claim 2, F3 (delay 14 + u, u one ranged draw over 0 … 2 from the scenario stream, taken even when the shot is refused; an exact integer sum; unload stays current)
+        let u = w.rng.ranged(0, 2, half);
+        return Some(UnloadRule::DeployFire(DEPLOY_FIRE_DELAY + u));
     }
     // spec: S-0415 claim 1 rank 3 (the harvester or weeder flag)
     if u.harvester || u.raw.weeder.unwrap_or(false) {
@@ -182,7 +202,7 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> Option<()> {
     // spec: S-0415 claim 1 rank 4 (a type that deploys into a building)
     let b = deploys_into(w, o.kind, o.type_index)?;
     let _ = attempt(w, id, b);
-    Some(())
+    Some(UnloadRule::Deploy)
 }
 
 /// What one deploy attempt came to (S-0415 claims 2 to 6), for the slave

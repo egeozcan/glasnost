@@ -196,6 +196,55 @@ fn claim_10_tile_animation_draws() {
     assert_eq!(s.build().rng.taken(), 1);
 }
 
+/// spec: S-0109 claim 3, F1 and Edge cases (`quirks.anim_random_rate_collapse` off: the converted pair is put in order, so an ascending pair draws over [min, max]; `quirks.anim_fast_rate_freezes` off: a rate above 900 converts to 1, not 0)
+#[test]
+fn s0109_random_rate_quirks_off() {
+    use glasnost_map::terrain::TileAnim;
+    use glasnost_rules::sim::AnimationType;
+    let mut s = Scene::new();
+    s.catalogue.tiles[1].anim = Some(TileAnim {
+        name: "spark".into(),
+        attaches_to: 0,
+        ..TileAnim::default()
+    });
+    s.register("animations", "SPARK");
+    let rate = |s: &mut Scene, r: [i32; 2]| {
+        s.ruleset.sim.animations.insert(
+            "SPARK".into(),
+            AnimationType {
+                random_rate: Some(r),
+                ..Default::default()
+            },
+        );
+    };
+    s.set_cell(cell(0, 0), 1, 0);
+    // The cell's two creations (both passes), then the load's last draw.
+    let expect = |s: &Scene, lo: i32, hi: i32| {
+        let mut r = Rng::new(s.setup.seed);
+        let _ = r.ranged(lo, hi, true);
+        let _ = r.ranged(lo, hi, true);
+        let _ = r.ranged(0, 65535, true);
+        r
+    };
+    // An ascending pair: ρ = 1 and 2 give d = 900 and 450.
+    rate(&mut s, [1, 2]);
+    s.ruleset.globals.quirks.anim_random_rate_collapse = false;
+    assert_eq!(s.build().rng, expect(&s, 450, 900));
+    // An ascending pair ρ = 2 and 1000 gives d = 450 and 0, or 450 and 1 with the fast-rate switch off.
+    rate(&mut s, [2, 1000]);
+    assert_eq!(s.build().rng, expect(&s, 0, 450));
+    s.ruleset.globals.quirks.anim_fast_rate_freezes = false;
+    assert_eq!(s.build().rng, expect(&s, 1, 450));
+    // Equal ends after ordering take no draw.
+    rate(&mut s, [2, 2]);
+    assert_eq!(s.build().rng.taken(), 1);
+    // Both switches on (the default): the ascending pair collapses to d₂′ = 0, no draw.
+    s.ruleset.globals.quirks.anim_random_rate_collapse = true;
+    s.ruleset.globals.quirks.anim_fast_rate_freezes = true;
+    rate(&mut s, [2, 1000]);
+    assert_eq!(s.build().rng.taken(), 1);
+}
+
 /// spec: S-0009 claim 12 and S-0202 claim 14 (low-bridge end markers, their end-row writes and their piece writes start no cell animation, even when the marker or the written type names one; an ordinary placement of such a type does)
 #[test]
 fn claim_14_low_bridges_start_no_cell_animation() {

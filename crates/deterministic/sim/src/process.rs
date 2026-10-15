@@ -594,11 +594,18 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         {
             crate::econ::harvest::process_unload(w, id)
         }
-        // spec: S-0415 claim 1 (unload of a vehicle: ranks 1 to 3 are other topics' rules, rank 4 deploys; the standard delay of S-0215 claim 6)
-        (Some(Behaviour::Unload), Kind::Vehicle)
-            if crate::econ::deploy::process_unload(w, id).is_some() =>
-        {
-            standard_delay(w, id)
+        // spec: S-0415 claim 1 (unload of a vehicle: rank 2 is the deploy-fire rule with its own delay, rank 4 deploys with the standard delay of S-0215 claim 6; ranks 1 and 3 are other topics' rules)
+        (Some(Behaviour::Unload), Kind::Vehicle) => {
+            match crate::econ::deploy::process_unload(w, id) {
+                Some(crate::econ::deploy::UnloadRule::DeployFire(d)) => d,
+                Some(crate::econ::deploy::UnloadRule::Deploy) => standard_delay(w, id),
+                None => {
+                    w.note(
+                    "S-0215: the processing of unload is not implemented yet; it waits as a behaviour without a processing rule",
+                );
+                    NO_RULE_DELAY
+                }
+            }
         }
         // spec: S-0417 claims 2 and 9 (a factory building's unloading)
         (Some(Behaviour::Unload), Kind::Building) => crate::econ::release::process_unload(w, id),

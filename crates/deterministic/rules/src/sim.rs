@@ -2013,9 +2013,6 @@ pub struct WeaponType {
     /// `IsMagBeam` (S-0301 claim 5).
     #[serde(default)]
     pub is_mag_beam: Option<bool>,
-    /// `Temporal` (S-0301 Terms).
-    #[serde(default)]
-    pub temporal: Option<bool>,
     /// `Spawner` (S-0301 claim 9).
     #[serde(default)]
     pub spawner: Option<bool>,
@@ -2177,6 +2174,10 @@ pub struct WarheadType {
     /// `Culling`, the cull flag (S-0614 claim 11); absent: no.
     #[serde(default)]
     pub culling: Option<bool>,
+    /// `Temporal`, the warhead's temporal flag (S-0301 Terms and Import
+    /// mapping, S-0514 Import mapping); absent: no.
+    #[serde(default)]
+    pub temporal: Option<bool>,
     /// `Fire`.
     #[serde(default)]
     pub fire: Option<bool>,

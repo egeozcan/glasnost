@@ -284,16 +284,25 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         Kind::Infantry => infantry_death(w, id, hit),
         Kind::Vehicle => {
             let tc = type_combat(w, id).cloned().unwrap_or_default();
+            // spec: S-0312 claim 32 (a killing hit on a vessel already sinking, whether its descent began with a killing hit or a cull)
+            let already_sinking = crate::naval::sinking(w, id);
+            let crashable = rules
+                .unit(o.kind, o.type_index)
+                .is_some_and(|u| u.vehicle.crashable);
             // spec: S-0312 claim 10 and table rows 4 and 8 (a vessel that sinks shows no explosion or destruction animation, takes no list picks and stays in play at 1 health point)
             let sinks = crate::naval::sinks_at_kill(w, id);
             if sinks {
                 // Passengers (claim 12) need transports.
                 crew(w, id, hit);
                 if let Some(ob) = w.obj_mut(id) {
-                    ob.health = 1; // spec: S-0312 claim 10 (it keeps 1 health point)
+                    ob.health = 1; // spec: S-0312 claim 10 (it keeps 1 health point); claim 32 table row 1 (again at a further killing hit)
                 }
-                // spec: S-0312 claim 10 and S-0504 claims 4 and 5 (the descent starts at its next own update)
+                // spec: S-0312 claim 10 and S-0504 claims 4 and 5 (the descent starts at its next own update); S-0504 claim 13 and S-0312 claim 32 row 1 (already sinking: the descent goes on from its height, not restarted)
                 crate::naval::start_sinking(w, id);
+                if already_sinking && crashable {
+                    // spec: S-0312 claims 15 and 32 (a crashable type that was sinking and cannot start a crash, being at or below the surface, is removed at the end of the effects)
+                    leave_play(w, id);
+                }
                 return;
             }
             // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
@@ -318,7 +327,11 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
             }
             // Passengers (claim 12) need transports.
             crew(w, id, hit);
-            // spec: S-0312 claim 15 (every other destroyed vehicle leaves play at the end of its death effects)
+            if already_sinking && !crashable {
+                // spec: S-0312 claims 15 and 32 table row 2 (a vessel already sinking that fails claim 10's conditions ends at 0 health after claim 9's animations and draws; a type that cannot crash stays in play, still sinking: S-0504 claim 4 goes on, tick::object_turn)
+                return;
+            }
+            // spec: S-0312 claim 15 (every other destroyed vehicle leaves play at the end of its death effects; a crashable type that was sinking cannot start a crash below the surface and is removed)
             leave_play(w, id);
         }
         Kind::Aircraft => {

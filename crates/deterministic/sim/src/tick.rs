@@ -2,10 +2,11 @@
 //!
 //! The parts that have no topic yet (planted bombs, the
 //! weather storm, chrono flashes, diving aircraft, teams, disc lasers,
-//! radiation, pulses, blast rings and crates) are empty seams in their places
+//! pulses, blast rings and crates) are empty seams in their places
 //! of S-0203 claim 1, so that their draws land where the original takes them
 //! once they are written. Resource growth (row 9), the production lines (row
-//! 6) and the houses (row 7) run the M5a topics (`crate::econ`).
+//! 6) and the houses (row 7) run the M5a topics (`crate::econ`). Radiation
+//! maintenance (row 13) takes no draws and is not built yet.
 
 use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
@@ -21,7 +22,7 @@ pub fn ticks_run(w: &World) -> i32 {
 
 /// Runs one tick (S-0203 claim 1, the draw order of its rows).
 pub fn step(w: &mut World) {
-    // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 13, 14, then the turn pass, row 5)
+    // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 14, then the turn pass, row 5; row 13, radiation maintenance, takes no draws)
     // spec: S-0203 row 1 and S-0011 claim 6 (the poll of every polled tag, at the start of the tick)
     crate::triggers::poll(w);
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
@@ -29,7 +30,8 @@ pub fn step(w: &mut World) {
     // Row 2 (planted bombs) has no topic yet: an empty seam.
     // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted bombs (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
     crate::spawn::kamikaze_orders(w);
-    // Rows 10, 11, 12, 3, 13 and 14 (and row 4) have no topic yet: empty seams.
+    // Rows 10, 11, 12, 3 and 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
+    // maintenance) takes no draws (S-0203 row 13) and is not built yet.
     // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
     // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)
     crate::econ::shroud::regrowth(w);
@@ -103,6 +105,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
             // spec: S-0501 claim 9 (a crashing aircraft keeps its flying movement until it hits the ground)
             crate::air::tick(w, id);
             crate::air::end_turn(w, id);
+            return;
+        }
+        if crate::naval::sinking(w, id) {
+            // spec: S-0312 claims 15 and 32 (a vessel destroyed while sinking stays in play at 0 health because it is sinking); S-0504 claim 4 (each own update of a sinking vessel descends, and it leaves play below −400 leptons); S-0504 claim 13 (no ordinary living updates are asserted for it, so it takes no others)
+            crate::naval::sinking_turn(w, id);
             return;
         }
         // A killed object that stays in play (an infantry unit in its death sequence) only plays it out.

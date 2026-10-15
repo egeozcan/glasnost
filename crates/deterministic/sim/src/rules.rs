@@ -452,10 +452,39 @@ pub struct ParticleRules {
     pub colour_draw: bool,
 }
 
-/// The stage delay d of a rate value ρ (S-0109 F1).
-pub fn anim_delay(rho: i32) -> i32 {
-    // spec: S-0109 F1 (d = ⌊900 / ρ⌋ for ρ > 0, 0 for ρ ≤ 0)
-    if rho > 0 { 900 / rho } else { 0 }
+/// The stage delay d of a rate value ρ (S-0109 F1), with
+/// `quirks.anim_fast_rate_freezes` as `fast_freezes`.
+pub fn anim_delay(rho: i32, fast_freezes: bool) -> i32 {
+    if rho <= 0 {
+        // spec: S-0109 F1 and Edge cases (0 for ρ ≤ 0 in both settings)
+        return 0;
+    }
+    // spec: S-0109 F1 (d = ⌊900 / ρ⌋ for ρ > 0; a rate above 900 gives 0)
+    let d = 900 / rho;
+    if fast_freezes {
+        d
+    } else {
+        // spec: S-0109 Edge cases (quirks.anim_fast_rate_freezes off: max(1, ⌊900 / ρ⌋) for ρ > 0)
+        d.max(1)
+    }
+}
+
+/// The random delay range of a random rate pair (ρ₁, ρ₂) (S-0109 claim 3,
+/// F1), with `quirks.anim_fast_rate_freezes` and
+/// `quirks.anim_random_rate_collapse`.
+pub fn anim_random_delay(r1: i32, r2: i32, q: &Quirks) -> (i32, i32) {
+    let (d1, d2) = (
+        anim_delay(r1, q.anim_fast_rate_freezes),
+        anim_delay(r2, q.anim_fast_rate_freezes),
+    );
+    if q.anim_random_rate_collapse {
+        // spec: S-0109 claim 3 and F1 (d₂′ = max(d₂, 0), d₁′ = min(d₁, d₂′): an ascending pair collapses to d₂)
+        let d2p = d2.max(0);
+        (d1.min(d2p), d2p)
+    } else {
+        // spec: S-0109 Edge cases (quirks.anim_random_rate_collapse off: the converted pair in order, [min, max])
+        (d1.min(d2), d1.max(d2))
+    }
 }
 
 /// The gate and wall tower types that walls join (S-0112 claim 7), by
@@ -1135,13 +1164,9 @@ impl SimRules {
                 let a = s.animations.get(n).cloned().unwrap_or_default();
                 // spec: S-0109 Import mapping (RandomRate absent: no random rate, the range (0, 0))
                 let [r1, r2] = a.random_rate.unwrap_or([0, 0]);
-                let (d1, d2) = (anim_delay(r1), anim_delay(r2));
-                // spec: S-0109 F1 (d₂′ = max(d₂, 0), d₁′ = min(d₁, d₂′))
-                let d2p = d2.max(0);
-                let d1p = d1.min(d2p);
                 AnimRules {
                     name: n.clone(),
-                    random_delay: (d1p, d2p),
+                    random_delay: anim_random_delay(r1, r2, &quirks),
                     // spec: S-0109 Terms (a bouncing type: the bouncer flag or the meteor flag)
                     bouncing: a.bouncer.unwrap_or(false) || a.is_meteor.unwrap_or(false),
                     mu: a.middle_frame,
@@ -1622,6 +1647,34 @@ mod tests {
             ratio("10%"),
             "0.09999999999999999167332731531132594682276248931884765625"
         );
+    }
+
+    // spec: S-0109 claim 2, F1 and Edge cases (⌊900 / ρ⌋, 0 for ρ ≤ 0; quirks.anim_fast_rate_freezes off: at least 1 for ρ > 0)
+    #[test]
+    fn anim_delays() {
+        assert_eq!(anim_delay(225, true), 4);
+        assert_eq!(anim_delay(901, true), 0);
+        assert_eq!(anim_delay(901, false), 1);
+        assert_eq!(anim_delay(225, false), 4);
+        for fast in [true, false] {
+            assert_eq!(anim_delay(0, fast), 0);
+            assert_eq!(anim_delay(-5, fast), 0);
+        }
+    }
+
+    // spec: S-0109 claim 3, F1 and Edge cases (d₂′ = max(d₂, 0), d₁′ = min(d₁, d₂′); quirks.anim_random_rate_collapse off: [min, max])
+    #[test]
+    fn anim_random_delays() {
+        let mut q = Quirks::default();
+        assert_eq!(anim_random_delay(450, 225, &q), (2, 4));
+        assert_eq!(anim_random_delay(225, 450, &q), (2, 2));
+        assert_eq!(anim_random_delay(225, 1000, &q), (0, 0));
+        q.anim_random_rate_collapse = false;
+        assert_eq!(anim_random_delay(450, 225, &q), (2, 4));
+        assert_eq!(anim_random_delay(225, 450, &q), (2, 4));
+        assert_eq!(anim_random_delay(225, 1000, &q), (0, 4));
+        q.anim_fast_rate_freezes = false;
+        assert_eq!(anim_random_delay(225, 1000, &q), (1, 4));
     }
 
     // spec: S-0215 F1 (0.06 gives 53, 0.05 gives 45, the default gives 14)

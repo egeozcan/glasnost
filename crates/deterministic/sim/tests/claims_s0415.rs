@@ -660,3 +660,65 @@ fn claim_6_deployed_single_stage_never_completes() {
     assert_eq!(h, None);
     assert_eq!(w.obj(b).unwrap().beh.current, Some(Behaviour::Construction));
 }
+
+/// A deploy-fire vehicle type FIRE without the simple-deployer flag and
+/// with no weapon, so every shot at its own cell is refused (S-0517
+/// claim 2).
+fn deploy_fire_rules() -> Ruleset {
+    let mut r = rules();
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("FIRE".into());
+    let mut f = vehicle("SHOP");
+    f.deploys_into = None;
+    f.deploy_fire = Some(true);
+    r.sim.vehicles.insert("FIRE".into(), f);
+    r
+}
+
+// spec: S-0415 claim 1 rank 2 and S-0517 claim 2, F3 (a deploy-fire vehicle's unload: delay 14 + u, u one draw over 0 … 2 from the scenario stream, taken even when the shot is refused)
+#[test]
+fn claim_1_deploy_fire_delay_takes_one_draw_when_refused() {
+    let mut seen = std::collections::BTreeSet::new();
+    for seed in 0..24u32 {
+        let mut w = game(&deploy_fire_rules());
+        w.rng = glasnost_sim::rng::Rng::new(seed);
+        let half = w.rules().quirks.ranged_draw_half_span;
+        let v = spawn_v(&mut w, "FIRE", c(0, 0), facing_d());
+        w.obj_mut(v).unwrap().beh.current = Some(Behaviour::Unload);
+        let mut probe = w.rng.clone();
+        let u = probe.ranged(0, 2, half);
+        let rule = deploy::process_unload(&mut w, v);
+        assert_eq!(rule, Some(deploy::UnloadRule::DeployFire(14 + u)));
+        assert_eq!(w.rng, probe, "exactly one draw, seed {seed}");
+        seen.insert(14 + u);
+    }
+    assert_eq!(seen.into_iter().collect::<Vec<_>>(), vec![14, 15, 16]);
+}
+
+// spec: S-0415 claim 1 rank 2 and S-0517 claim 2 (unload stays current; every processing chooses 14 … 16 ticks, not the 450-tick no-rule wait; the vehicle neither deploys nor moves)
+#[test]
+fn claim_1_deploy_fire_processing_delays() {
+    let mut w = game(&deploy_fire_rules());
+    let v = spawn_v(&mut w, "FIRE", c(0, 0), facing_d());
+    order(&mut w, Order::Deploy { actor: v });
+    let mut delays = Vec::new();
+    let mut prev = None;
+    for _ in 0..120 {
+        step(&mut w);
+        let o = w.obj(v).expect("stays");
+        if o.beh.current == Some(Behaviour::Unload) && o.beh.last != prev {
+            if let Some((_, d)) = o.beh.last {
+                delays.push(d);
+            }
+            prev = o.beh.last;
+        }
+    }
+    assert!(delays.len() >= 5, "processings: {delays:?}");
+    assert!(delays.iter().all(|d| (14..=16).contains(d)), "{delays:?}");
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Unload));
+    assert_eq!(o.pos.cell(), c(0, 0));
+    assert!(buildings(&w).is_empty());
+}

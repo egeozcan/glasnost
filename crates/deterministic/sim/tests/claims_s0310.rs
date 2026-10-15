@@ -568,13 +568,18 @@ fn claim_7_particle_weapons_with_a_destination() {
     }
 }
 
-// spec: S-0310 claim 7 (a temporal primary weapon with a destination: moving, without any beam; a temporal secondary does not give it)
+// spec: S-0310 claim 7 and S-0514 Terms (a temporal beam, supplied at creation by a primary weapon whose warhead is temporal, with a destination: moving, attachment irrelevant; a temporal secondary does not give it)
 #[test]
 fn claim_7_temporal_primary_with_a_destination() {
     let mut r = base();
+    r.sim.warheads.insert("CHRONO".into(), {
+        let mut h = r.sim.warheads["SA"].clone();
+        h.temporal = Some(true);
+        h
+    });
     r.sim.weapons.insert("TIMER".into(), {
         let mut z = zap();
-        z.temporal = Some(true);
+        z.warhead = Some("CHRONO".into());
         z.fire_while_moving = Some(true);
         z
     });
@@ -585,9 +590,47 @@ fn claim_7_temporal_primary_with_a_destination() {
     dest(&mut w, a);
     assert_eq!(ask(&w, a), Answer::Moving);
     // Secondary temporal, ordinary primary: the primary fires with a destination.
-    let cart = r.sim.vehicles.get_mut("CART").unwrap();
+    let mut r2 = r.clone();
+    let cart = r2.sim.vehicles.get_mut("CART").unwrap();
     cart.secondary = Some("TIMER".into());
-    let (mut w, a, _) = duel(&r);
+    let (mut w, a, _) = duel(&r2);
+    dest(&mut w, a);
+    assert_eq!(ask(&w, a), Answer::CanFire);
+}
+
+// spec: S-0310 claim 7 and S-0514 Terms (the beam is supplied at creation and persists: an elite primary that is not temporal keeps it; an elite temporal primary on a type whose creation primary is not temporal supplies none)
+#[test]
+fn claim_7_temporal_beam_is_supplied_at_creation() {
+    let mut r = base();
+    r.sim.warheads.insert("CHRONO".into(), {
+        let mut h = r.sim.warheads["SA"].clone();
+        h.temporal = Some(true);
+        h
+    });
+    r.sim.weapons.insert("TIMER".into(), {
+        let mut z = zap();
+        z.warhead = Some("CHRONO".into());
+        z.fire_while_moving = Some(true);
+        z
+    });
+    r.sim.weapons.get_mut("ZAP").unwrap().fire_while_moving = Some(true);
+    let elite = glasnost_num::soft::F32(0x4000_0000); // experience 2.0: elite (S-0311 claim 1)
+    // Creation primary temporal, elite primary ordinary: still moving when elite.
+    let mut r1 = r.clone();
+    let cart = r1.sim.vehicles.get_mut("CART").unwrap();
+    cart.primary = Some("TIMER".into());
+    cart.elite_primary = Some("ZAP".into());
+    let (mut w, a, _) = duel(&r1);
+    w.obj_mut(a).unwrap().combat.experience = elite;
+    dest(&mut w, a);
+    assert_eq!(ask(&w, a), Answer::Moving);
+    // Creation primary ordinary, elite primary temporal: no beam, it fires.
+    let mut r2 = r.clone();
+    let cart = r2.sim.vehicles.get_mut("CART").unwrap();
+    cart.primary = Some("ZAP".into());
+    cart.elite_primary = Some("TIMER".into());
+    let (mut w, a, _) = duel(&r2);
+    w.obj_mut(a).unwrap().combat.experience = elite;
     dest(&mut w, a);
     assert_eq!(ask(&w, a), Answer::CanFire);
 }

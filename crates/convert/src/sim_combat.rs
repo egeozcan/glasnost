@@ -229,7 +229,6 @@ const WEAPON_COMBAT: &[Row] = &[
     ),
     ("is_railgun", "IsRailgun", Bool, "S-0301"),
     ("is_mag_beam", "IsMagBeam", Bool, "S-0301"),
-    ("temporal", "Temporal", Bool, "S-0301"),
     ("spawner", "Spawner", Bool, "S-0301"),
     ("camera", "Camera", Bool, "S-0501"),
     ("disk_laser", "DiskLaser", Bool, "S-0301"),
@@ -319,6 +318,7 @@ const WARHEAD_COMBAT: &[Row] = &[
     ("parasite", "Parasite", Bool, "S-0614"),
     ("paralyzes", "Paralyzes", Int, "S-0614"),
     ("culling", "Culling", Bool, "S-0614"),
+    ("temporal", "Temporal", Bool, "S-0301, S-0514"),
 ];
 
 /// Combat fields of countries.
