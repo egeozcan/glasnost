@@ -84,16 +84,14 @@ pub fn mobile_entered(w: &mut World, id: ObjectId) {
     }
 }
 
-/// A mobile sensor's completed-cell movement event (claim 22): the disc is
-/// removed around the last recorded coverage cell and added around the
-/// current one.
+/// A mobile sensor's cell-arrival update (claim 22): the disc is removed
+/// around the last recorded coverage cell and added around the current one,
+/// even when the two are the same cell (each change re-evaluates its cells,
+/// claim 21).
 pub fn mobile_moved(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let Some((h, old)) = o.cloak.disc else { return };
     let c = centre_cell(w, id);
-    if c == old {
-        return;
-    }
     let r = sight(w, id);
     change(w, Coverage::Sensors, h, old, r, -1, true);
     change(w, Coverage::Sensors, h, c, r, 1, false);

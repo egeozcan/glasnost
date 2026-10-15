@@ -1588,6 +1588,8 @@ fn move_to(w: &mut World, id: ObjectId, np: Pos) {
         if w.cells.cell(to).is_some() {
             w.cells.enter(to, Layer::Ground, id, false);
         }
+        // spec: S-0516 claim 22 and Edge cases (quirks.flying_sensor_disc_stationary: a crossing in flight relocates no sensor disc; off, it does)
+        crate::cloak::machine::flight_cell_crossed(w, id);
     }
     if w.cells.usable(to)
         && let Some(a) = st_mut(w, id)

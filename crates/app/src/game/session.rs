@@ -787,8 +787,9 @@ impl Session {
             // Placement hover images belong to S-0406's placement display
             // (S-0214 Open questions): the system pointer stays.
             Tool::Place(_) => return None,
-            // The superweapon aim images are not specified (Q-0742): the
-            // system pointer stays.
+            // S-0214 claim 31's table CS keys the aim images by aim action,
+            // and the action words are still interim (Q-0731): the system
+            // pointer stays.
             Tool::Superweapon { .. } => return None,
             Tool::Mode(m) => {
                 // spec: S-0214 claims 13 and 21 (the sidebar modes' offers and their images in table C)

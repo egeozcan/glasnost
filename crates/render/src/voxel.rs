@@ -104,9 +104,8 @@ pub struct VoxelQuirks {
     /// program-start value; stale state is not modelled). Off: shade 16.
     pub voxel_stale_normal_shades: bool,
     /// `quirks.voxel_section_sort_ties` (claim 23, F8): sections with equal
-    /// nearest depth need not keep file order; F8 fixes six tie rows and
-    /// every all-equal part, and other mixed ties follow an interim
-    /// exchange order (Q-0215). Off: stable order.
+    /// nearest depth need not keep file order; F8's record-low relation
+    /// gives the overlap priority of every sequence. Off: stable order.
     pub voxel_section_sort_ties: bool,
     /// `quirks.voxel_depth_double_width` (claim 24): depth-buffered voxels
     /// are two pixels wide. Off: one pixel.
@@ -1845,13 +1844,15 @@ fn pixel_of(p: i64) -> i64 {
 
 /// The sections of a part from lowest to highest overlap priority (claim
 /// 23, F8): `depths[s]` is the nearest view-space depth of section `s`
-/// (file order); the result lists sections in drawing order. Distinct
-/// depths ascend, F8's fourteen tie rows hold, the result depends only on
-/// the exact comparison relations, and a part whose sections all share one
-/// depth keeps file order. Other mixed-depth ties are open in S-0105
-/// (`unmeasured`, Q-0215 question 7); the exchange order used for them is
-/// an interim rule.
-/// With `quirks.voxel_section_sort_ties` off, a stable ascending sort.
+/// (file order); the result lists sections in drawing order. F8's
+/// relation: the lowest priority is the last strict record low of the
+/// sequence, and the rest take their priorities from the residual sequence
+/// (the first position omitted, each later record low replaced by its
+/// predecessor among the record lows). Each pass of the loop below picks
+/// that lowest section and leaves the residual in the remaining places.
+/// Distinct depths ascend, and a part whose sections all share one depth
+/// keeps file order. With `quirks.voxel_section_sort_ties` off, a stable
+/// ascending sort.
 pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
     let mut pi: Vec<usize> = (0..depths.len()).collect();
     if !quirks.voxel_section_sort_ties {
@@ -1861,8 +1862,9 @@ pub fn section_order(depths: &[f32], quirks: &VoxelQuirks) -> Vec<usize> {
         pi.sort_by(|&a, &b| (depths[a] + 0.0).total_cmp(&(depths[b] + 0.0)));
         return pi;
     }
-    // spec: S-0105 F8 (distinct depths ascend; the fourteen tie rows and all-equal parts in
-    // file order give the painter priorities of its table); other mixed ties: interim (Q-0215 question 7)
+    // spec: S-0105 F8 (question 7's relation: the last strict record low has the lowest
+    // priority; the residual sequence, first position omitted and each later record low
+    // replaced by its predecessor in R, orders the rest; exact single-precision comparisons)
     for t in 0..pi.len() {
         let mut chain = vec![t];
         let mut min = depths[pi[t]];
@@ -3542,10 +3544,190 @@ mod tests {
         assert_eq!(section_order(&[2.0, 2.0], &stable), [0, 1]);
         // F8: exact comparisons, so −0 and +0 tie.
         assert_eq!(section_order(&[0.0, -0.0], &stable), [0, 1]);
-        // Distinct depths always ascend (F8); the order among other mixed ties is interim (Q-0215).
+        // Distinct depths always ascend (F8).
         let d = [5.0, 1.0, 4.0, 1.0, 3.0, 9.0, 2.0, 2.0];
         let o = section_order(&d, &q());
         assert!(o.windows(2).all(|w| d[w[0]] <= d[w[1]]));
+    }
+
+    /// F8's question-7 relation written from its words: `seq` holds
+    /// (section, nearest depth) in file order; the result is the overlap
+    /// priority, lowest first.
+    fn f8_priority(seq: &[(usize, f32)]) -> Vec<usize> {
+        let Some(&(_, d0)) = seq.first() else {
+            return Vec::new();
+        };
+        // The strict record lows: the first position and every later one
+        // strictly below all before it.
+        let mut r = vec![0];
+        let mut min = d0;
+        for (i, &(_, d)) in seq.iter().enumerate().skip(1) {
+            if d < min {
+                r.push(i);
+                min = d;
+            }
+        }
+        let lowest = seq[r[r.len() - 1]].0;
+        let residual: Vec<(usize, f32)> = (1..seq.len())
+            .map(|i| match r.iter().position(|&x| x == i) {
+                Some(k) => seq[r[k - 1]],
+                None => seq[i],
+            })
+            .collect();
+        let mut out = vec![lowest];
+        out.extend(f8_priority(&residual));
+        out
+    }
+
+    /// The pair winner: the section later in the priority.
+    fn pair_winner(order: &[usize], a: usize, b: usize) -> usize {
+        let pa = order.iter().position(|&s| s == a).unwrap();
+        let pb = order.iter().position(|&s| s == b).unwrap();
+        if pa > pb { a } else { b }
+    }
+
+    /// Checks `pairs`, written as in S-0105's tables ("AB:B AC:A …"),
+    /// against the drawing order.
+    fn check_pairs(order: &[usize], pairs: &str) {
+        let n = |c: u8| usize::from(c - b'A');
+        for p in pairs.split_whitespace() {
+            let b = p.as_bytes();
+            assert_eq!(
+                pair_winner(order, n(b[0]), n(b[1])),
+                n(b[3]),
+                "{p} in {order:?}"
+            );
+        }
+    }
+
+    /// spec: S-0105 claims 23 and 24, Formulas F8 and MS-25 (the expected pair winners of
+    /// all fourteen rows and the common winners B,A,C,D,B,C,A,C,B,C,A,A,A,D: the later
+    /// section of each pair in the priority, the last at the common pixel, in both modes)
+    #[test]
+    fn section_order_ms25_pair_winners() {
+        let rows: [(&[f32], &str); 14] = [
+            (&[2.0, 2.0], "AB:B"),
+            (&[2.0, 2.0, 1.0], "AB:A AC:A BC:B"),
+            (&[2.0, 2.0, 2.0], "AB:B AC:C BC:C"),
+            (&[2.0; 4], "AB:B AC:C AD:D BC:C BD:D CD:D"),
+            (&[2.0, 2.0, 1.0, 1.0], "AB:B AC:A AD:A BC:B BD:B CD:D"),
+            (&[1.0, 2.0, 2.0], "AB:B AC:C BC:C"),
+            (&[2.0, 1.0, 1.0], "AB:A AC:A BC:C"),
+            (&[2.0, 1.0, 2.0], "AB:A AC:C BC:C"),
+            (&[1.0, 2.0, 1.0], "AB:B AC:C BC:B"),
+            (&[1.0, 1.0, 2.0], "AB:B AC:C BC:C"),
+            (&[2.0, 2.0, 2.0, 1.0], "AB:A AC:A AD:A BC:C BD:B CD:C"),
+            (&[2.0, 1.0, 1.0, 1.0], "AB:A AC:A AD:A BC:C BD:D CD:D"),
+            (&[2.0, 1.0, 2.0, 1.0], "AB:A AC:A AD:A BC:C BD:D CD:C"),
+            (&[2.0, 1.0, 1.0, 2.0], "AB:A AC:A AD:D BC:C BD:D CD:D"),
+        ];
+        let common = "BACDBCACBCAAAD".as_bytes();
+        for (i, (depths, pairs)) in rows.into_iter().enumerate() {
+            let o = section_order(depths, &q());
+            check_pairs(&o, pairs);
+            assert_eq!(
+                o[o.len() - 1],
+                usize::from(common[i] - b'A'),
+                "row {}",
+                i + 1
+            );
+        }
+        // Five sections at one depth: the later file section wins every pair,
+        // E the common pixel.
+        let o = section_order(&[4.0; 5], &q());
+        assert_eq!(o, [0, 1, 2, 3, 4]);
+        // A = B alone gives B; A = B > C gives A at the A/B probe, whatever
+        // C draws there: the order reads depths only, never pixels.
+        assert_eq!(pair_winner(&section_order(&[2.0, 2.0], &q()), 0, 1), 1);
+        assert_eq!(pair_winner(&section_order(&[2.0, 2.0, 1.0], &q()), 0, 1), 0);
+    }
+
+    /// spec: S-0105 claims 23 and 24, Formulas F8 and MS-28 (the four larger mixed-depth rows:
+    /// their priorities, every pair winner, the common winners C,B,A,B, unchanged under changed
+    /// gaps; stable file order would differ at row 2 B/D, row 3 A/E and row 4 B/E)
+    #[test]
+    fn section_order_ms28_rows() {
+        let rows: [(&[f32], &[usize], &str); 4] = [
+            // A = C > B = E > D: D, B, E, A, C
+            (
+                &[3.0, 2.0, 3.0, 1.0, 2.0],
+                &[3, 1, 4, 0, 2],
+                "AB:A AC:C AD:A AE:A BC:C BD:B BE:E CD:C CE:C DE:E",
+            ),
+            // B = D > A = E > C: C, A, E, D, B
+            (
+                &[2.0, 3.0, 1.0, 3.0, 2.0],
+                &[2, 0, 4, 3, 1],
+                "AB:B AC:A AD:D AE:E BC:B BD:B BE:B CD:D CE:E DE:D",
+            ),
+            // A = E > C = F > B = D: B, D, C, F, E, A
+            (
+                &[3.0, 1.0, 2.0, 1.0, 3.0, 2.0],
+                &[1, 3, 2, 5, 4, 0],
+                "AB:A AC:A AD:A AE:A AF:A BC:C BD:D BE:E BF:F CD:C CE:E CF:F DE:E DF:F EF:E",
+            ),
+            // B = E > A = C > D = F: D, F, A, C, E, B
+            (
+                &[2.0, 3.0, 2.0, 1.0, 3.0, 1.0],
+                &[3, 5, 0, 2, 4, 1],
+                "AB:B AC:C AD:A AE:E AF:A BC:B BD:B BE:B BF:B CD:C CE:E CF:C DE:E DF:F EF:E",
+            ),
+        ];
+        let stable = VoxelQuirks {
+            voxel_section_sort_ties: false,
+            ..q()
+        };
+        for (i, (depths, priority, pairs)) in rows.into_iter().enumerate() {
+            let o = section_order(depths, &q());
+            assert_eq!(o, priority, "row {}", i + 1);
+            check_pairs(&o, pairs);
+            // Changed unequal gaps keep every winner.
+            let spread: Vec<f32> = depths.iter().map(|d| d * d * 13.0 + 0.25).collect();
+            assert_eq!(section_order(&spread, &q()), priority, "row {} gaps", i + 1);
+            // The stable rule is not this relation.
+            let (a, b) = [(1, 3), (0, 4), (1, 4)][i.max(1) - 1];
+            if i > 0 {
+                assert_ne!(
+                    pair_winner(&section_order(depths, &stable), a, b),
+                    pair_winner(&o, a, b),
+                    "row {}",
+                    i + 1
+                );
+            }
+        }
+        let common: Vec<usize> = rows.iter().map(|r| r.1[r.1.len() - 1]).collect();
+        assert_eq!(common, [2, 1, 0, 1], "C, B, A, B");
+    }
+
+    /// spec: S-0105 Formulas F8 (question 7: the record-low relation defines a unique priority
+    /// for every finite sequence, depending only on exact comparisons: every pattern of up to
+    /// six sections with up to six depth levels, and near-equal distinct depths)
+    #[test]
+    fn section_order_is_f8_relation() {
+        for n in 0..=6usize {
+            let total = n.pow(n as u32).max(1);
+            for code in 0..total {
+                let mut c = code;
+                let depths: Vec<f32> = (0..n)
+                    .map(|_| {
+                        let v = c % n.max(1);
+                        c /= n.max(1);
+                        v as f32
+                    })
+                    .collect();
+                let seq: Vec<(usize, f32)> = depths.iter().copied().enumerate().collect();
+                assert_eq!(
+                    section_order(&depths, &q()),
+                    f8_priority(&seq),
+                    "{depths:?}"
+                );
+            }
+        }
+        // Exact comparison, no tolerance: one unit in the last place apart.
+        let a = 1.0f32;
+        let b = f32::from_bits(a.to_bits() + 1);
+        assert_eq!(section_order(&[b, a], &q()), [1, 0]);
+        assert_eq!(section_order(&[a, a], &q()), [0, 1]);
     }
 
     /// spec: S-0105 claims 23 and 24, Formulas F8 (every row of the overlap-priority table,

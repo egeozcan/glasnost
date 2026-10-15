@@ -7,7 +7,7 @@ mod cloak_common;
 use std::collections::BTreeSet;
 
 use cloak_common::*;
-use glasnost_sim::cloak::{self, CloakState};
+use glasnost_sim::cloak::{self, CloakState, FieldPhase};
 use glasnost_sim::objects;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
@@ -295,13 +295,18 @@ fn claim_20_building_interrupts_growth() {
     place_off(&mut w, "GENNY", ALPHA, ring2.0, ring2.1);
     run(&mut w, 1);
     assert_eq!(radius(&w, g), 1);
-    // Q-0792 (interim: the generator's own centre does not end a growth update)
-    assert_eq!(field_offsets(&w, ALPHA), cloak::field_circle(1));
+    // spec: S-0516 claim 20 (the own centre interrupts the first radius-1 update: only (0, −1), (−1, 0) and (0, 0))
+    let first: BTreeSet<(i32, i32)> = [(0, -1), (-1, 0), (0, 0)].into();
+    assert_eq!(field_offsets(&w, ALPHA), first);
     run(&mut w, 1);
     assert_eq!(radius(&w, g), 2);
-    let mut want = cloak::field_circle(1);
+    let mut want = first.clone();
     want.extend(prefix(2, ring2));
     assert_eq!(field_offsets(&w, ALPHA), want);
+    assert!(
+        !want.contains(&(1, 0)),
+        "omitted radius-1 cells after the stop"
+    );
     assert_ne!(want, cloak::field_circle(2), "cells after it omitted");
     run(&mut w, 1);
     assert_eq!(field_offsets(&w, ALPHA), cloak::field_circle(3));
@@ -364,13 +369,171 @@ fn claim_20_immediate_collapse_restarts() {
     assert!(field_offsets(&w, ALPHA).is_empty());
     assert_eq!(radius(&w, inside), 0, "full radius: restarts from 0");
     assert_eq!(radius(&w, on_edge), GEN_RADIUS, "on the boundary");
-    // A growing neighbour drops by one; capture restarts too.
+    // spec: S-0516 claim 20 (a growing neighbour is not idle and does not restart; capture restarts an idle one)
     let mut w = game(&r);
     let a = spawn(&mut w, "GENNY", ALPHA, 0, 0);
+    let idle = spawn(&mut w, "GENNY", BETA, 0, 4);
     run(&mut w, 5);
     let n = spawn(&mut w, "GENNY", ALPHA, 2, 0);
     run(&mut w, 2);
     assert_eq!(radius(&w, n), 2);
+    assert_eq!(phase(&w, idle), FieldPhase::Idle);
     change_owner(&mut w, a, BETA);
-    assert_eq!(radius(&w, n), 1);
+    assert_eq!(radius(&w, n), 2, "growing: no restart");
+    assert_eq!(radius(&w, idle), 0, "idle at full radius: restarts from 0");
+    assert_eq!(phase(&w, idle), FieldPhase::Growing);
+}
+
+fn phase(w: &World, g: ObjectId) -> FieldPhase {
+    w.obj(g).unwrap().cloak.field.unwrap().phase
+}
+
+// spec: S-0516 claim 20 (idle means no growth or shrinking pending: growing at full radius before its next update, a shrinking generator back in operation, and a neighbour not in operation are all ineligible for a restart; a second collapse cannot restart a neighbour the first made growing)
+#[test]
+fn claim_20_restart_eligibility_by_state() {
+    let r = ruleset();
+    // Growing at full radius: reached on the third update, idle on the fourth.
+    let mut w = game(&r);
+    let n = spawn(&mut w, "GENNY", BETA, 2, 0);
+    run(&mut w, GEN_RADIUS);
+    assert_eq!(radius(&w, n), GEN_RADIUS);
+    assert_eq!(phase(&w, n), FieldPhase::Growing);
+    let a = place_off(&mut w, "GENNY", ALPHA, 0, 0);
+    w.obj_mut(a).unwrap().econ.building.switched_off = false;
+    objects::remove(&mut w, a);
+    assert_eq!(
+        radius(&w, n),
+        GEN_RADIUS,
+        "growing at full radius: no restart"
+    );
+    run(&mut w, 1);
+    assert_eq!(phase(&w, n), FieldPhase::Idle);
+    // Two collapses: the first restarts, the second finds it growing.
+    let a = spawn(&mut w, "GENNY", ALPHA, 0, 0);
+    let b = spawn(&mut w, "GENNY", ALPHA, 0, 2);
+    objects::remove(&mut w, a);
+    assert_eq!((radius(&w, n), phase(&w, n)), (0, FieldPhase::Growing));
+    run(&mut w, 1);
+    objects::remove(&mut w, b);
+    assert_eq!(radius(&w, n), 1, "growing: the second collapse leaves it");
+    // Shrinking, even back in operation, and not in operation: no restart.
+    let mut w = game(&r);
+    let s = spawn(&mut w, "GENNY", BETA, 2, 0);
+    let off = spawn(&mut w, "GENNY", BETA, 0, 2);
+    run(&mut w, 5);
+    switch_off(&mut w, s);
+    switch_off(&mut w, off);
+    run(&mut w, 1);
+    assert_eq!(phase(&w, s), FieldPhase::Shrinking);
+    w.obj_mut(s).unwrap().econ.building.switched_off = false;
+    let a = spawn(&mut w, "GENNY", ALPHA, 0, 0);
+    let rs = radius(&w, s);
+    let ro = radius(&w, off);
+    objects::remove(&mut w, a);
+    assert_eq!(radius(&w, s), rs, "shrinking: no restart");
+    assert_eq!(radius(&w, off), ro, "not in operation: no restart");
+}
+
+// spec: S-0516 claim 20 (a zero-radius generator gives no field and cannot initiate a restart by shrinking, but when idle and in operation it receives a restart, becomes growing, and its next growth update makes it idle again)
+#[test]
+fn claim_20_zero_radius_generator() {
+    let mut r = ruleset();
+    let mut zero = r.sim.buildings["GENNY"].clone();
+    zero.cloak_radius_in_cells = Some(0);
+    r.sim.buildings.insert("GENNY0".into(), zero);
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("GENNY0".into());
+    let mut w = game(&r);
+    let z = spawn(&mut w, "GENNY0", BETA, 2, 0);
+    let n = spawn(&mut w, "GENNY", ALPHA, 0, 2);
+    run(&mut w, 5);
+    assert_eq!((radius(&w, z), phase(&w, z)), (0, FieldPhase::Idle));
+    assert!(field_offsets(&w, BETA).is_empty());
+    // Its shrink initiates nothing.
+    switch_off(&mut w, z);
+    run(&mut w, 3);
+    assert_eq!(radius(&w, n), GEN_RADIUS);
+    // Idle in operation, it receives a restart.
+    w.obj_mut(z).unwrap().econ.building.switched_off = false;
+    run(&mut w, 1);
+    let a = spawn(&mut w, "GENNY", ALPHA, 0, 0);
+    objects::remove(&mut w, a);
+    assert_eq!((radius(&w, z), phase(&w, z)), (0, FieldPhase::Growing));
+    run(&mut w, 1);
+    assert_eq!((radius(&w, z), phase(&w, z)), (0, FieldPhase::Idle));
+    assert!(field_offsets(&w, BETA).is_empty());
+}
+
+/// The x offset of the centre of house `h`'s sensor disc on row 0.
+fn disc_x(w: &World, h: HouseId) -> i32 {
+    let o = at(0, 0);
+    let xs: Vec<i32> = w
+        .cloak
+        .sensors
+        .iter()
+        .filter(|((hh, c), n)| *hh == h.0 && c.y == o.y && **n > 0)
+        .map(|((_, c), _)| c.x - o.x)
+        .collect();
+    (xs.iter().min().unwrap() + xs.iter().max().unwrap()) / 2
+}
+
+// spec: S-0516 claims 13 and 22 (walking and hovering sensors relocate their disc at their locomotor's cell-arrival update, not when the centre cell changes: there are ticks in another cell with the disc still behind; the walker's final arrival moves it to the destination, a hover's last choice uses its pre-travel position)
+#[test]
+fn claim_22_walk_and_hover_arrival_updates() {
+    use glasnost_rules::sim::Locomotor;
+    let mut r = ruleset();
+    let mut scout = r.sim.infantry["SHADE"].clone();
+    scout.combat.cloakable = None;
+    scout.combat.sensors = Some(true);
+    scout.combat.sensors_sight = Some(SEEKER_SIGHT);
+    r.sim.infantry.insert("SCOUT".into(), scout);
+    r.registries
+        .get_mut("infantry")
+        .unwrap()
+        .push("SCOUT".into());
+    let mut skimmer = r.sim.vehicles["SEEKER"].clone();
+    skimmer.locomotor = Some(Locomotor::Hover);
+    r.sim.vehicles.insert("SKIMMER".into(), skimmer);
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("SKIMMER".into());
+    for name in ["SCOUT", "SKIMMER"] {
+        let mut w = game(&r);
+        let s = spawn(&mut w, name, ALPHA, 0, 0);
+        assert_eq!(disc_x(&w, ALPHA), 0);
+        move_to(&mut w, s, at(4, 0));
+        let mut lagged = false;
+        let mut moves = 0;
+        for _ in 0..300 {
+            let x0 = w.obj(s).unwrap().pos.cell().x - at(0, 0).x;
+            let d0 = disc_x(&w, ALPHA);
+            run(&mut w, 1);
+            let x = w.obj(s).unwrap().pos.cell().x - at(0, 0).x;
+            let d = disc_x(&w, ALPHA);
+            if x != d {
+                lagged = true;
+            }
+            if d != d0 {
+                moves += 1;
+                if name == "SKIMMER" {
+                    // A hover's update uses its actual position at the
+                    // choice, before that tick's travel.
+                    assert_eq!(d, x0, "the pre-travel cell");
+                } else {
+                    // A walker's arrival snaps it: its cell at the update.
+                    assert_eq!(d, x, "the arrival cell");
+                }
+            }
+        }
+        assert_eq!(w.obj(s).unwrap().pos.cell(), at(4, 0), "{name}");
+        assert!(moves > 0, "{name}");
+        if name == "SCOUT" {
+            // The walker's final arrival and snap is an update.
+            assert_eq!(disc_x(&w, ALPHA), 4);
+        }
+        assert!(lagged, "{name}: the cell changes before the arrival update");
+    }
 }

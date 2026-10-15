@@ -1103,7 +1103,7 @@ fn centre(c: CellXY, z: i32) -> Pos {
     Pos::new(256 * c.x + 128, 256 * c.y + 128, z)
 }
 
-// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to P, the cell's centre at floor + 416: walk by its heading point's cell and stored height within 104 leptons; drive by its current track's end cell with its stored track-start height (S-0207 claim 24) or its own height; a destination without a heading point does not count)
+// spec: S-0511 claim 11 (after the blow-ups, a blown-up cell whose deck record is not empty hits every unit in the other 24 cells of its block whose locomotion heads to P, the cell's centre at floor + 416: walk by its heading point's cell and stored height within 104 leptons; drive by its current track's end cell with its stored track-start height (S-0207 claim 24), 0 for a factory exit track, or its own current height; a destination without a heading point does not count)
 #[test]
 fn claim_11_units_heading_onto_a_lost_deck() {
     for occupied in [true, false] {
@@ -1158,12 +1158,33 @@ fn claim_11_units_heading_onto_a_lost_deck() {
             assert!(deck_z - o.pos.z > 104);
             o.drive.as_mut().unwrap().track = Some(track_to_c(deck_z - 50));
         }
+        // Factory exit tracks to c store heading height 0 (S-0207 claim 24):
+        // one begun on the deck still meets the current-height track test;
+        // one begun at deck height that has since descended meets neither.
+        // (`claim_5_exit_points_store_height_zero` in claims_s0417.rs
+        // tests that the exit instruction stores 0.)
+        let exit_track = glasnost_sim::drive::Track {
+            exit: true,
+            ..track_to_c(0)
+        };
+        let exit_up = spawn(&mut w, Kind::Vehicle, "CART", at(1, 0));
+        onto_deck(&mut w, exit_up);
+        w.obj_mut(exit_up).unwrap().drive.as_mut().unwrap().track = Some(exit_track.clone());
+        let exit_down = spawn(&mut w, Kind::Vehicle, "CART", at(1, 1));
+        assert!(deck_z - w.obj(exit_down).unwrap().pos.z > 104);
+        w.obj_mut(exit_down).unwrap().drive.as_mut().unwrap().track = Some(exit_track);
         if occupied {
             // The high walker's reservation is in c's deck record.
             let h = w.obj(high).unwrap().owner.unwrap();
             w.cells.mark_infantry(c, Layer::Deck, 0, high, h);
         }
         bridges::attempts(&mut w, c, 2);
+        assert_eq!(
+            alive(&w, exit_up),
+            !occupied,
+            "an exit track meets the current-height test"
+        );
+        assert!(alive(&w, exit_down), "an exit track's stored height is 0");
         assert_eq!(alive(&w, high), !occupied, "occupied {occupied}");
         assert_eq!(alive(&w, tank), !occupied, "occupied {occupied}");
         assert!(alive(&w, low), "a heading point at floor height");

@@ -410,6 +410,119 @@ fn heading_point_keeps_the_track_start_height() {
     );
 }
 
+/// The vehicle's stored locomotor destination point (S-0207 claim 25).
+fn goal_of(w: &World, id: ObjectId) -> Option<glasnost_sim::world::Pos> {
+    w.obj(id)
+        .and_then(|o| o.drive.as_ref())
+        .and_then(|d| d.goal)
+}
+
+// spec: S-0207 claim 25 (a new locomotor has no destination point; an accepted move installs the cell centre at its surface height at once, before any search or tick; intermediate track completions and crossing into the goal cell keep it; a qualifying final completion clears it in that tick, before the arrival report)
+#[test]
+fn claim_25_destination_point_lifetime() {
+    let s = scene(car(WHEEL, 30, true), 0);
+    let mut w = s.build();
+    let id = objects_of(&w, Kind::Vehicle)[0];
+    assert_eq!(goal_of(&w, id), None, "absent at creation");
+    open_orders(&mut w);
+    let c = end_cell(&[N, N, N]);
+    order_move(&mut w, id, c);
+    orders::apply_pending(&mut w);
+    let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
+    let want = glasnost_sim::world::Pos::new(x, y, w.surface_at(x, y));
+    assert_eq!(goal_of(&w, id), Some(want), "installed at acceptance");
+    assert!(glasnost_sim::drive::goal_present(&w, id));
+    tick::step(&mut w);
+    let mut completions = 0;
+    let mut in_cell_with_track = false;
+    let mut guard = 0;
+    loop {
+        let before = snap(&w, id).track.map(|t| t.target);
+        let sn = step(&mut w, id);
+        if before.is_some() && sn.track.as_ref().map(|t| t.target) != before {
+            completions += 1;
+        }
+        let o = w.obj(id).unwrap();
+        if o.pos.cell() == c && sn.track.is_some() {
+            in_cell_with_track = true;
+            assert_eq!(
+                goal_of(&w, id),
+                Some(want),
+                "crossing into the cell keeps it"
+            );
+        }
+        if (sn.pos.0, sn.pos.1) == (x, y) && sn.track.is_none() {
+            break;
+        }
+        assert_eq!(
+            goal_of(&w, id),
+            Some(want),
+            "intermediate completions keep it"
+        );
+        guard += 1;
+        assert!(guard < 300);
+    }
+    assert!(completions >= 2, "intermediate completions seen");
+    assert!(in_cell_with_track);
+    // Cleared by the completion itself, in the arrival tick: the locomotor
+    // has not taken any destination change since.
+    assert_eq!(goal_of(&w, id), None, "a qualifying completion clears it");
+}
+
+// spec: S-0207 claim 25 (a stop clears the point immediately even while the begun track finishes; a move into the vehicle's own cell installs a present point; a replacement supplies the new point)
+#[test]
+fn claim_25_stop_same_cell_and_replacement() {
+    let s = scene(car(WHEEL, 30, true), 0);
+    let (mut w, id) = start(&s, &[N; 10]);
+    let mut sn = first_moving_tick(&mut w, id);
+    for _ in 0..6 {
+        sn = step(&mut w, id);
+    }
+    assert!(sn.track.is_some());
+    assert!(glasnost_sim::drive::goal_present(&w, id));
+    let owner = w.obj(id).and_then(|o| o.owner).unwrap_or(HouseId(0));
+    assert!(orders::issue(&mut w, owner, Order::Stop { actor: id }));
+    orders::apply_pending(&mut w);
+    assert!(!glasnost_sim::drive::goal_present(&w, id), "absent at once");
+    let sn = step(&mut w, id);
+    assert!(sn.track.is_some(), "the begun track still finishes");
+    assert_eq!(goal_of(&w, id), None);
+    run(&mut w, 30);
+    // Same cell: present without any search or movement.
+    let here = w.obj(id).unwrap().pos.cell();
+    order_move(&mut w, id, here);
+    orders::apply_pending(&mut w);
+    assert!(glasnost_sim::drive::goal_present(&w, id), "same-cell point");
+    assert_eq!(goal_of(&w, id).map(|p| p.cell()), Some(here));
+    // Replacement.
+    let far = cell(3, 0);
+    order_move(&mut w, id, far);
+    orders::apply_pending(&mut w);
+    assert_eq!(goal_of(&w, id).map(|p| p.cell()), Some(far));
+}
+
+// spec: S-0207 claim 25 (the qualifying completion needs |vehicle height − point height| strictly below 208 leptons: 207 clears, 208 keeps)
+#[test]
+fn claim_25_completion_height_tolerance() {
+    for (dz, cleared) in [(207, true), (208, false), (-207, true), (-208, false)] {
+        let s = scene(car(WHEEL, 30, true), 0);
+        let (mut w, id) = start(&s, &[N]);
+        let g = goal_of(&w, id).expect("installed");
+        w.obj_mut(id).unwrap().drive.as_mut().unwrap().goal =
+            Some(glasnost_sim::world::Pos::new(g.x, g.y, g.z + dz));
+        let mut guard = 0;
+        loop {
+            let sn = step(&mut w, id);
+            if (sn.pos.0, sn.pos.1) == (g.x, g.y) && sn.track.is_none() {
+                break;
+            }
+            guard += 1;
+            assert!(guard < 300);
+        }
+        assert_eq!(goal_of(&w, id).is_none(), cleared, "Δz = {dz}");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Turn in place
 

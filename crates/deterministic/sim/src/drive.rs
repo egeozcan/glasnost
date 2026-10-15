@@ -87,6 +87,14 @@ pub struct DriveState {
     /// tick (S-0207 claim 2), kept for the movement test of S-0402 claim 5a.
     #[serde(default)]
     pub step: i32,
+    /// The locomotor destination point (S-0207 claim 25): the movement goal
+    /// locomotion accepted, separate from the order-level destination and
+    /// from the heading point.
+    #[serde(default)]
+    pub goal: Option<Pos>,
+    /// The order-level destination the locomotor last took ([`take_destination`]).
+    #[serde(default)]
+    pub for_dest: Option<Target>,
 }
 
 impl DriveState {
@@ -106,7 +114,109 @@ impl DriveState {
             moved_tick: None,
             requests: None,
             step: 0,
+            // spec: S-0207 claim 25 (a newly created driving or ship locomotor has no locomotor destination point)
+            goal: None,
+            for_dest: None,
         }
+    }
+}
+
+/// The height added to a high-bridge cell's surface for a supplied
+/// destination point, leptons.
+// spec: S-0207 claim 25 and Import mapping (the 416-lepton high-bridge lift, applied once at acceptance)
+const GOAL_DECK_LIFT: i32 = 416;
+
+/// The arrival height tolerance of the locomotor destination point,
+/// leptons: a qualifying completion needs a height difference strictly
+/// below it.
+// spec: S-0207 claim 25 and Import mapping (the strict 208-lepton arrival tolerance)
+const GOAL_HEIGHT_TOLERANCE: i32 = 208;
+
+/// The movement point an order-level destination supplies to locomotion
+/// (S-0207 claim 25): a cell's centre at its surface height, plus 416 on a
+/// high-bridge cell; for an object, the depot's docking point when it
+/// supplies one (S-0314 claim 18), else its position.
+fn supplied_point(w: &World, id: ObjectId, dest: Target) -> Option<Pos> {
+    match dest {
+        Target::Cell(c) => {
+            // spec: S-0204 claim 3 (the cell centre)
+            let (x, y) = (256 * c.x + 128, 256 * c.y + 128);
+            // spec: S-0207 claim 25 (a high-bridge target adds 416 leptons to the supplied height)
+            let lift = if w.high_bridge(c) { GOAL_DECK_LIFT } else { 0 };
+            Some(Pos::new(x, y, w.surface_at(x, y) + lift))
+        }
+        // spec: S-0314 claims 17 and 18 (an accepted enter order supplies the depot's docking point, even in the vehicle's own cell)
+        Target::Object(t) => {
+            crate::depot::heading_point(w, id, t).or_else(|| w.obj(t).map(|x| x.pos))
+        }
+    }
+}
+
+/// The locomotor takes the order-level destination just assigned (S-0207
+/// claim 25): an accepted instruction with a point installs it at once,
+/// before any path search, even in the vehicle's own cell; one with no
+/// point (a stop) leaves none. Called when a destination is assigned, and
+/// at the start of the vehicle's tick for a destination set without that
+/// call.
+pub fn take_destination(w: &mut World, id: ObjectId) {
+    take(w, id, true);
+}
+
+fn take(w: &mut World, id: ObjectId, given: bool) {
+    let Some(o) = w.obj(id) else { return };
+    let Some(d) = o.drive.as_ref() else { return };
+    if !given && o.dest == d.for_dest {
+        return;
+    }
+    let dest = o.dest;
+    // spec: S-0207 claim 25 (an accepted instruction with a point replaces the old one; one with no point, or a stop that removes the order destination, leaves it absent)
+    let goal = dest.and_then(|t| supplied_point(w, id, t));
+    if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
+        d.for_dest = dest;
+        d.goal = goal;
+    }
+}
+
+/// Whether the driving or ship locomotor destination point is present
+/// (S-0207 claim 25; S-0314 claim 17). An order-level destination assigned
+/// but not yet taken counts with the point it supplies, a removed one as
+/// already cleared.
+pub fn goal_present(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(d) = o.drive.as_ref() else {
+        return false;
+    };
+    if o.dest != d.for_dest {
+        // spec: S-0207 claim 25 (assignment installs the point immediately; a stop clears it immediately)
+        return o.dest.is_some_and(|t| supplied_point(w, id, t).is_some());
+    }
+    d.goal.is_some()
+}
+
+/// The locomotor destination point, if present.
+pub fn goal(w: &World, id: ObjectId) -> Option<Pos> {
+    let o = w.obj(id)?;
+    let d = o.drive.as_ref()?;
+    if o.dest != d.for_dest {
+        return o.dest.and_then(|t| supplied_point(w, id, t));
+    }
+    d.goal
+}
+
+/// The qualifying track completion of S-0207 claim 25: with an order
+/// destination still present, the vehicle in its supplied point's cell and
+/// its height within 208 leptons of the point's, the point is cleared.
+fn completion_clears_goal(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let Some(p) = o.drive.as_ref().and_then(|d| d.goal) else {
+        return;
+    };
+    // spec: S-0207 claim 25 (an order destination still present, the vehicle in that destination's supplied movement-point cell, |vehicle height − point height| < 208, integer leptons)
+    let qualifies = o.dest.is_some()
+        && o.pos.cell() == p.cell()
+        && (o.pos.z - p.z).abs() < GOAL_HEIGHT_TOLERANCE;
+    if qualifies && let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
+        d.goal = None;
     }
 }
 
@@ -1184,8 +1294,8 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
                 e: None,
                 target,
                 target_cell: e,
-                // Q-0793 (interim: the exit track's heading point also copies the vehicle's height at its start; S-0207 claim 24 covers ordinary tracks only)
-                height: ob.pos.z,
+                // spec: S-0207 claim 24 and S-0417 claim 5 (the factory exit track's heading point stores world height 0, not the starting, terrain or deck height, with no deck lift)
+                height: 0,
                 next: 0,
                 last: (x, y),
                 cells: vec![e],
@@ -1196,6 +1306,9 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
             dd.turn = None;
             // spec: S-0417 claim 6 and Constants (the exit-track instruction sets the target fraction to 1.0)
             dd.rho_t = F64::from_i64(1, mode);
+            // spec: S-0207 claim 25 and S-0417 claim 5 (a successful driving exit-track instruction supplies the locomotor destination point at E's horizontal centre with height 0)
+            dd.goal = Some(Pos::new(target.0, target.1, 0));
+            dd.for_dest = ob.dest;
         }
     }
     // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once)
@@ -1257,6 +1370,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
+            // spec: S-0207 claim 25 (a qualifying track completion clears the locomotor destination point before the cell-arrival report)
+            completion_clears_goal(w, id);
             // spec: S-0516 claims 13 and 22 (arrival at the track target's cell centre is the completed-cell movement event: the sensor disc moves and a cloaked mover takes the adjacency check)
             crate::cloak::machine::cell_movement_completed(w, id);
             // spec: S-0402 claim 10 (second route: the arrival report at the track target, after the position and the cleared track, before cell-centre crushing and any next track)
@@ -1349,6 +1464,14 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         return false;
     };
     let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
+        return false;
+    };
+    if o.drive.is_none() {
+        return false;
+    }
+    // spec: S-0207 claim 25 (a destination assigned or removed without the assignment hook is taken before the movement)
+    take(w, id, false);
+    let Some(o) = w.obj(id).cloned() else {
         return false;
     };
     let Some(dd) = o.drive.clone() else {
@@ -1462,6 +1585,7 @@ fn arrive_or_rest(w: &mut World, id: ObjectId) {
             }
         }
         if at_goal {
+            // Q-0797 (interim: a driving or ship vehicle at rest in its order-level destination's goal cell has that destination removed by its locomotion update, and with it the locomotor destination point of S-0207 claim 25, even after a same-cell assignment)
             ob.dest = None;
             ob.path.steps.clear();
         }

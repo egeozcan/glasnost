@@ -349,13 +349,26 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0215 claim 32 (the table of answers: fire 1; rotate 2; drop and guard 1; others rotate 1)
         return match answer {
             Answer::CanFire => {
+                let gate = upgrade_gate(w, id);
+                if gate == Some(false) && rules.quirks.upgrade_attack_weapon_gate {
+                    // spec: S-0215 claim 32 (a failed upgrade weapon gate: no firing attempt; target, attack and ready mark kept, 1 tick)
+                    // Q-0798 interim: an animation-delayed building starts no delayed shot either.
+                    return 1;
+                }
                 if b.building.anim_delayed_fire {
                     // spec: S-0301 claim 14 (an animation-delayed building starts its delayed shot instead)
+                    // Q-0798 interim: with a passing gate too, the delayed single shot and no paired attempts.
                     let d = b.building.delayed_fire_delay;
                     if let Some(ob) = w.obj_mut(id) {
                         ob.combat.delayed_shot = Some(tick.wrapping_add((d - 1).max(0)));
                     }
+                } else if gate == Some(true) {
+                    // spec: S-0215 claim 32 and S-0301 claim 9 (a passing gate: a primary attempt, then a secondary attempt with no firing check of its own, whatever rearm the primary began)
+                    // Q-0798 interim: a secondary attempt with no weapon in slot 1 does nothing.
+                    crate::combat::fire::shot(w, id, 0, t);
+                    crate::combat::fire::shot(w, id, 1, t);
                 } else {
+                    // spec: S-0215 claim 32 (no installed upgrade, or quirks.upgrade_attack_weapon_gate off with a failed gate: the ordinary selected-weapon attempt)
                     crate::combat::fire::shot(w, id, slot, t);
                 }
                 1
@@ -415,6 +428,24 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0215 claim 32 (3 × D_r + U(0, 2))
         dr.wrapping_mul(3).wrapping_add(w.rng.ranged(0, 2, half))
     }
+}
+
+/// The upgrade weapon gate of a non-SAM building (S-0215 claim 32):
+/// `None` with no installed upgrade, else whether the first installed
+/// upgrade's ordinary weapons pass.
+pub fn upgrade_gate(w: &World, id: ObjectId) -> Option<bool> {
+    use crate::combat::weapon::{building_type_slot, installed_upgrades};
+    // spec: S-0215 claim 32 (the first installed upgrade, even when another supplies the weapon chosen; Q-0798 interim: the first nonempty position)
+    let u = installed_upgrades(w, id).next()?;
+    // spec: S-0215 claim 32 (its ordinary primary and secondary, not their elite replacements)
+    let Some(p) = building_type_slot(w, u, 0) else {
+        // spec: S-0215 claim 32 (no primary: the gate fails)
+        return Some(false);
+    };
+    let s = building_type_slot(w, u, 1);
+    let burst = |x| w.rules().combat.weapon(x).burst;
+    // spec: S-0215 claim 32 (both slots the same weapon type, the primary's burst count above 1, or a secondary whose burst count is above 1; integer comparisons)
+    Some(s == Some(p) || burst(p) > 1 || s.is_some_and(|s| burst(s) > 1))
 }
 
 /// A SAM building's *attack* (S-0215 claim 32).
