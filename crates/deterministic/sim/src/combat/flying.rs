@@ -21,7 +21,8 @@ pub type Sector = (i32, i32);
 /// The tracked flying objects (S-0303 Terms).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Flying {
-    /// Every tracked object, in the order of first registration.
+    /// Every tracked object, in the order its current tracking period
+    /// started (S-0303 claim 11, the order with `quirks.flying_search_sectors` off).
     pub order: Vec<ObjectId>,
     /// The objects registered in each sector, in registration order there.
     pub sectors: BTreeMap<Sector, Vec<ObjectId>>,
@@ -67,6 +68,7 @@ pub fn register(w: &mut World, id: ObjectId) {
     }
     let Some(o) = w.obj(id) else { return };
     let s = sector(w, o.pos.cell());
+    // spec: S-0303 claim 11 (a newly tracked object follows every object already registered, in its sector and globally)
     w.flying.order.push(id);
     w.flying.sectors.entry(s).or_default().push(id);
     w.flying.sector_of.insert(id, s);
@@ -87,9 +89,10 @@ pub fn unregister(w: &mut World, id: ObjectId) {
 }
 
 /// Updates a tracked object's sector after it moved (S-0303 Terms: the
-/// game updates the sector as it flies). Q-0614 (interim): an object that
-/// crosses into another sector is appended to the end of that sector's
-/// list; its place in the order of first registration is kept.
+/// game updates the sector as it flies). An object that crosses into
+/// another sector follows every object already there; the others keep
+/// their order, and the global order of tracking starts is unchanged
+/// (S-0303 claim 11).
 pub fn moved(w: &mut World, id: ObjectId) {
     let Some(&old) = w.flying.sector_of.get(&id) else {
         return;
@@ -105,6 +108,7 @@ pub fn moved(w: &mut World, id: ObjectId) {
             w.flying.sectors.remove(&old);
         }
     }
+    // spec: S-0303 claim 11 (a crossing object follows every object already registered in its destination sector)
     w.flying.sectors.entry(s).or_default().push(id);
     w.flying.sector_of.insert(id, s);
 }
@@ -154,10 +158,10 @@ pub fn sector_set(w: &World, c: CellXY, rho: i32) -> Vec<Sector> {
 /// detonation with centre cell `c` and truncated spread `spread_trunc` in cells (the
 /// warhead's spread S): the tracked objects of the sector set in sector
 /// order, each once; with `quirks.flying_search_sectors` off every tracked
-/// object once, in registration order.
+/// object once, in the order of starting its current tracking period.
 pub fn candidates(w: &World, c: CellXY, spread_trunc: i32) -> Vec<ObjectId> {
     if !w.rules().quirks.flying_search_sectors {
-        // spec: S-0303 Edge cases (quirks.flying_search_sectors off: every tracked flying object once, in registration order)
+        // spec: S-0303 Edge cases and claim 11 (quirks.flying_search_sectors off: every tracked flying object once, in the global order of starting the current tracking period; sector crossings do not reorder it)
         return w.flying.order.clone();
     }
     // spec: S-0303 F7 (ρ = max(trunc(S), 1) cells)

@@ -80,6 +80,9 @@ pub struct SpawnController {
     pub next_pass: i32,
     /// The tick of the controller's last launch (claim 6), if any.
     pub last_launch: Option<i32>,
+    /// The spawner's own target as last seen by [`watch_own_target`].
+    #[serde(default)]
+    pub own_seen: Option<Target>,
 }
 
 /// The world's record of spawned objects that outlive their slots
@@ -502,11 +505,36 @@ pub fn shot(w: &mut World, spawner: ObjectId, target: Target) {
     c.pending = Some(target);
 }
 
-/// The spawner's own target was cleared (S-0506 claim 3): the pending
-/// target is cleared too.
+/// The spawner's held target actually changed to empty (S-0506 claim
+/// 25): a pending clear is requested. It succeeds only when the
+/// controller target is nonempty
+/// (`quirks.spawner_pending_target_survives_idle_clear`; off: it always
+/// succeeds).
 pub fn target_cleared(w: &mut World, spawner: ObjectId) {
+    let survives = w.rules().quirks.spawner_pending_target_survives_idle_clear;
     if let Some(c) = w.obj_mut(spawner).and_then(|o| o.spawn.as_mut()) {
-        c.pending = None;
+        // spec: S-0506 claim 25 and Edge cases (the clear succeeds only with a nonempty controller target; off: every explicit own-target clear empties pending)
+        if !survives || c.target.is_some() {
+            c.pending = None;
+        }
+    }
+}
+
+/// Watches a spawner's own target for a change to empty (S-0506 claim
+/// 25). Our engine clears targets in many places, so the change is seen
+/// in each of the spawner's turns rather than where it is made: a clear
+/// and a restore of the same target within one tick go unseen, and so
+/// does a clear of an already empty target (docs/development.md).
+pub fn watch_own_target(w: &mut World, spawner: ObjectId) {
+    let Some(o) = w.obj(spawner) else { return };
+    let own = o.target;
+    let Some(c) = o.spawn.as_ref() else { return };
+    let cleared = c.own_seen.is_some() && own.is_none();
+    if cleared {
+        target_cleared(w, spawner);
+    }
+    if let Some(c) = w.obj_mut(spawner).and_then(|o| o.spawn.as_mut()) {
+        c.own_seen = own;
     }
 }
 
@@ -543,6 +571,7 @@ pub fn firing_answer(
 /// The spawner's part of its turn: a launch pass when one is due
 /// (S-0506 claim 2).
 pub fn turn(w: &mut World, spawner: ObjectId) {
+    watch_own_target(w, spawner);
     let t = w.tick;
     let due = w
         .obj(spawner)
@@ -567,10 +596,7 @@ pub fn pass(w: &mut World, spawner: ObjectId) {
     else {
         return;
     };
-    if w.obj(spawner).is_some_and(|o| o.target.is_none()) {
-        // spec: S-0506 claim 3 (clearing the spawner's own target clears the pending target); our engine clears targets in many places, so the pass applies it before it reads the pending target (Q-0616)
-        target_cleared(w, spawner);
-    }
+    // spec: S-0506 claim 25 (no launch pass drops pending merely because the spawner has no own target)
     for i in 0..n {
         slot_step(w, spawner, i);
         if w.obj(spawner).is_none() {
@@ -1147,8 +1173,20 @@ pub fn removing(w: &mut World, id: ObjectId) {
     w.spawned.launcher.remove(&id);
     w.spawned.kamikaze.remove(&id);
     crate::combat::flying::unregister(w, id);
-    // spec: S-0506 claim 11 (the controller target leaves play and no pending target is waiting: reset)
     let gone = Some(Target::Object(id));
+    // spec: S-0506 claim 25 (loss notification for the pending target clears it at once, whatever the own target)
+    let holders: Vec<ObjectId> = w
+        .objects
+        .iter()
+        .filter(|(_, o)| o.spawn.as_ref().is_some_and(|c| c.pending == gone))
+        .map(|(&k, _)| k)
+        .collect();
+    for s in holders {
+        if let Some(c) = w.obj_mut(s).and_then(|o| o.spawn.as_mut()) {
+            c.pending = None;
+        }
+    }
+    // spec: S-0506 claim 11 (the controller target leaves play and no pending target is waiting: reset)
     let resets: Vec<ObjectId> = w
         .objects
         .iter()

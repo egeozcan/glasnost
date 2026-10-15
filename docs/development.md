@@ -313,7 +313,8 @@ S-0506 (missiles and the spawn controller) is built in `glasnost_sim::spawn` (th
   - S-0311 claim 8: an untrainable missile-spawn object's experience goes to its launcher (`combat::veterancy`, `spawn::launcher_of`).
   - S-0214: `targeting::movable` is false while 0 < launching count < *N* (`spawn::partly_launched`).
   - S-0504 claim 3 / S-0207 claim 6: `drive::begin_track` waits while `spawn::track_held`; `spawn::launching_count(w, spawner) -> i32` is public.
-  - In the air: `combat::weapon::in_air` uses the height test for rocket types.
+  - In the air: `combat::weapon::in_air` answers by flight phase for the set-A and set-B types and by the 208-lepton test for a distinct set-C type (claim 22).
+- **Revision 3 (answers Q-0610 to Q-0616).** The raw arctangent of F6 and F7 is S-0204 F7's exact table `glasnost_num::tables::RAW_ATAN`, generated from the tangent recurrence (`tablegen::raw_atan_table`). The phase timer starts in the aim-fixing tick with zero elapsed ticks and runs that tick's update. Raise adds its rate only before expiry, and the update that finds cruise altitude still accelerates (claim 24). A rocket missile is in no cell list (claim 23). A destroyed missile keeps its phase timers (claim 20). A crossing flying object follows the objects already in its new sector (S-0303 claim 11). Pending targets follow claim 25 under `quirks.spawner_pending_target_survives_idle_clear`. No pass drops pending for a targetless spawner, and the pending target's own loss clears it. Our engine clears an object's target in many places, so `spawn::watch_own_target` spots the change to empty in each of the spawner's turns, not where it is made. It therefore misses a clear and restore of the same target within one tick, and (switch off) a clear of an already empty target.
 - **Seams for other lanes.**
   - S-0501 claims 35 and 36: `spawn::aircraft_launched`, `spawn::aircraft_attack` and `spawn::aircraft_return` only set the destination or target. Carrier aircraft do not fly yet, so they never dock (`spawn::docks` is ready). In the running pipeline the generic behaviour step clears that destination and target again later in the same tick (the move behaviour's fall-back), so the hooks do not work end to end until the aircraft lane owns these objects; `carrier_slot_cycle` checks them by calling `spawn::pass` directly.
   - `spawn::kamikaze_orders` is not called from the pipeline.
@@ -343,17 +344,7 @@ S-0506 (missiles and the spawn controller) is built in `glasnost_sim::spawn` (th
 - **Orders a human gives.** Select a drone and click an enemy vehicle. The attack order fires the latching weapon (`targeting::click`, then `orders::issue`).
 - **Claim ledger.** `docs/m6-claims/S-0614.md`.
 
-Provisional rules of M6a, each tied to a request:
-
-| Where | Interim rule | Request |
-|---|---|---|
-| `rocket::raw_atan` | the surrogate table `glasnost_num::tables::ATAN` stands for the raw arctangent T(i); lazy-cruise and descent pitches may differ in the last bits | Q-0610 |
-| `combat::weapon::in_air` | a set-A or set-B rocket is in the air by the 208-lepton height test in every phase | Q-0611 |
-| `rocket::place`, `objects` | a rocket missile is in no cell list and marks no occupancy; area damage reaches it only through the flying search once tracked (after tilt or raise) | Q-0612 |
-| `rocket::tick` | a destroyed rocket keeps its phase timers and moves only by F1; it detonates after its first positive-speed movement attempt | Q-0613 |
-| `combat::flying::moved` | a crossing object goes to the end of its new sector's list | Q-0614 |
-| `rocket::tick`, `tick` | the aim-fixing tick does nothing else; each later tick counts one tick of pause, tilt or raise; the tick that reaches cruise altitude switches without accelerating; the pass runs after behaviour processing and before movement and firing | Q-0615 |
-| `spawn::pass` | "clearing the spawner's target clears the pending target" (claim 3) is applied at the start of each pass when the spawner's own target is empty, because our engine clears targets in many places | Q-0616 |
+Provisional rules of M6a: none at present. Q-0610 to Q-0616 are answered by S-0506 revision 3, S-0204 revision 8 and S-0303 revision 11; Q-0620 to Q-0623 by S-0614 revisions 4 and 5.
 
 Known limits of M6a:
 

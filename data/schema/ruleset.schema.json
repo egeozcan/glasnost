@@ -501,7 +501,7 @@
           "default": null
         },
         "barrel_anim_is_voxel": {
-          "description": "Art `BarrelAnimIsVoxel` (S-0313 claim 8).",
+          "description": "`BarrelAnimIsVoxel` of the building type's rules section (S-0313\nclaims 8 and 10).",
           "type": [
             "boolean",
             "null"
@@ -1009,7 +1009,7 @@
           "default": null
         },
         "turret_anim_is_voxel": {
-          "description": "Art `TurretAnimIsVoxel` (S-0310 claim 4, S-0313 claim 8).",
+          "description": "`TurretAnimIsVoxel` of the building type's rules section (S-0310\nclaim 4, S-0313 claims 8 and 10; art has no effect).",
           "type": [
             "boolean",
             "null"
@@ -1017,7 +1017,7 @@
           "default": null
         },
         "turret_anim_xy": {
-          "description": "Art `TurretAnimX`, `TurretAnimY`, pixels (S-0313 claim 8).",
+          "description": "`TurretAnimX`, `TurretAnimY` of the building type's rules section,\npixels (S-0313 claims 8 and 10, S-0310 claim 4).",
           "type": [
             "array",
             "null"
@@ -7153,6 +7153,11 @@
           "type": "boolean",
           "default": true
         },
+        "parasite_carrier_loss_strands_unit": {
+          "description": "A parasite whose carrying projectile is removed without detonating stays off the map, unattached; off: it attempts claim 4's failed-latch return.",
+          "type": "boolean",
+          "default": true
+        },
         "parasite_exit_search_host_mobility": {
           "description": "A parasite's exit-cell search uses the host's locomotion class and movement zone; off: the parasite's own.",
           "type": "boolean",
@@ -7165,6 +7170,11 @@
         },
         "parasite_host_loss_bridge_test": {
           "description": "On host loss, the fallback neighbour's restricted land passes when the host's cell has a bridge; off: the neighbour's own bridge is tested.",
+          "type": "boolean",
+          "default": true
+        },
+        "parasite_host_loss_failed_choice_origin": {
+          "description": "On host loss, a vehicle parasite whose fallback standing-position choice fails survives at world position (128, 128, 0) leptons outside the playable map; off: it is removed silently like infantry, with the same draw count.",
           "type": "boolean",
           "default": true
         },
@@ -7580,6 +7590,11 @@
         },
         "sound_order_startup_draw": {
           "description": "Immediate-mode random ordering with no attack sample takes and discards one startup ordering draw; off: no discarded draw.",
+          "type": "boolean",
+          "default": true
+        },
+        "spawner_pending_target_survives_idle_clear": {
+          "description": "An own-target clear empties the pending target only when the controller target is nonempty, so a pending shot can survive the clear and launch later; off: every explicit own-target clear empties the pending target.",
           "type": "boolean",
           "default": true
         },

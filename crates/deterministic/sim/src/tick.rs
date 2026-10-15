@@ -106,7 +106,7 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none() {
         return;
     }
-    // spec: S-0506 claim 2 (a spawner's launch pass, when one is due, in its own turn; Q-0615)
+    // spec: S-0506 claim 2 (a spawner's launch pass, when one is due, in its own turn; claim 24: a vehicle or ship spawner's own firing step comes later in the turn, so its shot waits for the next pass)
     crate::spawn::turn(w, id);
     if w.obj(id).is_none() {
         return;

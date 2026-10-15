@@ -1201,6 +1201,10 @@ pub struct Quirks {
     // spec: S-0506 claim 13, Edge cases
     #[serde(default = "on")]
     pub rail_missile_vanishes_with_spawner: bool,
+    /// An own-target clear empties the pending target only when the controller target is nonempty, so a pending shot can survive the clear and launch later; off: every explicit own-target clear empties the pending target.
+    // spec: S-0506 claim 25, Edge cases
+    #[serde(default = "on")]
+    pub spawner_pending_target_survives_idle_clear: bool,
     /// A rocket missile's aim point is fixed at the heading point of claim 14.
     // spec: S-0506 claim 14, Edge cases
     #[serde(default = "on")]
@@ -1660,6 +1664,7 @@ impl Default for Quirks {
             launch_spacing_from_spawner_type: true,
             raised_missile_rail_time_from_set_b: true,
             rail_missile_vanishes_with_spawner: true,
+            spawner_pending_target_survives_idle_clear: true,
             rocket_aim_at_heading_point: true,
             destroyed_rocket_still_detonates: true,
             rocket_stalls_at_map_edge: true,
@@ -2409,6 +2414,10 @@ impl Quirks {
             (
                 "rail_missile_vanishes_with_spawner",
                 self.rail_missile_vanishes_with_spawner,
+            ),
+            (
+                "spawner_pending_target_survives_idle_clear",
+                self.spawner_pending_target_survives_idle_clear,
             ),
             (
                 "rocket_aim_at_heading_point",

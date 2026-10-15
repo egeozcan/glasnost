@@ -6,16 +6,11 @@
 //! [`tick`]: the first one with a destination fixes the aim point, then
 //! the phases of the Rocket table run, one tick at a time.
 //!
-//! Interim rules (docs/development.md, M6a):
-//! - Q-0612: a rocket missile is in no cell list and marks no occupancy;
-//!   it is found only through the flying-object search once tracked.
-//! - Q-0613: a destroyed rocket missile runs its phases as an undamaged
-//!   one and moves only by F1.
-//! - Q-0615: the tick that fixes the aim point does nothing else; each
-//!   later tick of pause, tilt or raise counts one tick of its time, and
-//!   the phase that follows starts in the next tick.
-//! - Q-0610: the raw arctangent A of F6 and F7 uses the surrogate table
-//!   `glasnost_num::tables::ATAN`.
+//! A rocket missile is in no cell list and marks no occupancy; it is
+//! found only through the flying-object search once tracked (claim 23). A
+//! destroyed one runs its phases as an undamaged one and moves only by F1
+//! (claim 20). The phase boundaries are claim 24's; the raw arctangent of
+//! F6 and F7 is S-0204 F7's exact table.
 
 use glasnost_num::geom::{direction, direction_constants, root_floor, table_root_real};
 use glasnost_num::trig::{cos_t, sin_t};
@@ -167,15 +162,15 @@ pub fn plain_pitch(p: F32, tau: F32, mode: Rounding) -> F32 {
     if q.to_f64().lt(zero) { F32(0) } else { q }
 }
 
-/// The raw table arctangent A of S-0506 Formulas F6 (Q-0610: the
-/// surrogate table supplies T).
+/// The raw table arctangent A of S-0506 Formulas F6, from S-0204 F7's
+/// exact raw angles (no facing correction).
 pub fn raw_atan(u: F64, mode: Rounding) -> F64 {
     // spec: S-0204 F3 (σ = 3276705 / 2^27)
     let sigma = F64::from_parts(false, 3276705, -27, Rounding::TowardZero);
     // spec: S-0506 F6 (i = |trunc(RZ₅₃(u / σ))|; the sign from RZ₂₄(u); T(i) for i ≤ 4096, else the single π/2)
     let i = u.div(sigma, mode).trunc_i128().map(i128::unsigned_abs);
     let mag = match i {
-        Some(i) if i <= 4096 => F32(glasnost_num::tables::ATAN[i as usize]).to_f64(), // spec: S-0506 F6 (T(i) for i ≤ 4096)
+        Some(i) if i <= 4096 => F32(glasnost_num::tables::RAW_ATAN[i as usize]).to_f64(), // spec: S-0506 F6 and S-0204 claim 13 (the exact raw T(i) for i ≤ 4096)
         _ => half_pi().to_f32(mode).to_f64(),
     };
     if u.to_f32(mode).to_f64().is_sign_negative() {
@@ -250,7 +245,7 @@ fn height_above_terrain(w: &World, p: Pos) -> i32 {
 
 /// Places a launched rocket missile (S-0506 claim 7): on the map at
 /// `pos` with `facing`, in the update order, in the rocket-flight mode of
-/// its parameter set. Q-0612 (interim): it enters no cell list.
+/// its parameter set. It enters no cell list (claim 23).
 pub fn place(w: &mut World, id: ObjectId, pos: Pos, facing: u16, spawner: ObjectId) {
     let t = w.tick;
     let keeps = w.rules().quirks.set_facing_keeps_target;
@@ -333,7 +328,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let cap = u.speed;
     let omega = u.turn_rate;
     let trailer = u.raw.trailer.clone();
-    let Some(phase) = rs.phase else {
+    let fresh = rs.phase.is_none();
+    if fresh {
         // spec: S-0506 claim 14 (the aim point is fixed when it first carries out its move behaviour, from the destination of claim 7)
         let Some(dest) = o.dest else { return false };
         let Some(aim) = heading_point(w, dest) else {
@@ -346,10 +342,12 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         } else {
             Phase::Tilt
         });
+        // spec: S-0506 claim 24 (the timer starts in the aim-fixing tick with zero elapsed ticks; its first rocket update is in that same tick)
         rs.elapsed = 0;
         rs.pitch = quarter_turns(p.pitch_initial, mode).to_f32(mode);
         rs.speed = F64::ZERO;
-        store(w, id, rs);
+    }
+    let Some(phase) = rs.phase else {
         return false;
     };
     let aim = rs.aim.unwrap_or(o.pos);
@@ -359,7 +357,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         Phase::Pause | Phase::Tilt | Phase::Raise => {
             // spec: S-0506 claim 19 (the elite launch is read in each pause, tilt and raise tick: the spawner exists and is elite)
             rs.elite = crate::spawn::launcher_elite(w, rs.spawner);
-            rs.elapsed += 1;
+            if !fresh {
+                rs.elapsed += 1;
+            }
             match phase {
                 Phase::Pause => {
                     if rs.set == RocketSetId::C {
@@ -384,29 +384,31 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 }
                 _ => {
                     set_c_anim(w, &mut rs, t);
-                    // spec: S-0506 Rocket table (raise: world height + raise rate, when that position is legal)
-                    let up = Pos::new(o.pos.x, o.pos.y, o.pos.z.wrapping_add(p.raise_rate));
-                    if legal(w, up)
-                        && let Some(ob) = w.obj_mut(id)
-                    {
-                        ob.pos = up;
-                    }
                     if rs.elapsed >= p.tilt {
+                        // spec: S-0506 claim 24 (raise adds its rate only on updates before expiry: T − 1 increments)
                         end_of_tilt(w, id, &mut rs, &p, mode);
+                    } else {
+                        // spec: S-0506 Rocket table (raise: world height + raise rate, when that position is legal)
+                        let up = Pos::new(o.pos.x, o.pos.y, o.pos.z.wrapping_add(p.raise_rate));
+                        if legal(w, up)
+                            && let Some(ob) = w.obj_mut(id)
+                        {
+                            ob.pos = up;
+                        }
                     }
                 }
             }
         }
         Phase::Ascent => {
             // spec: S-0506 Rocket table (ascent: speed by F4; cruise at the cruise altitude above the terrain, recording d₀)
+            // spec: S-0506 claim 24 (ascent tests the altitude before F1 moves it; the update first finding cruise altitude records d₀ before that movement, still accelerates and moves with ascent pitch, and applies no cruise steering)
             if height_above_terrain(w, o.pos) >= p.altitude {
                 rs.phase = Some(Phase::Cruise);
                 let (dx, dy) = (aim.x - o.pos.x, aim.y - o.pos.y);
                 // spec: S-0506 F6 (d₀ = trunc(r(n_d)))
                 rs.d0 = trunc(root_nd(dx, dy, table, mode)) as i32;
-            } else {
-                rs.speed = next_speed(rs.speed, p.acceleration, cap, mode);
             }
+            rs.speed = next_speed(rs.speed, p.acceleration, cap, mode);
         }
         Phase::Cruise => {
             let pos = o.pos;

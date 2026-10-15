@@ -391,7 +391,7 @@ pub fn remove(w: &mut World, id: ObjectId) {
             w.cells.leave(cell, o.layer, id);
             crate::drive::release_claims(w, id);
         }
-        // Q-0612 (interim): a rocket missile is in no cell list and marks no occupancy.
+        // spec: S-0506 claim 23 (a rocket missile is in no cell list and marks no occupancy)
         Kind::Aircraft if o.rocket.is_some() => {}
         Kind::Aircraft => {
             w.cells.leave(cell, o.layer, id);

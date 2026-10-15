@@ -310,7 +310,7 @@ fn claim_3_pending_target() {
     // A shot at the adopted target while another is pending leaves the pending one.
     spawn::shot(&mut w, lna, Target::Object(a));
     assert_eq!(controller(&w, lna).pending, Some(Target::Object(b)));
-    // Clearing the spawner's own target clears the pending target.
+    // spec: S-0506 claim 25 (a pending clear with a nonempty controller target succeeds)
     spawn::target_cleared(&mut w, lna);
     assert_eq!(controller(&w, lna).pending, None);
 }
@@ -1065,7 +1065,7 @@ fn claim_20_ground_removal() {
     );
 }
 
-// spec: S-0506 claim 20 (destroyed in pause: no detonation until the first positive-speed movement attempt, Q-0613 for the phases)
+// spec: S-0506 claim 20 (destroyed in pause: no detonation until the first positive-speed movement attempt; the phase timers run on unchanged)
 #[test]
 fn claim_20_destroyed_in_pause() {
     let r = rules();
@@ -1288,7 +1288,7 @@ fn f5_plain_pitch() {
     assert!(p.to_f64().lt(s(1, 2).to_f64()) && p.to_f64().gt(F64::ZERO));
 }
 
-// spec: S-0506 F6 (raw table arctangent A: odd, T(0) = 0, an index beyond 4096 gives the single π/2; Q-0610 surrogate table)
+// spec: S-0506 F6 (raw table arctangent A: odd, T(0) = 0, an index beyond 4096 gives the single π/2; S-0204 F7's exact raw table)
 #[test]
 fn f6_raw_atan() {
     use glasnost_num::{F64, Rounding};
@@ -1304,6 +1304,11 @@ fn f6_raw_atan() {
     assert_eq!(raw_atan(big.negated(), rz), hp.negated());
     let one = F64::from_i64(1, rz);
     assert_eq!(raw_atan(one.negated(), rz), raw_atan(one, rz).negated());
+    // spec: S-0204 claim 13 and C5 (index 1024: the exact raw angle 12841411 / 8388608, its negation for a negative argument; no facing correction)
+    let u = F64::from_i64(25, rz);
+    let t1024 = F64::from_parts(false, 12841411, -23, rz);
+    assert_eq!(raw_atan(u, rz), t1024);
+    assert_eq!(raw_atan(u.negated(), rz), t1024.negated());
 }
 
 // spec: S-0506 F7 (descent pitch: turns towards the line of sight by at most τ; reaches it when within τ)
@@ -1363,14 +1368,144 @@ fn claim_18_map_edge_quirk_off() {
     assert!(w.obj(x).is_none(), "it detonates at the edge");
 }
 
-// spec: S-0501 Terms, S-0308 Airborne and Q-0611 (a rocket-type object is in the air by the 208-lepton height test; the half distance of S-0303 claim 10 applies to it)
+// spec: S-0506 claim 22 (the set-A type: not in the air before flight and in pause and tilt; in the air from ascent on, even below 208 leptons; a destroying hit does not change the answer)
 #[test]
-fn q0611_in_air() {
+fn claim_22_in_air_by_phase() {
+    use glasnost_sim::combat::weapon::in_air;
     let r = rules();
     let (w, _, _, x) = fly_until(&r, Phase::Pause);
-    assert!(!glasnost_sim::combat::weapon::in_air(&w, x));
+    assert!(!in_air(&w, x));
+    let (mut w, _, _, x) = fly_until(&r, Phase::Tilt);
+    assert!(!in_air(&w, x));
+    w.obj_mut(x).unwrap().health = 0;
+    assert!(!in_air(&w, x), "the hit alone does not change it");
+    let (w, _, _, x) = fly_until(&r, Phase::Ascent);
+    let o = w.obj(x).unwrap();
+    assert!(o.pos.z - w.surface_at(o.pos.x, o.pos.y) < 208);
+    assert!(in_air(&w, x), "ascent, below 208 leptons");
     let (w, _, _, x) = fly_until(&r, Phase::Cruise);
-    assert!(glasnost_sim::combat::weapon::in_air(&w, x));
+    assert!(in_air(&w, x));
+}
+
+/// Fires LNA (or LNC with `set_c`) with pause `p` and tilt `t` and returns
+/// the aim-fixing tick, the tick ascent starts and the tick of the first
+/// positive-speed movement attempt, plus the raise height gained (set C).
+fn boundaries(p: i32, t: i32, set_c: bool) -> (i32, i32, i32, i32) {
+    let mut r = rules();
+    let g = &mut r.sim.general;
+    if set_c {
+        g.c_misl_pause_frames = Some(p);
+        g.c_misl_tilt_frames = Some(t);
+    } else {
+        g.v3_rocket_pause_frames = Some(p);
+        g.v3_rocket_tilt_frames = Some(t);
+    }
+    let mut w = game(&r);
+    let ln = spawn_at(&mut w, if set_c { "LNC" } else { "LNA" }, 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let x = controller(&w, ln).slots[0].object.unwrap();
+    spawn::shot(&mut w, ln, Target::Object(victim));
+    let (mut t0, mut ascent, mut moving) = (None, None, None);
+    let (mut z_raise, mut z_end) = (None, None);
+    for _ in 0..400 {
+        let t = w.tick;
+        testkit::run(&mut w, 1);
+        let Some(o) = w.obj(x) else { break };
+        let Some(rs) = o.rocket.as_ref() else { continue };
+        if t0.is_none() && rs.phase.is_some() {
+            t0 = Some(t);
+        }
+        if rs.phase == Some(Phase::Raise) && z_raise.is_none() {
+            z_raise = Some(o.pos.z);
+        }
+        if ascent.is_none() && rs.phase == Some(Phase::Ascent) {
+            ascent = Some(t);
+            z_end = Some(o.pos.z);
+        }
+        if moving.is_none() && rs.speed.gt(glasnost_num::F64::ZERO) {
+            moving = Some(t);
+            break;
+        }
+    }
+    let gained = match (z_raise, z_end) {
+        (Some(a), Some(b)) => b - a,
+        _ => 0,
+    };
+    (t0.unwrap(), ascent.unwrap(), moving.unwrap(), gained)
+}
+
+// spec: S-0506 claim 24 (exact phase boundaries: the timer starts at t₀ with zero elapsed ticks; P = 0: ascent at t₀ + T, first positive-speed attempt one tick later; P > 0: ascent at t₀ + P + max(T, 1), movement one tick later)
+#[test]
+fn claim_24_phase_boundaries() {
+    for (p, t) in [(0, 0), (0, 1), (1, 0), (1, 1), (3, 4)] {
+        let (t0, ascent, moving, _) = boundaries(p, t, false);
+        let expect = if p == 0 { t0 + t } else { t0 + p + t.max(1) };
+        assert_eq!(ascent - t0, expect - t0, "ascent, pause {p}, tilt {t}");
+        assert_eq!(moving, ascent + 1, "movement, pause {p}, tilt {t}");
+    }
+}
+
+// spec: S-0506 claim 24 (set C: a positive pause ends in raise, which adds its rate on updates before expiry only, T − 1 increments; a zero pause tilts, including set C)
+#[test]
+fn claim_24_set_c_raise() {
+    let rate = 7; // the fixture's raise rate 7.9, truncated to the integer world-height step
+    let (t0, ascent, moving, gained) = boundaries(5, 6, true);
+    assert_eq!(ascent, t0 + 5 + 6);
+    assert_eq!(moving, ascent + 1);
+    // The raise phase is first seen after the pause-expiry tick, which adds nothing.
+    assert_eq!(gained, (6 - 1) * rate);
+    let (t0, ascent, _, gained) = boundaries(0, 6, true);
+    assert_eq!(ascent, t0 + 6);
+    assert_eq!(gained, 0, "no raise without a pause");
+}
+
+// spec: S-0506 claim 25 and Edge cases (quirks.spawner_pending_target_survives_idle_clear: an own-target change to empty with an empty controller target leaves pending; off: it empties pending)
+#[test]
+fn claim_25_idle_clear() {
+    for on in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.spawner_pending_target_survives_idle_clear = on;
+        let mut w = game(&r);
+        let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+        let a = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+        w.obj_mut(lna).unwrap().target = Some(Target::Object(a));
+        spawn::watch_own_target(&mut w, lna);
+        spawn::shot(&mut w, lna, Target::Object(a));
+        w.obj_mut(lna).unwrap().target = None;
+        spawn::watch_own_target(&mut w, lna);
+        let expect = on.then_some(Target::Object(a));
+        assert_eq!(controller(&w, lna).pending, expect, "quirk {on}");
+    }
+}
+
+// spec: S-0506 claim 25 (with a nonempty controller target the clear succeeds; restoring the own target does not restore pending; a held target that stays empty requests nothing more; the pending target's loss clears it at once)
+#[test]
+fn claim_25_clear_and_loss() {
+    let r = rules();
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let a = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let b = spawn_at(&mut w, "VICTIM", 1, 8, 3, 0);
+    w.obj_mut(lna).unwrap().spawn.as_mut().unwrap().target = Some(Target::Object(a));
+    w.obj_mut(lna).unwrap().target = Some(Target::Object(a));
+    spawn::watch_own_target(&mut w, lna);
+    spawn::shot(&mut w, lna, Target::Object(b));
+    w.obj_mut(lna).unwrap().target = None;
+    spawn::watch_own_target(&mut w, lna);
+    assert_eq!(controller(&w, lna).pending, None, "an effective clear");
+    w.obj_mut(lna).unwrap().target = Some(Target::Object(a));
+    spawn::watch_own_target(&mut w, lna);
+    assert_eq!(controller(&w, lna).pending, None, "not restored");
+    // A pass with no own target does not drop pending (no per-pass sweep).
+    w.obj_mut(lna).unwrap().spawn.as_mut().unwrap().target = None;
+    w.obj_mut(lna).unwrap().target = None;
+    spawn::watch_own_target(&mut w, lna);
+    spawn::shot(&mut w, lna, Target::Object(b));
+    spawn::watch_own_target(&mut w, lna);
+    assert_eq!(controller(&w, lna).pending, Some(Target::Object(b)));
+    // The pending target's own loss clears it at once.
+    glasnost_sim::objects::remove(&mut w, b);
+    assert_eq!(controller(&w, lna).pending, None);
 }
 
 // spec: S-0506 claims 7 and 8 and S-0501 claims 35 and 36 (a non-missile slot aircraft is sent to the step direction 0 neighbour of the spawner's cell, then set on the controller target at release and attacking)

@@ -38,6 +38,41 @@ pub fn atan_table() -> Vec<u32> {
         .collect()
 }
 
+/// trunc₂₄ of a non-negative fixed-point value, kept in fixed point: its
+/// leading 24 significant binary digits, the rest truncated toward zero.
+fn trunc24_fixed(v: &BigUint) -> BigUint {
+    let bits = v.bits();
+    // spec: S-0204 F7 (trunc₂₄: 24 significant binary digits, toward zero)
+    if bits > 24 {
+        let sh = bits - 24;
+        (v >> sh) << sh
+    } else {
+        v.clone()
+    }
+}
+
+/// The tangents u₀ … u₄₀₉₆ of S-0204 F7 in fixed point: u₀ = 0,
+/// uᵢ₊₁ = trunc₂₄(uᵢ + σ), the addition exact.
+pub fn raw_tangents() -> Vec<BigUint> {
+    // spec: S-0204 F3 and F7 (σ = 3276705 / 2^27, exact in fixed point)
+    let sigma = BigUint::from(3276705u32) << (FRAC - 27);
+    let mut u = vec![BigUint::from(0u32)];
+    for i in 0..4096 {
+        let next = trunc24_fixed(&(&u[i] + &sigma));
+        u.push(next);
+    }
+    u
+}
+
+/// T(0 … 4096) of S-0204 F7, the exact raw arctangent table:
+/// trunc₂₄(arctan(uᵢ)).
+pub fn raw_atan_table() -> Vec<u32> {
+    raw_tangents()
+        .iter()
+        .map(|u| bigmath::trunc_single(&bigmath::atan(u)).0)
+        .collect()
+}
+
 /// A_s(0 … 4096) = RZ₂₄(asin(k / 2048 − 1)) (S-0306 Terms, table arcsine).
 pub fn asin_table() -> Vec<u32> {
     let s = BigUint::from(1u32) << FRAC;
@@ -111,6 +146,13 @@ pub fn render() -> String {
     );
     emit(
         &mut out,
+        "S-0204 claim 13 and F7 (T(i) = trunc24(arctan(uᵢ)), u₀ = 0, uᵢ₊₁ = trunc24(uᵢ + σ), for i = 0 … 4096, the exact raw table)",
+        "Exact raw arctangent table T(0 … 4096) as single-precision bit patterns.",
+        "RAW_ATAN",
+        &raw_atan_table(),
+    );
+    emit(
+        &mut out,
         "S-0306 Terms (table arcsine A_s[k] = RZ₂₄(asin(k / 2048 − 1)) for k = 0 … 4096)",
         "Table arcsine A_s(0 … 4096) as single-precision bit patterns.",
         "ASIN",
@@ -139,8 +181,40 @@ mod tests {
         assert_eq!(tables::SINE_QUARTER.to_vec(), sine_quarter());
         assert_eq!(tables::ATAN.to_vec(), atan_table());
         assert_eq!(tables::ASIN.to_vec(), asin_table());
+        assert_eq!(tables::RAW_ATAN.to_vec(), raw_atan_table());
         assert_eq!(tables::TAU_4096, single("1.2246063538223773e-16"));
         assert_eq!(tables::TAU_8192, single("-2.4492127076447545e-16"));
+    }
+
+    /// The fixed-point value m / 2^k.
+    fn ratio(m: u64, k: u32) -> BigUint {
+        BigUint::from(m) << (FRAC - k)
+    }
+
+    // spec: S-0204 F7 (the exact test values of uᵢ and T(i) for i = 0, 1, 40, 1024 and 4096)
+    #[test]
+    fn raw_atan_test_values() {
+        let u = raw_tangents();
+        let t = raw_atan_table();
+        let cases: [(usize, (u64, u32), (u64, u32)); 5] = [
+            (0, (0, 0), (0, 0)),
+            (1, (3276705, 27), (1638027, 26)),
+            (40, (511985, 19), (6488809, 23)),
+            (1024, (3276631, 17), (12841411, 23)),
+            (4096, (13104829, 17), (409153, 18)),
+        ];
+        for (i, (um, uk), (tm, tk)) in cases {
+            assert_eq!(u[i], ratio(um, uk), "u({i})");
+            assert_eq!(t[i], bigmath::trunc_single(&ratio(tm, tk)).0, "T({i})");
+        }
+        // spec: S-0204 F3 (the surrogate differs from the raw table: 4067 entries smaller, none larger)
+        let smaller = (0..=4096)
+            .filter(|&i| tables::RAW_ATAN[i] < tables::ATAN[i])
+            .count();
+        let larger = (0..=4096)
+            .filter(|&i| tables::RAW_ATAN[i] > tables::ATAN[i])
+            .count();
+        assert_eq!((smaller, larger), (4067, 0));
     }
 
     #[allow(clippy::disallowed_types, clippy::excessive_precision)]

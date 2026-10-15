@@ -11,13 +11,30 @@ use crate::world::{Layer, ObjectId, Target, World};
 
 /// Whether an object is in the air in the sense of S-0308 (Terms,
 /// *airborne*): an aircraft or jumpjet in flight, an object falling or
-/// carried. The aircraft and movement specs own the test. An object of a
-/// rocket type answers by its height (Q-0611); for every other object the
-/// answer is [`aircraft_in_air`].
+/// carried. The aircraft and movement specs own the test. An object of the
+/// set-A or set-B rocket type answers by its flight phase (S-0506 claim
+/// 22); for every other object the answer is [`aircraft_in_air`].
 pub fn in_air(w: &World, id: ObjectId) -> bool {
-    if crate::spawn::rocket_type(w, id).is_some() {
-        // Q-0611 (interim): a rocket-type object uses the 208-lepton height test of S-0307 Terms in every phase (S-0501 Terms, S-0307 claim 26, S-0308 Airborne)
-        return airborne_by_height(w, id);
+    if let Some(o) = w.obj(id)
+        && o.kind == Kind::Aircraft
+    {
+        let m = &w.rules().missiles;
+        let ab = [crate::spawn::RocketSetId::A, crate::spawn::RocketSetId::B]
+            .iter()
+            .any(|&s| m.set(s).type_index == Some(o.type_index));
+        if ab {
+            // spec: S-0506 claim 22 (the set-A or set-B type: false before flight and in pause, tilt and raise; true in ascent, cruise and descent; independent of height, speed, health and rail membership)
+            use crate::rocket::Phase;
+            return o
+                .rocket
+                .as_ref()
+                .and_then(|r| r.phase)
+                .is_some_and(|p| matches!(p, Phase::Ascent | Phase::Cruise | Phase::Descent));
+        }
+        if crate::spawn::rocket_type(w, id).is_some() {
+            // spec: S-0506 claim 22 (a distinct set-C type: the ordinary aircraft test, on the map and at least 208 leptons above the terrain, S-0307 claim 26)
+            return airborne_by_height(w, id);
+        }
     }
     aircraft_in_air(w, id)
 }
