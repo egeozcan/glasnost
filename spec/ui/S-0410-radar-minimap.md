@@ -2,7 +2,7 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -328,9 +328,7 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    (claim 7). A shown object is drawn using its owner's house display RGB (S-0103 claim 15),
    converted as Terms *radar colour* says. For a disguised unit, the colour house is its owner
    when that owner allies *H* (including ownership by *H*), otherwise its disguise house.
-   **Required cross-spec correction:** S-0516 claim 38 must name this owner-to-viewer relation,
-   not the reverse relation implied by "a house allied with its owner". The two specs must be
-   reconciled at joint sign-off; this claim does not adopt that reversed reading.
+   S-0516 claim 38 owns this owner-to-viewer colour-house choice.
    This radar choice is not the game-state test of appearing disguised
    or the battlefield image test (S-0516 claims 35 and 37). The colour when the disguise house
    is none remains open under S-0516 claim 38. A radar object without an owner is drawn in a
@@ -365,11 +363,10 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    another house is made on that cell, not on the cell it stands on (scenario R5 part F's setup
    makes it observable; R3 part A measures the pixel).
    - Backing: `measurable` (scenarios R5 parts A to C and F, R10, R11; R14 for house RGB,
-     object-kind equality and lighting independence; S-0516 CS16 part c and CS17 for
-     disguise-house selection with mutual alliances or mutual hostility). The one-way
-     alliance direction is `unmeasured`: those scenarios do not independently arrange a
-     controlled foreign disguise and opposite one-way relations to isolate that direction.
-     The following rules are also `unmeasured`. The neutral colour of an ownerless radar object: no skirmish setup is known that
+     object-kind equality and lighting independence; S-0516 CS16 part c for
+     disguise-house selection, including opposite one-way alliances and mutual-alliance
+     and mutual-hostility controls, and CS17 for its supplementary checks).
+     The following rules are `unmeasured`. The neutral colour of an ownerless radar object: no skirmish setup is known that
      creates a radar object without a house. A disguise with no disguise house has no
      established colour (S-0516 claim 38). The separate rejection of a
      non-owned object whose F4 pixel is outside the image while its position remains usable is
@@ -423,7 +420,9 @@ The halving belongs to the tile colour only: the other colours are used as given
     scenario G3 covers unit production, base attacks and harvester attacks; the remaining
     kinds and cross-creator suppression remain `unmeasured` there. Claims 14 and 15 and F9
     own the zoom-in duration and cadence, including without radar. The post-zoom lifetime
-    is not the total suppression duration.
+    is not the total suppression duration. S-0508 claim 8 owns the request for a
+    *garrison abandoned* event at the building's top-left cell; its scenarios G4 and G6
+    cover the creator and its announcement gate, not an isolated suppression-radius test.
     - Backing: `unmeasured` here (pointer only; S-0701 F7 carries the suppression backings
       and scenario G3, including its unmeasured cases)
     - Confidence: high that they exist
@@ -1377,9 +1376,10 @@ within skirmish scope.
   and R9 part D, not an alliance bypass.
 - The radar colour of a disguised unit whose disguise house is none remains open under
   S-0516 claim 38. With a disguise house, claim 8 specifies the viewer-dependent radar
-  rule, not the game-state or battlefield-image disguise predicates. Its owner-to-viewer
-  alliance direction requires the explicitly named correction to S-0516 claim 38 at joint
-  sign-off; mutual-alliance observations alone cannot distinguish the two directions.
+  rule, not the game-state or battlefield-image disguise predicates. S-0516 claim 38
+  agrees on the owner-to-viewer alliance direction; its CS16 part c proposes opposite
+  one-way alliances to distinguish the directions, with mutual-alliance and mutual-hostility
+  controls. That scenario remains proposed, not an oracle measurement.
 - Whether a bridge cell's colour (claim 9) is taken from image frame 0 of the bridge's sprite, as
   the evidence so far suggests, or from the cell's own image frame (scenario R6 part F).
 - The colour of an object without a house (claim 8): the original draws it in the colour of a
