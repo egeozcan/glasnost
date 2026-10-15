@@ -2,11 +2,11 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 44
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798]
 supersedes: []
@@ -569,10 +569,10 @@ Terms used by this spec:
      aircraft kinds; S-0402 claim 27a and scenario H25's site-offer variants for building
      *move*). The six listed behaviours for buildings remain `unmeasured`: a map's building
      entries carry no behaviour, and no order, trigger or other input is known that puts a
-     building into one of those six behaviours. The *none* case is `unmeasured`: a mobile actor gets a resting behaviour
-     through its placement fall-back (Terms), an infantry unit with neither a current nor a queued
-     behaviour falls back to rest before its processing (claim 11), and no setup is known that
-     leaves *none* current at any actor's processing.
+     building into one of those six behaviours. The *none* case is `measurable` for fresh
+     paratroopers (S-0522 claim 17 and scenario B44): placement queues a resting behaviour,
+     but falling prevents its start, leaving *none* current for due processing. This does
+     not change claim 11's fall-back for infantry with neither current nor queued behaviour.
    - Confidence: high
 
 5. **Behaviours that share another behaviour's processing.** For every actor kind:
@@ -909,11 +909,12 @@ Terms used by this spec:
       have S-0501 claim 31's backing: AC10 tests ordinary flight, take-off, landing and run-lock
       timing; its remaining exclusions are `unmeasured` for the reasons that claim gives. The building's
       second per-tick start is measurable at construction entry under S-0406 claim 17 and PL11.
-      Of the infantry conditions, being in the middle
-      of firing, falling and a sequence that is not interruptible are `unmeasured`: the first and
-      the last last only as long as a firing or a sequence that S-0107 and the combat specs own,
-      and no setup here can time an order inside them, and whether the input can give an order to
-      an infantry unit while it falls is not established.
+      The infantry falling condition is `measurable` with fresh paratroopers (S-0522
+      claim 17 and scenario B44): placement already queues rest, so no accepted order
+      during descent is needed to test readiness. Falling move clicks are refused, not
+      deferred until landing. Being in the middle of firing and a sequence that is not
+      interruptible remain `unmeasured`: these last only as long as a firing or sequence
+      that S-0107 and the combat specs own, and no setup here can time an order inside them.
     - Confidence: high (infantry, and the vehicle conditions on *sticky* or *rescue* and on
       moving); medium (the list of three vehicle transitions, the unload or deploy cycle, the
       vehicle-factory conditions and buildings); low (the two *unload* rules, the vehicle below the
@@ -4785,7 +4786,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   control instead starts the ordinary delayed shot. Use S-0301 F17's recording and
   falsifiers, three valid runs per case. Test skipped positions and sale/reinstallation
   separately under S-0406 PL16: position 1 alone gates, while provider eligibility follows
-  the count. An empty position 1 must bypass the gate even when position 2 is occupied. Repeat the unarmed case with a separate mark
+  the count. For a level-skip control, use PL16 part a's fresh host and install a level-2
+  upgrade whose weapons would fail the gate if it occupied position 1. Verify a nonzero
+  count, empty position 1 and occupied position 2. Expect the ordinary selected-weapon
+  path, not suppression or an upgrade-style pair. Repeat with animation delay enabled:
+  the ordinary delayed shot starts. Suppression by position 2 or an immediate pair
+  falsifies the bypass rule. Repeat the unarmed case with a separate mark
   reading immediately at guard entry and exit, before any other readiness rule can run:
   claim 32 predicts no mark set by unarmed guard itself; a clear-to-set transition inside
   that processing falsifies it. If the mark was already set at entry, that sample cannot
@@ -4932,6 +4938,30 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   corresponding clause. If entry changes phase before a due processing can be captured,
   that run cannot test processing retention; repeat the same-cell fixture rather than
   inferring a result from a serviced vehicle.
+
+- **B44 (claims 4 and 11: fresh paratrooper readiness).** Reuse S-0522 claim 17's
+  fresh human-owned payload fixture and P10, with the common skirmish setup, speed
+  index 2, 800 × 600, stock data, no external automated player or state-changing
+  add-on and no mods. First use an isolated clear landing area without an enemy.
+  Record falling, current and queued behaviours, readiness, processing timer, target
+  and destination from release until 60 ticks after landing. Include readings around
+  each due processing and start. Three valid runs, with the common bystander void rules.
+
+  Expected: release leaves current *none*, ordinary rest queued, and no target or
+  destination. While falling the unit is not ready and rest stays queued. A due
+  processing with *none* current chooses exactly 450 ticks without a delay draw or
+  changing those slots. Record random state around that processing separately from
+  release and animation draws. Landing itself issues no order and replaces neither
+  slot; the resting behaviour starts when ordinary readiness permits, resets the
+  timer, and is processed under claims 3 and 11, without waiting for the 450-tick
+  delay to expire. Do not infer this start from the first shot or require it on the
+  landing tick. Repeat with P10's eligible enemy and named type override selecting
+  *area guard*, retaining its setup and falsifiers. Scripted move clicks during descent
+  must be refused and leave no deferred move. Starting queued rest while still falling,
+  a non-450-tick *none* processing, a delay draw for it, a landing-generated replacement
+  order, or a deferred falling move falsifies the corresponding clause. Do not force
+  slots, timers or readiness. Other readiness conditions can still delay the start
+  after falling ends.
 
 ## Open questions
 
