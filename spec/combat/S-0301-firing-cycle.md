@@ -2,11 +2,11 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0060]
 supersedes: []
@@ -38,7 +38,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   the map (claim 15). It makes no shot.
 - **Rearm countdown.** A per-firer countdown in ticks. It is set by every shot the firer makes, to
   that shot's *delay* (claims 2 to 8 and 10), and it is *running* until that many ticks have passed. While it
-  runs, the firer may not fire any of its weapons, except for the sync shot of claim 13. One countdown serves all weapons of a firer.
+  runs, the firer may not fire any of its weapons, except for the sync shot of claim 13 and
+  the unchecked shots of claim 9. One countdown serves all weapons of a firer.
   S-0215's *rearm time remaining* is the number of ticks still to run.
 - **Rate-of-fire field** *R*. The imported weapon field that sets the base delay between shots, in
   ticks (Import mapping).
@@ -79,10 +80,11 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 - **Holding a target.** A firer *holds* a target with a temporal weapon while its temporal beam is
   attached to that target, and with a magnetic-beam weapon while that target is its held target.
 - **Spawner weapon, spawned aircraft.** A *spawner weapon* is a weapon with the imported spawner
-  flag. Its attempts do not launch a projectile; they send the firer's *spawned aircraft* (the
-  aircraft that the firer's type keeps and launches, whose life cycle the aircraft specs own)
-  against the target. A spawned aircraft is *alive* unless it is dead. A firer is *launching* spawned
-  aircraft while at least one of them is in the aircraft specs' launch phase.
+  flag. Its shots launch no projectile; they hand the shot's target to the spawn controller as
+  a pending target (S-0506 claim 3), rather than launching aircraft immediately. The firer's
+  *spawned aircraft* are the slot objects whose life cycle S-0506 owns. A spawned aircraft is
+  *alive* while its slot is not empty (S-0506 Terms). A firer is *launching* spawned aircraft
+  while S-0506's launching count is above 0 (S-0506 Terms and claim 10).
 - **Seeker type.** A vehicle type with the imported hunter-seeker flag (Import mapping). Only its
   effect on the firing check (claim 9, rank 9) is specified here.
 - **Playing death frames.** A vehicle whose type has death frames is *playing* them from the tick its
@@ -97,7 +99,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   (claim 10); ammunition of −1 is unlimited. A maximum of −1 disables vehicle reloading,
   but does not override an explicit initial field.
 - **Reload countdown.** A per-firer countdown in ticks, used only by vehicles (claim 11).
-- **Firing check.** The test that every attempt to fire a weapon at a target makes. Its *answer*
+- **Firing check.** The test made by attempts to fire a weapon at a target, apart from the
+  unchecked shots of claim 9. Its *answer*
   is one of the categories of claim 9: *can fire*, or a reason why not. An attempt either asks for
   the range test ("with range") or does not; a check that does not ask never answers *out of
   range* from the ordinary range test (S-0307). The attacking behaviours say which they ask (S-0310
@@ -117,8 +120,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    countdown is set to that shot's delay *D* (claims 2 to 8 and 10). The firing check then answers
    *rearming* for every weapon of the firer, in every tick with tick number below *t* + *D*, and
    no longer from tick *t* + *D* on. This holds unless a reason of ranks 1 to 4 gives its own answer (claim 9), and
-   except in the sync tick of claim 13, in which the countdown does not hold the shot back. So, apart from a
-   sync shot, *D* ticks pass from one shot to the next at the least. With *D* ≤ 0 the countdown is over at once. How often a firer attempts to fire (for a vehicle, once in
+   except in the sync tick of claim 13 and between shots of an aircraft's same-tick full burst
+   (claim 4), in which the countdown does not hold the shot back. Apart from those exceptions,
+   *D* ticks pass from one shot to the next at the least. With *D* ≤ 0 the countdown is over at once. How often a firer attempts to fire (for a vehicle, once in
    each of its turns) belongs to S-0215 and to claim 9 here. A firer that has never fired, including
    one created during play, has no running countdown: it can fire as soon as it has a target. The
    countdown is not changed by switching weapons or targets. Counting is in ticks: game speed does
@@ -214,7 +218,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    burst counter is shared by the firer's weapons, so a firer that changes weapons in mid-burst
    carries the count over and the new weapon's *B* decides. When the firer's target is cleared (it
    has none), its burst counter is set to 0; a change from one target to another keeps it.
-   - Backing: `measurable` (scenario F3)
+   An aircraft's full burst makes all *B* shots in one tick without a firing check between shots
+   (S-0501 claim 12). Each shot still advances the burst counter and sets the countdown.
+   The in-burst delays do not separate those shots.
+   - Backing: `measurable` (scenario F3; S-0501 scenarios AC7 to AC9 for aircraft)
    - Confidence: high (the counter and both in-burst delays); medium (the reset when the target is
      cleared, and the carry-over between weapons)
 
@@ -274,8 +281,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    - Backing: `measurable` (scenario F6)
    - Confidence: high
 
-9. **The firing check and its answers.** Every attempt to fire asks the firing check, with the
-   target and the weapon. Its answer is one of these categories:
+9. **The firing check and its answers.** Except for the unchecked shots named below, every
+   attempt to fire asks the firing check, with the target and the weapon. Its answer is one of
+   these categories:
 
    | Answer | Meaning |
    |---|---|
@@ -287,7 +295,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | moving | the firer may not fire while it moves (S-0310) |
    | cloaked | the weapon needs the firer uncloaked and it is not |
    | out of range | the target is beyond the weapon's range (S-0307) |
-   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing, capture and parasite tests (the feature specs). S-0214, claim 6(e), defers to these for what the check refuses |
+   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing and capture tests (their feature specs), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), or a sinking firer or target (S-0504 claim 5). S-0214, claim 6(e), defers to these for what the check refuses |
    | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power or the firer is disabled, and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
    | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy test (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
@@ -298,14 +306,14 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | Rank | Answer | Reasons at this rank |
    |---|---|---|
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
-   | 2 | busy | a vehicle that is launching spawned aircraft |
+   | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive. Their precedence among each other is not stated |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | |
    | 8 | cloaked | |
-   | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class, and the capture and parasite tests, give *illegal* |
+   | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class, the capture tests, the parasite tests (S-0614 claim 5), the target is sinking (S-0504 claim 5), or the firer is held and organic (S-0614 claim 8), give *illegal* |
    | 10 | out of range | the attempt asked for the range test and the target is beyond the weapon's range |
    | 11 | must deploy | a vehicle only (S-0310, claim 9) |
    | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). Which of the two wins when both hold is not stated; stock data has no vehicle that gives both |
@@ -332,9 +340,13 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
    **Exception (S-0215, claim 32).** The secondary shot of a building whose type has the SAM
    flag is made in the same processing as its primary shot without a firing check of its own, so
-   the table above does not apply to it. S-0215 owns that shot.
-   - Backing: `measurable` (scenarios F7, F8 and F15, which tests each named reason of ranks 1, 3,
-     4, 9 and 12); `unmeasured` for the order among ranks 1 to 4 when two of them hold at once (only
+   the table above does not apply to it. S-0215 owns that shot. An aircraft's full burst likewise
+   has no firing check between its shots (S-0501 claim 12).
+   - Backing: `measurable` (scenarios F7, F8 and F15; S-0506 scenarios R2 and R6 for spawner
+     handoff and lockouts; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
+     N6 for sinking restrictions; S-0501 scenarios AC7 to AC9 for aircraft bursts).
+     Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
+     S-0504 claim 5. `unmeasured` for the order among ranks 1 to 4 when two of them hold at once (only
      contrived data gives such a firer, for instance a spawner vehicle that is also playing death
      frames or is melee-linked, and the behaviours that respond to the check's answer (S-0215,
      S-0310) are not known to respond differently to *busy*, *illegal*, *impossible* and the early
@@ -359,8 +371,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     that a vehicle, infantry or building makes uses one round when *a* > 0; *a* = −1 is never
     changed. With *a* = 0 the firing check answers *out of ammunition*. A disc laser shot uses no
     round (and it neither advances a garrison's muzzle index, S-0313, nor restarts a vehicle's
-    reload, claim 11). Aircraft spending and servicing of ammunition belong to the aircraft specs.
-    only their starting count is owned here. The 1-tick rule depends on
+    reload, claim 11). Aircraft spend one round per attack run in which they fired, not per shot
+    (S-0501 claim 15). Servicing on pads belongs to S-0501 claims 26 to 28. Only their starting count is owned here. The 1-tick rule depends on
     a building's ammunition before the shot: a building that holds more than 1 round before a shot
     has a delay of exactly 1 tick after that shot, with no draw, whatever its weapon's burst count
     or kind (claim 2's order; `quirks.building_ammo_fast_rearm`). The shot made with its last round gets the normal delay of
@@ -565,7 +577,8 @@ nonnegative *A* is capped at *A*.
   launches and before those of its muzzle-flash animation (claim 18); two firers that fire in the same tick take their draws in update order
   (S-0203).
 - A shot made in tick *t* with delay *D* ≥ 1 allows the next shot in tick *t* + *D* at the
-  earliest (claim 1), unless that next shot is a sync shot (claim 13). So measured shot intervals are *D* ticks when the firer attempts every tick
+  earliest (claim 1), unless that next shot is a sync shot (claim 13) or another shot of the
+  aircraft's same-tick full burst (claim 4). So measured shot intervals are *D* ticks when the firer attempts every tick
   and makes no sync shot.
 - A building with a pending delayed shot reports *rearming*; under S-0215 claim 32 its attack
   behaviour is therefore processed every other tick (it keeps turning towards its target) until the
@@ -989,8 +1002,8 @@ is absent (the control).
 - Claim 9 lists only the members of *illegal* and *impossible* that matter here; the combat specs
   named there and the feature specs own the rest. The precedence among those is not stated.
 - The amount of ammunition lost to damage (claim 17) is S-0302's.
-- Aircraft ammunition spending and rearming at landing pads belong to the aircraft specs.
-  the starting ammunition is answered by claim 10 (Q-0060 question 1).
+- Aircraft ammunition spending and servicing at landing pads are specified by S-0501 claims
+  15 and 26 to 28; starting ammunition is answered by claim 10 (Q-0060 question 1).
 - The support charging of a prism-type building (claim 14) needs a structures spec.
 - The temporal weapon is believed to restart the rearm countdown when its beam lets go. That is not
   a claim of this spec; whether it holds, with its backing and confidence, belongs to the combat
