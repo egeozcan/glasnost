@@ -2,7 +2,7 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -116,17 +116,18 @@ are out of scope.
 
 2. **The body frame.** The image-frame index *f* is an integer. These situations are mutually
    exclusive: construction takes precedence over type properties. Outside construction the
-   occupiable property takes precedence over the stationary-gate body-frame rule. A moving gate
-   uses claim 4's separate displayed image instead.
+   occupiable property takes precedence over the ordinary gate body-frame rule. A gate whose current
+   behaviour is *open* and whose door is opening, closing or at rest open uses claim 4's
+   **special gate image** instead. A moving door under any other behaviour does not select that image.
 
    | Situation | Image-frame index *f* |
    |---|---|
    | Construction, not selling, not a gate | *k* |
    | Construction, selling, not a gate | *a* + *c* − *k* − 1, using the construction range (*a*, *c*); the build-up plays backwards |
    | Gate in construction | Claim 4 |
-   | Occupiable type, outside construction, not a moving gate | 2·[occupied] + [hurt] |
-   | Non-occupiable gate, outside construction, not opening or closing | 0 when not damaged, *G* + 1 when damaged; *G* is the gate-stage count |
-   | Any gate outside construction, opening or closing | Claim 4 |
+   | Occupiable type, outside construction, not using the special gate image | 2·[occupied] + [hurt] |
+   | Non-occupiable gate, outside construction, not using the special gate image | 0 when not damaged, *G* + 1 when damaged; *G* is the gate-stage count |
+   | Any gate outside construction, current behaviour *open*, door opening, closing or at rest open | Claim 4 |
    | Any other building, not damaged | *k* |
    | Any other building, damaged, *idle* state | *k* + 1 |
    | Any other building, damaged, other state | *k* + the maximum of (*a* + *c*) over *idle*, *active*, *aux-1* and *aux-2* |
@@ -163,16 +164,23 @@ are out of scope.
    runs the opposite way to other buildings. During build-up it shows *f = a + c − k − 1*, so its
    build-up plays from the last build-up frame to the first. While it is being sold it also shows
    *f = a + c − k − 1*, playing the selling build-up backwards like other buildings, a drawing-only
-   departure that does not alter the stage, range, delay or sale completion tick. While the gate is opening or
-   closing, the image frame drawn from the body sprite is *p* when not damaged and *p* + *G* + 1 when
-   damaged, where *p* is the gate's door position clamped to 0 … *G* − 1. The clamp of claim 3 does
-   not apply then, and no bib, unloading or under-door image is drawn. The door position and its
-   timing belong to the gate spec.
-   - Backing: `measurable` (B13 for build-up reversal and moving-gate frames,
-     selling reversal is a departure tested against this spec, not the original).
+   departure that does not alter the stage, range, delay or sale completion tick.
+   Outside construction, the special gate image is used only while the current behaviour is
+   *open* and the door is opening, closing or at rest open. Its image frame from the body sprite
+   is *p* when not damaged and *p* + *G* + 1 when damaged, where *p* is the integer door position
+   clamped to 0 … *G* − 1. At rest open, *p* = *G* − 1, so the image frame remains *G* − 1
+   undamaged or 2*G* damaged. Progress during motion, its floating-point rounding, reversal and
+   zero-time images are S-0215 claim 35 d1–d3. The clamp of claim 3 does not apply to the special
+   gate image, and no bib, unloading or under-door image is drawn with it. When the door is at
+   rest closed, or *open* is not current even though the door is moving or at rest open, claim 2's
+   ordinary body-frame rules apply. Door timing and passage state belong to S-0215 claim 35.
+   - Backing: `measurable` (B13 for build-up reversal, moving and rest-open gate frames,
+     S-0215 claim 35 d1–d3 and its scenario B28 h–j for progress, reversal and zero-time images).
+     Selling reversal is a departure tested against this spec, not the original.
      Suppression of bib/unloading/under-door images and bypass of the body clamp are
      `unmeasured` here: B13 supplies no gate with those extra images or a body half shorter
-     than its gate range.
+     than its gate range. The ordinary-image fallback under another behaviour while the door
+     still moves or stands open is `unmeasured`: no fixture here establishes that combination.
    - Confidence: medium
 
 5. **Build-up timing.** Let *n* be the number of build-up frames: ⌊N_b / 2⌋ for a build-up sprite of
@@ -267,12 +275,12 @@ are out of scope.
      last-request-wins rule)
 
 7. **Bib.** When the type has a bib sprite, the bib is drawn whenever the building is not in the
-   *construction* state, so never during build-up or selling. It is also not drawn while a gate is
-   opening or closing (claim 4). It uses the same image-frame index *f* as the body (so image frame 1 when
+   *construction* state, so never during build-up or selling. It is also not drawn with the
+   special gate image (claim 4), including at rest open while *open* is current. It uses the same image-frame index *f* as the body (so image frame 1 when
    damaged, with default art), without the clamp of claim 3. Its depth bias is in S-0102.
    - Backing: `measurable` (B4 for ordinary bib visibility and default damaged frame).
      The unclamped index is `unmeasured`: B4 never requests an index above the body clamp.
-     Moving-gate suppression shares claim 4's limitation.
+     Special-gate-image suppression shares claim 4's limitation.
    - Confidence: high
 
 8. **Anchor of the image.** The body, build-up, bib and shadow frames are drawn centred on the
@@ -580,7 +588,7 @@ new-theater flag (claim 5).
 
 **F2 Body frame** (integer): see claim 2. With at least one body frame, the body frame drawn is
 min(f, ⌊N/2⌋ − 1), and the shadow frame is that body frame + ⌊N/2⌋. With no body frames,
-no body or shadow is drawn. Any image-frame index below 0 or ≥ N draws nothing. Moving gates are exempt from the body clamp (claim 4).
+no body or shadow is drawn. Any image-frame index below 0 or ≥ N draws nothing. The special gate image is exempt from the body clamp (claim 4).
 The bib and door image are also unclamped (claims 7 and 23).
 
 **F3 Damaged tests.** h = health / strength, where health and strength are integers and the
@@ -639,7 +647,7 @@ infantry. For sizes of 0 or more this equals the sum of the sizes each truncated
 ## State and ordering
 
 **Body frame by situation** (claim 2). The occupiable, gate and other rows below apply only
-outside construction; moving gates use claim 4, not this table:
+outside construction; gates using the special gate image use claim 4, not this table:
 
 | Situation | Body frame *f* |
 |---|---|
@@ -647,7 +655,7 @@ outside construction; moving gates use claim 4, not this table:
 | construction state, selling (gate: claim 4) | *a* + *c* − *k* − 1 (build-up sprite) |
 | occupiable, not hurt | 0 empty, 2 occupied |
 | occupiable, hurt | 1 empty, 3 occupied |
-| gate, any state but *construction*, not opening or closing | 0, or *G* + 1 damaged |
+| gate, any state but *construction*, not using the special gate image | 0, or *G* + 1 damaged |
 | other, not damaged | *k* |
 | other, damaged, *idle* state | *k* + 1 |
 | other, damaged, other states | *k* + max(*a* + *c*) over *idle*, *active*, *aux-1*, *aux-2* |
@@ -1075,18 +1083,27 @@ expected numbers are computed from the type's own fields at measurement time.
     cases. No shadow for the third type.
   - Falsified if: any recorded body or shadow index differs from the expected indices,
     either damaged sprite lacks its corresponding shadow, or the shadow-suppressed type has one.
-- **B13 (claim 4).** Selling direction is a departure tested against this spec on our engine,
-  not against the original; build-up direction and moving-gate frames still use the original.
-  - Setup: a stock gate.
-  - Procedure: build it, open and close it, damage it past the yellow ratio, open it again, sell it.
-  - Observable: body frame index per tick and bib visibility.
-  - Runs: one.
+- **B13 (claims 2, 4).** Selling direction is a departure tested against this spec on our engine,
+  not against the original; build-up direction and special gate images still use the original.
+  - Setup: a stock gate and a friendly ground unit, with the common setup's settings.
+  - Procedure: build the gate, send the unit through it and let it close. Repeat after damaging
+    it past the yellow ratio. In each health condition, also hold the unit on a foundation cell
+    after the door reaches rest open, then move it clear. Finally sell the gate.
+  - Observable: body image-frame index per tick, current behaviour, door state, movement-start
+    tick and bib visibility. Use the recorded imported gate-stage count for *G*.
+  - Runs: one per health condition, plus one sale.
   - Expected: the build-up plays from its last build-up frame to its first; on our engine the
     sale also plays backwards, with frame *a + c − k − 1* and unchanged sale completion timing
-    under S-0408 claim 17. The body frames while the gate opens or closes run 0 … *G* − 1 undamaged and *G* + 1 … 2*G*
-    damaged, and no bib shows while the gate moves.
-  - Falsified if: either construction sequence has the wrong direction, any moving-gate index
-    differs from claim 4 for the recorded gate position, or a bib shows during gate movement.
+    under S-0408 claim 17. While *open* is current, opening and closing images follow the
+    positions of S-0215 claim 35 d1, plus *G* + 1 when damaged. At rest open they remain
+    *G* − 1 undamaged and 2*G* damaged, including throughout the hold. At rest closed the
+    ordinary non-occupiable gate frame is 0 undamaged or *G* + 1 damaged. No bib is drawn with
+    a special gate image. Reversal and zero-time image checks use S-0215 claim 35 d2–d3 and
+    scenario B28 i–j, with that scenario's setup, observables and falsification criteria.
+  - Falsified if: either construction sequence has the wrong direction, any special gate image
+    differs from claim 4 for the recorded behaviour and door state, the rest-open image returns
+    to the closed image, the rest-closed image differs from claim 2, or a bib shows with the
+    special gate image.
 - **B14 (claim 10).**
   - Setup: test data. A test building with one slot animation whose displacement is (0, 0), and a
     copy with displacement (10, −6).
