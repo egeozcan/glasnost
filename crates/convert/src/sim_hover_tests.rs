@@ -107,7 +107,10 @@ fn hover_fields_layer() {
 #[test]
 fn zero_bob_period_warns() {
     let (_, w) = sim(&base("HoverBob=0.001\n", "X=1\n"));
-    assert!(warned(&w, "[General] HoverBob 0.001 gives a bob period of 0"), "{w:?}");
+    assert!(
+        warned(&w, "[General] HoverBob 0.001 gives a bob period of 0"),
+        "{w:?}"
+    );
     let (_, w) = sim(&base("HoverBob=0.002\n", "X=1\n"));
     assert!(!warned(&w, "HoverBob"), "{w:?}");
 }
@@ -124,7 +127,10 @@ fn hover_coverage() {
             .unwrap_or_else(|| panic!("{cat} {key}"))
     };
     use crate::coverage::Outcome::Field;
-    assert_eq!(row("global:General", "HoverHeight"), (Field, "S-0503".into()));
+    assert_eq!(
+        row("global:General", "HoverHeight"),
+        (Field, "S-0503".into())
+    );
     assert_eq!(row("global:General", "HoverBob"), (Field, "S-0503".into()));
     assert_eq!(
         row("global:AudioVisual", "Gravity"),

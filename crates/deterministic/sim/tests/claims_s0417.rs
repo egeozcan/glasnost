@@ -910,7 +910,11 @@ fn hover_exit_across_own_foundation_reports_clear() {
         }
     }
     assert!(sent, "sent to (x0 + 4, y0 + 1)");
-    assert_eq!(report_at, Some(dest), "the report at completion in K's cell");
+    assert_eq!(
+        report_at,
+        Some(dest),
+        "the report at completion in K's cell"
+    );
     assert!(!release::tethered(&w, h));
     let o = w.obj(k).unwrap();
     assert_eq!(o.beh.current, Some(Behaviour::Guard), "the factory closes");
@@ -930,7 +934,11 @@ fn hover_exit_across_own_foundation_reports_clear() {
     }
     assert!(second, "the second hover reports clear");
     let o = w.obj(k).unwrap();
-    assert_eq!(o.beh.current, Some(Behaviour::Guard), "the factory closes again");
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Guard),
+        "the factory closes again"
+    );
     assert_eq!(o.beh.gate.door, Door::Closed);
 }
 
@@ -1017,9 +1025,16 @@ fn hover_exit_cell_with_building_adopts_substitute() {
         }
     }
     let s = substitute.expect("the substitute replaces the destination");
-    assert!(!foot.contains(&s), "the substitute is not a cell of the other building");
+    assert!(
+        !foot.contains(&s),
+        "the substitute is not a cell of the other building"
+    );
     assert!(reported, "the hover reports clear");
     assert!(rested, "the move ends and the factory closes");
-    assert_eq!(w.obj(h).unwrap().pos.cell(), s, "at rest in the substitute cell");
+    assert_eq!(
+        w.obj(h).unwrap().pos.cell(),
+        s,
+        "at rest in the substitute cell"
+    );
     assert!(!release::tethered(&w, h));
 }
