@@ -495,6 +495,128 @@ fn claim38_protected_ground_object_kills_on_arrival() {
     assert!(dead(&w, j));
 }
 
+// --- Claims 48 and 49 -----------------------------------------------------------
+
+/// A legal destination cell whose neighbours at (1, 0) and (0, 1) are off the map: the
+/// destination cells that the source block's cells 1 and 7 map to do not exist (F1).
+fn corner_destination(w: &World) -> CellXY {
+    w.cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .find(|&c| {
+            w.cells.cell(CellXY::new(c.x + 1, c.y)).is_none()
+                && w.cells.cell(CellXY::new(c.x, c.y + 1)).is_none()
+        })
+        .expect("the map has a corner")
+}
+
+#[test]
+fn claim49_an_off_map_destination_is_no_early_refusal() {
+    // spec: S-0513 claim 49 (source object whose corresponding destination cell is off the map: claim 34's parasite release and claim 35's organic death still occur, and an otherwise eligible survivor joins the warp rather than being left in place; its eventual position and fate are unmeasured, Q-0850)
+    let mut w = game(&rules());
+    chrono(&mut w);
+    let corner = corner_destination(&w);
+    let cart = spawn(&mut w, "CART", BETA, 1, 0); // block cell 1
+    let blob = spawn(&mut w, "BLOB", BETA, 0, 1); // block cell 7 (organic)
+    let kills = w.houses[0].combat.kills;
+    let tl = warp(&mut w, at(0, 0), corner);
+    assert!(
+        dead(&w, blob),
+        "the organic hit is not protected by the missing cell"
+    );
+    assert_eq!(
+        w.houses[0].combat.kills,
+        kills + 1,
+        "credited to the launcher"
+    );
+    assert_eq!(stage(&w, cart), Some(Stage::Pending), "it joined the warp");
+    assert!(
+        w.notes.iter().any(|n| n.starts_with("Q-0850")),
+        "the interim is noted"
+    );
+    // The run goes on through arrival and the end of the hold without a refusal or a panic;
+    // where it lands and whether it lives are unmeasured and are not asserted.
+    run_through(&mut w, tl + 80);
+    assert_eq!(stage(&w, cart), None);
+}
+
+#[test]
+fn claim49_a_failed_search_replaces_the_landing_point_and_the_retry_sets_the_delay() {
+    // spec: S-0513 claim 49 (blocked landing, nearby search finds no cell: the failed result replaces the landing point without a success test, it does not keep the old point; the unsuccessful check stays in the retry stage; a retry sets the held delay to the teleport delay) and claim 40; the replacement point itself is unmeasured (Q-0850 interim: the stand-in cell)
+    let mut w = game(&rules());
+    chrono(&mut w);
+    let a = spawn(&mut w, "CART", ALPHA, 0, 0);
+    let blocked = at(5, 5);
+    spawn(&mut w, "TOWER", BETA, 5, 5);
+    let tl = warp(&mut w, at(0, 0), blocked);
+    let before = w.obj(a).unwrap().sw.warp.clone().unwrap().landing;
+    assert_eq!(before.cell(), blocked);
+    // Every cell becomes water in the last leaving update: nothing is left for a search of the
+    // ground reach region of the member's cell to find.
+    run_through(&mut w, tl + 61);
+    let all: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+    water_at(&mut w, &all);
+    run_through(&mut w, tl + 62);
+    let m = w.obj(a).unwrap().sw.warp.clone().unwrap();
+    assert_eq!(
+        m.stage,
+        Stage::Blocked,
+        "the check failed and stays in the retry stage"
+    );
+    assert!(
+        w.notes.iter().any(|n| n.starts_with("Q-0850")),
+        "the search found nothing (interim noted)"
+    );
+    assert_ne!(m.landing, before, "the old point is not kept");
+    assert!(m.redirected);
+    assert_eq!(
+        w.obj(a).unwrap().sw.held_delay,
+        DELAY,
+        "the retry set the held delay"
+    );
+    // Later checks use the replaced point, not the blocked one.
+    run_through(&mut w, tl + 64);
+    let m2 = w.obj(a).unwrap().sw.warp.clone();
+    assert!(m2.is_none_or(|m| m.landing.cell() != blocked));
+}
+
+#[test]
+fn claim48_the_hold_end_test_precedes_the_rest_of_the_turn() {
+    // spec: S-0513 claim 48 and S-0203 claim 4 (a member beginning its turn in the arrival hold: the hold-expiry test precedes ordinary healing, behaviour, movement, firing and turret work of that turn). Observed through the movement, which phasing in excludes
+    let mut w = game(&rules());
+    chrono(&mut w);
+    let a = spawn(&mut w, "CART", ALPHA, 0, 0);
+    let tl = warp(&mut w, at(0, 0), at(5, 5));
+    run_through(&mut w, tl + 64); // the arrival effects: the hold starts (held delay 0: it ends next tick)
+    assert!(teleport::phasing_in(&w, a));
+    let far = at(5, -5);
+    w.obj_mut(a).unwrap().dest = Some(Target::Cell(far));
+    step(&mut w); // tick t_A + 1: the hold ends, then the ordinary turn runs
+    assert!(!teleport::phasing_in(&w, a), "the hold ended in this turn");
+    let o = w.obj(a).unwrap();
+    assert!(
+        o.drive.as_ref().is_some_and(|d| d.track.is_some()),
+        "the same turn's locomotion began a track"
+    );
+}
+
+#[test]
+fn claim48_a_member_still_leaving_takes_no_other_part_of_its_turn() {
+    // spec: S-0513 claim 48 and S-0203 claim 4 (a member still leaving after its warp update drops target and destination and does not drive: a destination given during the leaving stage is not driven)
+    let mut w = game(&rules());
+    chrono(&mut w);
+    let a = spawn(&mut w, "CART", ALPHA, 0, 0);
+    let tl = warp(&mut w, at(0, 0), at(5, 5));
+    run_through(&mut w, tl + 2);
+    assert!(w.obj(a).unwrap().sw.warp.as_ref().unwrap().leaving());
+    let start = w.obj(a).unwrap().pos;
+    w.obj_mut(a).unwrap().dest = Some(Target::Cell(at(-5, 5)));
+    run_through(&mut w, tl + 40);
+    assert_eq!(w.obj(a).unwrap().pos, start, "it stayed where it was");
+    assert!(w.obj(a).unwrap().drive.as_ref().unwrap().track.is_none());
+}
+
 // --- Determinism ---------------------------------------------------------------------
 
 #[test]

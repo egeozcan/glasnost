@@ -79,6 +79,14 @@ fn free(w: &World, c: CellXY) -> bool {
 /// building `giver` placed for it beside the yard, and its superweapons
 /// ready.
 fn ready(giver: &str) -> (Game, CellXY) {
+    ready_until(giver, None)
+}
+
+/// Like [`ready`], but with `until` named the loop ends in the step after
+/// which that type's record is ready, before the house's own brain has
+/// thought again (the brain fires a ready record at once, and its order is
+/// pending in the world: a fixed wait of 400 ticks can end after that).
+fn ready_until(giver: &str, until: Option<&str>) -> (Game, CellXY) {
     let mut g = Game::new(
         rules(),
         &fixture::map(),
@@ -114,8 +122,23 @@ fn ready(giver: &str) -> (Game, CellXY) {
         .expect("a free cell for the giving building");
     testkit::spawn(&mut g.world, Kind::Building, giver, 0, at, 0);
     // Granted at the next recheck; ready after the charge time.
-    for _ in 0..400 {
+    let index = until.map(|n| {
+        g.world
+            .rules()
+            .superweapons
+            .types
+            .iter()
+            .position(|t| t.name == n)
+            .expect("the type exists") as u32
+    });
+    for _ in 0..if index.is_some() { 1000 } else { 400 } {
         g.step();
+        if let Some(i) = index
+            && glasnost_sim::superweapons::charge::get(&g.world, HouseId(0), i)
+                .is_some_and(|r| r.ready)
+        {
+            return (g, yard);
+        }
     }
     (g, yard)
 }
@@ -243,7 +266,7 @@ fn shields_buildings_with_an_enemy_at_them() {
 // A ready spy plane goes at the enemy base.
 #[test]
 fn sends_the_spy_plane_at_the_enemy() {
-    let (g, _) = ready("SPYB");
+    let (g, _) = ready_until("SPYB", Some("SPYW"));
     let mut w = g.world.clone();
     glasnost_sim::tick::step(&mut w);
     let cells = fires(&think(&w), "SPYW", &w);

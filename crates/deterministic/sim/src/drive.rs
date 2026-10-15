@@ -1601,13 +1601,13 @@ fn arrive_or_rest(w: &mut World, id: ObjectId) {
 fn goal_cleanup(w: &mut World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let Some(dest) = o.dest else { return false };
-    let building =
-        matches!(dest, Target::Object(t) if w.obj(t).is_some_and(|x| x.kind == Kind::Building));
+    // spec: S-0207 claim 26 (Q-0830: a destination naming an object, a building, vehicle, infantry unit or aircraft, moving or stationary, is not a cell destination)
+    let named = matches!(dest, Target::Object(t) if w.obj(t).is_some());
     let goal_c = path::goal_cell(w, id);
     let here = o.pos.cell();
-    // spec: S-0207 claim 26 (an order-level cell destination, the vehicle occupying that cell: removed; a building destination never, by cell equality alone). Q-0830 (interim: a destination naming a unit is taken as a cell destination, its heading point's cell)
-    let cell_goal = !building && (goal_c.is_none() || goal_c == Some(here));
-    // spec: S-0207 claim 26 (at rest in guard, the locomotor destination point present and equal to the vehicle's world point in x, y and z: the same removal, a building destination included)
+    // spec: S-0207 claim 26 (an order-level cell destination, the vehicle occupying that cell: removed; a destination naming an object never, by cell equality alone)
+    let cell_goal = !named && (goal_c.is_none() || goal_c == Some(here));
+    // spec: S-0207 claim 26 (at rest in guard, the locomotor destination point present and equal to the vehicle's world point in x, y and z: the same removal, a destination naming a building, vehicle, infantry unit or aircraft included, compared with the retained locomotor point and not with the named unit's present position)
     let guard_goal = o.beh.current == Some(Behaviour::Guard) && goal(w, id) == Some(o.pos);
     if !cell_goal && !guard_goal {
         return false;

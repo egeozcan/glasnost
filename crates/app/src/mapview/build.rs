@@ -227,7 +227,7 @@ mod notes {
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
-    pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
+    pub const VOXEL_SHADOW_POINT: &str = "a vehicle's voxel shadow is placed at the body's point: the vehicle shadow point has no spec (S-0105 claim 40 settles aircraft only)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
     /// The importer warning of S-0102 claim 33: the shared building depth
     /// image file and why it is unavailable.
@@ -3661,7 +3661,6 @@ impl Builder<'_> {
                 Group::Shadows,
                 object,
             ));
-            self.note(notes::VOXEL_SHADOW_POINT);
         }
         let mut placed = Vec::new();
         // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)

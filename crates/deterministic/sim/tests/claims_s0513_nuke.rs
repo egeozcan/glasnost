@@ -4,7 +4,7 @@
 mod sw_common;
 
 use glasnost_sim::combat::state::Projectile;
-use glasnost_sim::superweapons::{self, SwEvent, nuke};
+use glasnost_sim::superweapons::{self, SwEvent, charge, nuke};
 use glasnost_sim::world::{ObjectId, World};
 use sw_common::*;
 
@@ -82,6 +82,37 @@ fn claim47_busy_silo_interval_is_eight_ticks() {
             step(&mut w);
         }
         nuke::silo_launch(&mut w, ALPHA, STRIKE, at(3, 3), Some(silo));
+        for _ in 0..3 {
+            step(&mut w);
+        }
+        assert_eq!(missiles(&w, "Lift").len(), expect, "gap {gap}");
+    }
+}
+
+#[test]
+fn s0512_claim8_a_busy_silo_spends_readiness_without_another_missile_until_eight_ticks_later() {
+    // spec: S-0512 claim 8 (through S-0513 claim 47: an order carried out while the chosen silo is busy still consumes readiness and plays the sounds but starts no new sequence; once the busy interval of 8 ticks is over a fresh sequence starts)
+    for (gap, expect) in [(2, 1), (4, 1), (9, 2), (12, 2)] {
+        let (mut w, _silo) = ready_silo();
+        fire_now(&mut w, ALPHA, STRIKE, at(0, 0));
+        let accepted = w.tick - 1;
+        assert!(!rec(&w, ALPHA, STRIKE).ready, "readiness spent");
+        charge::set_charge(&mut w, ALPHA, STRIKE, 100);
+        ready_tick(&mut w, ALPHA, STRIKE, 10);
+        while w.tick < accepted + gap {
+            step(&mut w);
+        }
+        w.effects.clear();
+        assert!(
+            rec(&w, ALPHA, STRIKE).ready,
+            "ready again for the second order"
+        );
+        fire_now(&mut w, ALPHA, STRIKE, at(3, 3));
+        assert!(!rec(&w, ALPHA, STRIKE).ready, "gap {gap}: readiness spent");
+        assert!(
+            events(&w).iter().any(|e| e.0 == SwEvent::Siren),
+            "gap {gap}: sounds"
+        );
         for _ in 0..3 {
             step(&mut w);
         }

@@ -3,8 +3,10 @@
 //!
 //! A member's warp runs in its own updates (S-0513 State and ordering: "a
 //! warp member's later draws come in its own updates"): [`turn`] is called
-//! at the start of the member's living turn. Until its arrival effects the
-//! warp update is the member's whole turn (Q-0738 interim).
+//! at the start of the member's living turn. A member still leaving takes no
+//! other part of its turn (S-0513 claim 48, confirmed); for the other stages
+//! before its arrival hold, whether it takes the rest of its turn is
+//! unmeasured, and the warp update is its whole turn there (Q-0851 interim).
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -15,6 +17,11 @@ use super::SwEvent;
 use crate::combat::effects::Sound;
 use crate::rules::{Kind, Locomotor};
 use crate::world::{HouseId, Layer, ObjectId, Pos, World};
+
+/// The blank stand-in cell that the nearby-cell search's callers use when
+/// it finds nothing (S-0212 claim 25; S-0507 claims 8 and 10).
+// spec: S-0212 claim 25 (the unchecked no-result placeholder at map cell (0, 0)); Q-0850 interim for the warp: S-0513 claim 49 leaves the exact replacement point open
+const STAND_IN: CellXY = CellXY::new(0, 0);
 
 /// The leaving stage's fixed wait (Constants).
 // spec: S-0513 Constants (warp leaving wait 60 elapsed ticks; claim 39: an engine constant, not the rules' teleport delay)
@@ -228,12 +235,12 @@ fn examine(w: &mut World, h: HouseId, id: ObjectId, to: Option<CellXY>) {
     {
         return;
     }
-    let Some(to) = to else {
-        // Q-0741 interim: destination cell i off the map leaves the object in place.
-        w.note("Q-0741: a warp object whose destination cell is off the map is left in place (interim)");
-        return;
-    };
-    join(w, h, id, to);
+    // spec: S-0513 claim 49 (an off-map destination cell is no early rejection: the object joins the warp after the parasite and organic tests above)
+    if to.is_none() {
+        w.note("Q-0850: a warp object whose destination cell is off the map lands at the stand-in cell (interim; its fate is unmeasured)");
+    }
+    // Q-0850 interim: the point conversion of an off-map destination cell is unmeasured (S-0513 claim 49); the stand-in cell of S-0212 claim 25 stands for it
+    join(w, h, id, to.unwrap_or(STAND_IN));
 }
 
 /// The object joins the warp group (claim 34).
@@ -267,7 +274,7 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY) {
     let landing = landing_in(w, o.kind, o.pos, to);
     if let Some(ob) = w.obj_mut(id) {
         ob.contact = None;
-        // spec: S-0513 claim 48 (a member in its leaving stage drops its target and destination, and its former driving does not continue; Q-0738 interim, still open: the warp update replaces its turn)
+        // spec: S-0513 claim 48 (a member in its leaving stage drops its target and destination, and its former driving does not continue; whether the path and the queued destinations are cleared at launch is unmeasured, Q-0851 interim: they are)
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         ob.dest = None;
@@ -289,7 +296,12 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY) {
 }
 
 /// A member's warp update at the start of its living turn (T2). Returns
-/// whether the update was its whole turn (Q-0738 interim).
+/// whether the update was its whole turn: true in every stage before the
+/// arrival hold. For a member still leaving that is S-0513 claim 48's
+/// confirmed exclusion; for the pending, departure, retry, placement and
+/// arrival-effects turns it is the Q-0851 interim, those turns being
+/// unmeasured. In the arrival hold the hold-end test comes first and the
+/// ordinary turn follows (claim 48, confirmed ordering).
 pub fn turn(w: &mut World, id: ObjectId) -> bool {
     let Some(m) = member(w, id) else {
         return false;
@@ -557,14 +569,14 @@ fn redirect(w: &mut World, id: ObjectId, m: Member) {
             landing_in(w, o.kind, m.landing, f)
         }
         None => {
-            // Q-0741 interim: no cell found keeps the landing point; the check is made again next update.
-            w.note("Q-0741: a blocked warp member with no nearby cell keeps its landing point (interim)");
-            m.landing
+            // spec: S-0513 claim 49 (a failed search replaces the landing point without a success test and does not keep the old point; later checks use the replaced point). Q-0850 interim: the exact replacement point is unmeasured, the stand-in cell of S-0212 claim 25 stands for it
+            w.note("Q-0850: a blocked warp member with no nearby cell lands at the stand-in cell (interim)");
+            landing_in(w, o.kind, m.landing, STAND_IN)
         }
     };
     let delay = r.superweapons.chrono_delay;
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0513 claim 40 (a landing that had to be redirected sets the held delay to the rules' teleport delay; nothing resets it)
+        // spec: S-0513 claim 40 (a landing that had to be redirected sets the held delay to the rules' teleport delay; nothing resets it) and claim 49 (a retry sets it also when the check afterwards passes, and also when the search failed)
         ob.sw.held_delay = delay;
     }
     // spec: S-0513 T2 (check failed: the check again in each later update)

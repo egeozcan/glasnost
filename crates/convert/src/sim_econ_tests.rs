@@ -324,6 +324,55 @@ fn superweapon_kind_link_and_action_words_layer() {
     assert!(w.iter().any(|m| m.contains("S-0512 claim 24")));
 }
 
+// spec: S-0513 claim 43 and Import mapping (the spy plane count compares the lengths of the compact creating infantry-reference list and the independently parsed count list: empty items and no-type names are omitted, an unknown name or a vehicle's name counts as an entry; S-0522 claim 2)
+#[test]
+fn spy_plane_count_lists_are_the_resolved_ones() {
+    let base = "[VehicleTypes]\n0=Truck\n[Truck]\nStrength=1\n\
+[General]\nAllyParaDropInf=Fresh,,Truck,none,<none>,Other\nAllyParaDropNum=1,2,3\n";
+    let (s, _) = import_with_map(base, "");
+    let g = &s.general.superweapons;
+    let inf = g.ally_para_drop_inf.clone().unwrap_or_default();
+    assert_eq!(inf.len(), 3, "resolved entries, not text tokens: {inf:?}");
+    assert_eq!(g.ally_para_drop_num.as_ref().map(Vec::len), Some(3));
+}
+
+// spec: S-0103 Import mapping and claim 8 (row 3), S-0522 claim 13 (`Parachute` is a creating animation reference: an unlisted name creates a type; `none` and `<none>` clear it; an omitted or empty layered value retains the held type; initially none, which is allowed)
+#[test]
+fn parachute_reference_layers_and_absence() {
+    let parachute = |base: &str, mode: &str| {
+        let inputs = Inputs {
+            base: Some(file("rules.ini", base)),
+            mode: Some(file("mode.ini", mode)),
+            map: Some(file("test.map", "")),
+            art: Some(file("art.ini", "")),
+            ..Inputs::default()
+        };
+        let import = convert(&inputs, &ImportOptions::default());
+        let warned = import
+            .warnings
+            .iter()
+            .any(|w| w.message.to_ascii_lowercase().contains("parachute"));
+        let r = glasnost_rules::resolve_ruleset(Some((import.tree, import.provenance)), &[])
+            .unwrap_or_else(|e| panic!("{e}"));
+        (r.ruleset.sim.general.superweapons.parachute, warned)
+    };
+    // An unlisted name creates an animation type and is the held type.
+    assert_eq!(
+        parachute("[General]\nParachute=Fresh\n", "").0.as_deref(),
+        Some("Fresh")
+    );
+    // Initially none, with no warning for the absence.
+    assert_eq!(parachute("[General]\n", ""), (None, false));
+    // An empty layered value retains the held type; `none` and `<none>` clear it.
+    let held = "[General]\nParachute=Fresh\n";
+    assert_eq!(
+        parachute(held, "[General]\nParachute=\n").0.as_deref(),
+        Some("Fresh")
+    );
+    assert_eq!(parachute(held, "[General]\nParachute=none\n").0, None);
+    assert_eq!(parachute(held, "[General]\nParachute=<none>\n").0, None);
+}
+
 #[test]
 fn one_text() {
     assert!(is_one_text("10e-1"));

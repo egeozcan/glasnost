@@ -1434,6 +1434,13 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         let items = &entries[0].items;
         let shadow = items.iter().find(|i| i.paint == Paint::Shadow);
         let body = items.iter().find(|i| i.paint != Paint::Shadow);
+        if let (Some(s), Some(b)) = (shadow, body) {
+            // spec: S-0102 claim 18 (the shadow is a depth reader with the body's own bias and the upright profile, drawn in the object's own drawing before its body, so an aircraft's body is never darkened by its own shadow)
+            assert_eq!(s.test, DepthTest::Reader);
+            assert_eq!(s.depth, b.depth, "the body's bias and profile");
+            let at = |p: Paint| items.iter().position(|i| i.paint == p);
+            assert!(at(Paint::Shadow) < items.iter().position(|i| i.paint != Paint::Shadow));
+        }
         (shadow.map(|s| s.y), body.map(|b| b.y))
     };
     let (shadow, body) = offset(0);
