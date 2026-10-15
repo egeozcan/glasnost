@@ -814,11 +814,18 @@ fn cleanup(w: &mut World) {
         .retain(|l| l.item.is_some() || !l.queue.is_empty());
 }
 
-/// A free dock (S-0404 Terms): aircraft docking belongs to the aircraft
-/// specs (M6). Until then every aircraft factory building has one.
+/// A free dock (S-0404 Terms): at least one of the building's contact
+/// places is empty, or no aircraft is docked with it at all. The places
+/// held are the aircraft in contact with it, by release or by pad
+/// reservation (S-0501 claim 23, free-dock accounting).
 pub fn dock_free(w: &World, b: ObjectId) -> bool {
-    let _ = (w, b);
-    true
+    let held = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Aircraft && o.contact == Some(b))
+        .count() as u32;
+    // spec: S-0404 Terms (a free dock: a docking place empty, or no aircraft docked with it at all)
+    held == 0 || held < super::release::contact_places(w, b)
 }
 
 fn switched_on(b: &Object) -> bool {

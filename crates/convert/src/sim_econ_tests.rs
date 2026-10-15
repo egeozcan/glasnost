@@ -533,3 +533,36 @@ fn economy_integer_list_items() {
         );
     }
 }
+
+// spec: S-0501 Import mapping (Landable, AirportBound, Fighter, FlyBy and FlyBack booleans, FlightLevel an integer for aircraft types; UnitReload a boolean for building types; [General] FlightLevel, ReloadRate, CurleyShuffle and AttackingAircraftSightRange; [AudioVisual] SpyPlaneCameraFrames)
+#[test]
+fn aircraft_flight_and_pad_keys() {
+    let base = "[AircraftTypes]\n0=KITE\n1=GULL\n[KITE]\nLandable=yes\nAirportBound=yes\n\
+Fighter=yes\nFlyBy=no\nFlyBack=yes\nFlightLevel=333\n[GULL]\nStrength=7\n\
+[BuildingTypes]\n0=NEST\n[NEST]\nHelipad=yes\nUnitReload=yes\nNumberOfDocks=3\n\
+[General]\nFlightLevel=444\nReloadRate=0.07\nCurleyShuffle=yes\nAttackingAircraftSightRange=3\n\
+[AudioVisual]\nSpyPlaneCameraFrames=12\n";
+    let (s, _) = import(base, "");
+    let k = &s.aircraft["KITE"].econ;
+    assert_eq!(k.landable, Some(true));
+    assert_eq!(k.airport_bound, Some(true));
+    assert_eq!(k.fighter, Some(true));
+    assert_eq!(k.fly_by, Some(false));
+    assert_eq!(k.fly_back, Some(true));
+    assert_eq!(k.flight_level, Some(333));
+    // spec: S-0501 Import mapping (an absent FlightLevel stays unset: the game-wide value)
+    let g = &s.aircraft["GULL"].econ;
+    assert_eq!(
+        (g.landable, g.fighter, g.fly_by, g.fly_back, g.flight_level),
+        (None, None, None, None, None)
+    );
+    let n = &s.buildings["NEST"].econ;
+    assert_eq!(n.unit_reload, Some(true));
+    assert_eq!(n.number_of_docks, Some(3));
+    let e = &s.general.economy;
+    assert_eq!(e.flight_level, Some(444));
+    assert_eq!(e.reload_rate.as_ref().map(|d| d.0.as_str()), Some("7e-2"));
+    assert_eq!(e.curley_shuffle, Some(true));
+    assert_eq!(e.attacking_aircraft_sight_range, Some(3));
+    assert_eq!(e.spy_plane_camera_frames, Some(12));
+}

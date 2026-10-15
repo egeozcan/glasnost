@@ -214,6 +214,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         }
         _ => None,
     };
+    let flyer = crate::air::is_aircraft(w, firer);
     let Some(ob) = w.obj_mut(firer) else {
         return false;
     };
@@ -225,7 +226,8 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     // spec: S-0206 claim 9 (the tick of the last shot of any weapon)
     ob.last_fired = t;
     // spec: S-0301 claim 10 (a shot uses one round when a > 0; a disc laser shot uses none)
-    if ob.combat.ammo > 0 && !wr.disk_laser {
+    // spec: S-0501 claim 15 (a flying aircraft spends one round per run instead, not per shot)
+    if ob.combat.ammo > 0 && !wr.disk_laser && !flyer {
         ob.combat.ammo -= 1;
     }
     // spec: S-0301 claim 11 (a vehicle shot that launches a projectile with a < A restarts the reload, unless manual reload or A = 0)

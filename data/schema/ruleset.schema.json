@@ -2419,6 +2419,39 @@
           ],
           "default": null
         },
+        "fighter": {
+          "description": "Aircraft: `Fighter`, the fighter flag (S-0501 claims 11 and 19);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "flight_level": {
+          "description": "Aircraft: `FlightLevel`, the cruise height in leptons (S-0501\nTerms); absent: unset, the game-wide value.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "fly_back": {
+          "description": "Aircraft: `FlyBack` (S-0501 claim 10); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fly_by": {
+          "description": "Aircraft: `FlyBy` (S-0501 claims 4, 5 and 10); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "forbidden_houses": {
           "description": "`ForbiddenHouses`, country names as written (S-0407 claim 5); absent:\nno restriction.",
           "type": [
@@ -2489,6 +2522,14 @@
         },
         "invisible": {
           "description": "`Invisible` (S-0410 claim 7); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "landable": {
+          "description": "Aircraft: `Landable`, the landable flag (S-0501 Terms and claim 6);\nabsent: no.",
           "type": [
             "boolean",
             "null"
@@ -2895,6 +2936,14 @@
           ],
           "default": null
         },
+        "unit_reload": {
+          "description": "Buildings: `UnitReload`, the reload-pad flag (S-0501 Terms and\nclaim 26); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "units_cost_bonus": {
           "description": "Buildings: `UnitsCostBonus`, the cost bonus *β* for vehicles, a single (S-0404 claim 2); absent: 1.0.",
           "anyOf": [
@@ -3011,6 +3060,15 @@
           ],
           "default": null
         },
+        "attacking_aircraft_sight_range": {
+          "description": "`[General] AttackingAircraftSightRange`, the reveal radius on firing\nin cells (S-0501 claim 20); absent: 5.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "bases": {
           "description": "`[MultiplayerDialogSettings] Bases`, the base rules' value only\n(S-0412 claim 1); absent: yes.",
           "type": [
@@ -3122,8 +3180,25 @@
           ],
           "default": null
         },
+        "curley_shuffle": {
+          "description": "`[General] CurleyShuffle`, the re-approach flag (S-0501 claim 14);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "flash_frame_time": {
           "description": "`[General] FlashFrameTime`, *F* in ticks (S-0410 claim 10); absent: 7.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "flight_level": {
+          "description": "`[General] FlightLevel`, the game-wide cruise height in leptons\n(S-0501 Terms); absent: 500.",
           "type": [
             "integer",
             "null"
@@ -3463,6 +3538,17 @@
             }
           ]
         },
+        "reload_rate": {
+          "description": "`[General] ReloadRate`, the pad reload rate *r* in game minutes, a\ndouble (S-0501 F10); absent: 0.05.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "reveal_by_height": {
           "description": "`[General] RevealByHeight` (S-0409 claim 7); absent: yes.",
           "type": [
@@ -3619,6 +3705,15 @@
               "type": "null"
             }
           ]
+        },
+        "spy_plane_camera_frames": {
+          "description": "`[AudioVisual] SpyPlaneCameraFrames`, the spy-plane approach delay in\nticks (S-0501 claim 34); absent: 16.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "spy_power_blackout": {
           "description": "`[General] SpyPowerBlackout`, *d* in ticks (S-0405 claim 6); absent: 0.",
@@ -9801,6 +9896,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "camera": {
+          "description": "`Camera`, the camera-weapon flag (S-0501 Terms, *visiting\naircraft*); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "cell_rangefinding": {

@@ -7,6 +7,9 @@ Buckets: **(a)** changes or clarifies behaviour the engine already implements;
 controller) or S-0614 (parasites), effective only once that feature exists;
 **(c)** editorial, no behavioural change.
 
+M6a: the (b) pointers into S-0501 are now implemented in `glasnost_sim::air` (lane A2); see
+[S-0501.md](S-0501.md) for their status. The evidence column below is unchanged.
+
 Evidence is taken from committed code at HEAD (d158117). The working tree also holds
 uncommitted work from another session (`sim/src/air.rs`, `naval.rs`, `parasite.rs`,
 `rocket.rs`, `spawn.rs`, plus new quirk fields in `rules/src/quirks.rs`). Those files
@@ -156,8 +159,8 @@ New quirk switches: none.
 
 | Claim | Bucket | Change | Code location / evidence |
 |---|---|---|---|
-| 16 (pad total *T*; backing; confidence) + Import `NumberOfDocks` + T12 run 7 | **(a)** | *T* = the house's pad total. Each placed building **with the helipad flag** adds its docking-place count, whose absent default is now **1** (was 0); an explicit 0 adds 0. Placement adds, owner change transfers, and removal subtracts without taking the total below 0. | `econ/tech.rs:351-355` (`number_of_docks.unwrap_or(0)` must become 1; the helipad gate is already there). The total is a wrapping sum over on-map owned buildings (tech.rs:1199-1206). That matches add/transfer/subtract for non-negative counts but not for negative explicit counts. The spec defines a running total: placement adds, owner change transfers, removal subtracts with a floor at 0. Implement it as a per-house running total updated on placement, owner change and removal. That total is simulation state, so it must be serialized and included in the state hash. `econ/release.rs:58, 1008` already use default 1 for S-0417/S-0404. |
-| 16 + Quirk switches list | **(a)** | New `quirks.pad_limit_counts_list_only` (owned by S-0501 claim 30, default on = original). Off: *D* also counts the requested type's present objects and line copies when it is not on the pad list, never twice. | `tech::queue_refused` *D* loop (tech.rs:1186-1197). |
+| 16 (pad total *T*; backing; confidence) + Import `NumberOfDocks` + T12 run 7 | **(a)** | *T* = the house's pad total. Each placed building **with the helipad flag** adds its docking-place count, whose absent default is now **1** (was 0); an explicit 0 adds 0. Placement adds, owner change transfers, and removal subtracts without taking the total below 0. | `econ/tech.rs:351-355` (`number_of_docks.unwrap_or(0)` must become 1; the helipad gate is already there). The total is a wrapping sum over on-map owned buildings (tech.rs:1199-1206). That matches add/transfer/subtract for non-negative counts but not for negative explicit counts. The spec defines a running total: placement adds, owner change transfers, removal subtracts with a floor at 0. Implement it as a per-house running total updated on placement, owner change and removal. That total is simulation state, so it must be serialized and included in the state hash. `econ/release.rs:58, 1008` already use default 1 for S-0417/S-0404. **Done (M6a lane A2):** `HouseTech::pad_total`, `tech::pad_placed` / `pad_owner_changed` / `pad_removed`; ledger `docs/m5-claims/S-0407.md` row 16. |
+| 16 + Quirk switches list | **(a)** | New `quirks.pad_limit_counts_list_only` (owned by S-0501 claim 30, default on = original). Off: *D* also counts the requested type's present objects and line copies when it is not on the pad list, never twice. | `tech::queue_refused` *D* loop (tech.rs:1186-1197). **Done (M6a lane A2):** `claim_16_pad_limit_counts_list_only`. |
 | Quirk list, `dock_bound_aircraft_ignores_limit` "owned here" | (c) | — | tech.rs:1210-1215 unchanged. |
 
 New quirk switches: `quirks.pad_limit_counts_list_only` (owned by S-0501 claim 30; the field already appears, uncommitted, in the working tree).

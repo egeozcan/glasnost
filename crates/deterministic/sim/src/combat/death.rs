@@ -146,6 +146,16 @@ fn death_weapon(w: &World, id: ObjectId) -> Option<(WeaponId, i32)> {
     Some((g, dmg))
 }
 
+/// A shot-down aircraft's impact (S-0312 claim 16): its death weapon goes
+/// off at the impact point `at`.
+pub(crate) fn impact_death_weapon(w: &mut World, id: ObjectId, at: crate::world::Pos) {
+    if let Some((wp, dmg)) = death_weapon(w, id) {
+        let house = w.obj(id).and_then(|o| o.owner);
+        // spec: S-0312 claim 16 (shot down: its death weapon goes off at the impact point, claim 6)
+        crate::combat::projectile::detonate_weapon(w, wp, dmg, at, Some(id), house, true);
+    }
+}
+
 /// Whether an object is exploding (S-0312 Terms).
 fn exploding(w: &World, id: ObjectId) -> bool {
     let explodes = type_combat(w, id).is_some_and(|tc| tc.explodes);
@@ -324,7 +334,11 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
             if crate::rocket::keeps_flying_when_destroyed(w, id) {
                 return;
             }
-            // spec: S-0312 claim 16 (an aircraft on the ground leaves play at once; no aircraft flies in our engine) and S-0506 claim 20 (a rocket missile on the ground: removed at once, no detonation)
+            // spec: S-0312 claim 16 (an aircraft above the terrain starts to crash and stays in play until it hits the ground, S-0501 claim 9)
+            if crate::air::start_crash(w, id, false) {
+                return;
+            }
+            // spec: S-0312 claim 16 (an aircraft on the ground leaves play at once) and S-0506 claim 20 (a rocket missile on the ground: removed at once, no detonation)
             leave_play(w, id);
         }
         Kind::Building => building_death(w, id, hit),

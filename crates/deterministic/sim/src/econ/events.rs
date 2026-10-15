@@ -22,6 +22,10 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
         house.econ.acquired.push(id);
     }
     let _ = by_order;
+    if kind == Kind::Building {
+        // spec: S-0501 claim 30 (a placed helipad building adds to its house's pad total)
+        super::tech::pad_placed(w, id);
+    }
     // spec: S-0414 claim 4 (the on-map counts: an entry)
     crate::econ::victory::entered_map(w, id);
     crate::econ::power::entered_map(w, id);
@@ -52,6 +56,10 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
 pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
     let Some(o) = w.obj(id) else { return };
     let (kind, owner) = (o.kind, o.owner);
+    if kind == Kind::Building {
+        // spec: S-0501 claim 30 (a helipad building removed from the map takes its count from the pad total)
+        super::tech::pad_removed(w, id);
+    }
     // spec: S-0414 claim 4 (the on-map counts: a leaving)
     crate::econ::victory::leaving_map(w, id);
     crate::econ::power::leaving_map(w, id);
@@ -120,6 +128,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
         ob.combat.captured = true;
     }
     crate::econ::power::owner_changed(w, id, old);
+    // spec: S-0501 claim 30 (the pad total moves with a helipad building that changes owner)
+    super::tech::pad_owner_changed(w, id, old);
     for h in [old, new].into_iter().flatten() {
         // spec: S-0410 claim 2 (a house that gains or loses a building is rechecked)
         crate::econ::radar::mark_due(w, h);

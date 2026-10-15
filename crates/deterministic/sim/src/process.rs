@@ -78,6 +78,8 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
             !(moving(w, id) && !below && !excused)
         }
         Kind::Building => o.beh.ready_mark,
+        // spec: S-0501 claim 31 (an aircraft's readiness to change)
+        Kind::Aircraft if crate::air::is_aircraft(w, id) => crate::air::ready(w, id),
         Kind::Aircraft | Kind::Terrain => false,
     }
 }
@@ -150,6 +152,10 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
     if !o.kind.is_mobile() {
         return;
     }
+    // spec: S-0501 claim 18 and table T2 (the first three rows come before the common effects)
+    if crate::air::fall_back_early(w, id) {
+        return;
+    }
     // spec: S-0215 claim 13 (the common effects at most once per actor per tick)
     if o.beh.last_common_effects != Some(t) {
         if let Some(ob) = w.obj_mut(id) {
@@ -195,7 +201,8 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
     match o.kind {
         Kind::Infantry => fall_back_infantry(w, id, placement),
         Kind::Vehicle => fall_back_vehicle(w, id, placement),
-        // The aircraft spec owns aircraft fall-backs (claim 13).
+        // spec: S-0501 claim 18 and table T2 (the aircraft rows)
+        Kind::Aircraft => crate::air::fall_back_rows(w, id),
         _ => {}
     }
 }
@@ -409,7 +416,12 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let t = w.tick;
     let Some(o) = w.obj(id) else { return };
     let kind = o.kind;
-    if kind == Kind::Terrain || kind == Kind::Aircraft {
+    if kind == Kind::Aircraft {
+        // spec: S-0501 claims 31 and 32 (an aircraft has no per-tick start; its processing)
+        crate::air::behaviour_turn(w, id);
+        return;
+    }
+    if kind == Kind::Terrain {
         return;
     }
     if kind == Kind::Building {

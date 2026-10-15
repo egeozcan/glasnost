@@ -93,7 +93,14 @@ const INFANTRY_ECON: &[Row] = &[
 const VEHICLE_ECON: &[Row] = &[("powered_unit", "PoweredUnit", Bool, "S-0405")];
 
 /// Fields of aircraft types only.
-const AIRCRAFT_ECON: &[Row] = &[("airport_bound", "AirportBound", Bool, "S-0407")];
+const AIRCRAFT_ECON: &[Row] = &[
+    ("airport_bound", "AirportBound", Bool, "S-0407, S-0501"),
+    ("landable", "Landable", Bool, "S-0501"),
+    ("fighter", "Fighter", Bool, "S-0501"),
+    ("fly_by", "FlyBy", Bool, "S-0501"),
+    ("fly_back", "FlyBack", Bool, "S-0501"),
+    ("flight_level", "FlightLevel", Int, "S-0501"),
+];
 
 /// Fields of building types (rules).
 const BUILDING_ECON: &[Row] = &[
@@ -190,6 +197,7 @@ const BUILDING_ECON: &[Row] = &[
         "S-0407",
     ),
     ("number_of_docks", "NumberOfDocks", Int, "S-0407"),
+    ("unit_reload", "UnitReload", Bool, "S-0501"),
     ("deploy_facing", "DeployFacing", Int, "S-0415"),
 ];
 
@@ -576,6 +584,23 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
     ("fog_rate", AUDIO_VISUAL, "FogRate", Dec, "S-0409"),
     ("savour_delay", AUDIO_VISUAL, "SavourDelay", Dec, "S-0414"),
     ("pose_dir", AUDIO_VISUAL, "PoseDir", Int, "S-0404"),
+    ("flight_level", GENERAL, "FlightLevel", Int, "S-0501"),
+    ("reload_rate", GENERAL, "ReloadRate", Dec, "S-0501"),
+    ("curley_shuffle", GENERAL, "CurleyShuffle", Bool, "S-0501"),
+    (
+        "attacking_aircraft_sight_range",
+        GENERAL,
+        "AttackingAircraftSightRange",
+        Int,
+        "S-0501",
+    ),
+    (
+        "spy_plane_camera_frames",
+        AUDIO_VISUAL,
+        "SpyPlaneCameraFrames",
+        Int,
+        "S-0501",
+    ),
     (
         "c4_warhead",
         COMBAT_DAMAGE,

@@ -2019,6 +2019,10 @@ pub struct WeaponType {
     /// `Spawner` (S-0301 claim 9).
     #[serde(default)]
     pub spawner: Option<bool>,
+    /// `Camera`, the camera-weapon flag (S-0501 Terms, *visiting
+    /// aircraft*); absent: no.
+    #[serde(default)]
+    pub camera: Option<bool>,
     /// `DiskLaser` (S-0301 claim 8).
     #[serde(default)]
     pub disk_laser: Option<bool>,

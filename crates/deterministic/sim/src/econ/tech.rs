@@ -31,6 +31,11 @@ pub struct HouseTech {
     /// in its icon order (S-0004 claim 11, S-0411 claim 13). Kept for every
     /// player house, as if it were the local player (S-0411 claim 13).
     pub icons: [Vec<Icon>; 4], // spec: S-0004 claim 11 (four sidebar tabs)
+    /// The pad total (S-0501 claim 30, S-0407 claim 16): a saved running
+    /// total of the docking-place counts of the house's placed helipad
+    /// buildings, never below 0.
+    #[serde(default)]
+    pub pad_total: i32,
 }
 
 /// An icon in a sidebar tab (S-0004 claim 11): its type and the cost it was
@@ -142,8 +147,8 @@ pub struct TypeTech {
     pub fixed_secret: Option<TypeRef>,
     /// An aircraft type that must return to a dock (claim 16).
     pub airport_bound: bool,
-    /// Docks a building adds to the house total (claim 16): its number of
-    /// docks when it has the dock flag, else 0.
+    /// Docks a building adds to the house's pad total (claim 16): its
+    /// docking-place count when it has the helipad flag, else 0.
     pub docks: i32,
     /// A building type that is an upgrade type (S-0406 Terms).
     pub upgrade: bool,
@@ -348,9 +353,9 @@ impl Rules {
                     // spec: S-0407 Import mapping (SecretLab absent: no)
                     secret_lab: e.secret_lab.unwrap_or(false),
                     fixed_secret,
-                    // spec: S-0407 Import mapping (NumberOfDocks absent: 0; counted with the Helipad flag, absent no)
+                    // spec: S-0407 claim 16 and S-0501 claim 30 (only helipad buildings count; the docking-place count's absent default is 1, an explicit 0 adds 0)
                     docks: if b.helipad.unwrap_or(false) {
-                        e.number_of_docks.unwrap_or(0)
+                        e.number_of_docks.unwrap_or(1)
                     } else {
                         0
                     },
@@ -1223,15 +1228,18 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
                 .wrapping_add(present_count(w, house, pt))
                 .wrapping_add(crate::econ::production::copies_in_line(w, house, pt));
         }
-        // spec: S-0407 claim 16 (T: the docks of the house's dock buildings)
-        let total: i32 = w
-            .objects
-            .values()
-            .filter(|b| b.kind == Kind::Building && b.on_map && b.owner == Some(house))
-            .filter_map(|b| r.buildings.get(b.type_index as usize))
-            .map(|b| b.docks)
-            // spec: S-0407 F3 (the sums wrap modulo 2³²)
-            .fold(0i32, i32::wrapping_add);
+        if !q.pad_limit_counts_list_only && !r.pad_aircraft.contains(&t.index) {
+            // spec: S-0501 claim 30 and S-0407 claim 16 (quirks.pad_limit_counts_list_only off: the asked-for type outside the list is counted too, never twice)
+            d = d
+                .wrapping_add(present_count(w, house, t))
+                .wrapping_add(crate::econ::production::copies_in_line(w, house, t));
+        }
+        // spec: S-0407 claim 16 and S-0501 claim 30 (T: the house's saved pad total)
+        let total = w
+            .houses
+            .get(usize::from(house.0))
+            .map_or(0, |h| h.econ.tech.pad_total);
+        // spec: S-0501 F12 (refused when n ≥ the pad total)
         let dock = d >= total;
         // spec: S-0407 F3 (a dock-bound aircraft: refused when D ≥ T; quirks.dock_bound_aircraft_ignores_limit)
         return if q.dock_bound_aircraft_ignores_limit {
@@ -1241,6 +1249,60 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
         };
     }
     limit_test()
+}
+
+/// The docking-place count a building adds to its house's pad total
+/// (S-0501 claim 30): 0 for a building that is not a helipad building.
+fn pad_docks(w: &World, id: ObjectId) -> i32 {
+    w.obj(id)
+        .filter(|o| o.kind == Kind::Building)
+        .and_then(|o| w.rules().econ.tech.buildings.get(o.type_index as usize))
+        .map_or(0, |b| b.docks)
+}
+
+/// Adds `n` to a house's pad total, never below 0 (S-0501 claim 30).
+fn add_pads(w: &mut World, house: Option<HouseId>, n: i32) {
+    if n == 0 {
+        return;
+    }
+    if let Some(h) = house
+        && let Some(x) = w.houses.get_mut(usize::from(h.0))
+    {
+        // spec: S-0501 claim 30 (the pad total never goes below 0)
+        x.econ.tech.pad_total = x.econ.tech.pad_total.wrapping_add(n).max(0);
+    }
+}
+
+/// A building was placed (S-0501 claim 30): a helipad building adds its
+/// docking-place count to its house's pad total.
+pub fn pad_placed(w: &mut World, id: ObjectId) {
+    let n = pad_docks(w, id);
+    let owner = w.obj(id).and_then(|o| o.owner);
+    // spec: S-0501 claim 30 (the pad total grows by d when the building is placed)
+    add_pads(w, owner, n);
+}
+
+/// A building leaves the map (S-0501 claim 30): its count is taken from
+/// its house's pad total, never below 0.
+pub fn pad_removed(w: &mut World, id: ObjectId) {
+    let n = pad_docks(w, id);
+    let owner = w.obj(id).filter(|o| o.on_map).and_then(|o| o.owner);
+    // spec: S-0501 claim 30 (it shrinks by d when the building is removed from the map, never below 0)
+    add_pads(w, owner, -n);
+}
+
+/// A building on the map changed owner from `old` (S-0501 claim 30): its
+/// count moves with it.
+pub fn pad_owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
+    let Some(o) = w.obj(id) else { return };
+    let new = o.owner;
+    if !o.on_map || old == new {
+        return;
+    }
+    let n = pad_docks(w, id);
+    // spec: S-0501 claim 30 (the count moves with the building when it changes owner)
+    add_pads(w, old, -n);
+    add_pads(w, new, n);
 }
 
 /// Secret labs at game start (S-0407 claim 14): S-0412's game-start setup

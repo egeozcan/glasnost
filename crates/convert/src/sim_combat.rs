@@ -231,6 +231,7 @@ const WEAPON_COMBAT: &[Row] = &[
     ("is_mag_beam", "IsMagBeam", Bool, "S-0301"),
     ("temporal", "Temporal", Bool, "S-0301"),
     ("spawner", "Spawner", Bool, "S-0301"),
+    ("camera", "Camera", Bool, "S-0501"),
     ("disk_laser", "DiskLaser", Bool, "S-0301"),
     ("decloak_to_fire", "DecloakToFire", Bool, "S-0301"),
     ("lobber", "Lobber", Bool, "S-0306"),

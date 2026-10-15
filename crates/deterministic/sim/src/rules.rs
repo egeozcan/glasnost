@@ -788,6 +788,8 @@ pub struct SimRules {
     pub triggers: crate::triggers::Rules,
     /// Spawners and rocket parameter sets (S-0506).
     pub missiles: crate::spawn::MissileRules,
+    /// Aircraft flight and pads (S-0501).
+    pub air: crate::air::AirRules,
 }
 
 fn dec(d: &Option<Decimal>, mode: Rounding) -> Option<F64> {
@@ -1180,6 +1182,7 @@ impl SimRules {
         let missiles = crate::spawn::MissileRules::new(s, &names, &combat.warheads, mode);
         Self {
             missiles,
+            air: crate::air::AirRules::new(r, mode),
             econ,
             triggers: crate::triggers::Rules::new(r),
             combat,
