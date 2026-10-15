@@ -21,7 +21,10 @@
 //!    tooltips, or a missing factory of its kind: an aircraft's pad, a
 //!    ship's naval yard), climbing further when
 //!    that building is itself blocked; a building is only ordered when the
-//!    spiral has a cell for it (a naval yard needs water);
+//!    spiral has a cell for it (a naval yard needs water, looked for in a
+//!    wider spiral). While a naval yard can be built but finds no water
+//!    next to the base, the house builds power plants on the legal cells
+//!    nearest the explored water, so that the base grows toward it;
 //! 4. keep the plan's harvester count, and send idle or resting harvesters
 //!    to harvest; a slave miner counts as a harvester (and, deployed, its
 //!    building too), needs no refinery, and is sent to harvest at the
@@ -114,6 +117,10 @@ const GAP: i32 = 2; // nocite: tuning of our own opponent
 
 /// The largest ring of the placement spiral around the construction yard.
 pub(crate) const SPIRAL_RINGS: i32 = 12; // nocite: tuning of our own opponent
+
+/// The largest ring of the wider search around the construction yard: for
+/// a naval building, and for a building placed toward the water.
+pub(crate) const WIDE_RINGS: i32 = 32; // nocite: tuning of our own opponent
 
 /// How many buildings deep the tech climb looks for one it can build now.
 const CLIMB_DEPTH: u32 = 4; // nocite: tuning of our own opponent
@@ -315,6 +322,15 @@ pub(crate) fn can_attack(w: &World, id: ObjectId, e: ObjectId) -> bool {
 }
 
 /// The squared distance between two cells.
+/// Whether `t` is a naval building (S-0406 claim 3 d: it stands on water).
+fn naval_building(w: &World, t: TypeRef) -> bool {
+    t.kind == Kind::Building
+        && w.rules()
+            .buildings
+            .get(t.index as usize)
+            .is_some_and(|b| b.naval)
+}
+
 pub(crate) fn dist2(a: CellXY, b: CellXY) -> i64 {
     let dx = i64::from(a.x - b.x);
     let dy = i64::from(a.y - b.y);
@@ -694,7 +710,13 @@ impl Script {
                 .then_some(item.t)
         });
         if let Some(t) = done {
-            if let Some(cell) = self.place_cell(w, t) {
+            // While the naval yard has no cell, other buildings go toward
+            // the water.
+            let toward = (!naval_building(w, t))
+                .then(|| self.water_goal(w))
+                .flatten()
+                .and_then(|g| self.place_toward(w, t, g));
+            if let Some(cell) = toward.or_else(|| self.place_cell(w, t)) {
                 out.push(Order::Place {
                     what: t,
                     cell: Some(cell),
@@ -721,10 +743,17 @@ impl Script {
                         .filter(|&f| self.of_role(w, f).is_empty()),
                 )
                 .find(|&r| !self.candidates(w, r).is_empty());
+            let walk = || {
+                // The cheapest power plant with a cell toward the water.
+                let goal = self.water_goal(w)?;
+                self.candidates(w, Role::Power)
+                    .into_iter()
+                    .find(|&t| self.place_toward(w, t, goal).is_some())
+            };
             if let Some(role) = wanted {
                 self.build(w, role, &mut out);
             } else if self.harvesters_kept(w)
-                && let Some(t) = self.climb(w)
+                && let Some(t) = walk().or_else(|| self.climb(w))
             {
                 self.order_build(w, t, &mut out);
             }
@@ -974,34 +1003,86 @@ impl Script {
 
     /// The first cell of a square spiral around the construction yard where
     /// a place order for `t` is legal, the cell test passes and the
-    /// foundation is free.
+    /// foundation is free. A naval building is looked for in the wider
+    /// spiral, as a person looks for the water near the base.
     pub(crate) fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
-        let home = self.home(w)?;
+        let rings = if naval_building(w, t) {
+            WIDE_RINGS
+        } else {
+            SPIRAL_RINGS
+        };
+        self.spiral(w, rings).find(|&c| self.fits(w, t, c))
+    }
+
+    /// The cells of the square spiral around the construction yard, ring by
+    /// ring up to `rings`.
+    fn spiral(&self, w: &World, rings: i32) -> impl Iterator<Item = CellXY> {
+        let home = self.home(w);
+        (1..=rings).flat_map(move |ring| {
+            (-ring..=ring).flat_map(move |dy| {
+                (-ring..=ring)
+                    .filter(move |dx| dx.abs() == ring || dy.abs() == ring)
+                    .filter_map(move |dx| home.map(|h| CellXY::new(h.x + dx, h.y + dy)))
+            })
+        })
+    }
+
+    /// Whether a place order for `t` at `c` is legal, the cell test passes
+    /// and the foundation is free.
+    fn fits(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
         // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12); an upgrade needs only the former.
         let upgrade = placement::place_type(w, t.index).upgrade_of.is_some();
-        for ring in 1..=SPIRAL_RINGS {
-            for dy in -ring..=ring {
-                for dx in -ring..=ring {
-                    if dx.abs() != ring && dy.abs() != ring {
-                        continue;
-                    }
-                    let c = CellXY::new(home.x + dx, home.y + dy);
-                    if placement::place_legal(w, self.house, t, c)
-                        && (upgrade
-                            || placement::cell_test(
-                                w,
-                                t.index,
-                                c,
-                                &placement::Test::order(self.house),
-                            ))
-                        && self.free(w, t, c)
-                    {
-                        return Some(c);
-                    }
-                }
-            }
+        placement::place_legal(w, self.house, t, c)
+            && (upgrade || placement::cell_test(w, t.index, c, &placement::Test::order(self.house)))
+            && self.free(w, t, c)
+    }
+
+    /// The water the base grows toward: when a naval factory type that the
+    /// house has none of is buildable but has no cell to stand on, the
+    /// explored water cell nearest the construction yard (the first in cell
+    /// order on equal distance).
+    pub(crate) fn water_goal(&self, w: &World) -> Option<CellXY> {
+        let home = self.home(w)?;
+        let stuck = w.rules().buildings.iter().enumerate().any(|(i, b)| {
+            let t = TypeRef {
+                kind: Kind::Building,
+                index: i as u32,
+            };
+            b.naval
+                && b.factory.is_some()
+                && tech::present_count(w, self.house, t) == 0
+                && tech::buildable(w, self.house, t)
+                && !self.placeable(w, t)
+        });
+        if !stuck {
+            return None;
         }
-        None
+        w.cells
+            .grid
+            .iter()
+            .filter(|(c, cell)| {
+                cell.land == glasnost_map::terrain::land::WATER
+                    && shroud::explored(w, self.house, *c)
+            })
+            .map(|(c, _)| c)
+            .min_by_key(|&c| (dist2(c, home), c.y, c.x))
+    }
+
+    /// The legal cell for `t` in the wider spiral nearest to `goal`, when it
+    /// is nearer than every building of the house: a step of the base
+    /// toward the water.
+    fn place_toward(&self, w: &World, t: TypeRef, goal: CellXY) -> Option<CellXY> {
+        let reach = self
+            .own(w)
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .filter(|o| o.kind == Kind::Building)
+            .map(|o| dist2(o.pos.cell(), goal))
+            .min()?;
+        self.spiral(w, WIDE_RINGS)
+            .filter(|&c| dist2(c, goal) < reach)
+            .filter(|&c| self.fits(w, t, c))
+            .min_by_key(|&c| (dist2(c, goal), c.y, c.x))
     }
 
     /// Whether the foundation's cells hold no object and keep a gap of
