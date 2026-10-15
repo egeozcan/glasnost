@@ -1315,6 +1315,14 @@ pub struct Quirks {
     // spec: S-0503 Edge cases
     #[serde(default = "on")]
     pub hover_stalled_start_reset: bool,
+    /// Clearing the last heading point at an arrival with no destination and no choice keeps its old reservation; off: that reservation is released and the actual position is marked instead.
+    // spec: S-0503 claim 15, Edge cases
+    #[serde(default = "on")]
+    pub hover_idle_arrival_reservation: bool,
+    /// Clearing a vehicle-present flag picks the deck by the point's height alone, while setting also needs a high bridge; off: clearing needs the high bridge too.
+    // spec: S-0503 claim 13, Edge cases
+    #[serde(default = "on")]
+    pub hover_flag_clear_height_only: bool,
     /// The repair cursor offers repair at an enabled first nearby link that has neither endpoint at the traversal cell; off: such links are skipped and the first link with that endpoint decides, none giving no cursor.
     // spec: S-0511 claim 21, Edge cases
     #[serde(default = "on")]
@@ -2018,6 +2026,8 @@ impl Default for Quirks {
             hover_brake_undershoot: true,
             hover_elevated_heading_point: true,
             hover_stalled_start_reset: true,
+            hover_idle_arrival_reservation: true,
+            hover_flag_clear_height_only: true,
             bridge_cursor_unrelated_link: true,
             bridge_event_band_short: true,
             bridge_family_by_block: true,
@@ -2907,6 +2917,14 @@ impl Quirks {
                 self.hover_elevated_heading_point,
             ),
             ("hover_stalled_start_reset", self.hover_stalled_start_reset),
+            (
+                "hover_idle_arrival_reservation",
+                self.hover_idle_arrival_reservation,
+            ),
+            (
+                "hover_flag_clear_height_only",
+                self.hover_flag_clear_height_only,
+            ),
             (
                 "bridge_cursor_unrelated_link",
                 self.bridge_cursor_unrelated_link,

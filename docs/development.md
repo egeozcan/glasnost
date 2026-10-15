@@ -243,7 +243,7 @@ Both need animation playback inside the simulation's turn pass, which is not bui
 
 `glasnost-sim` runs the game rules on the typed ruleset and map. Everything in it is integers and the soft-float types of `glasnost-num` (S-0205: IEEE binary32/64 in integers, round toward zero under `quirks.chop_rounding`), with ordered containers only.
 
-- **Rules and data.** `rules::SimRules` is built from a resolved ruleset (`SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)`): typed per-kind tables, the 413 quirk switches of `rules::Quirks` (every one defaulting to the original; `refused_death_keeps_unit` of S-0107 claim 17 is not consulted, since M3 has no death handling), and engine defaults cited to their specs. A type without a locomotor field has the teleporting locomotor (S-0207 claim 14); vehicles with the driving locomotor drive and infantry with the walking one walk, and every other locomotor is not moved in M3. `consts` holds the spec constants given as decimals, as checked bit patterns.
+- **Rules and data.** `rules::SimRules` is built from a resolved ruleset (`SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)`): typed per-kind tables, the 415 quirk switches of `rules::Quirks` (every one defaulting to the original; `refused_death_keeps_unit` of S-0107 claim 17 is not consulted, since M3 has no death handling), and engine defaults cited to their specs. A type without a locomotor field has the teleporting locomotor (S-0207 claim 14); vehicles with the driving locomotor drive and infantry with the walking one walk, and every other locomotor is not moved in M3. `consts` holds the spec constants given as decimals, as checked bit patterns.
 - **A game.** `load::new_game(rules, map, catalogue, setup)` follows S-0009 and S-0202's table *Draws during map loading*: the early phase of start positions on blank cells (lists 1 and 2, the assignment against list 2, with the base rules' passive fields, claims 17 to 20 and 33; `starts`, with the start-cell variant of the nearby-cell search, `path::start_cell`), the initial fill, the overlay type stream placed overlay by overlay (`overlays`: the slope condition of claim 12, high-bridge cells as each overlay is placed, wall connection bits, low-bridge end markers with their pieces' draws), the overlay data stream, the first recalculation pass, the vein rebuild with its draws (claim 14), the tile animations each recalculation starts with their creation draws (S-0010 claim 19, S-0202 claim 10: the first recalculation of a cell before the second pass, then at most one per cell from the second pass on, in play too; `load::recalc_cells`), the pre-placed objects (with the visceroid draw of a vehicle's placement and its follower-car link, claim 41), the second pass, the unused-house cleanup (claim 28 and S-0202 claim 14: only in a game with no AI house, S-0412 claim 12, and fewer human slots than the base rules' maximum player count; a removed house loses its pre-placed objects, takes no position and gets no starting units, and taking its objects out of their ground cells recalculates those cells; `House::removed`), the late phase (list 3), the owners of the map's walls (S-0210 claim 14), the starting units (`starting`, claims 45 and 46: the placement search's acceptance test reads the ground occupants of the ground layer only and takes as the nearest the one whose reference point lies nearest the cell corner by the table root, ties by the ground list's order), the rest of game start (S-0412 claim 14: crates, then the secret-lab draws), the game-start pass of S-0010 claim 12 (a third recalculation of every legal cell, with its tile animations, after those draws by S-0202 claim 14) and the bridge spans of S-0010 claim 25, whose low spans give their bands the bridge-body mark (`Cells::bridge_body`, `glasnost_map::bridges`; the burrowing test of S-0010 claim 17 is to read it). Cell animations (S-0009 claim 12) take their creation draws when their overlay is placed, before the tile animation of the same placement. Terrain recalculation itself is `glasnost-map`'s (S-0010, S-0211). `GameSetup` gives each house a role (player, neutral, special), whether it is an AI house (`HouseSetup::ai`), the unit-count setting and the bases setting. `load::sandbox_setup` is our viewer's setup: one house per object owner of the map, no start positions and no starting units.
 - **Wall connection bits.** `walls` keeps a wall's overlay data value as 16 × damage stage + connection bits (S-0112 claim 7), recomputed when a wall is placed from the map's overlay list, when crushing removes one, and when a gate or wall tower is placed or destroyed (`quirks.gate_tower_fixed_cells`). The map viewer draws the cells after loading, so walls show the bits the simulation gives them.
 - **A tick.** `tick::step` runs S-0203's parts in their places: the turn pass over the update order (with S-0203's removal skips and second turns), each object's behaviour part (`process`, S-0215), its locomotor (`drive` with `tracks`, S-0207 and S-0206 claim 12: a driving vehicle in the same behaviours stops at the track target where its mobile target comes in range, S-0207 claim 19 a, with the walker's conditions and range test, `walk::arrival_stop_holds`; the hovering locomotor is not modelled, so S-0207 claim 19 b to d and S-0212 claims 20, 21 and 23's hover rows are seams; ships move by the driving code since M6a (section *Simulation (M6a: naval units)*); `walk`, S-0208: a walk ends on its arrival tick in the destination's cell, claim 16, and an approaching walker in *attack*, *area guard*, *hunt* or *rescue* stops at the standing position where its mobile target comes in range, claim 17; the walker's speed fraction of S-0310 is `WalkState::fraction`), its infantry sequence (`infantry`, S-0107), then the orders (`orders`, S-0213), then the tick number. Occupancy is `cells`/`occupancy` (S-0209), crushing `crush` (S-0210), passability and regions `passability`/`regions` (S-0211, S-0212), pathfinding `path` (S-0212) behind the `Pathfinder` trait, over (cell, search layer) pairs, with the corridor of claims 13 to 14 in `corridor` (sectors and connections are derived data, rebuilt with the regions). Regions and sectors follow the rules of claims 3 and 13b and exact ties the recording order of claim 12a (departures D4 and D7, accepted by the project lead).
@@ -507,28 +507,28 @@ S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its ga
   - lift stops.
   - At the spin's end, a hover over water below 104 leptons gets the bomb mark (`hover::bomb_mark`) and starts to fall.
 - **Hooks elsewhere.**
-  - `infantry::destination_assigned` gives ρ = 1 and, for a powered hover not moving now, chooses the first heading point at once (`hover::take_destination`, claim 5); a hover moving now without a heading point gets T = ρ = 1 and chooses there only when its destination is gone or in its cell.
+  - `infantry::destination_assigned` gives ρ = 1 and, for a powered hover not moving now, chooses the first heading point at once (`hover::take_destination`, claim 5); a hover moving now without a heading point gets T = ρ = 1, the path update (destination-cell completion, a fresh search when R allows) and a choice there. A held hover (`parasite::held`, claim 17) only remembers the destination.
   - `econ::release::send_out` sets ρ = ½ after a factory exit; the hover leaves by its own locomotor towards (x₀ + 4, y₀ + 1).
   - `path::failed` clears a hover's destination like a driving unit's.
   - `occupancy::in_progress`, `path::heading_cell` and the claim 19 count see a hover's heading point and φ.
   - `scatter::vehicle_request` refuses a switched-off hover (claim 16 g) and centres on its heading point's cell.
   - `drive::release_claims` frees its flags at removal.
-  - There is no parasite hold for it (S-0614 claim 8 lists none).
+  - The parasite hold timer (`parasite::held`) is claim 17's hold test: a held assignment makes no choice, and a held choice refuses as *blocked* after clearing the old reservation.
 - **Seams.** These are named functions with doc comments:
   - the fall (`hover::start_fall`, S-0511 claim 10);
   - the cloaked reveal (`hover::reveal_cloaked`, S-0516);
   - crate collection (`hover::collect_crate`, S-0520);
   - the chase cut (`hover::chase_cut`, S-0212 claim 20);
-  - the stop order (`hover::stop_order`, claim 16: the heading point, T, φ and ρ are kept).
+  - the stop order (`hover::stop_order`, claim 16: the heading point, T, φ and ρ are kept; *D* and the stored path are kept apart from the cleared order-level destination when *D* = *P*, `HoverState::retained`, and the retry timer is made eligible).
   - S-0312 claim 11's low-water death of a marked vehicle is not built.
-- **Quirks.** `quirks.hover_brake_undershoot`, `quirks.hover_elevated_heading_point` and `quirks.hover_stalled_start_reset` are now implemented.
+- **Quirks.** `quirks.hover_brake_undershoot`, `quirks.hover_elevated_heading_point`, `quirks.hover_stalled_start_reset`, `quirks.hover_idle_arrival_reservation` and `quirks.hover_flag_clear_height_only` are implemented.
 - **Rendering.** The map view draws every mobile object at its world position, z included (`mapview::live`, `build::height_lift`), so the hover height and the bob show with no new drawing code.
 - **Own AI.**
   - Hovering vehicles are army (`scripted::plays`: any locomotor the simulation moves).
   - `Script::reachable` already sends a unit to its own reach region by its movement zone; the amphibious zone's region spans sea and land, so a hover's goal across water stays as ordered.
   - The fixture adds HOVR, a gun hovercraft with the hover class and locomotor and the amphibious zone, built at FACT once the house has a naval yard (NAVY) and a LAB, so only on maps with water; `builds_a_navy_on_a_water_map` checks that one is built.
   - `a_hover_crosses_the_sea_to_a_land_goal` (in `crates/deterministic/ai/tests/ai.rs`) shows a hover on the sea of `fixture::map_naval` sent by the brain at an enemy beside its base, reaching land.
-- **Save format 18.** `Object::hover` is new state; format 21 adds `HoverState::between` (claim 13).
+- **Save format 18.** `Object::hover` is new state; format 21 adds `HoverState::between` (claim 13), format 24 `HoverState::retained` (claim 16).
 - **What play needs.** Data and map:
   - a vehicle type whose `Locomotor` is the hovering locomotor's identifier, with the hover or amphibious locomotion class and a movement zone (amphibious for a type that crosses water);
   - land rows whose hover or amphibious multipliers are not 0 on water and on land;
@@ -545,15 +545,19 @@ S-0503 revision 3 answers Q-0690 to Q-0696 (claims 5 and 13 to 16, F6, Import ma
 - only a powered hover not moving now chooses at once when given a move (claim 5);
 - a stop order keeps the heading point, T, φ and ρ (claim 16).
 
+S-0503 revision 4 answers Q-0675 (claims 5, 7, 13, 15 to 17, two new quirks); its interim rules are retired:
+- the arrival runs the initial path update (completion, or a fresh search when R allows, whose failure clears the old reservation) before the choice; a choice is attempted when *D* remains or the contacted object is in the present cell (`hover::path_update`, `hover::choose_next`);
+- every non-refusing choice that leaves no point, a deferred or failed search included, restores the actual-position flag and gives a cell-arrival update; an arrival with no choice keeps the old reservation (`quirks.hover_idle_arrival_reservation`; off: the actual position is marked instead, with no update);
+- a flag is cleared in the deck by the point's height alone (`hover::clear_layer`, `quirks.hover_flag_clear_height_only`). Our cell records count flags per vehicle, so a clear in the other layer leaves this vehicle's flag standing, as a flag model would when no deck flag is set there;
+- held is the parasite hold timer (claim 17), and a person's stop order keeps *D* equal to *P* apart from the order-level destination (claim 16); a search with only a kept *D* searches for its cell.
+
+Q-0679 asks for the height of the point a held hover remembers for a cell destination; the remembered *D* takes the ordinary adjusted height (`hover::take`).
+
 Provisional rules of M6b hover and amphibious movement, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `hover::mark_layer` | the flag at the actual position takes the marked-point layer rule (deck only with a high bridge and at least 416 above the surface) | Q-0675 |
-| `hover::choose_next` (`Choice::Idle`) | an arrival with no destination attempts no choice: no flag restored, no cell-arrival update | Q-0675 |
-| `hover::travel_turn` | a failed or deferred arrival-time search that leaves no heading point counts as a successful choice without one (flag restored, update given) | Q-0675 |
-| `hover::take` | no state counts as paralysed; a hover moving now without a heading point makes no separate path update, only `choose_next` when its destination is gone or in its cell | Q-0675 |
-| `hover::stop_order` | the order clears the single destination field even when it equals the heading point, so the arrival there is the no-destination case | Q-0675 |
+| `hover::take` | a held assignment's remembered *D* for a cell destination is derived from the order-level destination with the ordinary adjusted height | Q-0679 |
 
 ## Simulation (M6b: transports)
 

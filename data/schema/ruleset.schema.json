@@ -7534,6 +7534,16 @@
           "type": "boolean",
           "default": true
         },
+        "hover_flag_clear_height_only": {
+          "description": "Clearing a vehicle-present flag picks the deck by the point's height alone, while setting also needs a high bridge; off: clearing needs the high bridge too.",
+          "type": "boolean",
+          "default": true
+        },
+        "hover_idle_arrival_reservation": {
+          "description": "Clearing the last heading point at an arrival with no destination and no choice keeps its old reservation; off: that reservation is released and the actual position is marked instead.",
+          "type": "boolean",
+          "default": true
+        },
         "hover_needs_nonzero_start": {
           "description": "The hover substitution needs a hover entry starting at a frame other than 0.",
           "type": "boolean",
