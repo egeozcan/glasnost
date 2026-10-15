@@ -2,7 +2,7 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -266,15 +266,17 @@ and *subject to walls*. In addition:
     skipped, and a transport without passengers uses its own value. This is not weapon choice
     against the transport's target: a passenger's current weapon is read regardless of that target. The result is read by the rules that scale
     with the firer's reach: the flak scatter of S-0306 (claim 4, its *R*_W) and the reach used by
-    the target-scan and guard rules of S-0309 (its F1), and the approach step and search
-    (S-0215 F10 and F4 below). The range test of claims 1 to 11 does
+    the target-scan and guard rules of S-0309 (its F1), the approach step and search
+    (S-0215 F10 and F4 below), and the prism support reach of S-0518 claim 2, which reads
+    ρ(*A*, 1) for the master building. The range test of claims 1 to 11 does
     **not** use it: it uses the weapon's own range field, so an open-topped transport whose
     passengers have short weapons still passes the range test at its own weapon's range, while
     those other rules see the shorter value. The passengers' own range tests use their own weapons
     and the bonus of claim 5.
     S-0306 claim 4 specifies this current-weapon rule, including the weapon-number slot for a multi-weapon passenger and skipping a passenger without a current weapon. Its P3 f does not distinguish the current-weapon rule from a primary-only rule, so those passenger cases remain unmeasured there.
     - Backing: `measurable` (RG9 and RG10 for an ordinary armed passenger and the range test's
-      non-use; scatter and scan consequences through S-0306 P3 and S-0309's scenarios).
+      non-use; scatter and scan consequences through S-0306 P3 and S-0309's scenarios,
+      and prism support reach through S-0518 PS3).
       Backing: `unmeasured` for multi-weapon current-slot selection and missing passenger weapons,
       since RG16 has no established normal-action fixture for obtaining the required states
       without writing game state, and for ρ = 0 with no firer weapon, since no valid firing
