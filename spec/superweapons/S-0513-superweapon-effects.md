@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -585,9 +585,11 @@ presentation and swept-layer rules below also apply where those specs cite them.
 
     Thus sprites and voxels share the brightness timing, but not an unconditional identical
     colour treatment. Ordinary infantry are killed, not recoloured (claim 23). This table
-    does not assert the treatment of building voxel turrets or every attached animation.
-    Exact packed-pixel colour composition belongs to S-0102; the remaining coverage needed
-    there is identified in Open questions. S-0104 claim 13 supplies ordinary brightness,
+    is a subset of S-0102 claim 34's ordinary opaque drawing coverage, which also covers
+    sprite vehicles, aircraft, building voxel turrets and marked building animations.
+    Exact packed-pixel colour composition is S-0102 claim 34 and F9, including its
+    single-layout drawing correction without a quirk switch. The narrower unresolved
+    drawing variants are identified in Open questions. S-0104 claim 13 supplies ordinary brightness,
     and its claim 15 maps the adjusted brightness to shade rows.
 
     Let *q* be the first turn of the object while this application is still protecting it,
@@ -624,8 +626,9 @@ presentation and swept-layer rules below also apply where those specs cite them.
     Expiry or restart before that turn prevents that application's draw. No turns means no
     phase transitions or draw; elapsed phase time is still in game ticks, not counted turns.
     The draw is game state; the brightness and colour are presentation.
-    - Backing: `measurable` (SW10 parts e and g). Exact pixel composition and the unlisted
-      drawing variants are not settled here, rather than assigned guessed values
+    - Backing: `measurable` (SW10 parts e and g). Ordinary opaque pixel composition and
+      the additional drawing cases inherit S-0102 claim 34's backing (D44).
+      The unresolved variants in Open questions are not assigned guessed values
     - Confidence: high for phase lengths, factors, draw timing relative to *q* and the three
       colour-selection rows; medium for the launch-to-first-turn boundary
 
@@ -1353,7 +1356,9 @@ is not under test.
   brightness still follows the envelope but its colour does not respond to either selector.
   A response in that last control, or no response in the first two, falsifies the respective
   row. Compare frames with equal phase factor and brightness; this selection test alone does
-  not establish the exact per-pixel composition formula. Record it separately for S-0102.
+  not establish the exact per-pixel composition formula. S-0102 claim 34 and F9 supply
+  that contract; its D44 extends these captures to the other ordinary opaque drawing cases
+  and tests the single-layout drawing correction with engine fixtures.
 - **SW11 — force shield (claims 30 to 32).** (a) Allied buildings with reference points at
   distances just below and at 256 × *R* from the target centre, one on raised ground; an enemy
   building inside; expected: only allied buildings strictly inside F3 protected. (b) Vehicles
@@ -1501,15 +1506,14 @@ for these two kinds.
 - The deck-to-deck bridge lift of claim 36 remains low confidence; SW12 needs a deck-to-deck
   run recording both the initial landing point and actual placed height.
 - The absolute tick of each warp step (claim 39).
-- Q-0742 question 4: claim 29 settles the protection envelope, its draw and the three listed
-  colour-selection cases. S-0102 must still specify the exact per-pixel colour-adjustment
-  composition, including channel quantisation, clamping and its relation to shade selection,
-  and extend coverage to sprite vehicles, aircraft, building voxel turrets and attached
-  animations. These results remain `unmeasured` here: this investigation establishes the
-  supplied drawing inputs but has not traced every pixel-composition path. SW10(g)'s
-  same-pixel captures, repeated for these drawing variants with named art overrides where
-  necessary, are the proposed discriminating observation. Do not infer identical colour
-  treatment merely from identical brightness timing.
+- Q-0742 question 4: claim 29 supplies the protection envelope and its draw; S-0102
+  claim 34 and F9 settle ordinary opaque composition and the sprite-vehicle, aircraft,
+  building-voxel and marked-building-animation cases. Exact mask handling for translucent
+  animations, cloaked or translucent units, building bibs and door accessories, remembered
+  images and unusual sprite-turret accessory combinations remains unconfirmed there.
+  SW10(g)'s same-pixel captures extended to those variants, with named art overrides where
+  necessary, remain proposed discriminating observations. Do not infer their colour
+  treatment from the opaque cases or from identical brightness timing.
 - Q-0742 questions 1 to 3 are answered by S-0214 claim 31, table CS; question 5 belongs to
   S-0512 claim 16. They are not answered by the protection changes here.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).
