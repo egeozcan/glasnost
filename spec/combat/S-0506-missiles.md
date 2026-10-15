@@ -2,7 +2,7 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -489,19 +489,26 @@ above the terrain*.
     - Confidence: high
 
 25. **Pending targets without an own target.** No launch pass drops pending merely because the
-    spawner has no own target. Adoption and launch still obey claims 3–6. A target change that
-    actually changes the spawner's held target to empty requests a pending clear. That clear
-    succeeds only when the controller target is nonempty. If the controller target is empty,
-    pending survives. Asking to clear an already empty own target also leaves pending unchanged
-    (`quirks.spawner_pending_target_survives_idle_clear`). With this switch off, any explicit
-    own-target clear empties pending, even when own target or controller target is already empty.
+    spawner has no own target. Adoption and launch still obey claims 3–6. An own-target clear
+    requests a pending clear when the own target was nonempty. Assigning a nonempty target that
+    is redirected to empty (S-0309 claim 24) also requests that clear, even when the previous
+    own target was empty. The pending clear succeeds only when the controller target is nonempty.
+    If the controller target is empty, pending survives. Asking to clear an already empty own
+    target leaves pending unchanged (`quirks.spawner_pending_target_survives_idle_clear`).
+    With this switch off, every such request empties pending, and any explicit own-target clear
+    does so even when the own target or controller target is already empty.
 
     Direct nonempty own-target replacement does not itself alter pending: another spawner shot
     must supply a replacement. Clearing and restoring the same own target before a pass neither
     undoes an effective pending clear nor cancels pending that survived the clear. Move/stop
-    orders, fall-backs and acquisition use these rules only insofar as they actually clear or
-    replace the own target. S-0215 claims 12–15 and S-0309 claims 4 and 23 own those events.
-    The order or behaviour name is not a separate controller cancellation rule.
+    orders, fall-backs and acquisition use these rules when they request an own-target clear
+    or assignment. S-0215 claims 12–15 and S-0309 claims 4, 23 and 24 own those events.
+    The discard and restoration of the own target in attack-move searches that run as for an
+    object with no target (S-0309 claim 23) request no pending clear, with either quirk setting.
+    Pending is unchanged whether that search finds a replacement, leaves the spawner targetless
+    or restores the remembered target; subsequent shots, loss notifications and resets still
+    have their usual effects. The order or behaviour name is not a separate controller
+    cancellation rule.
 
     Loss notification for the pending target itself clears it immediately, regardless of the
     own target. Loss of the controller target clears that target and resets only when no pending
@@ -1018,9 +1025,17 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   own-target replacement without a clear or another shot leaves pending alone. Destroy pending's
   target: its loss notification clears pending immediately. Lose the controller target with
   and without pending replacement: reset only without replacement. A failed search leaving an
-  already empty own target unchanged does not cancel pending. Classify by actual target changes,
-  not behaviour name. Different pending changes or adoption falsify. A shot with no own target
-  ever set remains outside this scenario's established normal-input reach.
+  already empty own target unchanged does not cancel pending. Add attack-move variants under
+  S-0309 claim 23 that search as for an object with no target: expected pending unchanged on
+  replacement, no result and restoration of the remembered target, with either quirk setting.
+  Keep referenced targets alive and avoid shots and resets during that search to isolate it.
+  Where normal input can assign a nonempty dead or sinking target before its removal, test
+  S-0309 claim 24's redirection to empty with an already empty own target. Expected: a pending
+  clear only with a nonempty controller target under the original setting; with the quirk off,
+  that request always clears pending. An unreachable redirected-assignment case is inconclusive.
+  Classify by clear requests and assignments, not behaviour name or final target alone.
+  Different pending changes or adoption falsify. A shot with no own target ever set remains
+  outside this scenario's established normal-input reach.
 
 - **R20. Raw-angle discrimination (claim 17).** Extend R10 with a set-A lazy-cruise missile
   and a set-B descent missile aimed at a stationary target. Vary only firing distance and
