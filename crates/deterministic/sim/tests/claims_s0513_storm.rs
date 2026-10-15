@@ -178,7 +178,7 @@ fn claim16_centre_clouds_on_absolute_multiples_and_scatter_separation() {
 
 #[test]
 fn claim17_cloud_height_and_list_pick() {
-    // spec: S-0513 claim 17 and F4 (over the cell centre at h_level + h_c; Q-0737 interim H = 0, h_c = −3); one list pick before the creation draws
+    // spec: S-0513 claim 17 and F4 (over the cell centre at h_level + h_c; Q-0739 interim H = 0, h_c = −3); one list pick before the creation draws
     let mut w = game(&ruleset());
     let taken = w.rng.taken();
     storm::cloud(&mut w, at(1, 1));

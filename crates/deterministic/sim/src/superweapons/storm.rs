@@ -32,8 +32,8 @@ const LEVEL: i32 = 104;
 // spec: S-0513 F4 (b₄, the lift of 4 levels on a high-bridge cell)
 const BRIDGE_LIFT: i32 = 4 * LEVEL;
 
-/// The bolt image height *H* the simulation assumes (Q-0737 interim).
-// spec: S-0513 F4 (H, the pixel height of the first bolt animation's image; not imported; Q-0737 interim: 0)
+/// The bolt image height *H* the simulation assumes (Q-0739 interim).
+// spec: S-0513 F4 (H, the pixel height of the first bolt animation's image; not imported; Q-0739 interim: 0)
 pub const BOLT_HEIGHT: i32 = 0;
 
 /// *h*_c of F4 for a bolt image height of `h` pixels.
@@ -179,7 +179,7 @@ fn make_cloud(w: &mut World, cell: CellXY) {
         // spec: S-0513 claim 21 (an empty bolt list: h_c = 0)
         0
     } else {
-        // spec: S-0513 F4 (h_c from the first bolt animation's image height H; Q-0737 interim H)
+        // spec: S-0513 F4 (h_c from the first bolt animation's image height H; Q-0739 interim H)
         cloud_lift(BOLT_HEIGHT, mode)
     };
     let mut pos = level_point(w, cell, BRIDGE_LIFT);
@@ -322,7 +322,7 @@ fn raging_clouds(w: &mut World) {
 }
 
 /// What the debris test compares before and after a strike's damage
-/// (claim 18; Q-0738 interim): the cell's first building, its nearest
+/// (claim 18; Q-0740 interim): the cell's first building, its nearest
 /// unit and its height level.
 struct CellState {
     building: Option<ObjectId>,
@@ -346,7 +346,7 @@ fn cell_state(w: &World, c: CellXY) -> CellState {
             Kind::Infantry | Kind::Vehicle | Kind::Aircraft => {
                 let (dx, dy) = (i64::from(o.pos.x - centre.x), i64::from(o.pos.y - centre.y));
                 let d = dx * dx + dy * dy;
-                // Q-0738 interim: the smallest planar squared distance to the centre, ties to the first listed.
+                // Q-0740 interim: the smallest planar squared distance to the centre, ties to the first listed.
                 if unit.is_none_or(|(b, _)| d < b) {
                     unit = Some((d, id));
                 }
@@ -420,7 +420,7 @@ fn strike(w: &mut World, cell: CellXY) {
             land_type,
             land::ROAD | land::ROCK | land::WALL | land::WEEDS
         );
-    // spec: S-0513 claim 18 (debris when the nearest unit before the damage was not infantry and something changed, or the cell held nothing on bare land; Q-0738 interim details)
+    // spec: S-0513 claim 18 (debris when the nearest unit before the damage was not infantry and something changed, or the cell held nothing on bare land; Q-0740 interim details)
     if not_infantry && (changed || bare) {
         // spec: S-0513 claim 18 (R(2, 4) pieces)
         let n = w.rng.ranged(2, 4, half);
@@ -429,7 +429,7 @@ fn strike(w: &mut World, cell: CellXY) {
             // spec: S-0513 claim 18 (each chosen by R(0, n − 1) over the metallic debris list, then its animation-creation draws)
             let k = w.rng.ranged(0, list.len() as i32 - 1, half);
             if let Some(name) = list.get(k as usize) {
-                // Q-0738 interim: at the strike point.
+                // Q-0740 interim: at the strike point.
                 crate::combat::effects::anim(w, name, point);
             }
         }
