@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -308,12 +308,12 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | |
    | 8 | cloaked | |
-   | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class, the capture tests, the parasite tests (S-0614 claim 5), the target is sinking (S-0504 claim 5), or the firer is held and organic (S-0614 claim 8), give *illegal* |
+   | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class, the capture tests, the parasite tests (S-0614 claim 5), the target is sinking (S-0504 claim 5), or the firer is held and organic (S-0614 claim 8; a spawner weapon is already refused at rank 4), give *illegal* |
    | 10 | out of range | the attempt asked for the range test and the target is beyond the weapon's range |
    | 11 | must deploy | a vehicle only (S-0310, claim 9) |
    | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). Which of the two wins when both hold is not stated; stock data has no vehicle that gives both |
