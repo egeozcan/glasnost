@@ -2,11 +2,11 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-15
 measurements: []
 requests: []
 supersedes: []
@@ -56,7 +56,7 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
   experience to anyone (claim 7).
 - **Missile spawn.** A type flag of the missiles that a launching object creates and steers (for
   example a submarine's or a launcher's missile); the launching object is the missile's
-  *launcher*. The spawning rules belong to a future spec.
+  *launcher*. S-0506 claims 1–13 own the spawning rules.
 - **Open-topped transport, passenger firing from it.** As S-0302 (Terms): a transport whose
   passengers fire from inside it.
 - **Garrisoned building, firing occupant.** As S-0302 (Terms) for the garrisoned building. Its
@@ -103,10 +103,11 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 
 2. **Experience changes only by the rules of this spec.** Experience changes by kills (claims 7
    to 10), is set at creation (claim 11), by the armory (claim 12) and by a deployment (claim 13),
-   and is changed by crates (the crate spec). No other change is known.
+   and is changed by crates (the crate spec). A grappling naval parasite also gains experience
+   from a cull under S-0614 claim 16 and F5. No other change is known.
    - Backing: the named changes inherit their claims' backing. The assertion that no other
      change exists is `unmeasured`: a finite set of scenarios cannot exclude every interaction.
-     Crates are delegated to their owner, not tested here.
+     Crates and parasite culls are delegated to their owners, not tested here.
    - Confidence: medium (no other in-scope change was found)
 
 ### Abilities and elite weapons
@@ -126,7 +127,7 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
 
    | Ability | Effect while present | Owner |
    |---|---|---|
-   | faster | the object's speed is multiplied by the veteran speed factor and truncated | S-0207 (vehicles, claim 2), S-0208 (infantry, claim 7 and F5) |
+   | faster | in ground vehicle and infantry movement, speed is multiplied by the veteran speed factor and truncated; ordinary aircraft flight uses type speed directly, without this bonus | S-0207 (vehicles, claim 2), S-0208 (infantry, claim 7 and F5), S-0501 (aircraft, claim 4) |
    | stronger | the damage the object takes is divided by the veteran armour factor | S-0302 (claim 5, F2) |
    | firepower | the object's shot damage is multiplied by the veteran combat factor | S-0302 (claim 2, F1) |
    | scatter | the object accepts the scatter requests that otherwise only a player setting allows | S-0208 (claims 11 to 15) |
@@ -745,7 +746,5 @@ out-of-scope AI policies are design rules, not oracle predictions. X1's wait tes
 - Which object a destruction that claim 9 does not list credits (erasure is only medium; other
   paths, such as occupants killed on their own, were not traced).
 - Which game-mode setting makes skirmish starting units elite, and whether it can be reached.
-- One parasite kind (a grappling naval parasite) gains experience on a path of its own, without the
-  rank multiplier and the alliance test; the parasite spec should own it.
 - Whether the resource-proof ability has any effect in the original (one candidate rule was not
   checked).
