@@ -1253,6 +1253,106 @@ pub struct Quirks {
     // spec: S-0501 claim 21 and F9, Edge cases
     #[serde(default = "on")]
     pub pad_distance_overflow: bool,
+    /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded. Not implemented yet (wave 2).
+    // spec: S-0507 claim 1, F1, Edge cases
+    #[serde(default = "on")]
+    pub transport_load_truncated: bool,
+    /// The gap between a neighbour's direction and the rear facing is not taken the short way round; off: the short way. Not implemented yet (wave 2).
+    // spec: S-0507 F2, Edge cases
+    #[serde(default = "on")]
+    pub unload_facing_gap_no_wrap: bool,
+    /// The second unloading round starts one step clockwise of the rear; off: it tries the rear direction first. Not implemented yet (wave 2).
+    // spec: S-0507 Edge cases
+    #[serde(default = "on")]
+    pub unload_second_round_skips_rear: bool,
+    /// A failed exit changes the gunner's weapon number to position 1's mode index; off: unchanged. Not implemented yet (wave 2).
+    // spec: S-0507 Edge cases
+    #[serde(default = "on")]
+    pub unload_failed_exit_gunner_handover: bool,
+    /// A braking step is floored at 0 and can cross below a positive goal; off: floored at the goal. Not implemented yet (wave 2).
+    // spec: S-0503 F2, Edge cases
+    #[serde(default = "on")]
+    pub hover_brake_undershoot: bool,
+    /// A next heading point gains 416 leptons whenever the vehicle is 312 or more above its terrain, bridge or not; off: a high-bridge cell is needed too. Not implemented yet (wave 2).
+    // spec: S-0503 Edge cases
+    #[serde(default = "on")]
+    pub hover_elevated_heading_point: bool,
+    /// The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell. Not implemented yet (wave 2).
+    // spec: S-0511 claim 8, Edge cases
+    #[serde(default = "on")]
+    pub bridge_event_band_short: bool,
+    /// The bridge family comes from the 5 x 5 block while the high-bridge search reaches 3 cells; off: from the cell claim 16's table finds. Not implemented yet (wave 2).
+    // spec: S-0511 claim 16, Edge cases
+    #[serde(default = "on")]
+    pub bridge_family_by_block: bool,
+    /// A span whose far piece is 30 or more cell steps away is never checked nor repaired; off: no limit. Not implemented yet (wave 2).
+    // spec: S-0511 claims 7 and 19, Edge cases
+    #[serde(default = "on")]
+    pub bridge_span_cap: bool,
+    /// A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated. Not implemented yet (wave 2).
+    // spec: S-0511 Edge cases
+    #[serde(default = "on")]
+    pub low_bridge_wrong_axis_recheck: bool,
+    /// Re-evaluation can turn a damaged strip back to an intact look; off: never from damaged to intact. Not implemented yet (wave 2).
+    // spec: S-0511 claim 14, Edge cases
+    #[serde(default = "on")]
+    pub low_strip_regress: bool,
+    /// A pier chipped on one side ignores a loss notice from that side; off: any pier in state 0 to 2 turns to 3. Not implemented yet (wave 2).
+    // spec: S-0511 claim 6, Edge cases
+    #[serde(default = "on")]
+    pub pier_loss_notice_skips_chipped: bool,
+    /// Repair raises only the pier column after a collapse lowered the pier's whole tile; off: the whole tile is restored. Not implemented yet (wave 2).
+    // spec: S-0511 Edge cases
+    #[serde(default = "on")]
+    pub pier_repair_partial_height: bool,
+    /// An engineer entering a hut whose bridge needs no repair is used up; off: it is refused entry. Not implemented yet (wave 2).
+    // spec: S-0511 claims 17 and 18, Edge cases
+    #[serde(default = "on")]
+    pub repair_consumes_engineer_always: bool,
+    /// The repair walk passes over other bridges' cells and can repair a different bridge; off: it stops at the first cell that is not part of a bridge. Not implemented yet (wave 2).
+    // spec: S-0511 claim 18, Edge cases
+    #[serde(default = "on")]
+    pub repair_walk_unbounded: bool,
+    /// The type's cloak flag is ignored for aircraft and buildings; off: they can cloak by themselves. Not implemented yet (wave 2).
+    // spec: S-0516 Edge cases
+    #[serde(default = "on")]
+    pub cloak_flag_ground_mobile_only: bool,
+    /// With a cloaking speed of 0 cloaking advances a stage per tick and uncloaking never advances; off: fixed. Not implemented yet (wave 2).
+    // spec: S-0516 Edge cases
+    #[serde(default = "on")]
+    pub cloak_zero_speed_stall: bool,
+    /// Healing or a zero-damage hit uncloaks; off: only hits that lower health. Not implemented yet (wave 2).
+    // spec: S-0516 claim 12, Edge cases
+    #[serde(default = "on")]
+    pub heal_reveals_cloaked: bool,
+    /// An uncloak started while cloaking takes the full duration; off: it starts from the current stage. Not implemented yet (wave 2).
+    // spec: S-0516 Edge cases
+    #[serde(default = "on")]
+    pub uncloak_from_cloaking_full_duration: bool,
+    /// Allied sensor units stop a building cloaking and a sensors ability does not; off: only non-allied sensors, by flag or ability. Not implemented yet (wave 2).
+    // spec: S-0516 claim 18, Edge cases
+    #[serde(default = "on")]
+    pub building_sensor_ring_owner_only: bool,
+    /// Overlapping cloak fields lose cells as in the original; off: a cell stays while any powered generator of the house covers it. Not implemented yet (wave 2).
+    // spec: S-0516 claim 20, Edge cases
+    #[serde(default = "on")]
+    pub cloak_field_overlap_loss: bool,
+    /// The neighbouring-infantry check runs on 7 ticks of 8; off: only on multiples of 8. Not implemented yet (wave 2).
+    // spec: S-0516 Edge cases
+    #[serde(default = "on")]
+    pub mirage_adjacent_check_cadence: bool,
+    /// A sensor array's removal decrements over its cloak-radius disc; off: over the disc it added. Not implemented yet (wave 2).
+    // spec: S-0516 Edge cases
+    #[serde(default = "on")]
+    pub sensor_array_removal_radius: bool,
+    /// Sensor and disguise-detector coverage is set at first placement only; off: it follows power and capture. Not implemented yet (wave 2).
+    // spec: S-0516 Edge cases
+    #[serde(default = "on")]
+    pub sensor_building_activation_once: bool,
+    /// Building removals have no floor, so a cell's sensor count can go negative; off: removal undoes exactly what was added. Not implemented yet (wave 2).
+    // spec: S-0516 Edge cases
+    #[serde(default = "on")]
+    pub sensor_count_negative: bool,
 }
 
 impl Default for Quirks {
@@ -1561,6 +1661,31 @@ impl Default for Quirks {
             aircraft_smoke_scenario_draw: true,
             pad_limit_counts_list_only: true,
             pad_distance_overflow: true,
+            transport_load_truncated: true,
+            unload_facing_gap_no_wrap: true,
+            unload_second_round_skips_rear: true,
+            unload_failed_exit_gunner_handover: true,
+            hover_brake_undershoot: true,
+            hover_elevated_heading_point: true,
+            bridge_event_band_short: true,
+            bridge_family_by_block: true,
+            bridge_span_cap: true,
+            low_bridge_wrong_axis_recheck: true,
+            low_strip_regress: true,
+            pier_loss_notice_skips_chipped: true,
+            pier_repair_partial_height: true,
+            repair_consumes_engineer_always: true,
+            repair_walk_unbounded: true,
+            cloak_flag_ground_mobile_only: true,
+            cloak_zero_speed_stall: true,
+            heal_reveals_cloaked: true,
+            uncloak_from_cloaking_full_duration: true,
+            building_sensor_ring_owner_only: true,
+            cloak_field_overlap_loss: true,
+            mirage_adjacent_check_cadence: true,
+            sensor_array_removal_radius: true,
+            sensor_building_activation_once: true,
+            sensor_count_negative: true,
         }
     }
 }
@@ -2310,6 +2435,70 @@ impl Quirks {
                 self.pad_limit_counts_list_only,
             ),
             ("pad_distance_overflow", self.pad_distance_overflow),
+            ("transport_load_truncated", self.transport_load_truncated),
+            ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),
+            (
+                "unload_second_round_skips_rear",
+                self.unload_second_round_skips_rear,
+            ),
+            (
+                "unload_failed_exit_gunner_handover",
+                self.unload_failed_exit_gunner_handover,
+            ),
+            ("hover_brake_undershoot", self.hover_brake_undershoot),
+            (
+                "hover_elevated_heading_point",
+                self.hover_elevated_heading_point,
+            ),
+            ("bridge_event_band_short", self.bridge_event_band_short),
+            ("bridge_family_by_block", self.bridge_family_by_block),
+            ("bridge_span_cap", self.bridge_span_cap),
+            (
+                "low_bridge_wrong_axis_recheck",
+                self.low_bridge_wrong_axis_recheck,
+            ),
+            ("low_strip_regress", self.low_strip_regress),
+            (
+                "pier_loss_notice_skips_chipped",
+                self.pier_loss_notice_skips_chipped,
+            ),
+            (
+                "pier_repair_partial_height",
+                self.pier_repair_partial_height,
+            ),
+            (
+                "repair_consumes_engineer_always",
+                self.repair_consumes_engineer_always,
+            ),
+            ("repair_walk_unbounded", self.repair_walk_unbounded),
+            (
+                "cloak_flag_ground_mobile_only",
+                self.cloak_flag_ground_mobile_only,
+            ),
+            ("cloak_zero_speed_stall", self.cloak_zero_speed_stall),
+            ("heal_reveals_cloaked", self.heal_reveals_cloaked),
+            (
+                "uncloak_from_cloaking_full_duration",
+                self.uncloak_from_cloaking_full_duration,
+            ),
+            (
+                "building_sensor_ring_owner_only",
+                self.building_sensor_ring_owner_only,
+            ),
+            ("cloak_field_overlap_loss", self.cloak_field_overlap_loss),
+            (
+                "mirage_adjacent_check_cadence",
+                self.mirage_adjacent_check_cadence,
+            ),
+            (
+                "sensor_array_removal_radius",
+                self.sensor_array_removal_radius,
+            ),
+            (
+                "sensor_building_activation_once",
+                self.sensor_building_activation_once,
+            ),
+            ("sensor_count_negative", self.sensor_count_negative),
         ]
     }
 

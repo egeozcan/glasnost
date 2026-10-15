@@ -5917,6 +5917,21 @@
           "type": "boolean",
           "default": true
         },
+        "bridge_event_band_short": {
+          "description": "The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "bridge_family_by_block": {
+          "description": "The bridge family comes from the 5 x 5 block while the high-bridge search reaches 3 cells; off: from the cell claim 16's table finds. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "bridge_span_cap": {
+          "description": "A span whose far piece is 30 or more cell steps away is never checked nor repaired; off: no limit. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "build_step_period_cap": {
           "description": "The step period never exceeds 255 ticks.",
           "type": "boolean",
@@ -5944,6 +5959,11 @@
         },
         "building_removal_second_round": {
           "description": "A building awaiting removal takes a second round of survivors and\nsmudge steps when it is removed; off: no second round.",
+          "type": "boolean",
+          "default": true
+        },
+        "building_sensor_ring_owner_only": {
+          "description": "Allied sensor units stop a building cloaking and a sensors ability does not; off: only non-allied sensors, by flag or ability. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -5989,6 +6009,21 @@
         },
         "cliff_back_case_sets": {
           "description": "Behind a cliff, row 1 of claim 5 becomes rock whatever its land type.",
+          "type": "boolean",
+          "default": true
+        },
+        "cloak_field_overlap_loss": {
+          "description": "Overlapping cloak fields lose cells as in the original; off: a cell stays while any powered generator of the house covers it. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "cloak_flag_ground_mobile_only": {
+          "description": "The type's cloak flag is ignored for aircraft and buildings; off: they can cloak by themselves. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "cloak_zero_speed_stall": {
+          "description": "With a cloaking speed of 0 cloaking advances a stage per tick and uncloaking never advances; off: fixed. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -6392,6 +6427,11 @@
           "type": "boolean",
           "default": true
         },
+        "heal_reveals_cloaked": {
+          "description": "Healing or a zero-damage hit uncloaks; off: only hits that lower health. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "height_block_cell": {
           "description": "The height block tests the displaced cell and the step directions of table T2.",
           "type": "boolean",
@@ -6399,6 +6439,16 @@
         },
         "hijack_truce_harvester_check": {
           "description": "The harvester-truce exception of row I15 never applies.",
+          "type": "boolean",
+          "default": true
+        },
+        "hover_brake_undershoot": {
+          "description": "A braking step is floored at 0 and can cross below a positive goal; off: floored at the goal. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "hover_elevated_heading_point": {
+          "description": "A next heading point gains 416 leptons whenever the vehicle is 312 or more above its terrain, bridge or not; off: a high-bridge cell is needed too. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -6452,8 +6502,23 @@
           "type": "boolean",
           "default": true
         },
+        "low_bridge_wrong_axis_recheck": {
+          "description": "A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "low_strip_regress": {
+          "description": "Re-evaluation can turn a damaged strip back to an intact look; off: never from damaged to intact. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "mind_controlled_passengers_cell_choice": {
           "description": "Passengers of a mind-controlled open-topped transport take the cell's last object only.",
+          "type": "boolean",
+          "default": true
+        },
+        "mirage_adjacent_check_cadence": {
+          "description": "The neighbouring-infantry check runs on 7 ticks of 8; off: only on multiples of 8. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -6687,6 +6752,16 @@
           "type": "boolean",
           "default": true
         },
+        "pier_loss_notice_skips_chipped": {
+          "description": "A pier chipped on one side ignores a loss notice from that side; off: any pier in state 0 to 2 turns to 3. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "pier_repair_partial_height": {
+          "description": "Repair raises only the pier column after a collapse lowered the pier's whole tile; off: the whole tile is restored. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "placed_buildings_not_ever_built": {
           "description": "A building put on the map by a place order does not raise its type's ever-built count.",
           "type": "boolean",
@@ -6837,6 +6912,16 @@
           "type": "boolean",
           "default": true
         },
+        "repair_consumes_engineer_always": {
+          "description": "An engineer entering a hut whose bridge needs no repair is used up; off: it is refused entry. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "repair_walk_unbounded": {
+          "description": "The repair walk passes over other bridges' cells and can repair a different bridge; off: it stops at the first cell that is not part of a bridge. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "repeat_direction_snap": {
           "description": "A completed sequence's declared direction is snapped on every tick it stays current.",
           "type": "boolean",
@@ -6894,6 +6979,21 @@
         },
         "secret_lab_pick_by_position": {
           "description": "Each secret lab picks its entry by position with replacement, so labs can share a type.",
+          "type": "boolean",
+          "default": true
+        },
+        "sensor_array_removal_radius": {
+          "description": "A sensor array's removal decrements over its cloak-radius disc; off: over the disc it added. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "sensor_building_activation_once": {
+          "description": "Sensor and disguise-detector coverage is set at first placement only; off: it follows power and capture. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "sensor_count_negative": {
+          "description": "Building removals have no floor, so a cell's sensor count can go negative; off: removal undoes exactly what was added. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
@@ -7157,6 +7257,11 @@
           "type": "boolean",
           "default": true
         },
+        "transport_load_truncated": {
+          "description": "A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "tread_default_water_only": {
           "description": "The tread entry is used for no current sequence on water only, not beach.",
           "type": "boolean",
@@ -7192,6 +7297,11 @@
           "type": "boolean",
           "default": true
         },
+        "uncloak_from_cloaking_full_duration": {
+          "description": "An uncloak started while cloaking takes the full duration; off: it starts from the current stage. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
         "uncounted_sight": {
           "description": "The original applies an uncounted sight at a few moments, never removed.",
           "type": "boolean",
@@ -7204,6 +7314,21 @@
         },
         "unit_changes_no_recheck": {
           "description": "Unit entries, departures, owner changes and removals below the limit call for no recheck.",
+          "type": "boolean",
+          "default": true
+        },
+        "unload_facing_gap_no_wrap": {
+          "description": "The gap between a neighbour's direction and the rear facing is not taken the short way round; off: the short way. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "unload_failed_exit_gunner_handover": {
+          "description": "A failed exit changes the gunner's weapon number to position 1's mode index; off: unchanged. Not implemented yet (wave 2).",
+          "type": "boolean",
+          "default": true
+        },
+        "unload_second_round_skips_rear": {
+          "description": "The second unloading round starts one step clockwise of the rear; off: it tries the rear direction first. Not implemented yet (wave 2).",
           "type": "boolean",
           "default": true
         },
