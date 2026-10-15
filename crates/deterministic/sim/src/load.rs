@@ -387,6 +387,7 @@ pub fn new_game(
             },
             // spec: S-0215 claim 38 (a house begins with no recorded base centre or base-start cell and a radius of 0)
             base: Default::default(),
+            computed_edge: 0, // spec: S-0522 claim 5 (the computed edge starts as north, 0)
         });
     }
     for (i, h) in houses.iter_mut().enumerate() {

@@ -133,6 +133,10 @@ pub struct House {
     /// The base records (S-0215 claim 38).
     #[serde(default)]
     pub base: crate::base::BaseRecord,
+    /// The computed arrival edge (S-0522 claim 5): 0 north, 1 east,
+    /// 2 south, 3 west; it starts as north.
+    #[serde(default)]
+    pub computed_edge: u8,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).

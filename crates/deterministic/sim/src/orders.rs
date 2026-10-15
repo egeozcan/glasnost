@@ -416,6 +416,10 @@ fn primary(w: &mut World, actor: ObjectId) {
     if let Some(ob) = w.obj_mut(actor) {
         ob.econ.building.primary = true;
     }
+    // spec: S-0522 claim 5 (the computed edge is computed again each time a building factory of the house is marked primary)
+    if factory == crate::rules::FactoryCategory::Produces(crate::rules::FactoryKind::Building) {
+        crate::air::recompute_edge(w, actor);
+    }
 }
 
 /// Whether the actor stands on a cell occupied by a vehicle-factory

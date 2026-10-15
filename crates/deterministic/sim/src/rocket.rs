@@ -279,6 +279,13 @@ pub fn keeps_flying_when_destroyed(w: &World, id: ObjectId) -> bool {
 
 /// The aim point of S-0506 claim 14: the destination's heading point.
 pub fn heading_point(w: &World, dest: Target) -> Option<Pos> {
+    heading_point_with(w, dest, w.rules().quirks.rocket_aim_at_heading_point)
+}
+
+/// The heading point of S-0506 claim 14; `moving_point` off samples a
+/// unit's position instead of the point its locomotor moves it to
+/// (`quirks.rocket_aim_at_heading_point` off, for a rocket's aim).
+pub fn heading_point_with(w: &World, dest: Target, moving_point: bool) -> Option<Pos> {
     match dest {
         // spec: S-0506 claim 14 (a cell: its centre point, S-0204)
         Target::Cell(c) => Some(Pos::centre(
@@ -291,7 +298,7 @@ pub fn heading_point(w: &World, dest: Target) -> Option<Pos> {
                 // spec: S-0506 claim 14 (a building: its centre, position + 128 × (W − 1), 128 × (H − 1)); the docking-point cases are a seam
                 return Some(w.reference_point(x));
             }
-            if !w.rules().quirks.rocket_aim_at_heading_point {
+            if !moving_point {
                 // spec: S-0506 Edge cases (quirks.rocket_aim_at_heading_point off: the unit's position)
                 return Some(o.pos);
             }

@@ -1118,16 +1118,21 @@ pub fn release_direction(f: u16) -> usize {
 }
 
 /// Starts a released aircraft's crash (S-0312 claim 16): a flying aircraft
-/// above the terrain falls alive and is destroyed at impact (S-0501 claim
-/// 9); any other is destroyed at once with no attacker.
+/// above the terrain gets health 0 and falls as a dead aircraft (S-0501
+/// claims 9 and 36); any other is destroyed at once with no attacker.
 fn start_crash(w: &mut World, x: ObjectId) {
     let Some(o) = w.obj(x) else { return };
     if crate::combat::damage::dead(o) {
         return;
     }
-    // spec: S-0501 claim 9 (a flying aircraft above the terrain crashes alive and is destroyed at impact; Q-0635)
-    if crate::air::start_crash(w, x, true) {
-        return;
+    if crate::air::is_aircraft(w, x) && crate::air::height(w, x) > 0 {
+        // spec: S-0501 claim 36 (starting this crash sets health to 0, not a living disabled fall; its unfinished flight and speed fraction are kept and ordinary movement continues)
+        if let Some(ob) = w.obj_mut(x) {
+            ob.health = 0;
+        }
+        if crate::air::start_crash(w, x, false) {
+            return;
+        }
     }
     if let Some(ob) = w.obj_mut(x) {
         ob.health = 0;
