@@ -2,7 +2,7 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -22,7 +22,7 @@ losing power affect the lines. Step length is S-0403, clicks are S-0411 and the 
 S-0416; factory unloading and qualified post-contact destinations are S-0417. Skirmish only,
 network games and campaigns are out of scope.
 
-**Paired revisions.** S-0407 revision 13 separates the issue of claim 9's cancellation orders
+**Paired revisions.** S-0407 separates the issue of claim 9's cancellation orders
 at the recheck from their application at the tick's end, exempts held-item resume from the
 issue-time limit test and keeps claim 10's application-time limit test on queued starts
 (S-0407, claims 13 and 16). S-0411 claim 9 specifies cancellation with refund at the
@@ -38,7 +38,7 @@ admission order; S-0004 retains sidebar sorting and capacity ownership. S-0417 c
 contact-place count, infantry exit-candidate acceptance and edge-aircraft nearby destinations.
 Release queues unloading rather than starting it synchronously. Claim 10 already distinguishes
 upgrade placement from ordinary placement, as required by S-0406 claim 12.
-S-0202 revision 17 claim 10 and S-0203 revision 17 claim 8 now agree with claim 11's
+S-0202 claim 10 and S-0203 claim 8 now agree with claim 11's
 causing-action rule and P11 B/C. Payment priority alone does not determine that assignment.
 Their proposed assignment measurements are not measured results. S-0202 claim 15's
 middle-event creation draws do not change production-start precedence.
@@ -627,7 +627,9 @@ and 0 at step 54; *P* = 10 pays 0 at steps 1 to 43 and 1 credit at each of steps
 | Facing of an aircraft entering from the edge | 0 | facing units | claim 13 |
 | Absent-key default, pose direction | 0 | 1/256 turn | claim 13 |
 
-**Exit lists** (claim 13). Per foundation word (S-0406, Import mapping; W × H, *a* along map *x*,
+**Exit lists** (claim 13). S-0314 claim 25 owns repair-departure selection using these same
+lists; claim 13 here governs newly produced units, not departure after repair.
+Per foundation word (S-0406, Import mapping; W × H, *a* along map *x*,
 *b* along map *y*, from the foundation's top-left cell), in the order tried:
 
 | Foundation | Exit list (*a*, *b*) |
