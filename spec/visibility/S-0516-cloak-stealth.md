@@ -2,7 +2,7 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -444,11 +444,15 @@ Two kinds of rule are kept apart throughout.
 
 24. **Firing at a hidden target.** The firing check of S-0301 answers *impossible* when the target is
     hidden from the firer's house and at least one of these holds:
-    - the firer's combat damage for the selected weapon, before armour, is above 0
+    - the firer's mean weapon damage (S-0308 claim 15) is above 0
     - the target is not allied with the firer.
 
-    A forced attack on such a target is refused, even against one's own unit. A healing weapon may
-    still be used on an allied hidden object.
+    Mean weapon damage is a target-independent integer, including the ambient component and
+    truncation toward zero defined by S-0308 claim 15, not the selected weapon's damage or shot
+    damage after firepower or armour scaling. A forced attack on such a target is refused, even
+    against one's own unit. An allied hidden target passes this test when the firer's mean weapon
+    damage is at or below 0; all other firing restrictions still apply. In particular, selecting a
+    healing weapon does not bypass a positive mean weapon damage.
     - Backing: `measurable` (CS9, part c)
     - Confidence: high
 
@@ -608,7 +612,9 @@ Two kinds of rule are kept apart throughout.
     named:
     - target acquisition: S-0309 claim 12, table C, disguise row
     - an object does not retaliate against an attacker that appears disguised to its house
-    - a vehicle does not crush a unit that appears disguised to its owner
+    - automatic crushing target choice excludes a unit that appears disguised to the crusher's
+      house (S-0210 claim 11). This exclusion does not prevent ordered drive-through crushing
+      under S-0210 claims 2–3
     - the infantry cell-entry answer: S-0209
     - the attack cursor: S-0214 claim 6
     - the veterancy insignia: S-0111 claim 18
@@ -636,9 +642,11 @@ Two kinds of rule are kept apart throughout.
     - Backing: `measurable` (CS16)
     - Confidence: high
 
-38. **Radar colour.** On the radar, a disguised unit appears to a house allied with its owner in the
-    owner's colour. To any other house it appears in the disguise house's colour. The colour of a
-    unit whose disguise house is none is an open question.
+38. **Radar colour.** For viewing house *V*, a disguised unit appears on the radar in its owner's
+    colour when its owner allies *V*, including when *V* is the owner. Otherwise it appears in the
+    disguise house's colour. This is the one-way owner → viewer relation, not viewer → owner.
+    Mutual alliance is not required. The colour of a unit whose disguise house is none is an
+    open question.
     - Backing: `measurable` (CS16, part c)
     - Confidence: medium
 
@@ -931,7 +939,19 @@ same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolate
   - **(a)** Units attacking a target that starts cloaking drop it unless covered by a sensor.
   - **(b)** A unit whose house gains sensor coverage of the target between the start and the
     completion keeps it at completion.
-  - **(c)** A force-fire on a hidden enemy is refused, while a medic can heal a hidden ally.
+  - **(c)** Retain an attack target while it becomes hidden, first an own object, then an allied
+    object and an enemy. Use CS-fixture weapon pairs of opposite signs, including their ambient
+    components, with positive, zero and negative mean weapon damage (S-0308 claim 15) in separate
+    runs. Keep the attempted weapon and all other firing conditions unchanged while changing the
+    other slot enough to change the mean's sign. Test both a selected healing weapon with positive
+    mean and a selected damaging weapon with nonpositive mean. Record target retention and shot
+    creation, repeating with own sensor coverage of the target. Expected: without sensing,
+    positive mean refuses an own or allied hidden target even for a selected healing weapon.
+    Nonpositive mean passes this cloak test even for a selected damaging weapon. Hidden enemies
+    are refused for every mean. Sensing removes this refusal. Use a damaged ally and otherwise
+    legal healing conditions for the healing control. Any contrary shot/no-shot result with the
+    target retained and all other firing conditions met falsifies the mean test; a lost target
+    makes that trial inconclusive.
   - **(d)** Aircraft drop a hidden target.
   - **(e)** Click tests, as owner, ally and enemy.
   - **(f)** Radar, as ally and enemy, with and without own sensors.
@@ -969,10 +989,28 @@ same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolate
   - **(a)** A spy disguised as an infantry unit of house *E* is not auto-targeted by *E*'s
     vehicles. *E*'s allies are not fooled when the spy's owner is their ally.
   - **(b)** A powered detector building of the enemy makes its units acquire it within the range.
+  - **(c)** With the auto-crush rule enabled in CS-fixture, put a crushable enemy infantry
+    disguiser within crush range of an idle crusher, disguised as the crusher's house and
+    without detector coverage. Record automatic movement and the infantry's survival. Expected:
+    no automatic crush choice. Repeat with building detector coverage: it is chosen and crushed.
+    Separately order the crusher along a route through the still-disguised infantry's cell to a
+    cell beyond it. Confirm passage through the crush radius with the disguise still effective.
+    Expected: the ordered drive-through crushes it. Automatic choice while fooled, or survival
+    solely due to disguise during a valid drive-through, falsifies the distinction (S-0210
+    claims 2–3 and 11). A missed route or lost disguise makes that trial inconclusive.
 - **CS16, drawn disguise.**
   - **(a)** The owner sees the disguise image on ticks 8 to 55 of every 256.
   - **(b)** An ally sees the disguise.
-  - **(c)** Radar colours as ally and enemy.
+  - **(c)** Use three houses with distinct radar colours: viewer *V*, unit owner *O* and disguise
+    house *D*. Have an infantry disguiser of *O* copy infantry of *D* before observing its stable
+    radar pixel from *V*, on explored ground with radar available, no overlapping radar object,
+    no cloak and no damage flash. Use CS-fixture map-house alliances to set *O* allying *V* but
+    not the reverse; then reverse only those two relations in a separate run. Record both
+    alliance directions, the retained disguise house and radar pixels. Expected: owner's colour
+    in the first run, disguise-house colour in the second. Repeat with mutual alliance and
+    mutual hostility as controls: owner's and disguise-house colours respectively. The opposite
+    colour in any otherwise valid run falsifies claim 38. A missing radar object, lost disguise,
+    changed disguise house or interference makes the run inconclusive.
   - **(d)** After the vehicle fires, enemies see the real unit for the weapon's fake-blink time.
 
 ### CS17: clause-isolation checks
@@ -990,7 +1028,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 5, 6, 9, 17 | Compare own-flag and ability cloakers inside/outside a field under EMP, paralysis and warp. Give aircraft a crate or ability; compare landed and airborne starts, then take off after cloaking. | The disable gate bars own-flag starts outside a field, not ability/field starts when otherwise ready. Losing the last source breaks a full cloak. Airborne starts fail; takeoff alone does not break a full cloak. |
 | 11, 12, 15 | Repeat CS7 for each accepted and rejected hit category in claim 12. Record sounds and fade. Repeat a hit while already uncloaking. | Accepted hits and listed uncloak causes sound; rejected hits do not reveal. Repeated causes during uncloaking do not replay sound. |
 | 13 | Share a neighbouring cell between sensor and non-sensor infantry. Swap which is nearest the top corner. Repeat with an ability sensor and on a bridge. | Only the nearest ground-layer candidate counts. A sensor approaching a stationary target gives coverage, not adjacency uncloaking. |
-| 14, 24–26 | Retain own-house, sensed-enemy and unsensed-enemy targeters at the mobile start/completion. Repeat on a building. Select a sensed non-owned object before it cloaks. Try positive-damage force fire on a hidden own target and healing on a hidden ally. | Unsensed enemies drop at both mobile moments, buildings only at the start. Non-owner selection is lost at cloak start even with sensors. Positive combat damage is refused; healing passes the cloak test. |
+| 14, 24–26 | Retain own-house, sensed-enemy and unsensed-enemy targeters at the mobile start/completion. Repeat on a building. Select a sensed non-owned object before it cloaks. Try positive-damage force fire on a hidden own target and healing on a hidden ally. | Unsensed enemies drop at both mobile moments, buildings only at the start. Non-owner selection is lost at cloak start even with sensors. Positive mean weapon damage is refused; nonpositive mean passes the cloak test for an own or allied target, independently of the selected weapon's sign. |
 | 18 | Put sensor infantry in the foundation/border, with candidate-control occupants. Compare own/allied/enemy and veterancy-only sensors. Lose the field during cloaking, then restore it during uncloaking and change sensor coverage. Watch levels and particles. | Foreign type-flag sensors, allies included, block. Interrupted cloaking completes before uncloaking. Field re-evaluation can reverse uncloaking at its current level. Particles stop at 15 and restart at 0. |
 | 19, 20 | Witness the circle boundary. Power, disable, sell, destroy and capture a generator separately. Test allied witnesses. With two generators cut one's power, then separately sell it. Repeat with a nearby other-owner generator. | F5, open-ground ring rates and immediate removal hold. Allies are not covered. Overlaps can lose coverage; a full idle neighbouring generator restarts irrespective of owner. |
 | 21–23, 40 | Observe detection across a mobile sensor's movement, capture and removal. Compare a type flag alone with a range alone. Toggle array/detector power after placement, and remove an initially unpowered building. Compare mobile and building disguise detectors. | Coverage is owner-only and does not lift shroud. Mobile range supplies coverage. Building power changes do not toggle coverage, and capture leaves it with the old owner. Mobile disguise detectors supply no shared coverage. |
@@ -998,8 +1036,8 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 27–29 | Compare owner, mutual-ally and enemy views on explored ground with/without own sensors. Record clicks, shadow, radar and images every tick. Include a stage count reaching fraction 255. | Claim 28 bands hold. Unsensed allies see the cloak image but cannot click or list it on radar. Fading vehicles have no shadow. Fraction 255 is not drawn for non-owners. |
 | 30–32 | Copy undisguised/disguised infantry, disguised/undisguised vehicles, rock overlays and terrain objects. Create permanent disguisers with each side default. Remove the disguise house. Observe image, colour, health and acquisition. | Claim 31 copies and rejected kinds hold, without target damage. Defaults have the owner's house and do not fool enemy logic. Cleared permanent infantry resets to default; a vehicle clears outright. |
 | 33, 34 | Move temporary infantry/vehicle disguisers; introduce neighbours on all 8 tick phases, ground/bridge layers, contact and lockout. Compare damage on permanent/temporary types. Try transport entry, infiltration, capture and vehicle undeployment. | Only temporary vehicles lose disguise while moving. Adjacent checks skip ticks divisible by 8. An eligible still vehicle draws once. Damage follows S-0302 claim 12. The listed non-removal events preserve disguise; vehicle undeployment clears it. |
-| 35, 36 | Vary disguise house among observer, ally and enemy. Vary ownership and detector coverage. Observe acquisition, retaliation, crush, cell entry, cursor, hover bar/name, insignia and scenery selection/flash. | Outcomes using claim 35 change with its predicate as claim 36 and the owning specs state. Detection changes the observer's treatment, not the copied disguise. |
-| 37–39 | Capture the owner's full 256-tick cycle and each Table B band. Compare ally/enemy images and radar colours. Fire vehicles using two fake-blink times, also while undisguised; compare infantry. | Owner bands/cycle hold. Non-owners see real during vehicle fake blink, then the same disguise again. Infantry firing starts no fake blink. Allied radar uses owner colour; enemy radar uses a non-empty disguise house's colour. |
+| 35, 36 | Vary disguise house among observer, ally and enemy. Vary ownership and detector coverage. Observe acquisition, retaliation, automatic crush choice versus ordered drive-through, cell entry, cursor, hover bar/name, insignia and scenery selection/flash. | Outcomes using claim 35 change with its predicate as claim 36 and the owning specs state. Disguise blocks automatic crush choice, not an otherwise valid drive-through. Detection changes the observer's treatment, not the copied disguise. |
+| 37–39 | Capture the owner's full 256-tick cycle and each Table B band. Compare ally/enemy images and radar colours. Fire vehicles using two fake-blink times, also while undisguised; compare infantry. | Owner bands/cycle hold. Non-owners see real during vehicle fake blink, then the same disguise again. Infantry firing starts no fake blink. Radar uses owner colour when the owner allies the viewer, otherwise a non-empty disguise house's colour; repeat opposite one-way alliances as CS16 (c). |
 | 41 | Compare stock submarines with an underwater fixture vehicle stripped of all cloak sources. Fire after surfacing; add sensors and then cause adjacency reveal. | The control stays surfaced. Ordinary transitions give submerged states and F2 surfacing delay. Sensing alone does not surface it; adjacency can. |
 
 Zero-speed check (claim 7's quirk): record cloaking and subsequent firing over 256 ticks with
