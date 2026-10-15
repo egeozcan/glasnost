@@ -2,11 +2,11 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0191, Q-0196]
 supersedes: []
@@ -518,17 +518,31 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       mapping), and
     - the number of copies, in the house's aircraft line (the item and the queue), of every type on
       that list (the queued type's own copies count only if the type is on the list),
-    and let *T* be the total number of docks of the house's dock buildings (each building with the
-    dock flag adds its number of docks). The order is refused when *D* is *T* or more (F3). A type
-    that is not on the pad list adds neither its objects nor its copies to *D*. So a house can
+    and let *T* be the house's pad total (S-0501 claim 30). Each placed building with the
+    helipad flag contributes its imported docking-place count, whose absent-key default is 1.
+    Placement adds that count, a change of owner transfers it between houses, and removal
+    subtracts it without reducing the total below 0. An explicit count of 0 contributes 0,
+    even though the building still has one contact place (S-0417 claim 14).
+    The order is refused when *D* is *T* or more (F3). A type
+    that is not on the pad list adds neither its objects nor its copies to *D*
+    (`quirks.pad_limit_counts_list_only`, owned by S-0501 claim 30, default on = original).
+    With that switch off, also count the requested type's present objects and line copies
+    when it is absent from the list; do not count it twice when it is listed.
+    This house-wide queue-capacity test is distinct from S-0404 claim 3's free-dock
+    factory eligibility and claim 9's build-limit answer; it replaces neither.
+    So a house can
     queue copies of a dock-bound aircraft type beyond its build limit, while an item of the type is
     in production (claim 9's exception keeps the type orderable then). Acceptance into the queue
     does not guarantee production: when a queued copy would start, S-0404 claim 10 tests factory
     eligibility and claim 9's build-limit answer with the production allowance, though it does
     not repeat this claim's queue-time test or the full tech-tree test. With no other item of
     that type in production, a copy at its positive limit therefore cannot start.
-    - Backing: `measurable` (scenario T12, runs 1 to 6)
-    - Confidence: medium (queue tests and the application-time limit on a queued start; T12 run 6)
+    - Backing: `measurable` (scenario T12, runs 1 to 7; pad-total changes also by
+      S-0501 AC18). The list-only switch-off alternative is `unmeasured`, a design rule
+      rather than an observable rule of the original
+    - Confidence: high (absent docking-place count, pad-total placement and removal),
+      medium (ownership transfer, queue tests and the application-time limit on a queued
+      start; T12 run 6)
 
 17. **Several new offers at one recheck (Q-0191).** For newly admitted types of one kind,
     admission follows increasing registration index. This applies to buildings across both
@@ -658,7 +672,11 @@ after the placement order is applied, while the building is still in its constru
   issued, is refused.
 - `quirks.queue_limit_counts_item_twice` (default original): claim 16. Off: the item in production is
   counted once.
-- `quirks.dock_bound_aircraft_ignores_limit` (default original): claim 16. Off: a dock-bound aircraft
+- `quirks.pad_limit_counts_list_only` (default on = original; owned by S-0501 claim 30):
+  claim 16's dock test counts only the pad-list types. Off: also count the requested type's
+  present objects and line copies when that type is absent from the list. This is the same
+  switch as S-0501's, not a second capacity rule.
+- `quirks.dock_bound_aircraft_ignores_limit` (default original; owned here): claim 16. Off: a dock-bound aircraft
   type is refused at queue time when either the dock test (*D* ≥ *T*) or the build-limit test of
   any other type (F3: *O* + *Q* ≥ *L*; for *L* ≤ 0, *L* = −2³¹ or *E* + *Q* ≥ −*L*) refuses it.
 - `quirks.infantry_limit_exception_exact` (default original): claim 9. Off: an infantry type is allowed
@@ -706,7 +724,7 @@ after the placement order is applied, while the building is still in its constru
 | `SecretInfantry`, `SecretUnit`, `SecretBuilding` (rules, building type) | a lab's fixed secret type (claim 14) | type name | none |
 | `AirportBound` (rules, aircraft type) | dock-bound aircraft (claim 16) | boolean | no |
 | `PadAircraft` (rules, `General`) | the pad aircraft types counted in claim 16 (S-0404) | list of type names | empty |
-| `NumberOfDocks` (rules, building type) | docks a building adds to the house total (claim 16) | integer | 0 |
+| `NumberOfDocks` (rules, building type) | docking-place count a helipad building adds to the house pad total (claim 16; S-0501 claim 30) | integer | 1 |
 | `Helipad` (rules, building type) | the building counts its docks for claim 16 | boolean | no |
 
 The owner-country and country-list values are compared with the country registry of S-0004. The
@@ -1035,6 +1053,20 @@ of the scenarios.
   S-0404 claim 10 governs the failed queued start. Falsified if: the second copy starts while
   these conditions hold. A second game with *L* = 2 is the control: the second copy starts and is
   released, leaving two owned *A*. Failure of that control makes the run inconclusive.
+- Run 7 (absent versus zero docking-place count, claim 16): use the common setup and
+  speed index 2. Give the house two otherwise identical helipad buildings, first with their
+  docking-place count absent, then in a fresh game explicitly zero. Keep a separate
+  eligible aircraft factory with a free contact place in both games; it must contribute
+  nothing to the pad total. Use a listed dock-bound test type with no binding build limit,
+  no present aircraft and enough credits. Start one item, then try to queue a second before
+  release. Record queue acceptance with the sidebar recorder and scripted input.
+  Expected: absent counts give *T* = 2 and *D* = 1, so the second copy is accepted,
+  explicit zero gives *T* = 0 and the queue request is refused. A different queue result
+  with factory eligibility satisfied falsifies the default or the capacity accounting.
+  S-0501 AC18 additionally tests placement, capture and removal changes in the pad total.
+  Replay run 4 in our engine with the list-only switch off: its second copy must instead
+  be refused, because the unlisted *A* item then raises *D* to 2. That replay tests the
+  design alternative, not the oracle.
 
 **T13. Captured prerequisite and override buildings (claims 3 and 15).**
 - Setup: three test types: type 1 needs a test building *X* as a prerequisite; type 2 has a tech
