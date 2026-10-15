@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 28
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -40,8 +40,7 @@ not rules for implementing them.
   confidence and measurement scenario.
 - A planned spec is a spec that is neither approved nor a draft of this glossary's batch. It may
   not be written yet, or it may exist as a draft of a later batch; either way it is not signed off
-  with this batch. The pointer to planned S-0516 below names the owner of future cloak rules
-  only. A spec cites a planned spec as
+  with this batch. A spec cites a planned spec as
   "planned S-xxxx" or as "S-xxxx (its subject, planned)". A planned spec owns no claim, so a
   pointer to one is a pointer only: in an entry with such a pointer, every statement about the original is a
   claim G1 to G3 or a claim of a written spec that the entry names, and the rest is vocabulary. At
@@ -61,8 +60,9 @@ not rules for implementing them.
 - This revision cites approved specs at their indexed revisions and the latest revisions of
   them in its current correction batch. S-0401 to S-0416 are now approved; their revised drafts
   in this batch are plain spec pointers, not planned specs. S-0417 is also approved; its revised
-  draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are drafts
-  in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
+  draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are approved. S-0503,
+  S-0507, S-0511 and S-0516 are approved. S-0512, S-0513, S-0522 and S-0524 are drafts in this
+  batch and own the terms attributed to them below. Sign-off checks every cross-spec
   change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
@@ -75,7 +75,7 @@ not rules for implementing them.
   under a topic. It takes no S-number.
 - An entry otherwise only fixes what a word means in the specs. That is a choice of vocabulary, not
   a claim about the original, so it needs no backing. Where an entry names a rule that has no
-  approved spec and no draft in this batch (for example transport entry or superweapon charging), its
+  approved spec and no draft in this batch, its
   description is a pointer only: specs must not cite it as a rule.
 - The few statements about the original that the glossary makes itself are the numbered claims G1
   to G3 in **Behaviour**, each with its backing, confidence and measurement scenario. They were
@@ -538,6 +538,9 @@ and gives each actor a current, a queued and a suspended behaviour (Terms, claim
 behaviour name in italics means the behaviour, never the sequence kind of the same name in S-0107.
 See S-0215; orders that set a behaviour are S-0213's.
 
+**capacity (transport).** A transport type's imported passenger count, an integer
+(S-0507 claim 1). Not a harvester's resource capacity.
+
 **computer-controlled.** A house of the original that its computer player plays rather than a
 person. The specs use the word for the original: a rule given for a "computer-controlled owner"
 states what the original does for units of such a house. In our engine the computer plays *AI
@@ -721,8 +724,16 @@ but not yet removed. A spec writes "off the map" or "inside" for an object held 
 placed, "not removed" (or "still exists") for an object that has not gone for good, and "in play"
 only in S-0203's sense.
 
+**kept passenger.** The passenger a vehicle transport with a type turret count above 0 keeps
+inside during an unload, subject to the single-passenger exception (S-0507 claim 11).
+
 **lepton.** The unit of world distance: 1/256 of a cell edge. Positions, ranges and speeds are given
 in leptons (speeds in leptons per tick). World height is also measured in leptons.
+
+**load (vehicle transport).** The whole-number sum used to count its passengers' sizes,
+truncated toward zero after each addition. For non-negative sizes and representable sums,
+this equals the sum of each passenger's size rounded down (S-0507 claim 1).
+Not a harvester's resource load.
 
 **local player.** The house of the person in front of this machine. In our engine only what is drawn
 or heard may depend on it, never game state; each spec that uses it says what depends on it. See
@@ -745,16 +756,24 @@ rounding.
 aircraft, buildings, overlays, terrain objects, smudges, animations, projectiles and so on. Every
 object is an instance of one type.
 
-**open-topped transport.** A transport whose passengers fire from inside it. S-0203 (Terms)
-defines it, as a transport whose type is open-topped, a property taken from the rules data, and
-gives its passengers' place in the update order (claim 3); S-0215 and S-0302 (Terms) restate it,
-and S-0307, S-0308, S-0311 and S-0313 give what it changes in their topics. Which
-transports are open-topped is left to the transport specs.
+**open-topped transport.** A vehicle or aircraft transport whose type has the imported
+open-topped flag (S-0507 claim 14). Its passengers fire from inside it. S-0203 claim 3 owns
+their place in the update order; S-0507 claim 15 owns position and target hand-down, and
+S-0307, S-0308, S-0311 and S-0313 own its combat effects in their topics.
+
+**passenger order, position 1.** The order in which a transport holds its passengers.
+Boarding places a passenger at position 1, and passengers leave from that position, so the
+order is last-in first-out. A failed exit puts the passenger back at position 1
+(S-0507 claims 3 and 10).
 
 **per-mille (‰).** An integer ratio where 1000 means a factor of 1.0.
 
 **player house.** A house of a player, human or AI (see *AI house*). The *neutral house* and the
 *special house* are not player houses. S-0409 defines it (Terms); most specs of the batch use it.
+
+**rear direction.** The step direction nearest to a transport's body facing plus 32767
+facing units, one facing unit short of a half turn. S-0507 claim 10 owns its use for exits
+and specifies its rounding.
 
 **reference point.** The point of an object that distance and direction measurements use: for a
 building the centre of its foundation, for every other object its position. See S-0204 (claim 4).
@@ -789,6 +808,11 @@ range −32768 … 32767. A positive value is a clockwise turn, and a half turn 
 S-0204 (claim 11, Formulas F5).
 
 **single-player game.** A skirmish or a campaign mission, as opposed to a *network game*. See S-0201.
+
+**size, size limit (transport).** An infantry or vehicle type's floating-point size, and a
+transport type's floating-point largest accepted size of one passenger. The size limit's
+absent-key default is 0. Vehicle transports test it; ordinary air loading does not
+(S-0507 claims 1 and 2).
 
 **skirmish.** A non-campaign game set up in the skirmish lobby with chosen houses, start positions
 and a game mode, rather than played over a network. In the original the opponents are computer
@@ -826,6 +850,10 @@ which observable order, is S-0203's.
 more at the end of every tick that does not end the game. Timings of game state counted in ticks are
 measured against it. See S-0201 (Terms, claim 1).
 
+**transport, vehicle transport, air transport.** A vehicle or aircraft whose type has a
+capacity above 0. A vehicle transport is a vehicle that is a transport, an air transport an
+aircraft that is one. Vehicle and air capacity rules differ (S-0507 claims 1 and 2).
+
 **turn.** Two senses, told apart by their wording.
 - An amount of rotation: a full turn is 65536 facing units (see *facing*), and a facing turns at a
   turn rate (S-0206). This is the sense of "turn" in every spec that does not say otherwise.
@@ -834,6 +862,9 @@ measured against it. See S-0201 (Terms, claim 1).
   part of a tick in which objects take their turns (S-0203, Terms and claim 1). A spec that uses this sense
   says so in its Terms, as S-0203 and S-0215 do, and then writes a rotation with facing words
   ("turns by", "turn rate", "a quarter turn").
+
+**unloading phases.** The four phases of a vehicle transport's *unload* processing:
+*settling*, *turning*, *letting out* and *finished* (S-0507 claims 8 to 12).
 
 **unsynchronised random stream.** The specs' name for the original's second pseudo-random stream,
 distinct from the *scenario random stream*. It has the same algorithm and is seeded with the same
@@ -844,6 +875,8 @@ load. S-0202 (claim 11) classifies its uses during play and on the setup screens
 our engine runs it: each machine runs it from the game's seed, it is not synchronised between the
 machines of a network game, and none of its draws during play reaches game state. A spec that names a draw from this stream also says what the
 draw affects.
+
+**would-be passenger.** A unit in *enter* whose contact is a transport (S-0507 claim 5).
 
 ### rendering
 
@@ -877,9 +910,11 @@ the backwards direction the *build-down* (S-0408, Terms). S-0108 owns its timing
 **detail level.** The player's visual-detail option, kept in the settings file: 0 = low, 1 =
 medium, 2 = high. Specs write "detail level", not "detail setting". See S-0104.
 
-**disguise.** A unit's ability to look like a unit of another type to some players. While a disguise
-is in effect against a player, that player sees the unit drawn as the disguise type. Which units can
-disguise, and against whom it is in effect, belongs to the special-abilities specs. See S-0107.
+**disguise.** A unit's disguised state, disguise type and disguise house (which may be none).
+The type may be an infantry, vehicle, overlay or terrain-object type. S-0516 claims 30 to 34
+own taking and losing a disguise. *Appears disguised to H* is the game-state test, distinct
+from the presentation test *drawn as its disguise for V* (S-0516 claims 35 and 37).
+S-0107 claim 13 owns drawing infantry through a disguise.
 
 **display path.** Everything between a drawn frame that the game has finished and the picture on the
 monitor: the graphics driver and its settings, any compatibility layer, and whether showing a drawn
@@ -888,11 +923,18 @@ frame (S-0201, claim 6), so a display path that waits for the refresh can hold t
 (S-0201, scenario T1). The measurement setup allows a presentation-only *display compatibility
 layer* (see *measurement setup*).
 
+**drawn as its disguise for V.** The presentation test of whether viewing house *V* is shown
+a unit's disguise image. It does not feed game state (S-0516 claim 37).
+
 **drawn frame.** One redraw of the screen. Not the same thing as a tick, although in a single-player
 game every cycle makes exactly one drawn frame, so a rule "per drawn frame" and a rule "per tick"
 coincide there except during a freeze, which makes drawn frames without ticks (S-0201, claim 6).
 Rendering specs say which of the two each rule follows. Not the same thing as an *image frame*
 either. Specs should not write "frame" or "game frame" on its own.
+
+**fake blink.** A countdown in ticks, set when a disguise-when-still vehicle fires and creates
+a projectile, during which non-owner viewers are shown the real unit. It does not remove
+the disguise (S-0516 claim 39).
 
 **global effect.** One of the map-wide lighting effects of S-0104: the *nuke flash*, the *chrono
 flash*, an *ion storm* or the *psychic dominator*. Each name, and the phases of each, means what
@@ -978,6 +1020,10 @@ jumpjet type and hovering vehicles are not aircraft: an object's kind is the kin
 S-0501 claims 1 to 10 own ordinary flying-locomotor flight, take-off and landing.
 Rocket missiles instead use S-0506 claims 14 to 21.
 
+**arrival edge.** A house's map edge, numbered 0 north, 1 east, 2 south, 3 west, from
+which its paradrop planes enter and by which retreating aircraft leave. S-0522 claims 4 and 5
+own arrival and edge selection; S-0501 claim 34 owns retreat.
+
 **bridge, high bridge, bridge deck.** A *bridge* is a crossing of water or a gap built from bridge
 overlays. A *high bridge* is a bridge with a raised *bridge deck* that units can drive on and pass
 under; a bridge without one is a *low bridge*. The deck lies 4 height levels above the terrain of
@@ -1001,6 +1047,13 @@ level when the type's field is absent. S-0501 claim 2 owns climbing toward it; i
 distinguish cruise height from the height held during landing or destination guidance.
 Not the *jumpjet cruise height*.
 
+**drop attempt.** One attempt to release a carrying aircraft's first passenger beside it.
+S-0522 claims 9 and 11 own the attempt and its use by aircraft shots.
+
+**drop point.** The point beside a carrying aircraft at which a drop attempt is judged,
+using a 128-lepton horizontal step to the selected side. S-0522 claim 9 owns the test and
+specifies the point's direction and rounding in its formula.
+
 **entry outcome.** The answer a moving unit gets for a neighbouring cell: one of eight values, in
 order of increasing severity, *clear*, *cloaked blocker*, *moving blocker*, *closed friendly gate*,
 *friendly obstacle*, *enemy obstacle*, *stationary friendly* and *blocked*. See S-0209 (Terms,
@@ -1012,6 +1065,16 @@ not itself a follower car forms a *car chain* together with the follower cars be
 (claim 26) gives how the cars are sent after their leader, and S-0207 (claim 10) how they copy its
 speed fraction. Specs write "follower car", not "following car", and "car chain", not "train", for
 the linked group (see *train*).
+
+**hover height.** A hovering vehicle's world height above the terrain surface at its position,
+less 416 leptons when it stands on a deck (S-0503 claim 8).
+
+**hover speed.** A hovering vehicle's double-precision fraction from 0 to 1 of its per-tick
+speed that it travels, changed by acceleration and braking. It is distinct from the speed
+fraction already included in that per-tick speed (S-0503 claims 3 and 4).
+
+**hovering vehicle.** A vehicle with the hovering locomotor. S-0503 claims 1 to 12 own its
+movement, lift and switch-off behaviour.
 
 **in-the-air answer.** An aircraft's test for being in the air: the height-above-the-surface
 test used by S-0307 (at least 208 leptons above the surface), except for two game-wide
@@ -1035,6 +1098,10 @@ cannot enter that land. See S-0211 (Terms, claims 2 and 10).
 *water*, *rock*, *wall*, *tiberium* (resource ground), *beach*, *rough*, *ice*, *railroad*, *tunnel*
 and *weeds*. See S-0211 (Terms, claims 5 to 8).
 
+**local point.** An integer point (*a*, *b*) in the local area's own frame: *a* counts cells
+across the screen from its left side, *b* half-rows down from its top. S-0522 claim 4 owns
+its conversion to a cell and specifies the conversion in its formula.
+
 **locomotion class.** The column of the land-type table that a mobile type uses: *foot*, *track*,
 *wheel*, *hover*, *winged*, *float*, *amphibious* or *float-on-beach*, or none. It is not the
 *locomotor* (how an object moves) or the *movement zone* (where the pathfinder lets it go); a type
@@ -1044,7 +1111,8 @@ has all three, chosen by three separate fields. See S-0211 (Terms, claim 3).
 walking, hovering, flying or jumping. It decides how the object moves between cells and what
 movement states it reports. The movement specs own its details: S-0207 the driving locomotor's
 movement, S-0208 infantry walking, S-0504 claim 1 the ship locomotor, S-0501 claims 1 to 10
-ordinary flying locomotion, S-0506 claims 14 to 21 rocket flight, S-0206 turning under each
+ordinary flying locomotion, S-0503 claims 1 to 12 hovering movement,
+S-0506 claims 14 to 21 rocket flight, S-0206 turning under each
 locomotor, and S-0106 (claim 5) which locomotors tilt a body on slopes. The other locomotors
 are left to later movement specs.
 
@@ -1053,6 +1121,9 @@ sabotage or otherwise reach, while the unit is in a behaviour that has one. S-02
 it and uses it in its entry outcomes (claim 4). Which behaviours have one belongs to the behaviour
 specs and is open (S-0209, Open questions). The master of an enslaved unit is
 not a mission target: S-0209 gives it a rule of its own. See S-0209.
+
+**movement heading.** The facing a hovering vehicle keeps besides its body facing. It turns
+towards the heading point, and the vehicle travels along it (S-0503 claim 6).
 
 **movement zone.** A mobile type's imported category of where the pathfinder lets it go, such as on
 foot, by wheel or track, by water or amphibiously. There are thirteen. The specs call them by the
@@ -1077,9 +1148,25 @@ rules, including crashing when no pad can be obtained.
 **pad total.** The sum of the docking-place counts of a house's placed helipad buildings.
 S-0501 claim 30 owns its accounting and the aircraft-capacity test that uses it.
 
+**paradrop plane.** An aircraft of the paradrop plane type sent by a paradrop launch,
+a visiting aircraft carrying its paratroopers as passengers (S-0522 claim 3).
+
+**paratrooper.** A passenger of a paradrop plane, and the same unit after it is dropped until
+it lands (S-0522 claim 9).
+
+**pass counter.** A paradrop plane's count of passes it may still start without a successful
+drop. It starts at 5 and a successful drop resets it to 5 (S-0522 claims 6 to 8).
+
 **passability category.** A number from 0 to 7 that each cell carries, computed from its land type,
 overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *partial obstacle*,
 *blocked* and *off-map*. See S-0211 (Terms, claim 11).
+
+**payload list.** A pair of rules lists, infantry types and counts, whose entry *i* means
+one plane carrying *n*ᵢ units of type *t*ᵢ (S-0522 claim 2).
+
+**powered (hovering vehicle).** Not switched off, or still at a hover height above 0.
+A switched-off hovering vehicle therefore remains powered until it settles. This is the
+hover-specific test, not a building's power condition (S-0503 claim 10).
 
 **service step.** One round added or one repair step made by a pad for one aircraft settled
 on it. S-0501 claims 26 and 27 own servicing and repair.
@@ -1090,11 +1177,15 @@ above the terrain is strictly below −400 leptons and it leaves play. S-0504 cl
 **speed fraction.** A movement speed multiplier. For aircraft, a floating-point value from
 0 to 1, with a current and a target value (S-0501 claim 5). Ground vehicles also have a
 current and a target speed fraction; S-0207 claims 9 and 10 own their rules, and S-0504
-claim 1 applies those rules to ships. A spec uses the sense for its movement kind.
+claim 1 applies those rules to ships. S-0503 claim 4 owns a hovering vehicle's speed fraction,
+which is separate from its *hover speed*. A spec uses the sense for its movement kind.
+
+**spin (hovering vehicle).** The brief uncontrolled rotation initiated by switching off a
+hovering vehicle. Re-enabling does not itself end it (S-0503 claim 10).
 
 **submerged.** An underwater-type vehicle in the cloaking, cloaked or uncloaking state.
-S-0504 claim 6 and its Terms own this naval vocabulary; planned S-0516 owns the cloak
-transitions. An underwater type without the ability to cloak is never submerged.
+S-0504 claim 6 owns the naval vocabulary; S-0516 claim 41 owns submerging and surfacing
+through the cloak transitions. An underwater type without the ability to cloak is never submerged.
 
 **tether link, tethered.** A link that two objects in *contact* both hold during some exchanges.
 An object that holds one is *tethered*. Contact alone does not imply a tether. The spec that owns
@@ -1114,6 +1205,9 @@ not a rule inherited from this glossary. Which other situations of play set the 
 is not fully known (S-0208 and S-0213, Open questions). What a tether changes is owned by the
 specs that use it, for example S-0213 (table T1) for orders.
 
+**throttle.** A hovering vehicle's double-precision per-tick drive setting: 0, ½ or 1
+(S-0503 claim 2). It is not its actual speed.
+
 **train, train type.** A *train type* is a vehicle type with the imported train flag, and a
 *train* is a vehicle of such a type (S-0210, S-0212, S-0214). The flag is a field of the type; the
 link that makes a vehicle a *follower car* comes from the map, and a group of linked vehicles is a
@@ -1132,8 +1226,9 @@ the mark unless its type is both selectable and landable and its primary weapon 
 a camera weapon; placement never clears an existing mark, and dispatch can set it earlier.
 S-0501 claims 1 and 10 own placement and leaving the map; its Terms define the mark.
 
-**wake.** An instance of the game-wide wake animation created by a vessel on the water.
-S-0504 claims 2 and 4 own moving-ship and sinking-vessel wakes.
+**wake.** An instance of the game-wide wake animation created over water.
+S-0504 claims 2 and 4 own moving-ship and sinking-vessel wakes; S-0503 claim 9 owns
+hovering-vehicle wakes.
 
 ### infantry
 
@@ -1458,8 +1553,12 @@ that do not come out on their own (S-0312, Terms, *absorbed passengers*). S-0405
 **adjacency.** A building type's adjacency field, in cells, and the placement condition that
 S-0406 builds on it. S-0406 owns both (Terms, claim 4); S-0415 uses the term.
 
+**blow-up of a cell.** The effects on occupants and animations when a high-bridge section or
+pier is lost: ground-layer demolition hits, deck drops and falling, and explosion animations.
+Protection from the hits is still tested (S-0511 claim 9).
+
 **bridge repair hut.** A building type that rebuilds the bridge linked to it when an engineer
-enters it. The structures specs own it. See S-0214 (Terms).
+enters it (S-0511 claims 17 to 20). S-0511 claim 16 owns hut demolition.
 
 **building.** A type kind and its objects: a stationary object that occupies a foundation of cells.
 Also called a structure.
@@ -1474,12 +1573,21 @@ placed. S-0406 owns it (Terms, claim 3); S-0415 (claim 3) uses it for deploying.
 
 **construction yard.** Ambiguous on its own. S-0213, S-0214 and S-0415 (Terms) mean a building
 whose type has the construction-yard flag; S-0215 (Terms) means a building whose type is in a list
-of the original's computer player, which can be a different set of types. A spec that uses the word
-in a rule says in its Terms which sense it means.
+of the original's computer player, which can be a different set of types. S-0522 claim 5 keeps
+two senses apart: a *building factory*, whose type produces buildings, and a *yard-flag
+building*, whose type has the construction-yard flag. A spec that uses the word in a rule
+says in its Terms which sense it means.
+
+**destroy attempt.** One application of the bridge destruction rules at a cell. It succeeds
+when it removes a high-bridge section, collapses a pier or destroys a low strip. A failed
+attempt can still change the bridge (S-0511 claims 1 and 2).
 
 **exit apron cell.** The cell where a ground vehicle factory's exit track ends. It need not
 belong to the factory's foundation. S-0417 owns the term and its position (Terms, claim 3).
 It is distinct from S-0404's *exit cell*, used for production release.
+
+**fall rate.** A falling object's vertical speed in leptons per update, decreased each update
+down to an imported floor (S-0511 claim 10).
 
 **foundation.** The cells a building occupies, within a bounding rectangle of W × H cells, W along
 the map x axis and H along y (S-0108, Import mapping, gives the sizes). The cells are normally the
@@ -1493,10 +1601,27 @@ axes: on the screen that cell is the topmost cell of the footprint, not the left
 foundation's *top corner* is the top corner of its top-left cell, the topmost point of the footprint
 on the screen.
 
+**high-bridge section.** One high-bridge overlay and the four cells it marks. Its overlay data
+value distinguishes intact, chipped on one side, damaged and open on one side states. A lost
+section has no overlay (S-0511 claims 3 to 5).
+
+**hut demolition.** Destruction of a whole bridge started at its repair hut by a detonating
+timed bomb or an expiring delayed-kill countdown (S-0511 claim 16).
+
+**low strip.** The three cells across a low bridge at one step along its line. Changes to the
+strip's class affect all three cells together (S-0511 claims 13 to 15).
+
+**pier.** A bridge tile standing between two spans, in state 0 (intact) to 4 (collapsed), with
+a reference cell and a three-cell column across the bridge (S-0511 claim 6).
+
 **smudge footprint.** The rectangle of cells a smudge type covers, starting at its placement
 cell (the *anchor cell*) and extending towards increasing map *x* and *y*. Its width counts cells
 along *x* and its height counts cells along *y*. S-0312 owns the term and the destruction-smudge
 fit test (Terms, claim 26).
+
+**span check.** After a successful direct high-bridge destroy attempt, the check that removes
+runs of sections touching neither end of the affected span, subject to the span bounds in
+S-0511 claim 7.
 
 **upgrade.** A building type that is added to an existing building instead of standing on its own
 cells, and a building of such a type. S-0405 names it (Terms), and S-0406 owns how it is placed
@@ -1680,8 +1805,22 @@ generic group of S-0407 (Terms) and with the neutral buildings that players capt
 
 ### visibility
 
+**appears disguised to H.** The game-state test of whether a unit's disguise fools house *H*.
+It is separate from how the unit is drawn for a viewer (S-0516 claim 35).
+
+**cloak delay.** The per-object countdown in ticks set when an uncloak completes, during
+which the object cannot start cloaking again (S-0516 claim 7). Buildings do not start this
+mobile-object delay on completing an uncloak (S-0516 claim 18).
+
+**cloak field.** The cells a house's cloak-generating buildings hide for that house. Coverage
+is a yes-or-no flag per house and cell, not a count (S-0516 claims 19 and 20).
+
 **discovered by a house.** A per-house mark of objects, set by reveals for that house. S-0409
 owns when it is set (Terms, *discovered by H*, claim 16); S-0410 (claim 7) uses it.
+
+**disguise-detector coverage.** A per-house, per-cell signed count fed only by detector
+buildings. A positive count defeats disguises on that cell in both the game-state and
+presentation tests, but does not reveal cloaked objects (S-0516 claim 40).
 
 **explored, seen.** Two per-house states of every legal cell. An *explored* cell is free of
 *shroud* for the house; with *fog of war* on, a *seen* cell is also not under fog. The opposites are
@@ -1700,6 +1839,18 @@ flag. While it generates, it holds one *gap field*, a set of cells around it. S-
 (Terms, claim 11); S-0110 (Terms) names the stock building, and S-0405 (claim 16) and S-0410 use
 the terms.
 
+**hidden from H.** Fully cloaked on a cell that house *H* does not sense. A building also
+counts at fade levels 11 to 15. This game-state test applies to the owner too
+(S-0516 claim 24).
+
+**re-disguise lockout.** A countdown in ticks during which a disguise-when-still vehicle
+cannot take a new disguise. S-0302 claim 12 calls it the disguise-disruption countdown
+(S-0516 claims 33 and 34).
+
+**sensor coverage, sensed cell.** A signed count per house and cell, fed by that house's
+sensors only. A cell is sensed by a house while its count is above 0. Allies do not share
+coverage (S-0516 claims 21 to 23).
+
 **shroud.** The cover that hides map areas a house has not explored yet. When a cell becomes
 explored, and when it is covered again, is S-0409's (see *explored, seen*); S-0110 draws the
 cover.
@@ -1712,6 +1863,88 @@ at a given moment. S-0409 owns both (Terms, claims 2 to 10); S-0406 points to it
 explores the whole map for its house. S-0409 owns it (Terms, claim 15); S-0405 (claim 14) and
 S-0410 use it.
 
+### superweapons
+
+**arrival hold.** The period after a warp arrival during which the object is still phasing in,
+lasting its held delay in ticks (S-0513 claim 40).
+
+**camera sight.** The spy plane's own sight with its radius replaced by its primary weapon's
+damage, subject to the radius cap and zero-damage fallback of S-0513 claim 44.
+
+**charge clock, remaining time.** A superweapon record's running or stopped countdown toward
+readiness, with remaining time in ticks. A running clock counts down by one per tick, never
+below zero; a stopped clock keeps its remaining time. S-0512 claim 5 owns completion.
+Its claims 10 and 14 describe clocks that run despite suspension.
+
+**clock stage.** The whole-number charge progress from 0 to 54 shown on a superweapon icon.
+S-0512 claim 16 owns the display, including drain-mode exceptions.
+
+**cloud, strike.** A *cloud* is a storm cloud animation over a cell; its *strike* is the bolt
+with damage it makes when it matures. S-0513 claims 16 to 18 own them.
+
+**countdown row.** One line of the on-screen superweapon countdown (S-0512 claim 18).
+
+**drain-mode superweapon.** A type with the imported drain-mode flag, whose record has the
+states charging, ready and active. Its orders can restart the clock despite suspension, and
+one-time drain records are not consumed by those transitions under the original behaviour
+(S-0512 claim 19).
+
+**effect block.** The 3 × 3 cells centred on a cell, in the fixed order that S-0513 claim 4
+specifies for the iron curtain and chronosphere.
+
+**giving building.** For one house and superweapon type, an on-map, non-destroyed building
+that gives the type through its superweapon fields or a carried upgrade. S-0512 claim 3 owns
+granting and its giving-building definition includes the auxiliary-building condition.
+
+**launching house.** The house that owns the superweapon record being launched
+(S-0513 claim 5).
+
+**leaving stage.** The fixed 60-tick period before a warped object leaves its old position,
+during which it counts as being erased (S-0513 claim 39).
+
+**manual-charge superweapon.** A type whose record is granted with its clock stopped at the
+full charge time and charges only when a trigger sets its charge (S-0512 claim 20).
+
+**one-time superweapon.** A trigger-granted single use, ordinarily revoked on firing.
+S-0512 claim 12 owns the grant and stale-suspension exception; claim 19 owns the drain-mode
+exception, whose orders do not consume a one-time record under the original behaviour.
+
+**permanent trigger grant.** A superweapon record granted for good by a trigger action,
+exempt from building and power suspension or loss checks (S-0512 claim 13).
+
+**phasing in.** A warped object's state from leaving its old position until its arrival hold
+ends (S-0513 claims 39 and 40).
+
+**protection timer.** The countdown of an object's temporary invulnerability, with its kind:
+curtain or force shield (S-0513 claims 25 and 26).
+
+**ready (superweapon).** A granted superweapon record whose charge has completed
+(S-0512 claim 5). S-0411's sidebar sense additionally requires no suspension and being inside
+the flash window (S-0512 claim 17).
+
+**storm, weather storm.** The single game-wide storm of the weather superweapon, with states
+idle, counting down, raging and clearing (S-0513 claims 14 to 19). S-0524 claim 1 uses
+*weather storm* for this same effect; S-0104 calls it the *ion storm*.
+
+**storm owner.** The house credited for storm strikes, possibly no house (S-0513 claim 19).
+
+**superweapon record.** The availability and charge state of one superweapon type for one
+house, including granted, ready and suspended state and its charge clock. More giving
+buildings do not give the house more charges of the same type (S-0512 claim 1).
+
+**suspended (superweapon).** A granted record whose power condition disables sidebar targeting
+and normally stops its charge clock. It may still be ready. S-0512 claims 4 and 6 own
+suspension; claims 10 and 14 give running-through-suspension exceptions. Specs write
+*suspended*, not *held*: the latter is the mobile-unit countdown.
+
+**swept layer.** The cell layer whose listed objects an area superweapon reaches in one cell
+(S-0513 claim 4).
+
+**warning marker.** The animation at a nuclear strike's target shown only to qualifying
+non-allied viewers with psychic detection (S-0513 claim 11).
+
+**warp group.** The mobile objects one chronosphere warp moves or kills (S-0513 claim 34).
+
 ### triggers
 
 **cell tag.** A trigger tag attached to one cell by the map. How a map attaches cell tags is
@@ -1719,12 +1952,27 @@ specified in S-0009 (claim 31). What an object entering the cell sets off is own
 (claim 18, the entered-by event) for the codes of its subset; other codes are left to later
 revisions of the trigger specs.
 
+**demolition warhead.** The warhead the rules name as the demolition-charge warhead
+(S-0524 claim 5).
+
+**entry raise.** An entered-by raise on the entered object's tag, with the entering unit as
+causing object. S-0524 claims 10 to 12 own the additional object-entry raises; S-0011 claim 18
+owns event matching.
+
+**starting-building record.** The snapshot of each house's owned building types and cells
+taken at the end of loading, before the first tick. It records neither health nor tags
+(S-0524 claim 9).
+
 **trigger, trigger action.** A *trigger* is a rule that a map defines: when its conditions are met,
 it runs its *trigger actions*, such as playing an animation or changing the lighting. S-0011 owns
 how triggers are set up, evaluated and fired, and the events and actions of its multiplayer subset.
 Codes outside that subset are pointers only, left to later revisions of the trigger specs; some of
 them are owned elsewhere, such as the freeze and chrono-flash actions of S-0201 (claims 10 and 11).
 Specs write "trigger action", not "script action".
+
+**waypoint point.** The centre of a waypoint's cell at its terrain surface height, raised
+416 leptons on a high bridge. S-0011 claim 28 owns the point; S-0524 claim 5 uses it for
+demolition blasts, unlike the cell-only actions of S-0524 claims 1, 2 and 4.
 
 ### ui
 
