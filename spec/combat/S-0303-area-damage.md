@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -254,12 +254,16 @@ addition:
 11. **Observable order of hit effects.** The objects present when the detonation begins determine
     its candidate entries. An object that first appears in a scanned cell while hit effects are
     occurring receives no entry for that detonation (State and ordering). Across conforming
-    implementations, the observable outcomes match the following entry order: tracked flying
-    objects of claim 6 according to F7, then scanned cells according to T1, and objects within
-    each cell according to the listing order of claim 5. A building's eligible foundation-cell
-    entries occupy the corresponding places in that order. For each entry, its damage (S-0302),
-    resulting death effects (S-0312), nested detonations and scenario-random-stream draws are
-    observable before the effects and draws of the next entry. Thus an earlier entry's death
+    implementations, the externally observable effects and scenario-random-stream draws have
+    one consistent order. When hit effects from tracked flying objects of claim 6 can be
+    distinguished from effects of scanned-cell objects, the flying-object effects and draws
+    are observable before the scanned-cell effects and draws. Among flying objects, effects
+    and draws follow F7's sector order and this claim's within-sector order. Among scanned-cell
+    objects, effects and draws follow the cells' T1 order and each cell's listing order of
+    claim 5 (S-0209 claim 13). A building's eligible foundation-cell hits have the corresponding
+    observable positions in that sequence. For any two successive distinguishable entries,
+    the damage (S-0302), resulting death effects (S-0312), nested detonations and draws of the
+    earlier entry are observable before those of the later entry. Thus an earlier entry's death
     weapon can kill an object before its later entry, making that later entry ineffective for
     the object (claim 9); damage without death can instead change its remaining health.
     Within a sector, a newly tracked object follows every object already registered there.
@@ -278,8 +282,12 @@ addition:
     design choice of the alternative search, not an observation of the original.
     - Backing: `measurable` (scenario A11, including variant d for newly placed objects, and
       scenario A20 for sector arrival, departure, return and same-sector ordering), and
-      `unmeasured` for the complete order between sectors: A16 tests membership, not every
-      pairwise sector hit order. The off-state order is a design rule (A20's replay check).
+      `unmeasured` for flying-object effects preceding scanned-cell effects and for the complete
+      order between sectors: A11 and A20 do not compare flying and ground hits, and A16 tests
+      membership, not every pairwise sector hit order. The extension of within-sector ordering
+      to aircraft and rocket missiles is also `unmeasured`: A20 uses only jumpjets and supplies
+      no corresponding kind-specific fixture. The off-state order is a design rule
+      (A20's replay check).
     - Confidence: high for cells, hits and within-sector registration changes; medium for the
       complete order between sectors (F7)
 
@@ -302,7 +310,7 @@ addition:
     claim 10's aircraft halving, as S-0302 claim 6's distance *r*. The falloff radius is F1's
     *R* = trunc(256 × *S*), not the distinct whole-cell radius used for the delayed-kill
     countdown of S-0302 claim 16.
-    - Backing: `measurable` (scenario A1, variants a to d and g)
+    - Backing: `measurable` (scenario A1, variants a to d, g and h)
     - Confidence: high
 
 13. **Healing detonations reach only the point itself.** A hit with damage amount *D* < 0 heals
@@ -430,7 +438,12 @@ addition:
     - Confidence: high for the trigger and the nested detonation; medium for the draws
 
 20. **Particle systems and rocking.** A warhead that names a particle system creates it at *P* at
-    the end of the detonation, owned by the source house. A warhead with the rocking flag rocks the
+    the end of the detonation, owned by the source house. When the system has a held particle type,
+    it immediately receives one particle of that type at *P*, subject to the terrain floor of
+    S-0613 claim 5; without a held type no initial particle appears (S-0613 claim 4).
+    The system takes its type's lifetime, whose absent default is −1 ticks, meaning it never
+    times out (S-0613 claim 4). This is the system's lifetime, not the particle's.
+    A warhead with the rocking flag rocks the
     bodies of the objects drawn as voxel models (of any kind) in the 7 × 7 cells around the centre
     cell, in the same cell layer, when the rocking strength min(*D* × 0.01, 4.0) exceeds 0.3.
     The strength is formed in double precision from the integer *D*, rounded as S-0205 sets for
@@ -440,7 +453,8 @@ addition:
     body-rocking rates that S-0106 draws (scaled by the type's weight), takes no draw, and is
     believed not to reach game state. The strength is passed on to that presentation as a number
     whose precision this spec does not fix.
-    - Backing: `measurable` for the particle system (scenario A13, variant c), and
+    - Backing: `measurable` for the particle system (scenario A13, variant c; S-0613 scenario G3
+      for the initial particle, absent held type and system lifetime), and
       `unmeasured` for rocking: no scenario calibrates visible tilt against strength, weight and
       direction, or tests its possible effect on firing. Presentation alone does not make it
       unobservable
@@ -581,8 +595,8 @@ falloff and versus computation owned by S-0302 claim 6: its *f*, *a*, *g* and *r
 *D*ₛ, *E*, *D*₁ and *d* here. Both single-precision narrowings are required, but the edge product
 uses the integer *d*₃, not the already narrowed *D*ₛ. The interpolation's arithmetic uses the
 double-precision roundings shown above. Damage quantities are in health points.
-At joint sign-off, S-0302 claim 6's formula must likewise form its edge share from *d*₃ rather
-than *f*; otherwise large defended amounts can disagree by a health point.
+S-0302 claim 6 uses the same integer *d*₃ for its edge share. Using *f* instead would make
+large defended amounts disagree by a health point.
 Example with exact arithmetic (no rounding at these values), for *d*₃ = 100, *p* = 0.5, *R* = 512:
 *d* = 0 gives 100, *d* = 256 gives 75, *d* = 511 gives 50, *d* = 512 gives 50. The order of the
 steps matters: with *D* = 1000, an armour divisor of 3 (*d*₃ = 333), *p* = 0.5 and *R* = 1024, the
@@ -628,9 +642,14 @@ lies outside the list (Edge cases).
 
 **F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). A non-positive *N* creates no pieces and takes no allocation or type-choice draws. This non-positive-total case is `unmeasured`: A15 and A19 use positive totals, not a setup producing a non-positive total. Confidence: high. All debris is created at the projectile position *Q* (claim 22).
 
-For a nonempty retained type list of *m* types, let *t*ᵢ and *u*ᵢ be the type and signed maximum at index *i*, with indices counted from 0. Allocation begins with *N* pieces remaining. The first allocation uses type *t*₀; subsequent allocations cycle through the retained types in list order, returning to *t*₀ after *t*ₘ₋₁. An allocation is made only while pieces remain.
+For a nonempty retained type list of *m* types, let *t*ᵢ and *u*ᵢ be the type and signed maximum at index *i*, with indices counted from 0. The initial remaining count is *N*. Each allocation uses one scenario-random-stream value *raw*. The allocation state is:
 
-For each allocation, one scenario-random-stream value *raw* is used. The quantities determining that allocation and the remaining count are:
+| Allocation state | Selected type | Remaining count before allocation | Random value | Allocation and next state |
+|---|---|---|---|---|
+| Initial, with *N* > 0 | *t*₀ | *N* | One *raw* value | Apply the quantity table below. |
+| Following allocation | The type after the previously selected type in list order, wrapping from *t*ₘ₋₁ to *t*₀ | The preceding allocation's resulting remaining count | One new *raw* value | Apply the quantity table below only when the remaining count is positive. |
+
+The quantities determining an allocation and the remaining count are:
 
 | Quantity | Meaning |
 |---|---|
@@ -641,7 +660,7 @@ For each allocation, one scenario-random-stream value *raw* is used. The quantit
 
 “Wrap” is S-0205 claim 1's signed 32-bit wrap. The remainder uses signed division truncated toward zero (S-0205 claims 2–3), so its sign follows *a*, not *b*. This is the magnitude-first rule of S-0202 claim 6, extended here to signed divisors. Thus a maximum below −1 normally behaves like the non-negative maximum −*u* − 2: −2 assigns zero pieces, while −4 assigns 0 to 2 pieces. A maximum of 2147483647 gives the wrapped divisor −2147483648, not a zero divisor. A maximum of −1 gives a zero divisor, and its departure is specified under Edge cases. For the exceptional raw value −2147483648, *a* stays negative under the default of S-0202 claim 6; signed remainder and the wrap of the remaining count still apply, and a non-positive allocation creates no pieces. With `quirks.random_magnitude_overflow` off (S-0202 claim 6), *a* is instead the exact magnitude |*raw*|, including 2147483648; the remainder is then non-negative. The magnitude and its quotient may use that wider non-negative integer domain, while the divisor and remaining count retain signed 32-bit wrap.
 
-The allocation's result contributes *g* pieces of its selected type. The allocation ends when the resulting remaining count is 0 or less; the random value used for that allocation is included. Pieces assigned by an allocation are created before the random value for the next allocation is drawn. Draws caused by creating pieces occur between allocation values and are not themselves allocation values. If no allocation reduces the remaining count to 0 or less, the non-terminating case is described under Edge cases: debris that can never be placed.
+The allocation's result contributes max(*g*, 0) pieces of its selected type. Debris allocation ends when the resulting remaining count is 0 or less; the random value used for that allocation is included. Pieces assigned by an allocation are created before the random value for the next allocation is drawn. Draws caused by creating pieces occur between allocation values and are not themselves allocation values. If no allocation reduces the remaining count to 0 or less, the non-terminating case is described under Edge cases: debris that can never be placed.
 
 If the warhead lists no debris types, the detonation creates *N* animations, each selected by
 entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by
@@ -1005,6 +1024,13 @@ in each of three runs and record its health loss. Expected: *d*₃ = 16777219,
 A loss of 12582913 would instead indicate that the edge product incorrectly used *D*ₛ.
 Any other loss also falsifies F3 for this setup. These are invented test values, not stock data.
 
+*Variant h (bypass cases):* use g's damage, target health, armour and cap settings, but an
+edge fraction of 1.0. Expected: the target loses 16777219 health points, not the narrowed
+16777218. Separately use edge fraction 0.75 and spread 0, aiming exactly at the target's
+recorded position so that its distance is 0 and its cell is scanned. Expected: again a loss
+of 16777219 because the zero radius bypasses interpolation. Use three fresh runs of each
+case. Any other loss falsifies the respective bypass rule.
+
 **A2. Scanned cells versus radius (claim 3).** Wall hits (claim 16) take no distance test, so a
 wall shows directly whether its cell is scanned. *Setup:* a field of stock wall cells around the
 detonation cell; a test warhead with the wall flag and a damage amount at least the wall strength (no
@@ -1216,10 +1242,14 @@ vehicles by the ammunition-crate damage scaled as F3 with the demolition warhead
 barrel explodes only if the nested detonation's own centre cell holds it (it does not), so it stays.
 Statistical over 100 runs: debris appears in a share 1 − 0.85ⁿ of the runs (*n* the length of
 the barrel debris list) and the particle system in 25 %. Variant c: a warhead naming a particle
-system shows it at *P*. *Falsified if:* the neighbour barrel explodes from the outer detonation, or
+system shows it at *P*. For initial-particle and lifetime variants, use S-0613 scenario G3:
+record the initial count with and without a held type, and compare an unlimited gas system with
+one whose lifetime is positive. Expect exactly one initial particle when a held type exists,
+none otherwise, and no timeout with the absent lifetime default. *Falsified if:* the neighbour barrel explodes from the outer detonation, or
 the share of runs with debris differs from 1 − 0.85ⁿ, or the share with the barrel particle system
 differs from 25 %, by more than 3 standard errors, or in variant c the warhead's particle system
-does not appear at *P*.
+does not appear at *P*, the initial particle count differs from the held-type prediction,
+or the finite/unlimited system-lifetime outcomes differ from G3.
 
 **A14. Explosion animation (claims 21, 23).** *Setup:* a test warhead with an animation list of 4
 distinct stock animations and damage values 1, 24, 25, 74, 75, 99, 100, 1000. *Observable:* which
