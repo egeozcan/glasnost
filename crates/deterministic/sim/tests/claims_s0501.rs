@@ -1392,10 +1392,11 @@ fn claim_5_unit_step_hover_between_east_and_south() {
                 assert!((16700..=17100).contains(&body), "{x:?}");
                 assert_eq!(at.y - p.y, -11, "{x:?}");
             }
-            // S-0501 AC24 expects b3's facing about 32076 with the side
-            // distance 11; under quirks.chop_rounding each step at facings
-            // 32767 to 32772 also moves 1 lepton west, so it drifts (Q-0654).
-            "b3" => {}
+            // spec: S-0501 AC24 (b3: under quirks.chop_rounding each step at body facing 32767 also moves 1 lepton west; from 5120 leptons north the hover facing is about 29778 and the side distance about 47 leptons west of the column)
+            "b3" => {
+                assert!((29500..=30100).contains(&body), "{x:?}");
+                assert!((-50..=-44).contains(&(at.x - p.x)), "{x:?}");
+            }
             // spec: S-0501 AC24 (b4: 32766, the westward drift ended 1 lepton east of the column)
             _ => {
                 assert_eq!(body, 32766, "{x:?}");
@@ -1405,7 +1406,7 @@ fn claim_5_unit_step_hover_between_east_and_south() {
     }
 }
 
-// spec: S-0501 AC24 (b3, converted speed 12 and S = 1000: the hover at about 166 leptons with the facing about 32076 and the side distance 11), here with quirks.chop_rounding off, where F3's table holds at every facing (Q-0654)
+// spec: S-0501 AC24 (b3, converted speed 12 and S = 1000: the hover at about 166 leptons with the facing about 32076 and the side distance 11), here with quirks.chop_rounding off, the engine-replay result: no sideways lepton at 32767 to 32772
 #[test]
 fn claim_5_unit_step_hover_from_the_north_without_chop() {
     let x = close_approach_with(5, 1000, ac24_b("b3"), |q| q.chop_rounding = false);
@@ -1479,7 +1480,7 @@ fn unit_step(f: Facing, stall: bool, mode: glasnost_num::Rounding) -> (i32, i32)
     (x - 5000, y - 5000)
 }
 
-// spec: S-0501 F3 (with s = 1, by body facing: 0 to 16379 (0, −1); 16380 to 16386 (+1, 0); 16387 to 16390 (0, −1); 16391 to 32766 (0, 0), quirks.aircraft_unit_step_stall; 32767 to 32772 (0, +1); 32773 to 49155 (−1, 0); 49156 to 65531 (−1, −1); 65532 to 65535 (0, −1); a step of two or more leptons always changes a coordinate); Edge cases (off: the stalled facings move 1 lepton along the larger component, x on equal magnitudes; every other step unchanged). With quirks.chop_rounding on, the rows at 32767 to 32772 and 49148 to 49155 differ and are not asserted (Q-0654)
+// spec: S-0501 F3 (with s = 1, by body facing, quirks.chop_rounding on: 0 to 16379 (0, −1); 16380 to 16386 (+1, 0); 16387 to 16390 (0, −1); 16391 to 32766 (0, 0), quirks.aircraft_unit_step_stall; 32767 to 32772 (−1, +1); 32773 to 49147 (−1, 0); 49148 to 65531 (−1, −1); 65532 to 65535 (0, −1); off, at positions of at least 1024 leptons, the rows for 32767 to 32772 and 49148 to 49155 become (0, +1) and (−1, 0); a step of two or more leptons always changes a coordinate); Edge cases (off: the stalled facings move 1 lepton along the larger component, x on equal magnitudes; every other step unchanged). Revision 11 answers Q-0654
 #[test]
 fn f3_unit_step_by_facing() {
     for chop in [false, true] {
@@ -1494,15 +1495,15 @@ fn f3_unit_step_by_facing() {
                 16380..=16386 => (1, 0),
                 16387..=16390 => (0, -1),
                 16391..=32766 => (0, 0),
+                32767..=32772 if chop => (-1, 1),
                 32767..=32772 => (0, 1),
-                32773..=49155 => (-1, 0),
+                32773..=49147 => (-1, 0),
+                49148..=49155 if chop => (-1, -1),
+                49148..=49155 => (-1, 0),
                 49156..=65531 => (-1, -1),
                 65532..=65535 => (0, -1),
             };
-            let open = chop && ((32767..=32772).contains(&f) || (49148..=49155).contains(&f));
-            if !open {
-                assert_eq!(got, want, "facing {f}, chop {chop}");
-            }
+            assert_eq!(got, want, "facing {f}, chop {chop}");
             let off = unit_step(f, false, mode);
             if want == (0, 0) {
                 assert!(off == (1, 0) || off == (0, 1), "facing {f}: {off:?}");

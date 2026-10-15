@@ -480,14 +480,12 @@ S-0501 (aircraft flight, attack runs and pads) is built in `glasnost_sim::air`. 
 - **Revision 10 (answers Q-0653).**
   - **The 1-lepton step (claim 4, F3).** No fraction of a lepton is kept, so a 1-lepton step at a body facing from 16391 to 32766 (between east and south) changes neither coordinate. The new `quirks.aircraft_unit_step_stall` (on, the original) keeps this. Off, such a step of at least 1 lepton moves 1 lepton along the axis of its larger component, x on equal magnitudes (`air::step`, with `walk::step_components`). An aircraft with converted speed from 10 to 19 whose step falls to 1 lepton outside the halving zone at such a facing hovers there with a positive fraction (claim 5). An ordinary attacker then never fires, and a *move* or a return to a pad stops short of landing. The Q-0653 interim row is gone, and AC24 (b) is flown from its starts b1 to b6.
   - **T1 (claim 42).** The new `quirks.aircraft_zero_step_attack_stall` (on, the original) keeps the zero-fraction test. Off, an ordinary attacker in *approaching* whose positive current fraction gives F3 step length 0 also moves to *firing*, keeping its destination, with a 1-tick delay (`air::step_length`). A 1-lepton step that does not move does not count.
-  - Under `quirks.chop_rounding`, two rows of F3's new table differ from S-0208 F3 and S-0205 claim 5 (Q-0654, interim row below).
+  - Under `quirks.chop_rounding`, two rows of F3's new table differ from S-0208 F3 and S-0205 claim 5 (Q-0654, answered by revision 11, below).
   - The save format stays 17: the switches are rules, not state.
-
-Provisional rules of M6a (aircraft), each tied to a request:
-
-| Where | Interim rule | Request |
-|---|---|---|
-| `air::step` (F3, the 1-lepton table) | S-0208 F3, S-0105 F1 and S-0205 claim 5 are followed literally: under `quirks.chop_rounding`, a step at facings 32767 to 32772 also moves 1 lepton west, and one at 49148 to 49155 also moves 1 lepton north. S-0501 F3's table and AC24 (b3) expect no such lepton | Q-0654 |
+- **Revisions 11 and 12 (revision 11 answers Q-0654; revision 12 restates Q-0650 to Q-0653).**
+  - **F3 under `quirks.chop_rounding`.** The round-toward-zero sum keeps the sideways lepton: a 1-lepton step at body facings 32767 to 32772 moves (−1, +1), and at 49148 to 49155 (−1, −1). With the switch off those rows are (0, +1) and (−1, 0). `air::step` already did this (it follows S-0208 F3 and S-0205 claim 5); `f3_unit_step_by_facing` now asserts both tables at every facing. AC24 (b3) drifts west and hovers at a facing near 29778 about 47 leptons west of the column (`claim_5_unit_step_hover_between_east_and_south`); facing 32076 with side 11 is the switch-off result.
+  - **F4.** The clamp min(*f*ₕ, *d*) compares numerical magnitudes in leptons, so it changes the fraction only at *d* = 0 (`air::slowing` already did this). The switch-off alternatives are marked unmeasured design rules; the airborne *unload* phases, dock search and waypoint-700 replacement are S-0507 claim 13 (built with S-0507 revision 4).
+  - The Q-0654 interim row is retired. No provisional rules of M6a (aircraft) remain.
 
 ## Simulation (M6b: hover and amphibious)
 
