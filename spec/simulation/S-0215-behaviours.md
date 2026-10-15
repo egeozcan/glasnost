@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 39
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -554,11 +554,18 @@ Terms used by this spec:
    Thus, within the ordinary-input cases studied, data is the only established way to put an
    actor into *attack move*.
 
+   Falling does not suppress an ordinary infantry unit's or vehicle's due behaviour processing.
+   The fall step and any landing hit precede that processing, which may change orders under
+   its usual rules. While still falling, the unit cannot advance its ordinary locomotion or
+   fire; a surviving landing removes those falling-specific refusals in that same turn
+   (S-0511 claim 10).
+
    A shared processing still reads the properties of the behaviour that is current: an actor in
    *sticky* uses the rate (and, for a building, the anti-air rate) of *sticky*, not of *guard*, and
    an actor in *sabotage* uses the rate of *sabotage* (claim 6).
    - Backing: `measurable` (scenario B14 for *queued move* and *attack move*; scenario B22 for
-     *sticky* and *sabotage* and for the rate each reads). For buildings the shared processing of
+     *sticky* and *sabotage* and for the rate each reads; S-0511 scenario B3's turn-order
+     variant for due processing during falling and the surviving-landing boundary). For buildings the shared processing of
      *sticky* and its anti-air rate are `unmeasured`: a map's building entries carry no behaviour
      and no known input puts a building into *sticky*.
    - Confidence: high (the shared processing); medium (that no other rule of the program makes
@@ -717,6 +724,17 @@ Terms used by this spec:
     target (S-0519 claims 18 and 20), so no strike need be in progress. They test the strike's
     target, not whether its aircraft still attack that object.
 
+    A mobile actor also reverts when its attack target is exactly the detonation's centre
+    cell of a successful area-damage bridge attempt (S-0511 claim 22). The revert restores
+    the suspended behaviour and put-aside target and destination. If the restored target
+    is still that centre cell, it is cleared; a different restored target is kept. Without
+    a suspended behaviour there is no revert, and the matching attack target is simply
+    cleared. This event does not create or refresh attack-move memory, nor generally
+    erase destinations, queued destinations or remembered cell references. The revert's
+    own restoration can nevertheless change the destination. Neighbouring cells and
+    objects standing on the centre cell do not acquire this revert cause merely by
+    being part of the affected bridge.
+
     The destruction and off-map/removal causes have no exception: they revert the actor whoever owns the target and
     whatever covers its cell. An erasing attacker has no exception to owner-change target loss:
     dropping its ordinary target does not itself detach its beam (S-0514 claim 16).
@@ -727,14 +745,16 @@ Terms used by this spec:
     actor's target again, and after a revert by an owner change or locomotor jump the actor has
     no such target. What the
     actor then does with such a target belongs to the target-acquisition specs. Clearing the target by
-    any other rule (the leash of claim 26, an order) does not revert. Other users of override and
+    another rule, apart from the centre-cell event above (for example the leash of claim 26
+    or an order), does not revert. Other users of override and
     revert are outside this spec: team logic, and some movement situations, among them S-0207
     claim 15, where a driving vehicle's repeated step check against an obstacle overrides to
     *attack*, with no destination, against the first object listed in the blocking cell when its
     house is not allied with that object, or against the wall when no object is listed and the
     cell holds a wall (with an allied first object, or with no object and no wall, there is no
     override).
-    - Backing: `measurable` (B18 d for the locomotor jump's ordinary target-loss and revert,
+    - Backing: `measurable` (S-0511 scenario B10's target-loss variant for the centre-cell
+      revert and restoration; B18 d for the locomotor jump's ordinary target-loss and revert,
       scenario B7: case b for the revert at the killing hit of an attacker
       that leaves play at once, case i for one that stays in play after the killing hit, case j
       for a target that goes off the map and for the target brought back, case k for an owner
@@ -760,7 +780,8 @@ Terms used by this spec:
         in place, and the slaves' guard reset needs harvesting slaves of the human-controlled
         house, which do not retaliate in *harvest* (claim 18).
     - Confidence: high (the slot rules, the target replacement, the revert at the killing hit
-      and on going off the map, and an override staying in effect until a revert, so that a later
+      and on going off the map, the centre-cell revert and exact-cell matching, and an
+      override staying in effect until a revert, so that a later
       target's causes revert it); medium (the owner change, the cloak and underground cause and
       their exceptions, the target brought back, and the list of users)
 
@@ -4675,6 +4696,20 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   separate target clearing is not evidence of this rule. The engineer, occupation, charging
   and controlled-transport comparisons remain unmeasured until fixtures isolate their
   targets at the same maintenance point; no state injection is proposed.
+
+- **B40 (claims 5 and 10: bridge fall processing and centre-cell revert).** Reuse
+  S-0511 scenario B3's turn-order variant and B10's target-loss variant, including their
+  setup, recorder and run counts. Record due processing and order changes during a deck
+  drop, with a protected landing survivor as the same-turn control. Expected: due
+  processing continues after the fall step, ordinary locomotion and firing remain refused
+  while falling, and a surviving landing removes those refusals that turn. For target loss,
+  compare an exact-centre-cell attacker with a neighbouring-cell attacker and a unit merely
+  moving toward the centre cell. Include a suspended override with saved target and
+  destination, and a control without one. Expected: only the exact-cell attack target
+  triggers the revert, saved state returns, and a restored target equal to that cell is
+  then cleared. No attack-move memory refresh occurs. Suppressed due processing,
+  a blanket destination clear, loss of the neighbouring target or a missing revert
+  falsifies the corresponding claim.
 
 ## Open questions
 
