@@ -176,16 +176,18 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32, flies: bool) -> Vec<Str
 pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
     match scenario {
         Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, true),
+        // The diagonal game ends before a launcher is sent; the straight
+        // and the naval duels fly both a rocket and an aircraft.
         Scenario::DuelDiagonal => {
             return duel(
                 &fixture::map_diagonal(),
                 "synthetic-duel-diagonal",
                 ticks,
-                true,
+                false,
             );
         }
         Scenario::DuelNaval => {
-            return duel(&fixture::map_naval(), "synthetic-duel-naval", ticks, false);
+            return duel(&fixture::map_naval(), "synthetic-duel-naval", ticks, true);
         }
         _ => {}
     }
