@@ -2,7 +2,7 @@
 id: S-0518
 title: Linked weapons (prism support beams, charging of overpowerable buildings)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -92,8 +92,7 @@ claims (Open questions).
    under a pulse (S-0405 claim 8), and it may be under construction or being sold (only the *attack*
    behaviour excludes it; quirk `quirks.prism_support_ignores_operation`). *B* need not be able to see or reach the master's
    target.
-   - Backing: `measurable` (scenarios PS2 and PS3); `unmeasured` for pulse-disabled
-     support, because no stock pulse fixture is supplied to isolate that condition
+   - Backing: `measurable` (scenarios PS2 and PS3, including a named test-data pulse case)
    - Confidence: high (each condition); medium (the build-up and sale cases, never observed)
 
 3. **Which one is chosen.** Of the eligible buildings, the one at the smallest distance F2 is
@@ -181,16 +180,16 @@ claims (Open questions).
 
     If the master is destroyed or sold after recruiting, its supporters still draw their beams to
     the stored point and then rearm by claim 6.
-    - Backing: `measurable` (scenario PS6); `unmeasured` for a projectile-less launch
-      retaining the count, because no isolated fixture preserves the target through that failure
+    - Backing: `measurable` (scenario PS6, including a named test-data void-shot case)
     - Confidence: high (the resets and the master's loss); low (how often the kept count can
       occur in play)
 
 ### Charging of overpowerable buildings
 
 11. **The charge shot.** A detonation that selects the electric-charge effect skips ordinary
-    area damage at any target. This effect is lower priority than mind control and demolition
-    charge planting if the same warhead enables them too. It does not suppress effects shared
+    area damage at any target. Special detonation effects are mutually exclusive: mind control
+    takes precedence as specified in S-0601 claim 5, and demolition charge planting also takes
+    precedence over electric charging if the same warhead enables them too. It does not suppress effects shared
     by detonations, including radiation creation before effect selection and the later
     detonation animation, debris and flash where configured. If the projectile's target is a
     building and its firer is an infantry unit, the electric-charge effect puts the firer on
@@ -325,12 +324,12 @@ conversion domain follow S-0205's invalid-conversion rule.
 
 | State | Event | Result |
 |---|---|---|
-| master idle, *N* < *N*ₘₐₓ | *can fire*; an eligible building exists | the nearest becomes *support pending*; *N* += 1; no shot |
+| master idle, *N* < *N*ₘₐₓ | *can fire*; an eligible building exists | the nearest becomes *support pending*; the support count increases by 1; no shot |
 | master idle | *can fire*; no eligible building, or *N* ≥ *N*ₘₐₓ | master *shot pending* (claim 7) |
-| master *shot pending* | its delayed shot comes and launches a projectile | projectile scaled by F1 when *N* > 0; *N* ← 0; master idle; ordinary rearm |
+| master *shot pending* | its delayed shot comes and launches a projectile | projectile scaled by F1 when *N* > 0; the support count becomes 0; master idle; ordinary rearm |
 | master *shot pending* | its delayed shot is dropped or launches nothing | master idle; *N* kept (claim 10) |
-| master idle | attack processing with no target, or the target is dropped | *N* ← 0 |
-| supporter *support pending* | its beam comes (claim 6) | beam drawn; rearm ← *R*ₛ; its own *N* ← 0; idle |
+| master idle | attack processing with no target, or the target is dropped | the support count becomes 0 |
+| supporter *support pending* | its beam comes (claim 6) | beam drawn; its rearm countdown starts at *R*ₛ; its own support count becomes 0; idle |
 | supporter *support pending* | the master is destroyed | no change; the beam still comes |
 
 **Charger and overpowered state** (overpowerable building).
@@ -338,7 +337,7 @@ conversion domain follow S-0205's invalid-conversion rule.
 | State | Event | Result |
 |---|---|---|
 | any | an infantry unit's electric-charge projectile detonates on it | that unit is on the list (once) |
-| any | its turn | chargers no longer aiming at it are removed; overpowered ← F3 |
+| any | its turn | chargers no longer aiming at it are removed; its overpowered state is set according to F3 |
 | any | a charger leaves play | removed from the list at once |
 
 Observable consequences:
@@ -368,20 +367,16 @@ Observable consequences:
 - **`quirks.prism_zero_delay_double_count`** (default on). When the prism type's delayed-fire field
   is 0, a recruited supporter's delayed-fire countdown stays 0 until its turn. Another master of the
   same house processed before that turn finds it eligible and also counts it. One beam is drawn
-  and both masters gain. *Fixed:* a building with a pending beam is not eligible. Stock data gives
-  the prism type's image a nonzero field, so this does not arise in stock play.
+  and both masters gain. *Fixed:* a building with a pending beam is not eligible. Whether this case arises with unmodified data is not asserted here.
 - **`quirks.prism_modifier_reread_scale`** (default on). Every rules layer that has a general
   section is re-read with the held modifier as its default, and the result is multiplied by 100
   (F4), even when the layer lacks the key. A map with a general section but no support-modifier
   key therefore multiplies the support contribution by 100 before F1's integer quantisation,
-  it does not multiply the unassisted contribution by 100. No stock multiplayer map and no
-  stock game-mode file has a general section, so this is dormant in stock skirmish. *Fixed:* a layer without the key leaves
+  it does not multiply the unassisted contribution by 100. Whether this case occurs on any particular map or in any particular game mode is not asserted here. *Fixed:* a layer without the key leaves
   the held value unchanged.
 - **`quirks.stale_chargers_kept`** (default on). A building of a non-overpowerable type never
   removes chargers that stopped aiming at it (claim 12). Two such registrations keep it in
-  operation's switch and house-power conditions through S-0405 claim 8 until the chargers leave play. Stock data gives no way to
-  register on such a building, since the electric-charge weapon is chosen only against
-  overpowerable targets (S-0308 row 11). *Fixed:* the same removal as for overpowerable types.
+  operation's switch and house-power conditions through S-0405 claim 8 until the chargers leave play. Whether unmodified data can register a charger on such a building is not asserted here. (S-0308 row 11). *Fixed:* the same removal as for overpowerable types.
 - The support reach is the master's slot-1 range. A master type with no slot-1 weapon has a reach
   of 0, so only a supporter at distance 0 qualifies. Normally placed buildings cannot share
   that position, so such a master fires alone after one processing.
@@ -391,8 +386,7 @@ Observable consequences:
   from its weapons' fields.
 - A vehicle with an electric-charge secondary goes through claim 14's scan and fires charge shots
   that do nothing (claim 11). Since it lacks claim 15's break-off search, it keeps firing at the
-  building while enemies approach, until an order or another target change. Stock data has no
-  such vehicle. Quirk `quirks.vehicle_charge_no_break_off` (default on). *Fixed:* vehicles break
+  building while enemies approach, until an order or another target change. The vehicle case is covered by the named test data in TC4. Quirk `quirks.vehicle_charge_no_break_off` (default on). *Fixed:* vehicles break
   off as infantry do.
 
 ## Import mapping
@@ -440,8 +434,8 @@ For every case, a different recorded result from the stated expectation falsifie
   shot, have a beam pending, be drained by a stock draining aircraft, or be destroyed before
   recruitment. Expect only the other to count. In separate runs switch one off, recruit it
   during its build-up, or order its sale and recruit before its removal: expect both to count.
+  In a separate run, use named test data to apply a pulse to the eligible candidate without changing its other eligibility conditions; record whether it is recruited and the recruitment tick. Expect it to be recruited; a failure to recruit falsifies the pulse-disabled eligibility rule.
   Record behaviour and recruitment ticks to distinguish current from merely queued sale.
-  Pulse-disabled eligibility remains unmeasured: no stock pulse fixture is supplied here.
 - **PS3 (claim 2, reach).** A named test-map override sets the secondary's range to the measured
   F2 separation of two normally placed buildings, then to one lepton less. Expect support
   only in the first case. Repeat across different terrain heights and with a missing secondary:
@@ -473,9 +467,9 @@ For every case, a different recorded result from the stated expectation falsifie
   with a long delayed shot and a slowly turning turret. Move a target sideways but keep it in
   range, timing movement so the final delayed-shot check fails for facing. Keep the target
   until another shot succeeds. Expect retained count, no replacement beams for that count,
-  and F1 scaling on the successful shot. A run where attack processing drops the target does
-  not test retention. The projectile-less variant is unmeasured: no isolated fixture here
-  makes a launch fail while preserving that target and support count.
+  and F1 scaling on the successful shot.
+  In a separate run, use named test data to make the delayed shot's projectile launch fail while the master retains its target; record the count before and after the failed launch and the damage multiplier on its next successful projectile. Expect the count to remain and the next successful projectile to use the retained count in F1; a reset or different multiplier falsifies the rule.
+  A run where attack processing drops the target does not test retention.
 - **PS7 (claim 16 and F4).** Compare named test maps with no general section, a general section
   lacking the modifier, and one explicitly giving an invented modifier. Repeat PS1 with one
   supporter and record area-damage input before target defences, choosing a target that survives.
