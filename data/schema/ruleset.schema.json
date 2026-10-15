@@ -9986,6 +9986,14 @@
           ],
           "default": null
         },
+        "temporal": {
+          "description": "`Temporal`, the warhead's temporal flag (S-0301 Terms and Import\nmapping, S-0514 Import mapping); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "tiberium": {
           "description": "`Tiberium`, the resource flag (S-0303 claim 17).",
           "type": [
@@ -10317,14 +10325,6 @@
         },
         "supress": {
           "description": "`Supress` (S-0309 claim 14).",
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "default": null
-        },
-        "temporal": {
-          "description": "`Temporal` (S-0301 Terms).",
           "type": [
             "boolean",
             "null"

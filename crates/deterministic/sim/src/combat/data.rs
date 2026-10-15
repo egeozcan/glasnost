@@ -92,8 +92,6 @@ pub struct WeaponRules {
     pub railgun: bool,
     /// Magnetic-beam weapon.
     pub mag_beam: bool,
-    /// Temporal weapon.
-    pub temporal: bool,
     /// Spawner weapon.
     pub spawner: bool,
     /// Disc laser weapon.
@@ -305,6 +303,9 @@ pub struct WarheadRules {
     pub paralyzes: i32,
     /// Cull flag (S-0614 claim 11).
     pub culling: bool,
+    /// Temporal flag (S-0301 Terms, S-0514 Terms): a weapon with this
+    /// warhead is a temporal weapon.
+    pub temporal: bool,
 }
 
 impl WarheadRules {
@@ -982,6 +983,8 @@ pub fn tables(
                 parasite: b(h.parasite),
                 paralyzes: h.paralyzes.unwrap_or(0),
                 culling: b(h.culling),
+                // spec: S-0301 Import mapping and S-0514 Import mapping (Temporal, a warhead key; absent: no)
+                temporal: b(h.temporal),
             }
         })
         .collect();
@@ -1029,7 +1032,6 @@ pub fn tables(
                 fire_particles: b(w.use_fire_particles),
                 railgun: b(w.is_railgun),
                 mag_beam: b(w.is_mag_beam),
-                temporal: b(w.temporal),
                 spawner: b(w.spawner),
                 disk_laser: b(w.disk_laser),
                 // spec: S-0301 Import mapping (DecloakToFire absent: yes)

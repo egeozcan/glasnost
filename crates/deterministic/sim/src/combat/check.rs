@@ -165,9 +165,25 @@ fn vehicle_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
     if (wr.spark || wr.fire_particles) && dest {
         return true;
     }
-    // spec: S-0310 claim 7 (a temporal primary weapon and a destination)
-    let primary_temporal = slot_weapon(w, firer, 0).is_some_and(|p| r.combat.weapon(p).temporal);
-    primary_temporal && dest
+    // spec: S-0310 claim 7 (the vehicle has a temporal beam and a destination; attachment is irrelevant)
+    has_temporal_beam(w, firer) && dest
+}
+
+/// Whether an object has a temporal beam (S-0310 claim 7, S-0514 Terms):
+/// supplied at creation when its primary weapon's warhead is temporal. An
+/// object is never elite at creation (S-0311 claim 11; a map's veterancy
+/// is applied after it is created), so that primary is its type's slot 0,
+/// not an elite replacement, and the beam stays when a promotion changes
+/// the primary. A temporal secondary weapon alone supplies none. Gunner
+/// hand-over (S-0308 claim 6) can also supply one; gunner transports are
+/// not built, so no beam comes from it yet.
+pub fn has_temporal_beam(w: &World, id: ObjectId) -> bool {
+    let r = w.rules();
+    // spec: S-0514 Terms and S-0310 claim 7 (a primary weapon whose warhead is temporal supplies a beam at creation)
+    type_combat(w, id)
+        .and_then(|tc| tc.slots[0])
+        .and_then(|p| r.combat.weapon(p).warhead)
+        .is_some_and(|h| r.combat.warhead(h).temporal)
 }
 
 /// Whether an infantry unit is "moving" for a weapon (S-0310 claim 8).
