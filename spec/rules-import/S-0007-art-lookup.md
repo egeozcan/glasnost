@@ -2,11 +2,11 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0008, Q-0083]
 supersedes: []
@@ -96,11 +96,11 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
 - **Translucent sprite, translucent-sprite name.** A type's optional secondary (alpha) sprite, and
   the name that the section of claim 1 gives it (claim 23). It is drawn as the type's light-glow
   image (S-0104), not with the translucency codes of S-0109 (animation playback).
-- **Infiltrated factory.** A house *has infiltrated a barracks* once, in the current game, one of its
-  infiltrating units has entered another house's building that produces infantry, and *has
-  infiltrated a war factory* once one has entered another house's building that produces vehicles
-  (naval vehicles included).
-  How infiltration happens belongs to a special-abilities spec; this spec only uses the result.
+- **Infiltrated factory.** A house *has infiltrated a barracks* when its infiltrated-infantry-factory
+  flag is set, and *has infiltrated a war factory* when its infiltrated-vehicle-factory flag is set
+  (naval vehicles included). These flags result from its spies infiltrating another house's factory,
+  subject to the effect selection of S-0510 claim 3. S-0510 claim 5 owns the flags; this spec only
+  uses the result.
 
 ## Behaviour
 
