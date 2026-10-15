@@ -16,7 +16,9 @@
 //! house's superweapons launched through the client's aim (S-0512, S-0513:
 //! the nuclear strike, the weather storm, the iron curtain, the teleport, the
 //! force shield, the paradrop plane and the spy plane; the type is found by
-//! its kind, never by name). A new scene is one more function and one more
+//! its kind, never by name), and paratroopers dropping under their
+//! parachutes (S-0522; sent through `planes::paradrop` when no type has the
+//! paradrop kind, Q-0730). A new scene is one more function and one more
 //! row of [`SCENES`].
 //!
 //! Run with `cargo test --release -p glasnost-app --test m6b_lane --
@@ -69,6 +71,7 @@ const SCENES: &[Scene] = &[
     ("sw-force-shield", sw_force_shield),
     ("sw-paradrop-plane", sw_paradrop_plane),
     ("sw-spy-plane", sw_spy_plane),
+    ("paratroopers-dropping", paratroopers_dropping),
 ];
 
 #[test]
@@ -1014,6 +1017,105 @@ fn sw_spy_plane(lane: &mut Lane) {
         return;
     };
     plane_scene(lane, sw, "sw-spy-plane");
+}
+
+/// S-0522 claims 6 to 13: a paradrop plane sent to a cell near home; shot
+/// while its paratroopers are descending under their parachutes, then
+/// followed until they have all landed. The plane comes through the aim when
+/// a superweapon type has a paradrop kind, else straight through
+/// `planes::paradrop` (Q-0730: stock kind words may not resolve).
+fn paratroopers_dropping(lane: &mut Lane) {
+    let local = lane.local();
+    let home = lane.home();
+    let target = lane.open_land(CellXY::new(home.x + 10, home.y + 10));
+    let w = lane.world();
+    let kind = [SwKind::Paradrop, SwKind::AmerParadrop]
+        .into_iter()
+        .find(|&k| w.rules().superweapons.first_of_kind(k).is_some());
+    let through_aim = match kind.and_then(|k| ready_sw(lane, k)) {
+        Some(sw) => lane.aim(sw, None, target),
+        None => false,
+    };
+    if !through_aim {
+        let american = kind == Some(SwKind::AmerParadrop);
+        let planes =
+            glasnost_sim::superweapons::planes::paradrop(lane.world_mut(), local, target, american);
+        println!(
+            "no paradrop-kind type took the order: {} plane(s) sent through planes::paradrop",
+            planes.len()
+        );
+    }
+    lane.look_at(target);
+    let t0 = lane.world().tick;
+    let mut first = None;
+    let mut dropped = 0usize;
+    let mut shot = false;
+    let mut later = None;
+    let mut troopers: Vec<ObjectId> = Vec::new();
+    for _ in 0..3000 {
+        lane.ticks(1);
+        let t = lane.world().tick - t0;
+        let new: Vec<ObjectId> = lane
+            .c
+            .session
+            .as_ref()
+            .unwrap()
+            .play
+            .effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Superweapon {
+                    event: SwEvent::Parachute { trooper, .. },
+                    ..
+                } => Some(*trooper),
+                _ => None,
+            })
+            .collect();
+        if !new.is_empty() && first.is_none() {
+            first = Some(t);
+            println!("first drop {t} ticks after the order");
+        }
+        dropped += new.len();
+        troopers.extend(new);
+        let w = lane.world();
+        let descending = troopers
+            .iter()
+            .filter(|&&id| w.obj(id).is_some_and(|o| o.on_map && o.fall.chute))
+            .count();
+        if let Some(p) = troopers.first().and_then(|&id| w.obj(id)).map(|o| o.pos) {
+            // Centred on the first paratrooper at its height.
+            let s = lane.c.session.as_mut().unwrap();
+            s.set_centre(glasnost_render::projection::project_lifted(p.x, p.y, p.z));
+        }
+        if !shot && descending >= 3 {
+            println!("{descending} descending {t} ticks after the order");
+            lane.save("paratroopers-dropping");
+            shot = true;
+            later = Some(t + 60);
+        }
+        if later == Some(t) {
+            println!("{descending} descending {t} ticks after the order");
+            lane.save("paratroopers-descending");
+        }
+        if first.is_some_and(|f| t > f + 30) && descending == 0 {
+            let w = lane.world();
+            let standing = troopers
+                .iter()
+                .filter(|&&id| w.obj(id).is_some_and(|o| o.on_map))
+                .count();
+            println!(
+                "{dropped} dropped; none descending {t} ticks after the order; {standing} on the ground"
+            );
+            if !shot {
+                lane.save("paratroopers-dropping");
+            }
+            return;
+        }
+    }
+    println!("first drop {first:?}; {dropped} dropped within 3000 ticks");
+    if !shot {
+        lane.save("paratroopers-dropping");
+    }
 }
 
 // ---------------------------------------------------------------------------
