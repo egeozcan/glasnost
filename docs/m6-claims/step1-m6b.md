@@ -214,6 +214,15 @@ Q-0679, Q-0720 to Q-0729, Q-0790, and Q-0327 (S-0701 claims 21 and 32). Filed: Q
 
 ## Spec revisions after dbdb150
 
+- **S-0516 (rev 6 to 7), (a).** Q-0791 and Q-0792 answered: cell-arrival updates by locomotor
+  (`quirks.flying_sensor_disc_stationary`), the generator's field phases and own-centre
+  interruption. See `S-0516.md`; gaps Q-0795 and Q-0796.
+- **S-0207 (rev 26 to 27), S-0314 (rev 19 to 20), S-0417 (rev 15 to 16), S-0504 (rev 15 to 16),
+  S-0511 (rev 5 to 6), (a).** Q-0793 and Q-0794 answered: the driving locomotor destination
+  point (`DriveState::goal`), its depot docking supply, and exit tracks at height 0. See
+  `depot-cycle.md`, `S-0511.md`, `docs/m5-claims/S-0417.md` and `S-0504.md`; gap Q-0797.
+- **S-0212 (rev 40 to 41), (a, already done).** Destination presence is S-0207 claim 25's, not the
+  search's: `DriveState::goal` is set at acceptance, before any search (`claim_25_*`).
 - **S-0105 (rev 16 to 17), (a, already done).** Q-0215 question 7 is answered: F8 gives every
   sequence its overlap priority by record lows (MS-25 pairs, MS-28 larger ties). The existing
   `section_order` loop is that relation; the new tests check it against F8 written out from its
