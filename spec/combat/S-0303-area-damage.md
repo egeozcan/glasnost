@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -276,16 +276,21 @@ addition:
 12. **Falloff.** A hit with damage amount *D* > 0 at epicentre distance *d* (0 ≤ *d* ≤ *R*)
     first goes through the target's defences, which S-0302 owns (its claim 5): the defended amount
     *d*₃ is *D* divided by the armour and never below 1 (Terms). The falloff then works on *d*₃,
-    not on *D*, and gives the damage *D*₁ of Formulas F3: *d*₃ at the centre, falling linearly to the
-    edge share *d*₃ × *p* at *d* = *R*, truncated toward zero, and never below 0. When *p* is exactly
-    1, or *R* is 0, the hit carries *d*₃ unchanged. An edge fraction above 1 makes the damage rise
-    towards the edge. The result goes on to the versus step of S-0302 (its claim 6): the original
+    not on *D*. Formulas F3 narrows the defended amount and its edge share to single precision
+    (*D*ₛ and *E*), interpolates between those rounded quantities in double precision, truncates
+    toward zero to give *D*₁, and floors the result at 0. When the rounded edge share *E* equals
+    *D*ₛ, or *R* is 0, the hit carries the integer *d*₃ unchanged instead. Thus an edge fraction
+    of exactly 1 bypasses interpolation; other fractions can do so too when the rounded quantities
+    coincide. An edge fraction above 1 normally makes the damage rise towards the edge. The result goes on to the versus step of S-0302 (its claim 6): the original
     multiplies it by the versus value of the object's armour class, truncates toward zero and caps
     it at the game-wide maximum damage (F3, last line). S-0302 owns that step, every other
     multiplier and the minimum. So with a house and an object armour of 1.0, a target that is not
     prone and no veteran armour bonus, *d*₃ = *D*; in the other cases the order can matter, because *d*₃ is truncated
-    before the falloff. The falloff is computed in floating point (F3).
-    - Backing: `measurable` (scenario A1, variants a to d)
+    before the falloff. Each hit passes its integer epicentre distance *d* in leptons, after
+    claim 10's aircraft halving, as S-0302 claim 6's distance *r*. The falloff radius is F1's
+    *R* = trunc(256 × *S*), not the distinct whole-cell radius used for the delayed-kill
+    countdown of S-0302 claim 16.
+    - Backing: `measurable` (scenario A1, variants a to d and g)
     - Confidence: high
 
 13. **Healing detonations reach only the point itself.** A hit with damage amount *D* < 0 heals
@@ -537,9 +542,9 @@ armour are both 1.0, the target is not prone and has no veteran armour bonus, an
 otherwise). At epicentre distance *d* (an integer,
 0 ≤ *d* ≤ *R*):
 
-> *D*ₛ = RZ₂₄(*d*₃)  (exact for *d*₃ < 2²⁴)
+> *D*ₛ = RZ₂₄(*d*₃)  (exact for *d*₃ ≤ 2²⁴)
 >
-> *E* = RZ₂₄(*D*ₛ × *p*)
+> *E* = RZ₂₄(RZ₅₃(*d*₃ × *p*))
 >
 > *D*₁ = trunc(RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(*D*ₛ − *E*) × (*R* − *d*)) / *R*) + *E*)) when *E* ≠ *D*ₛ and
 > *R* ≠ 0, and
@@ -551,7 +556,14 @@ otherwise). At epicentre distance *d* (an integer,
 > versus step (S-0302 F3): *m*₀ = min(trunc(RZ₅₃(*D*₂ × *v*)), *M*)
 
 *p* is the edge fraction (single), *v* the versus value of the hit object's armour class (a double,
-S-0302) and *M* the game-wide maximum damage. (*R* − *d*) and *R* are integers. Unit: health points.
+S-0302 claim 6) and *M* the game-wide maximum damage. (*R* − *d*) and *R* are exact integers
+in leptons; *R* is F1's spread radius and *d* includes claim 10's halving. This is the same
+falloff and versus computation owned by S-0302 claim 6: its *f*, *a*, *g* and *r* correspond to
+*D*ₛ, *E*, *D*₁ and *d* here. Both single-precision narrowings are required, but the edge product
+uses the integer *d*₃, not the already narrowed *D*ₛ. The interpolation's arithmetic uses the
+double-precision roundings shown above. Damage quantities are in health points.
+At joint sign-off, S-0302 claim 6's formula must likewise form its edge share from *d*₃ rather
+than *f*; otherwise large defended amounts can disagree by a health point.
 Example with exact arithmetic (no rounding at these values), for *d*₃ = 100, *p* = 0.5, *R* = 512:
 *d* = 0 gives 100, *d* = 256 gives 75, *d* = 511 gives 50, *d* = 512 gives 50. The order of the
 steps matters: with *D* = 1000, an armour divisor of 3 (*d*₃ = 333), *p* = 0.5 and *R* = 1024, the
@@ -595,37 +607,13 @@ lies outside the list (Edge cases).
 
 **F6. Warhead debris** (claim 22). With *X* the warhead's maximum debris count (*X* > 0) and *Y* its minimum debris count, the total number of pieces is *N* = R(*Y*, *X* − 1), one ranged draw whose bounds may come in either order (S-0202 claim 4). A non-positive *N* creates no pieces and takes no allocation or type-choice draws. This non-positive-total case is `unmeasured`: A15 and A19 use positive totals, not a setup producing a non-positive total. Confidence: high. All debris is created at the projectile position *Q* (claim 22).
 
-For a nonempty retained type list, number its *m* types from 0 to *m* − 1 as *t*₀ … *t*ₘ₋₁,
-paired with signed maxima *u*₀ … *u*ₘ₋₁. Allocation is described by the remaining count *ℓ* (initially *N*) and assignment number *j* (initially 0). For each assignment made while the remaining count is positive, the next signed scenario-random-stream value is *raw*ⱼ, and the selected type is *t*ᵢⱼ, where *i*ⱼ is the ordinary non-negative remainder of *j* divided by *m*. The allocation state changes according to the following table; “wrap” means S-0205 claim 1's signed 32-bit wrap:
+For a nonempty retained type list of *m* types, let *t*ᵢ and *u*ᵢ be the type and signed maximum at index *i*, with indices counted from 0. Define the allocation state at assignment *j* by remaining count *ℓ*ⱼ, initially *ℓ*₀ = *N*. If *ℓ*ⱼ > 0, the next scenario-random-stream value is *raw*ⱼ and the selected type index is *i*ⱼ = *j* rem *m*, using the ordinary non-negative remainder. The assignment quantities are
 
-| Quantity | Value or transition |
-|---|---|
-| *a*ⱼ | wrap(|*raw*ⱼ|) |
-| *b*ⱼ | wrap(*u*ᵢⱼ + 1) |
-| *g*ⱼ | min(*a*ⱼ rem *b*ⱼ, *ℓ*ⱼ) |
-| Remaining count | *ℓ*ⱼ₊₁ = wrap(*ℓ*ⱼ − *g*ⱼ) |
-| Next assignment | *j* increases by 1 if *ℓ*ⱼ₊₁ > 0 |
+> *a*ⱼ = wrap(|*raw*ⱼ|), *b*ⱼ = wrap(*u*ᵢⱼ + 1), *g*ⱼ = min(*a*ⱼ rem *b*ⱼ, *ℓ*ⱼ), *ℓ*ⱼ₊₁ = wrap(*ℓ*ⱼ − *g*ⱼ).
 
-The allocation remainder uses signed division truncated toward zero (S-0205 claims 2–3): its sign
-follows *a*ⱼ, not *b*ⱼ. This is the magnitude-first rule of S-0202 claim 6, extended here to
-signed divisors. Thus a maximum below −1 normally behaves like the non-negative maximum −*u* − 2:
-−2 assigns zero pieces, while −4 assigns 0 to 2 pieces. A maximum of 2147483647 gives the
-wrapped divisor −2147483648, not a zero divisor. A maximum of −1 gives a zero divisor, and its
-departure is specified under Edge cases. For the exceptional raw value −2147483648, *a*ⱼ stays
-negative under the default of S-0202 claim 6; signed remainder and the wrap of the remaining count
-still apply, and a non-positive *g*ⱼ creates no pieces. With
-`quirks.random_magnitude_overflow` off (S-0202 claim 6), *a*ⱼ is instead the exact magnitude
-|*raw*ⱼ|, including 2147483648; the remainder is then non-negative. The magnitude and its
-quotient may use that wider non-negative integer domain, while *b*ⱼ and the remaining count retain
-signed 32-bit wrap.
+Here “wrap” is S-0205 claim 1's signed 32-bit wrap. The remainder uses signed division truncated toward zero (S-0205 claims 2–3), so its sign follows *a*ⱼ, not *b*ⱼ. This is the magnitude-first rule of S-0202 claim 6, extended here to signed divisors. Thus a maximum below −1 normally behaves like the non-negative maximum −*u* − 2: −2 assigns zero pieces, while −4 assigns 0 to 2 pieces. A maximum of 2147483647 gives the wrapped divisor −2147483648, not a zero divisor. A maximum of −1 gives a zero divisor, and its departure is specified under Edge cases. For the exceptional raw value −2147483648, *a*ⱼ stays negative under the default of S-0202 claim 6; signed remainder and the wrap of the remaining count still apply, and a non-positive *g*ⱼ creates no pieces. With `quirks.random_magnitude_overflow` off (S-0202 claim 6), *a*ⱼ is instead the exact magnitude |*raw*ⱼ|, including 2147483648; the remainder is then non-negative. The magnitude and its quotient may use that wider non-negative integer domain, while *b*ⱼ and the remaining count retain signed 32-bit wrap.
 
-Assignment *j* contributes *g*ⱼ pieces of its selected type. The allocation sequence ends when
-the resulting remaining count is non-positive; the random value for that final assignment is
-included. The pieces belonging to one assignment are created before the next assignment's
-allocation value is drawn. Any draws caused by creating those pieces intervene and are not
-allocation values *raw*ⱼ, so allocation values need not be consecutive values of the scenario
-random stream. If the remaining count never becomes non-positive, the non-terminating case is
-described under Edge cases: debris that can never be placed.
+The assigned quantity *g*ⱼ contributes that many pieces of type *t*ᵢⱼ. The allocation ends at the least assignment index *j* for which *ℓ*ⱼ₊₁ ≤ 0; its random value is included. Pieces assigned at index *j* are created before the allocation value for index *j* + 1 is drawn. Draws caused by creating pieces occur between allocation values and are not themselves allocation values *raw*ⱼ. If no such *j* exists, the non-terminating case is described under Edge cases: debris that can never be placed.
 
 If the warhead lists no debris types, the detonation creates *N* animations, each selected by
 entry R(0, *c* − 1) of the game-wide metallic debris list (*c* its length), at *Q* raised by
@@ -976,6 +964,16 @@ climbs in steps, so the height comes from the recorded *P*; runs are repeated wi
 altitude values until distances of 1023, 1024 and 1025 are all recorded). Expected: the loss
 follows F3 at every recorded *d* up to 1024 and is 0 at 1025. *Runs:* 1 each (no draw involved for
 vehicles; check S-0302 adds none).
+
+*Variant g (large-amount narrowings):* named map overrides set the delivered damage to
+16777219 health points, spread to 1 cell, edge fraction to 0.75, the relevant versus value to
+100 % and the game-wide maximum damage above the delivered amount. Use a non-veteran target
+vehicle with strength and health 30000000, no armour modifiers and country armour factor 1.0.
+Place it exactly 256 leptons from the recorded detonation point, in a scanned cell. Fire once
+in each of three runs and record its health loss. Expected: *d*₃ = 16777219,
+*D*ₛ = 16777218 and *E* = 12582914, hence a loss of 12582914 health points at the edge.
+A loss of 12582913 would instead indicate that the edge product incorrectly used *D*ₛ.
+Any other loss also falsifies F3 for this setup. These are invented test values, not stock data.
 
 **A2. Scanned cells versus radius (claim 3).** Wall hits (claim 16) take no distance test, so a
 wall shows directly whether its cell is scanned. *Setup:* a field of stock wall cells around the
