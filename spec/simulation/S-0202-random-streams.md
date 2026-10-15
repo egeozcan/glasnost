@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -690,17 +690,23 @@ original's recording modes are retained as deferred context, not implementation 
     Our engine runs this stream from the game's seed (claim 8) with the same algorithm and lets
     none of its draws reach game state. Game-side sound choices and per-instance playback
     choices share this one unsynchronised stream, not separate generators (S-0701 claim 30).
-    In the original, playback service times can change presentation choices without changing
-    scenario-stream state or game rules. Our engine must schedule those choices deterministically.
-    S-0701 claim 30 defers the exact replacement schedule. How this stream runs on the machines
-    of a network game is for the future multiplayer spec (network games are out of scope for now).
+    In the original, host-dependent playback service interleaving can change presentation
+    choices without changing scenario-stream state or game rules. Our engine uses S-0701
+    claim 30's deterministic cycle-end audio passes and logical sample-completion and wait
+    opportunities. Game-side sound choices are assigned at their causing events before any
+    per-instance choices at that cycle's end pass; claim 30 fixes the pass choices' assignment
+    order on this same shared stream. This specified schedule does not complete the
+    delayed-mode sequence still deferred under S-0701 claim 14.
+    How this stream runs on the machines of a network game is for the future multiplayer
+    spec (network games are out of scope for now).
     - Backing: `measurable` (scenario R6 a) that no draw of this stream reaches the scenario random
       stream; `measurable` (R6 b) for voice responses and the choice of music track.
       Sound-instance pitch, volume shift, pre-delay, sample and play-order draws inherit
       S-0701 claims 13 and 14's backing (E1 and E3) and confidence for the explicitly
       established choices only; the complete delayed-mode sequence remains outside
-      coverage, not an additional claim with backing here. The shared-stream engine
-      contract is S-0701 claim 30's. Report choices and the creation-derived value retain
+      coverage, not an additional claim with backing here. Shared-stream retention and the
+      deterministic schedule are S-0701 claim 30's design requirements, tested by its
+      engine-only H2 rather than oracle measurements. Report choices and the creation-derived value retain
       S-0701 claims 21 and 32's backing and confidence; the damage-feedback chance inherits claim 20's
       high confidence and `measurable` backing (F1). The map-load use through S-0010's scenario V2: part A for the
       pattern's properties, part B for the draws themselves, with the random-state recorder's
