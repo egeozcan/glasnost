@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -125,7 +125,8 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
 
 3. **Apron position.** For a foundation with at least eleven exit-list entries, take its eleventh
    pair (*a*, *b*) from S-0404 Constants. E is (*x*₀ + *a* − 1, *y*₀ + *b*). The track ends at
-   E's centre, at ground height under the movement rules. E need not lie inside the
+   E's horizontal centre; the vehicle's own height follows the movement rules, distinct
+   from claim 5's stored movement-point heights. E need not lie inside the
    foundation; its position depends on the selected pair, not on a containment test.
    Shorter lists use the results in Edge cases. Apron selection uses the original lists under
    either state of S-0404's full-ring switch, as specified in Edge cases.
@@ -158,7 +159,14 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
    - Confidence: high (tests and options); medium (destinations inherited from movement specs)
 
 5. **Sending u out.** A drive vehicle is put on T1 towards E's centre, without a path search
-   from its present position. Tunnelling and teleporting vehicles temporarily receive driving
+   from its present position. Its stored heading point has integer world height 0 leptons
+   throughout the exit track, not the vehicle's starting height or the terrain or deck height
+   (S-0207 claim 24). A successful exit-track instruction also supplies the separate locomotor
+   destination point at E's horizontal centre with integer world height 0 leptons
+   (S-0207 claim 25). Neither point receives an extra deck lift; these integer assignments
+   involve no rounding. The vehicle's own height while travelling remains surface-derived
+   under S-0207 claim 5, including its deck rule, rather than being forced to 0.
+   Tunnelling and teleporting vehicles temporarily receive driving
    locomotion and use the same track; restoration belongs to S-0215 claim 13. S-0207 claim 21
    owns the suspended teleporting state and its occupancy consequences: destinations accepted
    while driving use driving movement, not the suspended teleporting movement, and restoration
@@ -185,9 +193,12 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
      specified here. Failed temporary replacement is `unmeasured`: no stock setup is
      established that makes it fail. Hover fraction persistence and the stalled-start
      reset are `measurable` (U6 and S-0503 H8), with backing inherited from S-0503 claim 4.
+     Stored driving heading and locomotor destination heights inherit S-0207 claims 24
+     and 25's `measurable` backing (D28, also U6).
      Immediate heading-point choice and its arrival update inherit the `measurable`
      backing of S-0503 claims 5 and 15 (H8).
-   - Confidence: high (driving and fixed destination), medium (temporary replacement),
+   - Confidence: high (driving, stored movement-point heights and fixed destination),
+     medium (temporary replacement),
      medium (immediate hover choice, inherited from S-0503 claim 5),
      high (clear-choice arrival update, inherited from S-0503 claim 15),
      low (duration of the hovering exit fraction, inherited from S-0503 claim 4)
@@ -740,6 +751,15 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
 - **U6, exit modes.** Produce a stock drive, teleporting and hovering vehicle; use a stock
   tunnelling type only if one is available from a vehicle factory. Record every position and
   locomotor change and facing. Compare each passed point and facing with T1.
+  For driving exits, also record the heading point, separate locomotor destination point
+  and vehicle world height from the successful instruction through track completion.
+  Repeat with a legally placed factory on elevated terrain, using S-0207 D28's controls.
+  Expect both supplied points at E's horizontal centre with height 0 leptons, the heading
+  height unchanged throughout the exit track, and the vehicle's own height following
+  S-0207 claim 5. A starting-height, terrain-height or deck-height assignment to either
+  supplied point, an extra deck lift, or forcing vehicle height to 0 falsifies the
+  corresponding rule. Record the separate destination before any completion or reply
+  can clear or replace it under S-0207 claim 25; later replacement is not a falsifier.
   Driving and successful temporary driving use T1, with first-point position
   independent of release displacement. Hovering uses F4, not T1. Falsifier: a different track or
   a hovering vehicle following T1, a destination other than F4 for that hovering vehicle,
