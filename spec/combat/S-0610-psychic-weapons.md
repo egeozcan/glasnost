@@ -2,7 +2,7 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -42,7 +42,8 @@ skirmish only; network games and campaigns are out of scope.
   hits when the data supplies them; each hit then follows this spec and S-0302 claim 10.
   The stock chaos drone creates no gas particles (claim 8).
 - **Permanent and temporary mind control** use the psionics immunity of claim 1.
-  their eligibility rules are S-0601 claims 3 and 13. Psychic domination belongs to planned S-0612.
+  Their eligibility rules are S-0601 claims 3 and 13. Psychic-domination eligibility is
+  S-0612 claim 13.
 
 ## Terms
 
@@ -79,14 +80,14 @@ skirmish only; network games and campaigns are out of scope.
    control (S-0601 claim 13), even when their psionics immunity is explicitly off.
    - Psionics immunity is consulted by: berserk hits (S-0302 claim 10), the firing check of a
      weapon whose warhead is berserk-causing (claim 3), temporary and permanent control
-     (S-0601 claims 3 and 13), and psychic domination (planned S-0612).
+     (S-0601 claims 3 and 13), and psychic domination (S-0612 claim 13).
    - Psychic-weapon immunity is consulted only by damage resolution (S-0302 claim 8). It adds no
      firing refusal and no search exclusion: a unit may fire a psychic-damage weapon at a
      psychic-weapon-immune target, and the hit does nothing.
    - Backing: `measurable` (P1 for psychic damage, P4 for berserk immunity, P8 for
      absent-key defaults, temporary-control immunity and immunity-specific firing checks).
      Permanent-control eligibility is backed by S-0601 claim 13's scenarios. Psychic-domination
-     consumption is `unmeasured` here: no dedicated domination setup is supplied.
+     immunity is `measurable` under S-0612 claim 13 (scenario PD10 part a).
    - Confidence: high (defaults and consumers); medium (that nothing else reads the
      psychic-weapon immunity)
 
@@ -367,6 +368,10 @@ Unless a part gives a narrower falsifier, any observed departure from its expect
 falsifies that part. A setup not achievable with stock data or the scenario's explicitly named
 test data is not a successful measurement.
 
+Psychic-domination immunity in claim 1 uses S-0612 claim 13's measurement coverage:
+scenario PD10 part a isolates takeovers with named zero-damage test data and expects the
+psionics-immune subject to keep its owner. A takeover of that subject falsifies the immunity.
+
 - **P1. Immunities.** A deployed psychic infantry fires its pulse with an enemy building, an
   enemy vehicle, an enemy infantry and an enemy infantry of a psychic-weapon-immune type inside
   the pulse's area. Choose the building and the immune infantry by reading the stock rules (a
@@ -496,5 +501,5 @@ test data is not a successful measurement.
   owner (claim 9). It cannot be in operation then, so no observable depends on it as far as known.
 - Exact line-colour animation, and whether its cosmetic appearance needs a separate rendering
   claim (claim 11).
-- The psychic-domination consumer and aircraft-tint subcases marked unmeasured need
-  dedicated setups before they can acquire measurement backing.
+- The aircraft-tint subcase marked unmeasured needs a dedicated setup before it can acquire
+  measurement backing.

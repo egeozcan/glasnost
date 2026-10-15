@@ -93,7 +93,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0410](ui/S-0410-radar-minimap.md) | Radar and minimap (when radar is available, what the radar map shows and how it is coloured) | ui | 19 | approved | — |
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 16 | approved | — |
 | [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 3 | approved | — |
-| [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 3 | approved | — |
 | [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 1 | approved | — |
 | [S-0612](superweapons/S-0612-psychic-dominator.md) | Psychic Dominator superweapon | superweapons | 1 | approved | — |
 | [S-0615](combat/S-0615-special-hit-effects.md) | Special-hit effects (death-kind animations, the burning walker and the disc laser) | combat | 1 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 3 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 2 | approved | — |
 | [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 6 | approved | — |
+| [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 4 | approved | — |
