@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -168,11 +168,18 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
    Any other locomotor instead gets destination (*x*₀ + 4, *y*₀ + 1), independent of the
    foundation and its exit list. It moves by its own locomotor's rules. K sets u's speed fraction
    to 0.5 after this exit instruction in all these cases.
+   For a hovering vehicle, ρ = ½ can persist during the exit move, but is not guaranteed
+   for the whole leg. S-0503 claim 4 owns its subsequent fraction changes: in particular,
+   a stalled start with provisional step length 0 leptons and movement heading exactly
+   towards its heading point resets ρ to 1. This is a fraction reset, not an immediate
+   rise to full hover speed.
    - Backing: `measurable` (U6 for driving, teleporting and hovering). Tunnelling is
      `unmeasured` unless U6 establishes a stock factory-produced type; no such setup is
      specified here. Failed temporary replacement is `unmeasured`: no stock setup is
-     established that makes it fail.
-   - Confidence: high (driving and fixed destination); medium (temporary replacement)
+     established that makes it fail. Hover fraction persistence and the stalled-start
+     reset are `measurable` (U6 and S-0503 H8), with backing inherited from S-0503 claim 4.
+   - Confidence: high (driving and fixed destination), medium (temporary replacement),
+     low (duration of the hovering exit fraction, inherited from S-0503 claim 4)
 
 6. **Exit track and speed.** T1 gives every point and facing. Passing its first point places u
    at E's centre plus (−670, −68) leptons regardless of the appear point. Between-point movement,
@@ -653,7 +660,14 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   Driving and successful temporary driving use T1, with first-point position
   independent of release displacement. Hovering uses F4, not T1. Falsifier: a different track or
   a hovering vehicle following T1, a destination other than F4 for that hovering vehicle,
-  or a speed fraction other than 0.5 immediately after the exit instruction. Initial fractional-progress ticks are S-0207's, not necessarily
+  or a speed fraction other than 0.5 immediately after the exit instruction.
+  For the hovering exit, also record ρ, hover speed, provisional step length, movement
+  heading and heading point each tick. Expect ρ = ½ to persist only until a reset listed
+  in S-0503 claim 4. In particular, a 0-lepton provisional step with heading exactly
+  towards the heading point resets ρ to 1, without itself setting hover speed to 1.
+  A fraction change without a listed reset, or no reset in that stalled-start state,
+  falsifies the corresponding rule. A run with no stalled start does not test that reset.
+  Initial fractional-progress ticks are S-0207's, not necessarily
   a complete first-point jump. Unavailable stock types remain untested.
   For the teleporting vehicle, also record destination, suspended landing point, pending jump,
   phasing-in state and expiry tick, and ground/deck occupancy marks before temporary driving,
