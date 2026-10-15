@@ -2,7 +2,7 @@
 id: S-0315
 title: Suppression and panic (infantry fear, prone and panic in combat; parasite suppression)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -62,8 +62,10 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
   repair, passenger unloading, consuming-building arrival, teleport jumps and parasite-specific
   release events. Unloading and consumption set 50 ticks of suppression just before release,
   so a non-naval parasite is removed silently. A teleporting superweapon releases a naval
-  parasite at launch, at the host's old position; a non-naval parasite is instead expected to
-  leave at the teleport jump (low confidence, S-0614 claim 12). Replacing the host's locomotor
+  parasite at launch, at the host's old position; a non-naval parasite is not released at
+  launch, and whether and how it is released at departure remains unresolved (S-0614 claim 12,
+  S-0513 claim 39). The release established for an ordinary teleport jump must not be assumed
+  for the superweapon's departure. Replacing the host's locomotor
   by an effect releases only a naval parasite. Packing up a deployed unit is not a traced
   release event.
   A hit covered by claim 6's vehicle-factory exception does not release the parasite.
@@ -248,7 +250,8 @@ Shared terms used here are defined in the glossary: *infantry*, *vehicle*, *hous
    - Confidence: high (host-loss suppression without a naval exception and no post-release hold),
      medium (silent removal, sonic and healing rules, unloading, consumption, hit-before-health
      ordering, forced host-loss placement and the parasite's invulnerability exception),
-     low (non-naval release at a superweapon teleport jump, as S-0614 claim 12)
+     low (the unresolved non-naval release outcome at superweapon departure, S-0614 claim 12,
+     no outcome is promised here)
 
 ## Formulas
 
@@ -621,8 +624,10 @@ destination. Repeat with a prone cyborg for the type exception.
 
 ## Open questions
 
-- Whether a non-naval parasite on a host moved by a teleporting superweapon is released at
-  the teleport jump as expected (S-0614 claim 12, low confidence; its scenario P7).
+- Whether and how a non-naval parasite on a host moved by a teleporting superweapon is
+  released at departure (S-0614 claim 12; S-0513 claim 39). The ordinary teleport jump's
+  release is not established for this path; S-0614 scenario P7 records the outcome without
+  assuming release.
 - Whether a parasite stays attached throughout a killed ship's sinking until actual host
   removal. S-0614 claim 15 owns host-loss release; its scenario P5 tests this timing question.
 - Whether a sonic hit that frees a parasite also makes the attacker drop its current target (the
