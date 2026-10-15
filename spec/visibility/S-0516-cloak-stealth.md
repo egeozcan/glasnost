@@ -2,7 +2,7 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -41,7 +41,7 @@ Two kinds of rule are kept apart throughout.
 - **Defined elsewhere:**
   - shroud: S-0409. Shroud sight is not sensor coverage; neither replaces the other
   - the cloaked-blocker answer to movement: S-0209
-  - crates that grant cloaking: planned S-0520.
+  - crates that grant cloaking: S-0520 claim 15.
 - **Out of scope:**
   - psychic detection
   - the capture-the-flag mode
@@ -130,7 +130,7 @@ Two kinds of rule are kept apart throughout.
      uses the veteran ability list; an elite uses either the veteran or the elite list.
    - **(c) Its owner's cloak field.** The cell under its centre is in its owner's cloak field
      (claim 19).
-   - **(d) A cloaking crate.** The crate sets the object's own cloak flag (planned S-0520).
+   - **(d) A cloaking crate.** The crate sets the object's own cloak flag (S-0520 claim 15).
 
    Aircraft and buildings do not take the flag from their type: the type's cloak flag has no effect
    on them (`quirks.cloak_flag_ground_mobile_only`). A building can nevertheless cloak through a
@@ -584,7 +584,8 @@ Two kinds of rule are kept apart throughout.
       to a vehicle, through claim 33 (c).
     - **(b) Moving,** for vehicles only: claim 33 (a).
     - **(c) Neighbouring infantry,** for vehicles only: claim 33 (b).
-    - **(d) Leaving deployed mode.** A vehicle stops being deployed.
+    - **(d) Beginning to undeploy.** An in-place deploying vehicle loses its disguise when its
+      undeploy step starts, before an animated undeploy finishes (S-0517 claim 6).
     - **(e) Disguise house leaves the game.** The house its disguise names leaves the game.
 
     Infiltration uses up the spy rather than leaving a surviving unit whose disguise could be
@@ -1035,7 +1036,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 23, 40 | Make the array's cloak radius larger than its sensor sight. After removal, cover an affected outer cell with one sensor, then two. For detectors test the detection-radius disc after an initially unpowered building is removed. | A formerly −1 cell needs two additions. Array removal uses cloak radius; detector removal uses detection radius. |
 | 27–29 | Compare owner, mutual-ally and enemy views on explored ground with/without own sensors. Record clicks, shadow, radar and images every tick. Include a stage count reaching fraction 255. | Claim 28 bands hold. Unsensed allies see the cloak image but cannot click or list it on radar. Fading vehicles have no shadow. Fraction 255 is not drawn for non-owners. |
 | 30–32 | Copy undisguised/disguised infantry, disguised/undisguised vehicles, rock overlays and terrain objects. Create permanent disguisers with each side default. Remove the disguise house. Observe image, colour, health and acquisition. | Claim 31 copies and rejected kinds hold, without target damage. Defaults have the owner's house and do not fool enemy logic. Cleared permanent infantry resets to default; a vehicle clears outright. |
-| 33, 34 | Move temporary infantry/vehicle disguisers; introduce neighbours on all 8 tick phases, ground/bridge layers, contact and lockout. Compare damage on permanent/temporary types. Try transport entry, capture and vehicle undeployment. | Only temporary vehicles lose disguise while moving. Adjacent checks skip ticks divisible by 8. An eligible still vehicle draws once. Damage follows S-0302 claim 12. The listed non-removal events preserve disguise; vehicle undeployment clears it. |
+| 33, 34 | Move temporary infantry/vehicle disguisers; introduce neighbours on all 8 tick phases, ground/bridge layers, contact and lockout. Compare damage on permanent/temporary types. Try transport entry and capture. For undeployment, use S-0517's P8 (b) fixture and record disguise at the first undeploy processing and at completion, with and without a deploying presentation. | Only temporary vehicles lose disguise while moving. Adjacent checks skip ticks divisible by 8. An eligible still vehicle draws once. Damage follows S-0302 claim 12. The listed non-removal events preserve disguise. Undeployment clears disguise at the first step, before animated completion, or at the immediate step without a presentation; a disguise lost before the step makes that trial inconclusive. |
 | 35, 36 | Vary disguise house among observer, ally and enemy. Vary ownership and detector coverage. Observe acquisition, retaliation, automatic crush choice versus ordered drive-through, cell entry, cursor, hover bar/name, insignia and scenery selection/flash. | Outcomes using claim 35 change with its predicate as claim 36 and the owning specs state. Disguise blocks automatic crush choice, not an otherwise valid drive-through. Detection changes the observer's treatment, not the copied disguise. |
 | 37–39 | Capture the owner's full 256-tick cycle and each Table B band. Compare ally/enemy images and radar colours. Fire vehicles using two fake-blink times, also while undisguised; compare infantry. | Owner bands/cycle hold. Non-owners see real during vehicle fake blink, then the same disguise again. Infantry firing starts no fake blink. Radar uses owner colour when the owner allies the viewer, otherwise a non-empty disguise house's colour; repeat opposite one-way alliances as CS16 (c). |
 | 41 | Compare stock submarines with an underwater fixture vehicle stripped of all cloak sources. Fire after surfacing; add sensors and then cause adjacency reveal. | The control stays surfaced. Ordinary transitions give submerged states and F2 surfacing delay. Sensing alone does not surface it; adjacency can. |
