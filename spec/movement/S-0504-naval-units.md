@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -131,8 +131,11 @@ a carrier's controller is launching ordinary aircraft.
 
 ### Sinking
 
-4. **Sinking descent and leaving play.** While a vessel is sinking, each of its own updates (once per
-   tick, S-0203) first lowers it by 5 leptons. If its height above the terrain is then below
+4. **Sinking descent and leaving play.** Descent applies only to a sinking vessel retained in
+   play after S-0312 claim 15. A crashable surface vessel removed during its first killing hit
+   under S-0312 claims 10 and 15 has no subsequent descent, sinking wakes or wake-displacement
+   draws. For a retained vessel, each of its own updates (once per tick, S-0203) first lowers it
+   by 5 leptons. If its height above the terrain is then below
    −400 leptons (strictly), it leaves play at once (S-0312 claim 15 says what that implies). Its
    destruction, when sinking followed a killing hit, was already counted at that hit (S-0312
    claim 10); a cull has no killing hit or ordinary destruction credit (S-0614 claim 11).
@@ -405,8 +408,8 @@ a carrier's controller is launching ordinary aircraft.
 
 ## Formulas
 
-**F1. Sinking descent (claim 4).** Integer leptons. With *h*₀ the vessel's height above the
-terrain when it starts sinking, after its *n*-th descent
+**F1. Sinking descent (claim 4).** Integer leptons, for a vessel retained in play as claim 4
+requires. With *h*₀ the vessel's height above the terrain when it starts sinking, after its *n*-th descent
 
 > *h*ₙ = *h*₀ − 5*n*.
 
@@ -423,8 +426,9 @@ The first draw displaces along the map's *y* axis and the second along *x*. *z* 
 of the terrain (the water surface) under the vessel.
 
 **F3. Depot distance (claim 8).** Vehicle position (*x*, *y*, *z*) and its docking point
-(*a*, *b*, *c*) have integer-lepton coordinates. The original evaluates squared differences,
-their sum and the square root in floating point, then truncates toward zero to integer leptons:
+(*a*, *b*, *c*) have integer-lepton coordinates. The original evaluates the squared
+differences, their sum and the square root in double-precision floating point, with
+round-toward-zero arithmetic, then truncates the result toward zero to integer leptons:
 
 > *d* = trunc(√((*x* − *a*)² + (*y* − *b*)² + (*z* − *c*)²)).
 
@@ -450,7 +454,8 @@ vehicle-factory point; other building kinds can supply other points.
 |---|---|---|
 | ship, moving now after locomotor movement | tick number divisible by 8, conditions of claim 2 hold | one wake at its post-movement position |
 | ship, between tracks | launching count is positive | keeps waiting with destination kept (claim 3) |
-| alive vessel | killing hit, S-0312 claim 10 holds | sinking at 1 health point, in play |
+| alive vessel | killing hit, S-0312 claim 10 holds and claim 15 retains it | sinking at 1 health point, in play |
+| alive crashable surface vessel | first killing hit, S-0312 claim 10 holds, height 0 above water | removed during the hit under S-0312 claim 15; no subsequent descent or sinking wakes |
 | sinking | own update | descends 5 leptons; then leaves play if below −400 leptons, else on a tick number divisible by 4 two draws and one wake |
 | sinking | firing check reaches its sinking test | *illegal*, subject to claim 5's earlier answers |
 | sinking | ordinary damage or healing reaches it | ordinary health rules apply, with no sinking exemption (claim 10) |
@@ -592,8 +597,9 @@ no next track may begin while that count is positive. A mid-track pause caused s
 count or a next track begun with a positive count falsifies claim 3. This override tests the
 between-track distinction, not stock carrier flight. Restore stock data after the run.
 
-**N5. Sinking duration and wakes (claim 4, F1, F2).** *Setup:* a stock surface vessel that meets the
-sinking condition, at height 0 on open water; a weapon that kills it in one shot. *Procedure:* kill
+**N5. Sinking duration and wakes (claim 4, F1, F2).** *Setup:* a stock non-crashable surface vessel
+without death image frames that meets the sinking condition and is retained under S-0312
+claim 15, at height 0 on open water; a weapon that kills it in one shot. *Procedure:* kill
 it; run the random-state recorder. *Observable:* the tick of the killing hit, the tick it leaves
 play (it disappears from the object list), the wakes created and their positions relative to the
 vessel, and the number of scenario-stream draws per tick. *Expected:* it leaves play at its 81st
@@ -607,6 +613,9 @@ draws. Repeat from a squid cull using S-0614 claim 11's setup and scenario P6: o
 starts, the same descent, wake and removal rules apply, with the health unchanged at the cull.
 Record the sinking-start tick and first descent rather than assuming a killing-hit tick.
 Different descent or wake rules after culling falsify claim 5's shared aftermath.
+For the first-hit crashable comparison, use S-0312 scenario D8's first-hit crashable variant:
+removal during that hit, with no subsequent descent or sinking-wake draws, is expected rather
+than 81 descents. Retention for descent or later sinking wakes falsifies that removal rule.
 The no-animation rule is a design choice, not a stock measurement.
 
 **N6. A sinking vessel cannot fire or be fired on (claim 5).** *Setup:* a sinking vessel with an
