@@ -2,11 +2,11 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 15
-sources-class: [decomp]
+revision: 16
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0009, Q-0018, Q-0041, Q-0046, Q-0055]
 supersedes: []
@@ -26,7 +26,8 @@ type, including the effect of overlays and neighbouring cliffs (S-0211), the byt
 files (public), the meaning of the slope shapes (S-0106), the colour that a drawn pixel takes from
 the cell's brightness and the palette (S-0104, S-0103), and how tile images overlap each other
 (S-0102). This revision covers skirmish games only; network games, campaigns and the random map
-generator are out of scope.
+generator are out of scope. Claims 13 and 24 also specify unconditional corrections for two
+terrain-picture artefacts, with the original's behaviour retained for oracle comparisons.
 
 ## Terms
 
@@ -123,6 +124,11 @@ this spec owns its rules. The terms below are specific to this spec.
   extra image (S-0102's *tile depth data*).
 
 ## Behaviour
+
+Unless a part has an explicit confidence of its own, the confidence stated under its numbered
+claim applies to that part too, including table rows and absent-key defaults. A backing delegated
+to another claim inherits that claim's confidence as well as its scenario. A defined correction
+in our engine is a design rule, not a claim of an oracle measurement.
 
 ### Theater data
 
@@ -232,11 +238,12 @@ this spec owns its rules. The terms below are specific to this spec.
      | Part | Backing |
      |---|---|
      | The land type and slope shape come from the plain image | `measurable` (scenario V3, with a named test file) |
+     | Variants do not affect usable-tile validation | `unmeasured` beyond the valid-plain/missing-variant case of X4: no scenario part supplies an invalid plain tile cell paired with a valid variant cell |
      | The slope shape taken from the tile cell of the sub-tile, and the land type | `measurable` through S-0211's scenario L3, which places ore on every slope shape, and its scenarios L5 and L11 |
      | The radar colours come from the tile cells, not from the theater data file | Claim 20 owns this rule and its backing; S-0410 owns the resulting radar pixels |
 
-   - Confidence: high for the plain image and the slope shape; the land type is S-0211's; low for the
-     radar colours
+   - Confidence: high for plain-image validation and the slope shape. Land-type confidence is
+     S-0211's, and radar-colour confidence is claim 20's
 
 7. **Cells whose tile is not usable.** A cell's tile is *unusable* when its tile number is at or
    beyond the theater's tile count (the no-tile marker included), its tile has no image (claim 3),
@@ -306,12 +313,15 @@ this spec owns its rules. The terms below are specific to this spec.
 
 ### Smoothing
 
-10. **Ground smoothing.** At terrain recalculation, the four transition-pair rules can affect
-    the same cell when their tileset ranges overlap or an unset role writes a low tile number.
-    In such cases the resulting tile can depend on the combined pair outcomes. Scenario R4
-    predicts one overlap outcome: the rough ground centre remains *G* and the four arms show
-    *L* + 15, the sand-pair result. Where the pair rules do not overlap, the resulting tile does
-    not depend on their application order. For a pair with ground tileset start *G* and transition tileset start *L*, a cell whose tile is *G*, or lies in *L* … *L* + 15,
+10. **Ground smoothing.** The mask rule below specifies non-overlapping transition pairs,
+    with the unset-role exceptions stated below. For overlapping roles this claim specifies only
+    the freshly loaded fixture of scenario R4: a five-cell rough-ground plus on clear ground,
+    with the sand and rough transition roles sharing the range *L* … *L* + 15, distinct rough
+    and sand ground tiles, and no other pair or ramp range touching those tiles. Its loaded
+    centre is the rough ground tile *G* and all four arms are *L* + 15. This result is fixed for
+    that fixture, not a choice left to an implementation's update order. Other overlapping-role
+    configurations and other pre-load terrain histories are outside this claim.
+    For a pair with ground tileset start *G* and transition tileset start *L*, a cell whose tile is *G*, or lies in *L* … *L* + 15,
     belongs to the pair. Its tile becomes *G* when all four edge neighbours belong to the pair, and
     *L* + *m* otherwise, where *m* = [N out] + 2·[E out] + 4·[S out] + 8·[W out] and "out" means
     the neighbour does not belong to the pair. Two pairs widen what counts as belonging, for the
@@ -349,12 +359,9 @@ this spec owns its rules. The terms below are specific to this spec.
     by a unit's move or otherwise, leaves the tile unchanged. In play, therefore, a unit's moves
     change tiles by this claim only in the one-past-the-end case, in the case of a set transition
     role with an unset ground role, and where roles name overlapping tilesets.
-    When roles name overlapping tilesets, a tile produced by one pair may qualify for another
-    pair, and the final tile and neighbouring cells' results can vary with the map's recalculation
-    history. Scenario R4 proposes a test of one such case: the arms should show *L* + 15 and the
-    centre should remain *G*. This spec makes no further claim about other overlapping-role
-    configurations. Stock data are not known to hold such an overlap; scenario R4 creates one
-    with a loose copy of the theater data file. The cell's slope shape and land
+    The overlap fixture specified above is created by R4's named theater data file; it is not
+    asserted to occur in stock data. This claim imposes no general ordering among overlapping
+    pairs or among recalculated cells. The cell's slope shape and land
     type are not re-read from the new tile in the same recalculation. Cells of the
     no-tile case (claim 8) are not smoothed at all (they hold the no-tile marker, which belongs to
     no pair and no ramp range). An edge neighbour outside the map reads as a blank cell (S-0009,
@@ -476,19 +483,20 @@ this spec owns its rules. The terms below are specific to this spec.
     - with *n* + 1 ≤ 4 images, the fixed 4 × 4 pattern of table P4 at (*X* mod 4, *Y* mod 4),
     - with *n* + 1 > 4 images, the 8 × 8 pattern of claim 14 at (*X* mod 8, *Y* mod 8).
 
-    For the cell of sub-tile 0, (*X*, *Y*) is the cell's own coordinates. For a cell of another
-    sub-tile *t* of a tile whose plain image is *w* cells wide and *h* high (the sizes of the plain
-    image, whichever image is shown), *X* = (x − (*t* mod *w*)) / *w* and
-    *Y* = (y − ⌊*t* / *w*⌋) / *h*, divided with truncation toward zero, that is, the coordinates of
-    the tile's origin cell divided by the tile's size. So for a tile larger than one cell, the
-    origin cell and the other cells of the same placed tile can choose different images
-    (`quirks.variant_origin_mismatch`). A tile cell whose file carries the *alternate-image mark* (a
+    For every sub-tile *t*, including 0, of a tile whose plain image is *w* cells wide and *h*
+    high (the sizes of the plain image, whichever image is shown), *X* =
+    (x − (*t* mod *w*)) / *w* and *Y* = (y − ⌊*t* / *w*⌋) / *h*, divided with truncation toward
+    zero: the coordinates of the tile's origin cell divided by the tile's size. Thus every cell
+    of one placed tile uses the same pattern position. This is an unconditional drawing
+    correction, with no quirk switch. The original instead uses the cell's own coordinates for
+    sub-tile 0, which can make that cell show a different variant from the rest of its tile.
+    A tile cell whose file carries the *alternate-image mark* (a
     yes-or-no mark in the tile file, taken from the plain image's tile cell at the cell's
     sub-tile) does not use the pattern: it shows image 1 when the map cell's own *alternate-image
     state* is set and image 0 (the plain image) when it is clear. The state is a yes-or-no value that
-    each map cell holds, clear at map load; it is used by tiles that change in play. Which game
-    events set or clear it belong to specs not yet written, so this spec fixes only what the cell
-    shows for each value of the state. For a tile with only one image the mark has no effect: the
+    each map cell holds, clear at map load; it is used by tiles that change in play. The bridge
+    damage and repair events of S-0511 claims 4 and 19 are examples of alternate-look changes.
+    This spec fixes only what the cell shows for each value of the state. For a tile with only one image the mark has no effect: the
     cell shows the plain image.
     - **Where the mark is read.** Only the plain image's file counts: the mark is that of the plain
       image's tile cell at index *t* mod (*w* × *h*) of the plain image (the bit of value 4 of its
@@ -509,14 +517,16 @@ this spec owns its rules. The terms below are specific to this spec.
       | Part | Backing |
       |---|---|
       | The choice for tiles of one cell | `measurable` (scenario V1 part A) |
-      | The choice for larger tiles | `measurable` (scenario V1 part B) |
+      | The original's mismatched choice for larger tiles | `measurable` (scenario V1 part B); our engine's uniform position is a high-confidence design definition tested by that part's engine comparison |
       | The choice never reaches the land type or slope shape | `measurable` (scenario V3) |
       | The image of a cell without a usable tile | `measurable` (scenario C1 part B) |
       | The origin coordinates of a tile placed beyond the map's low edges (a negative origin, with truncating division) | `unmeasured`: a cell that lies so near the map's edge is outside the playable area of S-0009 and shows nothing a measurement can compare; the formula only states the arithmetic |
       | A marked tile cell shows the plain image after map load (the state clear at load), the mark read from the plain image's file only, and the bit that carries it | `measurable` (scenario V4, named test files) |
-      | Image 1 while the state is set, and the mark having no effect on a one-image tile | `unmeasured`: the state is set by rules that no spec covers yet, so no way to set it is known; a one-image tile shows the same picture either way |
+      | Image 1 while the state is set | `unmeasured` here: V4 tests the clear state only; bridge damage and repair change tile looks under S-0511 claims 4 and 19, but no scenario part here isolates a marked tile cell in the set state |
+      | The mark having no effect on a one-image tile | `unmeasured`: a one-image tile shows the same picture with either image-selection rule |
 
-    - Confidence: high for tiles of one cell, medium for larger tiles, low for the negative origin,
+    - Confidence: high for tiles of one cell and the defined correction, medium for the original's
+      larger-tile choice, low for the negative origin,
       high for the bit that carries the mark and for its being read from the plain image's file
       only, and low for what the set state shows
 
@@ -584,11 +594,12 @@ this spec owns its rules. The terms below are specific to this spec.
       | Part | Backing |
       |---|---|
       | The tilesets, and the no-tile marker | `measurable` (scenario G2, parts A and B) |
-      | The other conditions listed (buildable land type, no overlay, slope shape 0) | `measurable` through S-0401 claim 10 and scenario E8, which own the full germinability test |
-      | A stray or negative tile number | `unmeasured`: such a cell exists only as a single cell (or the few cells that claim 10 writes one to) until its next recalculation, and the growth of new ore on one given cell is a rare random event that long runs cannot make observable |
+      | The other conditions listed (buildable land type, no overlay, slope shape 0) | `measurable` (scenario G2 part C); S-0401 claim 10 owns the full germinability test |
+      | A stray tile number | `unmeasured`: no proposed fixture preserves R1 part D2's transient stray cell next to a mine through loading; placing the extra terrain object can itself affect the recalculations that determine the survivor |
+      | A negative tile number | `unmeasured`: the original's result on such a tile is unspecified (claim 7), so no stable germination fixture is established |
 
-    - Confidence: medium (the condition list is certain; that this test is the one ore growth uses is
-      the economy specs' to confirm; low for the stray and negative numbers)
+    - Confidence: medium for tileset eligibility and the other conditions (S-0401 claim 10 owns
+      the full germinability test); low for the stray and negative numbers
 
 17. **Burrowing.** The *burrowing test* of a cell decides whether a tunnelling unit may dig in or
     come up on it. A cell outside the playable area of S-0009 (claim 4, tested with the
@@ -808,8 +819,8 @@ this spec owns its rules. The terms below are specific to this spec.
     height, of the *shown image*. A variant's file has its own size, so *N*<sub>s</sub> can differ from the
     plain image's *w* × *h*. The tile cell that is painted is counted row by row from the
     top-left of the shown image, empty positions included (claim 6).
-    - **Tile case (claim 8).** The cell paints the tile cell at index *t* mod *N*<sub>s</sub> of the
-      shown image. By claim 7, *t* is below the plain image's *w* × *h*, so the index is *t* itself
+    - **Tile case (claim 8).** Subject to the missing-cell correction below, the cell paints the
+      tile cell at index *t* mod *N*<sub>s</sub> of the shown image. By claim 7, *t* is below the plain image's *w* × *h*, so the index is *t* itself
       when the shown image is the plain one or any variant with at least as many positions as the
       plain image; a variant with fewer positions wraps the index.
     - **No-tile case.** A cell holding the no-tile marker paints position 0 of the first tile of the
@@ -819,7 +830,7 @@ this spec owns its rules. The terms below are specific to this spec.
       when it has more. The choice of claim 13 is made for the cell even when the clear tile has one image, with no
       visible effect (it still builds the 8 × 8 pattern, claim 14). The cell's height level lifts the picture as claim 22 says.
     - **Overlay case (claim 8), tile number below the tile count.** The cell paints as in the tile
-      case: the tile cell at index *t* mod *N*<sub>s</sub>, so a sub-tile at or beyond the cell count
+      case, including the missing-cell correction: the tile cell at index *t* mod *N*<sub>s</sub>, so a sub-tile at or beyond the cell count
       paints a tile cell of the tile, as the slope shape of claim 7 does.
     - **A stray tile number (Terms).** A cell holds one without being replaced by the no-tile marker
       when it is of the overlay case (a map can put such a number on a cell, and smoothing can write
@@ -830,16 +841,17 @@ this spec owns its rules. The terms below are specific to this spec.
       importer warns for a map cell that carries such a number together with an overlay of row 1 of
       S-0211 claim 5. A number that smoothing writes in play is not data, so nothing is warned. The
       cell's slope shape and land type are not affected (claims 7 and 8, S-0211).
-    - **Nothing painted.** When the shown image has no tile cell at the index, the cell paints
-      nothing at all: no diamond, no extra image, no depth. That happens (a) for a cell of the
-      overlay case whose tile has no image (claim 3), and (b) when the index lands on an empty
-      position of the shown image. For the plain image (b) can occur only in the overlay case,
-      because claim 7 guarantees a tile cell in the tile case. For a variant it occurs in either
-      case, when the variant's file has an empty position where the plain file has a cell
-      (`quirks.variant_cell_missing`). The pixels then
-      keep whatever the terrain picture held there, which for a first painting is unspecified; our
-      engine leaves them black. The cell's land type and slope shape are those of the plain image
-      (claim 6), so the cell plays as ground that is not drawn.
+    - **Missing tile cells.** When the selected variant has no tile cell at its selected index,
+      our engine paints the plain image's tile cell at *t* mod (*w* × *h*) instead, with that
+      tile cell's diamond, extra image and depth data. This is an unconditional drawing
+      correction with no quirk switch; it changes no land type or slope shape. It corrects the
+      terrain picture only: the selected variant still supplies the radar colour, or S-0410
+      claim 9's dark-grey fallback when its tile cell has none. The original
+      paints nothing for a missing variant cell, leaving stale terrain pixels (unspecified on
+      the first painting). If the plain image too has no tile cell, or the overlay-case tile has
+      no image at all, our engine paints no diamond, extra image or depth there and leaves the
+      uncovered terrain background black. The original likewise paints nothing in these
+      plain-image cases; such a case occurs only with an overlay (claim 7).
     - **The tile file's height value.** A tile cell's file stores a height value. It is not used when
       a tile is painted, and it does not set a cell's height level when a map is loaded or in play:
       a cell's level comes from the map file (S-0009) and changes only by the play events that
@@ -852,13 +864,14 @@ this spec owns its rules. The terms below are specific to this spec.
       |---|---|
       | The tile cell index in the tile case with the plain image, and position 0 for the marker | `measurable` (scenarios X1, C1) |
       | The image of a no-tile cell is claim 13's choice for the clear tile | `measurable` (scenario C1 part B) |
-      | A variant's empty position paints nothing | `measurable` (scenario X4 part A; named test file) |
+      | The original paints nothing at a variant's empty position | `measurable` (scenario X4 part A; named test file); plain-image fallback in our engine is a high-confidence design definition tested by that part's engine comparison |
       | A variant with fewer positions wraps the index | `measurable` (scenario X4 part B; named test files) |
       | The same index rule in the overlay case, and nothing painted there for a tile without an image | `unmeasured`: the overlay hides the ground, and a cell that paints nothing shows pixels that are unspecified on a first painting |
       | The height value is unused | `measurable` (scenario X3; named test file), the random map generator part `unmeasured` (not specified) |
       | The picture of a cell that holds a stray tile number | `unmeasured`: the original's result is unspecified, so there is nothing to compare |
-    - Confidence: high for the tile case, the no-tile case and the unused height value in drawing.
-      Medium for the wrap of a smaller variant, the empty position of a variant and the overlay case.
+    - Confidence: high for the tile case, the no-tile case, the unused height value in drawing
+      and the defined missing-cell correction. Medium for the original's wrap of a smaller
+      variant, empty position of a variant and overlay case.
 
 ### Bridge spans
 
@@ -904,8 +917,8 @@ this spec owns its rules. The terms below are specific to this spec.
       receive the bridge-body mark as their high-bridge marking is cleared: the cell one step
       against the marking direction, the overlay's own cell, and the cells one and two steps
       along that direction. Repair clears the bridge-body mark on those same four cells and
-      restores their high-bridge marking. Which overlays a destruction or repair touches belongs
-      to the bridge specs. When a destruction or repair finds no bridge link within 3 cells of
+      restores their high-bridge marking. S-0511 claims 5 and 19 own which cells are unmarked
+      and re-marked during destruction and repair. When a destruction or repair finds no bridge link within 3 cells of
       its named cell, the spans are found again from the map's current tiles and high-bridge
       markings by the start, far-end and high-or-low rules above. This replaces the bridge links
       as S-0212 claim 3 states, but does not set the low-span bands again: neither their body
@@ -913,19 +926,20 @@ this spec owns its rules. The terms below are specific to this spec.
       meant by within 3 cells.
     - Backing, by part:
 
-      | Part | Backing |
-      |---|---|
-      | Start cells, far ends and directions by table B, and the band of a low span | `measurable` (scenario G3 part E and its table-coverage repeats, named test maps) |
-      | High and low spans: a high span marks no band | `measurable` (scenario G3 part E, run 2) |
-      | The spans are S-0212's bridge links, and a high span is an enabled one | `unmeasured` here: S-0212 owns what links do in the path search, and its scenarios observe them |
-      | Bridge-role priority over an overlapping wooden-bridge role, mixed spans, a direction that leaves the map before a far end, and an unset role | `unmeasured`: no scenario part proposes these configurations; G3 part E's table-coverage repeats test separate set roles with matching ends inside the map |
-      | The body mark set on all four cells by destruction and cleared by repair | `unmeasured` here: which overlays a destruction or repair touches belongs to the bridge specs; the burrowing test refuses both the intact deck and its destroyed body, so it does not distinguish these marks |
-      | The band cells' bridge axis and the priority of overlapping bands | `unmeasured` here: S-0212 owns the rules that read the axis; stock spans do not have overlapping bands with different axes |
-      | Spans found again in play without reapplying low-span bands | `unmeasured`: as S-0212 claim 3 states, stock play gives no known way to make the destruction or repair lookup find no link |
-
-    - Confidence: high for table B, the directions and the band (read); medium for the high and low
-      rule, the bridge links, the band cells' axes, the marks set or cleared in play,
-      and finding spans again without reapplying bands
+      | Part | Confidence | Backing |
+      |---|---|---|
+      | Start cells, qualifying far ends and directions by table B, and the band of a low span | high | `measurable` (scenario G3 part E and its table-coverage repeats, named test maps) |
+      | High and low spans: a high span marks no band | medium | `measurable` (scenario G3 part E, run 2) |
+      | Nearest qualifying far end when several compete | high | `unmeasured`: the repeats provide only one qualifying far end per tested start |
+      | A span without any non-role between-cell is high | medium | `unmeasured`: G3 part E always has non-role between-cells, so it does not isolate this empty-between case |
+      | The spans are S-0212's bridge links, and a high span is an enabled one | medium | `unmeasured` here: this spec proposes no path-search probe that distinguishes link state from ordinary passability; S-0212 claim 3 owns their use |
+      | Bridge-role priority over an overlapping wooden-bridge role | medium | `unmeasured`: the table-coverage repeats keep the two role ranges separate |
+      | Mixed-role spans, a direction that leaves the map before a far end, and an unset role | medium | `unmeasured`: no scenario part proposes these configurations; the repeats use separate set roles with matching ends inside the map |
+      | The body mark set on all four cells by destruction and cleared by repair | medium | `unmeasured` here: S-0511 claims 5 and 19 own the affected cells; burrowing refuses both an intact deck and its destroyed body, so that test does not distinguish these marks |
+      | The band cells' bridge axis | medium | `unmeasured` here: no proposed axis-reading pathfinding probe isolates it from other bridge rules; S-0212 claim 13b owns the axis's use |
+      | Earliest-start priority of overlapping bands | medium | `unmeasured`: no scenario part creates overlapping bands with different axes and isolates an axis-dependent outcome |
+      | Body membership independent of span enumeration, end cells covered only by another band's marks, and bands clipped to legal cells | high | `unmeasured` beyond G3 part E's isolated interior span: no scenario part tests shared ends or clipping at the map boundary |
+      | Spans found again in play without reapplying low-span bands | medium | `unmeasured`: as S-0212 claim 3 states, stock play gives no known way to make the destruction or repair lookup find no link |
 
 ## Formulas
 
@@ -967,7 +981,7 @@ transition start *L*:
 
 **Variant (claim 13).** For a cell of sub-tile *t* of a tile *w* × *h* with *n* + 1 images:
 
-> (*X*, *Y*) = (x, y) if *t* = 0, else (trunc((x − (*t* mod *w*)) / *w*), trunc((y − ⌊*t*/*w*⌋) / *h*))
+> (*X*, *Y*) = (trunc((x − (*t* mod *w*)) / *w*), trunc((y − ⌊*t*/*w*⌋) / *h*)) for every *t*, including 0
 >
 > *P* = P4(*X* mod 4, *Y* mod 4), the entry of table P4 in column *X* mod 4 and row *Y* mod 4, if
 > *n* + 1 ≤ 4; else *P* = P8<sub>*k*</sub>, the entry of the 8 × 8 pattern with
@@ -983,7 +997,8 @@ transition start *L*:
 The origin coordinates x − (*t* mod *w*) and y − ⌊*t*/*w*⌋ can be negative for a multi-cell tile
 placed so that its origin would lie beyond the map's low x or low y edge. The formula covers that
 case as written: the division truncates toward zero, and *X* mod 4, *X* mod 8 (and the same for *Y*)
-are non-negative remainders, as in the original.
+are non-negative remainders. The original uses this arithmetic only for *t* ≠ 0 and instead
+uses (*x*, *y*) for *t* = 0 (claim 13's drawing correction).
 
 **Tile animation position (claim 19).** For a cell (x, y) at height level ℓ whose tile has the
 displacement (*dx*, *dy*) in pixels:
@@ -1114,7 +1129,7 @@ as in claim 13); east is towards *x* + 1, south towards *y* + 1. Unit: sub-tile 
 | Tileset section number width | 4 | decimal digits | Zero-padded, from 0 |
 | Tile number within a set in file names and animation keys | at least 2 | decimal digits | From 1; tile 100 has 3 |
 | Transition tiles | 16 | tiles | Per pair |
-| Transition pairs | 4 | pairs | Rough, sand, green, pave; claim 10 fixes the observable overlap outcome |
+| Transition pairs | 4 | pairs | Rough, sand, green, pave; claim 10 fixes only R4's loaded overlap outcome, not general overlaps |
 | Variant patterns | 4 × 4 and 8 × 8 | entries | Claims 13 and 14 |
 | Largest image count that uses table P4 | 4 | images, the plain image included | Claim 13 |
 | Alternate-image mark | bit of value 4 | flag value of a tile cell | Claim 13, Terms |
@@ -1173,11 +1188,9 @@ All switches default to the original behaviour.
 - **`quirks.ramp_shape_zero`.** Original: a tile of the ramp range or of the smooth-ramp range whose
   slope shape is 0 is replaced by the tile just before the ramp range (claim 11). Fixed: it keeps
   its tile.
-- **`quirks.variant_origin_mismatch`.** Original: the origin cell of a multi-cell tile uses its
-  own coordinates for the variant choice and the other cells use the origin divided by the tile's
-  size (claim 13). Fixed: every cell of a placed tile uses the divided origin coordinates.
-- **`quirks.variant_cell_missing`.** Original: a cell whose shown variant has no tile cell at the
-  cell's index paints nothing (claim 24). Fixed: it paints the plain image's tile cell instead.
+- **Uniform multi-cell variants and missing-variant fallback.** Claims 13 and 24 apply these
+  drawing corrections unconditionally. They affect terrain and radar pictures, not game state,
+  and have no quirk switches.
 - **The land-type rules** (overlays, tiberium on slopes, cliff-back and the switch
   `quirks.cliff_back_case_sets`) are S-0211's (claims 5 to 8). This spec adds no switch for them.
 - **The 8 × 8 pattern and the unsynchronised stream** (claim 14). The pattern depends on the
@@ -1460,7 +1473,7 @@ behind cliffs) are S-0211's scenarios L3, L5, L11 and L16.
   pixels for the terrain, S-0101) whichever file is used.
 - *Falsified if:* any pixel or lift differs.
 
-**X4. A variant without the cell (claim 24, `quirks.variant_cell_missing`; named test file).**
+**X4. A variant without the cell (claim 24; named test file).**
 - *Setup:* a stock tile of at least two cells in each direction and a loose variant "a" made from its
   plain file with one nonzero-sub-tile cell emptied (the cell absent in the variant's file). A flat map on which
   the tile is placed at many positions (the 4 × 4 pattern of claim 13 applies by the placed origins),
@@ -1468,11 +1481,17 @@ behind cliffs) are S-0211's scenarios L3, L5, L11 and L16.
   another non-origin cell of the same placed tile showing the variant's picture). Neutral lighting; a wheeled vehicle ordered across the emptied cell.
 - *Observable:* screenshot of the emptied cell of a tile that shows image 1, and of the same cell of
   a tile that shows image 0; whether the vehicle can cross the emptied cell.
-- *Expected:* the cell of the image 1 tile paints nothing (its pixels keep whatever the terrain picture
+- *Expected in the original:* the cell of the image 1 tile paints nothing (its pixels keep whatever the terrain picture
   held there, which claim 24 leaves unspecified for a first painting), not the plain file's picture; the cell of the image 0 tile shows its picture; the vehicle crosses in both
   (the cell's land type is the plain image's).
-- *Falsified if:* the plain file's tile cell is painted in the emptied cell, or the cell is
-  impassable.
+- *Falsified in the original if:* the plain file's tile cell is painted in the emptied cell,
+  or the cell is impassable. To distinguish no paint from an accidentally matching retained
+  image, repeat after scrolling the area out of view and back; if the terrain pixels still
+  cannot distinguish the alternatives, the no-paint part is inconclusive.
+- *Engine comparison:* the emptied cell instead paints the plain file's complete tile cell,
+  including its extra image and depth if present, while remaining passable. Missing pixels or
+  any use of the empty variant's absent data fail the correction. There is no switch setting
+  that restores the original hole.
 - *Part B, a variant with fewer positions (claim 24; named test files; the scenario above is part A).*
   - *Setup:* a stock tile 2 cells wide and 1 high with no variants (or a loose copy of one), and
     a loose "a" variant for it made from a stock one-cell tile file, so the variant has 1 position and a
@@ -1481,10 +1500,12 @@ behind cliffs) are S-0211's scenarios L3, L5, L11 and L16.
     cells lie well inside the playable area. As in V1 part B, the second cell shows image 1:
     its divided origin is (4*a* + 1, 8*b*), so the P4 entry is 1. Neutral lighting.
   - *Observable:* the picture in the second cell, sub-tile 1.
-  - *Expected:* the variant's picture (index 1 mod 1 = 0 of the variant). The origin cell shows
-    image 0 (its P4 entry is 2, reduced modulo 2).
-  - *Falsified if:* the second cell shows nothing (its pixels as before), or the plain file's tile cell
-    at sub-tile 1.
+  - *Expected in the original:* the variant's picture in the second cell (index 1 mod 1 = 0
+    of the variant). The origin cell shows image 0 (its P4 entry is 2, reduced modulo 2).
+  - *Falsified in the original if:* the second cell shows nothing or the plain file's tile
+    cell at sub-tile 1, or the origin does not show image 0.
+  - *Engine comparison:* both cells use the divided origin and show image 1. A different
+    image or an unpainted cell fails the correction.
 
 **L1. Ground smoothing (claim 10).**
 - *Setup:* in a theater whose data has the rough pair set, a map with a plus-shaped patch of the
@@ -1641,13 +1662,14 @@ behind cliffs) are S-0211's scenarios L3, L5, L11 and L16.
 - *Falsified if:* any control cell differs from its mask formula, or in the loose copy any
   cell shows a tile other than its ground tile.
 
-**R4. Order of the pairs, and roles that name overlapping tilesets (claim 10; named test file).**
+**R4. Loaded outcome of one overlapping-role fixture (claim 10; named test file).**
 - *Setup:* a theater whose data sets the rough pair and the sand transition role (the measurer
   checks the stock data), and a loose copy of its theater data file in which the sand transition
   role names the same tileset as the rough transition role (so the rough transition tiles *L* … *L* + 15
-  are also the sand transition range). The measurer checks that the rough ground tile lies in no other pair's
-  ground or transition range and in no ramp range, and that no other pair or ramp range contains the tiles
-  *L* … *L* + 15 in the loose copy. A map with scenario L1's plus-shaped patch of five rough ground cells
+  are also the sand transition range). Keep the sand ground role set and distinct from the rough
+  ground tile. The measurer checks that both ground tiles lie outside *L* … *L* + 15 and all
+  other pair and ramp ranges; the clear background belongs to neither pair. Neither the green
+  nor pave pair nor either ramp range may contain *G* or *L* … *L* + 15 in the loose copy. A map with scenario L1's plus-shaped patch of five rough ground cells
   on clear ground, away from other rough or sand tiles. Two runs, each in a fresh program start: a
   control with the unchanged data (this is scenario L1), and the loose copy.
 - *Observable:* screenshot after loading; the tile each of the five cells shows.
@@ -1720,35 +1742,42 @@ under test.
     y down, the same lines of constant x + y and constant x − y appear as diagonal stripes. A tile
     with more than 4 images, such as V2's example, does not use this table at all (claims 13 and
     14); V2 describes its typical appearance, not a prohibition on every chance alignment.
-- *Part B, a tile larger than one cell (`quirks.variant_origin_mismatch`).*
+- *Part B, a tile larger than one cell (claim 13's drawing correction).*
   - *Setup:* a tile 2 cells wide and 1 high with 2 images. Use one from the chosen theater's stock
     data if the measurer finds one. Otherwise use a named test file: a loose "a" variant for a stock
     tile of that size that has no variants, made from another tile file with the same cell layout whose image differs
     visibly. The map places the tile with origins (8*a*, 8*b*) and (8*a* + 2, 8*b*), for positive
     integers *a* and *b* chosen so all four cells lie well inside the playable area.
   - *Observable:* which image each of the four cells shows.
-  - *Expected (by the Formulas):* at the first origin both cells show image 0. At the second
+  - *Expected in the original:* at the first origin both cells show image 0. At the second
     origin, the origin cell shows image 0 (its P4 entry is 2, reduced modulo 2), and the second
     cell shows image 1 (its divided origin is (4*a* + 1, 8*b*), whose P4 entry is 1), so the two
     halves of that placed tile differ.
-  - *Falsified if:* any cell shows another image, in particular if both halves of the second
-    placed tile show the same image.
+  - *Falsified in the original if:* any cell shows another image, in particular if both halves
+    of the second placed tile show the same image.
+  - *Engine comparison:* both cells at the first origin show image 0, both at the second show
+    image 1. Different variants within either placed tile fail the correction. One-cell tiles
+    retain part A's original pattern.
 
 **V2. 8 × 8 pattern (claim 14).**
-- *Setup:* a map filled with a one-cell tile that has 8 images (for example the stock clear tile of
-  a theater that has 8 clear images). Two runs, each in a fresh program start, going straight to
+- *Setup:* a map filled with a one-cell tile with more than 4 images, identified from its files.
+  Record its imported image count. For part B use named test files with exactly 8 visibly distinct
+  images if no qualifying tile with that count is available: the 8 is a test choice that exposes
+  every possible pattern entry, not a stock-data assertion. Two runs, each in a fresh program start, going straight to
   the map; a third run in the same session after another map of the same kind.
 - *Observable:* the image of each cell over a 16 × 16 block.
-- *Expected:* the images repeat with period 8 in x and in y; within the 8 × 8 period, no entry
-  equals one of its 8 neighbours in the index-wrapped sense of the Formulas, except where 64 draws
-  failed (rare); the third run shows the same pattern as the map before it in that session.
+- *Expected:* the images repeat with period 8 in x and in y. With exactly 8 images, each shown
+  image exposes one pattern entry, which differs from its 8 index-wrapped neighbours except
+  where 64 candidate draws failed; with fewer images the final modulo reduction can make
+  neighbours equal without a failed candidate sequence. The third run shows the same pattern
+  as the map before it in that session.
 - *Falsified if:* the images fail to repeat after 8 cells on either axis, or the pattern changes
   between two maps of one session. An accidental shorter period is not a falsifier. Part B
   decides the candidate/retry rule; adjacent equal values alone cannot falsify it without knowing
   whether all 64 candidates clashed.
 - *What the pattern looks like over a large area.* The 8 × 8 period is anchored to map cell (0, 0)
-  and repeats in x and in y. Inside a period the images look scattered: no image repeats on a
-  cell's 8 neighbours (apart from the index wrap of the Formulas and rare failed tries), so a large
+  and repeats in x and in y. With 8 images, the images inside a period look scattered: no image
+  repeats on a cell's 8 index-wrapped neighbours apart from rare failed tries, so a large
   area typically has no long stripes or bands, but chance alignments are not forbidden. The
   guaranteed repeat is every 8 cells along x and along y (on the screen, every 8 cells along each of the two diagonal axes of the
   ground).
@@ -1823,13 +1852,38 @@ under test.
   refuses while the morphable control accepts. Inconclusive if the morphable control refuses or the
   non-morphable control accepts.
 
-**G2. Allow-tiberium (claim 16).** *Setup:* a map with ore next to large areas of two tilesets, one
-with the allow-tiberium flag and one without, both on buildable land, with ore growth on; long runs
-at fastest speed. *Observable:* the cells new ore appears on after 20 game minutes, over 5 runs.
-*Expected:* new ore only on the allowing tileset. *Falsified if:* any new ore on the other.
-*Part B, a cell without a tile.* The same map with a block of cells that hold a tile number equal
-to the theater's tile count (clear, buildable, flat land, claim 7) next to the ore. *Expected:* new
-ore also appears on those cells in the 5 runs. *Falsified if:* it never does.
+**G2. Allow-tiberium and the no-tile exception (claim 16; named test data).**
+- *Setup:* a small flat map with a stock animated ore mine well inside the playable area. Of its
+  eight neighbours, seven hold walls and the eighth is the target. The mine's own cell holds no
+  resource. The target has overlay data value 0, no overlay, no object or bridge mark, and a
+  buildable land type. No unit enters these cells. Use a named loose theater data file to change
+  only the tested tileset flag between runs; keep the mine's stock animation and chance fields.
+  A named map override may make the target's land type buildable. Turn ordinary resource growth
+  and spreading off so that only the mine can supply new resource (S-0401 claim 15). Choose
+  target tiles outside every ground and ramp smoothing range and verify the target is empty
+  at the first tick.
+- *Part A:* two fresh runs with the same valid flat target tile, its allow-tiberium flag yes and
+  no respectively. *Part B:* two more fresh runs with the clear tileset's flag no: one target
+  holds the ordinary clear tile, the other a tile number equal to the theater tile count, which
+  becomes the no-tile marker after loading (claim 7).
+- *Procedure:* video the mine and target with tick numbers until the mine completes its first
+  animation, at most 18000 ticks per run. Identify the completion and spread opportunity by
+  S-0401 claim 15's sprite-frame sequence, not merely by elapsed time or resource appearance.
+  Record the target immediately before and after that completion. A run without an identifiable
+  completion is inconclusive and repeated, not evidence against germination. With seven
+  neighbours blocked, the target is the only possible germinable neighbour, regardless of the
+  spread step's random starting direction.
+- *Observable:* whether the target gains resource at that completed animation. *Expected:*
+  part A yes-flag target gains resource and no-flag target stays empty; part B ordinary clear
+  target stays empty and no-tile target gains resource. *Falsified if:* any of these four
+  outcomes differs at a verified completion while all other conditions are satisfied. Thus a
+  failure to generate a random mine animation cannot masquerade as a failed tile condition.
+- *Part C, the other three conditions of claim 16:* repeat part A's yes-flag fixture in three
+  fresh runs changing only the target condition: a named test tile with slope shape 1 outside
+  every smoothing range, its land type made non-buildable, or a wall overlay placed on it.
+  Each stays empty at a verified completion, while the unchanged flat/buildable/empty target
+  of part A receives resource. Resource on a changed target falsifies that condition. This
+  tests representatives of the conditions, not every overlay or land type.
 
 **G3. Burrowing (claim 17; named test file for part C).** Inside the playable area only (the answer
 outside it is not measured, claim 17). The destination cells are flat, free of buildings and terrain
@@ -1969,9 +2023,10 @@ tileset decides.
 declares a tileset a shadow caster with a non-zero shadow-tile count (the measurer checks), and
 S-0104's scenario L15 part D on one tile of that tileset. Run 1: stock data. Run 2: a loose copy of the
 theater data file without that tileset's shadow-tile count (flag kept). Run 3: a loose copy without
-the flag (count kept). *Observable:* the vehicle's brightness on each cell, as in S-0104's scenario L15 part D.
-*Expected:* some cells darken the vehicle in run 1 (S-0104); none in runs 2 and 3. *Falsified if:*
-run 2 or run 3 darkens a cell that run 1 darkens. If run 1 darkens no cell, the part is
+the flag (count kept). Run 4: flag set but count explicitly 0. *Observable:* the vehicle's brightness
+on each cell, as in S-0104's scenario L15 part D.
+*Expected:* some cells darken the vehicle in run 1 (S-0104); none in runs 2 to 4. *Falsified if:*
+run 2, 3 or 4 darkens a cell that run 1 darkens. If run 1 darkens no cell, the part is
 inconclusive.
 
 ## Open questions
@@ -1998,9 +2053,9 @@ inconclusive.
   after it ends: in the original, removing such an animation in play clears, on the cell under its
   position, the record that the cell has started one (claim 19). No stock tile animation is known
   to have that flag; claim 19 does not cover the case.
-- Which overlays a bridge destruction or repair touches, and which cell it names for the
-  bridge-link lookup of S-0212. Claim 25 states the body-mark and rediscovery outcomes for a
-  given affected overlay and lookup result; the bridge specs own those events' affected cells.
+- Bridge destruction and repair are owned by S-0511 claims 5 and 19. Claim 25 states the
+  body-mark and rediscovery outcomes for a given affected overlay and lookup result; the
+  bridge-link lookup is S-0212 claim 3's.
 - Q-0009 is answered in full. Its question 1 by claims 1 and 3 and table T, 2 by claim 2, 3 by
   claims 3, 7 and 24, 4 by claims 13 and 14, 5 by claims 6, 7 and 24, 6 by claims 22 to 24, 7 by
   claims 7 and 24 and S-0009 claim 8, 8 by claim 6 and S-0211 claims 5 to 8, and 9 (the spelling of
@@ -2020,6 +2075,8 @@ inconclusive.
   plain image (claim 13; S-0410 already says so).
 - Whether the smoothed ramp tiles of the stock theaters carry the same slope shape as the ramp
   tile they replace (claim 12 assumes so).
+- General overlapping-role smoothing outside R4's freshly loaded fixture remains outside
+  claim 10. No history-dependent or pair-priority contract for those other cases is established.
 - Whether placing the map's terrain objects and units at map load, between the two passes of
   claim 12, recalculates their cells, as putting an object into a cell does in play (Terms).
   Claims 12 and 19 state the results after loading on the reading that it does not.
