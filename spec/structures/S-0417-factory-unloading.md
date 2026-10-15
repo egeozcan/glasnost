@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -293,6 +293,17 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     exit walk. S-0208 claims 16 and 17 own walking completion; claim 23 excludes an entry
     interaction that removes the unit before it can report and does not prescribe jumpjet
     or teleporting arrival timing.
+
+    **Factory contact during jumpjet ascent.** The ordinary walking report above does not establish
+    when a jumpjet ends factory contact or its tether. The unresolved factory-contact
+    interaction occurs during *ascending*, while the bridge-adjusted integer height of
+    S-0502 claim 7 is strictly above one quarter of the target height and below the target
+    height. The fraction is one half for a balloon-hover vehicle, not for balloon-hover
+    infantry; the integer threshold truncates toward zero. This is not an established
+    clear-report or contact-release rule (Open question 9).
+    - Backing: `unmeasured` for the interaction's effect: no observable consequence has
+      been established. The ascent thresholds inherit S-0502 claim 7's backing.
+    - Confidence: high (threshold conditions), low (contact or tether consequences)
 
     With no rally point (or a rally point in the unit's own cell), neither placement nor the release
     gives a destination or queues *move*. The unit rests in *guard*, and no rule of resting
@@ -737,7 +748,11 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   prediction. Report every later movement and its first tick, without scoring it, and whether the
   second release is busy. Part c: rally point set, stock jumpjet infantry type if one is
   available from an infantry factory. Expect the rally point as first destination and an empty
-  guard spot. Falsifier: an exit-cell leg.
+  guard spot. Falsifier: an exit-cell leg. Also record contact, tether, flight state,
+  target height and S-0502 claim 7's bridge-adjusted height on each ascent tick.
+  Record whether any contact or tether change coincides with the strict quarter-height
+  threshold while still below target height. This observation investigates Open question 9,
+  no contact-loss tick is predicted or scored from that threshold alone.
 - **U11, idle apron clearing.** Part a: an idle stock ground vehicle factory in *guard*, no
   production. Place an idle vehicle of the factory's own house on E by map pre-placement or a move
   order. Record the factory's guard processings, the scatter requests and the vehicle's
@@ -809,4 +824,7 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
 8. Whether putting a released unit on the map takes random draws of its own (Q-0120, question 5).
    The search and destination rules of this spec take none, but placement's own effects have not
    been traced.
+9. The jumpjet factory-contact interaction during ascent (claim 10): does it end contact or
+   tether, and on which tick? The ascent threshold alone establishes neither consequence.
+   U10 c records both states across the threshold; S-0502 claim 7 owns the height test.
 
