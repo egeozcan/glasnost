@@ -2,11 +2,11 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794]
 supersedes: []
@@ -308,7 +308,14 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    no scenario here can arrange hospital entry for an infantry unit at such a balance. The armory of S-0311 (claim 12) uses
    the same infantry repair count, but counts it in processings instead of ticks (S-0311, Formulas
    F6).
-   - Backing: `measurable` (H6 parts a to c for own hospitals; S-0701 claim 28, G7 for the
+   Hospital entry retains the infantry as an object. At arrival at its destination object,
+   before entry completion, it raises one entered-by notification on that object's tag,
+   with itself as causing object; entry alone raises no destroyed-by-anything notification
+   on the infantry's own tag. Release adds no entered-by notification, while a fresh entry
+   can raise it again. S-0524 claim 14 owns these raises and their distinction from
+   trigger firings, not repair payment or cadence.
+   - Backing: `measurable` (H6 parts a to c for own hospitals; S-0524 claim 14, C16 for
+     retained-infantry notifications; S-0701 claim 28, G7 for the
      shared suppression row). Hospital-specific cross-creator suppression is `unmeasured`:
      neither H6 nor G7 isolates a hospital/trigger pair. Absence of feedback for another
      owner's hospital is `unmeasured`: this scenario cannot order that owner's infantry to enter,
@@ -370,9 +377,13 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    of the building repair period *P*<sub>b</sub> (Formulas F1), provided its health is not 0 and
    not equal to its strength. This holds for infantry, vehicles, aircraft and buildings while
    they take their ordinary object updates, and uses the same game-wide rate as building repair.
-   It is free. Objects out of play do not take these updates (S-0203); healing inside transports
-   and hospitals remains the separate open question below.
-   - Backing: `measurable` for living objects taking updates (H7). The health-0 exclusion is
+   It is free. A vehicle, infantry unit or landed aircraft still in the superweapon warp's
+   leaving stage after its warp update skips this healing in that turn (S-0513 claim 48).
+   A pending warp alone does not impose that exclusion; other warp-turn continuation
+   boundaries retain that claim's unresolved status. Objects out of play do not take these
+   updates (S-0203); healing inside transports and hospitals remains the separate open question below.
+   - Backing: `measurable` for living objects taking updates (H7) and the leaving-stage
+     exclusion (S-0513 claim 48, SW23). The health-0 exclusion is
      `unmeasured`: no scenario here keeps a zero-health object in an ordinary living update
      without destruction handling, which would confound the observation.
    - Confidence: high
@@ -393,6 +404,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       total *T*<sub>i</sub>,
     - aircraft and buildings are not healed this way.
 
+    This healing requires reaching ordinary update work too: the still-leaving-stage
+    exclusion of claim 9 and S-0513 claim 48 applies equally to it, without implying
+    a blanket exclusion for every turn of a pending or arriving warp.
     *a*<sub>v</sub>, *a*<sub>i</sub>, *n*<sub>v</sub> and *n*<sub>i</sub> are game-wide fields
     (Import mapping, intervals in ticks). An object at full health or at 0 health gains nothing.
     Several buildings of a house add up: two such buildings double the amount, not the frequency.
@@ -405,7 +419,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     in the host's same turn (S-0614 claim 18). Health already restored can prevent a lethal
     delivery, but neither kind heals damage from that delivery later in the same turn.
     - Backing: `measurable` (H8 parts a to e, including the building-kind exclusion and
-      same-turn parasite ordering; S-0614 claim 18). The
+      same-turn parasite ordering; S-0614 claim 18; S-0513 claim 48, SW23 for the
+      leaving-stage exclusion). The
       health-0 exclusion is `unmeasured` for the same destruction-handling reason as claim 9.
     - Confidence: high (amounts, intervals, the kinds, the stacking, same-turn parasite ordering); medium (the events that change
       the totals, the floor at removal, and that power plays no part)
@@ -521,6 +536,11 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     produce another enter order: the permission fails, rather than adding the vehicle to a
     depot waiting queue. The existing contact is not displaced.
 
+    Ordinary vehicle service docking raises neither an entered-by notification on the
+    depot's tag nor a destroyed-by-anything notification on the vehicle's tag merely
+    for this entry. Departure adds no entered-by raise either. This differs from retained
+    infantry hospital entry (claim 7); S-0524 claim 14 owns the notification distinction.
+
     Contact alone does not set a tether. Each due *enter* processing repeats the entry request.
     Acceptance or an existing tether allows entry to continue. Refusal without a tether releases
     contact and falls back to rest (S-0215 claim 29). This is not a repeat of claim 16's initial
@@ -547,8 +567,13 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     waits, blockages and zero speed do not clear it. Stop or cancellation that stops
     locomotion clears it immediately. Qualifying final-track completion clears it before
     the cell-arrival report, whereas intermediate completion and merely standing in the
-    goal cell do not. Thus neither successful path search nor goal-cell inequality is a
-    substitute for testing whether that point is present.
+    goal cell do not by themselves. S-0207 claim 26 separately removes a cell destination
+    at a no-track update in its cell, or applies its approach-destination fallback; this
+    cell-goal cleanup does not apply merely because a building's supplied point is in
+    that cell. Its exact-point guard exception can nevertheless remove a building goal
+    when at rest in guard with all three integer-lepton coordinates equal to the
+    locomotor destination, including height. Thus neither successful path search nor
+    goal-cell inequality is a substitute for testing whether that point is present.
 
     | Locomotor | Reports movement when |
     |---|---|
@@ -569,8 +594,13 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     path search or new track is required for that assignment. With no movement hold refusing
     the instruction, the locomotor destination point is then present, and the retained
     order-level destination makes this a moving destination despite no translation. Merely
-    standing there does not perform the final-track completion that would clear the point.
-    Later stop, replacement or qualifying track completion follows S-0207 claim 25; the
+    standing there with the depot as a building destination does not perform the final-track
+    completion that would clear the point, nor the cell-destination cleanup of S-0207
+    claim 26. This is not indefinite retention for an ordinary same-cell move to a cell:
+    that claim's no-track cleanup and exact-point guard exception still apply where
+    eligible. Later stop, replacement or qualifying track completion follows S-0207
+    claim 25; completion alone clears the locomotor point, not the depot's order-level
+    building destination. Entry and servicing effects can separately change that destination. The
     tether test uses the state at the repeated request, not the earlier order-issue state.
     This answer does not bypass claim 16's permission refusal for a vehicle already standing
     on this depot, claim 20's ignored repeated enter, or claim 23's queued entry without a
@@ -614,10 +644,11 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     128 leptons on diagonal or elevated approaches.
     Simultaneous requests are claim 23's; servicing with more than one imported contact place
     is in Edge cases.
-    - Backing: `measurable` (H16 a and c, H19 a and c; contact, tether, behaviours and processing
+    - Backing: `measurable` (S-0524 claim 14, C16 for vehicle docking notifications,
+      H16 a and c, H19 a and c; contact, tether, behaviours and processing
       ticks recorded separately; H19 d and e for the empty-place test, movement reports, ready
       mark and one-place approach; H19 f for same-cell assignment and blocked persistence,
-      with S-0207 claim 25's D29 controls for set and clear events). Named test data distinguish pad combinations unavailable
+      with S-0207 claims 25 and 26's D29 and D30 controls for set, clear and cleanup events). Named test data distinguish pad combinations unavailable
       among stock types; no observation of them is claimed.
     - Confidence: high (capacity, repeated request, cell test, movement reports, empty-place
       result, ready mark, same-cell destination assignment and absence of initial tether), medium (stock approach observations,
@@ -1417,6 +1448,23 @@ strength and no charge; either falsifies the rule.
   cannot heal damage delivered later in that turn. Any other final health falsifies the
   corresponding ordering rule. Repeat each variant three times under the common setup.
 
+**H8 f: warp exclusion (claims 9 and 10).** Use S-0513 claim 48's SW23 setup and
+read-only turn recorder with damaged eligible infantry, vehicles and landed aircraft.
+Test individual healing, and for infantry and vehicles house-wide healing, with due
+healing ticks during turns that remain in the leaving stage after the warp update.
+Expected: no gain from either source on those turns; a gain falsifies that exclusion.
+Record pending, departure and arrival turns separately rather than extending this
+prediction to unresolved continuation boundaries. This is SW23's proposed test, not
+a completed measurement.
+
+**H8 g: service notifications (claims 7 and 17).** Use S-0524 claim 14's C16
+hospital and vehicle-repair fixtures, repeating destination entered-by tags and entrant
+own-tag destroyed-by-anything tags, with its raise recorder and visible counters.
+Expected: hospital infantry raises one destination entry notification before completion,
+vehicle docking none, and neither entry destroys the entrant. Release adds no entry
+raise; fresh entry repeats the respective count. Any contrary count, causing object
+or timing falsifies the corresponding rule. C16 supplies the setup and repetitions.
+
 **H9: exclusion by the skill-level gate (claim 8).** The human house has 100 000 credits and two
 damaged buildings of a repairable type, with individual and house-wide self-healing disabled,
 and gives no repair or sell order. No map action heals, repairs or sells them. Record health,
@@ -1798,8 +1846,13 @@ damaged to half strength unless a part says otherwise.
   destination, locomotor destination, heading point and every later stop or track completion
   within the turn, not just at tick end. Expected at accepted assignment: the locomotor
   point is present at the supplied point despite cell equality, before any successful search,
-  and its movement report is true while the order-level destination remains. Standing alone
-  does not clear it. In a separate run order entry from outside that cell and block the route
+  and its movement report is true while that building destination remains. Across later
+  no-track updates, mere cell equality clears neither destination: the depot is a building
+  destination, not a cell destination. Record behaviour as well: S-0207 claim 26's
+  exact-point guard exception remains applicable if it becomes at rest in guard with
+  all three coordinates equal. Use that claim's D30 cell-goal and guard controls to
+  distinguish those cleanups from entry exchanges or servicing changes. In a separate
+  run order entry from outside that cell and block the route
   short of it with stock obstacles; a wait or failed search retaining the goal retains the
   point and movement report. Record give-up separately rather than treating every failure
   as give-up. Compare ordinary final-track arrival, expecting S-0207 claim 25's clearing
@@ -1810,7 +1863,8 @@ damaged to half strength unless a part says otherwise.
   the point. If the named map cannot reach accepted same-cell entry, report that case
   untested, not an inferred absence. Omission on accepted assignment, clearing solely at
   cell equality or on a retained-goal search failure, or different stop/arrival clearing
-  falsifies the respective rule.
+  falsifies the respective rule, excluding S-0207 claim 26's applicable guard cleanup
+  and separately recorded entry or servicing effects.
   These tests need a read-only state trace proposed for the bench; do not set marks,
   points or tethers by writing into the running game. If a requested state cannot be
   reached by ordinary input and the named map, report that sub-test inconclusive.
