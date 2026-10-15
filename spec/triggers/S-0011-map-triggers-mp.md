@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1006,7 +1006,7 @@ name are not established either. Nothing else in the table fixes an order of int
 | Unused-house cleanup, after the second terrain recalculation pass and before the late phase | conditional tile-animation creation and immediate start-event draws from recalculations of occupied ground cells caused by removing objects, including building foundation cells. A cell that already started a tile animation since the second pass takes no new creation draws | S-0009, claim 28; S-0010, claim 19; S-0202, claims 10 and 14 |
 | Late phase | list 3's random entries; the re-assignment draws | S-0009, claims 20, 28 and 29 |
 | Starting units | the draws of type choice, creation and placement that S-0009 claims 45 and 46 list, in their order, including the raw draw after all houses' starting units | S-0009, claims 45 and 46; S-0202 |
-| Starting crates, when crates are on | the draws of placing them (not established) | crate rules, no spec yet |
+| Starting crates, when crates are on | successive random placements: two ranged requests per candidate attempt, x then y; on success, any overlay-placement draws precede one lifetime ranged request. A full crate-place list takes no requests. Ranged requests are not fixed raw-draw counts: equal bounds and rejection follow S-0202 claim 4 | S-0520 claims 2 and 3 |
 | Secret labs | the conditional secret-type choice draws of S-0407 claim 14, in lab creation order, after initial crates and before end-of-loading tags and the game-start recalculation | S-0407, claim 14; S-0202, claim 14 |
 | End of loading: remaining tag set-up (Terms) | claim 14's draws for every tag created there, in registration order, and for each tag its instances in chain order | this spec, claim 34 |
 | Game-start terrain recalculation pass, in S-0009's visiting order | after starting units, initial crates, secret-lab choices and end-of-loading tags, and before the first tick: for each tile animation this pass starts, its creation and immediate start-event draws. A cell that already started one in the second pass starts no second animation, so takes no further animation-creation draws in this pass | S-0010, claims 12 and 19; S-0011, claim 34; S-0202 claims 10 and 14; S-0109 |
@@ -1208,7 +1208,17 @@ but not specified in this revision.
 | 60 | type exists | count, with kind 2 type name | yes | no | 21 |
 | 61 | type does not exist | kind 2 type name | yes | no | 21 |
 
-**Companion event outside this subset.** Event code 3 tests the specified house's
+**Companion events outside this subset.** S-0520 claim 7 owns the pickup gates that
+raise event 49 on a tagged collector, with that collector as causing object, and set
+the scenario's any-crate-picked-up mark associated with event 50. The mark is set
+only for a crate-trigger overlay whose pickup continues after the tagged raise.
+If that raise kills the collector, the crate remains and the mark is not set by
+that pickup. These pickup rules inherit S-0520 claim 7's backing and confidence
+(scenario CR5). They do not establish event 50's evaluation at a poll: its presence
+in both the polled and code-matched sets remains an open question below. Nor does
+the mark alone establish a firing. These pointers do not extend I3's supported subset.
+
+Event code 3 tests the specified house's
 lost-to-capture mark under S-0509 claim 11: whether an engineer has ever captured one of
 that house's buildings. Nothing else sets the mark, and nothing clears it during the
 game. This is a code-matched event (Constants), not a polled condition: an unlatched
