@@ -201,8 +201,6 @@ pub struct AirState {
     pub run_of: Option<i32>,
     /// A round of the run is pending (claim 15).
     pub pending: bool,
-    /// Guidance turns toward the target rather than the destination (T1).
-    pub face_target: bool,
     /// Marked as a passenger carrier (claim 1).
     pub passenger_carrier: bool,
     /// A visiting aircraft (Terms).
@@ -216,8 +214,6 @@ pub struct AirState {
     pub flying_to: Option<Target>,
     /// A pad building's servicing: the tick of its next service step.
     pub service: Option<i32>,
-    /// The replacement target fraction for the next movement tick (claim 5).
-    pub replaced: Option<F64>,
     /// An unfinished flight (claim 40): a movement point accepted and not
     /// yet completed by settling at its landing destination.
     pub unfinished: bool,
@@ -227,6 +223,14 @@ pub struct AirState {
     /// *Enter* has recognised arrival on its pad and docks at its next
     /// processing (claim 24).
     pub enter_docking: bool,
+    /// The tick of the facing requests remembered below (claim 42).
+    pub request_tick: i32,
+    /// The body facing before its first request in `request_tick`, so that
+    /// a later request in the same tick replaces it without a trace
+    /// (claim 42, S-0206 claim 1).
+    pub body_was: Option<crate::turning::Turning>,
+    /// The aiming facing before its first request in `request_tick`.
+    pub aim_was: Option<crate::turning::Turning>,
 }
 
 // ---------------------------------------------------------------------------
@@ -572,22 +576,15 @@ fn approach_fraction(f: F64, tau: F64, r: &AirRules, mode: glasnost_num::Roundin
     }
 }
 
-/// F4: ordinary destination-dependent slowing. Returns (τ, adjusted
-/// current fraction).
-pub fn slowing(
-    f0: F64,
-    d: i32,
-    s: i32,
-    replacement: Option<F64>,
-    r: &AirRules,
-    mode: glasnost_num::Rounding,
-) -> (F64, F64) {
+/// F4: ordinary destination-dependent slowing. `f0` is the fraction the
+/// same tick's forward step has just used and `d` the distance from the
+/// position after that step; the adjusted fraction moves the aircraft in
+/// the next tick. Returns (τ, adjusted current fraction).
+pub fn slowing(f0: F64, d: i32, s: i32, r: &AirRules, mode: glasnost_num::Rounding) -> (F64, F64) {
     let one = F64::from_i64(1, mode);
     let df = F64::from_i64(i64::from(d), mode);
-    // spec: S-0501 F4 (τ₀ = min(1, d / S); a slowdown distance of 0 or less gives no slowing); claim 5 (a replacement target from the previous tick stands in for it)
-    let tau0 = if let Some(x) = replacement {
-        x
-    } else if s > 0 {
+    // spec: S-0501 F4 (S signed: for S ≠ 0, τ₀ = min(1, d / S) with floating-point division, so a negative S gives a negative quotient; for S = 0, τ₀ = 1 at every distance, d = 0 included, without a quotient); claim 5 (the ordinary calculation recomputes τ, so an earlier approach replacement has no effect here)
+    let tau0 = if s != 0 {
         one.min(df.div(F64::from_i64(i64::from(s), mode), mode))
     } else {
         one
@@ -675,15 +672,114 @@ pub fn stopped(w: &World, id: ObjectId) -> bool {
     !st(w, id).unfinished
 }
 
-/// The pre-revision-7 stop test, kept only for T1's ordinary-attacker
-/// firing row: at current fraction 0 and its held height, or on the
-/// ground, and not taking off. Under revision 7 alone an ordinary attacker
-/// hovers short of its spot with an unfinished flight and never fires.
-fn hovering_still(w: &World, id: ObjectId) -> bool {
+/// Which facing of an aircraft a request turns (claim 42).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Facet {
+    /// The body facing, which gives the direction of travel (claim 4).
+    Body,
+    /// The aiming facing, which the firing check compares (claim 19).
+    Aim,
+}
+
+/// Requests facing `which` of aircraft `id` toward `f`. Both facings turn
+/// at the type's turn rate (S-0206 claim 7). A facing turns toward the
+/// last direction requested in a tick; an earlier request of the same tick
+/// is undone before the new one, so it has no lasting effect (claim 42,
+/// S-0206 claim 1).
+fn request(w: &mut World, id: ObjectId, which: Facet, f: Facing) {
+    let tick = w.tick;
+    // spec: S-0206 claim 7 (an aircraft's body and turret facings turn at the type's turn rate)
+    let rate = ty(w, id).map_or(0, |t| t.turn_rate);
+    let mut a = st(w, id);
+    if a.request_tick != tick {
+        a.request_tick = tick;
+        a.body_was = None;
+        a.aim_was = None;
+    }
+    let Some(o) = w.obj_mut(id) else { return };
+    let (facing, was) = match which {
+        Facet::Body => (&mut o.body, &mut a.body_was),
+        Facet::Aim => (&mut o.turret, &mut a.aim_was),
+    };
+    // spec: S-0501 claim 42 (a request replaced later in the same tick has no lasting effect)
+    match was {
+        Some(x) => *facing = *x,
+        None => *was = Some(*facing),
+    }
+    // spec: S-0206 claim 1 (the facing turns toward the requested direction)
+    facing.turn_to(f, tick, rate);
+    o.air = Some(a);
+}
+
+/// The destination whose flight point the aircraft flies to: its
+/// destination, or, after that was cleared in *attack* (current or
+/// queued) while it has a target, the destination of its still unfinished
+/// flight (claim 42).
+fn flight_target(w: &World, id: ObjectId) -> Option<Target> {
+    let o = w.obj(id)?;
+    if o.dest.is_some() {
+        return o.dest;
+    }
     let a = st(w, id);
-    // interim: Q-0651 (an ordinary attacker hovering at fraction 0 at its held height, or on the ground, counts as stopped for T1's firing row, as before revision 7)
-    (a.cur.eq_num(F64::ZERO) && height(w, id) == a.held && !a.taking_off)
-        || (a.ground && !a.taking_off)
+    let attack =
+        o.beh.current == Some(Behaviour::Attack) || o.beh.queued == Some(Behaviour::Attack);
+    // spec: S-0501 claim 42 (clearing the destination of an aircraft in attack, current or queued, that has a target does not end its flight: the flight point and unfinished flight remain)
+    if attack && o.target.is_some() && a.unfinished {
+        a.flying_to
+    } else {
+        None
+    }
+}
+
+/// Claim 42's guidance, after the movement tick of a living aircraft that
+/// has a flight point, is neither landing nor taking off and is above the
+/// terrain: the body toward the flight point, the aiming facing toward the
+/// target, the landing direction or the flight point. These are the last
+/// facing requests of the update.
+fn guidance(w: &mut World, id: ObjectId, t: &Ty) {
+    let a = st(w, id);
+    // spec: S-0501 claim 42 (after each movement tick of a living aircraft that has a flight point, is neither landing nor taking off and is above the terrain; a settled aircraft has completed its flight, claim 40)
+    if a.landing || a.taking_off || a.ground || height(w, id) <= 0 {
+        return;
+    }
+    // spec: S-0501 claim 42 (with the run lock neither the body nor the aiming facing is requested)
+    if a.run_lock {
+        return;
+    }
+    let Some(d) = flight_target(w, id) else {
+        return;
+    };
+    let Some(o) = w.obj(id).cloned() else { return };
+    if crate::combat::damage::dead(&o) {
+        return;
+    }
+    let p = flight_point(w, id, d);
+    let here = o.pos;
+    // spec: S-0501 claim 42 (the bearing of S-0204 claim 8 from its current position)
+    let bearing = toward(w, here, p);
+    // spec: S-0501 claim 42 (the distance to the flight point after any pad-position adjustment)
+    let dist = planar(w, here, p);
+    let is_strafer = strafer(w, id);
+    // spec: S-0501 claim 42 (a strafer at most 768 leptons from the point requests its body only when the bearing differs from its current body facing by at most 8192 facing units)
+    let strafer_skips = is_strafer
+        && dist <= STRAFER_WINDOW
+        && glasnost_num::geom::delta(o.body.value(w.tick), bearing).abs() > STRAFER_TURN;
+    if !strafer_skips {
+        // spec: S-0501 claim 42 (the body facing is requested toward the flight point)
+        request(w, id, Facet::Body, bearing);
+    }
+    let armed_target = o.target.is_some() && ammo_left(w, id);
+    // spec: S-0501 claim 42 (below 256 leptons, no fly-by flag, not a strafer with a target and ammunition left: the aiming facing toward the target with a target and ammunition left, otherwise toward the landing direction of claim 25; in every other case toward the flight point)
+    let aim = if dist < AIM_NEAR && !t.fly_by && !(is_strafer && armed_target) {
+        match o.target {
+            // spec: S-0204 claim 8 and S-0310 F1 (the direction of the target: toward its reference point)
+            Some(tg) if armed_target => toward(w, here, crate::combat::range::target_point(w, tg)),
+            _ => landing_facing(w, id),
+        }
+    } else {
+        bearing
+    };
+    request(w, id, Facet::Aim, aim);
 }
 
 /// Moving in the sense of S-0501 claim 26 (its locomotor is moving).
@@ -1159,7 +1255,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id).cloned() else {
         return false;
     };
-    let dest = if dead { None } else { o.dest };
+    // spec: S-0501 claim 42 (a destination cleared in attack with a target keeps the flight point: guidance and claim 5's slowing go on toward it)
+    let dest = if dead { None } else { flight_target(w, id) };
     let dp = dest.map(|d| flight_point(w, id, d));
     let here = o.pos;
     let d = dp.map(|p| planar(w, here, p));
@@ -1219,52 +1316,29 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         }
     }
     let h0 = height(w, id);
-    // Requested heading (claims 4, 8 and T1).
+    // Take-off's facing requests (claim 8). In ordinary flight the facings
+    // are requested by guidance after the movement tick (claim 42).
     let cruise = t.cruise;
-    let mut heading = None;
-    if let Some(p) = dp {
-        // interim: Q-0651 (an ordinary attacker, neither strafer nor fighter, keeps flying toward its firing spot below 512 leptons, as before revision 7 when the spot was the target; it turns toward the target only once hovering, see `hovering_still`)
-        let ordinary = !strafer(w, id) && !fighter(w, id);
-        let aim = if a.face_target && (!ordinary || hovering_still(w, id)) {
-            // spec: S-0204 claim 8 and S-0310 F1 (the direction of the target: toward its reference point)
-            o.target
-                .map_or(p, |tg| crate::combat::range::target_point(w, tg))
-        } else {
-            p
-        };
-        heading = Some(toward(w, here, aim));
-    }
+    let tick_now = w.tick;
     let mut full_request = false;
-    let mut aim_body = false;
     if a.taking_off {
         let hh = cruise; // spec: S-0501 claim 8 (H = cruise height minus landing height 0)
         // spec: S-0501 claim 8 (the thresholds H − trunc(H / 3) and trunc(H / 2))
         let (upper, lower) = (hh - hh / 3, hh / 2);
         if h0 > upper {
             // spec: S-0501 claim 8 (above H − trunc(H / 3): the aiming facing is requested to match the current body facing; no body request)
-            heading = None;
-            aim_body = true;
+            let body = w.obj(id).map_or(0, |ob| ob.body.value(tick_now));
+            request(w, id, Facet::Aim, body);
         } else if h0 > lower {
             // spec: S-0501 claim 8 (above trunc(H / 2), up to and including the upper threshold: the body faces the destination and full speed is requested)
+            if let Some(p) = dp {
+                request(w, id, Facet::Body, toward(w, here, p));
+            }
             full_request = true;
-        } else {
-            // spec: S-0501 claim 8 (at or below trunc(H / 2): no new heading request; the previous request persists)
-            heading = None;
         }
-    }
-    if a.ground && !a.taking_off {
-        heading = None;
-    }
-    let tick_now = w.tick;
-    if let Some(f) = heading
-        && let Some(ob) = w.obj_mut(id)
-    {
-        // spec: S-0206 claim 1 (body turning)
-        ob.body.turn_to(f, tick_now, t.turn_rate);
-        ob.turret = ob.body;
-    }
-    if aim_body && let Some(ob) = w.obj_mut(id) {
-        ob.turret = ob.body;
+        // spec: S-0501 claim 8 (at or below trunc(H / 2): no new heading request; the previous request persists)
+        let r = st(w, id);
+        (a.request_tick, a.body_was, a.aim_was) = (r.request_tick, r.body_was, r.aim_was);
     }
     // Horizontal motion (claim 4): forward along the body facing by ⌊V × f⌋.
     let mut removed = false;
@@ -1370,7 +1444,6 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     // Speed fraction (claim 5, F4), at the end of a living movement tick.
     if alive && !a.ground {
         let fixed = full_speed(w, id, &t, &a);
-        let rep = a.replaced.take();
         let early_take_off = a.taking_off && height(w, id) < cruise / 2; // spec: S-0501 claim 5 (taking off: the target is kept until half the cruise height)
         if a.landing {
             a.cur = approach_fraction(a.cur, a.tgt, ar, mode);
@@ -1381,13 +1454,14 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             && !early_take_off
         {
             let dd = dp.map_or(dd, |p| planar(w, w.obj(id).map_or(here, |x| x.pos), p));
-            let (tau, f) = slowing(a.cur, dd, t.slowdown, rep, ar, mode);
+            // spec: S-0501 claim 5 and F4 (the forward step comes first with the previous tick's fraction; d is measured from the position after it)
+            let (tau, f) = slowing(a.cur, dd, t.slowdown, ar, mode);
             a.tgt = tau;
             a.cur = f;
         } else {
             a.cur = approach_fraction(a.cur, a.tgt, ar, mode);
         }
-        // spec: S-0501 claim 5 (the replacement target for the next movement tick, without the fixed-full-speed case or the fly-by flag)
+        // spec: S-0501 claim 5 (the approach target replacement, without the fixed-full-speed case or the fly-by flag; the next ordinary calculation recomputes τ, so it governs only an adjustment in a later tick that skips that calculation)
         if let Some(p) = dp
             && !a.landing
             && !a.taking_off
@@ -1407,12 +1481,15 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             if let Some(x) = replacement {
                 a.tgt = x;
             }
-            a.replaced = replacement;
         }
         if let Some(ob) = w.obj_mut(id) {
             ob.air = Some(a.clone());
         }
         landing_trigger(w, id, &t, fixed);
+    }
+    // spec: S-0501 claim 42 (guidance follows the movement tick)
+    if alive {
+        guidance(w, id, &t);
     }
     w.obj(id).is_some_and(|ob| ob.pos != start)
 }
@@ -1820,13 +1897,19 @@ pub fn landing_spot(w: &mut World, id: ObjectId) -> Option<CellXY> {
         }
         if let Some((d, s)) = best {
             // spec: S-0501 F8 (below 256 leptons)
-            if d < 256 {
-                // spec: S-0501 F8 (below 256 leptons a free cell near its own cell) and claim 41 (a 1 × 1 footprint, the own cell's ground reach region, the own cell as reference)
-                // Q-0650 (interim): when that own-cell search finds nothing, the spot near the chosen building
-                return landing_search(w, own, 1, own, Some(own)).or(Some(s));
+            if d >= 256 {
+                // spec: S-0501 F8 (otherwise the free spot near the chosen building)
+                return Some(s);
             }
-            // spec: S-0501 F8 (otherwise the free spot near the chosen building)
-            return Some(s);
+            // spec: S-0501 F8 (below 256 leptons a free cell near its own cell) and claim 41 (a 1 × 1 footprint, the own cell's ground reach region, the own cell as reference)
+            if let Some(c) = landing_search(w, own, 1, own, Some(own)) {
+                return Some(c);
+            }
+            if q.landing_own_cell_no_result {
+                // spec: S-0501 claim 41 and F8 (Q-0650: an own-cell search with no result makes the landing destination the placeholder at map cell (0, 0), not either fallback; quirks.landing_own_cell_no_result)
+                return Some(PLACEHOLDER);
+            }
+            // spec: S-0501 Edge cases (quirks.landing_own_cell_no_result off: no successful building choice; the other-object fallback follows, the chosen building counted like any other own-house object)
         }
     }
     // spec: S-0501 claim 41 (the fallback: other own-house infantry, vehicles, aircraft and buildings, not self and not in limbo; the smallest spatial table-root distance whose 1 × 1 search succeeds)
@@ -2106,7 +2189,7 @@ pub fn fall_back_early(w: &mut World, id: ObjectId) -> bool {
         }
         return true;
     }
-    // spec: S-0501 T2 row 2 (retreat, the paradrop and spy-plane behaviours, not an airstrike aircraft: unchanged; no airstrike aircraft exists in our engine)
+    // spec: S-0501 T2 row 2 (retreat, the paradrop and spy-plane behaviours, not a strike aircraft: unchanged; no aircraft is linked to a strike in our engine, S-0519 claims 17 and 20)
     if matches!(
         o.beh.current,
         Some(
@@ -2284,8 +2367,16 @@ pub fn behaviour_turn(w: &mut World, id: ObjectId) {
 const NO_RULE_DELAY: i32 = 450;
 // spec: S-0501 claim 6 (a destination more than 120 leptons above terrain)
 const HOLD_ABOVE: i32 = 120;
-// spec: S-0501 T1 (approaching: at a distance of at least 512 leptons it turns toward the destination)
+// spec: S-0501 T1 (approaching: at a distance of at least 512 leptons the aiming facing is requested toward the destination)
 const STEER_FAR: i32 = 512;
+// spec: S-0501 claim 42 and Constants (guidance aiming distance: below 256 leptons)
+const AIM_NEAR: i32 = 256;
+// spec: S-0501 claim 42 and Constants (strafer body re-aim window: at most 768 leptons)
+const STRAFER_WINDOW: i32 = 768;
+// spec: S-0501 claim 42 and Constants (strafer body re-aim window: at most 8192 facing units)
+const STRAFER_TURN: i32 = 8192;
+// spec: S-0501 claim 41 and Constants (no-result landing cell: map cell coordinates (0, 0))
+const PLACEHOLDER: CellXY = CellXY::new(0, 0);
 // spec: S-0501 T1 (approaching: below 16 leptons the destination is cleared)
 const STEER_NEAR: i32 = 16;
 // spec: S-0501 claim 13 and T1 (five strafing passes)
@@ -2655,9 +2746,6 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                 };
                 // spec: S-0501 T1 (the firing spot becomes the destination; approaching when it exists, else done)
                 set_dest(w, id, spot);
-                if let Some(s) = st_mut(w, id) {
-                    s.face_target = false;
-                }
                 set_stage(
                     w,
                     id,
@@ -2687,28 +2775,13 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                 return Some(standard(w, id));
             }
             let in_range = crate::combat::range::in_range(w, id, primary(w, id), Some(tgv), None);
-            // spec: S-0501 T1 (a strafer within range, a fighter, or another aircraft whose locomotor has stopped: firing)
-            // interim: Q-0651 (for that last row a hovering attacker also counts as stopped, see `hovering_still`; while the firing check still answers not facing it stays approaching and turns in place toward the target)
-            if !is_strafer
-                && !is_fighter
-                && !stopped(w, id)
-                && hovering_still(w, id)
-                && matches!(
-                    crate::combat::check::check(w, id, Some(tgv), 0, true),
-                    Answer::NotFacing
-                )
-            {
-                if let Some(s) = st_mut(w, id) {
-                    s.face_target = true;
-                }
-                return Some(1);
-            }
+            // spec: S-0501 T1 and claim 42 (a strafer within range, a fighter, or another aircraft whose current speed fraction, left by the previous movement tick, is exactly 0: firing, the destination kept; 1 tick)
             if (is_strafer && in_range)
                 || (!is_strafer && is_fighter)
-                || (!is_strafer && !is_fighter && (stopped(w, id) || hovering_still(w, id)))
+                || (!is_strafer && !is_fighter && a.cur.eq_num(F64::ZERO))
             {
                 set_stage(w, id, Stage::Firing);
-                return None;
+                return Some(1);
             }
             // The steer rows.
             let Some(d) = o.dest else {
@@ -2718,22 +2791,21 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             let p = flight_point(w, id, d);
             let dist = planar(w, o.pos, p);
             if dist >= STEER_FAR {
-                // spec: S-0501 T1 (distance at least 512: turn toward the destination; 1 tick)
-                if let Some(s) = st_mut(w, id) {
-                    s.face_target = false;
-                }
+                // spec: S-0501 T1 (distance at least 512: the aiming facing is requested toward the destination; 1 tick)
+                request(w, id, Facet::Aim, toward(w, o.pos, p));
                 return Some(1);
             }
-            // spec: S-0501 T1 (below 512: turn toward the target; at least 16: 1 tick, else the destination is cleared and firing)
-            if let Some(s) = st_mut(w, id) {
-                s.face_target = true;
-            }
+            // spec: S-0501 T1 (below 512: the aiming facing is requested toward the target, the body is not turned); S-0204 claim 8 and S-0310 F1 (toward its reference point)
+            let tp = crate::combat::range::target_point(w, tgv);
+            request(w, id, Facet::Aim, toward(w, o.pos, tp));
             if dist >= STEER_NEAR {
+                // spec: S-0501 T1 (at least 16 leptons: 1 tick)
                 return Some(1);
             }
+            // spec: S-0501 T1 and claim 42 (below 16 leptons: the destination is cleared, the flight point kept, and firing; 1 tick)
             set_dest(w, id, None);
             set_stage(w, id, Stage::Firing);
-            None
+            Some(1)
         }
         Stage::Firing => {
             let Some(tgv) = tg else {
@@ -2745,14 +2817,11 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                 return None;
             }
             if !is_strafer {
-                // spec: S-0501 T1 (a non-strafer turns its body to the target); S-0204 claim 8 and S-0310 F1 (toward its reference point)
+                // spec: S-0501 T1 (a non-strafer requests its body and aiming facing toward the target; claim 42 decides which request lasts); S-0204 claim 8 and S-0310 F1 (toward its reference point)
                 let tp = crate::combat::range::target_point(w, tgv);
                 let f = toward(w, o.pos, tp);
-                let (tick, rate) = (w.tick, ty(w, id).map_or(0, |t| t.turn_rate));
-                if let Some(ob) = w.obj_mut(id) {
-                    ob.body.turn_to(f, tick, rate);
-                    ob.turret = ob.body;
-                }
+                request(w, id, Facet::Body, f);
+                request(w, id, Facet::Aim, f);
             }
             let ans = crate::combat::check::check(w, id, Some(tgv), 0, true);
             match ans {
@@ -2896,9 +2965,6 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             // spec: S-0501 T1 (done: run lock off, the pending round spent, then claim 17; 1 tick)
             set_lock(w, id, false);
             spend_pending(w, id);
-            if let Some(s) = st_mut(w, id) {
-                s.face_target = false;
-            }
             run_end(w, id);
             Some(1)
         }
@@ -2931,7 +2997,7 @@ fn run_end(w: &mut World, id: ObjectId) {
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
-    // spec: S-0501 claim 17 (an airstrike aircraft with ammunition retreats; no airstrike exists in our engine; every other aircraft falls back to rest)
+    // spec: S-0501 claim 17 (a strike aircraft with ammunition retreats; no aircraft is linked to a strike in our engine, S-0519 claims 17 and 20; every other aircraft falls back to rest)
     set_stage(w, id, Stage::Start);
     fall_back(w, id);
 }
@@ -2948,6 +3014,8 @@ pub fn end_turn(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     let alive = !crate::combat::damage::dead(&o);
     if alive {
+        discard_placeholder(w, id);
+        let Some(o) = w.obj(id).cloned() else { return };
         let cur = o.beh.current;
         // spec: S-0501 claim 31 (the run lock is cleared in every update whose behaviour is none of attack, paradrop overfly, spy-plane approach and overfly)
         if !matches!(
@@ -2971,6 +3039,37 @@ pub fn end_turn(w: &mut World, id: ObjectId) {
         }
     }
     smoke(w, id);
+}
+
+/// Whether `t` is claim 41's placeholder destination: the cell position
+/// with map coordinates (0, 0), where no map has a cell.
+pub fn is_placeholder(w: &World, t: Option<Target>) -> bool {
+    // spec: S-0501 claim 41 (the placeholder: map cell coordinates (0, 0), where no map has a cell)
+    t == Some(Target::Cell(PLACEHOLDER)) && w.cells.cell(PLACEHOLDER).is_none()
+}
+
+/// Claim 41's discard: an aircraft whose destination or target is the
+/// placeholder discards both at the end of its update and falls back to
+/// rest again.
+fn discard_placeholder(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if !is_placeholder(w, o.dest) && !is_placeholder(w, o.target) {
+        return;
+    }
+    // spec: S-0501 claim 41 (Q-0650: the destination and target are discarded at the end of its update, after its behaviour processing and movement)
+    forget(w, id);
+    if let Some(a) = st_mut(w, id)
+        && is_placeholder_target(a.flying_to)
+    {
+        // The placeholder given again is a new movement point (claim 40).
+        a.flying_to = None;
+    }
+    // spec: S-0501 claim 41 (it falls back to rest again, claim 18)
+    fall_back(w, id);
+}
+
+fn is_placeholder_target(t: Option<Target>) -> bool {
+    t == Some(Target::Cell(PLACEHOLDER))
 }
 
 /// The damage-smoke chance draw (claim 37; `quirks.aircraft_smoke_scenario_draw`).

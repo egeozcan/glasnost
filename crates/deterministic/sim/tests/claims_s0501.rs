@@ -2,16 +2,19 @@
 //! synthetic data: invented aircraft, pad, weapon and carrier types, none
 //! of them stock values.
 
+mod common;
 mod econ_common;
 
 use econ_common::{SIZE, building, dec, factory, game, issue, ready, set_credits, t, wheel};
+use glasnost_num::geom::{Facing, direction, root_floor};
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Locomotor, ProjectileType, UnitType, WeaponType};
+use glasnost_rules::sim::{LandRow, LandType, Locomotor, ProjectileType, UnitType, WeaponType};
 use glasnost_sim::air;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, ClickOn, Modifiers};
 use glasnost_sim::testkit;
+use glasnost_sim::world::Pos;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 
 const ALPHA: HouseId = HouseId(0);
@@ -263,7 +266,7 @@ fn built_aircraft_stands_docked() {
     assert_eq!(w.obj(a).unwrap().pos, p, "it stays: {}", describe(&w, a));
 }
 
-// spec: S-0501 claims 8, 12 to 15, 17, 18, 21 to 26 and table T1 (end to end: a docked aircraft ordered by a click to attack an enemy vehicle takes off, makes its runs, damages the target, returns to its pad, lands and rearms); the close approach under the interim of Q-0651
+// spec: S-0501 claims 8, 12 to 15, 17, 18, 21 to 26 and table T1 (end to end: a docked aircraft ordered by a click to attack an enemy vehicle takes off, makes its runs, damages the target, returns to its pad, lands and rearms); the close approach of claim 42
 #[test]
 fn attack_take_off_run_return_rearm() {
     let mut r = rules();
@@ -316,7 +319,7 @@ fn move_order_flies_to_the_cell() {
     assert!(there, "lands in the cell: {}", describe(&w, a));
 }
 
-// spec: S-0501 claims 35 and 36 and table T4, S-0506 claims 6 to 9 (end to end: a carrier with slot aircraft ordered to attack launches them; they attack, damage the target and come back); the close approach under the interim of Q-0651
+// spec: S-0501 claims 35 and 36 and table T4, S-0506 claims 6 to 9 (end to end: a carrier with slot aircraft ordered to attack launches them; they attack, damage the target and come back); the close approach of claim 42
 #[test]
 fn carrier_launches_attacks_and_recovers() {
     let r = rules();
@@ -449,19 +452,42 @@ fn f4_slowing() {
     let m = w.rules().mode;
     let one = glasnost_num::F64::from_i64(1, m);
     let zero = glasnost_num::F64::ZERO;
-    assert_eq!(air::slowing(one, 1000, 500, None, &ar, m), (one, one));
-    let (tau, f) = air::slowing(one, 250, 500, None, &ar, m);
+    assert_eq!(air::slowing(one, 1000, 500, &ar, m), (one, one));
+    let (tau, f) = air::slowing(one, 250, 500, &ar, m);
     assert_eq!(tau, nd("0.5"));
     assert_eq!(f, one.sub(nd("0.1"), m));
     // The creep case: τ = 0, f halved, then one step toward 0.
-    let (tau, f) = air::slowing(nd("0.3"), 40, 500, None, &ar, m);
+    let (tau, f) = air::slowing(nd("0.3"), 40, 500, &ar, m);
     assert_eq!(tau, zero);
     let half = nd("0.3").mul(nd("0.5"), m);
     assert_eq!(f, zero.max(half.sub(nd("0.1"), m)));
     // A stopped aircraft creeps: fₚ = 0.05, adjusted toward 0.
-    assert_eq!(air::slowing(zero, 40, 500, None, &ar, m).1, zero);
-    // No slowing with a slowdown distance of 0.
-    assert_eq!(air::slowing(one, 10, 0, None, &ar, m).0, one);
+    assert_eq!(air::slowing(zero, 40, 500, &ar, m).1, zero);
+}
+
+// spec: S-0501 claim 5 and F4 (S = 0: the ordinary target is 1 at every distance, d = 0 included, without halving; the distance clamp and the 0.1 adjustment still apply, so at d = 0 the fraction is 0.1; a negative S takes the quotient: below 86 leptons halving and τ = 0, at 86 or more τ = 0.1)
+#[test]
+fn claim_5_signed_slowdown_distance() {
+    let w = game(&rules());
+    let ar = w.rules().air.clone();
+    let m = w.rules().mode;
+    let one = glasnost_num::F64::from_i64(1, m);
+    let zero = glasnost_num::F64::ZERO;
+    // S = 0, positive distance: target 1 and min(1, f + 0.1), no halving.
+    assert_eq!(
+        air::slowing(nd("0.3"), 10, 0, &ar, m),
+        (one, nd("0.3").add(nd("0.1"), m))
+    );
+    assert_eq!(air::slowing(one, 40, 0, &ar, m), (one, one));
+    // S = 0, distance 0: the clamp gives 0, the adjustment raises it to 0.1.
+    assert_eq!(air::slowing(one, 0, 0, &ar, m), (one, nd("0.1")));
+    // S = −500 below 86 leptons: τ = 0 and the fraction halved, then lowered by 0.1.
+    let (tau, f) = air::slowing(nd("0.6"), 40, -500, &ar, m);
+    assert_eq!(tau, zero);
+    assert_eq!(f, nd("0.6").mul(nd("0.5"), m).sub(nd("0.1"), m));
+    // S = −500 at 86 leptons and beyond: τ = 0.1.
+    assert_eq!(air::slowing(nd("0.6"), 86, -500, &ar, m).0, nd("0.1"));
+    assert_eq!(air::slowing(nd("0.6"), 2000, -500, &ar, m).0, nd("0.1"));
 }
 
 // spec: S-0501 F5 (k grows by 1 for a dead aircraft and by 3 for a living one; h₁ = h − k)
@@ -703,7 +729,7 @@ fn attacker(r: &Ruleset, name: &str) -> (World, ObjectId, ObjectId) {
     (w, a, v)
 }
 
-// spec: S-0501 claim 15 (one round per run in which it fired, whatever the burst; firing itself does not change the count); the close approach under the interim of Q-0651
+// spec: S-0501 claim 15 (one round per run in which it fired, whatever the burst; firing itself does not change the count); the close approach of claim 42
 #[test]
 fn claim_15_one_round_per_run() {
     let mut r = rules();
@@ -729,7 +755,7 @@ fn claim_15_one_round_per_run() {
     assert_eq!(seen, 1, "{}", describe(&w, a));
 }
 
-// spec: S-0501 claim 14 and quirks.aircraft_endless_refire; the close approach under the interim of Q-0651 (re-approach flag off: on, the run never spends its round; off, each burst-and-refire cycle ends a run)
+// spec: S-0501 claim 14 and quirks.aircraft_endless_refire; the close approach of claim 42 (re-approach flag off: on, the run never spends its round; off, each burst-and-refire cycle ends a run)
 #[test]
 fn claim_14_endless_refire_both_ways() {
     for endless in [true, false] {
@@ -752,7 +778,7 @@ fn claim_14_endless_refire_both_ways() {
     }
 }
 
-// spec: S-0501 claim 19 and T1, S-0204 claims 4 and 8, S-0310 F1 (a non-strafer attacking a 2 × 2 building turns toward its reference point, the point the facing check measures to, so its run reaches a shot); the close approach under the interim of Q-0651
+// spec: S-0501 claim 19 and T1, S-0204 claims 4 and 8, S-0310 F1 (a non-strafer attacking a 2 × 2 building turns toward its reference point, the point the facing check measures to, so its run reaches a shot); the close approach of claim 42
 #[test]
 fn attack_on_a_large_building_fires() {
     let mut r = rules();
@@ -1020,26 +1046,190 @@ fn save_load_mid_run() {
 // ---------------------------------------------------------------------------
 // Revision 7 claims
 
-fn planar_to(w: &World, a: ObjectId, p: glasnost_sim::world::Pos) -> i64 {
-    let o = w.obj(a).unwrap().pos;
-    (i64::from(o.x - p.x).pow(2) + i64::from(o.y - p.y).pow(2)).isqrt()
+// ---------------------------------------------------------------------------
+// Revision 9: the close approach and guidance facings (claim 42, AC24)
+
+/// The truncated table root of the planar distance (S-0204 claim 5).
+fn guide_dist(w: &World, a: Pos, b: Pos) -> i32 {
+    let q = w.rules().quirks;
+    let (dx, dy) = (i64::from(a.x - b.x), i64::from(a.y - b.y));
+    root_floor(
+        (dx * dx + dy * dy) as u64,
+        q.table_root_distance,
+        w.rules().mode,
+    ) as i32
 }
 
-// spec: S-0501 claim 5, F4 and T1; interim: Q-0651 (an ordinary attacker hovering at fraction 0 at its held height short of its spot counts as stopped for T1's firing row, so it fires from there)
-#[test]
-fn q0651_ordinary_attacker_reaches_its_spot_and_fires() {
+/// The bearing of S-0204 claim 8 from `from` to `to`.
+fn bearing(w: &World, from: Pos, to: Pos) -> Facing {
+    direction(
+        i64::from(to.x - from.x),
+        i64::from(to.y - from.y),
+        w.rules().quirks.table_direction,
+    )
+}
+
+/// The flight point claim 42's guidance steers by at the end of this
+/// tick's movement, when guidance runs: a living aircraft in flight,
+/// neither landing nor taking off, without the run lock; its destination,
+/// or after that was cleared in *attack* with a target, the point of its
+/// unfinished flight.
+fn guided_point(w: &World, a: ObjectId) -> Option<Pos> {
+    let o = w.obj(a)?;
+    let s = st(w, a);
+    if s.landing || s.taking_off || s.ground || s.run_lock || air::height(w, a) <= 0 {
+        return None;
+    }
+    let attack =
+        o.beh.current == Some(Behaviour::Attack) || o.beh.queued == Some(Behaviour::Attack);
+    let d = match o.dest {
+        Some(d) => d,
+        None if attack && o.target.is_some() && s.unfinished => s.flying_to?,
+        None => return None,
+    };
+    Some(air::flight_point(w, a, d))
+}
+
+/// What one close approach of AC24 shows.
+#[derive(Default, Debug)]
+struct Approach {
+    /// The first tick, after flying, with fraction 0: its post-step
+    /// distance to the destination point, whether the destination is
+    /// still set, and the position.
+    zero: Option<(i32, bool, Pos)>,
+    /// The destination and flight-point target at the first tick in *firing*.
+    firing: Option<(Option<Target>, Option<Target>)>,
+    /// The position when the target is first damaged.
+    shot: Option<Pos>,
+    /// Ticks in which guidance aimed at the target (below 256 leptons).
+    near_aims: i32,
+    /// The current fraction is positive at the end.
+    positive_at_end: bool,
+}
+
+/// AC24: JET with raw speed `speed` (converted ⌊256 × speed / 100⌋, S-0207
+/// F1) and slowdown distance `s` attacks VICTIM; checks claim 42's
+/// guidance requests in every tick before the first shot. With `west` the
+/// attacker starts east of the target and flies west, so a 1-lepton step
+/// has a negative x component, which F3's truncation lengthens to a whole
+/// lepton.
+fn close_approach(speed: i32, s: i32, west: bool) -> Approach {
     let mut r = rules();
     r.sim.general.economy.curley_shuffle = Some(true);
-    let (mut w, a, v) = attacker(&r, "JET");
+    let j = r.sim.aircraft.get_mut("JET").unwrap();
+    j.speed = Some(speed);
+    j.slowdown_distance = Some(s);
+    let (mut w, a, v) = if west {
+        let mut w = game(&r);
+        ready(&mut w);
+        let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, -8, 0);
+        let a = put(&mut w, Kind::Aircraft, "JET", 0, 4, 0);
+        (w, a, v)
+    } else {
+        attacker(&r, "JET")
+    };
     let full = w.obj(v).unwrap().health;
     click(&mut w, a, ClickOn::Object(v));
-    assert!(run_until(&mut w, 50, |w| st(w, a).stage == air::Stage::Approaching));
-    let d = w.obj(a).unwrap().dest.expect("a firing spot");
-    let spot = air::flight_point(&w, a, d);
-    let hit = run_until(&mut w, 2000, |w| w.obj(v).unwrap().health < full);
-    assert!(hit, "fires: {}", describe(&w, a));
-    // spec: S-0501 F4 (the halving case below 86 leptons): it fires from near its spot
-    assert!(planar_to(&w, a, spot) < 86, "{}", describe(&w, a));
+    let zero = glasnost_num::F64::ZERO;
+    let mut out = Approach::default();
+    let mut flown = false;
+    let mut prev_body = w.obj(a).unwrap().body;
+    for _ in 0..2000 {
+        step(&mut w);
+        let o = w.obj(a).unwrap().clone();
+        let s = st(&w, a);
+        if w.obj(v).unwrap().health < full {
+            out.shot = Some(o.pos);
+            break;
+        }
+        // spec: S-0501 claim 42 (guidance after the movement tick: the body toward the flight point; the aiming facing toward the target below 256 leptons with a target and ammunition, otherwise toward the flight point)
+        if let Some(p) = guided_point(&w, a) {
+            let b = bearing(&w, o.pos, p);
+            assert_eq!(
+                o.body.target,
+                b,
+                "body toward the spot: {}",
+                describe(&w, a)
+            );
+            let aim = if guide_dist(&w, o.pos, p) < 256 {
+                out.near_aims += 1;
+                assert!(o.combat.ammo > 0);
+                let tp = glasnost_sim::combat::range::target_point(&w, o.target.unwrap());
+                bearing(&w, o.pos, tp)
+            } else {
+                b
+            };
+            assert_eq!(o.turret.target, aim, "aiming facing: {}", describe(&w, a));
+            // spec: S-0501 claim 42 (in firing the body request toward the target is replaced in the same update and leaves no trace)
+            if s.stage == air::Stage::Firing && prev_body.target == b {
+                assert_eq!(o.body, prev_body, "no trace: {}", describe(&w, a));
+            }
+        }
+        prev_body = o.body;
+        if s.cur.gt(zero) {
+            flown = true;
+        }
+        if flown && out.zero.is_none() && s.cur.eq_num(zero) {
+            let d = o.dest.or(s.flying_to).expect("a flight point");
+            let p = air::flight_point(&w, a, d);
+            out.zero = Some((guide_dist(&w, o.pos, p), o.dest.is_some(), o.pos));
+        }
+        if s.stage == air::Stage::Firing && out.firing.is_none() {
+            out.firing = Some((o.dest, s.flying_to));
+        }
+        out.positive_at_end = s.cur.gt(zero);
+    }
+    out
+}
+
+// spec: S-0501 claims 5 and 42, F4 and T1 (AC24 variant a, converted speed 35 and S = 500: the ordinary attacker slows to fraction 0 at a post-step distance below min(86, S / 10) and above 16 leptons, moves to firing with its destination kept, and fires from where it hovers; the body never turns to the target, the aiming facing turns to it only below 256 leptons)
+#[test]
+fn claim_42_close_approach_hovers_short_and_fires() {
+    let x = close_approach(14, 500, false);
+    let (d, kept, at) = x
+        .zero
+        .unwrap_or_else(|| panic!("reaches fraction 0: {x:?}"));
+    assert!(d > 16 && d < 50, "{x:?}");
+    assert!(kept, "the destination is kept: {x:?}");
+    let (dest, _) = x.firing.unwrap_or_else(|| panic!("firing: {x:?}"));
+    assert!(
+        dest.is_some(),
+        "firing with the destination still set: {x:?}"
+    );
+    assert_eq!(x.shot, Some(at), "the shot leaves from the hover: {x:?}");
+    assert!(x.near_aims > 0, "{x:?}");
+}
+
+// spec: S-0501 claims 5 and 42, F4 and T1 (AC24 variant b, converted speed 12 and S = 1000, flying west: fraction 0 below 86 and above 16 leptons, then firing with the destination kept, and the shot from the hover; F3 (the westward 1-lepton steps advance); the heading of this setup avoids the question of Q-0653)
+#[test]
+fn claim_42_slow_close_approach_hovers_short_and_fires() {
+    let x = close_approach(5, 1000, true);
+    let (d, kept, at) = x
+        .zero
+        .unwrap_or_else(|| panic!("reaches fraction 0: {x:?}"));
+    assert!(d > 16 && d < 86, "{x:?}");
+    assert!(kept, "{x:?}");
+    assert!(x.firing.is_some_and(|(d, _)| d.is_some()), "{x:?}");
+    assert_eq!(x.shot, Some(at), "{x:?}");
+}
+
+// spec: S-0501 claims 12 and 42 and T1 (AC24 variant c, converted speed 35 and S = 100: within 16 leptons with a positive fraction the destination is cleared, the flight point remains, and it fires)
+#[test]
+fn claim_42_short_slowdown_clears_the_destination_keeps_the_point() {
+    let x = close_approach(14, 100, false);
+    let (dest, point) = x.firing.unwrap_or_else(|| panic!("firing: {x:?}"));
+    assert_eq!(dest, None, "destination cleared: {x:?}");
+    assert!(point.is_some(), "the flight point remains: {x:?}");
+    assert!(x.shot.is_some(), "fires: {x:?}");
+}
+
+// spec: S-0501 claim 42 and Edge cases (AC24 variant d, converted speed 7 and S = 500: it hovers with a positive fraction and fires no shot within 2000 ticks)
+#[test]
+fn claim_42_slow_attacker_never_fires() {
+    let x = close_approach(3, 500, false);
+    assert_eq!(x.shot, None, "{x:?}");
+    assert!(x.firing.is_none(), "{x:?}");
+    assert!(x.positive_at_end, "{x:?}");
 }
 
 // spec: S-0501 claim 39 (the firing spot: a cell on the largest circle of radius ρ − 256 around the target, the last or the preceding record by distance to the attacker, here the cells of facings 49152 and 45056)
@@ -1443,4 +1633,101 @@ fn claim_41_building_search_footprint() {
         }
     }
     assert!(cheb(s, w.obj(k).unwrap().pos.cell()) <= 4, "{s:?}");
+}
+
+/// The terrain code of a water tile in the scene catalogue (S-0211 Terms).
+const WATER_CODE: u8 = 9;
+
+/// AC25's patch: SCOUT on a one-cell island of clear ground ringed by
+/// water (no foot passage), the island cell also held by an enemy VICTIM,
+/// and an APAD (SCOUT's first dock type) of its house two cells away, so
+/// the weighted building distance is below 256 leptons. With `ring` off
+/// the island is ordinary open ground.
+fn no_own_cell(quirk: bool, ring: bool) -> (World, ObjectId, ObjectId) {
+    let mut r = rules();
+    r.globals.quirks.landing_own_cell_no_result = quirk;
+    let zero = LandRow {
+        foot: dec("0"),
+        track: dec("0"),
+        wheel: dec("0"),
+        hover: dec("0"),
+        float: dec("1"),
+        amphibious: dec("1"),
+        float_beach: dec("1"),
+        buildable: None,
+    };
+    r.sim.land_types.insert(LandType::Water, zero);
+    let mut s = common::Scene::new();
+    s.ruleset = r;
+    if ring {
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                if (dx, dy) != (0, 0) {
+                    s.set_cell(common::cell(dx, dy), common::code_tile(WATER_CODE), 0);
+                }
+            }
+        }
+    }
+    let mut w = s.build();
+    let pad = testkit::spawn(&mut w, Kind::Building, "APAD", 0, common::cell(2, 0), 0);
+    let a = testkit::spawn(&mut w, Kind::Aircraft, "SCOUT", 0, common::cell(0, 0), 0);
+    testkit::spawn(&mut w, Kind::Vehicle, "VICTIM", 1, common::cell(0, 0), 0);
+    (w, a, pad)
+}
+
+// spec: S-0501 claim 41 and F8 (Q-0650: a building chosen below 256 leptons and no result from the own-cell search: the landing destination is the placeholder at map cell (0, 0), where no map has a cell; not the spot near the building, not the other-object fallback, not the own cell; quirks.landing_own_cell_no_result on)
+#[test]
+fn claim_41_own_cell_no_result_gives_the_placeholder() {
+    let (mut w, a, _) = no_own_cell(true, true);
+    let origin = glasnost_map::CellXY::new(0, 0);
+    assert!(
+        w.cells.cell(origin).is_none(),
+        "no map has a cell at (0, 0)"
+    );
+    assert_eq!(air::landing_spot(&mut w, a), Some(origin));
+    assert!(air::is_placeholder(&w, Some(Target::Cell(origin))));
+    // Control: on open ground the own-cell search finds a free cell near it.
+    let (mut w, a, _) = no_own_cell(true, false);
+    let s = air::landing_spot(&mut w, a).unwrap();
+    assert_ne!(s, origin);
+    assert!(cheb(s, common::cell(0, 0)) <= 2, "{s:?}");
+}
+
+// spec: S-0501 Edge cases and claim 41 (quirks.landing_own_cell_no_result off: no successful building choice, so the other-object fallback runs and here gives a free cell near the chosen building, counted like any other own-house object)
+#[test]
+fn claim_41_own_cell_no_result_quirk_off_falls_back() {
+    let (mut w, a, pad) = no_own_cell(false, true);
+    let s = air::landing_spot(&mut w, a).unwrap();
+    assert_ne!(s, glasnost_map::CellXY::new(0, 0));
+    assert_ne!(s, common::cell(0, 0), "not the own cell");
+    assert!(w.cells.cell(s).is_some());
+    assert!(cheb(s, w.obj(pad).unwrap().pos.cell()) <= 3, "{s:?}");
+}
+
+// spec: S-0501 claim 41 (Q-0650: an aircraft whose target is the placeholder discards its destination and target at the end of its update and falls back to rest again, claim 18)
+#[test]
+fn claim_41_placeholder_discarded_at_end_of_update() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = lifted(&mut w, "SCOUT", 0, 0);
+    let origin = glasnost_map::CellXY::new(0, 0);
+    assert!(w.cells.cell(origin).is_none());
+    w.obj_mut(a).unwrap().target = Some(Target::Cell(origin));
+    step(&mut w);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, None, "{}", describe(&w, a));
+    assert_ne!(o.dest, Some(Target::Cell(origin)), "{}", describe(&w, a));
+    let far = testkit::mid(SIZE, -12, -12);
+    assert_ne!(
+        o.dest,
+        Some(Target::Cell(far)),
+        "the move destination discarded too: {}",
+        describe(&w, a)
+    );
+    // spec: S-0501 T2 (in flight otherwise: the landing spot; move)
+    assert!(
+        o.beh.queued == Some(Behaviour::Move) || o.beh.current == Some(Behaviour::Move),
+        "fell back to rest: {}",
+        describe(&w, a)
+    );
 }
