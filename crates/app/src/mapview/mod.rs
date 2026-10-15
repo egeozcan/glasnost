@@ -2,6 +2,7 @@
 //! (S-0101 to S-0105, S-0107, S-0108) and show it with scrolling, a
 //! minimap, layer toggles and object info.
 
+pub mod anims;
 pub mod build;
 pub mod combat;
 pub mod cover;

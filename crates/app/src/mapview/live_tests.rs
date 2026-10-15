@@ -1090,3 +1090,116 @@ fn live_unloading_state_of_a_building() {
     }
     assert!(live.unloading_of(&o).is_some_and(|x| x.roof));
 }
+
+/// The test context with BOOMX, an animation type of three frames at rate
+/// 900 (stage delay 1), which is also the move-feedback animation.
+fn anim_context() -> (
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    super::build::Assets,
+) {
+    let rules = format!("{RULES}[Animations]\n0=BOOMX\n[General]\nMoveFlash=BOOMX\n");
+    let art = format!("{}[BOOMX]\nRate=900\n", super::tests::ART);
+    let mut ctx = super::tests::context_full(&rules, &art);
+    ctx.0.arts.insert(
+        (Kind::Animations, 0),
+        super::tests::art_of("BOOMX", "boomx.shp"),
+    );
+    // Three frames (no shadow flag: every frame is a stage).
+    ctx.2.insert(b"boomx.shp", shp((10, 10), 3, (2, 2), (4, 4)));
+    ctx
+}
+
+/// The effects in the scene that are (`true`) or are not (`false`) our
+/// provisional markers.
+fn effect_items(scene: &Scene, provisional: bool) -> usize {
+    use glasnost_render::scene::Group;
+    scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Effects && i.provisional == provisional)
+        .count()
+}
+
+/// spec: S-0109 claims 1, 2, 5, 6 and 9 (an animation event creates a
+/// playing animation of its type that advances one frame per stage delay
+/// from its first update and is removed at the end of its pass); S-0102
+/// claim 3 (unattached, in its type's layer). The game client draws no
+/// marker for it, nor for a type without a sprite.
+#[test]
+fn animation_events_play_their_art_and_end() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let (import, catalogue, assets) = anim_context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let world = testkit::new_game(5);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, testkit::rules(), testkit::setup(5), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.step();
+    let pos = Pos {
+        x: 5 * 256 + 128,
+        y: 5 * 256 + 128,
+        z: 0,
+    };
+    live.world.effects.push(Effect::Anim {
+        name: "boomx".into(),
+        pos,
+        delay: None,
+    });
+    live.world.effects.push(Effect::Anim {
+        name: "NOSUCHANIM".into(),
+        pos,
+        delay: None,
+    });
+    live.after_tick();
+    assert_eq!(live.counts.anims_with_art, 1);
+    assert_eq!(live.counts.anims_without_sprite, 1);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.counts.anims_drawn, 1);
+    assert!(
+        effect_items(&scene, false) > 0,
+        "the animation's art is drawn"
+    );
+    assert_eq!(
+        effect_items(&scene, true),
+        0,
+        "no marker in the game client"
+    );
+    // Frames 0, 1 and 2 at one tick each, then the end of the pass.
+    let mut shown = 1;
+    for _ in 0..6 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        if live.counts.anims_drawn == 1 {
+            shown += 1;
+        }
+    }
+    assert_eq!(shown, 3, "one tick per frame, removed at its end");
+    assert_eq!(effect_items(&scene, false), 0);
+
+    // spec: S-0214 claim 30 (the move marker plays the move-feedback animation)
+    live.move_marker(pos);
+    assert_eq!(live.counts.anims_with_art, 2);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.counts.anims_drawn, 1);
+    assert_eq!(effect_items(&scene, true), 0);
+}

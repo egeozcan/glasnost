@@ -200,6 +200,8 @@ impl Session {
             );
         }
         live.clear_scripts();
+        // The game view draws art only: no debug markers for what has none.
+        live.set_debug_markers(false);
         let setup: GameSetup = live.setup.clone();
         let catalogue = live
             .world

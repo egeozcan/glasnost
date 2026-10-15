@@ -27,7 +27,7 @@ pub(super) const RULES: &str = "[BuildingTypes]\n1=HUTX\n[InfantryTypes]\n1=MANX
     [Colors]\nC0=1,2,3\nC1=10,200,200\nC2=20,200,200\nC3=30,200,200\nC4=40,200,200\nC5=50,200,200\n\
     C6=60,200,200\nC7=70,200,200\nC8=80,200,200\nC9=90,200,200\nC10=100,200,200\nC11=110,200,200\n\
     C12=120,200,200\nC13=130,200,200\nC14=140,200,200\nLightGrey=0,0,150\n";
-const ART: &str = "[HUTX]\nFoundation=2x2\nAnimIdle=1,1,0\n[MANX]\nSequence=MANSEQ\n[MANSEQ]\nReady=3,1,2\n\
+pub(super) const ART: &str = "[HUTX]\nFoundation=2x2\nAnimIdle=1,1,0\n[MANX]\nSequence=MANSEQ\n[MANSEQ]\nReady=3,1,2\n\
     [CARX]\nFacings=8\nWalkFrames=2\n";
 const THEATER: &str = "[General]\nClearTile=0\n[TileSet0000]\nFileName=clr\nTilesInSet=1\n";
 
@@ -115,7 +115,7 @@ pub(super) fn context() -> (glasnost_convert::Import, Catalogue, Assets) {
 }
 
 /// A type's art: its image name and sprite file.
-fn art_of(image: &str, sprite: &str) -> TypeArt {
+pub(super) fn art_of(image: &str, sprite: &str) -> TypeArt {
     TypeArt {
         image: image.as_bytes().to_vec(),
         sprite: Some(sprite.as_bytes().to_vec()),
@@ -129,7 +129,10 @@ pub(super) fn context_with(rules: &str) -> (glasnost_convert::Import, Catalogue,
 }
 
 /// The test context with the rules text `rules` and the art text `art`.
-fn context_full(rules: &str, art: &str) -> (glasnost_convert::Import, Catalogue, Assets) {
+pub(super) fn context_full(
+    rules: &str,
+    art: &str,
+) -> (glasnost_convert::Import, Catalogue, Assets) {
     let mut import = convert(
         &Inputs {
             base: input("rules.ini", rules),

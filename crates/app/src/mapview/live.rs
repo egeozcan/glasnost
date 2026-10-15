@@ -31,9 +31,10 @@ use glasnost_sim::rules::{Behaviour, Kind as SimKind, SimRules};
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, HouseId, Layer, Object, ObjectId, World};
 
+use super::anims::{self, AnimQuirks, Playback, Player};
 use super::build::{
-    Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile, Painter, find_type,
-    rule_int,
+    AnimDraw, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile, Painter,
+    find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
 use super::unload::{self, Unloading};
@@ -117,6 +118,8 @@ pub enum Entrant {
     Static(usize),
     /// A simulation object.
     Object(ObjectId),
+    /// A playing animation of the drawing (by its serial number).
+    Anim(u32),
 }
 
 /// The object pass's ground layer: a list fully sorted by sort key for
@@ -137,7 +140,7 @@ impl GroundLayer {
     pub fn objects(&self) -> impl Iterator<Item = ObjectId> + '_ {
         self.order().filter_map(|e| match e {
             Entrant::Object(id) => Some(id),
-            Entrant::Static(_) => None,
+            Entrant::Static(_) | Entrant::Anim(_) => None,
         })
     }
 
@@ -279,6 +282,91 @@ pub struct Live {
     /// The computer houses' scripts (`glasnost_ai`), one per AI house of a
     /// skirmish.
     scripts: Vec<glasnost_ai::scripted::Script>,
+    /// The playing animations (S-0109), in creation order.
+    anims: Vec<LiveAnim>,
+    /// The serial number of the next animation.
+    anim_serial: u32,
+    /// Every animation type of the import by upper-case name (the first
+    /// registered of a name, S-0003 claim 14): its index, art fields and
+    /// sprite image-frame count.
+    anim_table: BTreeMap<Vec<u8>, AnimEntry>,
+    /// The drawing's cosmetic stream, for the playback draws the
+    /// simulation does not take (interim rule, request Q-0770).
+    cosmetic: glasnost_sim::rng::Rng,
+    /// Whether our own debug markers are drawn for what has no art (the
+    /// viewer); the game client draws only art.
+    debug_markers: bool,
+    /// The move-feedback animation's type name (S-0214 claim 30).
+    move_flash: Option<Vec<u8>>,
+}
+
+/// An animation type of the import, for playback.
+#[derive(Clone, Debug)]
+struct AnimEntry {
+    idx: usize,
+    t: super::slots::AnimType,
+    n: i32,
+    sprite: bool,
+}
+
+/// A playing animation of the drawing (S-0109), unattached (claim 22: the
+/// simulation reports no owner for the animations it creates).
+#[derive(Clone, Debug)]
+struct LiveAnim {
+    serial: u32,
+    player: Player,
+    /// Its current type's entry, `None` for a name the import does not
+    /// list.
+    entry: Option<AnimEntry>,
+    pos: glasnost_sim::world::Pos,
+    /// Its layer, evaluated when it was placed (S-0102 claims 3 and 4).
+    layer: super::slots::Layer,
+    /// Tick of its first update (S-0109 claim 5).
+    first_update: i32,
+}
+
+/// What playback asks of the live game: the follow-up types, the
+/// cosmetic stream, the game speed and the speed switch.
+struct AnimEnv<'a> {
+    table: &'a BTreeMap<Vec<u8>, AnimEntry>,
+    rules: &'a SimRules,
+    rng: &'a mut glasnost_sim::rng::Rng,
+    speed: u8,
+}
+
+impl AnimEnv<'_> {
+    /// The entry and fields in play of type `name`.
+    fn lookup(&self, name: &[u8]) -> (Option<AnimEntry>, Playback) {
+        let Some(e) = self.table.get(&name.to_ascii_uppercase()) else {
+            // spec: S-0109 Edge cases (a name that names no type: absent-key defaults, no sprite)
+            return (None, Playback::missing());
+        };
+        let q = &self.rules.quirks;
+        let delay = anims::rate_delay(e.t.rate, q.anim_fast_rate_freezes);
+        // spec: S-0109 claim 3, F1 (the range [d₁′, d₂′], as the simulation converted it)
+        let random = self
+            .rules
+            .animation(&glasnost_convert::names::encode(name))
+            .map_or((0, 0), |a| a.random_delay);
+        let play = Playback::of(&e.t, e.n, delay, random, &AnimQuirks::default());
+        (Some(e.clone()), play)
+    }
+}
+
+impl anims::Env for AnimEnv<'_> {
+    fn follow_up(&mut self, name: &[u8]) -> Playback {
+        self.lookup(name).1
+    }
+    fn draw(&mut self, lo: i32, hi: i32) -> i32 {
+        self.rng
+            .ranged(lo, hi, self.rules.quirks.ranged_draw_half_span)
+    }
+    fn speed(&self) -> u8 {
+        self.speed
+    }
+    fn normalise(&self) -> bool {
+        self.rules.quirks.speed_normalised_delays
+    }
 }
 
 /// The import kind of a simulation kind.
@@ -518,6 +606,32 @@ impl Live {
             .collect();
         let static_ground = std::mem::take(&mut built.ground);
         let static_layered = std::mem::take(&mut built.layered);
+        let mut anim_table = BTreeMap::new();
+        if let Some(reg) = inputs.import.outcome.registries.get(&Kind::Animations) {
+            for (idx, ty) in reg.iter().enumerate() {
+                let Some((t, n)) = painter.anim_type(inputs, idx) else {
+                    continue;
+                };
+                let sprite = n > 0;
+                // spec: S-0003 claim 14 (names match with ASCII case folding; the first registered wins, as find_type)
+                anim_table
+                    .entry(ty.name.to_ascii_uppercase())
+                    .or_insert(AnimEntry { idx, t, n, sprite });
+            }
+        }
+        // Our own choice: the cosmetic stream takes the game's seed, like the
+        // unsynchronised stream of S-0202 claim 8.
+        let cosmetic = glasnost_sim::rng::Rng::new(setup.seed);
+        // spec: S-0214 Import mapping (rules [General] MoveFlash, an animation type name; none initially)
+        let move_flash = inputs
+            .import
+            .outcome
+            .globals
+            .get(&b"General"[..])
+            .and_then(|s| s.get(&b"MoveFlash"[..]))
+            .and_then(|k| k.value.as_deref())
+            .map(|v| glasnost_ini::value::text(v, usize::MAX).to_vec())
+            .filter(|n| !n.is_empty() && !glasnost_ini::value::is_no_type(n));
         let mut live = Self {
             world,
             rules,
@@ -548,6 +662,12 @@ impl Live {
             undrawn_types: undrawn,
             failed: None,
             scripts: Vec::new(),
+            anims: Vec::new(),
+            anim_serial: 0,
+            anim_table,
+            cosmetic,
+            debug_markers: true,
+            move_flash,
         };
         // The skirmish's AI houses are played by the script (S-0412
         // claim 12: AI houses; the script is our own opponent).
@@ -648,8 +768,8 @@ impl Live {
     /// members, keys and order, and the tick's presentation events
     /// (taken out of the world: read them before).
     pub fn after_tick(&mut self) {
-        self.sync_ground();
         self.take_effects();
+        self.sync_ground();
     }
 
     /// Drops the computer houses' scripts: their houses are played
@@ -658,23 +778,134 @@ impl Live {
         self.scripts.clear();
     }
 
-    /// Shows a move-target marker (S-0214 claim 30) as the animation marker
-    /// of the combat view, unattached at `at` (our own placeholder until the
-    /// imported move-feedback animation is drawn, S-0109).
+    /// Draws our own debug markers for what has no art (`true`, the
+    /// viewer's default) or only art (`false`, the game client).
+    pub fn set_debug_markers(&mut self, on: bool) {
+        self.debug_markers = on;
+    }
+
+    /// Shows a move-target marker (S-0214 claim 30): the imported
+    /// move-feedback animation, unattached at `at`, with no loop delay and
+    /// repeat factor 1. It is created between ticks, after the turn pass,
+    /// so its first update is in the next tick (S-0109 claim 5). Drawing
+    /// only: its draws come from the cosmetic stream (S-0214 claim 14).
+    /// Without the animation's art the viewer shows its animation marker.
     pub fn move_marker(&mut self, at: glasnost_sim::world::Pos) {
-        self.transients.push(Transient {
-            kind: TransientKind::Anim,
-            at: project_lifted(at.x, at.y, at.z),
-            born: self.shown_tick(),
+        // spec: S-0214 Import mapping (rules [General] MoveFlash: the move-feedback animation)
+        let name: Option<Vec<u8>> = self.move_flash.clone();
+        // spec: S-0109 claim 5 (created after the turn pass: first update in the next tick)
+        let next = self.world.tick;
+        let drawn = name.is_some_and(|n| self.create_anim(&n, at, next, None));
+        if !drawn && self.debug_markers {
+            self.transients.push(Transient {
+                kind: TransientKind::Anim,
+                at: project_lifted(at.x, at.y, at.z),
+                born: self.shown_tick(),
+            });
+        }
+        self.sync_ground();
+    }
+
+    /// Starts a playing animation of type `name` at `pos` whose first
+    /// update is in tick `first_update`, with the stage delay `drawn` the
+    /// simulation's creation draw gave (S-0109 claims 1 to 5). Returns
+    /// whether its type has a sprite.
+    fn create_anim(
+        &mut self,
+        name: &[u8],
+        pos: glasnost_sim::world::Pos,
+        first_update: i32,
+        drawn: Option<i32>,
+    ) -> bool {
+        let speed = self.world.game_speed;
+        let mut env = AnimEnv {
+            table: &self.anim_table,
+            rules: &self.rules,
+            rng: &mut self.cosmetic,
+            speed,
+        };
+        let (entry, play) = env.lookup(name);
+        let player = Player::new(
+            name,
+            play,
+            first_update,
+            drawn,
+            &mut env,
+            &AnimQuirks::default(),
+        );
+        let sprite = entry.as_ref().is_some_and(|e| e.sprite);
+        // spec: S-0102 claim 3 (an unattached animation is in its type's layer, default air)
+        let layer = entry
+            .as_ref()
+            .map_or(super::slots::Layer::Air, |e| e.t.layer);
+        if sprite {
+            self.counts.anims_with_art += 1;
+        } else {
+            self.counts.anims_without_sprite += 1;
+        }
+        self.anims.push(LiveAnim {
+            serial: self.anim_serial,
+            player,
+            entry,
+            pos,
+            layer,
+            first_update,
+        });
+        self.anim_serial = self.anim_serial.wrapping_add(1);
+        sprite
+    }
+
+    /// Every playing animation's update of tick `now` (S-0109 claim 5: one
+    /// update per tick from its first); ended ones leave.
+    fn update_anims(&mut self, now: i32) {
+        let speed = self.world.game_speed;
+        let mut env = AnimEnv {
+            table: &self.anim_table,
+            rules: &self.rules,
+            rng: &mut self.cosmetic,
+            speed,
+        };
+        let q = AnimQuirks::default();
+        self.anims.retain_mut(|a| {
+            if now < a.first_update {
+                return true;
+            }
+            let before = a.player.name.clone();
+            let alive = a.player.update(now, &mut env, &q);
+            if alive && a.player.name != before {
+                // spec: S-0109 claim 15 (the same animation continues as the follow-up type)
+                a.entry = env.lookup(&a.player.name).0;
+            }
+            alive
         });
     }
 
     /// Takes the tick's presentation events out of the game (they are not
-    /// game state) and turns them into short-lived markers.
+    /// game state): animations start playing; shots, detonations and
+    /// animations without art become short-lived markers.
     fn take_effects(&mut self) {
         let now = self.shown_tick();
         let at = |p: glasnost_sim::world::Pos| project_lifted(p.x, p.y, p.z);
-        for e in std::mem::take(&mut self.world.effects) {
+        let effects = std::mem::take(&mut self.world.effects);
+        let mut art_cells = BTreeSet::new();
+        for e in &effects {
+            if let Effect::Anim { name, pos, delay } = e {
+                self.counts.anims += 1;
+                // spec: S-0109 claim 5 (created during the turn pass: first update in the creation
+                // tick; interim rule, request Q-0771)
+                if self.create_anim(&name_bytes(name), *pos, now, *delay) {
+                    art_cells.insert(pos.cell());
+                } else if self.debug_markers {
+                    self.transients.push(Transient {
+                        kind: TransientKind::Anim,
+                        at: at(*pos),
+                        born: now,
+                    });
+                }
+            }
+        }
+        self.update_anims(now);
+        for e in effects {
             let (kind, pos) = match e {
                 Effect::Shot { from, .. } => {
                     self.counts.shots += 1;
@@ -682,12 +913,13 @@ impl Live {
                 }
                 Effect::Detonation { pos, radius, .. } => {
                     self.counts.detonations += 1;
+                    // The game client draws no burst where the detonation's animation art plays.
+                    if !self.debug_markers && art_cells.contains(&pos.cell()) {
+                        continue;
+                    }
                     (TransientKind::Burst(combat::burst_half_width(radius)), pos)
                 }
-                Effect::Anim { pos, .. } => {
-                    self.counts.anims += 1;
-                    (TransientKind::Anim, pos)
-                }
+                Effect::Anim { .. } => continue,
                 Effect::Killed { .. } => {
                     self.counts.kills += 1;
                     continue;
@@ -723,6 +955,19 @@ impl Live {
                 .values()
                 .filter(|o| o.kind.is_mobile() && o.on_map)
                 .map(|o| (Entrant::Object(o.id), mobile_key(o))),
+        );
+        // spec: S-0102 claims 3 and 5 (a ground-layer animation's key: X + Y plus its sort adjustment)
+        members.extend(
+            self.anims
+                .iter()
+                .filter(|a| a.layer == super::slots::Layer::Ground)
+                .map(|a| {
+                    let adjust = a.entry.as_ref().map_or(0, |e| e.t.y_sort_adjust);
+                    (
+                        Entrant::Anim(a.serial),
+                        i64::from(a.pos.x) + i64::from(a.pos.y) + i64::from(adjust),
+                    )
+                }),
         );
         self.ground.update(&members);
     }
@@ -841,7 +1086,7 @@ impl Live {
             .order()
             .filter_map(|e| match e {
                 Entrant::Object(id) => Some(id),
-                Entrant::Static(_) => None,
+                Entrant::Static(_) | Entrant::Anim(_) => None,
             })
             .collect();
         let mobiles: Vec<Mobile> = ids
@@ -955,11 +1200,48 @@ impl Live {
                 scene.items.extend(items);
             }
         }
+        // The playing animations with a sprite (S-0109), by serial number.
+        let playing: Vec<(u32, super::slots::Layer, AnimDraw)> = self
+            .anims
+            .iter()
+            .filter_map(|a| {
+                let e = a.entry.as_ref().filter(|e| e.sprite)?;
+                Some((
+                    a.serial,
+                    a.layer,
+                    AnimDraw {
+                        idx: e.idx,
+                        frame: a.player.frame(),
+                        stage: a.player.stage(),
+                        end: a.player.play.end,
+                        pos: (a.pos.x, a.pos.y, a.pos.z),
+                    },
+                ))
+            })
+            .collect();
+        let list: Vec<AnimDraw> = playing.iter().map(|(_, _, d)| *d).collect();
+        let (drawn, notes) = self.painter.anims(inputs, scene, &list);
+        self.notes.extend(notes);
+        let mut anim_items: BTreeMap<u32, (super::slots::Layer, Vec<Item>)> = BTreeMap::new();
+        for ((serial, layer, _), d) in playing.iter().zip(drawn) {
+            if let Some((_, _, items)) = d
+                && !items.is_empty()
+            {
+                anim_items.insert(*serial, (*layer, items));
+            }
+        }
+        self.counts.anims_drawn = anim_items.len();
+        self.counts.most_anims_drawn = self.counts.most_anims_drawn.max(anim_items.len());
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
         // top after it; each unsorted)
-        self.draw_layers(scene, |l| l < super::slots::Layer::Ground);
+        self.draw_layers(scene, &anim_items, |l| l < super::slots::Layer::Ground);
         for e in self.ground.order() {
             match e {
+                Entrant::Anim(serial) => {
+                    if let Some((_, items)) = anim_items.get(&serial) {
+                        scene.items.extend_from_slice(items);
+                    }
+                }
                 Entrant::Static(i) => {
                     if let Some(g) = self.static_ground.get(i)
                         && g.object.is_none_or(|o| !self.gone.contains(&o))
@@ -974,20 +1256,29 @@ impl Live {
                 }
             }
         }
-        self.draw_layers(scene, |l| l > super::slots::Layer::Ground);
+        self.draw_layers(scene, &anim_items, |l| l > super::slots::Layer::Ground);
         self.objects_end = scene.items.len();
         self.draw_effects(scene);
         self.draw_status(inputs, scene);
     }
 
-    /// Draws the static entries of the layers `which` picks, layer by layer
-    /// in drawing order, each in entering order (S-0102 claims 1 and 7).
-    fn draw_layers(&self, scene: &mut Scene, which: impl Fn(super::slots::Layer) -> bool) {
+    /// Draws the static entries and the playing animations (`anims`, by
+    /// serial number) of the layers `which` picks, layer by layer in
+    /// drawing order, each in entering order: the static entries entered
+    /// at the start, the animations as they were created (S-0102 claims 1,
+    /// 4 and 7).
+    fn draw_layers(
+        &self,
+        scene: &mut Scene,
+        anims: &BTreeMap<u32, (super::slots::Layer, Vec<Item>)>,
+        which: impl Fn(super::slots::Layer) -> bool,
+    ) {
         let mut layers: Vec<super::slots::Layer> = self
             .static_layered
             .iter()
             .map(|(l, _)| *l)
-            .filter(|l| which(*l))
+            .chain(anims.values().map(|(l, _)| *l))
+            .filter(|l| *l != super::slots::Layer::Ground && which(*l))
             .collect();
         layers.sort();
         layers.dedup();
@@ -996,6 +1287,10 @@ impl Live {
                 if g.object.is_none_or(|o| !self.gone.contains(&o)) {
                     scene.items.extend_from_slice(&g.items);
                 }
+            }
+            // spec: S-0102 claim 4 (an object placed in a layer other than ground becomes its last)
+            for (_, items) in anims.values().filter(|(l, _)| *l == layer) {
+                scene.items.extend_from_slice(items);
             }
         }
     }

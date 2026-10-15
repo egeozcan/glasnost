@@ -719,6 +719,18 @@ pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
     out
 }
 
+/// The sprites of every animation type, for the animations a game
+/// creates in play (S-0109; the move-feedback animation of S-0214 claim
+/// 30 among them).
+pub fn anim_files(import: &Import) -> BTreeSet<Vec<u8>> {
+    import
+        .arts
+        .iter()
+        .filter(|((kind, _), _)| *kind == Kind::Animations)
+        .filter_map(|(_, a)| a.sprite.as_ref().map(|s| upper(s)))
+        .collect()
+}
+
 /// The import's art file as a document (empty without one).
 fn art_document(import: &Import) -> Document {
     match &import.art_file {
@@ -916,6 +928,21 @@ type TileImages = (
 /// A sprite frame: image index, the frame's offset on the canvas, and the
 /// canvas size.
 type SpriteFrame = (u32, (i32, i32), (i32, i32));
+
+/// A playing animation of the live game to draw (S-0109).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AnimDraw {
+    /// Its current type's import registration index.
+    pub idx: usize,
+    /// Image frame *a* + *k* (claim 1).
+    pub frame: i32,
+    /// Stage *k*.
+    pub stage: i32,
+    /// End field *E* in play (claim 20's fade).
+    pub end: i32,
+    /// World position in leptons.
+    pub pos: (i32, i32, i32),
+}
 
 /// One entry of the object pass's ground layer (S-0102 claims 5 and 6).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2474,93 +2501,21 @@ impl Builder<'_> {
             // world units)
             let (dx, dy) = screen_to_ground(def.x, def.y);
             let pos = (256 * cell.x + dx, 256 * cell.y + dy, z);
-            let lz = height_lift(z);
-            // spec: S-0109 claim 26 (the screen pixel of the position with the height lift; the slot's
-            // displacement is already in the position, S-0108 claim 10)
-            let p = project_lifted(pos.0, pos.1, pos.2);
-            let v = t.y_draw_offset;
-            // spec: S-0109 claim 26 (the image is moved down by the type's vertical draw shift v)
-            let point = (p.0, p.1 + v);
             let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
-            // spec: S-0109 claim 20, S-0102 claim 32 and F8 (a nonzero translucency code blends the
-            // image's pixels with the colour already drawn; code 0 draws opaque)
-            let paint = match Translucency::from_code(i32::from(slots::first_translucency(
-                &t,
-                self.options.detail.number(),
-                n,
-            ))) {
-                Some(code) => Paint::Translucent(row, code),
-                None => Paint::Lit(row),
-            };
+            let code = slots::first_translucency(&t, self.options.detail.number(), n);
             let frame = slots::first_frame(&t, n);
-            let frame_of = |x: i32| {
-                usize::try_from(x)
-                    .ok()
-                    .filter(|&x| (x as i64) < i64::from(n))
-            };
-            // spec: S-0109 claim 27 (a tiled type draws a stack of copies of its current image frame)
-            let (image_point, stack) = if t.tiled {
-                self.tiled_placement(&sprite, p, v)
-            } else {
-                (point, None)
-            };
-            let mut items = Vec::new();
-            // spec: S-0102 claims 13 and 17 (animation rows; the slot's depth adjustment replaces the type's)
-            let (profile, bias) = if t.tiled {
-                (Profile::Upright, v + def.z_adjust - lz - 50)
-            } else if t.flat {
-                (Profile::Flat, v + def.z_adjust - lz - 3)
-            } else {
-                (Profile::Upright, v + def.z_adjust - lz - 2)
-            };
-            if let Some(f) = frame_of(frame)
-                && let Some(mut item) = self.place_sprite(
-                    &sprite,
-                    f,
-                    image_point,
-                    // spec: S-0102 claim 17 (slot animations are depth readers)
-                    DepthTest::Reader,
-                    ItemDepth::Profile {
-                        profile,
-                        bias,
-                        companion: None,
-                    },
-                    paint,
-                    Group::Buildings,
-                    false,
-                    Some(object),
-                )
-            {
-                item.stack = stack;
-                items.push(item);
-            }
-            // spec: S-0109 claim 10 (a shadow type also draws f + ⌊N/2⌋ as its shadow, unless flat or
-            // tiled: after the image, with nothing between, at the unshifted point p)
-            if t.shadow
-                && !t.flat
-                && !t.tiled
-                && let Some(sf) = frame_of(frame.saturating_add(n / 2))
-                && let Some(item) = self.place_sprite(
-                    &sprite,
-                    sf,
-                    p,
-                    DepthTest::Reader,
-                    // spec: S-0102 claim 13 (animation shadow: −2 − L(z), flat)
-                    ItemDepth::Profile {
-                        profile: Profile::Flat,
-                        bias: -2 - lz,
-                        companion: None,
-                    },
-                    // spec: S-0102 claim 32 (the shadow is never blended: plain halving, even
-                    // under a translucent image)
-                    Paint::Shadow,
-                    Group::Buildings,
-                    false,
-                    Some(object),
-                )
-            {
-                items.push(item);
-            }
+            // spec: S-0102 claim 17 (the slot's depth adjustment replaces the type's)
+            let items = self.anim_items(
+                &sprite,
+                &t,
+                n,
+                frame,
+                pos,
+                def.z_adjust,
+                (row, code),
+                Group::Buildings,
+                Some(object),
+            );
             if items.is_empty() {
                 continue;
             }
@@ -2580,6 +2535,156 @@ impl Builder<'_> {
         if any {
             self.note(notes::SLOT_ANIMS_STILL);
         }
+    }
+
+    /// The items of one animation of type `t` showing image frame `frame`
+    /// of `sprite` (which holds `n` image frames) at world position `pos`,
+    /// with animation depth adjustment `z_adjust`, shade row and
+    /// translucency code `shade`: the image (or its tiled stack), then its
+    /// shadow (S-0109 claims 1, 10, 26 and 27; S-0102 claims 13 and 19).
+    #[allow(clippy::too_many_arguments)]
+    fn anim_items(
+        &mut self,
+        sprite: &[u8],
+        t: &slots::AnimType,
+        n: i32,
+        frame: i32,
+        pos: (i32, i32, i32),
+        z_adjust: i32,
+        shade: (Shade, u8),
+        group: Group,
+        object: Option<u32>,
+    ) -> Vec<Item> {
+        let lz = height_lift(pos.2);
+        // spec: S-0109 claim 26 (the screen pixel of the position with the height lift)
+        let p = project_lifted(pos.0, pos.1, pos.2);
+        let v = t.y_draw_offset;
+        // spec: S-0109 claim 26 (the image is moved down by the type's vertical draw shift v)
+        let point = (p.0, p.1 + v);
+        let (row, code) = shade;
+        // spec: S-0109 claim 20, S-0102 claim 32 and F8 (a nonzero translucency code blends the
+        // image's pixels with the colour already drawn; code 0 draws opaque)
+        let paint = match Translucency::from_code(i32::from(code)) {
+            Some(code) => Paint::Translucent(row, code),
+            None => Paint::Lit(row),
+        };
+        // spec: S-0109 claim 1 (an image frame outside 0 … N − 1 draws nothing, nor its shadow)
+        let frame_of = |x: i32| {
+            usize::try_from(x)
+                .ok()
+                .filter(|&x| (x as i64) < i64::from(n))
+        };
+        // spec: S-0109 claim 27 (a tiled type draws a stack of copies of its current image frame)
+        let (image_point, stack) = if t.tiled {
+            self.tiled_placement(sprite, p, v)
+        } else {
+            (point, None)
+        };
+        let mut items = Vec::new();
+        // spec: S-0102 claim 13 (animation rows: ordinary, flat, tiled)
+        let (profile, bias) = if t.tiled {
+            (Profile::Upright, v + z_adjust - lz - 50)
+        } else if t.flat {
+            (Profile::Flat, v + z_adjust - lz - 3)
+        } else {
+            (Profile::Upright, v + z_adjust - lz - 2)
+        };
+        let in_range = frame_of(frame);
+        if let Some(f) = in_range
+            && let Some(mut item) = self.place_sprite(
+                sprite,
+                f,
+                image_point,
+                // spec: S-0102 claims 13 and 17 (animations are depth readers)
+                DepthTest::Reader,
+                ItemDepth::Profile {
+                    profile,
+                    bias,
+                    companion: None,
+                },
+                paint,
+                group,
+                false,
+                object,
+            )
+        {
+            item.stack = stack;
+            items.push(item);
+        }
+        // spec: S-0109 claim 10 (a shadow type also draws f + ⌊N/2⌋ as its shadow, unless flat or
+        // tiled or f itself is out of range: after the image, with nothing between, at the
+        // unshifted point p)
+        if t.shadow
+            && !t.flat
+            && !t.tiled
+            && in_range.is_some()
+            && let Some(sf) = frame_of(frame.saturating_add(n / 2))
+            && let Some(item) = self.place_sprite(
+                sprite,
+                sf,
+                p,
+                DepthTest::Reader,
+                // spec: S-0102 claim 13 (animation shadow: −2 − L(z), flat)
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: -2 - lz,
+                    companion: None,
+                },
+                // spec: S-0102 claim 32 (the shadow is never blended: plain halving, even
+                // under a translucent image)
+                Paint::Shadow,
+                group,
+                false,
+                object,
+            )
+        {
+            items.push(item);
+        }
+        items
+    }
+
+    /// One playing animation of the live game (S-0109): its layer, its
+    /// ground-layer sort key and its items, or `None` when it draws
+    /// nothing (no art, no sprite, or above the player's detail level).
+    fn live_anim(&mut self, a: &AnimDraw) -> Option<(slots::Layer, i64, Vec<Item>)> {
+        let art = self.import.arts.get(&(Kind::Animations, a.idx)).cloned()?;
+        let sprite = art.sprite.clone()?;
+        let t = slots::read_anim(&self.p.art, &art.image);
+        // spec: S-0109 claim 19 (detail field above the player's level: not drawn, still updated)
+        if !slots::shown_at(&t, self.options.detail.number()) {
+            return None;
+        }
+        let n = i32::try_from(self.sprite_frames(&sprite).unwrap_or(0)).unwrap_or(i32::MAX);
+        // spec: S-0103 claim 8 (an animation that belongs to no object: row 4 or 5, by its own
+        // art flags; row 3 is only for an object's own animation)
+        let unowned = slots::AnimType {
+            cell_drawer: false,
+            ..t.clone()
+        };
+        let row = self.anim_row(
+            &unowned,
+            [0, 0, 0],
+            NEUTRAL_BRIGHTNESS,
+            CellXY::new(a.pos.0 >> 8, a.pos.1 >> 8),
+        );
+        // spec: S-0109 claim 20 (an animation other than a building's slot animations has t = 0)
+        let code = slots::translucency(&t, self.options.detail.number(), a.stage, a.end);
+        let items = self.anim_items(
+            &sprite,
+            &t,
+            n,
+            a.frame,
+            a.pos,
+            // spec: S-0102 claim 13, Import mapping (ZAdjust: the type's depth adjustment)
+            t.z_adjust,
+            (row, code),
+            Group::Effects,
+            None,
+        );
+        // spec: S-0102 claim 5 (X + Y of the position plus the animation's sort adjustment)
+        let key = i64::from(a.pos.0) + i64::from(a.pos.1) + i64::from(t.y_sort_adjust);
+        // spec: S-0102 claim 3 (an unattached animation is in its type's layer)
+        Some((t.layer, key, items))
     }
 
     /// The lowest copy's draw point and the stack of a tiled animation
@@ -3886,6 +3991,60 @@ impl Painter {
         *self = b.p;
         *scene = b.built.scene;
         (items, b.built.notes)
+    }
+
+    /// Draws the live game's playing animations into `scene` (adding the
+    /// images and rows they need): for each, its layer, ground-layer sort
+    /// key and items, or `None` when it draws nothing.
+    pub fn anims(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        list: &[AnimDraw],
+    ) -> (
+        Vec<Option<(slots::Layer, i64, Vec<Item>)>>,
+        BTreeSet<String>,
+    ) {
+        let mut b = Builder {
+            map: inputs.map,
+            rules: inputs.rules,
+            cells_loaded: inputs.cells,
+            import: inputs.import,
+            catalogue: inputs.catalogue,
+            palettes: inputs.palettes,
+            assets: inputs.assets,
+            options: inputs.options,
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
+            built: Built {
+                scene: std::mem::take(scene),
+                ..Default::default()
+            },
+            live: true,
+        };
+        let out = list.iter().map(|a| b.live_anim(a)).collect();
+        *self = b.p;
+        *scene = b.built.scene;
+        (out, b.built.notes)
+    }
+
+    /// The import's animation type `idx`'s art fields and the image-frame
+    /// count of its sprite (0 without one), for playback (S-0109 F2).
+    pub fn anim_type(&self, inputs: &Inputs, idx: usize) -> Option<(slots::AnimType, i32)> {
+        let art = inputs.import.arts.get(&(Kind::Animations, idx))?;
+        let t = slots::read_anim(&self.art, &art.image);
+        let n = art
+            .sprite
+            .as_ref()
+            .and_then(|s| inputs.assets.get(s))
+            .and_then(|b| Shp::parse(b).ok())
+            .map_or(0, |s| i32::try_from(s.frames.len()).unwrap_or(i32::MAX));
+        Some((t, n))
     }
 
     /// Draws the live game's own buildings into `scene`: for each, its

@@ -1437,7 +1437,10 @@ fn flagged_shot(f: impl FnOnce(&mut WarheadType)) -> (i32, usize) {
     let b = put(&mut w, Kind::Vehicle, "BUGGY", BETA, 3, 0);
     w.obj_mut(a).unwrap().target = Some(Target::Object(b));
     w.effects.clear();
-    assert!(fire::shot(&mut w, a, 0, Target::Object(b)), "the shot was made");
+    assert!(
+        fire::shot(&mut w, a, 0, Target::Object(b)),
+        "the shot was made"
+    );
     for _ in 0..300 {
         if w.projectiles.is_empty() {
             break;
@@ -1478,6 +1481,14 @@ fn claim_2_flagged_warhead_still_hits_from_other_producers() {
     let mut w = testkit::game_with(&r, SIZE, 1);
     let b = put(&mut w, Kind::Vehicle, "BUGGY", BETA, 0, 0);
     let he = wh(&w, "HE");
-    glasnost_sim::combat::projectile::detonate_area(&mut w, he, 100, centre(0, 0), None, None, false);
+    glasnost_sim::combat::projectile::detonate_area(
+        &mut w,
+        he,
+        100,
+        centre(0, 0),
+        None,
+        None,
+        false,
+    );
     assert!(lost(&w, b) > 0);
 }

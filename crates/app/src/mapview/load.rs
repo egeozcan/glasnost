@@ -210,6 +210,10 @@ pub async fn load_with(
         &catalogue,
         &exists,
     );
+    if started.is_ok() {
+        // The animations a game creates in play (S-0109).
+        wanted.extend(build::anim_files(&import));
+    }
     let skirmish = started.is_ok() && options.game == build::GameMode::Skirmish;
     if skirmish {
         wanted.extend(build::game_files(&import));

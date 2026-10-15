@@ -4,10 +4,12 @@
 //! flight, shots, detonations, animations).
 //!
 //! The placeholders are presentation of our own design, not game art: the
-//! importer looks up no projectile art yet (S-0007 claims 26 to 30 are not implemented), and animation playback
-//! (S-0109) is not implemented, so an animation event is drawn as a marker
-//! instead of its art. They are marked provisional and can be hidden with the
-//! other provisional items, or with their own layer toggle.
+//! importer looks up no projectile art yet (S-0007 claims 26 to 30 are not
+//! implemented), and muzzle flashes have no art path. Animation events play
+//! their art (S-0109, `mapview::anims`); the animation marker is the
+//! viewer's debug drawing of an animation whose type has no sprite, and the
+//! game client draws none. They are marked provisional and can be hidden
+//! with the other provisional items, or with their own layer toggle.
 //!
 //! What S-0111 asks that is not drawn yet: the culling of claim 1 (the
 //! scene has no on-screen culling, S-0101 claim 6), the shading of claim 2
@@ -276,7 +278,8 @@ pub enum Marker {
         /// Stage, 0 first.
         stage: i32,
     },
-    /// An animation was created here (its art is not drawn: S-0109).
+    /// An animation whose type has no sprite was created here (the
+    /// viewer's debug layer).
     Anim,
 }
 
@@ -491,6 +494,16 @@ pub struct Counts {
     pub detonations: u64,
     /// Animations created.
     pub anims: u64,
+    /// Animations created whose type has a sprite (played with art,
+    /// S-0109), the move-feedback animation included.
+    pub anims_with_art: u64,
+    /// Animations created whose type has no sprite (or that the import
+    /// does not list): they draw nothing in the game view.
+    pub anims_without_sprite: u64,
+    /// Animations that drew items in the last redraw.
+    pub anims_drawn: usize,
+    /// Most animations drawn in one redraw.
+    pub most_anims_drawn: usize,
     /// Objects killed.
     pub kills: u64,
     /// Most projectiles in flight at once.
