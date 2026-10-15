@@ -2,11 +2,11 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0180, Q-0224, Q-0276]
 supersedes: []
@@ -380,14 +380,19 @@ house's own update in a tick, which comes after the turn pass and before orders 
     goes from 0 to 1, every vehicle of the house whose type is the powered unit of the building that
     just came into operation is enabled again. A vehicle whose type has the powered-unit flag and
     that enters a cell while its house has no active control centre is disabled too, unless the cell
-    holds a building (a vehicle in a factory or on a repair depot stays enabled). A disabled vehicle does nothing
-    until enabled (special-abilities specs). Because one count serves all control-centre types, a
+    holds a building (a vehicle in a factory or on a repair depot stays enabled). A disabled vehicle
+    is inactive until enabled, but disabling does not imply immediate rest: a hovering vehicle can
+    still spin, settle and retain residual travel, and over water can fall and be destroyed.
+    S-0503 claims 8 and 10–11 own these hover effects and their conditions, including restoration
+    of lift on re-enabling. Because one count serves all control-centre types, a
     house with two control-centre types that power different vehicle types disables neither kind
     while either centre runs (`quirks.shared_control_centre_count`, Edge cases).
     The cell-entry rule reads the vehicle type's powered-unit flag, while enabling and disabling at
     the count's transitions read only the control centre's powered unit; the two need not agree
     (Edge cases).
     - Backing: `measurable` (scenario W8, parts a to i; part h for off-map vehicles at disabling).
+      Hover effects inherit the backing and confidence of S-0503 claims 8 and 10–11, with
+      scenario H7 there testing ordinary disabling, settling, spin, residual travel and water loss.
       `unmeasured` for off-map vehicles at enabling and for loss or owner-change transitions
       (W8 tests disabling off-map and switch transitions only; no scenario part covers these
       other cases).
@@ -862,7 +867,9 @@ switched off the house has full power (W3's second pair).
   - (i) continue (c) by switching K2 off too, then switch K on again with K2 still off.
 - *Runs:* three per part.
 - *Observable:* whether the vehicles move and obey orders.
-- *Expected:* (a) both X vehicles stop and refuse orders; (b) both work again; (c) the X vehicles
+- *Expected:* (a) both X vehicles are disabled and refuse orders; a hovering vehicle can still
+  settle, spin and travel residually as S-0503 claims 8 and 10–11 specify (scenario H7 there tests
+  those effects and water destruction). (b) Both work again; (c) the X vehicles
   keep working (quirk); (d) the Z vehicle is disabled on entering the cell; (e) it stays enabled on
   the depot's cell and is disabled on the first cell without a building after it; (f) the X'
   vehicle is disabled and enabled like X in (a) and (b); (g) the Z vehicle stays disabled; (h) the
