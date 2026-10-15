@@ -227,7 +227,7 @@ mod notes {
     pub const SMUDGE_CLIP: &str = "a smudge is painted whole once per covered cell, not clipped to that cell (S-0102 claim 25): it differs only where covered cells differ in level or light";
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
-    pub const VOXEL_SHADOW_POINT: &str = "voxel shadows are placed at the object's ground point (the locomotor's shadow point has no spec)";
+    pub const VOXEL_SHADOW_POINT: &str = "a vehicle's voxel shadow is placed at the body's point: the vehicle shadow point has no spec (S-0105 claim 40 settles aircraft only)";
     pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
     /// The importer warning of S-0102 claim 33: the shared building depth
     /// image file and why it is unavailable.
@@ -3080,6 +3080,9 @@ impl Builder<'_> {
             object,
             // spec: S-0402 claim 5a (shown only while a harvest is loading; no tick has run)
             harvesting: None,
+            // spec: S-0105 claim 40 (no intact high bridge is known before a game is set up: terrain)
+            on_deck: false,
+            deck_bridge: false,
         };
         Some(self.mobile(&m))
     }
@@ -3598,15 +3601,9 @@ impl Builder<'_> {
         let (body_raw, turret_raw, elevation) = (m.body, m.turret, m.elevation);
         let pose = move || voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q);
         let object = m.object;
-        // Q-0799 interim: a flying aircraft's shadow lies on the ground under it (the terrain
-        // level of its cell), not at the body's lifted point; everything else keeps the body's point
+        // spec: S-0105 claim 40 (an aircraft's shadow draw point is the terrain under it, independent of its flight height; only a qualifying high bridge raises it)
         let shadow_point = if kind == Kind::Aircraft {
-            let level = self
-                .map
-                .cells
-                .get(CellXY::new(m.pos.0 / 256, m.pos.1 / 256)) // spec: S-0204 claim 2 (the cell holding a position)
-                .map_or(0, |cell| i32::from(cell.level));
-            project_lifted(m.pos.0, m.pos.1, (level * LEVEL_LEPTONS).min(m.pos.2))
+            aircraft_shadow_point(self.cells_loaded.unwrap_or(&self.map.cells), m)
         } else {
             point
         };
@@ -3643,7 +3640,6 @@ impl Builder<'_> {
                 Group::Shadows,
                 object,
             ));
-            self.note(notes::VOXEL_SHADOW_POINT);
         }
         let mut placed = Vec::new();
         // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
@@ -3769,6 +3765,35 @@ impl Builder<'_> {
         }
         items
     }
+}
+
+/// The terrain surface height under a position (S-0106 claim 2).
+fn terrain_height(grid: &CellGrid, x: i32, y: i32) -> i32 {
+    let cell = CellXY::new(x.div_euclid(256), y.div_euclid(256)); // spec: S-0204 claim 2 (the cell holding a position)
+    grid.get(cell).map_or(0, |c| {
+        glasnost_sim::surface::surface_height(
+            i32::from(c.level),
+            c.slope,
+            x.rem_euclid(256), // spec: S-0204 claim 2 (the position within the cell)
+            y.rem_euclid(256), // spec: S-0204 claim 2 (the position within the cell)
+            glasnost_rules::quirks::Quirks::default().negative_level_floor_raised,
+        )
+    })
+}
+
+/// The shadow draw point of an aircraft drawn as a voxel model (S-0105
+/// claim 40): the screen projection of its horizontal position at the
+/// terrain height there, raised by 60 pixels over a qualifying high bridge.
+pub fn aircraft_shadow_point(grid: &CellGrid, m: &Mobile) -> (i32, i32) {
+    let (x, y, z) = m.pos;
+    let h = terrain_height(grid, x, y);
+    // spec: S-0105 Terms (aircraft shadow height a = z − H − b; b is 416 leptons on a deck)
+    let a = z - h - if m.on_deck { 416 } else { 0 };
+    // spec: S-0105 claim 40 (bridge qualification: a ≥ 416 when not marked on the deck, a ≥ 0 when marked)
+    let qualifies = m.deck_bridge && a >= if m.on_deck { 0 } else { 416 };
+    let (px, py) = project_lifted(x, y, h);
+    // spec: S-0105 claim 40 (a qualifying high bridge raises the anchor by exactly 60 screen pixels)
+    (px, if qualifies { py - 60 } else { py })
 }
 
 /// Adds a voxel part or shadow image to `scene`: its index and offset from
@@ -3899,6 +3924,11 @@ pub struct Mobile {
     /// For a loading vehicle harvester: its harvesting image (S-0402
     /// claim 5a, F8).
     pub harvesting: Option<super::harvesting::Harvesting>,
+    /// Whether an aircraft is marked on a bridge deck (S-0105 claim 40).
+    pub on_deck: bool,
+    /// Whether an aircraft's cell and its neighbour towards the bridge axis
+    /// are both high-bridge cells (S-0105 claim 40, bridge qualification).
+    pub deck_bridge: bool,
 }
 
 /// The inputs a scene is drawn from.

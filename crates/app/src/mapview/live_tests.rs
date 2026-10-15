@@ -199,6 +199,8 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         }),
         object,
         harvesting: None,
+        on_deck: false,
+        deck_bridge: false,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -259,6 +261,8 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         infantry: None,
         object: sim_code(ObjectId(9)),
         harvesting,
+        on_deck: false,
+        deck_bridge: false,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1369,9 +1373,9 @@ fn parachute_follows_its_paratrooper() {
     assert!(live.attached().is_empty(), "it disappears with its owner");
 }
 
-/// Q-0799 interim (S-0102 claim 18 leaves the airborne shadow point open): a flying
-/// aircraft's body is drawn at its lifted point and its shadow on the ground under it; an
-/// aircraft on the ground draws both at one point.
+/// S-0105 claim 40 (Q-0799): a flying aircraft's body is drawn at its lifted point and its
+/// shadow at the terrain under it, whatever its height; an aircraft on the ground draws both
+/// at one point.
 #[test]
 fn flying_aircraft_shadow_lies_on_the_ground() {
     use glasnost_convert::art::TypeArt;
@@ -1426,6 +1430,8 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         infantry: None,
         object: sim_code(ObjectId(5)),
         harvesting: None,
+        on_deck: false,
+        deck_bridge: false,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1445,4 +1451,85 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         shadow.unwrap() - body.unwrap(),
         reference + glasnost_render::projection::height_lift(1500)
     );
+    // spec: S-0105 claim 40 (height dependence: changing the height alone does not move the anchor)
+    let (shadow_low, _) = offset(300);
+    let (shadow_high, _) = offset(2500);
+    assert_eq!(shadow_low, shadow_high);
+}
+
+fn jet_at(pos: (i32, i32, i32), on_deck: bool, deck_bridge: bool) -> Mobile {
+    Mobile {
+        kind: Kind::Aircraft,
+        idx: 0,
+        owner: b"Neutral".to_vec(),
+        pos,
+        body: 0,
+        turret: 0,
+        elevation: 0,
+        infantry: None,
+        object: sim_code(ObjectId(5)),
+        harvesting: None,
+        on_deck,
+        deck_bridge,
+    }
+}
+
+fn flat_grid(level: i8, slope: u8) -> glasnost_map::CellGrid {
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let mut map = decode(&doc, &DecodeContext::default()).map;
+    for y in 0..24 {
+        for x in 0..24 {
+            if let Some(c) = map.cells.get_mut(glasnost_map::CellXY::new(x, y)) {
+                c.level = level;
+                c.slope = slope;
+            }
+        }
+    }
+    map.cells
+}
+
+/// S-0105 claim 40: the anchor is the projection of the horizontal position at the terrain
+/// height there (the slope at the exact position included), never clamped to the body's own
+/// height, also at a height of 0 and below the surface.
+#[test]
+fn claim40_the_anchor_is_the_terrain_projection() {
+    use super::build::aircraft_shadow_point;
+    let grid = flat_grid(2, 0);
+    let (x, y) = (9 * 256 + 40, 9 * 256 + 200);
+    for z in [-50, 0, 208, 209, 5000] {
+        assert_eq!(
+            aircraft_shadow_point(&grid, &jet_at((x, y, z), false, false)),
+            project_lifted(x, y, 208),
+            "z = {z}"
+        );
+    }
+    // A slope shape 1 rises with the in-cell x: the exact position is sampled.
+    let slope = flat_grid(0, 1);
+    let at = |dx| aircraft_shadow_point(&slope, &jet_at((9 * 256 + dx, 9 * 256 + 100, 2000), false, false));
+    assert_eq!(at(0), project_lifted(9 * 256, 9 * 256 + 100, 0));
+    assert_eq!(at(255), project_lifted(9 * 256 + 255, 9 * 256 + 100, 103));
+}
+
+/// S-0105 claim 40: over a qualifying high bridge the anchor rises by exactly 60 pixels. The
+/// threshold includes equality (a = 416 off the deck, a = 0 on it); an unpaired edge row and a
+/// non-deck aircraft below deck height use the terrain.
+#[test]
+fn claim40_a_qualifying_bridge_raises_the_anchor_by_60_pixels() {
+    use super::build::aircraft_shadow_point;
+    let grid = flat_grid(0, 0);
+    let (x, y) = (9 * 256 + 128, 9 * 256 + 128);
+    let base = aircraft_shadow_point(&grid, &jet_at((x, y, 0), false, false));
+    let at = |z, deck, bridge| aircraft_shadow_point(&grid, &jet_at((x, y, z), deck, bridge));
+    // not marked on the deck: a = z
+    assert_eq!(at(415, false, true), base);
+    assert_eq!(at(416, false, true), (base.0, base.1 - 60));
+    assert_eq!(at(417, false, true), (base.0, base.1 - 60));
+    // marked on the deck: a = z - 416
+    assert_eq!(at(415, true, true), base);
+    assert_eq!(at(416, true, true), (base.0, base.1 - 60));
+    // the neighbour test: an unpaired marked edge cell uses the terrain
+    assert_eq!(at(1000, false, false), base);
+    assert_eq!(at(1000, true, false), base);
+    // a height-independent anchor above the threshold
+    assert_eq!(at(416, false, true), at(3000, false, true));
 }

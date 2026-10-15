@@ -1259,6 +1259,9 @@ impl Live {
             // spec: S-0402 claim 5a, F8 (ν: the walk-animation counter of S-0105 claim 16). The
             // simulation does not model that counter yet, so 0, as for the body's HVA frame.
             harvesting: super::harvesting::of(w, id, 0),
+            // spec: S-0105 claim 40 (marked on a bridge deck: the deck layer)
+            on_deck: o.layer == Layer::Deck,
+            deck_bridge: deck_bridge(w, o.pos.cell()),
         })
     }
 
@@ -1715,4 +1718,21 @@ impl Live {
 pub fn mobile_key(o: &glasnost_sim::world::Object) -> i64 {
     // spec: S-0102 claim 5 (sort key X + Y in leptons; height plays no part)
     i64::from(o.pos.x) + i64::from(o.pos.y)
+}
+
+/// Whether a cell and its neighbour towards its bridge axis are both
+/// high-bridge cells (S-0105 claim 40, bridge qualification).
+fn deck_bridge(w: &glasnost_sim::world::World, c: CellXY) -> bool {
+    use glasnost_sim::cells::Axis;
+    if !w.high_bridge(c) {
+        return false;
+    }
+    let Some(i) = w.cells.idx(c) else { return false };
+    // spec: S-0105 claim 40 (towards y − 1 for an axis along cell x, towards x − 1 for an axis along cell y; S-0212 claim 3's axis)
+    let n = match w.cells.bridge_axis[i] {
+        Axis::X => CellXY::new(c.x, c.y - 1),
+        Axis::Y => CellXY::new(c.x - 1, c.y),
+        Axis::None => return false,
+    };
+    w.high_bridge(n)
 }
