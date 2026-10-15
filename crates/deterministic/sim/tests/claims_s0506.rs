@@ -1217,7 +1217,7 @@ fn claim_14_heading_point() {
     );
 }
 
-// spec: S-0506 claim 16 and F4 (speed grows by a each tick up to the type speed; not reduced in descent)
+// spec: S-0506 claim 16 and F4 (speed grows by a each tick up to the type speed)
 #[test]
 fn f4_speed() {
     use glasnost_num::{F64, Rounding};
@@ -1478,4 +1478,26 @@ fn f6_lazy_pitch() {
     assert_eq!(at_start, pf.to_f64().mul(hp, rz).to_f32(rz));
     let below = lazy_pitch((0, 0, -400), 1000, pf, true, rz);
     assert_eq!(below, hp.negated().to_f32(rz));
+}
+
+// spec: S-0506 claim 4 (slot steps run in index order: the lowest docked slot launches first) and claim 6 (one launch per pass with the 9-tick spacing)
+#[test]
+fn claim_4_lowest_index_first() {
+    let r = rules();
+    let mut w = game(&r);
+    let lnb = spawn_at(&mut w, "LNB", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let first = controller(&w, lnb).slots[0].object.unwrap();
+    let second = controller(&w, lnb).slots[1].object.unwrap();
+    w.obj_mut(lnb).unwrap().target = Some(Target::Object(victim));
+    spawn::shot(&mut w, lnb, Target::Object(victim));
+    assert!(testkit_run_until(&mut w, 120, |w| controller(w, lnb).slots
+        [0]
+    .state
+        != SlotState::Docked));
+    let c = controller(&w, lnb);
+    assert_eq!(c.slots[0].state, SlotState::Preparing);
+    assert_eq!(c.slots[1].state, SlotState::Docked);
+    assert!(w.obj(first).unwrap().on_map);
+    assert!(!w.obj(second).unwrap().on_map);
 }

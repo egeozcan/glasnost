@@ -568,7 +568,7 @@ pub fn pass(w: &mut World, spawner: ObjectId) {
         return;
     };
     if w.obj(spawner).is_some_and(|o| o.target.is_none()) {
-        // spec: S-0506 claim 3 (clearing the spawner's own target clears the pending target); our engine clears targets in many places, so the pass applies it before it reads the pending target
+        // spec: S-0506 claim 3 (clearing the spawner's own target clears the pending target); our engine clears targets in many places, so the pass applies it before it reads the pending target (Q-0616)
         target_cleared(w, spawner);
     }
     for i in 0..n {

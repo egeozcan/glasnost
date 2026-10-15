@@ -314,7 +314,7 @@ S-0506 (missiles and the spawn controller) is built in `glasnost_sim::spawn` (th
   - S-0504 claim 3 / S-0207 claim 6: `drive::begin_track` waits while `spawn::track_held`; `spawn::launching_count(w, spawner) -> i32` is public.
   - In the air: `combat::weapon::in_air` uses the height test for rocket types.
 - **Seams for other lanes.**
-  - S-0501 claims 35 and 36: `spawn::aircraft_launched`, `spawn::aircraft_attack` and `spawn::aircraft_return` only set the destination or target. Carrier aircraft do not fly yet, so they never dock (`spawn::docks` is ready).
+  - S-0501 claims 35 and 36: `spawn::aircraft_launched`, `spawn::aircraft_attack` and `spawn::aircraft_return` only set the destination or target. Carrier aircraft do not fly yet, so they never dock (`spawn::docks` is ready). In the running pipeline the generic behaviour step clears that destination and target again later in the same tick (the move behaviour's fall-back), so the hooks do not work end to end until the aircraft lane owns these objects; `carrier_slot_cycle` checks them by calling `spawn::pass` directly.
   - `spawn::kamikaze_orders` is not called from the pipeline.
   - `spawn::owner_changed` has no caller until owner change exists.
   - `spawn::magnet_held` answers false (no magnetic beam).
@@ -331,7 +331,7 @@ Provisional rules of M6a, each tied to a request:
 | `rocket::tick` | a destroyed rocket keeps its phase timers and moves only by F1; it detonates after its first positive-speed movement attempt | Q-0613 |
 | `combat::flying::moved` | a crossing object goes to the end of its new sector's list | Q-0614 |
 | `rocket::tick`, `tick` | the aim-fixing tick does nothing else; each later tick counts one tick of pause, tilt or raise; the tick that reaches cruise altitude switches without accelerating; the pass runs after behaviour processing and before movement and firing | Q-0615 |
-| `spawn::pass` | "clearing the spawner's target clears the pending target" (claim 3) is applied at the start of each pass when the spawner's own target is empty, because our engine clears targets in many places | none (approximation of claim 3) |
+| `spawn::pass` | "clearing the spawner's target clears the pending target" (claim 3) is applied at the start of each pass when the spawner's own target is empty, because our engine clears targets in many places | Q-0616 |
 
 ## Own AI (M5b)
 
