@@ -2,7 +2,7 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -133,13 +133,13 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
    | scatter | the object accepts the scatter requests that otherwise only a player setting allows | S-0208 (claims 11 to 15) |
    | rate of fire | the delay between shots is multiplied by the veteran rate-of-fire factor | S-0301 (claim 6) |
    | sight | the nonzero veteran sight factor multiplies the radius before its visibility limit | this spec, claim 5; S-0409 claim 4 |
-   | cloak | the object can cloak | visibility specs (future) |
+   | cloak | the object can start and retain cloaking under the ability-dependent rules | S-0516 claims 2, 5 and 9 |
    | resource-proof | no effect found (claim 5) | this spec |
    | vein-proof | the object is not harmed by veins | resource specs (future) |
    | self-heal | the object heals itself like a self-healing type | S-0314 (claim 9) |
    | explodes | the object explodes on death | S-0312 |
    | radar-invisible | the radar display applies the ability-dependent hiding rule | S-0410 claim 7 |
-   | sensors | the object detects cloaked objects | visibility specs (future) |
+   | sensors | the object can force an enemy fully cloaked mobile object entering a neighbouring cell to uncloak, subject to the adjacency candidate test; the ability alone grants no sensor coverage | S-0516 claims 13 and 22 |
    | fearless | damage raises the object's fear only in the fraidycat case; its fear still decays | S-0107 (claims 15 and 16), S-0315 |
    | explosive charges | the infantry unit can plant explosive charges | S-0214 (row I16) |
    | resource-heal | no effect found (claim 5) | this spec |
