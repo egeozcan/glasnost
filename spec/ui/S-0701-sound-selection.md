@@ -2,7 +2,7 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -20,7 +20,9 @@ Sound data, selection and order responses, event sounds, announcements, mixing l
 placement and traced random choices in skirmish; network games and campaigns are out of scope.
 Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
 Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Which files hold the samples
-is claim 34; the byte formats of those files are outside this spec. Revision 10 aligns
+is claim 34; the byte formats of those files are outside this spec. Revision 11 cites
+S-0508 claim 8 for F7's garrison-abandoned event placement and preserves the limits of
+its suppression backing. Revision 10 aligns
 garrison feedback with S-0508 claims 6 and 8, cites infiltration announcements in S-0510
 claim 11, and unifies the needs-engineer flag with S-0405 claim 8 while excluding passive
 new owners from capture announcements. Revision 9 removes
@@ -912,8 +914,9 @@ extension should repeat deploy/undeploy on a slave-gathering building while link
 vehicle and while unlinked, recording single-response identities and omissions.
 
 **F7. Nearby-event suppression** (claim 28). Each announcement that passes through it first tries to
-create a radar event of its kind at a cell (the building, unit or factory). The attempt fails, and the
-announcement is not raised, when a radar event of the same kind exists whose cell is at a distance
+create a radar event of its kind at a cell (the building, unit or factory). For *garrison abandoned*,
+S-0508 claim 8 owns the request at the building's top-left cell and its announcement gate.
+The attempt fails, and the announcement is not raised, when a radar event of the same kind exists whose cell is at a distance
 ⌊√(Δ*x*² + Δ*y*²)⌋ < *r* cells (floating point, truncated), *r* from this table. The event lasts its
 zoom-in phase and then *t* ticks. S-0410 claims 14–15 specify the zoom duration and
 cadence, with their formula F9 and scenario R13: zoom advances once per drawn frame,
@@ -947,10 +950,12 @@ For a kind marked *yes*, radar events are game-wide, not per house: a matching e
 another request regardless of why the first event was created, including triggered events
 (S-0011 claim 32). Kinds marked *no* do not apply the distance rejection. The complete set of
 event creators is not established here. F7 is high confidence and `measurable` in G3 for
-*unit produced*, *base attacked* and *harvester attacked*. The *garrison abandoned* gate
-is `measurable` in S-0508 G4 and G6, with medium confidence under S-0508 claim 8.
-The remaining table rows and cross-creator suppression are `unmeasured`: these scenarios
-have no isolated request sequence for those kinds or creators. Zoom timing retains S-0410 claims 14–15's backing and confidence,
+*unit produced*, *base attacked* and *harvester attacked*. The *garrison abandoned* creator
+and announcement gate are `measurable` in S-0508 G4 and G6, with medium confidence for the
+gate under S-0508 claim 8. Those scenarios do not establish an isolated suppression-radius test.
+The remaining table rows, the isolated *garrison abandoned* suppression radius and
+cross-creator suppression are `unmeasured`: these scenarios have no isolated request sequence
+for those kinds, radius boundaries or creators. Zoom timing retains S-0410 claims 14–15's backing and confidence,
 including their unresolved exact floating-point equality boundaries; it does not turn
 the unmeasured suppression rows into measured claims.
 
