@@ -1,9 +1,9 @@
 ---
 id: Q-0679
 title: The point a held hover remembers for a cell destination
-status: open
+status: answered
 related: [S-0503, S-0614]
-answered-by: []
+answered-by: [S-0503]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696]
+requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696]
 supersedes: []
 ---
 
@@ -74,6 +74,8 @@ New terms:
   read by behaviours and factory reporting. The two can disagree after a stop order (claim 16).
   Unless held, assignment sets its height to the surface height of its cell, plus 416 leptons on
   a high-bridge cell. Held assignment retains the supplied point without this height adjustment.
+  For a cell destination that supplied point is its centre at terrain surface height, without
+  a bridge-deck lift; claim 18 gives its lifetime and order-level consequences.
 - **Held.** The parasite hold timer of S-0614 claims 7–8 is running. This is the meaning of
   *paralysed* for this spec's hover assignment and choice rules, not electromagnetic-pulse disable.
   Claim 17 gives its consequences.
@@ -503,6 +505,33 @@ tick while switched off has no further spin rotation on that tick. The spin ends
       for H14, although the hold test itself is settled
     - Confidence: high
 
+18. **Destination supplied during hold (Q-0679).** For a destination assignment that reaches
+    hovering movement while held, a cell supplies the integer point
+    (256*x* + 128, 256*y* + 128, *z*ₛ) leptons, where (*x*, *y*) are the cell coordinates and
+    *z*ₛ is its terrain surface height at the centre (S-0106 claim 2). The arithmetic is exact
+    integer arithmetic. This is not height 0 unless the surface there is 0, and it does not
+    use the issuing unit's height. On a high-bridge cell it still omits the 416-lepton deck
+    lift. The held hover remembers this point as *D*, whereas an unheld assignment applies
+    the destination-height adjustment in Terms.
+
+    Expiry of the hold, the next path search and the next heading-point choice do not adjust
+    this remembered *D*. A heading point still gets its own height by claim 5, independently
+    of *D*. Until another assignment replaces it or stopping/completion/failure clears it,
+    *D* retains the height originally supplied. An assignment made after hold expiry applies
+    the ordinary height adjustment anew, even when it names the same cell. Consequently
+    raised terrain alone does not leave a held cell destination at height 0. On a high bridge,
+    however, a retained terrain-height destination can fail claim 7's arrival-height test
+    for a vehicle on the deck; later searching does not silently repair that height.
+
+    The order-level destination changes to the assigned cell or object in the ordinary way
+    even while held. Behaviours and S-0417 claim 7's report tests see that new reference,
+    not the previous destination and not *D*. Omitting the immediate hover choice does not
+    itself generate a cell-arrival update or a factory clear report. This specifies the
+    result of an assignment, not permission to issue an otherwise refused move order:
+    S-0614 claim 8 and S-0214's order rules still govern held-unit order legality.
+    - Backing: `measurable` (H14, raised-ground and high-bridge assignment subtests)
+    - Confidence: high
+
 ## Formulas
 
 Every floating-point operation in this spec runs in the original's program-wide round-toward-zero
@@ -684,7 +713,8 @@ S-0212 claim 21 and its Import mapping; it introduces no additional hover key.
 | Input owned elsewhere | Feeds here | Parse form and absent-key default |
 |---|---|---|
 | warhead `Paralyzes` | held timer tested in claims 5 and 17 | integer ticks, default 0; S-0614 claims 7–8 and Import mapping own its renewal |
-| runtime stop order, destination and contact | claims 15–16 | runtime state, not an INI setting; no imported default |
+| runtime stop order, destination and contact | claims 15–16 and 18 | runtime state, not an INI setting; no imported default |
+| destination cell coordinates and terrain | supplied point in claim 18 | map geometry and terrain surface imported by S-0009 claim 7 and S-0106 claim 2; no separate held-destination key or default |
 
 Each key keeps its value when a later layer omits it (S-0006). The engine defaults are those of the
 program when no layer gives the key. The absent-key defaults and numeric import precision are
@@ -833,7 +863,7 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   or north in this last case falsifies claim 15's retention. Record placement and motion
   separately so movement on the placement tick is not mistaken for an initial setting.
 
-- **H14 Hold and assignment-time path update (Q-0675).** Use H1's map/settings and a named
+- **H14 Hold and assignment-time path update (Q-0675, Q-0679).** Use H1's map/settings and a named
   test-map variant with a hovering host that stock parasite attacks can hold; change only the
   host's locomotor, keeping the attack and its hold field unchanged. Compare held and expired-hold
   assignment with control-centre switch-off, and magnetic lift in separate runs. Record the
@@ -850,7 +880,27 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   and a search with full delay restart only when eligible. A delayed choice, unconditional
   search through the running timer, or missing restart falsifies the corresponding rule.
   If this state is never reached, that subtest is inconclusive, not evidence of a mandatory
-  tick delay. One qualifying run per subcase; propose any missing read-only recorder support.
+  tick delay.
+  For claim 18, add raised flat ground reached by a ramp, a sloped destination cell, and a
+  high-bridge destination. Retain an assignment that actually reaches the hover while held,
+  recording the order-level reference and *D* immediately before and after assignment,
+  at hold expiry, and at each subsequent search and point choice. A refused human move
+  order does not establish such an assignment; if normal input cannot produce it in the
+  named test-map variant, this subtest remains inconclusive. Expected: the new order-level
+  reference is present immediately, and *D* is the cell centre at terrain surface height
+  there, including slope height but excluding bridge lift. No hover choice, speed-fraction
+  change or arrival update is caused by that held assignment alone. Release the parasite
+  before host destruction and record movement, final position and both destination kinds.
+  Expected: unchanged *D* through expiry/search/choice while it exists, independent
+  heading-point height under claim 5, F1's distance to that retained *D*, and claim 7's
+  actual height-sensitive completion rather than an assumed successful bridge arrival.
+  Give the same cell again after expiry: expect the ordinary adjustment, including the
+  bridge lift. A zero remembered height on raised terrain, a bridge lift during held
+  assignment, a height repair without reassignment, a retained old order-level reference,
+  or an assignment-only arrival update falsifies the corresponding part of claim 18.
+  Where a contact/update trace exists, apply S-0417 claim 7's report test to the new
+  order-level reference, not *D*. Do not infer reporting merely from assignment.
+  One qualifying run per subcase; propose any missing read-only recorder support.
 - **H15 Arrival outcome matrix (Q-0675).** Extend H3/H9/H12 with recording of both destination
   kinds, contact cell, hold timer, retry timer, ground/deck flags, between-steps state, searches
   and cell-arrival events. In separate runs retain: no-*D* arrival without contact; no-*D*

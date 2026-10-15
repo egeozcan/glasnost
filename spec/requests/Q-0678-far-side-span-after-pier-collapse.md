@@ -1,9 +1,9 @@
 ---
 id: Q-0678
 title: Which span the far-side named cell of a direct pier collapse checks
-status: open
+status: answered
 related: [S-0511]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

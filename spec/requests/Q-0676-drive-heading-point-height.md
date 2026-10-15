@@ -1,9 +1,9 @@
 ---
 id: Q-0676
 title: The stored height of a driving or ship vehicle's heading point
-status: open
+status: answered
 related: [S-0511, S-0207, S-0504]
-answered-by: []
+answered-by: [S-0207, S-0511]
 ---
 
 ## Need

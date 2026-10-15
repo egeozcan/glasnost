@@ -2,13 +2,13 @@
 id: S-0511
 title: Bridges (destruction, collapse, falling and repair)
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0710, Q-0712, Q-0713, Q-0714, Q-0715, Q-0716, Q-0717, Q-0718, Q-0719]
+requests: [Q-0676, Q-0677, Q-0678, Q-0710, Q-0712, Q-0713, Q-0714, Q-0715, Q-0716, Q-0717, Q-0718, Q-0719]
 supersedes: []
 ---
 
@@ -249,9 +249,12 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
      blow-ups at pre-collapse heights. Deaths and explosion draws occur in decreasing-cross-
      coordinate, reference, increasing-cross-coordinate order: y across an x bridge, x across
      a y bridge. These effects precede losses caused by the pier's loss notices. Far-side
-     losses precede start-side losses. Both adjacent spans have claim 7's isolated-run result:
-     the start-side span is checked to completion before the far-side span, so their band raises
-     do not interleave. Subsequent routes reflect claim 12's connectivity, naming the reference cell.
+     losses precede start-side losses. After the tile replacement and both notices, claim 7
+     searches from two named loss cells, start-side neighbour before far-side neighbour.
+     These are not guaranteed to select the two former adjacent spans: the collapsed pier is
+     no longer an endpoint for either search. The first selected check completes before the
+     second, including all band raises. Subsequent routes reflect claim 12's connectivity,
+     naming the reference cell.
    - **Collapse from a notice:** the loss propagates onward on the side away from the sender.
      Collapses further along that direction produce their blow-up effects before this pier does.
      This pier's three blow-ups then occur in centre, decreasing-y, increasing-y order along x,
@@ -262,8 +265,8 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
    - Confidence: medium (direct stages, collapse, height drop); low (the notice table)
 
 7. **The span check: isolated runs fall.** After each successful direct attempt on a high bridge, the
-   original checks the span that held the lost section, or the spans on both sides of a collapsed
-   pier.
+   checked extent is selected by the searches below. A collapsed pier can join two former
+   spans into one checked extent rather than keeping their old boundary.
    - **Finding the span.** From the named loss cell, the first neighbour in N, NE, E, SE,
      S, SW, W, NW order carrying a deck or bridge-body mark supplies the bridge. Resolve its
      responsible section, or its body-mark section by claim 16's body rule. From that section
@@ -271,11 +274,23 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
      cells, for the nearest start ramp at sub-tile 8 along x or 12 along y, or non-collapsed
      pier at sub-tile 5 along x or 7 along y. No qualifying neighbour, body resolution or start
      piece means no span check. For direct pier collapse the two named loss cells are the
-     reference cell's start-side neighbour and then its far-side neighbour. The 29-cell cap
-     applies to the following far-end search, not this start-piece search.
+     reference cell's start-side neighbour and then its far-side neighbour. Both searches use
+     the post-collapse tiles and the marks left by the notices, not a saved pre-collapse span.
+     A collapsed pier, whether collapsed by this attempt, an earlier attempt or a notice,
+     never qualifies as a start piece. There is no exception for the far-side named cell.
+     The 29-cell cap applies to the following far-end search, not this start-piece search.
    - The span runs from its start piece (a start ramp at sub-tile 8 or 12, or a pier at sub-tile 5
-     or 7) to the nearest far piece within 29 cells along its direction (a far ramp, or a pier, at
-     sub-tile 4 or 2).
+     or 7) to the nearest far piece within 29 cells along its direction (a far ramp, or a
+     non-collapsed pier, at sub-tile 4 or 2). Collapsed piers are passed over at this end too
+     (`quirks.collapsed_pier_span_search`). Thus on an ordinary two-span bridge with no other
+     pier between its outer ramps, both named searches after direct pier collapse select the
+     same outer-ramp-to-outer-ramp extent, provided their marked neighbours resolve to that
+     bridge. They do not check just the former start-side span twice. If the outer endpoints
+     exceed the cap, neither check has an isolated-run or band-raise effect. Within the cap,
+     the second check repeats the same band on the state left by the first. If the first
+     check loses *n* isolated sections and at least one gap remains, the two checks together
+     raise that combined band *n* + 2 times: *n* + 1 from the first and one from the second.
+     Trigger actions that change the bridge can change the second search's result.
    - Consider the cells from the start piece's cell up to, but not including, the far piece's cell.
      Every run of consecutive section cells that includes neither the first of those cells nor the
      last is lost, one section at a time, with claim 5's blow-ups.
@@ -289,8 +304,10 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
      bridge-destroyed raises before the first isolated loss, between consecutive isolated
      losses, and after the last. With *n* isolated losses there are *n* + 1 band raises,
      including one when *n* = 0. A span with no missing section raises nothing.
-   - Backing: `measurable` (B2, B14 for multiple runs and interleaved band actions)
-   - Confidence: medium (the isolated-run rule); low (the order of losses, the pass count)
+   - Backing: `measurable` (B2, B14 for multiple runs and interleaved band actions,
+     B15 for post-collapse endpoints, repeated checks and the combined cap)
+   - Confidence: high (collapsed-pier exclusion and post-change searches); medium (the
+     isolated-run rule and repeated-check consequence); low (the order of losses, the pass count)
 
 8. **The bridge-destroyed event.** S-0011 claim 20's event code is raised from two places: from claim
    7's passes for a high bridge, and once per destroyed low strip (claim 15).
@@ -325,7 +342,10 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       flag are cleared on deck during this move, and the corresponding ground mark is made
       immediately. There is no deferred transfer after claim 11. Movement reservations are
       cleared at the locomotor's heading point, when it has one, at that point's stored height,
-      as well as the ordinary listing change's marks. These are the ordinary flag/position
+      as well as the ordinary listing change's marks. For drive and ship locomotion that
+      stored height is the retained track-start height of S-0207 claim 24, not necessarily
+      the object's current height or the deck's height at drop. Curve chaining does not
+      refresh it. These are the ordinary flag/position
       clearing rules, not ownership-counted reservations (S-0209 claim 1).
       No general deck-record reset follows the attempt, landing or repair. Unrelated marks
       remain until their ordinary clearing event. With just a stationary dropped infantry unit
@@ -366,16 +386,24 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     - An object that lands with the bomb mark and positive health then receives a hit equal to its
       current health, distance 0, with the demolition warhead, ignoring defences and carrying the
       no-escape marker, with no attacker and no attacking house. So every object on a lost deck
-      dies on landing unless S-0302 stops that hit. A vehicle landing in water dies under S-0312
-      claim 11.
+      dies on landing unless S-0302 stops that hit. Landing does not spend or clear the bomb
+      mark, even when the object survives. A later fall that adds no new bomb mark still
+      ends with this hit while the retained mark is present. This is one hit per landing,
+      not a hit on every later grounded update. A survivor that later dies within S-0312
+      claim 11's height window over water still qualifies for that claim's marked death
+      effects, even though its marked fall ended earlier; that death rule does not require
+      the object to be falling at death.
     - Over a whole drop from a deck (416 leptons above the terrain under it), with no attached
       animation, *v* starting at 0 and the floor of F3 not reached, the object lands on its 30th
       update (Formulas F3).
-    - Backing: `measurable` (B3, including its prior-fall and turn-order variants) for ordinary and prior
-      parachute drops; `unmeasured` here for a non-parachute attachment selecting the slow
+    - Backing: `measurable` (B3, including its prior-fall, turn-order and retained-mark variants) for ordinary and prior
+      parachute drops and retention after survival; `unmeasured` for a later fall without
+      a new mark and a later low-water death after survival: B3 specifies the conditional
+      comparisons, but no stock-play fixture yet guarantees those transitions without
+      another mark writer. Also `unmeasured` here for a non-parachute attachment selecting the slow
       recurrence, because B3 establishes no fixture that keeps such an attachment during a
       deck drop (S-0522 claim 12 owns that shared condition)
-    - Confidence: high (fall arithmetic, landing kill); medium (start from a stored rate)
+    - Confidence: high (fall arithmetic, landing hit and retained bomb mark); medium (start from a stored rate)
 
 11. **Units heading onto a lost deck.** After an attempt has made its blow-ups, each blown-up cell
     *c* whose deck-layer occupancy record (S-0209) is not empty is checked once more.
@@ -393,7 +421,15 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
         not prevent the heading-point test. Both drive/ship tests require a current heading
         point to be present, even when using the unfinished track's endpoint.
       - A heading point keeps the height assigned when it was chosen. The test does not
-        resample the cell's new surface after destruction. S-0208 claim 18 already gives the
+        resample the cell's new surface after destruction. For drive and ship, S-0207 claim 24
+        supplies the retained height from track start, unchanged by curve chaining. Thus a
+        vehicle travelling under a level bridge on level ground, with its track begun at
+        that ground height, fails both deck-height tests: a deck-bearing endpoint does not
+        lift its heading point. Ground-layer membership alone is not a refusal, however.
+        If the retained starting height is within 104 leptons of *P* but the vehicle has
+        since descended beyond that tolerance, the heading-point test can still hit it
+        while the current-height track test fails. The heading cell must still be *c*,
+        and the nonempty deck-record gate above still applies. S-0208 claim 18 already gives the
         ordinary walker's cell-destination height. An object destination is not excluded:
         it counts when the locomotor has a qualifying heading point or track endpoint, even
         when the final object or cell destination is elsewhere.
@@ -680,15 +716,7 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       | 5 | (2, 0) | decreasing y |
       | 6 to 15 | no probe | no repair cursor |
 
-      At each probe take the first bridge link in creation order within 3 cells, using
-      S-0212 claim 3 and its Terms' link-distance rule. Low links are not excluded. No such
-      link means no repair cursor; this test does not rebuild links. A disabled link offers
-      repair immediately. An enabled link offers repair too when neither endpoint equals the
-      current traversal cell (`quirks.bridge_cursor_unrelated_link`). Otherwise the traversal
-      cell becomes its opposite endpoint, and the next probe is one cell from there in the
-      table's direction. Thus the search can traverse several enabled links before finding
-      a disabled one. The initial traversal cell equals the initial probe. It is not a
-      nearest-link test and not a test of just one link near the hut.
+      At every probe, the selected link is the first link in creation order whose link-distance from the probe is at most 3 cells, as defined by S-0212 claim 3 and its Terms; low links are eligible. If no such link exists, there is no repair cursor, and this test creates no links. A selected disabled link offers repair. A selected enabled link also offers repair when neither endpoint is the current traversal cell (`quirks.bridge_cursor_unrelated_link`). Otherwise, the traversal continues from the selected link's opposite endpoint, with the next probe one cell away in the direction specified by the table. The initial traversal cell is the initial probe. Consequently, a chain of enabled links can lead to a later disabled link. Selection follows creation order, not nearest distance, and is not limited to one link near the hut.
     Cursor and actual repair may therefore select different bridges in mixed layouts.
     - Backing: `measurable` (B13 and its mixed-candidate and link-chain variants)
     - Confidence: high for candidate order and table; medium for link traversal
@@ -828,6 +856,11 @@ cited above. Passenger escape from a destroyed transport remains unresolved here
   ignores a loss notice arriving on that same side (claim 6). The usual way a section next to a
   pier is lost — damaged first, then lost — therefore leaves the pier only chipped, not damaged.
   Off ("fixed"): a loss notice turns any pier in state 0 to 2 into state 3.
+- `quirks.collapsed_pier_span_search` (proposed, default on, original): claim 7 passes
+  over collapsed piers at both endpoints, so collapse can combine former spans and make
+  both named searches check the combined extent, subject to its combined length cap.
+  Off: a collapsed pier remains eligible at the same start/far sub-tiles as a live pier,
+  preserving the former span boundaries for these checks. This changes gameplay, not just drawing.
 - `quirks.bridge_span_cap` (default on): a span whose far piece lies 30 or more cell steps from its
   start piece is never checked by claim 7 and cannot be repaired (claim 19). Off: no limit.
 - `quirks.bridge_event_band_short` (default on): the last cell along a band is skipped, and a
@@ -888,6 +921,9 @@ cited above. Passenger escape from a destroyed transport remains unresolved here
 | Map terrain blocks and theater tile catalogue | terrain tile number, sub-tile and tile width | connected pier replacement and cursor tile origin (Terms, claim 21) | integer tile/sub-tile identities and catalogue width, S-0012 claim 6 and S-0010 claim 3 | cited specs' empty-cell rules; no separate pier-cell list |
 | Map overlay blocks | high-bridge placements | responsible section (claim 2) | placement order and cell marking, S-0009 claim 12 and S-0211 claim 15 | no responsible section without a placement |
 | None | none | drop timing, mark clearing, low-change entry settings, heading tolerance, hut search centres and cell-target loss (claims 9 to 11, 15, 16, 18, 22) | fixed behaviour, not imported options | not applicable |
+| None | none | retained bomb mark across surviving landings and later falls (claim 10, Q-0677) | runtime state, not an imported landing option | initially unmarked; landing does not clear it |
+| None | none | drive/ship heading height used for drop reservations and heading hits (claims 9 and 11, Q-0676) | integer world-height leptons; S-0207 claim 24 supplies assignment and retention | no independent height key |
+| None | none | post-collapse start/far endpoint eligibility and repeated combined-extent checks (claims 6 and 7, Q-0678) | fixed searches over runtime tile states; pier identities use the theater rows above | no per-collapse endpoint override |
 
 **Piece-role binding.** Hₓ and Hᵧ are the high-overlay identities whose marking directions
 are map north and map west respectively (S-0211 claim 15). The pair identified by the original
@@ -925,9 +961,7 @@ the overlay position and data value of every watched cell, the tile and height l
 cells, object deaths with their tick, object heights, trigger raises, and, where a scenario says
 so, the number of draws taken from a named random stream. Use one human player and one bystander
 computer player kept outside the observed bridge, hut and approach cells, with the glossary's void
-rule. Record the chosen speed and replay each deterministic sub-test three times. The proposed tools
-are scripted input with video capture and a read-only state and random-stream recorder. These are
-proposals, not measurements already performed. Void timing and survival tests if the destruction
+rule. Record the chosen speed and replay each deterministic sub-test three times. The measurement method is a repeatable input procedure with observation of game state and random-stream draws. This is a proposal, not a measurement already performed. Void timing and survival tests if the destruction
 weapon itself kills a watched unit before the bridge changes, or an unrelated actor affects it.
 
 - **B1 (claims 1 to 5).** *Setup:* a small test map with one straight high bridge along x (7
@@ -982,6 +1016,25 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     suppressed due behaviour, firing in descent, erased order at drop, or a surviving phantom
     mark falsifies the corresponding rule. Record retained target/path state immediately
     at drop, separately from later behaviour changes. Three runs per kind and order.
+  - *Retained-mark variant (Q-0677):* give a deck unit temporary invulnerability and
+    destroy its deck over land. Record health, falling state, bomb mark and landing hit
+    through landing and several grounded updates. Expected: the hit is attempted once,
+    the protected unit survives, and the bomb mark stays set afterwards; no further
+    landing hit occurs while it remains grounded. Clearing the mark at landing, losing
+    it when protection ends, or repeatedly hitting the grounded survivor falsifies this
+    rule. Repeat three times. A second bridge collapse is not a distinguishing later-fall
+    test because it sets the mark anew. For a conditional later-fall test, record the
+    same survivor beginning an ordinary fall that does not write a new bomb mark, and
+    verify the absence of such a writer throughout. Expected: another landing hit, now
+    fatal without protection; no hit with positive health falsifies the retained-mark
+    consequence. A parachute fall is a candidate, but no stock-play route returning the
+    same survivor to such a drop is established here. For the later-death comparison,
+    require a surviving marked vehicle within 10 leptons over water, no intervening
+    mark writer, and protection expired. Kill it with an ordinary hit. Expected: S-0312
+    claim 11's wake/splash effects rather than ordinary vehicle death effects. Record
+    mark, height, water state and death animations; ordinary effects with those gates
+    satisfied falsify the consequence. Until stock fixtures establish these transitions,
+    these two conditional comparisons remain unmeasured, not completed oracle runs.
   - *Prior-fall variant:* let a paradropped unit land, move it onto the deck, and destroy the
     deck. Record its fall rate at the end of the parachute drop and its next drop's first
     displacement. Expected: the latter equals the retained rate, and later heights follow F3
@@ -1043,6 +1096,21 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     changes the floor-height test instead accepts the floor point and rejects the deck point.
     A result depending only on the final cell, the presence of an object destination, or
     a freshly resampled surface falsifies the corresponding rule. Three runs per variant.
+  - *Retained starting-height variant (Q-0676):* drive one tank on level ground under
+    a high deck toward the watched cell and a second on the deck toward it. Record each
+    track's starting world height, retained heading height, current height, heading cell
+    and track endpoint, with the nonempty deck-record gate verified separately. The
+    ground approach started at the floor fails both deck-height tests; the deck-height
+    approach qualifies. Repeat with a descending approach whose retained starting height
+    is within 104 leptons of the lost-deck point but whose current height is more than
+    104 leptons below it. When its heading cell is the watched cell, the heading test
+    still qualifies despite the failed current-height track test. Use recorder-verified
+    positions and void a run lacking this separating geometry. Record dropped movers'
+    reservation clearing too: the layer follows the retained heading height under claim 9,
+    not a substitution of the then-current vehicle height. A floor-start heading lifted
+    merely because its target carries a deck, rejection of the separating heading case,
+    or clearing based on current height instead of stored height falsifies that rule.
+    Repeat three times per fixture, including a chained curve retaining its start height.
   - *Falsified by:* a heading vehicle surviving with the nonempty-record condition satisfied,
     a heading hit despite the empty-record condition, the third vehicle dying, or reversed
     death ordering. The other locomotion kinds remain outside this scenario's backing.
@@ -1269,8 +1337,19 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
   to the reference height minus 4; repair raises only the three column cells as claim 19 says.
   In a named theater-data test make the non-collapsed pier ranges overlap: a direct attempt
   uses x. Also test an x-collapsed/y-live overlap: the live y range wins.
-  Tag both adjacent spans repeatably and arrange isolated runs on both: start-side span
-  actions complete before far-side span actions. A separated start piece beyond a non-bridge
+  Tag both former adjacent spans repeatably and arrange gaps without tag actions that
+  change bridge state. Collapse their shared pier directly. Record the tile state at each
+  search, selected endpoints, section losses and tag raises. Expected: searches occur after
+  state 4 is installed and reject that pier at both ends. When the two outer ramps are within
+  29 steps, both searches select the same combined extent. For *n* isolated losses during
+  the first check, every eligible cell in the combined band receives *n* + 2 raises in total,
+  the last from the second check. Use the recorder to distinguish its repeated band from
+  two former-span bands. With outer ramps more than 29 steps apart but each former span
+  individually within 29, neither check raises a band or loses isolated sections. Repeat
+  with a pier already collapsed before a later far-side section loss: it still supplies
+  neither endpoint. Accepting state 4, searching before its installation, retaining the
+  former pier boundary, a different repeated-band count without intervening state changes,
+  or checking the over-cap combined extent falsifies the corresponding rule. A separated start piece beyond a non-bridge
   gap remains eligible up to the map boundary; no eight-neighbour bridge candidate gives no
   span check. Any contrary cell set, axis, band order or bounded start search falsifies the
   corresponding claim. For overlapping deck marks, swap placement order of parallel high

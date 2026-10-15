@@ -1,9 +1,9 @@
 ---
 id: Q-0677
 title: Whether the bomb mark stays on an object that survives its landing
-status: open
+status: answered
 related: [S-0511, S-0312, S-0503]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need
