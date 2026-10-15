@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::combat::check::Answer;
 use crate::rules::{Behaviour, Kind};
-use crate::world::{Layer, ObjectId, Pos, Target, World};
+use crate::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 
 // ---------------------------------------------------------------------------
 // Rules
@@ -2147,6 +2147,48 @@ fn arrival_edge_cell(w: &mut World, id: ObjectId, opposite: bool) -> Option<Cell
     Some(edge_cell_on(w, e))
 }
 
+/// A cell on house `h`'s arrival edge (S-0522 claim 5), selected with the
+/// draws of S-0522 claim 4: a paradrop or spy plane's arrival cell.
+pub fn house_edge_cell(w: &mut World, h: HouseId) -> CellXY {
+    // spec: S-0522 claim 5 (the computed edge; a map section's named edge is not read, S-0522 Open questions 1)
+    let e = w
+        .houses
+        .get(usize::from(h.0))
+        .map_or(0, |x| x.computed_edge);
+    edge_cell_on(w, e)
+}
+
+/// The spy plane's camera (S-0513 claim 44) in a processing of its
+/// approach or overfly: when it had its destination at the start of the
+/// processing and its ground distance to the target is at most its
+/// primary weapon's range. `sound` plays the camera sound (approach).
+fn spy_camera(w: &mut World, o: &crate::world::Object, id: ObjectId, sound: bool) {
+    let (Some(tg), Some(_)) = (o.target, o.dest) else {
+        return;
+    };
+    let Some(wp) = crate::combat::weapon::slot_weapon(w, id, 0) else {
+        // spec: S-0513 claim 44 (a spy type with no primary weapon gives no camera; our engine warns, departure)
+        w.note("S-0513 claim 44: a spy plane has no primary weapon; it takes no camera");
+        return;
+    };
+    let (range, damage) = {
+        let wr = w.rules().combat.weapon(wp);
+        (wr.range, wr.damage)
+    };
+    // spec: S-0513 claim 44 (the ground distance to the target, S-0204 claim 6, at most the primary weapon's range)
+    if planar(w, o.pos, crate::process::target_pos(w, tg)) > range {
+        return;
+    }
+    // spec: S-0513 claim 44 (the radius in cells is the primary weapon's damage)
+    crate::econ::shroud::camera(w, id, damage);
+    if sound {
+        let owner = o.owner;
+        let p = w.obj(id).map(|x| x.pos);
+        // spec: S-0513 claim 44 (in approach each camera plays the camera sound at the plane; presentation)
+        crate::superweapons::event(w, crate::superweapons::SwEvent::Camera, owner, None, p);
+    }
+}
+
 /// The pad's service step (claims 26 to 28), in the pad building's turn.
 pub fn pad_turn(w: &mut World, k: ObjectId) {
     let Some(next) = w
@@ -2471,6 +2513,10 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         Some(Behaviour::Retreat) => retreat(w, id),
         Some(Behaviour::SpyPlaneApproach) => spy_approach(w, id),
         Some(Behaviour::SpyPlaneOverfly) => spy_overfly(w, id),
+        // Seam: the paradrop plane's approach, passes and drops (S-0522 claims 6 to 15).
+        Some(Behaviour::ParadropApproach | Behaviour::ParadropOverfly) => {
+            crate::paradrop::drop_passengers(w, id).unwrap_or(NO_RULE_DELAY)
+        }
         // spec: S-0507 claim 13 (an air transport in unload)
         Some(Behaviour::Unload) => crate::transport::process_air_unload(w, id),
         _ => NO_RULE_DELAY,
@@ -2650,6 +2696,8 @@ fn spy_approach(w: &mut World, id: ObjectId) -> i32 {
         return NO_RULE_DELAY;
     };
     let frames = w.rules().air.camera_frames;
+    // spec: S-0513 claim 44 (a camera in a processing of spy-plane approach in which it already has its destination, with the camera sound)
+    spy_camera(w, &o, id, true);
     // spec: S-0501 claim 34 (the ground distance to the target below 769 leptons, or no target: overfly queued, the run lock held and an exit destination chosen)
     let close = match o.target {
         None => true,
@@ -2669,8 +2717,12 @@ fn spy_approach(w: &mut World, id: ObjectId) -> i32 {
     frames
 }
 
-/// *Spy-plane overfly* (claim 34; the reveal belongs to a planned spec).
+/// *Spy-plane overfly* (claim 34; the camera is S-0513 claim 44).
 fn spy_overfly(w: &mut World, id: ObjectId) -> i32 {
+    if let Some(o) = w.obj(id).cloned() {
+        // spec: S-0513 claim 44 (a camera in every processing of spy-plane overfly in which the gate holds; no sound)
+        spy_camera(w, &o, id, false);
+    }
     if w.obj(id).is_some_and(|o| o.dest.is_none()) {
         // spec: S-0501 claim 34 (an absent destination is replaced by a new choice on the exit edge)
         let c = arrival_edge_cell(w, id, true);

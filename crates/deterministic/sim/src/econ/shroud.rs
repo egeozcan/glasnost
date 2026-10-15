@@ -898,11 +898,18 @@ fn remove_cells(w: &mut World, h: HouseId, cells: &[u32]) {
 
 /// Adds an object's sight (claim 8).
 fn add_sight(w: &mut World, id: ObjectId) {
+    add_sight_with(w, id, None);
+}
+
+/// Adds an object's sight, with the radius `radius` in cells instead of
+/// the computed one when given (a camera, S-0513 claim 44).
+fn add_sight_with(w: &mut World, id: ObjectId, radius: Option<i32>) {
     let Some(o) = w.obj(id) else { return };
     let (owner, cell) = (o.owner, o.pos.cell());
     let houses = sight_houses(w, id);
-    let cells =
-        sight_radius(w, id).map_or_else(Vec::new, |r| sight_cells(w, sight_point(w, id), r));
+    let cells = radius
+        .or_else(|| sight_radius(w, id))
+        .map_or_else(Vec::new, |r| sight_cells(w, sight_point(w, id), r));
     for &h in &houses {
         add_cells(w, h, &cells);
     }
@@ -924,6 +931,23 @@ fn remove_sight(w: &mut World, id: ObjectId) {
     for &h in &a.houses {
         remove_cells(w, h, &a.cells);
     }
+}
+
+/// A camera (S-0513 claim 44): the object's sight is replaced by one
+/// centred on its own position, with its height, whose radius in cells is
+/// `radius` instead of the computed sight radius; a radius of 0 or less
+/// gives the ordinary radius. It is a sight held for the owner, not an
+/// area reveal, so the ordinary refresh may later restore the ordinary
+/// radius and the sight ends with the object (claim 8).
+pub fn camera(w: &mut World, id: ObjectId, radius: i32) {
+    if !may_hold(w, id) {
+        // spec: S-0409 claim 10 (no sight while outside the usable area)
+        return;
+    }
+    // spec: S-0513 claim 44 (a camera replaces the plane's sight)
+    remove_sight(w, id);
+    // spec: S-0513 claim 44 (the radius is the primary weapon's damage; a damage of 0 gives the ordinary radius; the cap of 10 is S-0409 claim 6's, in sight_cells)
+    add_sight_with(w, id, (radius > 0).then_some(radius));
 }
 
 /// Whether an object may hold a sight now (claims 8 and 10): on the map

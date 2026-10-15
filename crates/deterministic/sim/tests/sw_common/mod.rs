@@ -25,7 +25,10 @@
 //!   projectile UpShot with detonation altitude 900), NukePayload (falling,
 //!   projectile Fall with detonation altitude 50 000, warhead HE), Camera (the spy plane's: damage 4,
 //!   range 3);
-//! - aircraft SPYP; vehicle BLOB (organic); infantry JUMPER (organic and
+//! - aircraft SPYP and PDPLANE (unarmed); paradrop lists: first side
+//!   group WALKER ×1, WALKER ×1; second WALKER ×3; third JUMPER ×2;
+//!   American WALKER ×1, JUMPER ×2;
+//! - vehicle BLOB (organic); infantry JUMPER (organic and
 //!   teleporter);
 //! - storm values: countdown 30, duration 60, hit period 10, scatter
 //!   period 5, spread 6, separation 2, damage 50, warhead Bolt, clouds
@@ -141,7 +144,7 @@ pub fn ruleset() -> Ruleset {
             t.pre_dependent = Some("ChronoSphere".into());
             t
         }),
-        ("DROP", sw(Some("ParaDrop"), Some("ParaDrop"))),
+        ("DROP", sw(Some("ParachuteDrop"), Some("ParaDrop"))),
         ("SPY", sw(Some("SpyAircraft"), Some("SpyPlane"))),
         ("SHIELD", {
             let mut t = sw(Some("ForceShield"), Some("ForceShield"));
@@ -198,6 +201,12 @@ pub fn ruleset() -> Ruleset {
         g.force_shield_invoke_anim = Some("SHIELDA".into());
         g.ally_para_drop_inf = Some(vec!["WALKER".into(), "WALKER".into()]);
         g.ally_para_drop_num = Some(vec![1, 1]);
+        g.sov_para_drop_inf = Some(vec!["WALKER".into()]);
+        g.sov_para_drop_num = Some(vec![3]);
+        g.yuri_para_drop_inf = Some(vec!["JUMPER".into()]);
+        g.yuri_para_drop_num = Some(vec![2]);
+        g.amer_para_drop_inf = Some(vec!["WALKER".into(), "JUMPER".into()]);
+        g.amer_para_drop_num = Some(vec![1, 2]);
     }
     let mut silo = building(Some("STRIKE"), None);
     silo.econ.nuke_silo = Some(true);
@@ -312,6 +321,17 @@ pub fn ruleset() -> Ruleset {
     spyp.sight = Some(2);
     r.sim.aircraft.insert("SPYP".into(), spyp);
     reg(&mut r, "aircraft", "SPYP");
+    r.sim.aircraft.insert(
+        "PDPLANE".into(),
+        UnitType {
+            strength: Some(100),
+            speed: Some(30),
+            rot: Some(12),
+            locomotor: Some(Locomotor::Fly),
+            ..Default::default()
+        },
+    );
+    reg(&mut r, "aircraft", "PDPLANE");
     let mut blob = UnitType {
         strength: Some(200),
         speed: Some(6),

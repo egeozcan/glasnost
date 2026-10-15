@@ -298,9 +298,15 @@ fn effect(
                 super::warp::launch(w, h, s, cell);
             }
         }
-        Some(SwKind::Paradrop) => super::planes::paradrop(w, h, cell, false),
-        Some(SwKind::AmerParadrop) => super::planes::paradrop(w, h, cell, true),
-        Some(SwKind::SpyPlane) => super::planes::spy_plane(w, h, cell),
+        Some(SwKind::Paradrop) => {
+            super::planes::paradrop(w, h, cell, false);
+        }
+        Some(SwKind::AmerParadrop) => {
+            super::planes::paradrop(w, h, cell, true);
+        }
+        Some(SwKind::SpyPlane) => {
+            super::planes::spy_plane(w, h, cell);
+        }
         Some(SwKind::ForceShield) => super::protect::force_shield(w, h, i, cell),
         Some(k @ (SwKind::Dominator | SwKind::Genetic | SwKind::PsychicReveal)) => {
             yuri_seam(w, h, k, cell);

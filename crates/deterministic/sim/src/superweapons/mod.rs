@@ -242,6 +242,63 @@ pub struct SwRules {
     pub ally_para: (usize, usize),
     /// The camera sound.
     pub camera_sound: Option<String>,
+    /// The paradrop plane type `PDPLANE`, by aircraft registration index.
+    pub para_plane: Option<u32>,
+    /// The payload lists (S-0522 claim 2) of the first, second and third
+    /// side groups and of the American paradrop, in that order: each
+    /// entry one plane carrying `count` units of an infantry type; `None`
+    /// sends no plane at all.
+    pub payloads: [Option<Vec<(u32, i32)>>; 4], // spec: S-0522 Import mapping (four payload lists)
+}
+
+/// The fixed paradrop plane type name (S-0522 Import mapping).
+// spec: S-0522 Import mapping (aircraft type ID `PDPLANE`, a name fixed in the original)
+pub const PARA_PLANE: &str = "PDPLANE";
+
+/// One payload list (S-0522 claims 2 and 3). `partial` is the second side
+/// group's list, whose shorter count list sends the entries that have a
+/// count.
+fn payload_list(
+    label: &str,
+    inf: &Option<Vec<String>>,
+    num: &Option<Vec<i32>>,
+    partial: bool,
+    names: &BTreeMap<(Kind, String), u32>,
+    warnings: &mut Vec<String>,
+) -> Option<Vec<(u32, i32)>> {
+    // spec: S-0522 Import mapping (absent lists: empty, no plane)
+    let inf = inf.clone().unwrap_or_default();
+    let num = num.clone().unwrap_or_default();
+    if inf.len() != num.len() {
+        if !partial || num.len() > inf.len() {
+            if !partial {
+                // spec: S-0522 claim 2 (the American, first and third side groups' lists of different lengths: no plane at all)
+                warnings.push(format!("S-0522 claim 2: paradrop list {label} has {} types and {} counts; it sends no plane", inf.len(), num.len()));
+                return None;
+            }
+        } else {
+            // spec: S-0522 claim 2 (the second side group's shorter count list: planes for the entries that have a count; the importer warns, departure)
+            warnings.push(format!("S-0522 claim 2: paradrop list {label} has fewer counts than types; the entries without a count send no plane"));
+        }
+    }
+    let mut out = Vec::new();
+    // spec: S-0522 claim 2 (a count list longer than the infantry list has its extra counts ignored)
+    for (t, &n) in inf.iter().zip(num.iter()) {
+        let Some(&ti) = names.get(&(Kind::Infantry, t.clone())) else {
+            // Q-0736 interim: an entry naming no infantry type sends no plane; the importer warns.
+            warnings.push(format!("S-0522 claim 2 (Q-0736): paradrop list {label} names {t}, which is no infantry type; that entry sends no plane"));
+            continue;
+        };
+        let n = if n < 0 {
+            // spec: S-0522 claim 3 (a negative count is treated as 0, with an importer warning; design)
+            warnings.push(format!("S-0522 claim 3: paradrop list {label} has the negative count {n} for {t}; treated as 0"));
+            0
+        } else {
+            n
+        };
+        out.push((ti, n));
+    }
+    Some(out)
 }
 
 /// The fixed payload weapon name (S-0513 Import mapping).
@@ -440,6 +497,42 @@ impl SwRules {
             // spec: S-0513 Edge cases (a missing payload weapon: no projectile; the importer warns)
             warnings.push("S-0513 Edge cases: no weapon NukePayload; nuclear strikes create no falling missile".to_owned());
         }
+        let mut w2 = Vec::new();
+        let payloads = [
+            payload_list(
+                "Ally",
+                &g.ally_para_drop_inf,
+                &g.ally_para_drop_num,
+                false,
+                names,
+                &mut w2,
+            ),
+            payload_list(
+                "Sov",
+                &g.sov_para_drop_inf,
+                &g.sov_para_drop_num,
+                true,
+                names,
+                &mut w2,
+            ),
+            payload_list(
+                "Yuri",
+                &g.yuri_para_drop_inf,
+                &g.yuri_para_drop_num,
+                false,
+                names,
+                &mut w2,
+            ),
+            payload_list(
+                "Amer",
+                &g.amer_para_drop_inf,
+                &g.amer_para_drop_num,
+                false,
+                names,
+                &mut w2,
+            ),
+        ];
+        warnings.extend(w2);
         let para_inf = g.ally_para_drop_inf.as_ref().map_or(0, Vec::len);
         let para_num = g.ally_para_drop_num.as_ref().map_or(0, Vec::len);
         Self {
@@ -473,6 +566,8 @@ impl SwRules {
             spy_plane: names.get(&(Kind::Aircraft, SPY_PLANE.to_owned())).copied(),
             ally_para: (para_inf, para_num),
             camera_sound: g.spy_plane_camera.clone(),
+            para_plane: names.get(&(Kind::Aircraft, PARA_PLANE.to_owned())).copied(),
+            payloads,
         }
     }
 
