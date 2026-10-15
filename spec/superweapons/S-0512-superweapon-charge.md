@@ -2,7 +2,7 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -420,6 +420,14 @@ between a fire order and the effect.
     - Backing: `measurable` (scenario X10)
     - Confidence: medium
 
+23. **Aim action and crate selection.** A superweapon type's aim action is imported separately
+    from its effect kind; neither implies the other. The nuclear crate's type selection uses the
+    nuke aim action, not the missile kind, subject to the separate kind-presence test of S-0520
+    claim 21. A newly registered type has no action unless one is imported. An absent action
+    keeps the previous layer's action; an unrecognised action word instead sets no action.
+    - Backing: `measurable` (scenario X13)
+    - Confidence: high
+
 ## Formulas
 
 Floating-point results follow S-0205 claims 4, 5 and 7: double precision, each arithmetic result
@@ -552,6 +560,7 @@ Observable ordering:
 | `PostClick` (rules, superweapon) | second-stage flag | boolean | no |
 | `PreDependent` (rules, superweapon) | second stage's link: a kind word as for `Type`; kind numbers start at 0 in the order below | word | none |
 | `Type` (rules, superweapon) | superweapon kind, matched without regard to case; an unknown word keeps the previous kind | word, mapping below | none (no kind) |
+| `Action` (rules, superweapon) | aim action, claim 23; `Nuke` maps to the nuke action used by S-0520 claim 21, `None` maps to no action | action word, case-insensitive; an unknown word sets no action | keeps previous action; initially no action |
 | `UseChargeDrain` (rules, superweapon) | drain-mode flag, claim 19 | boolean | no |
 | `ManualControl` (rules, superweapon) | manual-charge flag, claim 20 | boolean | no |
 | `AuxBuilding` (rules, superweapon) | auxiliary building type for the giving-building test | building type name | none |
@@ -829,6 +838,25 @@ to the user's bench. Where automation is unavailable, tick-labelled video plus m
   converted value, not rounding to nearest.
 - *Falsified if:* any grant, count, loss or duration differs. Use the recorded checks, not assumed
   immediate changes, for the auxiliary condition.
+
+**X13: crate action mapping and default (claim 23).**
+- *Setup:* named test map `S0512-crate-action.map`, following S-0520 scenario CR15, with fixed
+  nuclear crates and the crate setting off. Keep a missile-kind type present and give a separate,
+  earlier test type a different effect kind. Only that earlier type receives the nuke action.
+  Use fresh games and records for each pickup, with no prior grant of the expected type.
+- *Procedure:* collect a crate and record which icon becomes ready. Repeat with mixed-case
+  spelling of the action word. In separate variants, omit the action on the newly registered
+  earlier type, explicitly choose no action, or supply an unrecognised word. Keep a later
+  nuke-action type for these controls, avoiding S-0520 claim 21's unsafe missing-action case.
+  Finally import the earlier type's nuke action in a rules layer and either omit its action in
+  the map layer or replace it with an unrecognised word there.
+- *Expected:* the earlier type is granted for either spelling of the nuke action, despite its
+  different kind. Omission on a new type, explicit no action and an unrecognised word leave
+  that type unmatched, so the later type is granted. Layer omission preserves the earlier
+  type's nuke action; an unrecognised map-layer word clears it and selects the later type.
+- *Falsified if:* the kind alone determines the granted type, matching is case-sensitive, a
+  new omitted action matches nuke, omission clears an earlier action, or an unrecognised
+  word retains it. Record sidebar readiness and consumption under S-0520 scenario CR15.
 
 ## Open questions
 
