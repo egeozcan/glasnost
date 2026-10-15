@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 46
+revision: 47
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -495,7 +495,8 @@ Terms used by this spec:
 2. **When an actor processes its behaviour.** On each tick on which an actor's own update runs (its
    turn in the turn pass of S-0203, tick order, which says which objects
    take turns, in which order, and when an object loses a turn), the actor
-   processes its current behaviour if, and only if, all of these hold:
+   processes its current behaviour if, and only if, all of these hold, subject in our engine
+   to the superweapon-warp design exclusion below:
    - the actor is alive and its health is above 0,
    - its processing timer has expired,
    - it is not an infantry unit or vehicle travelling through a tunnel,
@@ -508,11 +509,25 @@ Terms used by this spec:
    On a tick on which the tunnel, erasing or leaving-stage exclusion holds (the last three bullets
    above), the per-tick start of claim 11 takes no effect. On every other tick on which the actor
    does not process, the per-tick start still takes effect: for example on a tick on which only the
-   timer has not expired (claim 3a, scenario B3, case k). The phase-in of a chrono move does
-   not stop processing: an actor processes during its phase-in as at any other time. One edge (low
-   confidence): when a chrono move reaches its phase-in while the actor is being erased, the
-   exclusion ends for an infantry unit at once and for a vehicle when the phase-in ends, although
-   the erasing goes on.
+   timer has not expired (claim 3a, scenario B3, case k). A teleporting locomotor's own
+   phase-in does not stop processing: the actor processes under the ordinary eligibility rules.
+
+   **Superweapon warp, engine design.** S-0513 claim 51 excludes ordinary behaviour processing
+   for vehicles, teleporter infantry and landed aircraft from the first pending update through
+   arrival effects, including departure, every off-map landing retry and placement, whether
+   successful or failed. No ordinary processing occurs before or after warp work on those
+   turns, even for a survivor of the arrival effects. During arrival hold, the hold-end test
+   precedes ordinary behaviour eligibility: processing is permitted under its usual conditions
+   both while the hold continues and on its expiry turn. This is not permission to ignore
+   another exclusion, nor does it suppress the target searches or sensor update intrinsic to
+   the warp (S-0513 claim 39). It is an engine design rule, not confirmed original behaviour,
+   and has no quirk switch. S-0513 claim 48 retains the original-side uncertainty about
+   continuation on pending, departure, retry, placement, arrival-effects and hold turns.
+
+   One original-side edge (low confidence): when a chrono move reaches its phase-in while
+   the actor is being erased, the exclusion ends for an infantry unit at once and for a vehicle
+   when the phase-in ends, although the erasing goes on. This does not override our engine's
+   superweapon-warp design exclusion.
 
    A processing on tick *t* that chooses the delay *d* sets the timer so that it has expired at
    any later turn of the actor on a tick *t*′ with *t*′ − *t* ≥ *d*. The actor processes again on
@@ -527,12 +542,17 @@ Terms used by this spec:
    aircraft's attack-run shots. This does not place all firing before the parasite:
    S-0614 claim 18 distinguishes the later separate firing of infantry and vehicles.
    - Backing: `measurable` (scenarios B1 and B18; S-0514 E11 part a for landed-aircraft erasure,
-     S-0614 scenario P12 for parasite ordering). The second-turn case is `unmeasured`: S-0203
+     S-0614 scenario P12 for parasite ordering). The warp design contract is `measurable`
+     in our engine (S-0513 scenario SW23 part f); the original's unresolved continuation
+     remains `unmeasured` as S-0513 claim 48 states (SW23 parts a to e, incomplete per-kind
+     eligibility evidence). The second-turn case is `unmeasured`: S-0203
      marks the second turn itself as not observable by a recorder. The erasing edge is
      `unmeasured`: it needs an erasing weapon locked onto an actor at the moment its chrono move
      reaches the phase-in, and no setup is known that can time that.
-   - Confidence: high (alive, health, timer and parasite ordering); medium (the tunnel, erasing and leaving-stage
-     exclusions, including landed-aircraft erasure, and that the phase-in does not exclude); low (the second-turn case and the erasing edge)
+   - Confidence: high (alive, health, timer, parasite ordering and the engine design contract),
+     medium (the tunnel, erasing and leaving-stage exclusions, including landed-aircraft erasure,
+     and locomotor phase-in not excluding processing); low (the second-turn case, the erasing
+     edge and matching the original's unresolved superweapon-warp continuation)
 
 3. **A behaviour start is processed at once, unless the processing that caused it chooses later.**
    A behaviour start (start-next, claim 8, or force, claim 9) sets the processing timer to "expired
@@ -4143,9 +4163,17 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   single just above 0.001, so *D*<sub>r</sub> = 0; an actor in *move* or *guard* then has a
   processing tick at least every 2 ticks, and one in *area guard* at least every 5).
   (a) Chrono move: an armed vehicle of the human-controlled house in *guard* is moved by the
-  chronosphere. Expected: during its leaving stage the processing timer's expiry does not move
-  forward and target and destination are empty; during phase-in processing comes at least every
-  5 ticks. Separately, order an armed non-harvester vehicle, given teleporting locomotion by the
+  chronosphere. Expected in the original: during its leaving stage the processing timer's expiry
+  does not move forward and target and destination are empty. Record due behaviour actions
+  separately on pending, departure, retry, placement, arrival-effects and arrival-hold turns,
+  including hold expiry. Original continuation on those turns remains unmeasured under
+  S-0513 claim 48; use its scenario SW23 parts a to e to distinguish the alternatives rather
+  than expecting processing throughout phase-in. In our engine, SW23 part f tests claim 51's
+  design contract: no ordinary processing from the first pending update through arrival
+  effects, then ordinary eligibility after each arrival-hold expiry test, including while
+  still holding. An ordinary processing in an excluded turn, or refusal solely because
+  of arrival hold after that test, falsifies the engine contract. Separately, order an
+  armed non-harvester vehicle, given teleporting locomotion by the
   named test map, to a clear cell 10 cells away. Expected: no leaving stage and no corresponding
   processing exclusion; its jump follows S-0207 claim 20 d, and its phase-in lasts F9 of that
   spec. During phase-in processing continues at least every 5 ticks, whichever of *move*,
@@ -4154,7 +4182,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   and destination empty on those ticks. (c) A test map with a tunnel: an infantry unit and a
   vehicle ordered through it show no processing tick while inside. Falsified by a processing tick
   during the leaving stage, while being erased or inside the tunnel, or by a gap of more than 5
-  ticks between processing ticks during a phase-in. (d) Jumping retaliation target: an armed
+  ticks between processing ticks during a locomotor jump's phase-in. The original's superweapon
+  continuation gaps are not covered by that five-tick expectation. (d) Jumping retaliation target: an armed
   observer first retaliates against an enemy non-harvester teleporting vehicle, then that vehicle
   is moved by a test-map team to another clear cell. Record observer target, suspended behaviour
   and slots on the jump tick. Expected: override reverts on that tick and the jumping vehicle
@@ -5100,8 +5129,10 @@ behavioural edit to them is requested. Also confirm S-0207 claim 20 a/e with S-0
 matching ground-reservation and bridge-record consequences and their shared
 `quirks.teleport_vehicle_ground_reservation`; S-0212 claim 22 with S-0207 claim 15 and
 D17 d3 for immediate fresh search and same-tick follow-up; and S-0208 claim 19 with
-claim 10 here for teleport landing and target-loss/reversion. Retain claim 2's phase-in
-processing, claim 11's unchanged factory ready mark and claim 13's restoration hand-off
+claim 10 here for teleport landing and target-loss/reversion. Retain claim 2's locomotor
+phase-in processing and S-0513 claim 51's distinct superweapon-warp design exclusion through
+arrival effects, with ordinary eligibility after the arrival-hold expiry test; retain
+claim 11's unchanged factory ready mark and claim 13's restoration hand-off
 to S-0207 claim 21; S-0417's release and temporary driving do not supply exceptions to
 them. Confirm claim 33's charging break-off exception with S-0309 claims 1 and 4 and
 S-0518 claim 15. Also retain claim 37's approach trigger, destination retention and processing
