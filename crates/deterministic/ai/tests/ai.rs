@@ -17,8 +17,10 @@ use glasnost_sim::rules::Kind;
 use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 
-/// Ticks a whole synthetic game may take at most.
-const LIMIT: i32 = 40_000;
+/// Ticks a whole synthetic game may take at most. With aircraft in the
+/// army (M6a) a game on the fixture map runs longer: seed 5 ends near
+/// 58 000 ticks.
+const LIMIT: i32 = 70_000;
 
 fn start(seed: u32) -> Game {
     Game::new(
