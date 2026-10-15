@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -152,7 +152,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | Expiry of a building's delayed-kill countdown (claim 16) | yes | no | a recorded demolition-charge planter, if present, otherwise none; not the attacker of the delayed-kill hit | none |
    | The destruction of the objects in contact with a destroyed building (S-0312, claim 17) | yes | yes | none | none |
    | The impact of an object that crashes while alive (S-0312, claim 16) | yes | yes | none | none |
-   | The elimination of a house's remaining objects, and the destruction of a bridge section (their specs) | yes | yes | none | none |
+   | The elimination of a house's remaining objects (S-0414 claim 5) | yes | yes | none | none |
+   | Bridge destruction: ground-layer hits, landing hits after a deck drop, and low-strip kill checks (S-0511 claims 9, 10 and 15) | yes | yes | none | none |
    | Crushing by trains (S-0210) | yes | S-0210 says | S-0210 says | S-0210 says |
    | The damage of a damaging animation, such as a burning one (S-0109, claim 17) | not traced | not traced | not traced | not traced |
 
@@ -190,14 +191,13 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      claim 16 and D13 parts e to h; the contact destruction
      and the crash impact through S-0312's scenarios D11 and D12; house elimination through
      S-0414 claim 5 and its scenario V11; parasite deliveries through S-0614 claims 6 and 10,
-     scenarios P1 and P6, and D31 below for the markers, attacker and absent attacking house),
+     scenarios P1 and P6, and D31 below for the markers, attacker and absent attacking house; also
+     bridge-destruction hits through S-0511 claims 9, 10 and 15 and scenarios B3, B5 and B6),
      `unmeasured` (a damaging animation's row:
      its hit metadata is not established, so no expected outcome can yet be supplied for a
      discriminating test; a firer removed
      from the game in flight by some means other than a killing hit or a cloak: no such means is
-     identified, so no scenario can set it up; the markers, attacker and house of bridge-section
-     destruction: the affected objects and the bridge-piece rules that deliver those hits are
-     not established, so no isolated test of those values is specified; the wave's
+     identified, so no scenario can set it up; the wave's
      attacking house column: a wave kill credits the attacker whether the wave carries its
      firer's house or none (claim 14), so a wave that carries its firer's house is not told apart
      from one that carries none; the wave's no-escape marker: D24 part f observes credit but
@@ -211,11 +211,11 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
      the trigger kill, the contact destruction, the crash impact and the wave; the ore burst's
      no-escape marker, like other detonations; the elimination row, owned by S-0414 claim 5,
-     and the parasite-delivery row),
+     the parasite-delivery row and the bridge-destruction row),
      low (the storm bolt,
      which the superweapon specs own; the ore burst's attacker and house, which follow from
      claim 20 having no source object and house; the damaging-animation row, which is
-     not traced; the bridge row, which its owning spec must confirm; that the detonations of a
+     not traced; that the detonations of a
      firer that starts to cloak carry neither attacker nor house; that those of a firer loaded into
      a closed transport still carry it; the other believed scripted sources without established
      setups)
@@ -516,9 +516,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    a demolition warhead of infantry-death kind 9 (claim 17). S-0011's departure for the survivor (damage it once per
    firing and go on) and its importer warning cover all these survivor cases. At hand-off,
    confirm this survivor coverage together with S-0011 claim 27, including the distinction
-   between general immunity and an immune bridge repair hut. S-0011 claim 27 must replace
-   its airborne wording and unsettled height reference with the positive-height-above-the-surface
-   test of claim 17; it is not S-0308's airborne-state test. The zero-amount
+   between general immunity and an immune bridge repair hut and the positive-height-above-the-surface
+   test of claim 17, which S-0011 claim 27 also states; it is not S-0308's airborne-state test. The zero-amount
    row stops a trigger kill only in the positive-height case just named: every other
    target has health at the trigger kill, so the amount is above 0. The self-damage
    row cannot stop a trigger kill (it needs an attacker), and the two no-health rows do not apply to
@@ -616,7 +615,7 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     claim 10). This claim owns two of them: the damage effect of claim 13, and, for a target whose type can disguise itself but does not keep its
     disguise permanently, the loss of its current disguise and a disguise-disruption countdown of
     2*m*′ ticks, *m*′ the health it lost, after any hit that reports *unchanged*, *now yellow* or
-    *now red* (the disguise spec owns both). It also owns one reaction of a building: on *now
+    *now red* (S-0516 claims 33–34 own disguise loss and re-disguise eligibility). It also owns one reaction of a building: on *now
     yellow* the intensity of its light source is scaled by a fixed factor (D11, part c). Two
     more are pointers only, owned elsewhere and not claims of this spec: the trigger events that
     a hit sets off through the target's tag, whose list S-0011 leaves to a later revision, and the
@@ -633,13 +632,11 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     - Backing: `measurable` (scenario D11 for the thresholds, its parts a to c for the yellow
       threshold, the red threshold and the precedence of red, and for the light source; part d
       for the imported precision and the 601 to 600 crossing; D23 for
-      the loss of the disguise); `unmeasured` (the length of the disguise-disruption countdown: its only effect is on when
-      the unit can disguise again, which the disguise spec owns and which is not traced here,
-      so no observable is known; the countdown is stated here so that spec can measure it; and the
-      post-mortem result after a reaction removes the target: the result that a hit reports then
+      the loss of the disguise and, in part h with S-0516 scenario CS14 part c, the length of
+      the disguise-disruption countdown); `unmeasured` (the post-mortem result after a reaction removes the target: the result that a hit reports then
       has no further effect that this spec or its owners could observe, so it stays a documented
       behaviour in case an effect is found)
-    - Confidence: high (the thresholds); medium (the light source and the loss of the disguise); low (the countdown, post-mortem after a reaction)
+    - Confidence: high (the thresholds); medium (the light source, the loss of the disguise and the countdown); low (post-mortem after a reaction)
 
 13. **Damage effect and its draw.** After a hit that reports *now yellow* or *now red*, an object
     whose health ratio (S-0214, Terms) is at or below the game-wide yellow ratio (Import mapping; unlike the fixed half of claim 12, this is the imported ratio) and that has no damage
@@ -786,9 +783,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     its attacker as that planter. In the ordinary delayed-kill case there is no planter and
     nobody receives further experience, score or an attacking-house kill count at expiry.
     The victim's loss bookkeeping and destroyed-object events run again if the expiry hit
-    kills it, just as for any lethal hit (claim 14). A bridge repair hut instead performs its
-    bridge-repair action and clears the pending countdown and recorded planter, without an
-    expiry hit or a combat death. The structures specs own which bridge cells that action repairs.
+    kills it, just as for any lethal hit (claim 14). A bridge repair hut instead demolishes its
+    bridge and clears the pending countdown and recorded planter, without an
+    expiry hit or a combat death. S-0511 claim 16 owns which bridge cells that action destroys.
     With `quirks.delay_kill_credited_again` off, repeated destruction registration at an expiry
     hit is suppressed too.
 
@@ -1484,10 +1481,10 @@ parts use their stated replay checks and rejection thresholds instead.
   *Falsified if* it is removed unconditionally at expiry. These tests must end before their
   repeated events or draws overwhelm the recorder. A final variant uses a bridge repair hut
   that is not marked immune, made eligible for delayed kills. *Expected:* no expiry hit or combat
-  death, and the countdown is cleared at expiry; a bridge-repair action takes its place.
-  *Falsified if* it takes the ordinary building's lethal expiry hit or repeats the countdown.
-  This variant records health and pending countdown; the repaired cells themselves are outside
-  this spec's claims.
+  death, and the countdown is cleared at expiry; bridge demolition takes its place (S-0511
+  claim 16). Use an intact bridge linked to the hut and record the affected bridge cells as well
+  as hut health and pending countdown. *Falsified if* it takes the ordinary building's lethal
+  expiry hit, repeats the countdown or repairs the bridge instead of demolishing it.
   (h) *Protection.* Apply temporary invulnerability during the countdown, then let that effect
   finish before the former expiry tick. *Expected:* no expiry hit at that tick or later.
   Separately use an electromagnetic-pulse effect spanning expiry: the expiry hit occurs in the
@@ -1737,9 +1734,10 @@ parts use their stated replay checks and rejection thresholds instead.
   with a list of B and D only starts no effect and takes no draw. *Falsified if* the replay differs
   for any vehicle (in particular if B or D is ever chosen, or if a draw of 0 gives A), a count fails
   its test, or the stream shows another number of draws.
-- **D23 (claim 12: loss of the disguise).** A stock spy type of the human house (strength set to
-  1000 in the test map) is disguised as an enemy infantry type and stands among computer-house
-  units; the recorder reads whether it shows as the disguise to the computer house. (a) A hit of damage 5
+- **D23 (claim 12: loss of the disguise).** A spy type of the human house, with the permanent
+  disguise flag cleared and strength set to 1000 in the test file, is disguised as an enemy
+  infantry type and stands among computer-house units. All other disguise settings remain stock, and
+  the recorder reads whether it shows as the disguise to the computer house (S-0516 claim 34). (a) A hit of damage 5
   (versus 100 %): the disguise is lost (the spy shows as itself) until the human house disguises it
   again. (b) A hit that reports *unaffected* (the same weapon with versus 0 %): the disguise is
   kept. (c) A healing hit: the disguise is kept. (d) A hit that crosses half the strength (*now
@@ -1748,7 +1746,12 @@ parts use their stated replay checks and rejection thresholds instead.
   the spy type not immune to psionics) on the spy of (a), which makes it go berserk: the disguise
   is kept (claim 10: a berserk hit has none of the reactions). (g) Start a fresh disguised spy
   at health 300, strength 1000 and red ratio 0.25, and hit for 100: the crossing from 300 to
-  200 reports *now red* and loses the disguise as in (a). *Falsified if* any of these differs.
+  200 reports *now red* and loses the disguise as in (a). (h) For the countdown, use a still,
+  non-permanently-disguised disguise-when-still vehicle, with no contact or neighbouring enemy
+  infantry, as in S-0516 claim 33 and scenario CS14 part c. A hit taking 5 health clears its
+  disguise and sets a 10-tick re-disguise lockout; record the hit tick, remaining lockout and
+  tick it takes a disguise again. It cannot re-disguise while the lockout remains and does so
+  on its first eligible turn after expiry. *Falsified if* any of these differs.
 - **D24 (claims 1, 14: credit for a kill).** A trainable test unit *A* of the human house (known
   experience, S-0311) and test computer vehicles of strength 1; the recorder reads the units-destroyed
   count of each house as the score screen shows it. (a) *A* fires a test weapon at a vehicle, which
