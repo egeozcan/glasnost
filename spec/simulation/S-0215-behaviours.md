@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -691,15 +691,20 @@ Terms used by this spec:
     - the target goes off the map (for example it enters a transport or a building), or is
       removed,
     - the target makes its teleporting locomotor's own jump (S-0207 claim 20 e), except for an
-      attacker whose airstrike is aimed at the living target. Other attackers
+      attacker whose strike target is the living jumping object (S-0519 Terms,
+      S-0207 claim 20 e). Other attackers
       revert if overridden, then drop the jumping object if it is still their target; a revert
       that restores another target keeps that restored target. Projectiles lose the jumping
       target as S-0207 states,
     - the target changes owner (for example by mind control, or a building taken by a building
-      taker), except for an actor whose airstrike is aimed at the living target,
+      taker), except for an actor whose strike target is that living object (S-0519 Terms),
     - the target starts to cloak, or, being of an underground type, goes underground, except
       when the target belongs to the actor's own house or a sensor of the actor's house covers the
       target's cell (Terms, *cloak* and *sensor*).
+
+    Both strike-target exceptions also hold after a strike ends normally: it keeps its strike
+    target (S-0519 claims 18 and 20), so no strike need be in progress. They test the strike's
+    target, not whether its aircraft still attack that object.
 
     The destruction and off-map/removal causes have no exception: they revert the actor whoever owns the target and
     whatever covers its cell. An erasing attacker has no exception to owner-change target loss:
@@ -729,9 +734,9 @@ Terms used by this spec:
         cloak, when an underground object goes underground and what a sensor covers belong to the
         visibility and movement topics, which no spec states, so no setup here can make a target
         start to cloak or go underground at a known tick,
-      - the airstrike exceptions to owner change and a locomotor jump, because each needs an
-        airstrike aimed at a living target at the moment of that event, and no setup here
-        establishes that timing. Erasing attackers' owner-change target loss and beam retention
+      - the strike-target exceptions to owner change and a locomotor jump, including after a
+        strike ends normally, because each needs a living object held as the strike target at
+        the moment of that event, and no setup here establishes that timing. Erasing attackers' owner-change target loss and beam retention
         instead inherit S-0514 claim 16's measurable backing (E10 part h),
       - a removal that follows neither a killing hit nor going off the map, because every removal
         that a setup here can make comes after one of those, which has already caused the revert,
