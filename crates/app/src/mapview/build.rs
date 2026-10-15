@@ -697,13 +697,17 @@ fn art_files(import: &Import, kind: Kind, idx: usize, out: &mut BTreeSet<Vec<u8>
     }
 }
 
-/// The art files of every building, vehicle and infantry type: a live
-/// game can create types the map does not hold (deploys, production).
+/// The art files of every building, vehicle, infantry and aircraft type: a
+/// live game can create types the map does not hold (deploys, production,
+/// spawned aircraft and missiles).
 pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
     let mut out = BTreeSet::new();
     let art = art_document(import);
     for &(kind, idx) in import.arts.keys() {
-        if matches!(kind, Kind::Buildings | Kind::Vehicles | Kind::Infantry) {
+        if matches!(
+            kind,
+            Kind::Buildings | Kind::Vehicles | Kind::Infantry | Kind::Aircraft
+        ) {
             art_files(import, kind, idx, &mut out);
         }
         if kind == Kind::Buildings {

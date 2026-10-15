@@ -1968,3 +1968,22 @@ fn oversized_voxel_model_warns_once() {
     assert!(warned[0].contains("carx.vxl"), "{warned:?}");
     assert!(notes(5.0).is_empty());
 }
+
+/// A live game can create aircraft the map does not hold (production,
+/// spawned aircraft and missiles), so their voxel models and motion files
+/// are read with the game's files, as for vehicles (S-0102 claim 21: an
+/// aircraft is drawn only from its voxel model).
+#[test]
+fn game_files_hold_aircraft_voxels() {
+    let (mut import, _, _) = context();
+    import.arts.insert(
+        (Kind::Aircraft, 0),
+        TypeArt {
+            voxels: [("body".to_string(), b"jet.vxl".to_vec())].into(),
+            ..Default::default()
+        },
+    );
+    let files = super::build::game_files(&import);
+    assert!(files.contains(&b"JET.VXL"[..]));
+    assert!(files.contains(&b"JET.HVA"[..]));
+}
