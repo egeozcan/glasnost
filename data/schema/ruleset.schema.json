@@ -7291,12 +7291,12 @@
           "default": true
         },
         "hover_brake_undershoot": {
-          "description": "A braking step is floored at 0 and can cross below a positive goal; off: floored at the goal. Not implemented yet (wave 2).",
+          "description": "A braking step is floored at 0 and can cross below a positive goal; off: floored at the goal.",
           "type": "boolean",
           "default": true
         },
         "hover_elevated_heading_point": {
-          "description": "A next heading point gains 416 leptons whenever the vehicle is 312 or more above its terrain, bridge or not; off: a high-bridge cell is needed too. Not implemented yet (wave 2).",
+          "description": "A next heading point gains 416 leptons whenever the vehicle is 312 or more above its terrain, bridge or not; off: a high-bridge cell is needed too.",
           "type": "boolean",
           "default": true
         },
@@ -7306,7 +7306,7 @@
           "default": true
         },
         "hover_stalled_start_reset": {
-          "description": "A zero step length while heading exactly at the heading point sets the throttle and fraction to 1 at once; off: no reset. Not implemented yet (wave 2).",
+          "description": "A zero step length while heading exactly at the heading point sets the throttle and fraction to 1 at once; off: no reset.",
           "type": "boolean",
           "default": true
         },
