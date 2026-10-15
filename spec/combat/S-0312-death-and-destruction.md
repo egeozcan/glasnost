@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -62,7 +62,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
   soviet crew for side 1, third crew for side 2 (Import mapping). Sides are numbered by S-0004
   (claim 9).
 - **Hijacker type.** The infantry type remembered by a vehicle that a vehicle thief has taken over
-  (special-abilities specs).
+  (S-0524 claim 11).
 - **Bomb mark.** A mark that an object can carry which causes landing damage when it finishes
   falling (S-0511 claim 10). Stock sources include a hovering vehicle's switch-off fall over water
   (S-0503 claim 11) and a bridge collapse dropping objects from its deck (S-0511 claim 9).
@@ -290,8 +290,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 13. **Crew.** After its passengers, a destroyed vehicle may leave a crew infantry unit at its
     position, owned by its house:
-    - A vehicle with a hijacker type always leaves one infantry of that type, with no chance test
-      and no draw for its type.
+    - Hijacking records the vehicle thief's infantry type as the vehicle's hijacker type
+      (S-0524 claim 11). A vehicle with a hijacker type always leaves one infantry of that type,
+      with no chance test and no draw for its type.
     - Otherwise, when the killing damage does not carry the no-escape marker, the type has the
       crewed flag and has no passenger capacity, a chance test "less than" with the game-wide crew
       escape chance (one unit-interval value, S-0202 claim 6) decides, and the crew's type is chosen
@@ -342,8 +343,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     above the terrain starts to crash but keeps rocket-flight movement and its full detonation
     damage on the next positive-speed movement attempt, including a rejected map-edge attempt.
     At zero speed the health-triggered detonation waits for such an attempt. On the ground it
-    is removed without a rocket detonation. This does not establish that any additional crash
-    displacement is absent. For the non-rocket crash, when it reaches the ground:
+    is removed without a rocket detonation. Interception neither restarts nor suspends the
+    rocket's phase timer, and adds no crash-fall displacement: pause and tilt keep its position
+    fixed, raise keeps its ordinary rise, and positive-speed motion follows S-0506 claim 20.
+    For the non-rocket crash, when it reaches the ground:
     - if it was shot down, its death weapon goes off at the impact point (claim 6, even if it already
       went off at the moment of death because the aircraft was exploding), and it leaves play,
     - if it was still alive (a crash started without a kill), it is destroyed by damage equal to its
@@ -353,9 +356,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       demolition warhead, no source object and no source house follows at the impact point.
     - Backing: `measurable` (scenario D11, variant f for an empty explosion list,
       S-0501 scenario AC5 for dead flying-aircraft crash motion; S-0506 scenario R13 for
-      rocket interception). Living flying-aircraft crashes, aircraft sinking and additional
-      rocket crash displacement retain the backing limitations of S-0501 claim 9 and
-      S-0506 claim 20.
+      rocket interception, unchanged phase timers and absence of additional crash fall).
+      Living flying-aircraft crashes and aircraft sinking retain the backing limitations
+      of S-0501 claim 9.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
       empty list, and their independence from height; rocket interception inherits S-0506
       claim 20's confidence; medium for the non-rocket impact rules; low for the double death weapon and for which objects
