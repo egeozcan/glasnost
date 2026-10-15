@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741]
 supersedes: []
 ---
 
@@ -723,7 +723,9 @@ presentation and swept-layer rules below also apply where those specs cite them.
 
 34. **The warp group.** The second-stage order uses the linked first stage's last picked source.
     Its unchecked acceptance and the first stage's recharge are S-0512 claims 10 and 11, not an
-    additional readiness test here. A launch of the teleport-warp kind at a destination cell plays the blast
+    additional readiness test here. Before any source pick, it uses cell (0, 0) and attempts
+    the ordinary warp effect there; it is not a no-op or a substitution of the giving
+    building. A granted linked first stage still restarts, as S-0512 claim 10 specifies. A launch of the teleport-warp kind at a destination cell plays the blast
     animations (one at the source centre, one at the destination centre), ends the source marker,
     and affects the listed objects of the source cell's effect block (claim 4), of any house.
     The observable recipient sequence for infantry, vehicles and aircraft follows claim 4,
@@ -823,9 +825,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
       every object targeting it drops it as in S-0207 claim 20 (e), it starts *phasing in*, and the
       landing check of claim 37 runs,
     - when the check passes, appears at its landing point in its next update, and in the update
-      after that has its arrival effects: arrival sound, claim 38's fate, the warp-out animation at
-      the new position, and the start of its arrival hold (claim 40). With a clean landing that is
-      ticks *t*_L + 63 and *t*_L + 64,
+      after that has its arrival effects: arrival sound, claim 38's fate, a surviving member's
+      sensor-disc transfer and adjacency reveal (S-0516 claim 22), the warp-out animation at
+      the new position, and the start of its arrival hold (claim 40). Sensor coverage remains
+      at the old recorded cell through departure, retries and appearance; it transfers before
+      the landing animation and hold, not at hold expiry. A member killed by the arrival-fate
+      test gets no arrival sensor update. With a clean landing, appearance and arrival effects
+      are ticks *t*_L + 63 and *t*_L + 64,
     - stops phasing in when the hold ends.
 
     When the 60-tick wait expires (*t*_L + 61), not at departure, and when the arrival hold
@@ -834,7 +840,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
     departure animation. The landing, redirection and placement take no draw; the animations
     take their creation draws (S-0202 claim 10). All timing arithmetic here is integer ticks,
     without rounding.
-    - Backing: `measurable` for timing (SW12 part d). Drone-parasite release on this path is
+    - Backing: `measurable` for timing (SW12 part d); sensor coverage and transfer inherit
+      S-0516 claim 22's backing (CS20 superweapon-warp part). Drone-parasite release on this path is
       `unmeasured`: the ordinary teleport release path is traced, but this superweapon path
       has not been shown to reach the same release; no result is promised here
     - Confidence: medium for the absolute tick timeline; low for drone-parasite release
@@ -881,12 +888,17 @@ presentation and swept-layer rules below also apply where those specs cite them.
     cell as target, no destination and behaviour *spy-plane approach*, placed over a cell on its
     house's arrival edge chosen as in S-0522 claims 4 and 5 (with the same draws), facing 0, with
     no passengers. If placement fails, that plane is removed and the next is still tried. The
-    number of planes is the length of the first side group's paradrop infantry list, for every
-    side, and none when that list and its count list differ in length
+    number of planes is the length of the first side group's resolved paradrop infantry list,
+    for every side, and none when that compact list and its independently parsed count list
+    differ in length. Resolution is S-0522 claim 2: unknown ordinary names create infantry
+    types and count as entries, including names also used by a vehicle or aircraft kind.
+    Empty items and reserved no-type names are omitted. Count resolved entries, not text
+    tokens or only names explicitly registered in the infantry type list
     (`quirks.spy_plane_count_from_paradrop_list`, default on = original; off: exactly one plane).
     No plane, with an illegal cell or no spy plane type, still counts as carried out (S-0512 claim
     8). There is no announcement.
-    - Backing: `measurable` for plane count and arrival (SW15 part a). Failed placement and
+    - Backing: `measurable` for plane count and arrival (SW15 part a); resolved-list counting
+      also inherits S-0522 claim 2's backing (P2). Failed placement and
       invalid-cell orders are `unmeasured`: no normal-input fixture is established here.
       A missing spy plane type is `unmeasured`: SW15 does not remove that type
     - Confidence: high
@@ -970,7 +982,7 @@ presentation and swept-layer rules below also apply where those specs cite them.
     - Confidence: high for processing waits and the queue rule; medium for uninterrupted
       absolute tick labels before oracle confirmation
 
-48. **Other work during a warp: confirmed boundary and unresolved turns (Q-0738).** A
+48. **Other work during a warp (Q-0738).** A
     vehicle, infantry unit or landed aircraft that is still in its leaving stage after
     its warp update skips ordinary self-healing, behaviour processing, movement, firing
     and turret turning in that turn. It drops target and destination. S-0215 claim 2
@@ -983,30 +995,55 @@ presentation and swept-layer rules below also apply where those specs cite them.
     Protection's elapsed duration still runs even on a turn that skips its brightness
     phase processing (claim 29).
 
-    The full continuation contract at departure, off-map retries, placement, arrival and
-    hold expiry remains unmeasured here. In particular the single-warp-update-per-tick
-    assumption in claim 39 is not proof that every kind gets exactly one such update:
-    a turn can reach a warp update before ordinary work and another movement opportunity
-    later. Do not infer that the warp step is the whole turn until arrival, or that the
-    hold test necessarily precedes every kind's other work, from T2 alone.
-    - Backing: `measurable` for the leaving-stage exclusions and stopped driving (SW23).
-      Exact continuation and per-kind absolute timeline are `unmeasured`: the interaction
-      between early warp work, ordinary movement work and placement has not been fully
-      established. SW23 is the proposed discriminating observation, not confirmation
-    - Confidence: high for the leaving-stage exclusion; low for the unresolved boundaries
+    For a vehicle, infantry unit or landed aircraft whose turn begins in arrival hold,
+    the hold-end test precedes any ordinary healing, behaviour, movement, firing or turret
+    work in that turn. This answers the ordering question, not whether each such operation
+    is eligible to run. It does not make the warp step the whole turn.
 
-49. **Invalid warp cells: no established safe refusal (Q-0741 parts 2 and 3).** No
-    destination-legality test is established that would leave a source member in place
-    merely because its corresponding destination cell is off the map. The ordinary
-    parasite release and organic death tests of claim 34 still precede selection of that
-    landing point. Likewise, failure of a nearby-cell search is not established to retain
-    the old landing point: the landing point is replaced using the search result without
-    a success test. The subsequent observable position and fate for these two exceptional
-    cases remain unspecified here, not a promised retry-in-place or immediate death.
-    - Backing: `unmeasured`: the remaining invalid-cell and failed-search point conversion
-      and subsequent placement outcomes have not been traced completely; SW24 proposes
-      the normal-input edge and exhausted-search observations
-    - Confidence: high that the proposed early legal-cell refusal is absent; low for final fate
+    The following table explicitly marks the remaining answers rather than adopting the
+    request's interim whole-turn-only rule. Each row applies separately to vehicles,
+    teleporter infantry and landed aircraft, and to each of self-healing, behaviour
+    processing, ordinary movement, firing and turret turning where that kind has it.
+
+    | Boundary in the request | Ordinary-work answer | Backing and confidence |
+    |---|---|---|
+    | Joining at launch | Former driving does not continue under the warp. Immediate clearing of the path, queued destinations and driving step is not established here | Stopped driving: measurable, SW23(a), high. Exact clearing: unmeasured, SW23(a), low |
+    | First pending turn, before leaving starts | Pending alone is not the exclusion. Whether each ordinary operation occurs before that turn enters leaving is unmeasured | Unmeasured, SW23(a), low |
+    | Turn still in leaving after its warp update, including wait expiry | No ordinary healing, behaviour, movement, firing or turret work; target and destination dropped | Measurable, SW23(b), high |
+    | Departure turn, after leaving ends | Continuation of each ordinary operation is unmeasured | Unmeasured, SW23(c), low |
+    | Off-map landing-check retries | Whether any work other than warp work occurs is unmeasured; being off-map alone is not evidence of a whole-turn exclusion | Unmeasured, SW23(c), low |
+    | Placement update | Continuation of each ordinary operation after placement is unmeasured | Unmeasured, SW23(d), low |
+    | Arrival-effects update | Continuation of each ordinary operation after effects is unmeasured. The surviving sensor update is independently settled by claim 39 | Unmeasured for ordinary continuation, SW23(d), low |
+    | Arrival hold, including the hold-expiry turn | Hold-end test precedes ordinary-work opportunities; eligibility and continuation of each ordinary operation remain unmeasured | Ordering: measurable, SW23(e), high. Continuation: unmeasured, SW23(e), low |
+
+    The unmeasured entries are incomplete evidence, not a claim of an unstable original
+    result and not permission to treat the request's workaround as confirmed behaviour.
+    The per-kind interaction of early warp work, ordinary-work eligibility and a later
+    movement opportunity has not been fully established. In particular claim 39/T2's
+    one-warp-update-per-tick assumption does not establish that count for every kind.
+    SW23 is the discriminating proposal for every marked gap.
+    - Backing: `measurable` for leaving exclusions, stopped driving and hold-test ordering
+      (SW23); `unmeasured` for each explicitly marked continuation or clearing entry above,
+      for the incomplete per-kind eligibility trace just described
+    - Confidence: high for the confirmed boundaries; low for the marked gaps
+
+49. **Exceptional warp cells (Q-0741).** The three questions have these separate answers.
+
+    | Case | Answer | Backing and confidence |
+    |---|---|---|
+    | Source marker creation | Ordinary scenario-stream animation-creation draws occur regardless of the local viewer; only visibility and audio are local. This was already answered by claim 33 | Measurable, SW22, high |
+    | A source object's corresponding destination cell is off-map: parasite and organic tests | Claim 34's naval-parasite release and claim 35's organic hit still occur. Off-map destination is not an early refusal that protects either | Measurable, SW24(a), high |
+    | Same off-map case: otherwise eligible survivor | There is no destination-legality rejection before joining the warp. Its eventual position, placement success and death or survival are explicitly unmeasured; neither leaving it at source nor immediate death is established | No early rejection: measurable, SW24(a), high. Final outcome: unmeasured, SW24(a), low |
+    | Blocked landing, nearby search finds no cell | The failed result replaces the landing point without a success test; it does not preserve the old point. The unsuccessful check remains in the landing-retry stage. A retry sets the held delay to the teleport delay, including when the check subsequently passes | Measurable, SW24(b), high |
+    | Failed-search conversion and later fate | The exact replacement world point and its subsequent placement, death or survival are explicitly unmeasured. Subsequent checks use the replaced point, not a promised repeat at the original blocked point | Unmeasured, SW24(b), low |
+
+    These gaps arise from the incomplete invalid-cell point-conversion and placement trace,
+    not an established undefined result. No safe fallback, immediate kill, or retained-point
+    retry is prescribed as original behaviour. S-0212 claim 25 owns search candidate
+    selection; claim 37 owns this caller's settings and treatment of its result.
+    - Backing: `measurable` for the confirmed rows (SW22 and SW24); `unmeasured` for the
+      explicitly marked world-point and final-fate rows, for the incomplete trace above
+    - Confidence: high for the confirmed rows; low for the marked gaps
 
 ## Formulas
 
@@ -1207,8 +1244,8 @@ can reliably force its effect-creation failure through ordinary input.
 
 | Source | Key | Feeds | Form | Absent |
 |---|---|---|---|---|
-| superweapon type sections | `Type` | superweapon kind (S-0512; psychic reveal: S-0610 claims 13 to 15; genetic mutation: S-0611 claims 2 to 5; psychic domination: S-0612 claims 1 to 17) | word, S-0512 | no kind |
-| superweapon type sections | `Action` | aim action, claims 1 and 2 | action word | none (no aiming; S-0512) |
+| superweapon type sections | `Type` | superweapon kind (S-0512 claim 24; psychic reveal: S-0610 claims 13 to 15; genetic mutation: S-0611 claims 2 to 5; psychic domination: S-0612 claims 1 to 17) | case-insensitive complete word from S-0512 claim 24's Import mapping vocabulary | omitted, empty or unknown retains prior layer; initially no kind |
+| superweapon type sections | `Action` | aim action, claims 1 and 2 | case-insensitive complete word from S-0512 claim 23's Import mapping vocabulary | omitted or empty retains prior layer; initially no action; unknown nonempty word clears action (S-0512 claim 23) |
 | superweapon type sections | `WeaponType` | the silo's upward weapon (claim 8) | weapon name | none |
 | superweapon type sections | `StartSound`, `SpecialSound` | force-shield sounds (claim 32) | sound name | none |
 | superweapon type sections | `AIDefendAgainst` | computer defence check (claim 6; AI module only) | boolean | no |
@@ -1268,7 +1305,8 @@ can reliably force its effect-creation failure through ordinary input.
 | `[General]` | `ChronoReinfDelay` | reinforcement delay (claim 40) | integer, ticks | 60 |
 | aircraft type `PDPLANE` | fixed type name | paradrop plane (S-0522) | name | none: nothing sent |
 | aircraft type `SPYP` | fixed type name | spy plane type (claim 43) | name | none: nothing sent |
-| `[General]` | `AllyParaDropInf`, `AllyParaDropNum` | spy plane count (claim 43) | lists, S-0522 | empty: no plane |
+| `[General]` | `AllyParaDropInf`, `AllyParaDropNum` | spy plane count (claim 43) | creating infantry-reference list and independent integer-count list, S-0522 claim 2; compare resolved compact lengths, not text-token counts | empty: no plane |
+| No data key | no imported field | warp turn continuation and exceptional-cell rules (claims 48 and 49) | engine behaviour; unmeasured boundaries are explicitly marked in those claims; no INI option supplies the missing answers | no configurable default |
 | spy type's primary weapon | `Damage` | camera radius (claim 44) | integer, cells | 0 |
 | spy type's primary weapon | `Range` | camera gate (claim 44) | cells times 256, truncated | 0 |
 | `[AudioVisual]` | `SpyPlaneCamera` | camera sound | sound name | none |
@@ -1535,7 +1573,12 @@ is not under test.
   Repeat (a) with one-way alliances: the building owner's attitude to the launcher decides.
 - **SW12 — warp (claims 33 to 36, 39).** (a) Pick a source; only the launching player sees the
   marker; leaving warp aiming ends it. Pick an empty source, cancel, then pick a new source:
-  no unit requirement, and the marker moves to the new source. (b) A 3 × 3 block with own tanks, an enemy tank, own
+  no unit requirement, and the marker moves to the new source. Add S-0512 claim 10's X17
+  no-pick control: fire an accessible second-stage grant before picking any source, record
+  the source coordinate and the linked first-stage clock. Expect cell (0, 0), an attempted
+  ordinary warp there, and restart of a granted linked first stage; no restart when that
+  first stage is ungranted. A substituted building/source or no restart of the granted
+  record falsifies the contract. (b) A 3 × 3 block with own tanks, an enemy tank, own
   infantry and a teleporter-flag infantry; expected: tanks move (the enemy too), ordinary infantry
   die credited to the launcher, the teleporter infantry moves. (c) Expected: the block's shape is
   kept; infantry keep their position within the cell; vehicles end at cell centres. Repeat
@@ -1687,25 +1730,52 @@ is not under test.
   draw isolates its creation. Expected: its creation draws in both cases, but visibility
   and sound only for its launching viewer. No network-game test is required or claimed.
 - **SW23 — warp turn continuation (claim 48).** Extend SW12(d) with a damaged self-healing
-  vehicle already driving, a turret aimed away from its body, and an unreachable harmless
-  enemy target; also test teleporter infantry and landed aircraft separately. Record each
-  member's health, position, target, destination, turret facing, warp stage and number of
-  warp updates on every tick through arrival and hold expiry. Named test data supply
-  healing every tick and a long redirected hold. Expected confirmed portion: no old
-  driving after launch and no ordinary healing, firing, processing or turret progress
-  on turns that remain leaving. Any such progress falsifies that exclusion. For the
-  unresolved portions record whether ordinary work resumes on departure, placement or
-  arrival, and whether two warp updates occur within one turn; these distinguish the
-  whole-turn-only hypothesis from continuation, rather than assuming either outcome.
-- **SW24 — exceptional warp cells (claim 49).** Source block in the interior and
-  destination centre on a legal map edge: place a normal vehicle, organic infantry and
-  an infected naval host in source cells mapped outside the map. Record parasite exit,
-  deaths, pending flags, landing points and all later positions. Separately block every
-  candidate through the nearby search's full radius, verified read-only, and record
-  each search's result and replaced landing point. Expected confirmed portion: ordinary
-  source-side parasite release and organic death occur, not an early whole-cell refusal.
-  Final fate and failed-search conversion have no established expected value; this
-  proposal is exploratory and must not be reported as confirming a retry-in-place rule.
+  vehicle already driving, a turret aimed away from its body, and a harmless enemy target.
+  also test teleporter infantry and landed aircraft separately. Named map SW23 supplies
+  healing every tick, a weapon able to fire at the target without killing it, and a long
+  redirected hold. Use the common skirmish settings and three runs per kind and part.
+  Record health, position, current/queued destinations, route, target, behaviour, shot
+  count, turret facing and warp stages with tick labels. Use video and the permitted
+  read-only recorder, never injected tracing. Behaviour processing needs a visible
+  due-action witness, not merely unchanged behaviour text. Parts:
+  (a) Record launch and the first pending turn separately. Expected: no continuation of
+  the old driving movement. For immediate route clearing and each first-turn ordinary
+  operation, the expected value is unmeasured: retained versus cleared routes, a heal
+  versus no heal, and a shot/turret change versus none distinguish the alternatives.
+  (b) Record turns still leaving, including wait expiry. Expect no ordinary heal, due
+  behaviour action, physical movement, shot or turret progress; any such event falsifies
+  that exclusion. (c) Record departure and every off-map retry separately. Whether each
+  ordinary operation continues is unmeasured; any heal, due action, shot or turret
+  progress refutes the whole-turn-only hypothesis for that boundary, while its absence
+  across an independently eligible due event refutes continuation for that operation.
+  (d) Apply the same per-operation test separately to placement and arrival-effects turns.
+  Their continuation values are unmeasured, not assumed equal to off-map retries.
+  (e) Record the arrival hold and expiry, including held delays 0, 1 and a longer value.
+  Expect the hold-end decision before any ordinary-work witness in a turn that begins
+  holding; a resolvable reversed order falsifies that ordering. Eligibility/continuation
+  of each operation on holding and expiry turns is unmeasured; compare due-action
+  witnesses as in (c). Record stage transitions per tick to discriminate one versus
+  multiple warp updates; exact per-kind absolute timelines remain unmeasured. An
+  observation that cannot separate same-tick events is inconclusive, not confirmation.
+- **SW24 — exceptional warp cells (claim 49).** Use the common skirmish settings and
+  three runs of each part. (a) Source block in the interior and destination centre on a
+  legal map edge: place a normal vehicle, organic infantry and an infected naval host
+  in source cells mapped outside the map. Keep exit water clear. Record parasite exit,
+  deaths and credit, pending flags, landing points and all later positions using video
+  and the permitted read-only recorder. Expect ordinary source-side parasite release,
+  organic death credited to the launcher, and an otherwise eligible survivor joining the
+  warp rather than an early whole-cell refusal. Any contrary outcome falsifies that
+  confirmed portion. The survivor's final position and fate are unmeasured: distinguish
+  staying at source, a different landing, removal and death, without selecting one as
+  the expected result. (b) Separately block every candidate through the nearby search's
+  full radius, verified read-only under S-0212 claim 25, and record each failed result,
+  replaced landing point, retry stage, held delay, subsequent positions and fate. Expect
+  the failed result to replace the point, the unsuccessful check to remain in retry,
+  and a retry to set the held delay to the imported teleport delay. Preserving the old
+  point despite a distinct failed-result conversion, or not setting the delay during
+  retry, falsifies those rules. Exact conversion and eventual placement/death/survival
+  remain unmeasured; this part distinguishes those alternatives and does not confirm
+  retained-point retries merely because no landing is visible.
 - **SW25 — bolt header height (F4).** Extend SW8(c) with two images having equal stored
   rectangles but unequal canvas heights, then equal canvas heights but unequal rectangles.
   Expected: cloud world height follows canvas height alone. Use a named damaging cloud
@@ -1743,13 +1813,17 @@ for these two kinds.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).
 - Negative storm countdowns and durations other than the endless value are not covered by the
   non-negative timing formulas; their safe import policy remains unresolved.
-- Q-0738: claim 48 answers the leaving-stage exclusion and old driving question, but exact
-  per-kind continuation while pending, departing, off-map, placed, arriving and ending the
-  hold remains open. Reconcile claim 39/T2's one-update assumption and claim 40's turn
-  boundary with SW23 before treating their illustrative absolute ticks as unconditional.
-- Q-0741 parts 2 and 3: claim 49 records the absence of the proposed safe guards, but final
-  invalid-destination and exhausted-search placement/fate remain open (SW24). Part 1's
-  marker creation draws are answered by claim 33 and SW22.
+- Q-0738 is accounted for question by question in claim 48: leaving exclusions, stopped
+  driving and hold-test ordering are confirmed source-derived rules, not measurements.
+  Each pending/departure/off-map/placement/arrival/hold ordinary-work continuation and
+  immediate route-clearing gap is explicitly unmeasured with SW23(a) to (e). These gaps
+  remain open to investigation despite the request's inclusion in front matter. Reconcile
+  claim 39/T2's one-update assumption before using unconditional per-kind tick labels.
+- Q-0741 is accounted for in claim 49: marker draws were already answered by claim 33.
+  source-side effects and unchecked failed-search replacement have rules. The off-map
+  survivor's fate and failed-search world-point conversion/fate remain explicitly
+  unmeasured under SW24(a) and (b). Front-matter inclusion records this complete
+  question accounting, not oracle confirmation or closure of those factual gaps.
 - Q-0732: rate/frame-count timing is claim 46, using S-0109 claims 2 to 5 and 25; Q-0733
   was already answered by claim 29's first-protected-turn rule, now explicit about skipped
   phases. Q-0734 is claim 22 and Import mapping, Q-0735 is claim 47, Q-0739 is F4,

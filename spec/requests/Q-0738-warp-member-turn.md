@@ -1,9 +1,9 @@
 ---
 id: Q-0738
 title: What else a warp member does in its turns while its warp is under way
-status: open
+status: answered
 related: [S-0513, S-0203, S-0215, S-0314]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0741
 title: The warp source marker's draws, and warp cells that are off the map or unreachable
-status: open
+status: answered
 related: [S-0513, S-0202, S-0212]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
