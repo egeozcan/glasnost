@@ -2,11 +2,11 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0046, Q-0418, Q-0770, Q-0771]
 supersedes: []
@@ -657,7 +657,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 
     These cases differ from the simple reading (every value from the sprite that is drawn) only when
     the sprites a type gets in one game have different image-frame counts, or when a type read
-    finds no sprite.
+    finds no sprite. A defined type with no sprite is distinct from having no animation type
+    at all; S-0522 claim 13 owns the absent-parachute lifecycle and its release-tick fall-rate
+    exception.
     - Backing: `measurable` (AN18, AN23 part C) for their successful two-sprite fixtures
       and explicit-zero ends. Earlier failed sprite finds, repeated reads with changed
       fields and loop-end −1 or zero remain `unmeasured`: neither scenario creates those
@@ -1035,8 +1037,12 @@ advance of the same update. So:
   an animation type of that name with absent-key defaults (S-0004). If no sprite resolves for it, it
   draws nothing and its end field is 0 (claim 25), so after the switch it ends on its first advance,
   unless it keeps σ = −1 without being reversed (claim 15), in which case it never ends.
-  An animation created with no type at all is removed by the original at once. Our engine does the
-  same, and the importer warns about the reference that caused it where the cause is in the data.
+  An animation created with no type at all has no ordinary playback. This does not imply
+  immediate loss of every attachment effect: S-0522 claim 13 owns the absent-parachute
+  lifecycle, including its release-tick fall-rate exception and the alternative under
+  `quirks.paratrooper_any_animation_slow_fall`. A defined type with no sprite instead follows
+  claim 25 and the missing-sprite rule below. The importer warns about invalid references
+  where their cause is in the data; a genuinely absent parachute type is allowed.
 - **Sprite missing.** An animation whose sprite cannot be resolved is updated but draws nothing; by
   claim 25 an absent end field is then 0, so an animation created as such a type, with one pass and
   without the ping-pong flag, ends on its first advance (claims 7 and 9 give the other cases). An end field or loop
@@ -1106,9 +1112,10 @@ Import defaults and sentinel cases not explicitly exercised by the named scenari
 `unmeasured` here (confidence: high): no scenario systematically omits each key in each layer
 or supplies every sentinel value. Playback effects of the selected test values use the
 numbered claims' backings. Quirk-off alternatives, importer warnings and safe bad-data
-results are design rules (confidence: high), not oracle measurements. The missing-type
-behaviour in Edge cases remains `unmeasured` (confidence: high): no scenario creates an
-animation without a type. Missing-sprite ordinary playback is `measurable` through AN25
+results are design rules (confidence: high), not oracle measurements. The absent-parachute
+lifecycle in Edge cases inherits S-0522 claim 13's backing and confidence (its scenario P8).
+Other missing-type creators remain `unmeasured` here (confidence: high): no scenario here
+creates an animation without a type. Missing-sprite ordinary playback is `measurable` through AN25
 (confidence: high); the crash with missing-sprite −1 limits remains `unmeasured` here
 because AN25 deliberately avoids those limits.
 
