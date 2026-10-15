@@ -2,7 +2,7 @@
 id: S-0410
 title: Radar and minimap (when radar is available, what the radar map shows and how it is coloured)
 topic: ui
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -45,9 +45,9 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
   image frame's picture and not looked up in a palette. An image frame that the sprite does not have, or a type
   with no loaded sprite, has the frame radar colour (0, 0, 0). No spec of the project owns this stored field yet; it belongs to the sprite file's format.
 - **Radar building.** A building whose type has the radar flag (Import mapping).
-- **Radar outage.** A per-house countdown in ticks during which the house has no radar, started by
-  the weather storm superweapon against every house not allied with its owner, for the storm's
-  duration, and by a radar-outage trigger action (superweapon and trigger specs).
+- **Radar outage.** A per-house countdown in ticks during which the house has no radar.
+  S-0513 claim 15 owns which houses receive a weather storm's outage, its duration and the
+  original's local-player-defeat exception. A radar-outage trigger action can also start one.
 - **Free radar.** A map flag that gives every house radar (Import mapping).
 - **Electromagnetic lock.** An object under the electromagnetic pulse effect of S-0203 (Terms) has
   a running lock countdown. The combat and superweapon specs own how it starts and ends. It is a
@@ -326,9 +326,12 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    sizes. Each pixel still passes claim 7's draw-time tests separately. An object of *H* outside the radar image, other than a building, is drawn at the
    nearest pixel on the image's edge; other houses' objects outside the usable area are not shown
    (claim 7). A shown object is drawn using its owner's house display RGB (S-0103 claim 15),
-   converted as Terms *radar colour* says. For a disguised unit, S-0516 claim 38 selects the
-   colour house: its owner when that owner allies *H* (including ownership by *H*), otherwise
-   its disguise house. This radar choice is not the game-state test of appearing disguised
+   converted as Terms *radar colour* says. For a disguised unit, the colour house is its owner
+   when that owner allies *H* (including ownership by *H*), otherwise its disguise house.
+   **Required cross-spec correction:** S-0516 claim 38 must name this owner-to-viewer relation,
+   not the reverse relation implied by "a house allied with its owner". The two specs must be
+   reconciled at joint sign-off; this claim does not adopt that reversed reading.
+   This radar choice is not the game-state test of appearing disguised
    or the battlefield image test (S-0516 claims 35 and 37). The colour when the disguise house
    is none remains open under S-0516 claim 38. A radar object without an owner is drawn in a
    fixed neutral colour. Buildings, infantry, vehicles and aircraft use the same house display RGB:
@@ -363,7 +366,10 @@ house as S-0409 defines (Terms); a gap field that is not hostile to *H* is a *fr
    makes it observable; R3 part A measures the pixel).
    - Backing: `measurable` (scenarios R5 parts A to C and F, R10, R11; R14 for house RGB,
      object-kind equality and lighting independence; S-0516 CS16 part c and CS17 for
-     disguise-house selection). The following rules are `unmeasured`. The neutral colour of an ownerless radar object: no skirmish setup is known that
+     disguise-house selection with mutual alliances or mutual hostility). The one-way
+     alliance direction is `unmeasured`: those scenarios do not independently arrange a
+     controlled foreign disguise and opposite one-way relations to isolate that direction.
+     The following rules are also `unmeasured`. The neutral colour of an ownerless radar object: no skirmish setup is known that
      creates a radar object without a house. A disguise with no disguise house has no
      established colour (S-0516 claim 38). The separate rejection of a
      non-owned object whose F4 pixel is outside the image while its position remains usable is
@@ -449,7 +455,12 @@ The halving belongs to the tile colour only: the other colours are used as given
     is held, a selection containing an object that cannot participate in a planned route
     (S-0213 claim 16) also gives the miniature arrow rather than an ordinary command image.
 
-    Superweapon targeting uses table C1. Nuclear strike, weather storm, either paradrop
+    Superweapon targeting uses table C1. With `quirks.superweapon_kind_as_list_position`
+    on (default original, shared with S-0513 claim 8), the selected type's zero-based list
+    position chooses the row, not its imported kind. C1 gives the positions. With the switch
+    off, its actual kind chooses the row instead. The kind names in the following description
+    name those rows; they describe the selected type's actual kind only when the positions
+    and kinds agree, or with the switch off. Nuclear strike, weather storm, either paradrop
     kind, psychic domination, spy plane and psychic reveal have explicit offers independent
     of selection. Invulnerability and genetic mutation give the miniature arrow even with
     a selection. Teleport source/destination and force-shield targeting instead fall back
@@ -461,7 +472,8 @@ The halving belongs to the tile colour only: the other colours are used as given
     - Backing: `measurable` (scenario R12). Unreachable action/target combinations and
       route-ineligible selections remain `unmeasured` until R12 reaches them, rather than
       assuming that every action can be arranged with stock types
-    - Confidence: high for the ordinary action restriction and frame choices; medium for
+    - Confidence: high for the ordinary action restriction, frame choices and superweapon
+      list-position choice; medium for
       reverse picking priority, mode bypasses, route eligibility and the shroud test
 
 13. **Miniature frames and playback.** Table C1 lists the actual frames shown. All other
@@ -513,6 +525,12 @@ The halving belongs to the tile colour only: the other colours are used as given
 **Table C1. Radar cursor frames** (claims 12 and 13). Ranges are inclusive. The ordinary
 rows apply only to actions admitted by claim 12. Shroud affects the presentation choice,
 not permission to issue an order. All static entries remain on the named frame.
+For superweapon targeting with the shared switch on, the row names correspond to these
+zero-based positions: nuclear strike 0, invulnerability 1, weather storm 2, teleport source 3,
+teleport destination 4, paradrop 5 or 6, psychic domination 7, spy plane 8, genetic mutation 9,
+force shield 10 and psychic reveal 11. Every other position falls back to the ordinary
+representative's radar offer with a selection, or the miniature arrow without one, like the
+teleport and force-shield rows. These positions are engine constants, not stock rule values.
 
 | Offer or action | Revealed target | Shrouded target |
 |---|---|---|
@@ -783,6 +801,10 @@ any intervening tick during a freeze.
   its original and alternative candidate pairs, including the precedence of the direct-cell
   test under `quirks.shroud_on_flat_grid` off. This is not a separate radar switch.
   Backing and confidence are claim 6's; R4 G tests the radar consequences.
+- **Shared superweapon list-position choice** (claim 12). The default and alternative of
+  `quirks.superweapon_kind_as_list_position` are shared with S-0513 claim 8, not a separate
+  radar option. On: C1's fixed list positions choose offers even after a list reorder.
+  Off: the selected type's actual kind chooses them. R12 D tests the difference.
 - **Insignificant neutral objects.** Insignificant objects of passive countries are hidden unless
   radar-visible (claim 7); this is the original's design and needs no switch.
 - **Campaign-only behaviour** (out of scope): in a campaign mission the original also requires some
@@ -826,7 +848,7 @@ There is no imported radar-discovery flag. Claim 7 reads the per-house discovery
 by S-0409, separately from the object's owner, position and sight fields.
 
 Colour-definition parsing and selection inherit S-0103 claims 4, 5 and 10's backing.
-there is no additional building or nonbuilding colour import. R14 tests their shared consumption.
+There is no additional building or nonbuilding colour import. R14 tests their shared consumption.
 
 The height and coverage rows inherit their owning specs' import mappings, backing and
 confidence; R4 F and G test radar consumption. The shared pair switch is an engine option,
@@ -1239,7 +1261,13 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   in C1 for explicit offers and refusals. Teleport and force-shield targeting instead
   show the representative's ordinary radar offer with a selection, frame 1 without one.
   A different image or an animated single-frame miniature falsifies the row. These are cursor observations, not assertions
-  that a click may fire a superweapon in shroud.
+  that a click may fire a superweapon in shroud. Repeat with a named loose test rules file
+  exchanging only the nuclear-strike and weather-storm types' list positions, keeping their
+  kinds unchanged. With the shared switch on, targeting the actual nuclear-strike type at
+  position 2 must show frame 514, and the actual weather-storm type at position 0 frame 513,
+  with either selection state and either shroud state. Following actual kind instead falsifies
+  the list-position rule. Replay on our engine with the switch off: expect 513 for nuclear
+  strike and 514 for weather storm. This replay tests the alternative, not the oracle.
   Part E: capture ten advances of move, attack, enter, area guard and attack-move at
   speed indices 2 and 5. Expected ranges and wrapping are C1's, with S-0214 claim 22's
   real-time interval, not a tick-based interval. Move the pointer between battlefield
@@ -1301,7 +1329,8 @@ cannot reach its distinguishing states is recorded as inconclusive, not as confi
   changing only the definition selected by the human's lobby colour to invented HSV
   (0, 255, 255) and (170, 128, 200). Keep its name and position unchanged; remove these copies
   afterwards. A test-map trigger starts a storm and another changes a map-tint channel.
-  forced radar prevents outages during the colour observations.
+  Give the storm to the human house, so that its own storm does not impose a radar outage
+  on it (S-0513 claim 15). Keep the radar available throughout the colour observations.
   Procedure: after listing stabilises, sample interior shown building pixels and the isolated
   pixels of each other kind, before and after each lighting change. Capture battlefield remap
   pixels too, confirming that the intended definition loaded and that later lighting changed.
@@ -1347,8 +1376,10 @@ within skirmish scope.
   own-sensor condition for another house's fully cloaked object is resolved by S-0516 claim 27
   and R9 part D, not an alliance bypass.
 - The radar colour of a disguised unit whose disguise house is none remains open under
-  S-0516 claim 38. With a disguise house, claim 8 now uses that spec's viewer-dependent
-  radar rule, not its game-state or battlefield-image disguise predicates.
+  S-0516 claim 38. With a disguise house, claim 8 specifies the viewer-dependent radar
+  rule, not the game-state or battlefield-image disguise predicates. Its owner-to-viewer
+  alliance direction requires the explicitly named correction to S-0516 claim 38 at joint
+  sign-off; mutual-alliance observations alone cannot distinguish the two directions.
 - Whether a bridge cell's colour (claim 9) is taken from image frame 0 of the bridge's sprite, as
   the evidence so far suggests, or from the cell's own image frame (scenario R6 part F).
 - The colour of an object without a house (claim 8): the original draws it in the colour of a
