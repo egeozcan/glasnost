@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -419,7 +419,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
    - Backing: `measurable` (Scenarios T5 and T10; S-0511 claim 21, B13 for row I3's cursor
      test, and claims 17 and 18, B12 and B14 for hut-entry effects and repair selection,
      S-0508 claim 1, G1 and G2 for row I8's occupation test; S-0509 claims 6 and 7,
-     E4 for the distinction between engineer click action and arrival outcome).
+     E4 for the distinction between engineer click action and arrival outcome; S-0519
+     claim 10, T11 for row I2's bomb-visibility requirement, and claim 13, T13 for
+     row I16's veterancy-only planting failure).
      The rows that the list after Scenario T10 gives
      as `unmeasured` have no step, each with its reason.
    - Confidence: medium (low where a row says so)
@@ -1203,7 +1205,7 @@ undefined.
 | Row | Actor and target | Final action |
 |---|---|---|
 | I1 | *g* is toggle select | toggle select |
-| I2 | Engineer; the target carries an active planted bomb | disarm bomb |
+| I2 | Engineer; the target carries a planted bomb visible to the acting player (S-0519 claim 10) | disarm bomb |
 | I3 | Engineer; the target a repairable building, not vehicle-like, that is a bridge repair hut | repair building when S-0511 claim 21's cursor test reports a destroyed bridge, else no-repair; no owner or alliance test |
 | I4 | Engineer below full health (the engineer's own health ratio, F2); the target an engineer-friendly building that is a hospital | enter |
 | I5 | Engineer; the target an engineer-friendly building at full health | recycle if the building recycles, else no-repair |
@@ -1231,6 +1233,13 @@ undefined.
 | I27 | *g*₂ is attack; the target's type is immune to damage | no-move |
 | I28 | *g*₂ is nothing | fallback move |
 | I29 | Otherwise | *g*₂ |
+
+Row I16 grants the *sabotage* action and order for the veterancy ability as well as the
+type flag. It does not promise a charge on arrival: with `quirks.charge_needs_type_flag`
+at its original default, veterancy alone plants nothing. S-0519 claim 13 owns planting
+and that switch, whose off setting also permits the veterancy ability to plant.
+Row I2 tests the bomb's visible state, not merely its presence. A previously ordered
+disarm shot does not acquire a visibility requirement (S-0519 claims 3 and 10).
 
 Consequences of the precedence: an immune building still gets *sabotage*, *demolish*, *airstrike*
 or *attack* from rows I16 to I18, since those come before I27; an engineer told to attack gets *no-move* from I9
@@ -2209,11 +2218,11 @@ action or order.
 
 | Rows | Actor and target | Expected |
 |---|---|---|
-| I2 | An engineer type that has no weapon (the test file removes any), over the own tank that carries the bomb attached in T3; then an engineer type given a weapon by the test file | disarm bomb (the cursor) and no order for the unarmed engineer; disarm bomb and an attack order on the tank for the armed one. With `quirks.disarm_bomb_needs_weapon` off, the unarmed engineer also gets the attack order. Falsified if the unarmed engineer gets an order with the quirk on |
+| I2 | An engineer type that has no weapon (the test file removes any), over the own tank that carries a visible bomb attached in T3; then an engineer type given a weapon by the test file. Repeat with a bomb not visible to the acting player, using the detector-range comparison of S-0519 claim 10, T11 | disarm bomb (the cursor) and no order for the unarmed engineer; disarm bomb and an attack order on the tank for the armed one. With `quirks.disarm_bomb_needs_weapon` off, the unarmed engineer also gets the attack order. The invisible-bomb comparison must not give disarm bomb through I2. Falsified by that cursor in the invisible case, or if the unarmed engineer gets an order with the weapon quirk on |
 | I9 | An engineer type that carries the infiltrator flag (the test file sets it, so that claim 6 (c) holds), force-fire held, over an enemy tank | no-move; a move order to a cell near the tank |
 | I11, I12, I13 | A medic over itself; over a hurt own infantry unit; over an own tank (a type without passengers) | area guard (an area-guard order on itself); heal (an attack order on the infantry unit); select (no order, the selection changes) |
 | I14 | A vehicle thief over a vehicle of another house whose type has the train flag; control: the same over an ordinary vehicle | select, no order; capture (hijack) for the control |
-| I16 | A charge planter over an enemy building whose type accepts charges; then over one whose type refuses them | sabotage (a sabotage order); attack |
+| I16 | A charge planter over an enemy building whose type accepts charges; then over one whose type refuses them; compare with an actor whose only charge capability is its current veterancy ability | sabotage (a sabotage order); attack. Veterancy alone also gives sabotage on the accepting building, but no charge on arrival at the original setting of `quirks.charge_needs_type_flag` (S-0519 claim 13, T13); a missing sabotage order or a planted charge in that last case falsifies this |
 | I17, I18 | An infantry type whose weapon has the demolition-cursor flag over an enemy tank; one whose weapon has the air-strike-cursor flag over an enemy building that accepts charges, and over one that refuses them | demolish (an attack order); airstrike (an attack order); attack |
 | I20 to I23 | An in-place deployer infantry type with an undeploy delay, deployed: over a far cell; over an own tank with force-move held; over an enemy tank out of its range (its type does not fire while deployed); over itself; then the same type while undeploying, over itself | no-move and no order; no-move and a move order to a cell near the tank (row I20; part 1 withholds only a no-move on a cell); no-move and the same kind of move order (row I21); no-deploy, no order; no-deploy, no order |
 | I24 | A spy over an enemy building whose type is spyable | capture (infiltrate): a capture order |
@@ -2659,6 +2668,11 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   not evidence that all object clicks create markers.
 
 ## Open questions
+
+- Row I18 and table M own only the airstrike cursor and its attack order, not the
+  subsequent designation effect or aircraft call-in. No current spec owns those effects.
+  Lead assignment is needed before a claim-level effects pointer can be supplied.
+  S-0519 is the proposed owner for the designation effect.
 
 - Q-0278 is answered by claims 18–20, with the remaining explicitly unmeasured qualification
   of state-specific transient box points (claim 19, T14 part B). Claims 24 and 25 answer
