@@ -121,6 +121,10 @@ pub fn removal_marks(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
         return Vec::new();
     };
     let actual = (o.pos.cell(), o.layer);
+    // spec: S-0209 claim 1 (a flying aircraft holds its object-present mark only while on the ground)
+    if let Some(m) = crate::air::removal_marks(w, id) {
+        return m;
+    }
     let Some(t) = o.teleport.as_ref() else {
         return vec![actual];
     };

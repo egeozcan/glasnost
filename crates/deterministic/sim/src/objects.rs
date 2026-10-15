@@ -256,6 +256,8 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
         obj.body.set(facing, tick, keeps);
         obj.turret.set(facing, tick, keeps);
     }
+    // spec: S-0501 claim 1 (an aircraft's placement height, speed fraction and marks)
+    crate::air::placed(w, id);
     // spec: S-0203 claim 2 (a terrain object takes turns exactly when its type has the spawns-resources flag)
     let takes_turns = o.kind != Kind::Terrain
         || w.rules()
@@ -293,6 +295,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
         return;
     }
     crate::econ::events::leaving_map(w, id, false);
+    // spec: S-0209 claim 1 (an aircraft going inside clears its object-present mark)
+    crate::air::clear_mark(w, id);
     let skip = w.rules().quirks.update_order_removal_skip;
     // spec: S-0203 claim 10 (going inside: a removal from the update order, counting during the turn pass)
     w.update.leave(id, skip);

@@ -96,6 +96,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
             crate::rocket::tick(w, id);
             return;
         }
+        if crate::air::crashing(w, id) {
+            // spec: S-0501 claim 9 (a crashing aircraft keeps its flying movement until it hits the ground)
+            crate::air::tick(w, id);
+            crate::air::end_turn(w, id);
+            return;
+        }
         // A killed object that stays in play (an infantry unit in its death sequence) only plays it out.
         crate::combat::death::infantry_death_turn(w, id);
         return;
@@ -115,6 +121,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::behave::delayed_shot_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);
+        // spec: S-0501 claim 26 (a pad's service step, in the pad's own turn)
+        crate::air::pad_turn(w, id);
         // spec: S-0302 claim 16 (the countdown's expiry hit, in the building's own turn, after the actions due earlier in that turn: self-healing, behaviour, ordinary and animation-delayed shots; Q-0170)
         crate::combat::damage::delay_kill_expiry_turn(w, id);
         return;
@@ -154,6 +162,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
     };
     // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)
     crate::econ::events::turn(w, id, moved);
+    if kind == Kind::Aircraft {
+        // spec: S-0501 claims 15, 31 and 37 (the end of an aircraft's update)
+        crate::air::end_turn(w, id);
+    }
     if kind == Kind::Vehicle {
         crate::combat::fire::reload_turn(w, id);
         crate::combat::fire::firing_frame_turn(w, id);

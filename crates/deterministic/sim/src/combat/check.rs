@@ -355,7 +355,14 @@ pub fn check(
         // spec: S-0310 claim 8 (infantry moving)
         return Answer::Moving;
     }
+    // spec: S-0501 claim 19 (a passenger carrier that now carries none answers out of ammunition)
+    if crate::air::empty_passenger_carrier(w, firer) {
+        return Answer::OutOfAmmo;
+    }
+    // spec: S-0501 claim 19 (a fighter never answers not facing)
+    let fighter = crate::air::is_aircraft(w, firer) && crate::air::fighter(w, firer);
     if let Some(tg) = target
+        && !fighter
         && let Some(a) = facing_answer(w, firer, weapon, tg)
     {
         // spec: S-0301 claim 9 rank 15 (not facing)

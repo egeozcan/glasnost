@@ -22,13 +22,12 @@ pub fn in_air(w: &World, id: ObjectId) -> bool {
     aircraft_in_air(w, id)
 }
 
-/// The in-the-air answer of an object that is not of a rocket type. Seam
-/// for the aircraft and jumpjet lanes (S-0501): in our engine no ordinary
-/// aircraft flies yet (aircraft stand landed, jumpjets are not moved), so
-/// none is in the air.
+/// The in-the-air answer of an object that is not of a rocket type: for a
+/// flying aircraft S-0307's *airborne* (S-0501 Terms). Jumpjets are not
+/// moved in our engine (a seam), so no other object is in the air.
 pub fn aircraft_in_air(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    // spec: S-0501 Terms (an aircraft's in-the-air answer is S-0307's airborne)
+    crate::air::is_aircraft(w, id) && airborne_by_height(w, id)
 }
 
 /// Whether an object is airborne in the sense of S-0307 (Terms): on the

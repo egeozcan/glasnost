@@ -2,12 +2,12 @@
 //! whose type names a spawned type keeps, launches, regenerates and reloads
 //! its slot objects (V3 and Dreadnought missiles, a carrier's aircraft).
 //!
-//! The flight of a non-missile slot aircraft belongs to the aircraft lane
-//! (S-0501 claims 35 and 36). This module drives its slot states and calls
-//! the hooks [`aircraft_launched`], [`aircraft_attack`] and
-//! [`aircraft_return`]; until the aircraft lane fills them, a non-missile
-//! slot aircraft only receives its destination or target and stays where it
-//! was placed. Docking back into the slot is the returning row of the Slot
+//! The flight of a non-missile slot aircraft is S-0501 (claims 35 and 36,
+//! table T4, in [`crate::air`]). This module drives its slot states and
+//! calls the hooks [`aircraft_launched`], [`aircraft_attack`] and
+//! [`aircraft_return`], which hand a flying aircraft to the flight code; a
+//! slot object of another locomotor only receives its destination or
+//! target. Docking back into the slot is the returning row of the Slot
 //! table, tested here in every pass ([`docks`]).
 
 use std::collections::BTreeMap;
@@ -1013,12 +1013,16 @@ pub fn release_direction(f: u16) -> usize {
     ((i32::from(f) / 4096 + 1) / 2).rem_euclid(8) as usize
 }
 
-/// Starts a released aircraft's crash (S-0312 claim 16). Our engine has
-/// no aircraft crash yet: the aircraft is destroyed at once with no
-/// attacker (seam: the aircraft lane).
+/// Starts a released aircraft's crash (S-0312 claim 16): a flying aircraft
+/// above the terrain falls alive and is destroyed at impact (S-0501 claim
+/// 9); any other is destroyed at once with no attacker.
 fn start_crash(w: &mut World, x: ObjectId) {
     let Some(o) = w.obj(x) else { return };
     if crate::combat::damage::dead(o) {
+        return;
+    }
+    // spec: S-0501 claim 9 (a flying aircraft above the terrain crashes alive and is destroyed at impact; Q-0635)
+    if crate::air::start_crash(w, x, true) {
         return;
     }
     if let Some(ob) = w.obj_mut(x) {
@@ -1191,33 +1195,44 @@ pub fn lost(w: &mut World, x: ObjectId) {
 }
 
 // ---------------------------------------------------------------------
-// Hooks for the aircraft lane (S-0501 claims 35 and 36)
+// Hooks into the aircraft flight (S-0501 claims 35 and 36, table T4)
 // ---------------------------------------------------------------------
 
 /// A non-missile slot aircraft is launched (or re-sent while preparing)
-/// towards `cell` (S-0506 claim 7 and Slot table). Hook for the aircraft
-/// lane: its flight there belongs to S-0501. Here it only receives the
-/// cell as its destination.
+/// towards `cell` (S-0506 claim 7 and Slot table): a flying aircraft gets
+/// the destination with *move* queued (S-0501 T4).
 pub fn aircraft_launched(w: &mut World, x: ObjectId, cell: CellXY) {
+    if crate::air::is_aircraft(w, x) {
+        crate::air::carrier_move(w, x, cell);
+        return;
+    }
     if let Some(o) = w.obj_mut(x) {
         o.dest = Some(Target::Cell(cell));
     }
 }
 
 /// A non-missile slot aircraft is set on the controller target (S-0506
-/// claim 8 and Slot table). Hook for the aircraft lane; here it only
-/// receives the target.
+/// claim 8 and Slot table): a flying aircraft receives it and queues
+/// *attack* (S-0501 T4).
 pub fn aircraft_attack(w: &mut World, x: ObjectId, target: Target) {
+    if crate::air::is_aircraft(w, x) {
+        crate::air::carrier_attack(w, x, target);
+        return;
+    }
     if let Some(o) = w.obj_mut(x) {
         o.target = Some(target);
     }
 }
 
 /// A non-missile slot aircraft flies back to its spawner (S-0506 Slot
-/// table). Hook for the aircraft lane; here it only receives the spawner
-/// as its destination and loses its target. Docking is tested in each pass
-/// by [`docks`].
+/// table): it loses its target and gets the spawner as its destination,
+/// with *move* for a flying aircraft (S-0501 T4). Docking is tested in each
+/// pass by [`docks`].
 pub fn aircraft_return(w: &mut World, x: ObjectId, spawner: ObjectId) {
+    if crate::air::is_aircraft(w, x) {
+        crate::air::carrier_return(w, x, spawner);
+        return;
+    }
     if let Some(o) = w.obj_mut(x) {
         o.target = None;
         o.dest = Some(Target::Object(spawner));
@@ -1227,9 +1242,9 @@ pub fn aircraft_return(w: &mut World, x: ObjectId, spawner: ObjectId) {
 /// The shared re-order cycle of released missiles (S-0506 claim 12):
 /// every 30 ticks each kamikaze is ordered to attack its release cell. A
 /// rocket missile ignores these orders (its aim point is fixed), so they
-/// matter only for a flagged aircraft outside the rocket types, whose
-/// flight belongs to the aircraft lane; this sets its target. Seam: the
-/// tick pipeline does not call it yet (the aircraft lane wires it).
+/// matter only for a flagged aircraft outside the rocket types, which
+/// receives the target and queues *attack* (S-0501 T4). Seam: the tick
+/// pipeline does not call it yet (no spec places the cycle in the tick).
 pub fn kamikaze_orders(w: &mut World) {
     let t = w.tick;
     if t < w.spawned.next_reorder {
