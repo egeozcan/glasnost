@@ -201,7 +201,7 @@ Q-0520 is answered by S-0102 revision 15, claim 33 and its Import mapping: for `
 
 | Where | Placeholder | Request |
 |---|---|---|
-| `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6 and leaves question 7 `unmeasured`) | Q-0215 |
+| `render::voxel::section_order` | mixed-depth ties outside F8's fourteen rows and all-equal parts keep the previous revision's exchange order; the depth-buffered mode draws its reverse (S-0105 claims 23 and 24; revision 11 answers questions 1 to 6; revision 16 marks Q-0215 answered with question 7 explicitly `unmeasured` and says our pixels there are no reference, so this choice stays a provisional rule) | Q-0215 |
 
 ## Map viewer (M2)
 
@@ -316,8 +316,9 @@ Provisional rules of M5a, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `econ::body::set_up` | no bootstrap: S-0215 claim 1 leaves a set-up building's ready mark clear and endorses no set-up mark, so a set-up turreted building's queued *guard* stays pending (claim 11) until a specified rule makes it ready; map-placed turreted defences therefore do not start *guard* on their own | Q-0241 |
 | `combat::death::kill`, `econ::production::release`, `econ::production::place` | a production item killed by a destruction hit (S-0414 claim 15) is only marked killed (no other death effect, no draws) and stays on its line with health 0 until a cancellation deletes it; a release order for it fails and cancels it with the refund, a place order does nothing | Q-0193 |
+
+S-0215 revision 42 answers Q-0241 (claim 1): set-up placement runs the building's grand opening after *guard* is queued, and the opening sets the ready mark (`econ::body::set_up`), so *guard* is current from the building's first per-tick start, armed or not, turreted or not, with or without a map-installed upgrade. The opening's free unit stays suppressed at set-up (S-0402 claim 18). Its row is retired; map-placed defences now guard and fire from their first turn.
 
 ## Simulation (M6a: missiles)
 
@@ -822,6 +823,7 @@ Interim rules and gaps:
   Game-side choices and the mixer's per-instance draws all take raw values from the client's one unsynchronised stream (S-0202 claim 11, S-0701 claim 30). `frame` and `service` lend that stream to the mixer for the pass and take it back. `now_ms` is host time; S-0701 revision 14 claim 30 (answering Q-0671) specifies the deterministic logical schedule that replaces it, which is not built yet (row below).
 - **Not modelled yet.**
   - Claim 22's animation stop sound: the simulation reports no animation end.
+  - Revision 15's Import mapping for `Report`, `StartSound` and `StopSound` per import layer (an unknown name keeps an earlier layer's reference, and the `Report` alias is read only while no start reference is held) is not built: `SoundNames` reads the merged section, where the last layer's value wins and an unknown name resolves to no entry at play time. The 127-character cut is the common text limit.
   - Claim 25's lightning sounds: there is no weather storm.
   - Enslaved and deactivated objects do not exist yet, so the normal response lists always apply (claim 17).
   - Sounds the simulation does not report yet: crushing (S-0210), chrono departure and arrival (S-0207), entering and leaving water, idle comments and undeploying (S-0107).

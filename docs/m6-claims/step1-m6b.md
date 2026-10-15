@@ -196,3 +196,18 @@ Q-0679, Q-0720 to Q-0729, Q-0790, and Q-0327 (S-0701 claims 21 and 32). Filed: Q
   empty place 0 and the arrival's ready mark (Q-0790).
 - **S-0504 (rev 14), (a).** Claim 7's two other amphibious zones are tested
   (`claim_7_other_amphibious_zones_match_the_flag`); Q-0643's marker is retired.
+- **S-0215 (rev 41 to 42), S-0009 (rev 25 to 26), S-0108 (rev 12 to 13), S-0402 (rev 22 to 23),
+  S-0409 (rev 13 to 14), (a).** Q-0241 answered: set-up placement's grand opening sets the
+  ready mark (`econ::body::set_up`), so *guard* is current from the first per-tick start; no
+  free unit at set-up (already so: set-up never calls `harvest::grand_opening`). The app's
+  set-up slots already include a refinery's empty fill slot (*active-1*); the superweapon and
+  sprite-turret slot starts are still not built (`turret_start_clears_damaged` row). S-0409's
+  shared owner reveal is original-only bookkeeping; nothing to build.
+- **S-0312 (rev 26 to 27), S-0504 (rev 14 to 15), (a, already done).** The retained bomb
+  mark (S-0511 claim 10) is built; S-0312 claim 11's low-water death effects are not built.
+  Ships run the drive track, so `Track::height` covers S-0504 claim 1's heading height.
+- **S-0105 (rev 15 to 16), (a).** Q-0215's question 7 stays `unmeasured`; its row stays as
+  our drawing choice.
+- **S-0701 (rev 14 to 15), S-0109 (rev 24 to 25), (a) and not built.** Claim 40 indexes
+  Q-0260, Q-0264 and Q-0265 (already listed as answered). The per-layer sound-reference
+  import rules are not built (`docs/development.md`, audio).
