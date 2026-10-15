@@ -110,3 +110,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0522](movement/S-0522-paradrops.md) | Parachutes and drops | movement | 1 | approved | — |
 | [S-0512](superweapons/S-0512-superweapon-charge.md) | "Superweapons: charge and readiness" | superweapons | 1 | approved | — |
 | [S-0524](triggers/S-0524-mp-trigger-completion.md) | Multiplayer trigger completion (remaining stock actions and entry raises) | triggers | 1 | approved | — |
+| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 1 | approved | — |
