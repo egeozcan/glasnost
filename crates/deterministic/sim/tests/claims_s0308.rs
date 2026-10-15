@@ -420,6 +420,26 @@ fn gattling_type_uses_slot_two_s() {
     assert_eq!(slot(&w, g, t), 4);
 }
 
+// spec: S-0308 Terms and claim 7; S-0609 Terms (only a gattling-flagged type that is also a multi-weapon type reads its stage; a gattling flag on a type with no turret count chooses as an ordinary type)
+#[test]
+fn gattling_flag_without_multi_weapon_reads_no_stage() {
+    let mut picks = Vec::new();
+    for gattling in [false, true] {
+        let mut r = multi_rules(gattling, false, &["C3", "B13", "A7", "E11"]);
+        let m = r.sim.vehicles.get_mut("MULTI").unwrap();
+        m.turret_count = Some(0);
+        m.primary = Some("C3".into());
+        m.secondary = Some("B13".into());
+        let mut w = game(&r);
+        let g = put(&mut w, Kind::Vehicle, "MULTI", 0, 0, 0);
+        let t = put(&mut w, Kind::Vehicle, "TGT", 1, 2, 0);
+        w.obj_mut(g).unwrap().combat.gattling_stage = 1;
+        picks.push(slot(&w, g, t));
+    }
+    assert_eq!(picks[0], picks[1], "the flag alone changes nothing");
+    assert!(picks[1] < 2, "slot 2s is not used: {picks:?}");
+}
+
 // spec: S-0308 claim 7 (a gattling type with an empty slot 1 uses slot 0 at every stage)
 #[test]
 fn gattling_type_with_empty_slot_one_uses_slot_zero() {

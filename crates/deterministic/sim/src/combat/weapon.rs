@@ -241,7 +241,8 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
         return 0;
     }
     // Row 4 (a passenger of an open-topped transport) needs transports, which their specs own.
-    if tc.gattling {
+    // spec: S-0308 Terms and S-0609 Terms (a gattling type is a gattling-flagged type that is also a multi-weapon type; only it reads the stage)
+    if tc.multi_weapon && tc.gattling {
         // spec: S-0308 claim 7 (slot 2s + 1 against an object in the air when the anti-air test passes, else 2s)
         let stage = w.obj(firer).map_or(0, |o| o.combat.gattling_stage).max(0) as usize;
         let test_slot = if q.gattling_air_test_slot_one {
