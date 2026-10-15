@@ -129,6 +129,14 @@ fn rules() -> Ruleset {
         r.sim.vehicles.insert(n.into(), u);
         push(&mut r, "vehicles", n);
     }
+    r.sim.aircraft.insert(
+        "FLYER".into(),
+        UnitType {
+            strength: Some(100),
+            ..Default::default()
+        },
+    );
+    push(&mut r, "aircraft", "FLYER");
     let mut yard = BuildingType {
         strength: Some(500),
         foundation: Some([2, 2]),
@@ -329,6 +337,72 @@ fn claim_1_ship_goal_cleanup() {
         None,
         "removed at the next update"
     );
+}
+
+/// A ship whose destination names a unit of `kind` (`name`) that stands on
+/// the ship's own point.
+fn naming(kind: Kind, name: &str) -> (World, ObjectId, ObjectId) {
+    let mut w = world(rules());
+    let ship = at(&mut w, "SKIFF", 0, 0, 0);
+    open(&mut w);
+    let n = testkit::spawn(&mut w, kind, name, 0, cell(5, 5), 0);
+    let here = w.obj(ship).unwrap().pos;
+    w.obj_mut(n).unwrap().pos = here;
+    let o = w.obj_mut(ship).unwrap();
+    o.dest = Some(Target::Object(n));
+    // Not at rest in guard: the cell-equality rows are tested here.
+    o.beh.current = Some(Behaviour::Move);
+    (w, ship, n)
+}
+
+const UNIT_GOALS: [(Kind, &str); 3] = [
+    (Kind::Vehicle, "CART"),
+    (Kind::Infantry, "WALKER"),
+    (Kind::Aircraft, "FLYER"),
+];
+
+// spec: S-0504 claim 1 (S-0207 claim 26, D31: a destination naming a vehicle, infantry unit or aircraft is not a cell destination; with no track, supplied-point cell equality alone clears neither the destination nor the point, whether the named unit is stationary or moving)
+#[test]
+fn claim_1_ship_keeps_a_destination_naming_a_unit_under_cell_equality() {
+    for (kind, name) in UNIT_GOALS {
+        let (mut w, ship, n) = naming(kind, name);
+        for step in 0..4 {
+            // The named unit moving, with no replacement instruction, makes no difference.
+            if step >= 2 {
+                w.obj_mut(n).unwrap().pos.x += 20;
+            }
+            glasnost_sim::drive::tick(&mut w, ship);
+            assert_eq!(
+                w.obj(ship).unwrap().dest,
+                Some(Target::Object(n)),
+                "{name}, update {step}"
+            );
+            assert!(glasnost_sim::drive::goal_present(&w, ship), "{name}");
+        }
+    }
+}
+
+// spec: S-0504 claim 1 (S-0207 claim 26, D31: at rest in guard with a locomotor point present, exact equality of the ship's world point and that point in x, y and z removes the destination, for a unit goal too; the comparison is with the retained point, not the named unit's position; same-cell equality alone does not qualify)
+#[test]
+fn claim_1_ship_guard_row_compares_the_retained_point_for_a_unit_goal() {
+    // (the retained point's offset from the ship, the named unit's offset) -> removed?
+    for (kind, name) in UNIT_GOALS {
+        for (point_dx, named_dx, removed) in [(0, 0, true), (0, 90, true), (30, 0, false)] {
+            let (mut w, ship, n) = naming(kind, name);
+            let p = w.obj(ship).unwrap().pos;
+            {
+                let o = w.obj_mut(ship).unwrap();
+                o.beh.current = Some(Behaviour::Guard);
+                let d = o.drive.as_mut().unwrap();
+                d.for_dest = Some(Target::Object(n));
+                d.goal = Some(Pos::new(p.x - point_dx, p.y, p.z));
+            }
+            w.obj_mut(n).unwrap().pos.x += named_dx;
+            glasnost_sim::drive::tick(&mut w, ship);
+            let kept = w.obj(ship).unwrap().dest == Some(Target::Object(n));
+            assert_eq!(kept, !removed, "{name}: point {point_dx}, named {named_dx}");
+        }
+    }
 }
 
 // spec: S-0504 claim 1 (a destination on land: the ship does not leave the water)

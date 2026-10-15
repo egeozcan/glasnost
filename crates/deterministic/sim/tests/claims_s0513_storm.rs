@@ -337,7 +337,10 @@ fn building_strike_debris(
             .iter()
             .any(|e| matches!(e.0, SwEvent::Lightning(_)))
         {
-            assert!(w.obj(bld).is_none_or(|o| o.health <= 0), "the building died");
+            assert!(
+                w.obj(bld).is_none_or(|o| o.health <= 0),
+                "the building died"
+            );
             return w.effects.iter().any(|e| {
                 matches!(e, glasnost_sim::combat::effects::Effect::Anim { name, .. }
                     if name.starts_with("DEB"))
@@ -372,6 +375,30 @@ fn claim18_the_building_threshold_is_the_same_in_every_foundation_cell() {
     // A 3 x 3 building (both odd, 181) struck on a non-anchor cell: infantry at 141 wins, at 282 the building does.
     assert!(!building_strike_debris([3, 3], (2, 2), (2, 2), (100, 100)));
     assert!(building_strike_debris([3, 3], (2, 2), (2, 2), (200, 200)));
+}
+
+#[test]
+fn claim18_a_building_is_listed_in_every_actual_foundation_cell() {
+    // spec: S-0209 claim 13 and S-0513 claim 18 (an on-map ground-layer building is listed in every actual foundation cell of S-0406 claim 2, not only its anchor; a missing cell of an irregular foundation does not list it)
+    let mut r = ruleset();
+    {
+        let b = r.sim.buildings.get_mut("AUXB").unwrap();
+        b.foundation = Some([3, 3]);
+        b.foundation_refinery = Some(true);
+    }
+    let mut w = game(&r);
+    let bld = spawn(&mut w, "AUXB", BETA, 0, 0);
+    for dx in 0..3 {
+        for dy in 0..3 {
+            let listed = w.cells.list(at(dx, dy), glasnost_sim::world::Layer::Ground);
+            // The 8-cell word lacks the cell (2, 1).
+            assert_eq!(
+                listed.contains(&bld),
+                (dx, dy) != (2, 1),
+                "cell ({dx}, {dy})"
+            );
+        }
+    }
 }
 
 /// The synthetic rules with both clouds of `frames` image frames and rate

@@ -1592,7 +1592,9 @@ fn arrive_or_rest(w: &mut World, id: ObjectId) {
 /// without an active track (S-0207 claim 26); whether the goal was removed.
 /// A cell goal is removed while the vehicle occupies that cell, whatever the
 /// behaviour and with no search, height tolerance or exact alignment. A
-/// building goal is not removed by cell equality; only a vehicle at rest in
+/// goal naming an object (a building, vehicle, infantry unit or aircraft,
+/// a transport included, S-0504 claim 1, S-0507 claims 5 and 6) is not
+/// removed by cell equality; only a vehicle at rest in
 /// guard whose world point equals the locomotor destination point in all
 /// three coordinates loses it too. With approach destinations the goal is
 /// abandoned and the vehicle falls back to rest (S-0215 claim 13), as for a

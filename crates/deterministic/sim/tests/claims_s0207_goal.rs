@@ -213,3 +213,55 @@ fn claim_26_guard_row_for_a_destination_naming_a_unit_compares_the_retained_poin
         );
     }
 }
+
+// spec: S-0215 claim 22 (a destination naming a vehicle, infantry unit or aircraft is retained under cell equality: a due move processing sees it and chooses the standard delay, and the locomotion cleanup does not remove it or touch the timer)
+#[test]
+fn s0215_claim_22_a_unit_goal_is_kept_through_processing_and_cleanup() {
+    for (kind, name) in [(Kind::Vehicle, "BUGGY"), (Kind::Infantry, "WALKER")] {
+        let (mut w, v, n) = naming(kind, name);
+        let t = w.tick;
+        w.obj_mut(v).unwrap().beh.force(Behaviour::Move, t, true);
+        process::turn(&mut w, v);
+        let (at, d) = w.obj(v).unwrap().beh.last.unwrap();
+        assert_eq!(at, t);
+        assert!(
+            (14..=16).contains(&d),
+            "{name}: the standard delay, got {d}"
+        );
+        let timer = w.obj(v).unwrap().beh.last;
+        drive::tick(&mut w, v);
+        assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(n)), "{name}");
+        assert_eq!(w.obj(v).unwrap().beh.last, timer, "{name}: timer untouched");
+    }
+}
+
+// spec: S-0215 claim 22 (the exact-point guard exception of S-0207 claim 26 removes a goal naming a unit and invokes the approach-destination fallback; it compares the retained point, not the named unit's current position)
+#[test]
+fn s0215_claim_22_guard_exception_with_a_unit_goal_falls_back_to_the_approach_destination() {
+    let (mut w, v, n) = naming(Kind::Vehicle, "BUGGY");
+    let here = w.obj(v).unwrap().pos;
+    let far = CellXY::new(here.cell().x, here.cell().y - 6);
+    {
+        let o = w.obj_mut(v).unwrap();
+        o.beh.current = Some(Behaviour::Guard);
+        o.queued_dests = vec![Target::Cell(far)];
+        let d = o.drive.as_mut().unwrap();
+        d.for_dest = Some(Target::Object(n));
+        d.goal = Some(here);
+    }
+    // The named unit is elsewhere in the cell: the retained point alone decides.
+    w.obj_mut(n).unwrap().pos.x += 90;
+    drive::tick(&mut w, v);
+    let o = w.obj(v).unwrap();
+    assert_ne!(
+        o.dest,
+        Some(Target::Object(n)),
+        "the unit goal is abandoned"
+    );
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(far)),
+        "the approach fallback supplies the next"
+    );
+    assert!(o.queued_dests.is_empty());
+}
