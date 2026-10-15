@@ -2,10 +2,11 @@
 //!
 //! The parts that have no topic yet (planted bombs, the
 //! weather storm, chrono flashes, diving aircraft, teams, disc lasers,
-//! radiation, pulses, blast rings and crates) are empty seams in their places
+//! pulses, blast rings and crates) are empty seams in their places
 //! of S-0203 claim 1, so that their draws land where the original takes them
 //! once they are written. Resource growth (row 9), the production lines (row
-//! 6) and the houses (row 7) run the M5a topics (`crate::econ`).
+//! 6) and the houses (row 7) run the M5a topics (`crate::econ`). Radiation
+//! maintenance (row 13) takes no draws and is not built yet.
 
 use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
