@@ -1383,10 +1383,20 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     // Seam: S-0518 claim 11 ranks mind control and demolition charge planting above the
     // electric-charge effect; neither is modelled (S-0601, S-0519 claim 13), so a flagged
     // warhead always selects it. Charger registration is S-0518's (not built).
-    let area = !rules
+    let disguises = rules
         .combat
         .warhead_of(pr.weapon)
-        .is_some_and(|h| h.parasite || h.airstrike || h.electric_assault);
+        .is_some_and(|h| h.makes_disguise);
+    // spec: S-0516 claim 31 (a disguise-flag warhead's projectile does no damage to the target)
+    let area = !disguises
+        && !rules
+            .combat
+            .warhead_of(pr.weapon)
+            .is_some_and(|h| h.parasite || h.airstrike || h.electric_assault);
+    if disguises {
+        // spec: S-0516 claim 31 (detonating on its target, it disguises its firer)
+        crate::cloak::disguise::disguise_hit(w, pr.attacker, pr.target);
+    }
     if p.airburst {
         let res = detonation_inner(
             w,

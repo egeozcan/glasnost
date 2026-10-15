@@ -2,7 +2,8 @@
 //! neighbouring cell.
 //!
 //! Object states that later milestones own read as their default here:
-//! nothing is cloaked, being erased, invulnerable, a parasite or a slave.
+//! nothing is being erased, invulnerable, a parasite or a slave. The cloak
+//! state is S-0516's ([`crate::cloak::fully_cloaked`]).
 //! Whether a gate is open is S-0215 claim 35 ([`crate::process::gate_open`]).
 //! A wall's owner is S-0210 claim 14.
 
@@ -333,6 +334,9 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
             } else if allied {
                 // spec: S-0209 claim 4 (row WP19: allied building blocked)
                 (false, Some(Outcome::Blocked))
+            } else if crate::cloak::fully_cloaked(w, oid) {
+                // spec: S-0209 claim 4 (row WP21: cloaked enemy object, armed walker or not; the cloak state alone, Terms *cloaked*)
+                (false, Some(Outcome::CloakedBlocker))
             } else if !armed {
                 // spec: S-0209 claim 4 (row WP22: enemy object, unarmed walker)
                 (false, Some(Outcome::Blocked))
@@ -369,9 +373,18 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
                 Kind::Aircraft => (false, Some(Outcome::Blocked)),
                 _ => (false, None),
             }
+        } else if crate::cloak::fully_cloaked(w, oid) {
+            // spec: S-0209 claim 4 (row WP21: cloaked enemy object, armed walker or not; the cloak state alone, Terms *cloaked*)
+            (false, Some(Outcome::CloakedBlocker))
         } else if !armed {
             // spec: S-0209 claim 4 (row WP22)
             (false, Some(Outcome::Blocked))
+        } else if o.kind == Kind::Infantry
+            && crate::cloak::appears_disguised(w, oid, m.owner)
+            && o.cloak.disguise.is_some_and(|d| d.house.is_some())
+        {
+            // spec: S-0209 claim 4 (row WP25: enemy infantry that appears friendly to the walker's house through a disguise, armed walker) and S-0516 claims 35 and 36; Q-0728 (interim: a disguise with a house)
+            (false, Some(Outcome::StationaryFriendly))
         } else if o.kind == Kind::Infantry {
             // spec: S-0209 claim 4 (row WP26: other enemy infantry, armed: none)
             (false, None)
@@ -569,6 +582,9 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             } else if allied {
                 // spec: S-0209 claim 5 (row VP19)
                 v = Some(Outcome::Blocked);
+            } else if crate::cloak::fully_cloaked(w, oid) {
+                // spec: S-0209 claim 5 (row VP24: cloaked enemy object; the cloak state alone, Terms *cloaked*)
+                v = Some(Outcome::CloakedBlocker);
             } else if crusher && crushable_by(w, mover, oid) {
                 crushable_occupant = true;
                 v = None;
@@ -612,6 +628,9 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
                 // spec: S-0209 claim 5 (row VP23) and S-0212 claim 27 (any other moving allied unit, moving infantry among them, gives no outcome of its own)
                 v = None;
             }
+        } else if crate::cloak::fully_cloaked(w, oid) {
+            // spec: S-0209 claim 5 (row VP24: cloaked enemy object; the cloak state alone, Terms *cloaked*)
+            v = Some(Outcome::CloakedBlocker);
         } else if crusher && crushable_by(w, mover, oid) {
             // spec: S-0209 claim 5 (row VP25: a crushable occupant)
             crushable_occupant = true;

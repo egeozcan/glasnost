@@ -164,8 +164,8 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
     if !tc.retaliate {
         return;
     }
-    // spec: S-0309 claim 18 (the attacker is not allied with it)
-    if w.allied(o.owner, a.owner) {
+    // spec: S-0309 claim 18 (the attacker is not allied with it); S-0516 claim 36 (and does not appear disguised to its owner)
+    if w.allied(o.owner, a.owner) || crate::cloak::appears_disguised(w, attacker, o.owner) {
         return;
     }
     // spec: S-0309 claim 18 and S-0614 claim 17 (X is not the parasite attached to it)
@@ -650,6 +650,20 @@ fn candidate(
     }
     // spec: S-0309 table C (invisible building)
     if to.kind == Kind::Building && r.buildings[to.type_index as usize].invisible {
+        return false;
+    }
+    // spec: S-0309 table C (cloak: fully cloaked, not on a sensed cell of A's owner, not owned by A's owner); S-0516 claim 21
+    if crate::cloak::fully_cloaked(w, t)
+        && !crate::cloak::senses(w, ao.owner, t)
+        && to.owner != ao.owner
+    {
+        return false;
+    }
+    // spec: S-0309 table C (disguise: appears disguised to A's owner and A's type cannot detect disguises); claim 25 (g) for the neutral and special houses is a seam (`cloak::disguise::neutral_sees_through`)
+    if crate::cloak::appears_disguised(w, t, ao.owner)
+        && !atc.is_some_and(|x| x.detect_disguise)
+        && (player_owned(w, a) || !crate::cloak::disguise::neutral_sees_through(w, a, t))
+    {
         return false;
     }
     let player = player_owned(w, a);

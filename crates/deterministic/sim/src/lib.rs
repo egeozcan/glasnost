@@ -19,6 +19,7 @@ pub mod base;
 pub mod behaviour;
 pub mod bridges;
 pub mod cells;
+pub mod cloak;
 pub mod combat;
 pub mod consts;
 pub mod corridor;

@@ -78,7 +78,8 @@ fn ship() -> UnitType {
 /// - a water land row passable only to the float and amphibious classes,
 ///   ground rows impassable to the float class;
 /// - ships SKIFF (surface), LIGHT (weight below the sinking weight),
-///   DIVER (underwater, cloakable), SCOW (no weight);
+///   DIVER (underwater, cloakable), DEEP (underwater, not cloakable),
+///   SCOW (no weight);
 /// - HOVER (the hovering locomotor), AMPHI (amphibious zone);
 /// - buildings NAVYARD (naval vehicle factory with the repair flag, its
 ///   sole docking displacement to the cell (2, 1) from its top-left) and
@@ -99,6 +100,8 @@ fn rules() -> Ruleset {
     let mut diver = ship();
     diver.combat.underwater = Some(true);
     diver.combat.cloakable = Some(true);
+    let mut deep = ship();
+    deep.combat.underwater = Some(true);
     let mut scow = ship();
     scow.weight = None;
     let hover = UnitType {
@@ -118,6 +121,7 @@ fn rules() -> Ruleset {
         ("SKIFF", ship()),
         ("LIGHT", light),
         ("DIVER", diver),
+        ("DEEP", deep),
         ("SCOW", scow),
         ("HOVER", hover),
         ("AMPHI", amphi),
@@ -626,15 +630,20 @@ fn sinking_save_load_round_trip() {
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
 }
 
-// spec: S-0504 claim 6 (an underwater type moves like a surface ship and is never submerged without cloaking; S-0516's cloak states are not modelled yet)
+// spec: S-0504 claim 6 (an underwater type moves like a surface ship and is never submerged without cloaking); S-0516 claims 16 and 41 (a self-cloaking underwater vessel enters play submerged)
 #[test]
 fn claim_6_underwater_vessel() {
     let mut w = world(rules());
     let diver = at(&mut w, "DIVER", 0, -6, 4);
     let skiff = at(&mut w, "SKIFF", 0, -6, -4);
+    let deep = at(&mut w, "DEEP", 0, -6, 0);
     open(&mut w);
-    assert!(!naval::submerged(&w, diver));
+    assert!(naval::submerged(&w, diver), "placed already cloaked");
     assert!(!naval::submerged(&w, skiff));
+    assert!(
+        !naval::submerged(&w, deep),
+        "an underwater type that cannot cloak"
+    );
     click_move(&mut w, diver, cell(-1, 4));
     let p = w.obj(diver).unwrap().pos;
     for _ in 0..60 {

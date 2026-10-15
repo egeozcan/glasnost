@@ -267,6 +267,9 @@ pub struct Object {
     pub combat: crate::combat::state::CombatState,
     /// Economy state (M5a).
     pub econ: crate::econ::ObjectEcon,
+    /// Cloak and disguise state (S-0516).
+    #[serde(default)]
+    pub cloak: crate::cloak::ObjCloak,
 }
 
 /// One house in the game setup.
@@ -361,6 +364,9 @@ pub struct World {
     pub notes: Vec<String>,
     /// Economy, production, structures and visibility (M5a).
     pub econ: crate::econ::WorldEcon,
+    /// Cloak fields, sensor and disguise-detector coverage (S-0516).
+    #[serde(default)]
+    pub cloak: crate::cloak::CloakWorld,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.

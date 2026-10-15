@@ -120,6 +120,8 @@ pub struct WeaponRules {
     pub limbo_launch: bool,
     /// Animation list: the per-direction delivery animation (S-0614 claim 9).
     pub anim: Vec<String>,
+    /// Fake-blink time in ticks (S-0516 claim 39).
+    pub disguise_fake_blink: i32,
 }
 
 impl WeaponRules {
@@ -306,6 +308,8 @@ pub struct WarheadRules {
     /// Temporal flag (S-0301 Terms, S-0514 Terms): a weapon with this
     /// warhead is a temporal weapon.
     pub temporal: bool,
+    /// Disguise flag (S-0516 claim 31).
+    pub makes_disguise: bool,
 }
 
 impl WarheadRules {
@@ -455,8 +459,20 @@ pub struct TypeCombat {
     pub naval_targeting: i32,
     /// Underwater.
     pub underwater: bool,
-    /// Can cloak (S-0504 Terms; S-0516, wave 2).
+    /// The type's own cloak flag (S-0504 Terms; S-0516 claim 2 a).
     pub cloakable: bool,
+    /// Cloak-stop (S-0516 claim 3).
+    pub cloak_stop: bool,
+    /// Cloaking speed S, ticks per stage (S-0516 claim 1).
+    pub cloaking_speed: i32,
+    /// Sensors flag (S-0516 claims 13 and 18).
+    pub sensors: bool,
+    /// Sensors-sight R in cells (S-0516 claims 22 and 23).
+    pub sensors_sight: i32,
+    /// Can disguise (S-0516 claims 30 to 34).
+    pub can_disguise: bool,
+    /// Disguises when still (S-0516 claim 33).
+    pub disguise_when_still: bool,
     /// Organic.
     pub organic: bool,
     /// Unnatural.
@@ -994,6 +1010,8 @@ pub fn tables(
                 culling: b(h.culling),
                 // spec: S-0301 Import mapping and S-0514 Import mapping (Temporal, a warhead key; absent: no)
                 temporal: b(h.temporal),
+                // spec: S-0516 Import mapping (MakesDisguise absent: no)
+                makes_disguise: b(h.makes_disguise),
             }
         })
         .collect();
@@ -1058,6 +1076,8 @@ pub fn tables(
                 // spec: S-0614 Import mapping (LimboLaunch absent: no; Anim absent: empty)
                 limbo_launch: b(w.limbo_launch),
                 anim: w.anim.clone().unwrap_or_default(),
+                // spec: S-0516 Import mapping (DisguiseFakeBlinkTime absent: 0 ticks)
+                disguise_fake_blink: w.disguise_fake_blink_time.unwrap_or(0),
             }
         })
         .collect();
@@ -1160,6 +1180,18 @@ pub fn type_combat(
         underwater: b(c.underwater),
         // spec: S-0504 Import mapping (Cloakable absent: no)
         cloakable: b(c.cloakable),
+        // spec: S-0516 Import mapping (CloakStop absent: no)
+        cloak_stop: b(c.cloak_stop),
+        // spec: S-0516 Import mapping (CloakingSpeed absent: 7 ticks per stage)
+        cloaking_speed: c.cloaking_speed.unwrap_or(7),
+        // spec: S-0516 Import mapping (Sensors absent: no)
+        sensors: b(c.sensors),
+        // spec: S-0516 Import mapping (SensorsSight absent: 0 cells)
+        sensors_sight: c.sensors_sight.unwrap_or(0),
+        // spec: S-0516 Import mapping (CanDisguise absent: no)
+        can_disguise: b(c.can_disguise),
+        // spec: S-0516 Import mapping (DisguiseWhenStill absent: no)
+        disguise_when_still: b(c.disguise_when_still),
         // spec: S-0314 Import mapping (Organic absent: yes for infantry types, no otherwise)
         organic: c.organic.unwrap_or(infantry),
         unnatural: b(c.unnatural),

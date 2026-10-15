@@ -1351,43 +1351,43 @@ pub struct Quirks {
     // spec: S-0511 claim 18, Edge cases
     #[serde(default = "on")]
     pub repair_walk_unbounded: bool,
-    /// The type's cloak flag is ignored for aircraft and buildings; off: they can cloak by themselves. Not implemented yet (wave 2).
+    /// The type's cloak flag is ignored for aircraft and buildings; off: they can cloak by themselves.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub cloak_flag_ground_mobile_only: bool,
-    /// With a cloaking speed of 0 cloaking advances a stage per tick and uncloaking never advances; off: fixed. Not implemented yet (wave 2).
+    /// With a cloaking speed of 0 cloaking advances a stage per tick and uncloaking never advances; off: fixed.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub cloak_zero_speed_stall: bool,
-    /// Healing or a zero-damage hit uncloaks; off: only hits that lower health. Not implemented yet (wave 2).
+    /// Healing or a zero-damage hit uncloaks; off: only hits that lower health.
     // spec: S-0516 claim 12, Edge cases
     #[serde(default = "on")]
     pub heal_reveals_cloaked: bool,
-    /// An uncloak started while cloaking takes the full duration; off: it starts from the current stage. Not implemented yet (wave 2).
+    /// An uncloak started while cloaking takes the full duration; off: it starts from the current stage.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub uncloak_from_cloaking_full_duration: bool,
-    /// Allied sensor units stop a building cloaking and a sensors ability does not; off: only non-allied sensors, by flag or ability. Not implemented yet (wave 2).
+    /// Allied sensor units stop a building cloaking and a sensors ability does not; off: only non-allied sensors, by flag or ability.
     // spec: S-0516 claim 18, Edge cases
     #[serde(default = "on")]
     pub building_sensor_ring_owner_only: bool,
-    /// Overlapping cloak fields lose cells as in the original; off: a cell stays while any powered generator of the house covers it. Not implemented yet (wave 2).
+    /// Overlapping cloak fields lose cells as in the original; off: a cell stays while any powered generator of the house covers it.
     // spec: S-0516 claim 20, Edge cases
     #[serde(default = "on")]
     pub cloak_field_overlap_loss: bool,
-    /// The neighbouring-infantry check runs on 7 ticks of 8; off: only on multiples of 8. Not implemented yet (wave 2).
+    /// The neighbouring-infantry check runs on 7 ticks of 8; off: only on multiples of 8.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub mirage_adjacent_check_cadence: bool,
-    /// A sensor array's removal decrements over its cloak-radius disc; off: over the disc it added. Not implemented yet (wave 2).
+    /// A sensor array's removal decrements over its cloak-radius disc; off: over the disc it added.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub sensor_array_removal_radius: bool,
-    /// Sensor and disguise-detector coverage is set at first placement only; off: it follows power and capture. Not implemented yet (wave 2).
+    /// Sensor and disguise-detector coverage is set at first placement only; off: it follows power and capture.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub sensor_building_activation_once: bool,
-    /// Building removals have no floor, so a cell's sensor count can go negative; off: removal undoes exactly what was added. Not implemented yet (wave 2).
+    /// Building removals have no floor, so a cell's sensor count can go negative; off: removal undoes exactly what was added.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
     pub sensor_count_negative: bool,

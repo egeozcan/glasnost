@@ -148,9 +148,12 @@ pub fn create_converted(
             F64::from_i64(1, w.rules().mode),
         ),
         econ: Default::default(),
+        cloak: Default::default(),
     };
     w.objects.insert(id, obj);
     veteran_at_creation(w, id);
+    // spec: S-0516 claims 2 (a) and 32 (the own cloak flag and a permanent disguise at creation)
+    crate::cloak::machine::created(w, id);
     id
 }
 

@@ -297,6 +297,14 @@ pub fn check(
         // spec: S-0301 claim 9 rank 4 (most target tests give illegal)
         return Answer::Illegal;
     }
+    // spec: S-0301 claim 9 rank 4 and S-0516 claim 24 (a target hidden from the firer's house: impossible when the mean weapon damage is above 0 or the target is not allied with the firer)
+    if let Some(Target::Object(x)) = target
+        && crate::cloak::hidden_from(w, x, o.owner)
+        && (crate::combat::weapon::mean_damage(w, firer) > 0
+            || !w.allied(o.owner, w.obj(x).and_then(|t| t.owner)))
+    {
+        return Answer::Impossible;
+    }
     // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0207 claim 20 (f) (phasing in)
     if crate::teleport::phasing_in(w, firer) {
         return Answer::Rearming;
@@ -333,7 +341,10 @@ pub fn check(
     if c.ammo == 0 {
         return Answer::OutOfAmmo;
     }
-    // Rank 8 (cloaked) needs the cloaking states of the visibility topic: no object cloaks yet.
+    // spec: S-0301 claim 9 rank 8 and claim 12 (a weapon that needs the firer uncloaked: cloaked; an aircraft only while fully cloaked)
+    if crate::cloak::machine::needs_uncloak(w, firer, wr.decloak_to_fire) {
+        return Answer::Cloaked;
+    }
     if let Some(tg) = target {
         // spec: S-0301 claim 9 rank 9 (a seeker type answers out of range, whatever the distance)
         if kind == Kind::Vehicle

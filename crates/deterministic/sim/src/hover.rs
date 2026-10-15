@@ -1139,12 +1139,13 @@ pub fn start_fall(w: &mut World, id: ObjectId) {
     crate::fall::start(w, id, true);
 }
 
-/// Seam: the cloaked objects in `c` become visible to the vehicle's house
-/// (S-0503 table T1, S-0209 claim 9). Cloaking is S-0516's and is not built,
-/// so nothing is cloaked.
+/// The cloaked objects in `c` start uncloaking (S-0503 table T1, S-0209
+/// claim 9, S-0516 claim 11 (e): every cloaked ground-layer object, of any
+/// house).
 fn reveal_cloaked(w: &mut World, id: ObjectId, c: CellXY) {
-    // spec: S-0516 (cloaking), not built: a seam
-    let _ = (w, id, c);
+    let _ = id;
+    // spec: S-0516 claim 11 (e) (a blocked mover: the cell's ground-layer cloaked objects start uncloaking)
+    crate::cloak::machine::blocked_reveal(w, c);
 }
 
 /// Seam: a crate in the chosen cell is collected (S-0503 claim 5, S-0520).

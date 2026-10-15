@@ -168,6 +168,8 @@ pub fn at_cell_centre(w: &mut World, id: ObjectId) {
             house: None,
             pos: Some(cr.pos),
         });
+        // spec: S-0516 claim 11 (c) (a vehicle that crushes something starts uncloaking); Q-0723
+        crate::cloak::machine::crushed(w, id);
     }
 }
 
@@ -202,6 +204,8 @@ fn crush_overlay(w: &mut World, id: ObjectId, c: CellXY) {
             pos,
         });
     }
+    // spec: S-0516 claim 11 (c) (a vehicle that crushes something starts uncloaking); Q-0723
+    crate::cloak::machine::crushed(w, id);
     if !ov.wall && r.quirks.crushable_overlay_stays {
         // spec: S-0210 claim 8 (a crushable overlay that is not a wall stays, quirks.crushable_overlay_stays)
         return;

@@ -253,6 +253,10 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         tob.combat.expected_health = tob.combat.expected_health.wrapping_sub(e);
     }
     after_shot(w, firer, weapon);
+    if launched.is_some() {
+        // spec: S-0516 claim 39 (a still-disguising vehicle that fires and creates a projectile starts its fake blink)
+        crate::cloak::disguise::fired(w, firer, weapon);
+    }
     // spec: S-0614 claim 1 (a latching weapon: the firer leaves the map and travels inside the projectile)
     if let Some(carrier) = launched
         && crate::parasite::latching(w, weapon)

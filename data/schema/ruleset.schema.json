@@ -564,6 +564,23 @@
           ],
           "default": null
         },
+        "cloak_generator": {
+          "description": "`CloakGenerator` (S-0516 claims 19 and 20).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "cloak_radius_in_cells": {
+          "description": "`CloakRadiusInCells` *r*, cells, kept as a signed 8-bit value (S-0516 claims 19, 20 and 23).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "cloning": {
           "description": "`Cloning`.",
           "type": [
@@ -628,6 +645,15 @@
               "type": "null"
             }
           ]
+        },
+        "detect_disguise_range": {
+          "description": "`DetectDisguiseRange`, cells (S-0516 claim 40).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "econ": {
           "description": "Economy fields (M5).",
@@ -935,6 +961,14 @@
           ],
           "default": null
         },
+        "sensor_array": {
+          "description": "`SensorArray` (S-0516 claim 23).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "spyable": {
           "description": "`Spyable`.",
           "type": [
@@ -1156,6 +1190,14 @@
             }
           ]
         },
+        "can_disguise": {
+          "description": "`CanDisguise` (S-0516 claims 30 to 34).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "can_passive_aquire": {
           "description": "`CanPassiveAquire` (S-0309 claim 2).",
           "type": [
@@ -1172,12 +1214,29 @@
           ],
           "default": null
         },
+        "cloak_stop": {
+          "description": "`CloakStop`, the cloak-stop flag (S-0516 claim 3).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "cloakable": {
           "description": "`Cloakable`: whether an underwater type can be submerged (S-0504 Terms; S-0516, wave 2).",
           "type": [
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "cloaking_speed": {
+          "description": "`CloakingSpeed` *S*, ticks per stage (S-0516 claim 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "coefficients": {
@@ -1296,6 +1355,14 @@
         },
         "detect_disguise": {
           "description": "`DetectDisguise` (S-0309 table C).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "disguise_when_still": {
+          "description": "`DisguiseWhenStill` (S-0516 claim 33).",
           "type": [
             "boolean",
             "null"
@@ -1608,6 +1675,23 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "sensors": {
+          "description": "`Sensors`, the sensors flag (S-0516 claims 13 and 18).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "sensors_sight": {
+          "description": "`SensorsSight` *R*, cells (S-0516 claims 22 and 23).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "spawn_regen_rate": {
@@ -3814,6 +3898,14 @@
           ],
           "default": null
         },
+        "allied_disguise": {
+          "description": "`[General] AlliedDisguise`, an infantry type name (S-0516 claim 32).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "allied_gate_one": {
           "description": "`GDIGateOne`: the first Allied gate type, a building key (S-0112).",
           "type": [
@@ -3863,6 +3955,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "attack_cursor_on_disguise": {
+          "description": "`[General] AttackCursorOnDisguise` (S-0516 Import mapping, S-0214 claim 6).",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "ballistic_scatter": {
@@ -4183,6 +4283,34 @@
           "format": "int32",
           "default": null
         },
+        "cloak_delay": {
+          "description": "`[General] CloakDelay` *d*, minutes, a decimal (S-0516 F3).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cloak_sound": {
+          "description": "`[AudioVisual] CloakSound`, the game-wide cloak sound (S-0516 claim 15).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cloaking_stages": {
+          "description": "`[General] CloakingStages` *N*, the game-wide number of cloaking stages (S-0516 claim 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "close_enough": {
           "description": "`CloseEnough`, cells (S-0209 F2).",
           "anyOf": [
@@ -4427,6 +4555,17 @@
           ],
           "default": null
         },
+        "default_mirage_disguises": {
+          "description": "`[General] DefaultMirageDisguises`, terrain-object type names (S-0516 claim 33 (c)).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "default_spark_system": {
           "description": "`[CombatDamage] DefaultSparkSystem`, a particle-system name: the drone\ndelivery's spark effect (S-0614 claim 9); absent-key default not\nestablished.",
           "type": [
@@ -4657,6 +4796,15 @@
               "type": "null"
             }
           ]
+        },
+        "infantry_blink_disguise_time": {
+          "description": "`[General] InfantryBlinkDisguiseTime`, ticks (S-0516 claim 33 (b)).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "infantry_explode": {
           "description": "`[General] InfantryExplode`, an animation name (S-0302 claim 15).",
@@ -5047,6 +5195,14 @@
           ],
           "default": null
         },
+        "soviet_disguise": {
+          "description": "`[General] SovietDisguise`, an infantry type name (S-0516 claim 32).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "soviet_gate_one": {
           "description": "`NodGateOne`: the first Soviet gate type (S-0112).",
           "type": [
@@ -5093,6 +5249,14 @@
         },
         "third_crew": {
           "description": "`[General] ThirdCrew` (S-0312 F4).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "third_disguise": {
+          "description": "`[General] ThirdDisguise`, an infantry type name (S-0516 claim 32).",
           "type": [
             "string",
             "null"
@@ -6706,7 +6870,7 @@
           "default": true
         },
         "building_sensor_ring_owner_only": {
-          "description": "Allied sensor units stop a building cloaking and a sensors ability does not; off: only non-allied sensors, by flag or ability. Not implemented yet (wave 2).",
+          "description": "Allied sensor units stop a building cloaking and a sensors ability does not; off: only non-allied sensors, by flag or ability.",
           "type": "boolean",
           "default": true
         },
@@ -6776,17 +6940,17 @@
           "default": true
         },
         "cloak_field_overlap_loss": {
-          "description": "Overlapping cloak fields lose cells as in the original; off: a cell stays while any powered generator of the house covers it. Not implemented yet (wave 2).",
+          "description": "Overlapping cloak fields lose cells as in the original; off: a cell stays while any powered generator of the house covers it.",
           "type": "boolean",
           "default": true
         },
         "cloak_flag_ground_mobile_only": {
-          "description": "The type's cloak flag is ignored for aircraft and buildings; off: they can cloak by themselves. Not implemented yet (wave 2).",
+          "description": "The type's cloak flag is ignored for aircraft and buildings; off: they can cloak by themselves.",
           "type": "boolean",
           "default": true
         },
         "cloak_zero_speed_stall": {
-          "description": "With a cloaking speed of 0 cloaking advances a stage per tick and uncloaking never advances; off: fixed. Not implemented yet (wave 2).",
+          "description": "With a cloaking speed of 0 cloaking advances a stage per tick and uncloaking never advances; off: fixed.",
           "type": "boolean",
           "default": true
         },
@@ -7341,7 +7505,7 @@
           "default": true
         },
         "heal_reveals_cloaked": {
-          "description": "Healing or a zero-damage hit uncloaks; off: only hits that lower health. Not implemented yet (wave 2).",
+          "description": "Healing or a zero-damage hit uncloaks; off: only hits that lower health.",
           "type": "boolean",
           "default": true
         },
@@ -7496,7 +7660,7 @@
           "default": true
         },
         "mirage_adjacent_check_cadence": {
-          "description": "The neighbouring-infantry check runs on 7 ticks of 8; off: only on multiples of 8. Not implemented yet (wave 2).",
+          "description": "The neighbouring-infantry check runs on 7 ticks of 8; off: only on multiples of 8.",
           "type": "boolean",
           "default": true
         },
@@ -8036,17 +8200,17 @@
           "default": true
         },
         "sensor_array_removal_radius": {
-          "description": "A sensor array's removal decrements over its cloak-radius disc; off: over the disc it added. Not implemented yet (wave 2).",
+          "description": "A sensor array's removal decrements over its cloak-radius disc; off: over the disc it added.",
           "type": "boolean",
           "default": true
         },
         "sensor_building_activation_once": {
-          "description": "Sensor and disguise-detector coverage is set at first placement only; off: it follows power and capture. Not implemented yet (wave 2).",
+          "description": "Sensor and disguise-detector coverage is set at first placement only; off: it follows power and capture.",
           "type": "boolean",
           "default": true
         },
         "sensor_count_negative": {
-          "description": "Building removals have no floor, so a cell's sensor count can go negative; off: removal undoes exactly what was added. Not implemented yet (wave 2).",
+          "description": "Building removals have no floor, so a cell's sensor count can go negative; off: removal undoes exactly what was added.",
           "type": "boolean",
           "default": true
         },
@@ -8381,7 +8545,7 @@
           "default": true
         },
         "uncloak_from_cloaking_full_duration": {
-          "description": "An uncloak started while cloaking takes the full duration; off: it starts from the current stage. Not implemented yet (wave 2).",
+          "description": "An uncloak started while cloaking takes the full duration; off: it starts from the current stage.",
           "type": "boolean",
           "default": true
         },
@@ -10187,6 +10351,14 @@
           ],
           "default": null
         },
+        "makes_disguise": {
+          "description": "`MakesDisguise` (S-0516 claim 31).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "max_debris": {
           "description": "`MaxDebris` X (S-0303 F6).",
           "type": [
@@ -10482,6 +10654,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "disguise_fake_blink_time": {
+          "description": "`DisguiseFakeBlinkTime`, ticks (S-0516 claim 39).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "disk_laser": {

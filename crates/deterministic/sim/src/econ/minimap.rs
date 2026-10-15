@@ -506,7 +506,11 @@ pub fn listed(w: &World, h: HouseId, id: ObjectId, g: &Grid, img: &Image) -> Vec
         if !w.cells.usable(o.pos.cell()) || crate::econ::shroud::point_shrouded(w, h, o.pos) {
             return Vec::new();
         }
-        // The radar-invisible veterancy ability, cloaking and being underground (claim 7) need their topics (seams).
+        // spec: S-0410 claim 7 and S-0516 claim 27 (another house's fully cloaked object, an ally's included, only where H's own sensor coverage covers its cell)
+        if !crate::cloak::view::on_radar(w, id, Some(h)) {
+            return Vec::new();
+        }
+        // Being underground (claim 7) needs its topic (seam).
         if crate::combat::veterancy::has_ability(
             w,
             id,
@@ -699,8 +703,8 @@ pub fn compose(
             // spec: S-0410 claim 6 (the colour of the first object shown at the pixel)
             if let Some(id) = arrivals.winner(w, h, (p, q), g, img) {
                 let o = w.obj(id);
-                let c = o
-                    .and_then(|o| o.owner)
+                // spec: S-0410 claim 8 and S-0516 claim 38 (a disguised unit: its owner's colour when the owner allies H, otherwise its disguise house's; Q-0728 interim for a disguise without a house)
+                let c = crate::cloak::view::radar_house(w, id, Some(h))
                     .map_or(view.neutral, |ow| (view.house_colour)(ow));
                 let mut rc = radar_colour(c, view.bits);
                 let t_left = (view.flash)(id);

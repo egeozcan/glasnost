@@ -2947,8 +2947,11 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                     // spec: S-0501 T1 and claim 13 (45 ticks for a strafer, else 1)
                     Some(if is_strafer { 45 } else { 1 })
                 }
-                // spec: S-0501 T1 (rearming: 1 tick; cloaked: uncloak, 1 tick; no object cloaks in our engine)
-                Answer::Rearming | Answer::Cloaked => Some(1),
+                // spec: S-0501 T1 (rearming: 1 tick; cloaked: uncloak, 1 tick); S-0516 claim 11 (a)
+                Answer::Rearming | Answer::Cloaked => {
+                    crate::cloak::machine::firing_answer(w, id, 0, tgv, ans);
+                    Some(1)
+                }
                 _ => {
                     if !ammo_left(w, id) {
                         set_stage(w, id, Stage::Done);

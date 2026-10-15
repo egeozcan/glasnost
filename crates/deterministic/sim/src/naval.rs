@@ -181,23 +181,17 @@ pub fn ship_wake(w: &mut World, id: ObjectId) {
     crate::drive::wake_check(w, id, SHIP_WAKE_PERIOD);
 }
 
-/// Whether an object is *submerged* (S-0504 Terms): an underwater-type
-/// vehicle whose cloak state is cloaking, cloaked or uncloaking. Cloak
-/// states are S-0516's and not modelled yet, so no object is submerged; an
-/// underwater type without the cloak ability is never submerged (claim 6).
+/// Whether an object is *submerged* (S-0504 Terms, S-0516 claim 41): an
+/// underwater-type vehicle whose cloak state is cloaking, cloaked or
+/// uncloaking; an underwater type without the cloak ability is never
+/// submerged (claim 6).
 pub fn submerged(w: &World, id: ObjectId) -> bool {
     let tc = crate::combat::veterancy::type_combat(w, id);
     let underwater = tc.is_some_and(|tc| tc.underwater);
     // spec: S-0504 claim 6 (without the cloak ability an underwater type stays surfaced)
     let cloakable = tc.is_some_and(|tc| tc.cloakable);
-    // spec: S-0504 Terms and claim 6 (submerged: underwater type and a cloak state of cloaking, cloaked or uncloaking; S-0516 (wave 2) owns the states, none is set yet)
-    underwater && cloakable && cloak_state_hidden(w, id)
-}
-
-/// The cloak-state seam of S-0516: whether the object is cloaking, cloaked
-/// or uncloaking. No object cloaks in our engine yet.
-fn cloak_state_hidden(_w: &World, _id: ObjectId) -> bool {
-    false
+    // spec: S-0504 Terms and claim 6, S-0516 claim 41 (submerged: underwater type and a cloak state of cloaking, cloaked or uncloaking)
+    underwater && cloakable && crate::cloak::not_uncloaked(w, id)
 }
 
 /// Whether a type has the naval flag (S-0303 Terms; S-0504 claim 7), for a
