@@ -454,6 +454,8 @@ fn play_ai(
     let mut seen: [BTreeMap<Role, BTreeSet<u32>>; PLAYERS] = Default::default();
     let mut last = [i32::MAX; PLAYERS];
     let mut drained = 0usize;
+    // The (house, superweapon type) pairs ready after the last tick.
+    let mut ready_before: BTreeSet<(usize, usize)> = BTreeSet::new();
     // The (passenger, transport) pairs of the last tick.
     let mut riding: BTreeSet<(u32, u32)> = BTreeSet::new();
     // `GLASNOST_AI_TRACE=n`: a timeline line per house every n ticks.
@@ -472,10 +474,6 @@ fn play_ai(
             match e {
                 Effect::Shot { .. } => g.shots += 1,
                 Effect::Killed { .. } => g.killed += 1,
-                Effect::Superweapon {
-                    event: glasnost_sim::superweapons::SwEvent::Launch,
-                    ..
-                } => g.launches += 1,
                 _ => {}
             }
         }
@@ -497,6 +495,24 @@ fn play_ai(
             })
             .count();
         riding = now;
+        // A launch spends a ready record that is still granted afterwards:
+        // count each such fall of the ready mark (a lost giving building
+        // also clears the grant).
+        let ready_now: BTreeSet<(usize, usize)> = (0..PLAYERS)
+            .flat_map(|h| (0..w.rules().superweapons.types.len()).map(move |i| (h, i)))
+            .filter(|&(h, i)| {
+                glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
+                    .is_some_and(|r| r.granted && r.ready && !r.suspended)
+            })
+            .collect();
+        g.launches += ready_before
+            .difference(&ready_now)
+            .filter(|&&(h, i)| {
+                glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
+                    .is_some_and(|r| r.granted)
+            })
+            .count();
+        ready_before = ready_now;
         features(w, &mut g.features);
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
