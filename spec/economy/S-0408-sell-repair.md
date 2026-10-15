@@ -2,11 +2,11 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0130, Q-0131, Q-0225, Q-0282, Q-0284, Q-0440]
 supersedes: []
@@ -292,14 +292,17 @@ its *master*, and slaves *inside* rather than on the map. In addition:
 
 9. **Garrison on a sale.** A sold garrisoned building puts out its occupants at the step of claim 6,
    after its absorbed passengers (claim 8) and before its sale survivors (claim 7). Where each
-   occupant stands and how it leaves belong to the structures specs; this spec fixes only the
-   place in the order, which shows in two ways: the draws that the occupants' leaving takes come
-   before the survivors' draws, and an occupant that stands on a position inside the foundation
-   can take it from a survivor.
+   occupant stands and how it leaves are S-0508 claims 10 to 12's eviction rules, without
+   hunting and with inside fallback. When no exit-ring cell qualifies, occupants use the inside
+   fallback cell: the foundation rectangle's last cell, with the largest x and y (S-0508 claim 12).
+   Sale is the only eviction cause that enables inside fallback (S-0508 claim 13).
+   This spec fixes the place in the release order, which shows in two ways: the draws that the
+   occupants' leaving takes come before the survivors' draws, and an occupant placed at the inside
+   fallback can take a standing position from a survivor.
    - Backing: `measurable` (scenario S5, part a, which records occupants' and survivors' positions
-     and draws)
-   - Confidence: medium (that the occupants leave at that step); low (their place before the
-     survivors)
+     and draws; S-0508 scenario G8 for the blocked-exit fallback and non-sale controls)
+   - Confidence: high (inside fallback and its sale-only use); medium (that the occupants leave
+     at that step); low (their place before the survivors)
 
 10. **Stored resources on a sale.** In the processing in which a sold building is removed, its house
     is paid, after the refund (claim 6), for the resources the building stores: for each resource
