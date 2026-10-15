@@ -1,0 +1,589 @@
+---
+id: S-0503
+title: Hover and amphibious movement
+topic: movement
+revision: 1
+sources-class: [decomp]
+status: approved
+approved-by: Claude (delegated by project lead)
+approved-on: 2026-10-15
+measurements: []
+requests: []
+supersedes: []
+---
+
+# S-0503: Hover and amphibious movement
+
+## Summary
+
+How a vehicle with the hovering locomotor moves: its throttle, speed, acceleration and braking,
+its straight-line steps between cell centres, its arrival at each point, its hover height, lift and
+bob, the wake it leaves over water, what it does at each entry outcome of its next cell, and what
+happens when it is switched off (it spins, settles and, over water, sinks). It also states which
+movement model an amphibious type uses, and how land and water affect the speed of hovering and
+amphibious vehicles. Skirmish only; network games and campaigns are out of scope.
+
+Pointers, not repeated here:
+- land types, locomotion classes, land multipliers, entering a cell and zones: S-0211 claims 1–3
+  and 10–12.
+- the rates of the hover's movement heading and body facing: S-0206 claim 13.
+- the locomotor field and the per-tick speed *s*: S-0207 claims 14 and 2.
+- the driving model, for amphibious types that drive: S-0207 claims 1–12.
+- what an approaching hover does once its target is in range (the discarded path and the
+  arrival-time stop): S-0207 claim 19 c and d.
+- the hover's exit from a factory: S-0417 claim 5.
+- water cells, ships and wakes of ships: S-0504.
+- unloading at a shoreline: S-0507.
+- bridge decks as surfaces: S-0511.
+- disabling by loss of a control centre: S-0405 claim 13.
+- death over water with the bomb mark: S-0312 claim 11.
+
+**Cross-spec corrections required at hand-off.** S-0206 claim 13's body aim must follow claim 5
+below, not necessarily the travel direction. S-0207 claim 19 d's stop permits claim 7's final
+already-computed step. S-0405 claim 13's description of inactivity must allow the settling, spin,
+residual travel and fall of claims 8 and 10–11. S-0312 claim 11's assertion that stock play has no
+source of the bomb mark must be removed: claim 11 below supplies one. These corrections must be
+checked together at sign-off.
+
+## Terms
+
+From the glossary and other specs: *locomotor*, *locomotion class*, *land type*, *land multiplier*,
+*entry outcome* (and its eight values), *step*, *path steps*, *stored path*, *retry delay*,
+*speed fraction* ρ, *per-tick speed* (S-0207 claim 2's *s*), *heading point* (S-0207 claim 16),
+*bomb mark* (S-0312 claim 11), *scenario random stream*, *ranged draw*, *facing*, *table sine*,
+*table square root*, *surface height* (S-0106 claim 2), *high-bridge cell*, *deck*.
+
+New terms:
+- **Hovering vehicle.** A vehicle whose locomotor (S-0207 claim 14) is the hovering locomotor.
+- **Destination** *D*. The point a hovering vehicle was last ordered to move to, kept until the
+  move ends. Its height is the surface height of its cell, plus 416 leptons on a high-bridge cell.
+- **Heading point** *P*. For a hovering vehicle, the centre of the next cell of its stored path,
+  at the surface height of that cell, plus 416 leptons when the
+  vehicle's world height is at least 312 leptons above that surface, even without a high bridge
+  (`quirks.hover_elevated_heading_point`, claim 5). A hovering vehicle
+  *is moving* when it has a destination or a heading point.
+- **Movement heading** η. A facing kept by a hovering vehicle besides its body facing. It turns
+  towards the vehicle's heading point at the rate of S-0206 claim 13, and the vehicle travels along
+  it (claim 6).
+- **Throttle** *T*. A double-precision value of 0, ½ or 1, set in each moving tick (claim 2). A
+  hovering vehicle *is moving now* when it is moving and *T* ≠ 0.
+- **Hover speed** φ. A double-precision value from 0 to 1 kept by a hovering vehicle: the fraction
+  of its per-tick speed it travels in a tick (claims 3 and 4). It starts at 0.
+- **Boost** *B*. A double-precision factor kept by a hovering vehicle (claim 3). It starts at 1.
+- **Vertical velocity** *v*. A double-precision value in leptons per tick kept by a hovering
+  vehicle (claim 8). It starts at 0.
+- **Hover height** *h*. The hovering vehicle's world height above the surface height at its
+  position, less 416 leptons when it stands on a deck.
+- **Powered.** A hovering vehicle is powered when it is not switched off (claim 10), or when its
+  hover height is above 0. So a switched-off vehicle still counts as powered until it has settled.
+- **Spin.** The short uncontrolled rotation initiated by switching off a hovering vehicle
+  (claim 10); re-enabling does not itself end it.
+
+## Behaviour
+
+### Which movement model
+
+1. **Amphibious types move with their own locomotor.** The movement model of a type is chosen only
+   by its locomotor field (S-0207 claim 14). The amphibious locomotion class, like every class
+   (S-0211 claim 3), supplies its land multipliers and contributes to which cells the type may
+   enter (S-0211 claims 10 to 12). Its movement zone is a separate imported property. For a type
+   that drives, the class supplies the land multiplier that sets its target speed fraction
+   on each track (S-0207 claim 9). Nothing changes the locomotor of a vehicle that crosses a
+   shoreline: a driving amphibious vehicle drives on water by the driving rules, and a hovering one
+   hovers on land by the rules of this spec.
+   - Backing: `measurable` (scenario H1 a for hovering types). The driving side is `unmeasured`:
+     no stock vehicle with both the amphibious class and driving locomotor is established.
+     H1 b is a conditional proposal, not backing
+   - Confidence: medium (no shoreline change of locomotor was found; absence is read, not observed)
+
+2. **Throttle.** In each tick in which a hovering vehicle is moving and has a heading point, it
+   sets its throttle *T* (F1):
+   - *T* = 0 when it is not powered, or when its movement heading η differs from the direction β
+     from its position to the heading point by more than 8192 facing units (45°).
+   - otherwise *T* = ½ when it is strictly less than 256 leptons (one cell) from its destination, or, when it
+     has no destination, from its heading point, and *T* = 1 otherwise.
+
+   Thus ordinary acceleration starts within 45° of the heading point. The stalled-start rule
+   (Edge cases) is an exception. Near its destination it selects half throttle, not necessarily
+   half actual speed: boost and the acceleration/braking ramp still apply. The distance test is
+   strictly less than 256 leptons and includes height (F1).
+   - Backing: `measurable` (scenarios H2 and H3)
+   - Confidence: high
+
+3. **Acceleration, braking and boost.** In the same tick, after the throttle, the vehicle sets its
+   boost and then its hover speed φ (F2):
+   - while *T* > 0, *B* = the hover boost factor when its stored path has at least two steps and the
+     first two are equal (a straight run), and *B* = 1 otherwise. While *T* = 0, *B* keeps its value.
+   - the goal is *G* = min(1, *B* × *T*).
+   - when φ < *G*, φ rises by 1 / (*a* × 900), but not above *G*, where *a* is the hover
+     acceleration field.
+   - then, when φ > *G*, φ falls by 1 / (*b* × 900), but not below 0, where *b* is the hover brake
+     field. The floor is 0, not *G*, so φ can fall up to one braking step below *G*, and it rises
+     back towards *G* on a later qualifying tick.
+
+   This ramp applies only while moving with a heading point; it is not a passive braking rule
+   after the move ends. The undershoot is controlled by `quirks.hover_brake_undershoot`.
+
+   As a result, with a boost factor of 1 or more the boost has no effect at full throttle (the goal
+   is capped at 1), and it raises the half-throttle goal only while two equal stored steps remain.
+   A boost factor below 1 slows straight runs. The fields are in game minutes, at
+   900 ticks per game minute (real-time tick rates are S-0201 claims 2 and 5): *a* is the time from rest to full speed, *b* from full speed to rest,
+   ignoring the step rounding.
+   - Backing: `measurable` (scenario H2 for the ramp). Boost is `unmeasured` pending a stock
+     detour satisfying H2's discriminating half-throttle condition; ordinary full-throttle
+     straight runs cannot distinguish a boost of at least 1 from a boost of 1
+   - Confidence: high for the ramp and the braking floor; medium for the boost condition
+
+4. **Step length; land and water.** In each tick in which it is moving, a hovering vehicle travels
+   a provisional distance *d* = trunc(*s* × φ) leptons (F3), subject to the arrival and refusal
+   outcomes of claim 7, where *s* is S-0207 claim 2's per-tick speed, read here in
+   leptons per tick. *s* contains the speed fraction ρ. A hovering vehicle sets ρ only to 1 or 0:
+   to 1 when it is given a move while powered and not moving now, and on a tick on which it is
+   moving with no heading point; to 0 for a refused step or an explicit immediate stop
+   (claims 7 and 12). The switch-off stop request of claim 10 does not itself zero ρ. It also sets ρ to
+   1 on a tick on which *d* = 0 while its movement heading points exactly at its heading point (a
+   stalled start, Edge cases). Any other value set by another rule stays until one of those events.
+   So the ρ = ½ that S-0417 claim 5 sets after a factory exit can persist during the exit move unless
+   its movement heading lands exactly on the direction of its heading point while its hover speed
+   is still too small to give a step of 1 lepton.
+
+   No land multiplier enters *d*: a hovering vehicle travels at the same speed on every land type it
+   may enter, water, beach and land alike. The land multipliers of its class (S-0211 claim 2)
+   matter to it only through which cells it may enter (a multiplier of 0 forbids entry).
+   - Backing: `measurable` (H1 for land independence, H3 and H7 for ordinary endings,
+     H8 for the factory exit and stalled-start reset)
+   - Confidence: high for the land independence; low for how long the factory-exit half speed
+     lasts
+
+5. **Choosing the next heading point.** A hovering vehicle chooses a new heading point when it
+   starts a move and each time it arrives at its heading point (claim 7):
+   - with no stored step left, it has no heading point, and the path-search rules of S-0212
+     (claims 20 to 23, with the hover's in-range rules of S-0207 claim 19 c and d) apply.
+   - otherwise the heading point is the centre of the cell its first stored step enters (Terms),
+     and the step check of that cell (claim 12) decides whether the vehicle takes it. On *clear*
+     the step is used up and the vehicle heads for that point. A crate in that cell is collected
+     when the cell is chosen, before the check.
+
+   While it has a throttle above 0, its body facing turns (at its own rate, S-0206 claim 13)
+   towards the point one neighbour step (256 leptons on each affected map axis) beyond the heading point in the direction of its
+   next stored step, or towards the heading point when there is no further step. So the body looks
+   one cell ahead along the path; the body facing does not steer the vehicle.
+   - Backing: `measurable` (H2 for body aim, H3 for heading-point selection, H10 for crates).
+     The elevated heading point on a non-bridge cell is `unmeasured`: no stock route isolating
+     that height condition is established
+   - Confidence: medium
+
+6. **Straight-line travel.** A hovering vehicle travels in a straight line along its movement
+   heading, not along tracks: in each tick in which *d* > 0 its ground position moves by *d* in the
+   direction of η's current value, by the same planar step formula as S-0208 claim 6 (F4). Its world height is not changed
+   by this step (claim 8 sets it). Its occupancy (S-0209) is moved from cell to cell as its position
+   crosses a cell edge. When it enters a high-bridge cell with a hover height of 416 or more above
+   the cell's surface it is on the deck, and when it enters a cell that is not a bridge cell it is
+   off any deck (S-0511 owns bridge surfaces).
+   - Backing: `measurable` (scenario H3)
+   - Confidence: high
+
+7. **Arrival at the heading point.** At the start of a tick's travel, when the distance along the
+   map (heights play no part) from the vehicle to its heading point is at most *d* (F5), the vehicle
+   has arrived there. It is not placed on the point: it initially keeps its position, up to *d*
+   leptons from the point. The test alone neither snaps it to the point nor cancels the travel
+   distance already computed for this tick. Then:
+   - it chooses its next heading point (claim 5). When one is chosen, it travels *d* on the same
+     tick along its current movement heading (claim 6), still aimed towards the old heading point,
+     so at a turn it can swing wide of the cell centres.
+   - when no new heading point is chosen, any positive *d* already computed can still produce a
+     final step on this tick; absence of a heading point alone does not suppress it. When it has
+     reached the cell of its destination, at a height difference strictly less than 208 leptons,
+     its destination is cleared and the move ends; otherwise S-0212 claims 20 to 23 decide whether
+     it searches again. Once not moving, it takes no further travel ticks and the ramp of claim 3
+     does not run. Clearing a destination alone does not promise that throttle and hover speed
+     become 0.
+   - a refused next cell zeroes throttle, hover speed and ρ (claim 12). Waiting suppresses further
+     travel on that tick, except that a give-up can still take the already computed positive *d*
+     as a final step. After the destination is cleared there are no later travel ticks until
+     another move starts.
+   - Backing: `measurable` (scenario H3)
+   - Confidence: medium (the stop position and the same-tick continuation are read, not observed)
+
+### Hover height
+
+8. **Lift, gravity and bob.** In every tick, moving or not, a hovering vehicle sets its hover height
+   (F6).
+
+   | Observable stage of the tick's height update | Result |
+   |---|---|
+   | Height and bob | The height before lift and gravity is the old hover height plus the old vertical velocity, truncated toward zero, plus the periodic bob term (at most ±2 leptons per tick), with the resulting sum truncated toward zero. If this result is below 0, the resulting hover height is 0 and the vertical velocity used by the remaining height update is 0. Otherwise, the resulting height is that sum and the velocity used by the remaining update is the old vertical velocity. |
+   | Lift | If the effective height *h*ₜ is below the hover height field *H*ₕ and the vehicle is not switched off, the velocity used by the remaining update gains ((2*H*ₕ − *h*ₜ) / *H*ₕ) × *g*. If *h*ₜ is also below trunc(*H*ₕ / 4), it additionally gains trunc(*g* / 3), whether or not the vehicle is switched off. |
+   | Gravity and damping | In every tick, subtract *g* from the velocity after the applicable lift gains and multiply the result by the hover dampen field; this is the new vertical velocity. |
+
+   The effective height *h*ₜ is the hover height, except when the vehicle has a stored step and the
+   surface one neighbour step ahead in that step's direction is higher than the surface under it:
+   then *h*ₜ is the hover height less *H*ₕ. So when climbing (from water onto a higher bank, for
+   example) the lift is stronger. Because claim 6 keeps the world height while the surface rises,
+   the hover height drops on a climb and may be clamped at 0 (with *v* = 0) for a tick; on a descent
+   the vehicle is briefly higher and gravity brings it down. Water and land surfaces are treated
+   alike: a shoreline matters only through the surface height (S-0106, S-0504).
+
+   The bob's period is trunc(*m* × the hover bob field × 900) ticks, with *m* = 1 for a vehicle
+   whose object number is odd and *m* = 1.1 for one whose object number is even, and its phase is set
+   by the tick number plus twice the object number (F6). So hovering vehicles bob out of step with
+   each other. In our engine the object number is our own creation counter, not the original's
+   (Edge cases).
+   - Backing: `measurable` (scenario H4 for the settled height and the bob, H5 for the climb)
+   - Confidence: high for the formula; medium for the settled height values it implies
+
+9. **Wake over water.** In each tick in which a hovering vehicle is moving now and the tick number is
+   divisible by 10, it creates one instance of the game-wide wake animation at its position,
+   provided it is off a deck, its cell's land type is water, and the animation is defined. The
+   wake is created after the tick's travel. This is the same rule as S-0207 claim 23 with the
+   hover's *moving now*. A hovering vehicle at rest (throttle 0) leaves no wake.
+   - Backing: `measurable` (scenario H6). The missing-animation guard is `unmeasured`:
+     stock data defines the wake, so H6 does not test its absence
+   - Confidence: high
+
+### Switching off
+
+10. **Switched off: spin and settling.** A hovering vehicle is switched off by the disabling of
+    S-0405 claim 13, and switched on again by its re-enabling. When it is switched off while it is
+    powered, and its current behaviour is neither *sleep* nor *enter*:
+    - it takes two ranged draws from the scenario random stream, first R(20, 30), giving the spin
+      count *n*, then R(0, 99); when the second is below 50, *n* is negated.
+
+    These conditions govern only the start of a spin. Whenever it is switched off, a moving
+    vehicle receives a stop request, and its powered lift (claim 8) stops.
+
+    While the spin is active and the vehicle is powered, its body facing turns by *n* × 256 facing units each
+    tick, and *n* moves one step towards 0 each tick. A vehicle that settles to height 0 on this
+tick while switched off has no further spin rotation on that tick. The spin ends on the
+    first tick on which *n* reaches 0 or the vehicle is no longer powered (it has settled to a hover
+    height of 0). Without lift it sinks under gravity (claim 8) and rests on the surface. When it
+    is switched on again, the lift returns and it rises to its hover height.
+
+    The stop request clears the destination and stored path only when destination and heading
+    point differ as full three-dimensional points; otherwise it leaves them. It does not itself
+    zero throttle or hover speed. Thus stopping is not necessarily instantaneous horizontal rest.
+
+    A vehicle not powered, or in *sleep* or *enter*, takes no draws and starts no new spin, but
+    still receives that stop request and loses lift. Re-enabling restores lift without cancelling
+    an already active spin, which can continue until its count reaches 0.
+    - Backing: `measurable` (scenario H7) for ordinary disabling, draws, stopping and restoration
+      of lift. The *sleep*/*enter*, equal-point and re-enable-during-spin exceptions are
+      `unmeasured`: no stock input sequence isolating these states is yet established, and
+      H7's early-restoration subtest is conditional. The settling-tick rotation cutoff is
+     measurable in H7
+    - Confidence: high for the draws and the spin; medium for the exceptions
+
+11. **Sinking over water.** On the tick on which the spin of claim 10 ends, when the vehicle's cell
+    is a water cell and its world height is less than 104 leptons (one level) above the surface,
+    it is given the bomb mark and starts to fall. Upon dying within 10 leptons above the water,
+    S-0312 claim 11 supplies wake and splash instead of the ordinary vehicle death effects, and
+    its passengers do not get out. A vehicle whose spin ends while still at least 104 leptons
+    above the water does not start this fall. Thus ordinary switch-off over flat water leads to
+    loss after settling, whereas a vehicle settling on land or a bridge deck survives this test.
+    The test belongs to the end of a spin, even if the vehicle has meanwhile been re-enabled.
+    - Backing: `measurable` (scenario H7) for ordinary low-water fall, destruction, animations
+      and land/deck survival. The exact 104-lepton boundary and a spin ending after re-enabling
+      are `unmeasured`: H7 establishes neither a spin ending near that boundary nor unconditional
+      early restoration. Passenger loss is `unmeasured` here: no stock passenger-carrying hover
+      type dependent on a control centre is established; its rule inherits S-0312 claim 12
+    - Confidence: medium (the fall's end is S-0312's; in stock play the vehicle settles before its
+      spin count runs out, so the test is made close to the surface)
+
+### The step check
+
+12. **What a hovering vehicle does at each entry outcome.** The step check of the next cell
+    (claim 5) has the results of table T1. A *first check* is the one made when the cell is chosen
+    after an arrival or a new move; a *repeated check* is the one made on the same tick after a
+    fresh search that a first check started. Every row other than *clear* leaves the vehicle without
+    a heading point and with throttle, hover speed and ρ at 0, unless the row says otherwise. A
+    vehicle that keeps its destination and has no heading point tries again on later ticks through
+    the path-search rules (S-0212 claims 20 to 23).
+
+    **T1. The step check of a hovering vehicle.**
+
+    | Outcome | First check | Repeated check |
+    |---|---|---|
+    | clear | it heads for the cell centre (claim 5) | as the first check |
+    | cloaked blocker | the cloaked objects in the cell become visible to its house (S-0209 claim 9). It discards its stored path and makes a fresh search at once, whatever its path retry timer shows (unlike S-0207 claim 15, where this search waits for the timer). When the search finds a path, the repeated check follows on the same tick | the cloaked objects become visible again. It keeps its destination and waits (it does not give up the move, unlike S-0207 claim 15) |
+    | blocked | it reveals cloaked objects in the cell as in the cloaked-blocker row, then discards its stored path and makes a fresh search at once, whatever its path retry timer shows. When the search finds a path, the repeated check follows on the same tick | it gives up the move: its destination is cleared |
+    | moving blocker | S-0212 claim 22's blockage timer and re-path rule, as for the driving locomotor | as the first check |
+    | closed friendly gate | it tells the gate to open and waits | as the first check |
+    | friendly obstacle, enemy obstacle | it discards its stored path and makes a fresh search at once, whatever its path retry timer shows. When the search finds a path, the repeated check follows on the same tick | as S-0207 claim 15's repeated check: it attacks the first listed object when its house is not allied with it, or, when no object is listed, a wall in the cell, by the override of S-0215 claim 10. Otherwise it attacks nothing and waits |
+    | stationary friendly | as for an obstacle | when the give-up test of S-0207 claim 15 holds, it gives up the move (its destination is cleared). Otherwise it sends the same scatter request as S-0207 claim 15 (no threat point, forced, move-anywhere) to the cell layer it moves in (the deck layer when the cell is a high-bridge cell and the vehicle's height level differs from the cell's by 3 or more), and waits |
+
+    After any fresh search that finds a path, the cell the first step of the new path enters is
+    looked at as in S-0207 claim 15 (*the first cell of a new path*), with two differences: there is
+    no gate row and no train exception, and the nearest object is looked for in the cell's deck layer
+    when the vehicle's world height is more than 312 leptons (three height levels) above the
+    surface at that cell's centre, not 208.
+    - Backing: `measurable` (H9 for clear, cloaked blocker, blocked, moving blocker, closed
+      friendly gate, stationary friendly and enemy obstacle). A repeated friendly-obstacle
+      outcome, the missing gate response at the new-path inspection, and the exact deck-layer
+      and nearest-object distinctions after a fresh search are `unmeasured`: H9 does not establish
+      stock placements isolating these from passability or the ordinary step check. These are not confirmed by an ordinary unobstructed crossing
+    - Confidence: medium for the table; low for the first cell of a new path
+
+## Formulas
+
+Every floating-point operation in this spec runs in the original's program-wide round-toward-zero
+mode (glossary), as in S-0205 claim 5: results are rounded to double precision, toward zero.
+S-0205 owns that mode and its switch `quirks.chop_rounding`. Every conversion to an integer
+truncates toward zero. Integer positions and distances are in leptons, tick numbers and object
+numbers are integers, and R(*a*, *b*) denotes one ranged draw on the inclusive integer interval
+*a* … *b* (S-0202 claim 4). Sine and cosine below use table trigonometry (S-0205 claim 6),
+not exact analytic trigonometry; *r* is the table
+square root of S-0204 claim 5. Facings use the units of S-0204 claim 10.
+
+**F1 Throttle** (claim 2). β = S-0204 claim 8's direction from the vehicle's position to *P*.
+δ = S-0204 claim 11's signed difference between η's current value and β.
+> *T* = 0 if the vehicle is not powered or |δ| > 8192.
+> Otherwise, with a destination: *T* = ½ if trunc(*r*(Δ*x*² + Δ*y*² + Δ*z*²)) < 256, measured to *D*,
+> else *T* = 1. Without a destination: the same test measured to *P*.
+Integers in leptons; the squares are summed exactly (double precision, exact at map scale).
+
+**F2 Hover speed** (claim 3). Let *G* = min(1, *B* × *T*). The acceleration-adjusted value is
+φ₁ = min(*G*, φ + 1 / (*a* × 900)) when φ < *G*, and φ₁ = φ otherwise.
+The resulting hover speed is φ′ = max(0, φ₁ − 1 / (*b* × 900)) when φ₁ > *G*, and
+φ′ = φ₁ otherwise. All quantities are double precision. Each denominator product is formed
+before division, with rounding as stated above. The braking floor is 0, not *G*.
+Unit: fraction of *s*.
+
+**F3 Step length** (claim 4). *d* = trunc(*s* × φ), *s* the integer of S-0207 claim 2, φ double. Unit:
+leptons.
+
+**F4 Position step** (claim 6). Let η̂ = η for η ≤ 32767 and η̂ = η − 65536 otherwise,
+exact integer arithmetic. Then θ = (η̂ − 16383) × *c*₂ radians, with *c*₂ = −2π / 65534,
+the same double constant as S-0208 claim 6's planar step; η is the movement heading's current value.
+> *x*′ = trunc(*x* + *d* × cos(θ)), *y*′ = trunc(*y* − *d* × sin(θ)), *z*′ = *z*.
+The sum is formed in floating point before the truncation (not *x* + trunc(*d* × cos(θ))).
+This follows the shared `quirks.table_direction` of S-0204 claim 8. With it off, use
+θ = (η̂ − 16384) × (−2π / 65536) instead; all other operations stay the same.
+Table-trigonometry behaviour, including negative angles, is inherited through S-0205 claim 6.
+
+**F5 Arrival test** (claim 7). Arrived when trunc(*r*(Δ*x*² + Δ*y*²)) ≤ *d*, Δ from the vehicle to
+*P*, map plane only. Integers in leptons.
+
+**F6 Height and bob** (claims 8 and 10). *h* is the integer hover height in leptons (Terms),
+*N* the integer object number, and *t* the integer tick number. The imported hover height *H*ₕ
+and gravity *g* are integers, in leptons and leptons per tick per tick respectively. Vertical
+velocity *v*, the bob field *q* (game minutes), damping factor *k*, period *P*ᵈ and factor *m*
+are double precision. Heights *A*, *h*ₜ and the resulting height are integer leptons.
+
+Define the effective height *h*ₜ to be *h* − *H*ₕ when the vehicle has a stored step and the
+surface height one neighbour step ahead in that step's direction exceeds the surface height at
+its position; otherwise *h*ₜ = *h*. Let *A* = trunc(*h* + *v*), *m* = 1 for odd *N* and 1.1
+for even *N*, *P*ᵈ = *m* × *q* × 900 ticks, and *P*ᵢ = trunc(*P*ᵈ). Let
+ϱ = (*t* + 2*N*) mod *P*ᵢ, using integer remainder with the sign of the dividend.
+The unclamped height is *u* = trunc(2 × sin(ϱ × 2π / *P*ᵈ) + *A*).
+The resulting hover height is max(0, *u*). When *u* < 0, the velocity used for the following
+adjustments is 0; otherwise it is the old *v*.
+
+The velocity gains ((2*H*ₕ − *h*ₜ) / *H*ₕ) × *g* when *h*ₜ < *H*ₕ and the vehicle is not
+switched off. It also gains trunc(*g* / 3) when both *h*ₜ < *H*ₕ and
+*h*ₜ < trunc(*H*ₕ / 4), whether switched off or not. These gains apply in the order stated to
+the velocity selected by the clamp rule. Subtracting *g* from that adjusted velocity and then
+multiplying by *k* gives the new vertical velocity.
+
+The lift term is formed in double precision in the order shown; *g* / 3 and *H*ₕ / 4 are integer
+divisions truncated toward zero. The world height becomes the surface height plus the resulting
+hover height (plus 416 leptons on a deck). The sine argument uses the double *P*ᵈ; the remainder
+uses the integer *P*ᵢ. Sine is the table sine defined above.
+
+**F7 Spin** (claim 10). On each powered tick of an active spin, the body facing increases by
+256*n* facing units, modulo 65536. The integer spin count for the next tick is *n* − sign(*n*).
+The spin ends when the count reaches 0 or the vehicle is no longer powered.
+
+## Constants
+
+| Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
+| Ticks per minute of the hover fields | 900 | ticks | F2, F6 |
+| Throttle heading tolerance | 8192 | facing units (45°) | F1 |
+| Half-throttle distance | 256 | leptons | F1 |
+| Bob amplitude factor | 2 | leptons per tick | F6 |
+| Bob period factors | 1 (odd object number), 1.1 (even) | factor | F6 |
+| Spin facing step | 256 | facing units per count | F7 |
+| Spin count draw | R(20, 30), sign by R(0, 99) < 50 | count | claim 10 |
+| Wake period | 10 | ticks | claim 9 |
+| Sinking height limit | 104 | leptons | claim 11 |
+| Deck-layer threshold of the new-path look | 312 | leptons | claim 12 |
+| Arrival height tolerance at the destination cell | 208 | leptons | claim 7 |
+| Absent-key defaults | see Import mapping | | engine defaults only |
+
+## State and ordering
+
+**A hovering vehicle's tick**, as observable results:
+
+| State | Event | Result |
+|---|---|---|
+| not moving | tick | no travel; height (claim 8) and spin (claim 10) still update |
+| moving, has heading point | tick | arrival uses the distance from this tick's updated throttle and hover speed; no snap is implied (claims 2–3, 6–7) |
+| moving, no heading point | tick | ρ = 1; search may give a heading point; any travel uses the retained hover speed, without that tick's ramp (claims 3–5) |
+| moving now, over water, tick divisible by 10 | after travel | one wake (claim 9) |
+| switched off, spinning | settles to hover height 0 on this tick | spin ends without another rotation; claim 11 decides the water fall |
+| powered, not *sleep* or *enter* | switched off | two draws and a new spin; stop request and loss of lift occur regardless of these spin conditions (claim 10) |
+| spinning | *n* = 0 or no longer powered | spin ends; over water below 104 leptons, sinks (claim 11) |
+| switched off | switched on | lift resumes; an existing spin is not cancelled (claims 8 and 10) |
+
+The wake's position is the position after travel, before the height change. If the height change
+makes a settling vehicle no longer powered, its spin ends on that tick without another rotation.
+Otherwise an active spin's facing change is visible in that tick's final facing.
+These consequences inherit the backing and confidence of claims 8–10 (H6 and H7).
+
+## Edge cases and quirks
+
+- **Object number in the bob.** The bob's period choice and phase depend on the original's
+  scenario-wide object creation number. As for the projectile wobble (lead decision of
+  2026-10-10), our engine uses its own deterministic creation counter, so which vehicles bob with
+  the longer period and their phases are a documented departure, with no switch. The bob formula,
+  period and amplitude stay exact. Its effect on play is at most a few leptons of height.
+- **Zero bob period.** When trunc(*m* × *q* × 900) = 0 (a hover bob field below about 1/900), the
+  original divides by zero and the program fails. Our engine treats that period as 1 tick (the
+  remainder is 0 and the bob term is 0) and the importer warns. Documented departure.
+  Backing: `unmeasured`, confidence high for the failure condition: no stock-only scenario below
+  supplies a zero period; the safe replacement is a design rule.
+- **`quirks.hover_brake_undershoot`.** Proposed default original: F2 floors a braking step at 0,
+  allowing it to cross below a positive goal. Off: floor that braking step at the goal instead.
+- **`quirks.hover_elevated_heading_point`.** Proposed default original: a next heading point gains
+  416 leptons whenever the vehicle is at least 312 leptons above that heading point's terrain surface, whether
+  or not that cell has a high bridge. Off: require a high-bridge cell too. This changes the
+  three-dimensional throttle-distance test, not the cell's actual terrain height.
+- **A stalled start.** When the step length is 0 while the movement heading points exactly at the
+  heading point, the vehicle sets *T* = 1 and ρ = 1 at once and recomputes *d* on that tick, so a
+  fraction left at 0 by another rule does not hold it still. This changes throttle and fraction,
+  not hover speed directly; a positive step still requires positive hover speed.
+- **Weather switch-off.** The original also contains a switch-off of hovering vehicles that follows
+  a house-wide weather condition. It never triggers with the stock program, so our engine has none.
+  Backing: `unmeasured`, confidence medium: no established stock input activates that condition,
+  so ordinary disabling cannot test this absence.
+- **Pushing.** The original's hovering locomotor can be pushed one cell aside, with or without a
+  spin. No stock caller of that was found (Open questions), so it is not specified.
+- **Tunnels.** A stored step into a tunnel entrance is handled by the tunnel rules (S-0212 claim 9), not
+  by this spec.
+
+## Import mapping
+
+| Key | Feeds | Parse form | Absent-key default |
+|---|---|---|---|
+| `[General]` `HoverHeight` | *H*ₕ (claim 8, F6) | integer, leptons | engine default 120 |
+| `[General]` `HoverBob` | *q* (F6) | decimal (S-0003 claim 6), single precision widened to double; a `%` sign scales by 0.01 | engine default 30.0 |
+| `[General]` `HoverBoost` | boost factor (claim 3) | decimal, as above | engine default 1.3 |
+| `[General]` `HoverAcceleration` | *a* (F2) | decimal, as above | engine default 0.03 |
+| `[General]` `HoverBrake` | *b* (F2) | decimal, as above | engine default 0.03 |
+| `[General]` `HoverDampen` | *k* (F6) | decimal, as above | engine default 0.8 |
+| `[AudioVisual]` `Gravity` | *g* (F6) | integer, leptons per tick per tick | engine default 3 |
+| `[General]` `Wake` | the wake animation (claim 9) | animation name | none: no wake |
+| type key `Locomotor` | hovering locomotor (S-0207 claim 14) | identifier | S-0207 |
+| type key `SpeedType` | locomotion class, for example amphibious (S-0211 claim 3) | name | S-0211 |
+
+Each key keeps its value when a later layer omits it (S-0006). The engine defaults are those of the
+program when no layer gives the key. The absent-key defaults and numeric import precision are
+`unmeasured` here, confidence high: the stock-only scenarios below neither remove these keys
+nor isolate the precision of their parsing. Parse-form and layering rules otherwise inherit
+the cited import specs' backing and confidence.
+
+## Measurement scenarios
+
+Use stock data, director and mods off, game-speed index 2, 800 × 600, one human test house and
+one bystander computer player outside the observed test area under the glossary's void rule.
+Use a purpose-made map with flat land, beach and water lanes, a bank with a traversable ramp,
+a high bridge, and a stock control centre with dependent hovering vehicles. Use scripted input
+and a read-only per-tick recorder where supported. Propose missing
+recorder support to the user rather than changing the measurement setup. Record positions, heights,
+surface heights, body and movement facings, destination, heading point, throttle, hover speed,
+vertical velocity, speed fraction, remaining path directions, entry outcomes and animation events.
+One valid run per subcase unless stated. No completed measurement is claimed.
+
+- **H1 Land independence and amphibious drive.** (a) Order a stock hovering vehicle along an 8-cell
+  straight run on clear land, then beach, then water, then across a shoreline. Compare plateau
+  ticks with equal throttle, fraction, hover speed and direction. Expected: identical F3–F4
+  displacements and no movement-model change at the shore. Endpoint timings must also account
+  for F1's height-sensitive distance test. A differing plateau step or a change to tracks falsifies it.
+  (b) Conditional: only if the stock data has a type with the amphibious class and the driving
+  locomotor. Order it across the shoreline. Expected: it drives on tracks
+  on both sides (cell-by-cell track pattern of S-0207), with its speed changing by its class's land
+  multipliers (S-0207 claim 9). Falsified by straight-line hovering or a change of model.
+- **H2 Ramp, heading tolerance and body aim.** Order a resting hover whose movement heading is
+  south to move north 8 cells, then run a 90° turn and an approach from full speed. Expected:
+  F1–F4 each tick, with ordinary throttle 0 beyond 45°, half throttle strictly below the 3-D
+  distance threshold, ramp and braking undershoot as F2, and body aim along the next stored
+  direction rather than necessarily along movement heading. A differing throttle, increment,
+  heading rate, body aim or position falsifies it. Also tests S-0206 claim 13.
+  For boost, add a narrow detour beside the destination and retain a run where half throttle
+  coincides with two equal remaining steps. Compare F2 with the imported boost and with boost 1.
+  Only ticks where those predictions differ test boost. No qualifying tick is inconclusive.
+- **H3 Straight steps, arrival and stop.** Order 1-, 2- and 5-cell moves, straight and with a 90°
+  turn; also cross the high bridge. Record heading-point selection, position, occupancy and deck
+  state on arrival ticks. Expected: F4 without snapping to the old point; a positive precomputed
+  step can still move the vehicle when the point is cleared. A new point does not instantly
+  redirect movement heading. Cell-layer transitions follow claim 6. Once not moving, no later
+  travel or passive ramp occurs. Falsified by a snap, suppression of an otherwise qualifying
+  final step, a different layer transition or a ramp while not moving.
+- **H4 Height and bob.** Observe two resting hovers of opposite recorded object-number parity
+  over land, then water, for 2000 ticks. From known starting heights and vertical velocities,
+  predict every tick with F6, including phase and truncation. Expected: that exact trace and
+  the two periods. A repeatable height or velocity mismatch falsifies it. Consecutive vehicles
+  need not have consecutive object numbers if other objects were created between them.
+- **H5 Climb.** Move a hover from water up the bank's ramp and back down, with a flat control
+  run from matching vertical state. Expected: F6, with reduced effective height only on a rise,
+  and no world-height change from horizontal travel before the vertical update. A trace requiring
+  no anticipatory lift, lift on descent, or an extra height snap falsifies claim 8.
+- **H6 Wake.** A hovering vehicle crossing water; record wake creation ticks. Expected: one wake on
+  each tick divisible by 10 while moving now, none at rest or on the bridge deck, none on land.
+  Its position must be the post-travel, pre-height-update position. A wake with different timing,
+  conditions or position, or a missing qualifying wake, falsifies claim 9.
+- **H7 Switch-off.** Put dependent hovers on land, flat water and bridge deck, including one
+  moving. Destroy the last control centre and record spin, settling, residual travel and death.
+  Rebuild it and record survivors rising. Record scenario-stream state across disabling.
+  Expected: two ranged draws per qualifying vehicle, with count and sign matching the stream,
+  F7 rotations until zero count or loss of powered height, and F6 without powered lift. On the
+  first switched-off tick whose resulting hover height is 0, expect no further spin rotation,
+  even if the previous tick's height was positive and the count was nonzero; another spin
+  rotation on that settling tick falsifies the cutoff. The water
+  hover gets the bomb mark and falls when its spin ends below 104 leptons, then has the low-water
+  death effects of S-0312 claim 11. Land and deck hovers survive. A mismatched draw, rotation,
+  height or survival/death under those conditions falsifies the corresponding claim.
+  Conditional second run: interrupt and restore the centre's operation through ordinary power
+  controls before the spin ends, where those controls permit it. Lift should resume without
+  cancelling spin; premature cancellation falsifies that exception. No qualifying sequence is
+  inconclusive, not confirmation. This setup tests no passengers.
+- **H8 Factory exit.** Record a produced hover's exit, then an ordinary move. Predict F3 from
+  the actual recorded fraction rather than an approximate ratio of travel times. Expected:
+  ρ = ½ persists only until a listed reset, including a stalled-start reset when step length is 0
+  and movement heading exactly matches the heading-point direction. A fraction change without
+  a listed reset, or failure to reset in that state, falsifies claim 4.
+- **H9 Step checks.** (a) Block the next cell with an allied vehicle that has no orders: expected a
+  scatter request after the fresh search, or a give-up within the close-enough distance (claim 12).
+  (b) Put a wall across the path of a hovering vehicle on attack-capable orders: expected an attack
+  on the wall on the repeated check. (c) Put a cloaked enemy unit (a stock type that can cloak) on the
+  hovering vehicle's next cell when the path has no way around it. Expected: the cloaked unit is
+  revealed, and the hovering vehicle keeps its destination and waits, retrying, where a driving
+  vehicle in the same setup gives up its move (S-0207 claim 15).
+  Add (d) a newly placed impassable obstacle giving *blocked*: expect immediate search and
+  destination loss on repeated *blocked*. (e) A moving allied blocker: expect the blockage timer
+  and mode-1/mode-2 re-paths of S-0212 claim 22; clear entry once it leaves. (f) A closed allied
+  gate: expect opening and waiting, then clear entry. Introduce blockers after a path is chosen.
+  Retain only traces that actually produce each intended outcome and, for repeated-check tests,
+  a successful fresh search followed by that outcome. Failed searches are not repeated checks.
+  Compare against T1, including zero throttle, hover speed and fraction on refusal. A differing
+  search tick, destination retention, scatter, attack, gate response or refusal state falsifies
+  the corresponding row. A different recorded outcome makes the intended subtest inconclusive.
+- **H10 Crate.** Put a stock crate in a traversable corridor and order a hover towards it. Record
+  heading-point selection, crate disappearance/effect and physical arrival. Expected: collection
+  on selection of that cell before physical arrival and its ordinary step check. Collection only
+  at arrival, or no collection in a qualifying clear-entry run, falsifies claim 5. The crate's
+  particular effect is outside this spec.
+
+## Open questions
+
+- **Pushing.** A push of a hovering vehicle one cell aside, with an optional spin, exists in the
+  original's locomotor, but no stock caller was found by the search made. If one exists, the pushed
+  vehicle turns its movement heading at once and moves at full speed. Medium confidence that it is
+  unused.
+- **Arrival and stopping.** H3 must isolate the final same-tick step from subsequent behaviour
+  processing. No measurement has yet confirmed its size or whether the point is overshot.
+- **First cell of a new path.** The deck threshold of 312 leptons and the missing gate row (claim 12)
+  are read, not observed; low confidence.
+- **Boost and exceptional disabling.** H2 still needs a qualifying half-throttle detour, and H7
+  still needs an ordinary-input early-restoration sequence. The *sleep*/*enter* and equal-point
+  stop exceptions also lack isolated stock setups. These remain unmeasured, not disproved.

@@ -103,3 +103,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0501](movement/S-0501-aircraft.md) | Aircraft flight, attack runs and pads | movement | 3 | approved | — |
 | [S-0306](combat/S-0306-projectiles.md) | Projectiles (launch, flight, homing, scatter, detonation) | combat | 9 | approved | — |
 | [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 3 | approved | — |
+| [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 1 | approved | — |
