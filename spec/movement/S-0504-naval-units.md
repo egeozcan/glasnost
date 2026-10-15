@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -64,6 +64,8 @@ a carrier's controller is launching ordinary aircraft.
   test. It need not lie in an external neighbouring cell. Claim 12 applies S-0314 claim 18's
   selection and stopping rules to naval yards.
 - **Stored path, path retry timer.** As S-0212. Claim 9 specifies their ship-locomotor application.
+- **Locomotor destination point.** S-0207 claim 25's independently retained movement goal,
+  distinct from the order-level destination and the active track's heading point.
 
 ## Behaviour
 
@@ -91,16 +93,34 @@ a carrier's controller is launching ordinary aircraft.
    A new track after completion copies the ship's height anew. A high-bridge target alone
    therefore does not assign deck height. S-0511 claims 9 and 11 own the bridge-loss uses
    of this stored height and the separate current-height track test.
+
+   The separate locomotor destination point follows S-0207 claim 25 unchanged. It is absent
+   at creation. An accepted movement instruction installs its supplied integer-lepton point
+   immediately, before any successful path search, even for a point in the ship's own cell.
+   A high-bridge target adds 416 leptons to the supplied height once, at acceptance; this
+   does not change the heading-height rule above. Refused or ignored orders do not necessarily
+   supply an instruction. A retained-goal wait, retry, turn or intermediate track completion
+   keeps the point, independently of heading-point presence. Crossing into the goal cell
+   does not clear it. A stop that stops locomotion clears it immediately even while the
+   current track finishes; replacement supplies the new point, and an accepted instruction
+   without a point clears it. At track completion with an order destination still present,
+   being in that destination's supplied movement-point cell with an absolute difference
+   between ship world height and locomotor destination height strictly below 208 leptons
+   clears the point before the cell-arrival report. Merely standing in that cell does not.
+   Copies and comparisons use integer leptons without rounding. Give-up and fallback use
+   S-0207 claim 25's normal stop/replacement rules, not an inferred successful arrival.
+   S-0212 claims 20 to 22 still own search timing and give-up conditions.
    A ship stays in the ground layer, or the bridge-deck layer on a deck, by S-0207's rules; an
    underwater type is in the same layer as a surface ship (claim 6). Its body tilts on slopes as
    S-0106 claim 5 says for naval locomotion.
    - Backing: `measurable` (N1 and N2) for ordinary progress, turning, stopping, heading-point
      scatter and approach; S-0207 D27 for heading-height assignment and retention through
-     chaining. The remaining shared-rule assertions are `unmeasured` here: those
+     chaining; S-0207 D29's water controls for the separate locomotor destination's
+     assignment and lifetime. The remaining shared-rule assertions are `unmeasured` here: those
      scenarios do not isolate power-ups, lead speed, cell-tag timing, slope tilt or every entry
      outcome; the cited specs' scenarios need ship-specific counterparts.
    - Confidence: high for shared ordinary rules and tables; medium for lead speed, approach
-     and cell-tag timing
+     and cell-tag timing, and for approach-destination fallback lifetime
 
 2. **Wakes behind a moving ship.** In each tick in which a ship is *moving now*, and the tick number
    (glossary) is divisible by 8, the ship creates one wake at its own position, provided all of these
@@ -568,6 +588,21 @@ Expected: exact copying at track start and retention until completion, not targe
 deck height; a new track copies height anew. A different initial value, mid-track height
 change or height refresh at a qualified chain falsifies the rule. N1 and N2 alone do not
 isolate these alternatives. S-0511 B6 separately tests the bridge-loss consequences.
+
+**Locomotor destination lifetime (claim 1).** Use S-0207 D29's water-lane controls
+at speed index 2 with a stock ship, a remote bystander computer player, director and
+mods off; repeat each control three times. Record order destination, locomotor destination,
+heading point, world position, search outcome, track completion and arrival report.
+Include reachable and temporarily blocked goals, a retained-goal retry, an intermediate
+completion, entry into the goal cell, final completion, mid-track stop, replacement and
+same-cell assignment before subsequent behaviour processing. Expected: assignment before
+search success, persistence through retained-goal waits and intermediate tracks, no clearing
+at the cell boundary, clearing at qualifying completion before reporting, immediate clearing
+on stop despite finishing the track, and a present point after same-cell assignment.
+Any contrary point lifetime falsifies the corresponding rule. Use D29's give-up controls
+and its named docking-displacement controls for the strict 207/208-lepton boundary.
+if legal ship approaches cannot be established, that boundary control is inconclusive.
+N1 and N2 alone do not isolate destination-point presence.
 
 **N3. Wake cadence (claims 2, 6).** *Setup:* one surface ship and one underwater ship moving on
 open water; a bridge over part of the path. *Procedure:* run 200 ticks of straight movement and a
