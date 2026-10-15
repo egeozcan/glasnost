@@ -154,6 +154,34 @@ fn claim10_one_time_strike_falls_from_20000_without_owner() {
     assert!(events(&w).iter().any(|e| e.0 == SwEvent::Siren));
 }
 
+// --- Claim 11 --------------------------------------------------------------------
+
+#[test]
+fn claim11_warning_marker_at_the_target_centre() {
+    // spec: S-0513 claim 11 (a nuclear strike places the warning-marker animation at the target cell's centre; S-0202 claim 10: an ordinary creation) and Edge cases (no marker animation type: no animation)
+    for named in [true, false] {
+        let mut r = ruleset();
+        if named {
+            r.sim.animations.insert(
+                superweapons::WARNING_MARKER.into(),
+                glasnost_rules::sim::AnimationType::default(),
+            );
+            r.registries
+                .entry("animations".into())
+                .or_default()
+                .push(superweapons::WARNING_MARKER.into());
+        }
+        let mut w = game(&r);
+        w.effects.clear();
+        nuke::one_time(&mut w, Some(ALPHA), STRIKE, at(1, 1));
+        let n = anims(&w)
+            .iter()
+            .filter(|a| a.as_str() == superweapons::WARNING_MARKER)
+            .count();
+        assert_eq!(n, usize::from(named), "named {named}");
+    }
+}
+
 // --- S-0524 claim 3 ------------------------------------------------------------------
 
 #[test]
