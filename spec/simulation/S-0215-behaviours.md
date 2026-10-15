@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -312,8 +312,9 @@ Terms used by this spec:
   flag. "No deploy weapon" means that slot holds no weapon.
 - **Turreted building, voxel turret, turn-rate field:** a *turreted building* is a building whose
   type, or an upgrade installed on it, has the turret flag; its *turret facing* is the facing it
-  aims with. It has a *voxel turret* when its own type's art marks the turret as drawn from a voxel
-  model. The *turn-rate field* is the type's imported turn rate, an integer (Import mapping); how it
+  aims with. It has a *voxel turret* when its own type's rules voxel-turret flag is set,
+  the same flag used by S-0310 claim 4 and S-0313 claim 10. Art supplies no separate
+  value, override or fallback. The *turn-rate field* is the type's imported turn rate, an integer (Import mapping); how it
   turns facings belongs to S-0206 (turn rates), and this spec uses it only in the bound of
   Formulas F8.
 - **Opportunity target:** a target that an automatic search chose by itself and marked as such, as
@@ -468,11 +469,16 @@ Terms used by this spec:
    once. An actor normally has one turn per tick; when S-0203 (claim 11) gives it a second turn
    in the same tick, that second turn processes again only if the delay chosen in its first turn
    was 0 or less (or a behaviour start, claim 3, has set the timer to "expired now" since).
-   - Backing: `measurable` (scenarios B1 and B18). The second-turn case is `unmeasured`: S-0203
+   Due behaviour processing precedes an attached parasite's same-turn delivery or grappling
+   event and its hold renewal (S-0614 claim 18). A hit mark or a newly renewed hold from that
+   event does not undo the behaviour processing or shots it already made, including an
+   aircraft's attack-run shots. This does not place all firing before the parasite:
+   S-0614 claim 18 distinguishes the later separate firing of infantry and vehicles.
+   - Backing: `measurable` (scenarios B1 and B18; S-0614 scenario P12 for parasite ordering). The second-turn case is `unmeasured`: S-0203
      marks the second turn itself as not observable by a recorder. The erasing edge is
      `unmeasured`: it needs an erasing weapon locked onto an actor at the moment its chrono move
      reaches the phase-in, and no setup is known that can time that.
-   - Confidence: high (alive, health and timer); medium (the tunnel, erasing and leaving-stage
+   - Confidence: high (alive, health, timer and parasite ordering); medium (the tunnel, erasing and leaving-stage
      exclusions, that the phase-in does not exclude, and that no other per-kind exclusion exists
      for aircraft); low (the second-turn case and the erasing edge)
 
@@ -902,8 +908,18 @@ Terms used by this spec:
     is *construction* or *selling*. As a consequence, an actor in *move* or *attack* that has been
     stopped falls back to rest at a later processing (claims 22 and 23), once it has stopped moving.
     The order specs own the stop order's further conditions.
+
+    **Spawners' own targets.** Target changes made by these orders, and by the fall-back and
+    behaviour rules in this spec, obey S-0506 claim 25. With its quirk at the original setting,
+    actually changing a nonempty own target to empty requests a pending-target clear, effective
+    only if the controller target is nonempty. An already empty own target leaves pending
+    unchanged, as does direct replacement by another nonempty own target. Restoring an own
+    target does not restore pending that was cleared. A behaviour name or a fall-back to rest
+    is not itself a cancellation, and a targetless actor is not swept for pending cancellation
+    on every tick or launch pass. S-0506 claim 25 owns the alternative quirk setting,
+    target-loss notifications and explicit controller resets.
     - Backing: `measurable` (scenario B3; scenario B14, case b, for the two attack-move orders that
-      input creates). Attack-move orders with no established input path (neither target nor
+      input creates; S-0506 scenario R19 for actual own-target changes and pending cancellation). Attack-move orders with no established input path (neither target nor
       destination, or a building) are `unmeasured` here: the measurement setup cannot issue them.
       Translation after loss of eligibility is also `unmeasured` here; S-0213 claim 6 owns that
       case and the translation's backing. The stop order's exemption for
@@ -913,7 +929,7 @@ Terms used by this spec:
       these behaviours only when data places it in them (claim 4), and any order that gives it a
       target or a destination also queues a behaviour that replaces them at its next per-tick
       start, so no state is known in which the exemption would show.
-    - Confidence: high (queue without start; the stop order changes no slot); medium (the effect on
+    - Confidence: high (queue without start; the stop order changes no slot; pending-clear conditions); medium (the effect on
       a moving vehicle, which follows from claim 11, the clearing rules and the stop order's
       exceptions)
 
@@ -923,6 +939,8 @@ Terms used by this spec:
     or starting queued *paradrop approach* or *spy-plane approach*. A matching row ends that
     fall-back without any common effects below, including refresh, and without the ordinary
     end-of-fall-back queued start. S-0501 claim 18 owns those rows and their backing.
+    Any actual own-target changes during fall-back use claim 12's spawner rule, not
+    unconditional pending-target cancellation.
 
     Otherwise, when an infantry unit, vehicle or aircraft falls back to rest, the effects of
     this table take place, and the tables of claims 14 and 15 (for aircraft, S-0501 claim 18)
@@ -1842,7 +1860,8 @@ apply in our engine to the actors of every player house.
       leaves its weapon's range returns to *guard* at its next processing.
 
       **Turret snap** (low confidence). When the answer is *not facing* and the building is a
-      turreted building with a voxel turret (Terms), the building checks its aim error *ε*, the
+      turreted building whose own type has the rules voxel-turret flag (Terms; shared with
+      S-0310 claim 4 and S-0313 claim 10), the building checks its aim error *ε*, the
       angle between its turret facing and the direction to the target in facing units, taken the
       shorter way round (0 to 32 768). If its type's turn-rate field is 0, or *ε* is within the
       snap bound *b* of Formulas F8, its turret facing is set exactly onto the direction of the
@@ -2985,7 +3004,7 @@ absent key keeps the value the earlier layers left).
 | `AreaFire` | weapon section | claim 30 (of the deploy weapon, Terms) | boolean |
 | `SprayAttack` | type section | spray-attack flag: picks the first weapon slot as the deploy weapon (Terms; claim 30) | boolean; absent no |
 | `Turret` | building type section (and the building types installed on it as upgrades) | turret flag of a turreted building (Terms; claim 32) | boolean; absent no |
-| `TurretAnimIsVoxel` | art, the building type's image section | voxel turret (Terms; claim 32) | boolean; absent no |
+| `TurretAnimIsVoxel` | rules, section named by the building type | voxel turret (Terms; claim 32; S-0310 claim 4 and S-0313 claim 10) | boolean; initially no; omission in a later rules layer keeps the current value; art supplies no value or fallback |
 | `ROT` | building type section | turn-rate field *v* of F8 (claim 32) | integer; absent 0 |
 
 **Cells to leptons** (`GuardRange` and `GuardModeStray`). The value is read as S-0003's decimal
@@ -3600,14 +3619,19 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Runs: five. (h) Turret snap (claim 32, F8): named test files give an armed defensive building
   type without the SAM flag the turret flag, a turn-rate field of 128 (so *w*₈ = −128 and the
   bound covers every aim error) and a weapon whose rate-of-fire field is 20 ticks or more, and
-  mark its turret art as a voxel model, supplying a voxel turret model for it in the test files.
+  set its own type's rules voxel-turret flag, supplying a voxel turret model in the test files.
   A run in which the turret image fails to load is invalid. A stationary enemy vehicle is placed in range in the
   direction opposite to the turret's facing, and the building is given a force-fire order on it.
   Expected: at its first *attack* processing it fires (the shot is recorded on that tick) and the
   next processing comes 1 tick later, with no 2-tick interval before the first shot. Control: the
-  same files without the voxel art mark: expected at least one 2-tick interval (rotating) before
-  the first shot. Falsified by a 2-tick interval before the first shot in the main run, or by
-  none in the control. Runs: five each.
+  same files with the rules voxel-turret flag cleared: expected at least one 2-tick interval
+  (rotating) before the first shot. In both cases repeat with conflicting voxel-turret
+  settings in the image art, changing only those art settings as a negative control:
+  neither the snap nor the processing intervals change. Also compare an art-only flag
+  with the flag omitted from every applicable rules layer in a fresh game: both use the
+  initial rules default and do not snap.
+  Falsified by a 2-tick interval before the first shot in the main run, by none in the
+  rules-cleared control, or by any art-only change affecting the result. Runs: five each.
   (i) *Still turning* (claim 32, the row of other answers): the control of (h), with a turn-rate
   field small enough that the half turn takes at least 20 ticks (S-0206), and the recorder also
   reading the turret facing. Expected: the first *attack* processing (answer *not facing*) is
