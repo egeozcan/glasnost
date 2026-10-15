@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 40
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1292,6 +1292,13 @@ Terms specific to this spec:
       S-0209 claims 7 to 10 for the walk locomotor),
     - and, with the driving, ship or hovering locomotor, in the chase case below.
 
+    For driving and ship locomotion, search eligibility and results do not define whether
+    a locomotor destination point is present. An accepted movement instruction installs
+    that point before any search succeeds, even when its cell equals the unit's own cell.
+    A wait, turn, retry delay or failed search that retains the movement goal keeps the
+    point present. S-0207 claim 25 owns its assignment and clearing; neither search success
+    nor goal-cell inequality substitutes for that presence test.
+
     For a hovering unit, the destination used by its movement completion and path searches
     in claims 20–23 is its movement destination, not its order-level destination. A search
     targets the movement destination's cell even when an accepted stop has cleared the
@@ -1318,7 +1325,9 @@ Terms specific to this spec:
     The walk locomotor cuts no stored path for a chased unit either.
     - Backing: `measurable` (scenario P5, and P9's train refresh run for the train rule; P5 run 1i
       for the absence of the refresh in the walk locomotor; S-0504 N11 for ship refresh
-      timing; S-0503 H12 and H15 for the hover movement/order-level destination split).
+      timing; S-0207 D29 for driving and ship destination presence before search and
+      during retained-goal waits, including same-cell assignment; S-0503 H12 and H15
+      for the hover movement/order-level destination split).
       The exact lepton-scale refresh boundary and the distinction between the
       table root and an exact Euclidean root are `unmeasured` for both driving and ships:
       P5 and S-0504 N11 place the heading point well beyond the threshold, not at a
@@ -1333,7 +1342,9 @@ Terms specific to this spec:
       cells as a moving blocker or a stationary friendly, and S-0209's reactions then make new
       paths of their own, so the absence of the cut cannot be isolated
     - Confidence: high for the 24-step limit. Medium for the 512-lepton trigger, the chase cut, the
-      train rule and their absence in the walk locomotor. Low for the dropped first step
+      train rule and their absence in the walk locomotor. High for destination presence
+      independent of search success and goal-cell inequality (S-0207 claim 25).
+      Low for the dropped first step
 
 21. **Retry delay.** The retry delay is *R* = trunc(*P* × 900) ticks (F3), where *P* is the
     path-retry delay field in game minutes. The path retry timer of S-0209 counts it down. A unit
