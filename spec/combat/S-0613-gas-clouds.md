@@ -2,7 +2,7 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -17,8 +17,7 @@ supersedes: []
 ## Summary
 
 How lingering gas clouds are made and how they behave in skirmish; campaigns and network games are out of scope. It covers the shared gas system that exists in
-every skirmish, the poison clouds left by a virus death (clouds whose warhead is a poison warhead in
-the stock data), the first particle of a particle system that a warhead creates, and the gas
+every skirmish, the poison clouds left by a virus death (clouds whose warhead is a poison warhead), the first particle of a particle system that a warhead creates, and the gas
 particle itself: its drift, slope deflection, sinking, wind, lifetime, particle stage, successor and
 the damage it deals at a fixed cadence. Gas damage is ordinary damage. What a hit then
 does (immunities, poison, berserk, death kinds) belongs to the specs named below.
@@ -32,8 +31,10 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 - **Creation draws** of a particle (its lifetime draw and the other conditional draws): S-0202
   claim 15.
 - **Particle art lookup:** S-0007 claims 28 and 29.
-- **Berserk** from a psychic gas hit: S-0610. With the stock data the chaos drone's weapon names no
-  particle system, so the stock chaos drone leaves no gas particles (Open questions).
+- **Berserk** from a gas hit with a berserk-causing warhead: S-0302 claim 10 decides whether
+  the hit takes effect and its duration; S-0610 claims 4 to 7 govern entry, re-hits, countdown,
+  expiry, restrictions and tint. Whether the chaos drone's weapon names a particle system is outside
+  this spec (Open questions).
 
 ## Terms
 
@@ -67,7 +68,9 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    With an unlimited system lifetime it lasts until the game is cleared and is never removed merely
    for being empty. A positive system lifetime instead marks it to end after that many turns (claim 6).
    A rules set without that type cannot be played: the importer rejects it (Edge cases).
-   - Backing: `measurable` (scenario G1: virus clouds appear in a game whose map has no gas source)
+   - Backing: `measurable` (G1 for creation, ownership, target and empty persistence,
+     G3 for finite system lifetime). The statement that its own position has no effect is
+     `unmeasured`: these scenarios do not independently vary that position.
    - Confidence: high
 
 2. **Virus death with the animation.** When an infantry unit dies a virus death that plays the
@@ -77,8 +80,8 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    system, which has no house. The particles requested by the animation's middle event (S-0109
    claim 14: its particle type, its particle count times) are all created in the shared gas system
    at the animation's position, *whatever their type's behaviour kind*.
-   - Backing: `measurable` (scenario G2, part a: the number of clouds equals the animation's particle
-     count)
+   - Backing: `measurable` (G2 part a for animation position, ownership, shared-system
+     membership and particle count)
    - Confidence: high
 
 3. **Virus death without the animation's middle event.** In the two extra-animation cases of
@@ -87,7 +90,7 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    (S-0109 claim 13: start sound, and the middle event too when its μ is 0). Then exactly one
    particle of the animation's particle type is created in the shared gas system at the unit's
    position, and the animation is removed in the same step, so it never reaches a later middle
-   event. With μ ≠ 0 (as in the stock data) the animation's particle count therefore plays no
+   event. With μ ≠ 0 the animation's particle count therefore plays no
    part, and the death leaves one cloud. With μ = 0 the creation middle event's particles (and its
    scorch mark or crater, S-0109 claim 14) come first, then the one extra particle.
    - Backing: `measurable` (scenario G2, part b: one cloud where part a gives the particle count).
@@ -107,18 +110,20 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 5. **Creating a particle.** A new particle is added at the end of its system's list. Its remaining
    lifetime *E* is drawn from its type's lifetime field as S-0202 claim 15 sets. Its damage
    countdown *C* starts at its type's damage interval field reduced modulo 65536 and its stage at
-   its type's start-stage field. The lifetime is also reduced modulo 65536; an initial zero expires
-   after 65536 updates, not immediately. If its height is at or below *H* at its position, it is raised to *H*. Its velocity and
+   its type's start-stage field. The lifetime is also reduced modulo 65536; an initial zero
+   expires by lifetime after 65536 updates, not immediately, unless another cause removes it earlier. If its height is at or below *H* at its position, it is raised to *H*. Its velocity and
    deflection start at zero.
    - Backing: `measurable` (G4 and G5 for initial cadence, stage, motion and lifetime,
-     S-0202 claim 15 for creation draws).
+     S-0202 claim 15 for creation draws). The initial-zero lifetime's full 65536-update life is
+     `unmeasured`: no practical setup here guarantees that creation draw without writing random state.
    - Confidence: high
 
 ### The system's turn
 
 6. **Order within a gas system's turn.** In a gas-behaviour system's turn (S-0203 claim 2),
    each existing particle's damage and other update effects use its position before that tick's movement. For any two particles in the system, the newer particle's update effects, including any random draws, precede the older particle's effects. Each particle's own behaviour-kind update occurs in that tick, and its lifetime is reduced by one modulo 65536; a resulting value of 0 marks it dead. All existing particles' update effects finish before any surviving particle moves. Only particles not marked dead move during that tick. A dead particle disappears and may leave a successor (claim 7). When more than one particle dies in the tick, successor creation draws for the newer dead particle precede those for the older dead particle, and all successor creation follows the particles' update effects. Consequences:
-   - A particle hits in the tick when its lifetime runs out, then disappears in that tick.
+   - A particle whose damage is due still hits in the tick when its lifetime runs out,
+     then disappears in that tick.
    - A particle created by a death that a cloud causes during the update pass (claim 3) is not
      updated that tick, but it is moved in the second pass. One created later in the tick, for
      example by an animation's middle event, waits for the next turn.
@@ -140,9 +145,13 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 
 8. **Random drift.** On even tick numbers only, each gas particle takes one scenario raw value
    (S-0202). With probability 1/8 (F2) it takes two more and adds −1, 0 or +1 to either *v*ₓ or
-   *v*ᵧ, the second draw choosing which. After such a drift event, *v*ₓ and *v*ᵧ are clamped to [−2, 2]. A gas particle
+   *v*ᵧ, the second draw choosing which. The exceptional third raw value −2³¹ instead gives
+   a step of −3 (F1/F2). After such a drift event, both *v*ₓ and *v*ᵧ are clamped to [−2, 2]
+   leptons per tick. A gas particle
    therefore takes 1 or 3 raw values on each even tick and none on odd ticks.
-   - Backing: `measurable` (scenario G6: cloud spread on flat ground, distribution over seeds)
+   - Backing: `measurable` (scenario G6: cloud spread on flat ground and recorded draws).
+     The −2³¹ exception is `unmeasured`: the recorder cannot force this exceptionally rare value,
+     and G6's runs do not practically isolate it.
    - Confidence: high
 
 9. **Vertical speed.** On even tick numbers: when the particle's height above the terrain
@@ -154,9 +163,10 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 10. **Slope deflection.** On even tick numbers the particle also sets its deflection (F3). Over flat ground, or when nothing below stops it, the deflection is zero. When
     the point a short step below it (the *probe*, F3) is below the terrain, crosses a high bridge's
     deck height, or is within 150 leptons above the terrain in a cell holding an obstacle, the
-    deflection points downhill along the slope of the particle's cell. Then on each odd tick the
-    particle moves by that deflection, so a cloud on a ramp creeps downhill and one on flat ground
-    does not.
+    deflection follows F3. With gravity greater than −2 leptons per tick² it points downhill
+    along the slope of the particle's cell; other gravity values use F3 without that guarantee.
+    On each odd tick that stored deflection contributes to movement. With the downward probe,
+    a cloud on a ramp therefore creeps downhill, unlike one on flat ground.
     - **Obstacles:** a building, except an inactive section of a laser fence and a vehicle-like
       building (S-0214 Terms); or, in a cell without a building, one of the three wall overlays of
       S-0306's constants (by position in the imported overlay list).
@@ -164,15 +174,15 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     - Confidence: medium (downhill direction and the zero on flat ground: high. The exact
       magnitudes and the obstacle and bridge triggers: medium)
 
-11. **Movement.** Each live gas particle's position after the update pass is determined by F5. A due wind push contributes on either parity of tick (claim 12). On even ticks the particle's height is unchanged and its horizontal velocity contributes no movement. On odd ticks, wind and stored deflection determine the horizontal position at which sinking is evaluated; sinking moves the particle toward 5 leptons above the terrain by no more than 2 leptons, and velocity determines its subsequent displacement. Its final height is never below 5 leptons above the terrain at its final horizontal position.
-    - Backing: `measurable` (scenarios G6 and G7)
+11. **Movement.** Each live gas particle's position after the update pass is determined by F5. A due wind push contributes on either parity of tick (claim 12). On even ticks the particle's height is unchanged and its horizontal velocity contributes no movement. On odd ticks, wind and stored deflection determine the horizontal position at which sinking is evaluated; sinking moves the particle toward 5 leptons above the terrain by no more than 2 leptons, and velocity determines its subsequent displacement. After an odd-tick move its final height is never below 5 leptons above the terrain at its final horizontal position. Even-tick wind movement applies no terrain-height clamp.
+    - Backing: `measurable` (G6 and G7; G9 for even-tick wind without a height clamp)
     - Confidence: high
 
 12. **Wind.** A gas particle type with a positive wind-effect field *W* is pushed one step of the
     rules' wind direction on every tick whose number is a multiple of ⌊10 / *W*⌋ (F6). The step is
     given by the table in Constants. With *W* above 10 the original fails on integer division by zero; our engine's
-    S-0205 claim 3 departure permits a push only at tick 0. Stock gas
-    types have no wind effect, so this matters only with other data.
+    S-0205 claim 3 departure permits a push only at tick 0. This matters only for data that gives a gas
+    particle type a positive wind effect.
     - Backing: `measurable` (scenario G9, with a test rules file)
     - Confidence: high
 
@@ -193,9 +203,14 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     The ground layer is used whatever the particle's height, so an object on a bridge deck is never
     hit, even by a cloud level with the deck. An object removed by a hit does not stop the hits on
     the others listed after it. The first hit of a new particle comes on its update number
-    equal to its damage interval reduced modulo 65536, with zero meaning 65536 updates. Its death kind, poison, berserk and every other effect of the hit
-    are S-0302's and S-0107's, and a death it causes can create further clouds (claims 2 and 3).
-    - Backing: `measurable` (scenario G4)
+    equal to its damage interval reduced modulo 65536, with zero meaning 65536 updates. Its death
+    kind, poison and other damage effects follow S-0302 and S-0107 claim 17. For a berserk-causing
+    warhead, S-0302 claim 10 decides whether the hit takes effect and its duration; effective hits
+    then follow S-0610 claims 4 to 7. A death it causes can create further clouds (claims 2 and 3).
+    - Backing: `measurable` (scenario G4; G10 for house credit and no attacker).
+      A completed zero-interval cycle is `unmeasured`:
+      G4 tests its wrap and absence of early hits, but reaching update 65536 also needs the
+      unforced initial-zero lifetime of claim 5, with no earlier stage deletion.
     - Confidence: high (cadence, ground layer, no detonation). Medium for *D*: it uses the lift of
       F7, which makes the distance smaller than the lepton distance.
 
@@ -207,8 +222,9 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     - Confidence: high
 
 15. **Particle stage.** In each update, after the damage step, the particle stage advances by 1
-    on the updates that F8 selects. The period is the type's stage-advance field, or one more than it when the particle's
-    object number is odd. Then, whenever the particle stage equals the type's end-stage field, the particle
+    on the updates that F8 selects. For a positive stage-advance field, the period is that
+    field in ticks, or one more tick when the particle's object number is odd; F8 also covers
+    nonpositive fields. Then, whenever the particle stage equals the type's end-stage field, the particle
     is marked dead if its type has the delete-at-stage-limit flag; otherwise its particle stage restarts at
     0 (not at the start-stage field). The drawn image-frame number is the particle stage itself:
     the type's start-frame field is not added for gas.
@@ -233,13 +249,18 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 toward zero, so their sign follows the dividend.
 
 **F2. Drift** (even ticks; integer arithmetic with signed remainders truncated toward zero).
-One raw draw tests whether the low three bits of *m*(*r*₁) are zero. A nonzero result leaves
-horizontal velocity unchanged and consumes no further drift draws. A zero result consumes two
-more raw draws, in order *r*₂ then *r*₃. The step is *k* = (*m*(*r*₃) rem 3) − 1.
-Even *m*(*r*₂) selects the horizontal x axis, odd selects y. The selected velocity increases by
-*k*, and both horizontal velocities are then clamped to [−2, 2] leptons per tick.
+Let *v*ₕ = (*v*ₓ, *v*ᵧ) be the velocity before drift, *r*₁ the first raw value, and
+*c*(*u*) = clamp(*u*, −2, 2). The cases below specify the resulting velocity and total drift
+raw-value count. In the three-value cases, the raw values are *r*₁, *r*₂, *r*₃ in that order,
+and *k* = (*m*(*r*₃) rem 3) − 1. Velocity components and *k* are in leptons per tick.
 
-With *r*₃ = −2³¹, *k* = −3 before the clamp.
+| Condition | Drift draw count | *v*ₕ′ |
+|---|---|---|
+| Low three bits of *m*(*r*₁) nonzero | 1 | (*v*ₓ, *v*ᵧ) |
+| Low three bits zero; *m*(*r*₂) even | 3 | (*c*(*v*ₓ + *k*), *c*(*v*ᵧ)) |
+| Low three bits zero; *m*(*r*₂) odd | 3 | (*c*(*v*ₓ), *c*(*v*ᵧ + *k*)) |
+
+With *r*₃ = −2³¹, *k* = −3 before clamping the resulting velocity.
 
 **F3. Deflection** (even ticks). Let *G* be the rules gravity (integer, 3 when absent) and
 *v*⁰ = (0, 0, −2 − *G*) in single precision. Let *p* = (*x*, *y*, *z*) be the particle's position.
@@ -304,8 +325,9 @@ particle stage advances when
 > (*n* + *E*_max − *E*) is divisible by (*n* mod 2) + *A*.
 
 The particle stage is an 8-bit signed counter, wrapping from 127 to −128. The start-stage, end-stage and
-stage-advance fields are stored as 8-bit signed values. With *A* = 0 and an even *n*, the divisor
-is 0, and the advance follows S-0205 claim 3.
+stage-advance fields are stored as 8-bit signed values. With *A* = 0 and an even *n*, or
+*A* = −1 and an odd *n*, the divisor is 0: the original stops, and our engine's advance
+follows S-0205 claim 3 with its importer warning.
 
 ## Constants
 
@@ -325,7 +347,11 @@ is 0, and the advance follows S-0205 claim 3.
 | Damage countdown width | 16 | bits | F7 |
 | Particle stage width | 8 | bits, signed | F8 |
 | Gravity when absent | 3 | leptons per tick² | F3 |
-| Particle type defaults | lifetime 1, damage interval 0, damage 0, stage advance 4, start and end stage 0 | | Import mapping |
+| Particle lifetime default | 1 | ticks | Import mapping |
+| Damage interval default | 0 | ticks | F7 wraparound |
+| Damage amount default | 0 | health points per hit, before damage resolution | Import mapping |
+| Stage advance default | 4 | ticks | F8 adds the object-number parity |
+| Start and end stage defaults | 0 each | stage indices, dimensionless | Import mapping |
 
 ## State and ordering
 
@@ -366,9 +392,9 @@ Ordering consequences:
   table. When a type with a wind effect exists, our importer warns, and no wind push is applied.
 - **Non-gas particle types in the shared gas system** (claim 2). Such a particle updates and moves
   by the rules of its own behaviour kind, which other specs own. Only the turn order of claim 6
-  comes from its system. Stock data never does this.
-- **Signed magnitude** (F1): an extreme raw value gives a drift step of −3 before the clamp, so it
-  is clamped to −2 like any other.
+  comes from its system. This spec makes no claim about whether the data supplies such a particle.
+- **Signed magnitude** (F1): an extreme raw value gives a drift step of −3 before the clamp.
+  F2 clamps the resulting velocity, not the step itself.
 - **Damage interval 0** (F7): one hit per 65536 updates rather than one per tick.
 
 ## Import mapping
@@ -382,23 +408,23 @@ Ordering consequences:
 | Particle behaviour kind | particle type `BehavesLike` | name: Gas, Smoke, Fire, Spark, Railgun | none (no update) |
 | Damage interval | particle type `MaxDC` | integer, ticks | 0 |
 | Lifetime | particle type `MaxEC` | integer, ticks | 1 |
-| Damage amount | particle type `Damage` | integer | 0 |
+| Damage amount | particle type `Damage` | integer, health points per hit before damage resolution | 0 health points |
 | Warhead | particle type `Warhead` | warhead name | none |
-| Start frame (not added for gas drawing) | particle type `StartFrame` | integer | 0 |
-| Start stage | particle type `StartStateAI` | integer, stored as 8-bit signed | 0 |
-| End stage | particle type `EndStateAI` | integer, stored as 8-bit signed | 0 |
-| Stage advance | particle type `StateAIAdvance` | integer, stored as 8-bit signed | 4 |
+| Start frame (not added for gas drawing) | particle type `StartFrame` | integer frame index, dimensionless | 0 |
+| Start stage | particle type `StartStateAI` | integer stage index, dimensionless; reduced to signed 8-bit | 0 |
+| End stage | particle type `EndStateAI` | integer stage index, dimensionless; reduced to signed 8-bit | 0 |
+| Stage advance | particle type `StateAIAdvance` | integer, ticks; reduced to signed 8-bit | 4 ticks |
 | Delete at stage limit | particle type `DeleteOnStateLimit` | boolean | no |
 | Next particle type | particle type `NextParticle` | particle type name; `<none>` for none | none |
 | Next-particle displacement | particle type `NextParticleOffset` | three integers, leptons | 0, 0, 0 |
-| Wind effect | particle type `WindEffect` | integer | 0 |
-| Translucency | particle type `Translucency` | integer, reduced to signed 8-bit; claim 16 selects blending | 0 |
+| Wind effect | particle type `WindEffect` | integer cadence divisor, dimensionless | 0 |
+| Translucency | particle type `Translucency` | integer percentage points, reduced to signed 8-bit; claim 16 selects blending | 0 percentage points |
 | Particle art | particle type `Image` | S-0007 claim 28 | |
 | Warhead's particle system | warhead `Particle` | particle-system type name | none |
 | Virus-death animation | Rules `[General]` `InfantryVirus` | animation name | |
 | Animation's particle type and count | art `SpawnsParticle`, `NumParticles` | name, integer | S-0109 |
-| Wind direction | Rules `[General]` `WindDirection` | integer 0–7 | −1 (Edge cases) |
-| Gravity | Rules `[AudioVisual]` `Gravity`, as in S-0306's Import mapping | integer | 3 |
+| Wind direction | Rules `[General]` `WindDirection` | integer table index 0–7, dimensionless | −1 (Edge cases) |
+| Gravity | Rules `[AudioVisual]` `Gravity`, as in S-0306's Import mapping | integer, leptons per tick² | 3 leptons per tick² |
 
 ## Measurement scenarios
 
@@ -416,9 +442,17 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   with no other gas source. Kill the infantry. *Observable:* clouds appear and damage nearby
   infantry. Repeat a kill after all earlier clouds have gone: clouds still appear. G3's finite
   lifetime variant separately tests expiry rather than assuming all systems are immortal.
-  *Falsified if* either kill produces no clouds.
+  At game start and after each cloud disappears, also record particle-system existence,
+  owner and target with the read-only recorder. Expected: the shared system already exists
+  before the first death, has neither owner nor target, and persists empty between deaths.
+  *Falsified if* either kill produces no clouds, the system first appears at a death, acquires
+  an owner or target, or disappears merely for being empty.
 - **G2. Cloud count.** (a) Kill a human infantry with the virus sniper: count the clouds at the
-  animation's middle frame. Expected: the animation's particle count. (b) Kill an attack dog (a
+  animation's middle frame. Also record the animation's initial position and owner and each
+  particle's creation position and system membership. Expected: the animation begins at the
+  victim's position, belongs to the sniper's house, and requests the imported particle count
+  at its own position in the existing ownerless shared system. A different position, owner,
+  membership or count falsifies the corresponding rule. (b) Kill an attack dog (a
   non-human infantry type), and separately a parachutist still in the air, with the virus sniper.
   Expected: exactly one cloud, at the moment of death, and the animation disappears at once.
   *Falsified if* (b) shows the particle count or the animation persists. (c) Named test art file
@@ -437,9 +471,10 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   empty until game clear. Record system existence as well as particles.
 - **G4. Damage cadence.** The virus sniper kills one human infantry that shares its cell with a
   second enemy infantry ordered to stay. Record the tick numbers of the second unit's health
-  changes and of the clouds' creation. Expected: hits every *I* ticks, where *I* is the cloud
-  type's damage interval field, the first *I* ticks after a cloud appears, one hit per cloud in
-  the cell. Variant (a): the kill on the ground under a
+  changes and of the clouds' creation and updates. Expected: hits every *I* particle updates,
+  where *I* is the cloud type's damage interval reduced modulo 65536 (zero means 65536),
+  starting on update *I*, one hit per due cloud in the cell. A creation tick is not counted as
+  an update when claim 6 defers that particle's first update. Variant (a): the kill on the ground under a
   high bridge, with infantry on the deck above. Expected: those on the deck are never hit.
   Variant (b): two enemy infantry in the cloud's cell, the first killed by a hit. Expected: the
   second is still hit in the same tick. Named test rules file G4-distance: use one damaging
@@ -448,19 +483,39 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   not Euclidean or unscaled lepton distance. Give its warhead conspicuous detonation animation
   and particle-system effects: cloud hits must cause neither. Also test interval zero for
   a recorded lifetime shorter than 65536 updates, and a damaging hit on the particle's
-  final lifetime update. Expected: the zero interval wraps on its first update and gives no
-  hit before removal; final-update damage with a positive interval occurs before removal.
-  A harmless variant must not reset its countdown on zero.
+  final lifetime update. Record the damage countdown as well as health: the zero interval
+  wraps to 65535 on its first update and gives no hit before removal; final-update damage
+  with a positive interval occurs before removal. A harmless variant must not reset its
+  countdown on zero. Repeat with an interval above 65535: predict its initial countdown and
+  first hit from reduction modulo 65536, counting particle updates rather than elapsed ticks.
+  Named test rules file G4-defences supplies otherwise identical gas hits on standing and
+  prone infantry, a poison-immune target, allied and enemy targets of the same type, and
+  a transport with passengers. Expect ordinary S-0302 damage using the particle amount,
+  warhead and F7 distance, including defences and immunity. The no-attacker hit is not
+  suppressed merely by an allies-excluding warhead. On a killing transport hit passenger
+  escape follows S-0312 claims 5 and 12 rather than being forcibly disabled. Any contrary health,
+  hit order, countdown, detonation effect or forced no-escape result falsifies that part.
 - **G5. Lifetime and successor.** Watch one stock virus cloud until its successor ends in 20
   runs. Record each particle's creation tick, position, stage and removal tick and the random
   state used for its lifetime draw. Expected: disappearance and successor creation share a
   tick; the successor position is the old position plus the imported displacement, floored at
   terrain, and it inherits velocity but not horizontal deflection. Its first update and motion
   wait until the next system turn. Compute its stage advances from F8, including the creation
-  phase, rather than assuming a full period before its first advance. End occurs on the first
+  phase, rather than assuming a full period before its first advance. For oracle predictions,
+  record the original's object identifier and use it in F8; engine conformance instead uses
+  our object number, as the stated numbering departure requires. End occurs on the first
   lifetime-zero or deleting-stage-limit update. Named test rules file G5-stages varies start
   stage, end stage, delete flag and advance period; without deletion, equality resets to zero,
-  not the start stage. Capture frames while varying the start-frame field: the selected frame
+  not the start stage. Include start stage 127, no deletion and an unreachable end stage for
+  the observed interval: the next advance wraps to −128. Compare imported stage values 128
+  and −128, and advance periods 255 and −1: each pair must give identical signed-byte values
+  and F8 timing for the same identifier parity. With advance −1, even identifiers advance
+  every update; odd identifiers give division by zero. An advance field of zero with an even
+  identifier likewise stops the original on its
+  update; our engine must instead apply S-0205 claim 3, not be compared with continued oracle
+  play. Vary the lifetime field above 65535 and compare the recorded creation draw and
+  remaining lifetime with reduction modulo 65536, without assuming an initial zero will occur.
+  Capture frames while varying the start-frame field: the selected frame
   must remain the stage itself. Include an odd-tick
   virus chain death: its directly spawned particle moves immediately but has no update until
   the next turn; a middle-event particle created after the system turn waits for the next turn.
@@ -492,7 +547,10 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   the flat control falsifies the corresponding part of claim 10.
 - **G9. Wind.** Test rules file: a cloud type with wind effect 1 to 10 and wind direction 0 to 7.
   Record the position every tick. Expected: a push of the table step every ⌊10 / *W*⌋ ticks.
-  Direction 3 moves 1 lepton in *x* per push. Include W = 0 (no pushes) and W above 10:
+  Direction 3 moves 1 lepton in *x* per push. Repeat over a ramp with an even-tick wind push
+  toward higher terrain: even ticks preserve absolute height without a floor clamp, and the
+  next surviving odd-tick move restores F5's floor. A height change on the even tick falsifies
+  claim 11. Include W = 0 (no pushes) and W above 10:
   the original's integer division fails when movement is reached; our engine instead follows
   S-0205 claim 3's remainder departure, so only tick 0 can push. Do not claim this safe result
   as a measurement of continuing original play.
@@ -507,14 +565,16 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   but damaging clouds bypass this gate; at or above it both pass this gate. Vary the player's
   detail setting separately. At highest detail compare translucencies 0, 25, 50, 75 and 80
   against the same background: 80 matches 75, and the others match their selected fraction.
-  At lower detail all these gas clouds use opaque drawing when otherwise visible.
+  Also compare imported translucencies 127, 128, 255 and 281: expect respectively
+  75-percent, opaque, opaque and 25-percent drawing at highest detail. At lower detail all
+  these gas clouds use opaque drawing when otherwise visible. Wrong suppression, blending
+  fraction or signed-byte reduction falsifies the corresponding part of claim 16.
 
 ## Open questions
 
-- **Chaos drone.** With the stock data the chaos drone's weapon creates an animation and an area
-  berserk effect, but names no particle system, so the stock chaos drone makes no gas particles.
-  An unused stock warhead names a psychic gas system. S-0610 should not rely on this spec for the
-  stock chaos drone.
+- **Chaos drone.** A chaos-drone weapon that creates an animation and an area berserk effect but
+  names no particle system leaves no gas particles under claim 4. S-0610 should not rely on this
+  spec to assert whether the chaos drone's weapon names a particle system.
 - **Non-gas particles in the shared system** (claim 2). Only other data can do this. Should the
   importer warn?
 - **Adaptive drawing cutoff.** Claim 16 establishes the suppression test, but the settings and
