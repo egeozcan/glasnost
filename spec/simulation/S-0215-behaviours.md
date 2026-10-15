@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 36
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312, Q-0371, Q-0663]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0312, Q-0371, Q-0663, Q-0685]
 supersedes: []
 ---
 
@@ -88,6 +88,9 @@ claim 13: the owner-routes departure also uses the actor owner's house for both 
 guards and the non-allied fallback, without a machine-local house. The same claim distinguishes
 ordinary original skirmishes from our engine's AI-house route cases. S-0214's acting-house
 and allied definitions already supply ordinary classification, not these extra route guards.
+Q-0685 is answered by claim 35 d1–d3: opening and closing image positions, rounding,
+endpoints, reversal and zero-time motion. Previously claim 35 d settled the rest tick and
+S-0108 claim 4 settled image selection and clamping, but neither gave those positions.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -2281,8 +2284,42 @@ apply in our engine to the actors of every player house.
       *closing*. The per-tick starts of claim 11 neither look at the door nor move it, so where the
       door's motion falls relative to them has no observable effect. Where the gate's turn falls
       within the tick, and so whether another object's turn in the same tick sees the door still
-      moving or already at rest, is S-0203's. The drawn stage of the gate, from the stage-count
-      field (Import mapping), is drawing only.
+      moving or already at rest, is S-0203's. The drawn stage is drawing only.
+    - (d1) **Drawn door position.** Let *G* be the imported gate-stage count, a positive integer,
+      and *e* the integer ticks since the current opening or closing began. For an uninterrupted
+      motion of positive duration *T*<sub>d</sub>, define
+      *q* = R(*min(e, T*<sub>d</sub>*) / T*<sub>d</sub>*) and
+      *n* = trunc(R(*q × G*)). The division and multiplication are separate floating-point
+      operations with a 53-bit significand, not integer arithmetic: R rounds each result
+      toward zero with `quirks.chop_rounding` on, or to nearest, ties to even, with it off
+      (S-0205 claim 4). The final conversion truncates toward zero to an integer.
+      The unclamped position is *p = n* while opening and *p = G − n* while closing.
+      The displayed position is max(0, min(*p*, *G* − 1)), as S-0108 claim 4 requires.
+      It is evaluated for the draw's tick, not just at behaviour processings.
+
+      Thus opening begins at 0 and closing begins at unclamped *G*, displayed as *G* − 1.
+      At *e = T*<sub>d</sub>, the opening expression is *G* and the closing expression is 0,
+      but the gate's turn on that tick has already brought the door to rest under part d.
+      Before that tick the opening expression is less than *G*; it need not visit *G* − 1
+      when there are fewer motion ticks than image stages. While *open* is current, a door
+      at rest open continues to display position *G* − 1, with the same damaged-image selection
+      as a moving door in S-0108 claim 4. That rule is not a moving-frame request of *G*.
+      When *open* is not current, or the door is at rest closed, S-0108 claim 2 supplies
+      the ordinary stationary body image.
+    - (d2) **Position on reversal.** With `quirks.gate_reverse_snaps` on, the closing-to-opening
+      reversal of part c immediately gives *q = 1*: its opening position is unclamped *G*,
+      displayed as *G* − 1, even before the next gate turn brings it to rest open.
+      There is no intermediate retracing image. With the switch off, if closing had run for
+      *a* ticks before reversal, the reopening takes *a* ticks and uses the opening expression
+      of d1 with progress *q* = R(min(*T*<sub>d</sub>*, T*<sub>d</sub>* − a + e*) / *T*<sub>d</sub>*),
+      where *e* now counts ticks since reversal. This off-switch rule is a design alternative,
+      not an additional original behaviour.
+    - (d3) **Zero-time motion.** For *T*<sub>d</sub> = 0, use *q = 1* without division, including
+      on the motion-start tick. Starting motion does not itself put the door at rest: its first
+      later gate turn does (part d). A draw between those turns therefore does use a moving-door
+      image, at position *G* − 1 for opening and 0 for closing. There is no sweep through
+      intermediate images. A display need not present that tick, so the statement concerns
+      the image selected when a draw occurs, not a guaranteed visible refresh.
     - (e) **Consequences.** A friendly unit at a closed gate waits about *T*<sub>d</sub> ticks
       (S-0209: it waits without a new path search) and then passes. A gate stays open as long as
       something stands in its foundation cells, and closes no earlier than *T*<sub>c</sub> ticks
@@ -2307,7 +2344,10 @@ apply in our engine to the actors of every player house.
       reverses)
     - Confidence: high for part a, the passage state and the door time; medium for part b (stated as its
       net effect on the slots), the stage table, the countdown rules and the
-      quirk; high for where within the gate's own turn the door reaches rest (part d, Q-0030)
+      quirk; high for where within the gate's own turn the door reaches rest (part d, Q-0030),
+      and for the drawing formulas, reversal position, rest-open image and zero-time image
+      (parts d1–d3, Q-0685; `measurable`, scenario B28 h–j). The off-switch retracing
+      formula is a design rule.
 
 ### Game-wide settings with engine defaults
 
@@ -3161,7 +3201,7 @@ absent key keeps the value the earlier layers left).
 | `GuardRange` | type section | *g* of F5 | cells, in S-0003's decimal form (claims 6 and 7), converted to leptons as stated below the table; absent or −1 keeps the held value; engine default 0 |
 | `DefaultToGuardArea` | type section | claims 14 and 15 | boolean |
 | `Gate` | building type section | whether a building is a gate (claim 35) | owned by S-0209 (Import mapping) |
-| `GateStages` | the building's image section in the art data (S-0007) | the gate's drawn stage count (claim 35, d): drawing only, read by no rule of this spec | integer, stages; absent keeps the held value; engine default 9 stages; owned by the rendering topic |
+| `GateStages` | the building's image section in the art data (S-0007) | *G*, the gate's drawn stage count (claim 35 d1–d3); drawing only, no effect on passage timing | integer, stages; absent keeps the held value; engine default 9 stages; image selection owned by S-0108 claim 4 |
 | `StupidHunt` | type section | claim 27 | boolean |
 | `HoverAttack` | type section | claims 23 and 24 | boolean |
 | `ApproachTargetResetMultiplier` | `[General]` | *m* of F10 (claim 37 e) | integer; absent keeps the held value; engine default 1 |
@@ -4202,7 +4242,37 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     a delay of 0 (expiry on the next tick, no draw from the gate). Falsified by that processing in
     tick *r* + 2 (the door reaching rest after the processing in its turn), or in tick *r* or
     earlier.
-  - Runs for cases a to d, f and g: three each.
+  - (h) Drawing progress (claim 35 d1, Q-0685): repeat (a–b) at game speed index 2,
+    first with stock art and then with a named art test file setting only the stage count to
+    7 stages, retaining the 90-tick door time. Record the tick of each motion start, direction,
+    rest state, displayed body-image index and damage state at every tick, including both
+    motion-start ticks and the first stationary ticks. Use tick-associated screenshots with
+    the read-only recorder; ordinary screen refresh may omit ticks. Compare the selected
+    images to d1's two rounded floating-point operations, not exact rational division.
+    Expected: opening starts at position 0, closing at displayed position 6 in the named
+    test, and every later position follows d1; at elapsed 45 ticks the positions are 3 opening
+    and 4 closing. Rest open while *open* is current still displays position 6. Repeat after
+    nonlethal damage crosses the gate's damaged threshold: only S-0108 claim 4's damaged
+    image addition changes. Falsified by another position at any recorded tick, by position
+    7 being displayed, by reversing the opening expression without the closing subtraction,
+    or by the ordinary closed image at rest open while *open* remains current.
+  - (i) Reversal image (claim 35 d2): repeat (d) with the recorder also associating each
+    displayed image with the tick on which the gate's processing reverses the door, rather
+    than only the unit's entry attempt. Expected: displayed position *G* − 1 already in that
+    reversal tick, while the door is still opening, and the same position at rest open after
+    its next turn. Any lower image after reversal falsifies the original-side prediction.
+    Test the off-switch retracing expression separately against our engine, not the oracle.
+  - (j) Zero-time motion and skipped images, claim 35 d1/d3: repeat (h) with a named rules test file
+    setting the deploy time to 0, leaving the art-stage count at 7. Record the draw selected
+    after each start processing and before the next gate turn. Expected: opening is still
+    moving with displayed position 6, closing is still moving with position 0; both are at
+    rest on their next turns. No intermediate image is selected. Falsified by a different
+    start-tick image or by immediate rest in the start processing. Separately set the deploy
+    time to 0.002 game minutes, giving a 1-tick duration after F9's truncation, confirmed by
+    the recorder: the only moving opening position is 0, rather than a forced visit to
+    position 6. These named test data are measurement-only, with all other mods
+    and external automated players off as in the common setup.
+  - Runs for cases a to d, f to j: three each.
 
 - **B29 (claims 14 and 15: rows and exceptions reached through other fall-backs).** Named test file
   for cases a and b: *guard* and *area guard* get the no-threat property, not the zombie property,

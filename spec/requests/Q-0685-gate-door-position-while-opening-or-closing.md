@@ -1,9 +1,9 @@
 ---
 id: Q-0685
 title: The door position p of a moving gate (S-0108 claim 4, S-0215 claim 35)
-status: open
+status: answered
 related: [S-0108, S-0215]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need

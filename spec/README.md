@@ -95,7 +95,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 37 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 34 | approved | — |
 | [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 11 | approved | — |
-| [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 36 | approved | — |
 | [S-0312](combat/S-0312-death-and-destruction.md) | Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains) | combat | 25 | approved | — |
 | [S-0414](simulation/S-0414-victory-and-defeat.md) | Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders) | simulation | 13 | approved | — |
 | [S-0408](economy/S-0408-sell-repair.md) | Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired) | economy | 19 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0517](combat/S-0517-deployable-units.md) | Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing) | combat | 4 | approved | — |
 | [S-0313](combat/S-0313-firing-positions.md) | Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack) | combat | 7 | approved | — |
 | [S-0210](movement/S-0210-crushing.md) | Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing) | movement | 20 | approved | — |
+| [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 37 | approved | — |
