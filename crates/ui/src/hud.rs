@@ -641,11 +641,11 @@ mod tests {
 
     #[test]
     fn shown_tab_falls_back_to_the_first_with_icons() {
-        use glasnost_sim::{load, testkit};
+        use glasnost_sim::load;
         let w = load::new_game(
             glasnost_ai::fixture::rules(),
             &glasnost_ai::fixture::map(),
-            testkit::catalogue(),
+            glasnost_ai::fixture::catalogue(),
             &glasnost_ai::fixture::setup(1),
         )
         .unwrap();

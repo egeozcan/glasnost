@@ -212,13 +212,13 @@ pub fn place(w: &World, house: HouseId, t: TypeRef, cursor: CellXY) -> Option<Or
 mod tests {
     use super::*;
     use glasnost_ai::fixture;
-    use glasnost_sim::{load, orders, testkit, tick};
+    use glasnost_sim::{load, orders, tick};
 
     fn game() -> World {
         load::new_game(
             fixture::rules(),
             &fixture::map(),
-            testkit::catalogue(),
+            fixture::catalogue(),
             &fixture::setup(3),
         )
         .expect("the synthetic skirmish loads")

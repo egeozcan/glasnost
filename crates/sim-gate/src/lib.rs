@@ -100,14 +100,14 @@ fn duel(map: &glasnost_map::Map, name: &str, ticks: i32) -> Vec<String> {
         fixture::rules(),
         map,
         name,
-        testkit::catalogue(),
+        fixture::catalogue(),
         fixture::setup(SEED),
     )
     .expect("the synthetic duel loads");
     let mut out = Vec::new();
     while g.world.tick < ticks {
         if g.world.tick == ticks / 2 {
-            let loaded = Game::load(&g.save(), fixture::rules(), testkit::catalogue())
+            let loaded = Game::load(&g.save(), fixture::rules(), fixture::catalogue())
                 .expect("the duel's save loads");
             assert_eq!(
                 loaded.state_hash(),
@@ -141,7 +141,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
             fixture::rules(),
             &fixture::map(),
             "synthetic-skirmish",
-            testkit::catalogue(),
+            fixture::catalogue(),
             fixture::setup(SEED),
             &fixture::plan(),
             ticks,
@@ -152,7 +152,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
             .run(
                 fixture::rules(),
                 &fixture::map(),
-                testkit::catalogue(),
+                fixture::catalogue(),
                 |w| {
                     out.push(save::state_hash(w));
                 },

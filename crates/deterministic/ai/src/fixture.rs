@@ -14,19 +14,24 @@
 //! - Aircraft: RKT (the set-A rocket type, S-0506).
 //! - Infantry: WALKER (the testkit's rifleman).
 //! - Resource: ORE (overlays 0 … 11, stages 0 … 11).
+//! - Naval: NAVY (naval yard, 3 × 3, needs FACT) and BOAT (a gunboat with
+//!   the ship locomotor, float class and water zone); water is open only
+//!   to the float, hover and amphibious classes, ground closed to float.
 //! - Map: a flat clear square of side [`SIZE`] (cell coordinates 0 … 2·SIZE
 //!   on both axes), start waypoints 0 and 1 on opposite sides of the
 //!   middle, and an ore field beside each; [`map_diagonal`] puts the starts
-//!   on a diagonal with a third ore field between them.
+//!   on a diagonal with a third ore field between them; [`map_naval`] adds a
+//!   sea along the north side. [`catalogue`] has the water tile.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use glasnost_map::terrain::{Roles, TileCatalogue, TileCell, TileInfo};
 use glasnost_map::{CellXY, Map};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     BuildingType, CombatFields, Decimal, LandRow, LandType, LocomotionClass, Locomotor,
-    OverlayType, UnitType, WarheadType, WeaponType,
+    MovementZone, OverlayType, UnitType, WarheadType, WeaponType,
 };
 use glasnost_rules::sim_econ::TiberiumType;
 use glasnost_sim::econ::setup::{self, Player, Settings};
@@ -41,6 +46,10 @@ pub const SIZE: i32 = 40;
 
 /// The start offset from the middle along x.
 pub const START_DX: i32 = 22;
+
+fn dec(s: &str) -> Option<Decimal> {
+    Some(Decimal(s.into()))
+}
 
 fn owners() -> Option<Vec<String>> {
     Some(vec!["Alphaland".into(), "Betaland".into()])
@@ -87,14 +96,35 @@ fn vehicle(strength: i32, speed: i32, cost: i32) -> UnitType {
 pub fn ruleset() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     let s = &mut r.sim;
+    // Ground rows closed to the float class, so ships keep to the water.
     s.land_types.insert(
         LandType::Clear,
         LandRow {
             buildable: Some(true),
+            float: dec("0"),
+            float_beach: dec("0"),
             ..Default::default()
         },
     );
-    s.land_types.insert(LandType::Tiberium, LandRow::default());
+    s.land_types.insert(
+        LandType::Tiberium,
+        LandRow {
+            float: dec("0"),
+            float_beach: dec("0"),
+            ..Default::default()
+        },
+    );
+    // Water: open to the float, hover and amphibious classes only.
+    s.land_types.insert(
+        LandType::Water,
+        LandRow {
+            foot: dec("0"),
+            track: dec("0"),
+            wheel: dec("0"),
+            ..Default::default()
+        },
+    );
+    s.general.wake = Some("Ripple".into());
     s.general.base_unit = Some(vec!["MCV".into()]);
 
     let mut yard = building(3, 3, 3000, 0);
@@ -114,6 +144,10 @@ pub fn ruleset() -> Ruleset {
     radr.econ.prerequisite = Some(vec!["FACT".into()]);
     let mut lab = building(2, 2, 1500, -60);
     lab.econ.prerequisite = Some(vec!["RADR".into()]);
+    let mut navy = building(3, 3, 1000, -20);
+    navy.factory = Some("vehicle".into());
+    navy.naval = Some(true);
+    navy.econ.prerequisite = Some(vec!["FACT".into()]);
     for (n, b) in [
         ("YARD", yard),
         ("POWR", powr),
@@ -122,6 +156,7 @@ pub fn ruleset() -> Ruleset {
         ("FACT", fact),
         ("RADR", radr),
         ("LAB", lab),
+        ("NAVY", navy),
     ] {
         r.sim.buildings.insert(n.into(), b);
         push(&mut r, "buildings", n);
@@ -146,7 +181,22 @@ pub fn ruleset() -> Ruleset {
     lnch.combat.spawn_regen_rate = Some(200);
     lnch.combat.spawn_reload_rate = Some(0);
     lnch.combat.primary_fire_flh = Some([60, 0, 80]);
-    for (n, u) in [("MCV", mcv), ("MINR", minr), ("GUNR", gunr), ("LNCH", lnch)] {
+    let mut boat = vehicle(600, 6, 900);
+    boat.locomotion_class = Some(LocomotionClass::Float);
+    boat.locomotor = Some(Locomotor::Ship);
+    boat.movement_zone = Some(MovementZone::Water);
+    boat.primary = Some("Gun".into());
+    boat.turret = Some(true);
+    boat.weight = dec("4");
+    boat.combat.naval = Some(true);
+    boat.combat.primary_fire_flh = Some([90, 0, 70]);
+    for (n, u) in [
+        ("MCV", mcv),
+        ("MINR", minr),
+        ("GUNR", gunr),
+        ("LNCH", lnch),
+        ("BOAT", boat),
+    ] {
         r.sim.vehicles.insert(n.into(), u);
         push(&mut r, "vehicles", n);
     }
@@ -240,6 +290,37 @@ pub fn rules() -> Arc<SimRules> {
     Arc::new(SimRules::new(&ruleset(), "synthetic-skirmish"))
 }
 
+/// The water tile of [`catalogue`].
+pub const WATER_TILE: i32 = 5;
+
+/// The terrain code of a water tile (S-0211 Terms).
+const WATER_CODE: u8 = 9;
+
+/// The skirmish catalogue: the testkit's tiles 0 to 4 (clear, flat and
+/// ramps) and tile [`WATER_TILE`], a flat water tile where the water role
+/// starts, so that only it takes a naval yard (S-0406 claim 3 d).
+pub fn catalogue() -> Arc<TileCatalogue> {
+    let mut c = (*testkit::catalogue()).clone();
+    c.tiles.push(TileInfo {
+        width: 1,
+        height: 1,
+        has_image: true,
+        cells: vec![Some(TileCell {
+            terrain_code: WATER_CODE,
+            slope: 0,
+        })],
+        variants: 0,
+        anim: None,
+        no_burrowing: false,
+    });
+    c.roles = Roles {
+        water: WATER_TILE,
+        ..c.roles
+    };
+    c.allow_tiberium.push(false);
+    Arc::new(c)
+}
+
 /// The cell (dx, dy) from the middle.
 pub fn at(dx: i32, dy: i32) -> CellXY {
     testkit::mid(SIZE, dx, dy)
@@ -294,6 +375,27 @@ pub fn map_diagonal() -> Map {
     m.waypoints = waypoints;
     m
 }
+
+/// The naval skirmish map: [`map`] with a sea of water tiles along its
+/// north side, from [`SEA_DY`] cells north of the starts to the edge, within
+/// reach of both bases' building spirals.
+pub fn map_naval() -> Map {
+    let mut m = map();
+    let shore = at(0, SEA_DY).y;
+    let cells: Vec<CellXY> = m.cells.iter().map(|(c, _)| c).collect();
+    for c in cells {
+        if c.y <= shore
+            && let Some(cell) = m.cells.get_mut(c)
+        {
+            cell.tile = WATER_TILE;
+        }
+    }
+    m
+}
+
+/// The offset along y, from the middle, of the sea's southernmost row in
+/// [`map_naval`].
+pub const SEA_DY: i32 = -9;
 
 /// The lobby setup (S-0412): two AI houses, Alpha and Beta, random start
 /// positions, every other setting at the rules' default.

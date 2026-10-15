@@ -3,7 +3,6 @@
 //! (setup and the person's orders only) runs the AI again to the same state.
 
 use glasnost_ai::{fixture, game::Game};
-use glasnost_sim::testkit;
 
 const FIRST: i32 = 400;
 const MORE: i32 = 200;
@@ -13,7 +12,7 @@ fn start() -> Game {
         fixture::rules(),
         &fixture::map(),
         "synthetic-skirmish",
-        testkit::catalogue(),
+        fixture::catalogue(),
         fixture::setup(5),
     )
     .expect("the synthetic skirmish loads")
@@ -27,7 +26,7 @@ fn save_load_and_replay_keep_the_state() {
         g.step();
     }
     let bytes = g.save();
-    let mut loaded = Game::load(&bytes, fixture::rules(), testkit::catalogue()).expect("loads");
+    let mut loaded = Game::load(&bytes, fixture::rules(), fixture::catalogue()).expect("loads");
     assert_eq!(loaded.state_hash(), g.state_hash());
     for _ in 0..MORE {
         g.step();
@@ -42,7 +41,7 @@ fn save_load_and_replay_keep_the_state() {
         g.replay(),
         fixture::rules(),
         &fixture::map(),
-        testkit::catalogue(),
+        fixture::catalogue(),
         |_| {},
     )
     .expect("replays");

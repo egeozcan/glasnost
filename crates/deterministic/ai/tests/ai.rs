@@ -25,7 +25,7 @@ fn start(seed: u32) -> Game {
         fixture::rules(),
         &fixture::map(),
         "synthetic-skirmish",
-        testkit::catalogue(),
+        fixture::catalogue(),
         fixture::setup(seed),
     )
     .expect("the synthetic skirmish loads")
@@ -289,7 +289,7 @@ fn plays_to_a_winner() {
             g.replay(),
             fixture::rules(),
             &fixture::map(),
-            testkit::catalogue(),
+            fixture::catalogue(),
             |_| {},
         )
         .expect("replays");
@@ -320,7 +320,7 @@ fn a_broke_house_sells_a_building() {
             rules.clone(),
             &fixture::map(),
             "synthetic-skirmish",
-            testkit::catalogue(),
+            fixture::catalogue(),
             fixture::setup(5),
         )
         .expect("the synthetic skirmish loads")
@@ -434,7 +434,7 @@ fn a_slave_miner_side_earns_income() {
         slave_rules(),
         &fixture::map(),
         "synthetic-skirmish",
-        testkit::catalogue(),
+        fixture::catalogue(),
         fixture::setup(5),
     )
     .expect("the synthetic skirmish loads");

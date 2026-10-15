@@ -10,7 +10,6 @@ use glasnost_ai::{fixture, skirmish};
 use glasnost_sim::econ::tech;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::save;
-use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, World};
 
 /// Ticks the synthetic game may take at most.
@@ -24,7 +23,7 @@ fn run_for(ticks: i32) -> skirmish::Run {
         fixture::rules(),
         &fixture::map(),
         "synthetic-skirmish",
-        testkit::catalogue(),
+        fixture::catalogue(),
         fixture::setup(SEED),
         &fixture::plan(),
         ticks,
@@ -72,7 +71,7 @@ fn plays_to_the_last_side() {
         .run(
             fixture::rules(),
             &fixture::map(),
-            testkit::catalogue(),
+            fixture::catalogue(),
             |w| {
                 for h in 0..2u8 {
                     for (k, v) in counts(w, h) {
@@ -114,14 +113,14 @@ fn save_and_load_mid_game() {
     let mut w = glasnost_sim::load::new_game(
         fixture::rules(),
         &fixture::map(),
-        testkit::catalogue(),
+        fixture::catalogue(),
         &rep.setup,
     )
     .expect("loads");
     rep.run_on(&mut w, rep.ticks / 2, |_| {});
     let bytes = save::save(&w);
     let mut loaded =
-        save::load(&bytes, fixture::rules(), testkit::catalogue()).expect("the save loads");
+        save::load(&bytes, fixture::rules(), fixture::catalogue()).expect("the save loads");
     assert_eq!(save::state_hash(&loaded), save::state_hash(&w));
     rep.run_on(&mut loaded, rep.ticks, |_| {});
     assert_eq!(save::state_hash(&loaded), save::state_hash(&run.world));
@@ -159,7 +158,7 @@ fn climbs_to_the_launcher_and_fires() {
         .run(
             fixture::rules(),
             &fixture::map(),
-            testkit::catalogue(),
+            fixture::catalogue(),
             |w| {
                 for h in 0..2u8 {
                     for (k, v) in counts(w, h) {
@@ -189,4 +188,94 @@ fn climbs_to_the_launcher_and_fires() {
     }
     assert!(launchers > 0, "a house built a launcher: {most:?}");
     assert!(rockets > 0, "a rocket flew");
+}
+
+// On a map with water the houses build a naval yard on the sea, then
+// ships, and send the ships to the water off the enemy base; ships fight
+// and sink.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn builds_a_navy_on_a_water_map() {
+    let map = fixture::map_naval();
+    let run = skirmish::run(
+        fixture::rules(),
+        &map,
+        "synthetic-naval",
+        fixture::catalogue(),
+        fixture::setup(SEED),
+        &fixture::plan(),
+        LIMIT,
+    )
+    .expect("the naval skirmish loads");
+    let mut most: [BTreeMap<String, usize>; 2] = Default::default();
+    let mut yard_on_water = true;
+    let mut furthest = [0i32; 2];
+    let mut ship_fired = false;
+    let mut sunk = 0usize;
+    let mut sinking_seen = std::collections::BTreeSet::new();
+    run.replay
+        .run(fixture::rules(), &map, fixture::catalogue(), |w| {
+            for h in 0..2u8 {
+                for (k, v) in counts(w, h) {
+                    let e = most[usize::from(h)].entry(k).or_default();
+                    *e = (*e).max(v);
+                }
+            }
+            let r = w.rules();
+            for o in w.objects.values().filter(|o| o.on_map) {
+                let t = tech::type_of(o);
+                let name = match t.kind {
+                    Kind::Building => r.buildings.get(t.index as usize).map(|b| b.name.as_str()),
+                    Kind::Vehicle => r.vehicles.get(t.index as usize).map(|u| u.name.as_str()),
+                    _ => None,
+                };
+                let Some(h) = o.owner else { continue };
+                match name {
+                    Some("NAVY") => {
+                        let c = o.pos.cell();
+                        let (fw, fh) = o.foundation;
+                        for dx in 0..fw {
+                            for dy in 0..fh {
+                                let k = glasnost_map::CellXY::new(c.x + dx, c.y + dy);
+                                yard_on_water &= map
+                                    .cells
+                                    .get(k)
+                                    .is_some_and(|x| x.tile == fixture::WATER_TILE);
+                            }
+                        }
+                    }
+                    Some("BOAT") => {
+                        let i = usize::from(h.0);
+                        // How far east (house 0) or west (house 1) of its start the ship got.
+                        let x = o.pos.cell().x - fixture::at(0, 0).x;
+                        let gone = if i == 0 { x } else { -x };
+                        furthest[i] = furthest[i].max(gone);
+                        ship_fired |= o.target.is_some();
+                        if glasnost_sim::naval::sinking(w, o.id) && sinking_seen.insert(o.id) {
+                            sunk += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        })
+        .expect("the replay runs");
+    assert!(yard_on_water, "every naval yard stands on water");
+    for (h, m) in most.iter().enumerate() {
+        assert!(
+            m.get("NAVY").copied().unwrap_or(0) > 0,
+            "house {h} built a naval yard: {m:?}"
+        );
+        assert!(
+            m.get("BOAT").copied().unwrap_or(0) > 0,
+            "house {h} built ships: {m:?}"
+        );
+    }
+    assert!(
+        furthest.iter().any(|&d| d > 0),
+        "a ship crossed towards the enemy: {furthest:?}"
+    );
+    assert!(ship_fired, "a ship took a target");
+    // spec: S-0504 claim 4 (a killed ship on water sinks)
+    assert!(sunk > 0, "a ship sank");
 }

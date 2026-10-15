@@ -31,7 +31,9 @@
 //!    has been visited, to the nearest cell of a coarse search grid that
 //!    the house does not see now; idle units attack seen enemies near them.
 //!    A smaller wave goes too once units have waited long enough, so a house
-//!    that cannot afford a full wave still attacks.
+//!    that cannot afford a full wave still attacks. A unit whose goal lies
+//!    outside its reach region (a ship, for a goal on land) goes to the
+//!    nearest cell of its region instead.
 //!
 //! Types are found by role from the rules (a building with power output, the
 //! refinery flag, a factory kind; a harvester; a unit with a primary weapon)
@@ -41,10 +43,13 @@
 //! The numbers here (think period, spiral size, engage distance, wave patience) are tuning
 //! of our own opponent, not game behaviour.
 
+use std::collections::BTreeMap;
+
 use glasnost_map::CellXY;
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
 use glasnost_sim::orders::Order;
+use glasnost_sim::regions::{self, Reach};
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
 use glasnost_sim::targeting;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
@@ -808,18 +813,53 @@ impl Script {
                     })
                 });
             if let Some(c) = goal {
+                let mut near: BTreeMap<(u8, u32), CellXY> = BTreeMap::new();
                 for &id in &waiting {
+                    let dest = self.reachable(w, id, c, &mut near);
                     out.push(Order::Behaviour {
                         actor: id,
                         behaviour: Behaviour::Move,
                         attack_move: true,
                         target: None,
-                        dest: Some(Target::Cell(c)),
+                        dest: Some(Target::Cell(dest)),
                     });
                 }
             }
         }
         out
+    }
+
+    /// Where unit `id` goes for goal `c`: the goal itself when it lies in
+    /// the unit's reach region (S-0212 claim 4), else the nearest cell of
+    /// that region to the goal, the first in cell order on equal distance,
+    /// as a person sends ships to the water off an enemy base. `near`
+    /// keeps the answers of one wave by zone and region.
+    fn reachable(
+        &self,
+        w: &World,
+        id: ObjectId,
+        c: CellXY,
+        near: &mut BTreeMap<(u8, u32), CellXY>,
+    ) -> CellXY {
+        let Some(o) = w.obj(id) else { return c };
+        let Some(zone) = w.rules().unit(o.kind, o.type_index).map(|u| u.zone) else {
+            return c;
+        };
+        let Reach::Region(r) = regions::reach_in(w, o.pos.cell(), zone) else {
+            return c;
+        };
+        if regions::reach_in(w, c, zone) == Reach::Region(r) {
+            return c;
+        }
+        *near.entry((zone as u8, r)).or_insert_with(|| {
+            w.cells
+                .grid
+                .iter()
+                .map(|(k, _)| k)
+                .filter(|&k| w.cells.usable(k) && regions::reach_in(w, k, zone) == Reach::Region(r))
+                .min_by_key(|&k| (dist2(k, c), k.y, k.x))
+                .unwrap_or(c)
+        })
     }
 
     /// The nearest cell of the search grid, from `from`, that is in the

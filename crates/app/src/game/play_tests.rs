@@ -32,7 +32,7 @@ fn start() -> Play {
         rules,
         &fixture::map(),
         "synthetic-skirmish",
-        testkit::catalogue(),
+        fixture::catalogue(),
         s,
     )
     .expect("the synthetic skirmish loads");
@@ -231,7 +231,7 @@ fn start_with(rules: std::sync::Arc<glasnost_sim::rules::SimRules>) -> Play {
         rules,
         &fixture::map(),
         "synthetic-skirmish",
-        testkit::catalogue(),
+        fixture::catalogue(),
         s,
     )
     .expect("the synthetic skirmish loads");
