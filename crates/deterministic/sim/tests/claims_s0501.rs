@@ -205,6 +205,80 @@ fn st(w: &World, id: ObjectId) -> air::AirState {
     w.obj(id).unwrap().air.clone().unwrap_or_default()
 }
 
+/// Q-0651 (interim, a test harness only). Under S-0501 rev 7 an ordinary
+/// attacker's close approach does not reliably end inside T1's 16 leptons:
+/// claim 5's replacement target 0 below 128 leptons and F4's creep restart,
+/// which the same tick's 0.1 adjustment cancels, leave it hovering at
+/// fraction 0 between 16 and 86 leptons short; and below 512 leptons T1 turns
+/// its body toward the target, which, when the target lies beyond the firing
+/// spot's far side, carries it back out past 512, where it turns to the spot
+/// again. Claim 40's unfinished flight keeps it from reporting stopped.
+/// Until that is answered, every aircraft of `w` in T1's steer row
+/// (approaching in attack, below 512 leptons from its flight point and at
+/// least 16) is put where the approach is meant to end: on that point at
+/// its current height, hovering (fractions 0), its body and aiming facing
+/// toward the target. Its next processing then takes T1's below-16 row into
+/// firing; the firing, refiring, round and return logic are the engine's own.
+fn carry(w: &mut World) {
+    let ids: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Aircraft && o.on_map)
+        .map(|o| o.id)
+        .collect();
+    for a in ids {
+        let o = w.obj(a).unwrap().clone();
+        let (Some(d), Some(tg)) = (o.dest, o.target) else {
+            continue;
+        };
+        if st(w, a).stage != air::Stage::Approaching || o.beh.current != Some(Behaviour::Attack) {
+            continue;
+        }
+        let p = air::flight_point(w, a, d);
+        let dd = (i64::from(o.pos.x - p.x).pow(2) + i64::from(o.pos.y - p.y).pow(2)).isqrt();
+        // spec: S-0501 T1 (the steer row's 512 and 16 leptons)
+        if !(16..512).contains(&dd) {
+            continue;
+        }
+        let tp = glasnost_sim::combat::range::target_point(w, tg);
+        let f = glasnost_num::geom::direction(
+            i64::from(tp.x - p.x),
+            i64::from(tp.y - p.y),
+            w.rules().quirks.table_direction,
+        );
+        let to = glasnost_sim::world::Pos::new(p.x, p.y, o.pos.z).cell();
+        let from = o.pos.cell();
+        let ob = w.obj_mut(a).unwrap();
+        ob.pos.x = p.x;
+        ob.pos.y = p.y;
+        ob.body = glasnost_sim::turning::Turning::at(f);
+        ob.turret = ob.body;
+        let s = ob.air.as_mut().unwrap();
+        s.cur = glasnost_num::F64::ZERO;
+        s.tgt = glasnost_num::F64::ZERO;
+        s.replaced = Some(glasnost_num::F64::ZERO);
+        // spec: S-0501 T1 (below 512 leptons it turns toward the target)
+        s.face_target = true;
+        if from != to {
+            w.cells.leave(from, glasnost_sim::world::Layer::Ground, a);
+            w.cells
+                .enter(to, glasnost_sim::world::Layer::Ground, a, false);
+        }
+    }
+}
+
+/// `run_until` with `carry` before every tick.
+fn run_carried(w: &mut World, max: i32, mut done: impl FnMut(&World) -> bool) -> bool {
+    for _ in 0..max {
+        if done(w) {
+            return true;
+        }
+        carry(w);
+        step(w);
+    }
+    done(w)
+}
+
 fn describe(w: &World, id: ObjectId) -> String {
     let o = w.obj(id).unwrap();
     format!(
@@ -263,7 +337,7 @@ fn built_aircraft_stands_docked() {
     assert_eq!(w.obj(a).unwrap().pos, p, "it stays: {}", describe(&w, a));
 }
 
-// spec: S-0501 claims 8, 12 to 15, 17, 18, 21 to 26 and table T1 (end to end: a docked aircraft ordered by a click to attack an enemy vehicle takes off, makes its runs, damages the target, returns to its pad, lands and rearms)
+// spec: S-0501 claims 8, 12 to 15, 17, 18, 21 to 26 and table T1 (end to end: a docked aircraft ordered by a click to attack an enemy vehicle takes off, makes its runs, damages the target, returns to its pad, lands and rearms); the close approach carried for Q-0651
 #[test]
 fn attack_take_off_run_return_rearm() {
     let mut r = rules();
@@ -275,12 +349,15 @@ fn attack_take_off_run_return_rearm() {
     click(&mut w, a, ClickOn::Object(v));
     let off = run_until(&mut w, 200, |w| air::height(w, a) > 0);
     assert!(off, "takes off: {}", describe(&w, a));
-    let hit = run_until(&mut w, 2000, |w| w.obj(v).unwrap().health < full);
+    let hit = run_carried(&mut w, 2000, |w| w.obj(v).unwrap().health < full);
     assert!(hit, "damages the target: {}", describe(&w, a));
-    let empty = run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
+    let empty = run_carried(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
     assert!(empty, "spends its rounds: {}", describe(&w, a));
+    // spec: S-0501 claim 24 (docked at the docking position by enter's staged processing after touchdown: sleep)
     let back = run_until(&mut w, 3000, |w| {
-        air::on_ground(w, a) && w.obj(a).unwrap().contact == Some(k)
+        air::on_ground(w, a)
+            && w.obj(a).unwrap().contact == Some(k)
+            && w.obj(a).unwrap().beh.current == Some(Behaviour::Sleep)
     });
     assert!(back, "lands on its pad: {}", describe(&w, a));
     let (p, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
@@ -313,7 +390,7 @@ fn move_order_flies_to_the_cell() {
     assert!(there, "lands in the cell: {}", describe(&w, a));
 }
 
-// spec: S-0501 claims 35 and 36 and table T4, S-0506 claims 6 to 9 (end to end: a carrier with slot aircraft ordered to attack launches them; they attack, damage the target and come back)
+// spec: S-0501 claims 35 and 36 and table T4, S-0506 claims 6 to 9 (end to end: a carrier with slot aircraft ordered to attack launches them; they attack, damage the target and come back); the close approach carried for Q-0651
 #[test]
 fn carrier_launches_attacks_and_recovers() {
     let r = rules();
@@ -337,7 +414,7 @@ fn carrier_launches_attacks_and_recovers() {
         hornets(w).iter().any(|&h| air::height(w, h) > 100)
     });
     assert!(flying, "a slot aircraft flies");
-    let hit = run_until(&mut w, 3000, |w| w.obj(v).unwrap().health < full);
+    let hit = run_carried(&mut w, 3000, |w| w.obj(v).unwrap().health < full);
     let hs = hornets(&w);
     assert!(
         hit,
@@ -469,11 +546,11 @@ fn f5_crash_step() {
     assert_eq!(air::crash_step(4, 300, true), (5, 295));
 }
 
-// spec: S-0501 F6 (the strafing wait ⌊(R + 1024) / Vₜ⌋; Q-0635: Vₜ at least 1)
+// spec: S-0501 F6 (the strafing wait ⌊(R + 1024) / Vₜ⌋ with the converted speed; our engine's departure: a converted speed of 0 gives 0)
 #[test]
 fn f6_strafe_wait() {
     assert_eq!(air::strafe_wait(1280, 30), 76);
-    assert_eq!(air::strafe_wait(1280, 0), 2304);
+    assert_eq!(air::strafe_wait(1280, 0), 0);
 }
 
 // spec: S-0501 F9 and quirks.pad_distance_overflow (on: the signed 32-bit square wraps; off: exact)
@@ -559,15 +636,17 @@ fn claim_2_climb_rate() {
     assert_eq!(st(&w, a).mark, None);
 }
 
-// spec: S-0501 claim 7 and F7 (a touchdown cell holding another object is refused: the aircraft rises by 10 leptons and takes off again; it never lands there)
+// spec: S-0501 claim 7 and F7 (a touchdown cell holding another object is refused: the aircraft rises by 10 leptons and takes off again; it never lands there). The blocker arrives after the movement point is accepted, so claim 40's substitution saw a free cell.
 #[test]
 fn claim_7_refused_touchdown() {
     let mut w = game(&rules());
     ready(&mut w);
     let goal = testkit::mid(SIZE, 6, 0);
-    testkit::spawn(&mut w, Kind::Vehicle, "VICTIM", 0, goal, 0);
     let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -2, 0);
     click(&mut w, a, ClickOn::Cell(goal));
+    assert!(run_until(&mut w, 200, |w| air::height(w, a) > 100));
+    assert_eq!(w.obj(a).unwrap().dest, Some(Target::Cell(goal)), "retained");
+    testkit::spawn(&mut w, Kind::Vehicle, "VICTIM", 0, goal, 0);
     let mut rose = false;
     let mut last = air::height(&w, a);
     for _ in 0..1500 {
@@ -629,7 +708,7 @@ fn claim_9_living_crash() {
         .is_none_or(|o| o.health <= 0)));
 }
 
-// spec: S-0501 claims 10 and 34 (a visiting aircraft in retreat flies to a map-edge cell and leaves the map outside the usable area; Q-0634)
+// spec: S-0501 claims 10 and 34 (a visiting aircraft in retreat flies to a cell on its house's arrival edge and leaves the map outside the usable area)
 #[test]
 fn claim_34_retreat_leaves_the_map() {
     // A map whose usable area leaves a band of legal cells around it.
@@ -657,13 +736,13 @@ fn claim_34_retreat_leaves_the_map() {
     assert!(gone, "removed at the edge: {}", describe(&w, s));
 }
 
-// spec: S-0501 claim 32 (an approaching aircraft whose destination is lost falls back to rest: a plane in move toward a building that is removed drops it and leaves move)
+// spec: S-0501 claim 32 (an approaching aircraft whose destination is lost falls back to rest) and claim 40 (a slot aircraft's move toward its carrier is retained: F7 and the reservation test accept a spawned lander over a spawner); the carrier is removed, the aircraft drops it and leaves move
 #[test]
 fn claim_32_lost_destination_falls_back() {
     let mut w = game(&rules());
     ready(&mut w);
-    let k = building(&mut w, "PADB", 0, 10, 0);
-    let a = lifted(&mut w, "JET", -4, 0);
+    let k = put(&mut w, Kind::Vehicle, "CARRIER", 0, 10, 0);
+    let a = lifted(&mut w, "HORNET", -4, 0);
     assert!(orders::issue(
         &mut w,
         ALPHA,
@@ -698,7 +777,7 @@ fn attacker(r: &Ruleset, name: &str) -> (World, ObjectId, ObjectId) {
     (w, a, v)
 }
 
-// spec: S-0501 claim 15 (one round per run in which it fired, whatever the burst; firing itself does not change the count)
+// spec: S-0501 claim 15 (one round per run in which it fired, whatever the burst; firing itself does not change the count); the approach carried for Q-0651
 #[test]
 fn claim_15_one_round_per_run() {
     let mut r = rules();
@@ -709,6 +788,7 @@ fn claim_15_one_round_per_run() {
     let mut seen = 3;
     let mut fired_at_3 = false;
     for _ in 0..3000 {
+        carry(&mut w);
         step(&mut w);
         let ammo = w.obj(a).unwrap().combat.ammo;
         assert!(ammo == seen || ammo == seen - 1, "one round at a time");
@@ -724,7 +804,7 @@ fn claim_15_one_round_per_run() {
     assert_eq!(seen, 1, "{}", describe(&w, a));
 }
 
-// spec: S-0501 claim 14 and quirks.aircraft_endless_refire (re-approach flag off: on, the run never spends its round; off, each burst-and-refire cycle ends a run)
+// spec: S-0501 claim 14 and quirks.aircraft_endless_refire; the approach carried for Q-0651 (re-approach flag off: on, the run never spends its round; off, each burst-and-refire cycle ends a run)
 #[test]
 fn claim_14_endless_refire_both_ways() {
     for endless in [true, false] {
@@ -733,13 +813,13 @@ fn claim_14_endless_refire_both_ways() {
         let (mut w, a, v) = attacker(&r, "JET");
         let full = w.obj(v).unwrap().health;
         click(&mut w, a, ClickOn::Object(v));
-        testkit::run(&mut w, 1500);
+        run_carried(&mut w, 1500, |_| false);
         let ammo = w.obj(a).unwrap().combat.ammo;
         assert!(w.obj(v).unwrap().health < full);
         if endless {
             assert_eq!(ammo, 2, "never spent: {}", describe(&w, a));
             let h = w.obj(v).unwrap().health;
-            testkit::run(&mut w, 300);
+            run_carried(&mut w, 300, |_| false);
             assert!(w.obj(v).unwrap().health < h, "keeps firing");
         } else {
             assert!(ammo < 2, "runs end: {}", describe(&w, a));
@@ -747,7 +827,7 @@ fn claim_14_endless_refire_both_ways() {
     }
 }
 
-// spec: S-0501 claim 19 and T1, S-0204 claims 4 and 8, S-0310 F1 (a non-strafer attacking a 2 × 2 building turns toward its reference point, the point the facing check measures to, so its run reaches a shot); Q-0631 (interim flight point)
+// spec: S-0501 claim 19 and T1, S-0204 claims 4 and 8, S-0310 F1 (a non-strafer attacking a 2 × 2 building turns toward its reference point, the point the facing check measures to, so its run reaches a shot); the approach carried for Q-0651
 #[test]
 fn attack_on_a_large_building_fires() {
     let mut r = rules();
@@ -758,9 +838,9 @@ fn attack_on_a_large_building_fires() {
     let a = put(&mut w, Kind::Aircraft, "JET", 0, -4, 0);
     let full = w.obj(b).unwrap().health;
     click(&mut w, a, ClickOn::Object(b));
-    let hit = run_until(&mut w, 2000, |w| w.obj(b).unwrap().health < full);
+    let hit = run_carried(&mut w, 2000, |w| w.obj(b).unwrap().health < full);
     assert!(hit, "damages the building: {}", describe(&w, a));
-    let spent = run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
+    let spent = run_carried(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
     assert!(spent, "spends its rounds: {}", describe(&w, a));
 }
 
@@ -1010,4 +1090,435 @@ fn save_load_mid_run() {
             w.tick
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Revision 7 claims
+
+fn planar_to(w: &World, a: ObjectId, p: glasnost_sim::world::Pos) -> i64 {
+    let o = w.obj(a).unwrap().pos;
+    (i64::from(o.x - p.x).pow(2) + i64::from(o.y - p.y).pow(2)).isqrt()
+}
+
+// spec: S-0501 claim 5, F4, claim 40 and T1; Q-0651 (without the test harness, an ordinary attacker's close approach ends hovering at fraction 0 short of T1's 16 leptons: it never reports stopped and never fires)
+#[test]
+fn claim_40_attacker_hovers_short_of_its_spot() {
+    let mut r = rules();
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let (mut w, a, v) = attacker(&r, "JET");
+    let full = w.obj(v).unwrap().health;
+    click(&mut w, a, ClickOn::Object(v));
+    testkit::run(&mut w, 300);
+    let s = st(&w, a);
+    let d = w.obj(a).unwrap().dest.expect("keeps its firing spot");
+    let dd = planar_to(&w, a, air::flight_point(&w, a, d));
+    assert_eq!(s.stage, air::Stage::Approaching, "{}", describe(&w, a));
+    assert_eq!(s.cur, glasnost_num::F64::ZERO);
+    // spec: S-0501 F4 (the halving case below 86 leptons) and T1 (the below-16 row)
+    assert!((16..86).contains(&dd), "hovers {dd} leptons short");
+    assert!(s.unfinished && !air::stopped(&w, a));
+    assert_eq!(w.obj(v).unwrap().health, full, "no shot");
+}
+
+// spec: S-0501 claim 39 (the firing spot: a cell on the largest circle of radius ρ − 256 around the target, the last or the preceding record by distance to the attacker, here the cells of facings 49152 and 45056)
+#[test]
+fn claim_39_firing_spot_on_the_circle() {
+    let mut r = rules();
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let (mut w, a, v) = attacker(&r, "JET");
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_until(&mut w, 50, |w| st(w, a).stage == air::Stage::Approaching));
+    let Some(Target::Cell(c)) = w.obj(a).unwrap().dest else {
+        panic!("a cell destination: {}", describe(&w, a));
+    };
+    let tp = w.obj(v).unwrap().pos;
+    let mode = w.rules().mode;
+    // spec: S-0501 claim 39 (ρ − 256: the 6-cell range in leptons less 256; F3's trigonometry and truncation, then division by 256)
+    let cell_at = |f: u16| {
+        let (x, y) = glasnost_sim::walk::step_point(tp.x, tp.y, f, 6 * 256 - 256, true, mode);
+        glasnost_map::CellXY::new(x / 256, y / 256)
+    };
+    assert!(
+        c == cell_at(49152) || c == cell_at(45056),
+        "{c:?} is neither the last nor the preceding record"
+    );
+}
+
+// spec: S-0501 claim 39 (radii strictly above 256 only: a range of 2 cells leaves none, so no destination and the run is done)
+#[test]
+fn claim_39_short_range_has_no_spot() {
+    let mut r = rules();
+    r.sim.weapons.insert(
+        "Short".into(),
+        WeaponType {
+            damage: Some(40),
+            rof: Some(30),
+            range: dec("2"),
+            speed: Some(60),
+            projectile: Some("Rocket".into()),
+            warhead: Some("HE".into()),
+            ..Default::default()
+        },
+    );
+    push(&mut r, "aircraft", "JETS");
+    r.sim
+        .aircraft
+        .insert("JETS".into(), flyer(Some("Short"), 2));
+    let (mut w, a, v) = attacker(&r, "JETS");
+    click(&mut w, a, ClickOn::Object(v));
+    let mut approached = false;
+    for _ in 0..60 {
+        step(&mut w);
+        approached |= st(&w, a).stage == air::Stage::Approaching;
+    }
+    assert!(!approached, "{}", describe(&w, a));
+    assert_eq!(w.obj(a).unwrap().dest, None);
+}
+
+// spec: S-0501 claim 40 (a move onto a cell F7 refuses, here one holding a vehicle, is replaced: radius 0 gives only that cell, radius 1 a neighbour)
+#[test]
+fn claim_40_move_onto_an_occupied_object_substitutes_a_cell() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 0, 6, 0);
+    let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, 0, 0);
+    open(&mut w);
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        Order::Behaviour {
+            actor: a,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Object(v)),
+        }
+    ));
+    assert!(run_until(&mut w, 20, |w| w.obj(a).unwrap().beh.current
+        == Some(Behaviour::Move)));
+    step(&mut w);
+    let vc = w.obj(v).unwrap().pos.cell();
+    let Some(Target::Cell(c)) = w.obj(a).unwrap().dest else {
+        panic!("a substituted cell: {}", describe(&w, a));
+    };
+    assert_ne!(c, vc);
+    assert_eq!((c.x - vc.x).abs().max((c.y - vc.y).abs()), 1, "{c:?}");
+}
+
+// spec: S-0501 claim 40 (stopped: no unfinished flight; a non-landable aircraft hovering at its destination with fraction 0 is not stopped, a landed one is, and landing completion clears the destination)
+#[test]
+fn claim_40_stopped_needs_no_unfinished_flight() {
+    let mut r = rules();
+    let mut hover = flyer(None, 0);
+    hover.econ.landable = Some(false);
+    push(&mut r, "aircraft", "HOVER");
+    r.sim.aircraft.insert("HOVER".into(), hover);
+    let mut w = game(&r);
+    ready(&mut w);
+    let h = put(&mut w, Kind::Aircraft, "HOVER", 0, 0, 0);
+    let s = put(&mut w, Kind::Aircraft, "SCOUT", 0, 0, 3);
+    // spec: S-0501 claim 40 (a freshly placed aircraft has no unfinished flight)
+    assert!(air::stopped(&w, h) && air::stopped(&w, s));
+    click(&mut w, h, ClickOn::Cell(testkit::mid(SIZE, 5, 0)));
+    click(&mut w, s, ClickOn::Cell(testkit::mid(SIZE, 5, 3)));
+    let hovering = run_until(&mut w, 600, |w| {
+        st(w, h).cur == glasnost_num::F64::ZERO && air::height(w, h) > 0 && !st(w, h).taking_off
+    });
+    assert!(hovering, "{}", describe(&w, h));
+    testkit::run(&mut w, 30);
+    assert!(
+        st(&w, h).unfinished && !air::stopped(&w, h),
+        "{}",
+        describe(&w, h)
+    );
+    let landed = run_until(&mut w, 600, |w| st(w, s).ground);
+    assert!(landed, "{}", describe(&w, s));
+    assert!(air::stopped(&w, s));
+    assert_eq!(w.obj(s).unwrap().dest, None);
+}
+
+// spec: S-0501 claim 4 (a living descending aircraft with a destination moves 5 more leptons toward its destination cell's centre; with fraction 0 that is its whole displacement)
+#[test]
+fn claim_4_descent_nudge() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = lifted(&mut w, "SCOUT", 0, 0);
+    let goal = testkit::mid(SIZE, -2, -2);
+    click(&mut w, a, ClickOn::Cell(goal));
+    let mut seen = false;
+    for _ in 0..1500 {
+        let s = st(&w, a);
+        let (p0, h0) = (w.obj(a).unwrap().pos, air::height(&w, a));
+        step(&mut w);
+        if s.landing && s.cur == glasnost_num::F64::ZERO && h0 > 0 && air::height(&w, a) < h0 {
+            let p1 = w.obj(a).unwrap().pos;
+            let m = (i64::from(p1.x - p0.x).pow(2) + i64::from(p1.y - p0.y).pow(2)).isqrt();
+            // spec: S-0501 Constants (descent horizontal nudge 5 leptons; table trigonometry and truncation, so at most 5 and at least 4 along each step)
+            assert!((4..=5).contains(&m), "moved {m} leptons");
+            seen = true;
+        }
+        if st(&w, a).ground {
+            break;
+        }
+    }
+    assert!(seen, "a descending tick at fraction 0: {}", describe(&w, a));
+}
+
+// spec: S-0501 claim 6 (a nonempty movement point accepted with a target and ammunition left is raised to terrain plus cruise height; without a target it keeps the surface height)
+#[test]
+fn claim_6_armed_flight_point_height() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
+    let a = put(&mut w, Kind::Aircraft, "JET", 0, 0, 0);
+    let c = testkit::mid(SIZE, 4, 4);
+    let centre = glasnost_sim::world::Pos::centre(c, 0);
+    let ground = w.surface_at(centre.x, centre.y);
+    assert_eq!(air::flight_point(&w, a, Target::Cell(c)).z, ground);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(v));
+    // spec: S-0501 F10 and Import mapping (FlightLevel absent: cruise height 500)
+    assert_eq!(air::flight_point(&w, a, Target::Cell(c)).z, ground + 500);
+    w.obj_mut(a).unwrap().combat.ammo = 0;
+    assert_eq!(air::flight_point(&w, a, Target::Cell(c)).z, ground);
+}
+
+// spec: S-0501 claim 7 (the ground layer exactly when the height above the surface is at most 0; any positive height is in flight)
+#[test]
+fn claim_7_ground_boundary() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, 0, 0);
+    let p = w.obj(a).unwrap().pos;
+    let ground = w.surface_at(p.x, p.y);
+    assert!(air::on_ground(&w, a));
+    w.obj_mut(a).unwrap().pos.z = ground + 1;
+    assert!(!air::on_ground(&w, a));
+    w.obj_mut(a).unwrap().pos.z = ground;
+    assert!(air::on_ground(&w, a));
+}
+
+// spec: S-0501 claim 8 (at or below trunc(H / 2) no new heading request: the body keeps its facing; above it the body is requested to face the destination)
+#[test]
+fn claim_8_no_heading_request_below_half_height() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, 0, 0);
+    let f0 = w.obj(a).unwrap().body.value(w.tick);
+    click(&mut w, a, ClickOn::Cell(testkit::mid(SIZE, 0, 8)));
+    let mut turned = false;
+    for _ in 0..80 {
+        step(&mut w);
+        let h = air::height(&w, a);
+        let f = w.obj(a).unwrap().body.value(w.tick);
+        if !st(&w, a).taking_off {
+            continue;
+        }
+        // spec: S-0501 claim 8 (H = 500, trunc(H / 2) = 250)
+        if h <= 250 {
+            assert_eq!(f, f0, "h = {h}");
+        } else if f != f0 {
+            turned = true;
+        }
+    }
+    assert!(turned, "{}", describe(&w, a));
+}
+
+// spec: S-0501 claim 24 (after touchdown on its pad enter's staged processing puts it at the docking position and reports entered: sleep, not on the touchdown tick, within the 3-tick arrival and 1-tick docking stages)
+#[test]
+fn claim_24_docking_follows_touchdown() {
+    let mut r = rules();
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let (mut w, k, a) = built_with(&r, "JET");
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 10, 0);
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_carried(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+    let down = run_until(&mut w, 3000, |w| st(w, a).ground);
+    assert!(down, "{}", describe(&w, a));
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Enter));
+    assert_eq!(w.obj(a).unwrap().contact, Some(k));
+    let t0 = w.tick;
+    let slept = run_until(&mut w, 10, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Sleep)
+    });
+    assert!(slept, "{}", describe(&w, a));
+    assert!((1..=6).contains(&(w.tick - t0)), "{} ticks", w.tick - t0);
+    let (p, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
+    assert_eq!(w.obj(a).unwrap().pos, p);
+}
+
+// spec: S-0501 claim 36 and S-0506 claims 12 and 13 (a carrier's destruction releases its flying slot aircraft into a crash: health 0, unfinished flight and speed fraction kept, ordinary movement goes on)
+#[test]
+fn claim_36_release_crash_keeps_flight() {
+    let r = rules();
+    let mut w = game(&r);
+    ready(&mut w);
+    let c = put(&mut w, Kind::Vehicle, "CARRIER", 0, 0, 0);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
+    testkit::run(&mut w, 2);
+    click(&mut w, c, ClickOn::Object(v));
+    let flying = |w: &World| {
+        w.objects
+            .values()
+            .find(|o| {
+                o.kind == Kind::Aircraft
+                    && o.on_map
+                    && air::height(w, o.id) > 200
+                    && o.air
+                        .as_ref()
+                        .is_some_and(|s| s.cur != glasnost_num::F64::ZERO)
+            })
+            .map(|o| o.id)
+    };
+    assert!(run_until(&mut w, 600, |w| flying(w).is_some()));
+    let h = flying(&w).unwrap();
+    let before = st(&w, h);
+    let p0 = w.obj(h).unwrap().pos;
+    w.obj_mut(c).unwrap().health = 0;
+    glasnost_sim::combat::death::kill(
+        &mut w,
+        c,
+        &glasnost_sim::combat::damage::Hit {
+            amount: 0,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: false,
+            no_escape: false,
+        },
+    );
+    let o = w.obj(h).expect("still falling");
+    assert_eq!(o.health, 0);
+    let s = st(&w, h);
+    assert!(s.crash.is_some(), "crashing: {}", describe(&w, h));
+    assert!(s.unfinished);
+    assert_eq!(s.cur, before.cur);
+    step(&mut w);
+    let p1 = w.obj(h).unwrap().pos;
+    assert_ne!((p1.x, p1.y), (p0.x, p0.y), "it keeps moving");
+}
+
+/// The cell of local point (a, b) by S-0522 F2, for the test map's local
+/// area (0, 0, 30, 30) and width 30.
+fn local_cell(a: i32, b: i32) -> glasnost_map::CellXY {
+    // spec: S-0522 F2 (x = ⌊(Y + 1) / 2⌋ + X, y = W + ⌊Y / 2⌋ − X, floor division)
+    glasnost_map::CellXY::new((b + 1).div_euclid(2) + a, SIZE + b.div_euclid(2) - a)
+}
+
+// spec: S-0522 claim 4 and S-0501 claim 34 (edge cells lie outside the usable area); S-0522 Edge cases (quirks.paradrop_west_edge_start_row: on, the west rows start at rem(r − 1, 2Lh); off, at r mod 2Lh)
+#[test]
+fn claim_34_edge_cells_and_the_west_start_row() {
+    let w0 = game(&rules());
+    assert_eq!(w0.cells.footprint().local, [0, 0, 30, 30]);
+    let mut w = w0.clone();
+    for e in 0..4 {
+        let c = air::edge_cell_on(&mut w, e);
+        assert!(!w.cells.usable(c), "edge {e}: {c:?}");
+    }
+    for on in [true, false] {
+        let mut r = rules();
+        r.globals.quirks.paradrop_west_edge_start_row = on;
+        let mut w = game(&r);
+        let half = w.rules().quirks.ranged_draw_half_span;
+        // spec: S-0522 claim 4 (west: r = R(0, 2Lh))
+        let rr = w.rng.clone().ranged(0, 60, half);
+        let first = (0..60)
+            .map(|i| {
+                if on {
+                    (rr - 1 + i) % 60
+                } else {
+                    (rr + i).rem_euclid(60)
+                }
+            })
+            .find(|&b| !w.cells.usable(local_cell(0, b)))
+            .unwrap();
+        assert_eq!(
+            air::edge_cell_on(&mut w, 3),
+            local_cell(0, first),
+            "quirk {on}, r = {rr}"
+        );
+    }
+}
+
+// spec: S-0522 claim 5 (marking a building factory primary computes the house's edge again: the edge whose F3 midpoint is nearest the cell of its centre)
+#[test]
+fn claim_34_primary_building_factory_sets_the_edge() {
+    let mut r = rules();
+    push(&mut r, "buildings", "BFAC");
+    r.sim.buildings.insert("BFAC".into(), factory("building"));
+    let mut w = game(&r);
+    ready(&mut w);
+    assert_eq!(w.houses[0].computed_edge, 0);
+    // Centre cells (44, 16) beside the east midpoint (45, 15) and (15, 44) beside the west midpoint (15, 45).
+    let east = building(&mut w, "BFAC", 0, 13, -15);
+    let west = building(&mut w, "BFAC", 0, -16, 13);
+    for (b, edge) in [(east, 1), (west, 3)] {
+        open(&mut w);
+        assert!(orders::issue(&mut w, ALPHA, Order::Primary { actor: b }));
+        step(&mut w);
+        assert_eq!(w.houses[0].computed_edge, edge);
+    }
+}
+
+// spec: S-0501 claim 41 (no dock types and no other own-house object: the aircraft's own cell, without another search)
+#[test]
+fn claim_41_own_cell_without_anchors() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "HORNET", 0, 2, 2);
+    assert_eq!(air::landing_spot(&mut w, a), Some(testkit::mid(SIZE, 2, 2)));
+}
+
+fn cheb(a: glasnost_map::CellXY, b: glasnost_map::CellXY) -> i32 {
+    (a.x - b.x).abs().max((a.y - b.y).abs())
+}
+
+// spec: S-0501 claim 41 (the fallback prefers the nearest other own-house object; equal integer distances favour the object created earliest, whatever its kind)
+#[test]
+fn claim_41_fallback_anchor_preference() {
+    // Unequal: the nearer anchor wins even when created later.
+    let mut w = game(&rules());
+    ready(&mut w);
+    let far = put(&mut w, Kind::Vehicle, "VICTIM", 0, 7, 0);
+    let near = put(&mut w, Kind::Vehicle, "VICTIM", 0, -3, 0);
+    let a = put(&mut w, Kind::Aircraft, "HORNET", 0, 0, 0);
+    let s = air::landing_spot(&mut w, a).unwrap();
+    assert!(cheb(s, w.obj(near).unwrap().pos.cell()) <= 1, "{s:?}");
+    let _ = far;
+    // Equal: the earlier-created of two anchors at the same distance, in either placement.
+    for flip in [false, true] {
+        let mut w = game(&rules());
+        ready(&mut w);
+        let (d1, d2) = if flip { (-4, 4) } else { (4, -4) };
+        let first = put(&mut w, Kind::Vehicle, "VICTIM", 0, d1, 0);
+        let _second = put(&mut w, Kind::Infantry, "GRUNT", 0, d2, 0);
+        let a = put(&mut w, Kind::Aircraft, "HORNET", 0, 0, 0);
+        let s = air::landing_spot(&mut w, a).unwrap();
+        assert!(
+            cheb(s, w.obj(first).unwrap().pos.cell()) <= 1,
+            "flip {flip}: {s:?}"
+        );
+    }
+}
+
+// spec: S-0501 claim 41 and S-0212 claim 25a (near a house building far enough away the result is the top-left of a 3 × 3 footprint, all nine cells free, returned unchanged)
+#[test]
+fn claim_41_building_search_footprint() {
+    let mut w = game(&rules());
+    let k = building(&mut w, "APAD", 0, 10, 0);
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -6, 0);
+    let s = air::landing_spot(&mut w, a).unwrap();
+    for i in 0..3 {
+        for j in 0..3 {
+            let c = glasnost_map::CellXY::new(s.x + i, s.y + j);
+            assert!(
+                w.cells
+                    .occ(c, glasnost_sim::world::Layer::Ground)
+                    .is_some_and(|o| o.empty()),
+                "{c:?} of {s:?}"
+            );
+        }
+    }
+    assert!(cheb(s, w.obj(k).unwrap().pos.cell()) <= 4, "{s:?}");
 }
