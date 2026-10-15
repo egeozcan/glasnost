@@ -2,7 +2,7 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 14
+revision: 15
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -117,7 +117,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   the body's HVA frame (claim 16). When it advances belongs to the vehicle specs.
 - **Animation-frame counter.** A per-object counter of the object's current animation frame. It
   picks a building turret's HVA frame, and a vehicle turret's frame in one case (claim 16). When it
-  advances belongs to the vehicle and building specs.
+  advances for gattling-flagged types is S-0609 claim 14's rule, including its correction
+  of the building's presentation-only double advance outside *attack*. Other advances belong
+  to the vehicle, building and combat specs.
 - **Turret anchor.** The screen point at which a building's voxel turret and barrel images are
   centred: the building's draw point moved by the building type's turret-animation x and y
   displacements, in whole screen pixels (x to the right, y downward). Both are fields of the
@@ -315,9 +317,15 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     (claim 37). The frame used by the turret models of
     a multi-turret type (claim 12) has not been determined; until it is, our engine gives them the
     vehicle turret frame above. The animation-frame counter is 0 when the
-    object is created, and in the original it changes only through the object's attacking
-    (firing, and, for a type with rotating-barrel weapon stages, while those stages are spun up). The exact rule belongs to the
-    combat, vehicle and building specs. So a vehicle or building that has never attacked shows
+    object is created. For gattling-flagged types, S-0609 claim 14 owns its advances:
+    a vehicle advances once per completed firing step with positive post-update spin,
+    and our engine advances a building once per tick with positive post-processing spin,
+    without a separate advance for firing or leaving *attack*. Animation can therefore
+    continue during spin-down after attacking stops. The original building adds a second
+    advance outside *attack* when spin remains positive after passive decay; S-0609 claim 14
+    corrects this presentation-only bug without a quirk switch.
+    For other types, changes arise through attacking; their exact rule belongs to the
+    combat, vehicle and building specs. A vehicle or building that has never attacked shows
     turret frame 0 whenever its turret frame comes from this counter.
     - Backing: `measurable` (MS-3 and MS-3b for the body, the barrel and *f_b ≠ 0*; MS-3c for
       *f_b = 0* and building turrets). The multi-turret frame is not a claim yet: the original's
@@ -325,9 +333,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       The exact mapping from animation-frame counter u to a vehicle turret at f_b = 0 or
       a building turret is `unmeasured`: MS-3c observes changing frames but does not record u,
       so it cannot distinguish the precise modulo mapping. The counter's initial zero and
-      attack-only changes are the parts tested there.
-    - Confidence: high (barrel frame 0, body frame), medium (turret frame, and the counter
-      changing only through attacking)
+      subsequent changes are the parts tested there; S-0609 claim 14 and its scenario G11
+      cover gattling advances and the original building's double advance separately.
+    - Confidence: high (barrel frame 0, body frame), medium (turret frame and counter advances)
 
 ### Lighting
 
@@ -844,7 +852,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       reuse during recoil. Complete frames and current elevation are lead-confirmed
       departures tested by MS-21's engine-rendering fixtures, not the original. The exact modulo mapping
       from animation counter u to barrel-only frame is also `unmeasured`: MS-21 records the
-      marker and attacks, not u, and therefore tests only the initial frame and attack-only changes.
+      marker and attacks, not u, and therefore tests only the initial frame and subsequent
+      changes, not the exact counter-to-frame mapping (gattling advances: S-0609 claim 14).
     - Confidence: high (pose, frame, no recoil, key), medium (visible placement)
 
 ### The voxel lighting table file
@@ -1964,16 +1973,21 @@ an unchanged oracle-checkable rule.
     clearly different.
 - *Procedure:* in a fresh game, drive the vehicle around for a few hundred ticks without letting
   it attack, then order it to attack a target for a few hundred ticks. Leave the building idle
-  for a few hundred ticks, then let it attack a target. Capture every drawn frame.
+  for a few hundred ticks, then let it attack a target. Capture every drawn frame. For
+  gattling-flagged variants, remove the target after spin-up and capture through spin-down.
+  Use S-0609 claim 14's scenario G11 to distinguish the original building's double advance
+  from the corrected engine result.
 - *Observable:* the turret frame shown in each capture.
 - *Expected:*
   - Before its first attack, each turret shows frame 0 in every capture, however far the
     vehicle drives.
-  - Once attacking starts, each turret's frame changes, and it changes only while its owner is
-    attacking.
+  - Once attacking starts, each turret's frame changes. For types without the gattling flag,
+    changes occur only through attacking. For gattling-flagged variants, continued animation
+    during spin-down follows S-0609 claim 14, including its building correction.
 - *Falsified if:* a turret shows frame 1 or 2 before its owner's first attack, the vehicle's
   turret frame changes with driving alone (a sign of the walk-animation counter), a turret
-  cycles through its frames at a steady rate on its own (a sign of an independently playing HVA),
+  cycles through its frames before any attack (a sign of an independently playing HVA),
+  a gattling variant disagrees with S-0609 claim 14's applicable original or corrected result,
   or a turret never leaves frame 0 during a long attack.
 
 **MS-4 Lighting (claims 17–19).**
@@ -2985,9 +2999,10 @@ conformance for lead-confirmed departures, not an oracle experiment.
   missing for one drawn frame, has not been determined.
 - **Turret frame of multi-turret types.** Which HVA frame the turret models of a multi-turret
   type are drawn in (claims 12, 16) has not been determined.
-- **Animation-frame counter.** Exactly how attacking advances the counter that picks turret
-  frames (claim 16) belongs to the combat, vehicle and building specs; MS-3c tests only that it
-  starts at 0 and changes only while attacking.
+- **Animation-frame counter.** S-0609 claim 14 owns advances for gattling-flagged types,
+  including continued animation during spin-down and the corrected building double advance.
+  Exact advances for other types belong to the combat, vehicle and building specs; MS-3c
+  tests the initial frame and subsequent changes, not the exact counter-to-frame mapping.
 - **Cache keys of other locomotors.** For the flying, rocket and tunnelling locomotors the body
   key is made up differently, and how its parts combine with the turret key, including the
   removal of the body facing at turret displacement 0, has not been determined. Whether
