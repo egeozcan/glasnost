@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -49,7 +49,7 @@ reveal) are M7 and are not covered here.
 - **Announcements and sounds:** S-0701 claims 25 and 28.
 - **Tick order:** the weather storm's place before the turn pass, S-0203 claim 1 row 3.
 - **Parasites:** S-0614 claims 12 and 13.
-- **Radiation fields:** a later spec (planned S-0525). This spec gives only the hand-off.
+- **Radiation fields:** S-0525 claims 1 to 4. This spec gives only the hand-off.
 
 ## Terms
 
@@ -77,15 +77,18 @@ reveal) are M7 and are not covered here.
 - **Cloud, strike.** A *cloud* is a storm cloud animation placed over a cell. When it matures it
   makes a *strike*: the *storm bolt* of S-0203 Terms with its damage.
 - **Warp group.** The mobile objects one teleport warp moves or kills (claim 34).
-- **Leaving stage, arrival hold.** The fixed period before a warped object leaves (claim 39), and
-  the time after arrival during which it is still phasing in (claim 40).
+- **Leaving stage, arrival hold.** The period from a warp member's first update after launch
+  until departure, including the update at which its fixed 60-tick wait expires (claim 39), and
+  the time after arrival effects during which it is still phasing in (claim 40). The glossary
+  needs the same distinction: 60 ticks is the leaving wait, not the whole leaving stage.
+  A zero held delay still ends phasing in on the update after arrival effects.
 - **Phasing in.** The state of a warped object from the moment it leaves its old position until
   its arrival hold ends (claims 39 and 40). A phasing-in object is not warped again (claim 34).
 - **Camera sight.** The spy plane's sight with its radius replaced (claim 44).
 - **Radiation level.** A dimensionless integer field intensity, in radiation-level units. One
   unit is one unit of the imported radiation level; it is not a health point, a duration or a
   physical radiation dose. Claim 12 passes this intensity on without conversion. Its subsequent
-  decay and conversion to damage belong to planned S-0525.
+  decay and conversion to damage belong to S-0525 claims 5 to 10.
 - **R(a, b).** A scenario-stream ranged draw over the inclusive integer range a … b, as in
   S-0202 claim 4; it can consume zero, one or several raw values.
 
@@ -124,9 +127,11 @@ reveal) are M7 and are not covered here.
    to the charge, including a launch that sends nothing (claims 7, 42 and 43 name those cases).
    No kind checks its target cell again at launch, except that the paradrop and spy plane kinds
    send nothing for a cell that is not a legal map cell (claims 42 and 43).
-   - Backing: `measurable` for legal-cell dispatch (SW14 and SW15). The effect-level readiness
-     guard and invalid-cell raw orders are `unmeasured`: ordinary input already prevents these
-     orders, so no independent normal-input test isolates the additional guard
+   - Backing: `unmeasured`: ordinary input prevents illegal-cell orders, and no permitted
+     normal-input setup here produces and observes one. The effect-level readiness guard is
+     also `unmeasured`: ordinary input already prevents unready orders, so no independent
+     normal-input test isolates the additional guard. Legal-cell dispatch is tested separately
+     under claims 42 and 43
    - Confidence: high
 
 4. **Effect blocks and swept layers.** The invulnerability superweapon and the teleport warp act on
@@ -262,12 +267,16 @@ reveal) are M7 and are not covered here.
     one-time strike, or a silo that has left play), which S-0303 and S-0302 treat as a hit without
     attacker. **Radiation hand-off:** when the payload weapon's radiation level is above 0, its
     detonation leaves radiation at the detonation cell with that level and a spread of the
-    warhead's cell spread truncated to whole cells. If that cell already holds a radiation field,
-    the level is added to it and the new spread is ignored. Radiation fields are planned S-0525's.
+    warhead's cell spread truncated toward zero to whole cells. If that cell is the centre of a
+    still-existing radiation field, its new level is that field's decayed current level plus the
+    weapon's radiation level, not its original level plus the weapon's level; the new spread is
+    ignored (S-0525 claims 2 and 4). S-0525 claim 4 owns the floating-point calculation and
+    truncation of the current level, and the restarted duration and decay timers.
     The same applies to the upward missile if its own weapon has a positive radiation level.
     - Backing: `measurable` (SW2 part d, SW3) for credit, field creation and level addition.
-      Retention of the old spread is `unmeasured`: SW2 part d repeats the same spread, and no
-      fixture here supplies two different spreads to a surviving field. Upward-missile
+      The decayed-current-level calculation and retention of the old spread also inherit
+      S-0525 claim 4's backing (its scenario RF4); SW2 part d alone repeats the same spread.
+      Upward-missile
       radiation is `unmeasured`: SW2 tests the payload's radiation, not this separate weapon
     - Confidence: high for the credit and the hand-off condition; medium for the stacking
 
@@ -378,7 +387,7 @@ reveal) are M7 and are not covered here.
 
 19. **End and clearing.** A raging storm whose duration is not the endless value (−1) begins
     *clearing* in the first weather update in which its start tick plus duration is below the
-    current tick; no cloud is made in that update. A stop request (trigger action 45, claim 20)
+    current tick; no cloud is made in that update. A storm-stop request (claim 20)
     also begins clearing, but only while raging. While clearing, clouds already made still strike
     as claim 18 says. The storm becomes *idle* in the first weather update after the one in which
     clearing began that finds no present cloud at its start: its owner becomes no house and the
@@ -400,22 +409,23 @@ reveal) are M7 and are not covered here.
 
 20. **Other ways to start or stop a storm.** The storm of claims 14 to 19 is the one storm the trigger
     actions also use:
-    - lightning storm at a waypoint (code 102): S-0524 claim 1 requests this same single storm,
+    - The lightning-storm-at-a-waypoint action requests this same single storm (S-0524 claim 1),
       owned by the trigger's owner house, possibly no house, with the game-wide duration and
-      countdown. It may replace a pending request as in claim 14, but not a raging or clearing storm,
-    - lightning strike at a waypoint (code 90): S-0524 claim 2 creates a cloud even while the
+      countdown. It may replace a pending request as in claim 14, but not a raging or clearing storm.
+    - The lightning-strike-at-a-waypoint action (S-0524 claim 2) creates a cloud even while the
       storm is idle. Repeating the action at the same waypoint creates another cloud, with a
       separate cloud-list pick and creation draws as in claim 17. These clouds strike under
       claim 18 in every storm state, including idle, and use claim 19's owner at strike time,
-      not the trigger's owner. They use F4's height and claim 21's empty-list departures,
-    - the storm-start action (44) requests a storm whose duration is the action's number, with the
+      not the trigger's owner. They use F4's height and claim 21's empty-list departures.
+    - The storm-start action requests a storm whose duration is the action's number, with the
       game-wide countdown, at a random legal cell and with no owner. The random cell is found by
       drawing a row, then a column, each R(0, *W* + *H* − 1) on the scenario stream for the map's
       width *W* and height *H* in cells, until the cell is a legal map cell. Like claim 14 it does
-      nothing while the storm is raging or clearing,
-    - the storm-stop action (45) begins clearing while the storm is raging.
-    - Backing: `measurable` (scenario SW8 part d)
-    - Confidence: medium (the owner of action 44)
+      nothing while the storm is raging or clearing.
+    - The storm-stop action begins clearing while the storm is raging.
+    - Backing: `measurable` (SW8 parts b and d; repeated waypoint clouds also use S-0524 claim 2's
+      scenario C2). Unsafe-list fallbacks retain claim 21's `unmeasured` design backing
+    - Confidence: medium (the owner of the storm-start action)
 
 21. **Unsafe storm data (departure).** The original does not handle these safely. Our engine warns
     at import and behaves as stated:
@@ -572,25 +582,32 @@ reveal) are M7 and are not covered here.
     and goes through the listed objects of the source cell's effect block (claim 4), of any house.
     Infantry units, vehicles and aircraft are examined in the cell listing order, not grouped
     by kind; buildings and other objects are never moved. An object in the air (an aircraft or
-    jumpjet in flight) is left alone. A naval parasite inside an examined object is released at
-    once with 500 ticks of suppression, before the object's other tests (S-0614 claim 12). Then:
-    - an object whose type has the organic flag and not the teleporter flag is killed (claim 35),
-    - otherwise it is left alone when it is protected, already has a warp pending, is being
-      erased or in a leaving stage, is phasing in, or is a vehicle still inside the vehicle
-      factory it is in contact with,
-    - otherwise it joins the warp group: it is released from a tank bunker, its radio contacts are
-      told it is leaving (docking, repair and similar links end), a vehicle stops occupying its
-      cell, and it is given its landing point (claim 36). Its warp then follows claims 37 to 40.
+    jumpjet in flight) is left alone. A naval parasite inside an examined object is released
+    with 500 ticks of suppression before any other effect of the warp on that object
+    (S-0614 claim 12). This release occurs whether the object is killed, left in place or joins
+    the warp group. An examined object with the organic flag and without the teleporter flag
+    is killed even if it is protected or meets another condition that would leave it in place
+    (claim 35). Every other examined object is left in place if it is protected, already has
+    a warp pending, is being erased, is in a leaving stage, is phasing in, or is a vehicle still
+    inside the vehicle factory with which it is in contact. Every remaining examined object
+    joins the warp group: it is released from its tank bunker, its docking, repair and similar
+    contact links end, a vehicle ceases to occupy its cell, and the object receives the landing
+    point defined in claim 36. Its subsequent warp follows claims 37 to 40.
 
     No owner test applies: enemy and neutral objects are warped or killed too. Passengers travel
     inside their transport; a mind-controlled object stays controlled.
-    - Backing: `measurable` (scenario SW12 parts b to f)
+    - Backing: `measurable` for recipients, parasite release and ordinary contact endings
+      (SW12 parts b to f). Independent exclusions for an ongoing erasure and phasing in are
+      `unmeasured`: these parts establish a pending or leaving warp, not a separately
+      observable recipient held in either of those other states. Parasite release from an
+      already protected host is also `unmeasured`: protection prevents infection and starting
+      curtain protection already releases the parasite, so these tests cannot isolate it
     - Confidence: high
 
 35. **Organic objects die.** An examined object with the organic flag and without the teleporter flag
     receives a hit of its type's whole strength, distance 0, with the demolition warhead, ignoring
-    defences, with no attacker object and the launching house as attacking house. This is tested
-    before protection, so a protected infantry unit dies too
+    defences, with no attacker object and the launching house as attacking house. Protection
+    does not prevent this death, so a protected infantry unit dies too
     (`quirks.warp_kill_before_protection`, default on = original; off: a protected organic object
     is left alone like any protected object).
     - Backing: `measurable` (scenario SW12 part b, SW13 part a)
@@ -646,10 +663,13 @@ reveal) are M7 and are not covered here.
     - Confidence: high for the control-centre and road-cell tests; medium for other arrival outcomes
 
 39. **Timing of a warp.** Let *t*_L be the tick of the warp launch (an order, applied after the turn
-    pass, S-0203 claim 7). Each member:
-    - from its next update (*t*_L + 1) is in its **leaving stage** for 60 ticks (an engine
-      constant, not the rules' teleport delay). During it the member counts as *being erased*
-      (glossary) and stays where it is; S-0214 and S-0301 give what that refuses,
+    pass, S-0203 claim 7). The following tick labels assume a surviving member with one warp
+    update in every tick, without an interruption or failed placement. Each member:
+    - enters its **leaving stage** in tick *t*_L + 1. Its fixed wait expires 60 elapsed ticks
+      later, in tick *t*_L + 61 (an engine constant, not the rules' teleport delay). It still
+      stays at its old position throughout that expiry update and departs on the following
+      update. It counts as *being erased* from its update in *t*_L + 1 until departure in
+      *t*_L + 62, including the expiry update; S-0214 and S-0301 give what that refuses,
     - leaves the map in its update of tick *t*_L + 62: the warp-out animation and departure sound
       play at its old position. Parasite release at this departure is unresolved for a drone
       parasite (S-0614 claim 12); a naval parasite was already released at launch (claim 34).
@@ -662,27 +682,37 @@ reveal) are M7 and are not covered here.
       ticks *t*_L + 63 and *t*_L + 64,
     - stops phasing in when the hold ends.
 
-    At the end of the leaving stage and at the end of the hold, a member with no target tries a
-    target search with the conditional 4-to-8-tick draw of S-0207 claim 20 (f). The landing,
-    redirection and placement take no draw; the animations take their creation draws (S-0202).
+    When the 60-tick wait expires (*t*_L + 61), not at departure, and when the arrival hold
+    ends, a member with no target tries a target search with the conditional 4-to-8-tick draw
+    of S-0207 claim 20 (f). Thus the first search can consume draws one tick before the
+    departure animation. The landing, redirection and placement take no draw; the animations
+    take their creation draws (S-0202 claim 10). All timing arithmetic here is integer ticks,
+    without rounding.
     - Backing: `measurable` for timing (SW12 part d). Drone-parasite release on this path is
       `unmeasured`: the ordinary teleport release path is traced, but this superweapon path
       has not been shown to reach the same release; no result is promised here
     - Confidence: medium for the absolute tick timeline; low for drone-parasite release
 
-40. **Arrival hold.** A member's arrival hold lasts its *held delay* ticks. Every object starts with
-    a held delay of 0; a landing that had to be redirected (claim 37) sets it to the rules' teleport
-    delay, and a teleport reinforcement arrival sets it to the reinforcement delay. Nothing resets
+40. **Arrival hold.** Let *t*_A be the tick of the arrival effects and *H* the member's integer
+    *held delay*, in ticks. With one update per tick, phasing in ends in tick
+    *t*_A + max(1, *H*), not in the arrival-effects update itself; no rounding is involved.
+    Every object starts with a held delay of 0; a landing that had to be redirected (claim 37)
+    sets it to the rules' teleport delay, and a teleport reinforcement arrival sets it to the
+    reinforcement delay. Nothing resets
     it: a member that once had a redirected landing keeps that hold for every later warp, and a
-    clean first landing holds 0 ticks (`quirks.warp_hold_persists`, default on = original; off:
-    the hold is the teleport delay after a redirected landing and 0 otherwise, for each warp
+    clean first landing has held delay 0, ending phasing in on the next update
+    (`quirks.warp_hold_persists`, default on = original; off:
+    the held delay is the teleport delay after a redirected landing and 0 otherwise, for each warp
     separately).
-    - Backing: `measurable` (scenario SW13 part c)
+    - Backing: `measurable` for clean and redirected warps and persistent redirected holds
+      (SW13 part c). Inheritance from teleport reinforcement is `unmeasured`: no scenario
+      part here follows a reinforced object through a later superweapon warp
     - Confidence: medium
 
-41. **Credit during a warp.** From joining the group until its arrival effects end, a member that
-    dies by sinking on arrival credits the launching house (claim 38). The kills of claim 37 and
-    the other deaths of claim 38 credit nobody. Kills of claim 35 credit the launching house.
+41. **Credit during a warp.** A member that sinks because it is a non-infantry, non-naval,
+    non-hovering object arriving on water without a deck credits the launching house
+    (claim 38). Sinking caused by failed cell entry, and every other death under claims 37
+    and 38, credits nobody. Kills of claim 35 credit the launching house.
     - Backing: `measurable` (scenario SW13 parts a and d)
     - Confidence: medium
 
@@ -693,7 +723,9 @@ reveal) are M7 and are not covered here.
     nothing (for example an illegal cell, no paradrop plane type, or a rejected payload list)
     the launch still counts
     as carried out (S-0512 claim 8). There is no announcement (claim 5).
-    - Backing: `measurable` (scenario SW14)
+    - Backing: `measurable` for the missing-plane launch and charge consumption (SW14).
+      Successful delivery and rejected payloads inherit S-0522 claims 1 to 3 and 16's backing.
+      Illegal-cell orders are `unmeasured`: no permitted normal-input fixture here produces one
     - Confidence: high
 
 ### Spy plane
@@ -797,7 +829,7 @@ reveal) are M7 and are not covered here.
 | Invoke animation lift | 5 | leptons | claims 22, 31, 33, 34 |
 | Curtain parasite suppression | 50 | ticks | claim 25 |
 | Warp parasite suppression | 500 | ticks | claim 34 |
-| Warp leaving stage | 60 | ticks | claim 39 |
+| Warp leaving wait | 60 | elapsed ticks | expires one update before departure, claim 39 |
 | Tint draw range | −5 … 5 | ticks | claim 29 |
 | Spy overfly processing period | 3 | ticks | claim 44, S-0501 |
 | Effect block | 3 × 3 | cells | F1 |
@@ -826,12 +858,13 @@ Absent-key defaults are in Import mapping.
 | State | Event | Result |
 |---|---|---|
 | examined | joins the group (claim 34) | warp pending; landing point fixed |
-| warp pending | its next update | leaving stage (counts as being erased), 60 ticks |
-| leaving stage | 60 ticks elapsed, then its next update | leaves the map; phasing in; landing check |
+| warp pending | update in *t*_L + 1 | leaving stage; counts as being erased; fixed wait starts |
+| leaving stage, waiting | update in *t*_L + 61, 60 elapsed ticks after the wait starts | remains at old position and still counts as being erased; target search if targetless |
+| leaving stage, wait expired | update in *t*_L + 62 | leaves the map; being-erased state ends; phasing in; landing check |
 | check failed | each update | redirected search and check again; held delay set to the teleport delay |
 | check passed | next update | placed at the landing point |
 | placed | next update | arrival effects; arrival hold starts (claim 40) |
-| arrival hold | hold elapsed | phasing in ends; target search if it has no target |
+| arrival hold | update in *t*_A + max(1, *H*) (claim 40) | phasing in ends; target search if it has no target |
 
 **Ordering consequences.**
 - The storm's update comes before the turn pass (S-0203 claim 1, row 3), so an object a strike
@@ -995,7 +1028,7 @@ is void if an unlisted bystander acts on the observed area. The superweapons are
 granted with the one-time or permanent trigger grants of S-0512 claims 12 and 13 where a building
 is not under test.
 
-- **SW1 — targeting (claims 1 to 3).** (a) Aim a nuclear strike, a weather storm and an
+- **SW1 — targeting (claims 1 and 2).** (a) Aim a nuclear strike, a weather storm and an
   invulnerability at a fully shrouded cell; expected: each is carried out. (b) Hover a force shield
   over an enemy building, open ground and an own building; expected: no-force-shield cursor,
   no-force-shield cursor, offer; a click on the first two sends no order and keeps the charge.
@@ -1019,8 +1052,10 @@ is not under test.
   credited. In a named map give the payload a positive radiation level and a fractional
   warhead spread. Record the field's level and spread read-only immediately at detonation:
   expected the imported level and spread truncated to whole cells. Repeat at the same cell
-  before the existing field ends, recording its level immediately before the second hit:
-  expected that level plus the imported level. A different sum or a non-truncated initial
+  before the existing field ends, recording its decayed current level immediately before the
+  second hit using S-0525 claim 4's floating-point calculation and truncation:
+  expected that current level plus the imported level, not the original level plus the imported
+  level. A different sum or a non-truncated initial
   spread falsifies the corresponding part of claim 12. This same-spread repeat does not
   distinguish retaining the old spread from replacing it with an equal value. (e) Sell the first-built silo on the order
   tick (sale accepted first, use a named map that grants the ready record and slows sale),
@@ -1028,7 +1063,9 @@ is not under test.
   while the upward missile climbs; expected: the strike's kills credit nobody. Capture it during
   ascent instead; expected: the capturing house receives the kills. For a busy-silo test use two
   ready nuclear types named by the silo's two superweapon fields and fire the second during the
-  first's launch sequence; record missile count and replacement target, not only sound.
+  first's launch sequence with no queued behaviour; record missile count and replacement target,
+  not only sound. Expected: the second order replaces the house's target and plays the sounds,
+  but starts no second missile sequence. A second missile sequence falsifies the busy-silo rule.
   (f) Every player hears the launch announcement and siren. Falsified by another silo launching
   or by a delay before take-off. Capture just before the next update remains unmeasured.
   (g) Named rules file moves the fired nuclear type away from index 0 and gives the type at index 0
@@ -1082,12 +1119,13 @@ is not under test.
   duration and longer countdown: expected replacement centre/owner/duration, unchanged shorter
   remainder. Repeat with a shorter countdown. A stop during countdown does not cancel it.
   Defeat the owner while raging, keeping two other contenders: strikes retain its credit.
-  Create an idle-storm cloud with code 90 before any storm request: expected a bolt and damage
+  Create an idle-storm cloud with the lightning-strike-at-a-waypoint action before any storm
+  request: expected a bolt and damage
   with no house credited. In separate named maps, create that cloud under trigger owner A, then
   request a deferred storm for B before it strikes: expected B's credit, not A's. Change the
   pending request to C before the same cloud matures: expected C's credit. Arrange a lethal target
   under each test cloud using named target-strength overrides so kill counts distinguish owners.
-  While clearing, add a code-90 cloud whose last frame is later than all existing clouds:
+  While clearing, add a waypoint-strike cloud whose last frame is later than all existing clouds:
   expected idle exactly one weather update after its removal, not after the older clouds end.
   (c) Named test file with a one-entry bolt list of known image height *H*; measure the
   cloud's height above its cell; expected F4. Repeat on flat ground, raised ground and a high
@@ -1150,19 +1188,41 @@ is not under test.
   no unit requirement, and the marker moves to the new source. (b) A 3 × 3 block with own tanks, an enemy tank, own
   infantry and a teleporter-flag infantry; expected: tanks move (the enemy too), ordinary infantry
   die credited to the launcher, the teleporter infantry moves. (c) Expected: the block's shape is
-  kept; infantry keep their position within the cell; vehicles end at cell centres. (d) Record
-  disappearance, placement, arrival effects and phasing-end ticks; expected *t*_L + 62,
-  *t*_L + 63, *t*_L + 64 and the hold-end tick respectively. A one-tick discrepancy falsifies
-  the proposed absolute timeline and reopens claim 39, rather than being silently accepted.
-  Record scenario draws at both targetless searches against S-0207 claim 20 (f).
+  kept; infantry keep their position within the cell; vehicles end at cell centres. (d) Use a
+  stationary, newly created tank with no previous warp or reinforcement hold, an empty flat
+  destination and no deaths or removals that could cost it a turn. Record the applied order
+  tick *t*_L, old-position presence, disappearance, placement, arrival effects and phasing-end
+  ticks, and the being-erased and phasing-in states read-only at each boundary. Expected:
+  being erased from its update in *t*_L + 1 through the expiry update in *t*_L + 61, then
+  phasing in at departure. Still at its old position in *t*_L + 61, disappearance in *t*_L + 62,
+  placement in *t*_L + 63, arrival effects in *t*_L + 64 and phasing end in *t*_L + 65.
+  A one-tick discrepancy falsifies the corresponding boundary, rather than being silently
+  accepted. Record scenario draws at both targetless searches against S-0207 claim 20 (f):
+  the first search attempt is in *t*_L + 61, one tick before departure-animation draws.
+  The second is in *t*_L + 65. For a draw witness, use a named variant with a long targeting
+  period and a nearby visible enemy whose weapon cannot kill the member during the run.
+  Retain only runs whose read-only record shows no target and more than 10 ticks left on
+  the targeting timer just before expiry. Expected: the conditional 4-to-8-tick draw at
+  expiry, followed by any ordinary search draws under S-0207 claim 20 (f); a draw delayed
+  until departure falsifies the expiry/search boundary. Other runs test positions and effects
+  but are inconclusive for this conditional draw.
   Repeat a deck-to-deck warp, recording both the initial landing point and final placed height
   to test claim 36's low-confidence lift. Infect a member with a naval parasite: expected release
-  at launch with the suppression period of claim 34. A drone-parasite run records departure
+  at launch with the suppression period of claim 34. In a named map variant give a naval host
+  the organic flag and no teleporter flag, leaving adjacent water clear for parasite exit.
+  Infect it with a naval parasite before the launch. Expected: the parasite exits beside the
+  old position and the host dies with the launcher's credit. A retained parasite or a parasite
+  removed by its host's death instead of released falsifies the release precedence.
+  A drone-parasite run records departure
   outcome without assuming the ordinary-teleport release path. (e) A vehicle inside
   its factory and an aircraft in flight over the block; expected: both stay. A named map makes
   the factory vehicle organic and non-teleporting: it is killed, not exempted. Include a
   protected non-organic unit, a unit already warping, a bunkered vehicle, a controlled vehicle
-  and a loaded transport: the first two stay, the bunker link ends, control and passengers persist. (f) A unit under a
+  and a loaded transport: the first two stay, the bunker link ends, control and passengers persist.
+  Repeat the pending unit test during its leaving stage: it stays on its original warp timeline.
+  Warp a vehicle undergoing repair: its repair link ends and repair does not continue remotely
+  after departure. Continued bunker confinement or remote repair falsifies the contact-ending
+  claim. (f) A unit under a
   bridge whose deck is the source cell; expected: it stays. (g) Every player hears the
   activation; two radar events. (h) Named rules file with a reordered superweapon type list: keep
   the source type selectable, put a non-warp type with a distinct aim action at index 4, and
@@ -1183,11 +1243,19 @@ is not under test.
   own locomotion, not to tracks: expected redirect follows the tracked search, with no draw.
   (c) Warp the
   redirected unit of (b) again to a clean cell; expected: it phases in for the teleport delay,
-  where a never-redirected unit phases in for 0 ticks. (d) A tank warped onto deep water sinks and
+  where a never-redirected unit has held delay 0 and stops phasing in on the update after
+  arrival effects. Record the arrival-effects tick *t*_A and the phasing-end tick in both
+  cases: expected *t*_A + max(1, *H*) from claim 40. Repeat with named data giving redirected
+  holds of 0, 1 and 2 ticks: expected ends at *t*_A + 1, *t*_A + 1 and *t*_A + 2,
+  respectively; same-update expiry or any other tick difference falsifies this boundary.
+  (d) A tank warped onto deep water sinks and
   the launcher's kill count rises; a hover vehicle survives; a powered-unit hover vehicle of a
   house with no active control centre sinks. Contrast full house power without a centre against
   low house power with a centre that does not need power, to distinguish the count from house
-  power. Use named test data for those centre settings. (e) A ship warped onto a land cell dies with no credit.
+  power. Use named test data for those centre settings. (e) A ship warped onto a land cell dies
+  with no credit. Repeat onto a bridge deck above water with an otherwise empty landing cell:
+  the ship sinks with no credit, unlike the tank's credited sinking in (d). A launcher kill-count
+  increase for the ship falsifies the no-credit sinking rule.
 - **SW14 — paradrop (claim 42).** Named test file without a paradrop plane type; fire; expected:
   nothing sent, charge spent, no announcement for anyone.
 - **SW15 — spy plane (claims 43 to 45).** (a) Stock: one plane per first-side-group paradrop entry
