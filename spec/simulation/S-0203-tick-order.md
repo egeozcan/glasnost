@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0018, Q-0412, Q-0430]
 supersedes: []
@@ -22,6 +22,14 @@ destroyed object stops acting, and the consequences, such as two units killing e
 same tick. How many ticks run per second is S-0201, and what each object does in its own turn
 (moving, firing, harvesting) belongs to the topic specs of those actions. This revision covers
 skirmishes only; network games and campaigns are out of scope.
+
+Within an object's turn, S-0506 claim 24 owns local launch-pass ordering: an ordinary
+vehicle or ship shot cannot supply that turn's due pass, whereas an aircraft attack-run shot
+can. S-0614 claim 18 owns within-host-turn parasite ordering: self-healing, due behaviour
+processing and ordinary movement precede the parasite event; ordinary separate infantry and
+vehicle firing follows it, while behaviour-issued shots, including aircraft attack-run shots,
+precede it. These are local ordering constraints, not a global firing phase. Their backing,
+confidence and proposed measurements remain those of the owning claims.
 
 ## Terms
 
@@ -360,7 +368,7 @@ skirmishes only; network games and campaigns are out of scope.
      its death effects. It normally leaves in its own next turn, later in the same tick if that
      turn has not yet come, otherwise in a later tick. S-0312 claim 21 owns the erasure and
      electromagnetic-pulse exceptions and the second survivor and smudge round in the removal
-     turn, with `quirks.building_removal_second_round`. A sale does not advance or complete once
+     turn, with `quirks.building_removal_second_round`. This switch is on by default, preserving the original behaviour; when off, the building takes no second survivor and smudge round when it leaves play. A sale does not advance or complete once
      the building has 0 health; its removal follows S-0312 claim 21, not sale completion. A veterancy
      ability or a weapon's suicide property alone does not cause this deferred removal. Its
      leaving then is a removal for claim 10 like any other.
