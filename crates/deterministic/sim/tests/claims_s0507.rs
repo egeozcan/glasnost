@@ -1231,3 +1231,114 @@ fn claim_6_refused_boarding_has_already_notified() {
         "it gave up its destination"
     );
 }
+
+/// A driving passenger standing on its transport's point with a destination
+/// naming the transport and no active track (claims 5 and 6).
+fn goal_scene() -> (World, ObjectId, ObjectId) {
+    use glasnost_sim::rules::Behaviour;
+    use glasnost_sim::world::Target;
+    let r = ruleset();
+    let mut w = game(&r);
+    let t = at(&mut w, Kind::Vehicle, "HAULER", 0, 0, 0);
+    let v = at(&mut w, Kind::Vehicle, "BUGGY", 0, 5, 5);
+    testkit::run(&mut w, 5);
+    let here = w.obj(t).unwrap().pos;
+    w.obj_mut(v).unwrap().pos = here;
+    let o = w.obj_mut(v).unwrap();
+    o.dest = Some(Target::Object(t));
+    // Not at rest in guard: the exact-point exception is tested separately.
+    o.beh.current = Some(Behaviour::Move);
+    (w, t, v)
+}
+
+// spec: S-0507 claim 5 (S-0207 claim 26, D31: for a driving passenger a destination naming the transport is an object goal; with no active track, occupying the cell of its supplied point alone clears neither the object goal nor the locomotor point, whether the transport is stationary or moving; a later cell assignment uses the cell-goal cleanup instead)
+#[test]
+fn claim_5_a_transport_goal_is_kept_by_cell_equality() {
+    use glasnost_sim::world::Target;
+    for moving in [false, true] {
+        let (mut w, t, v) = goal_scene();
+        for step in 0..3 {
+            if moving && step >= 1 {
+                w.obj_mut(t).unwrap().pos.x += 20;
+            }
+            glasnost_sim::drive::tick(&mut w, v);
+            assert_eq!(
+                w.obj(v).unwrap().dest,
+                Some(Target::Object(t)),
+                "moving {moving}, update {step}"
+            );
+            assert!(glasnost_sim::drive::goal_present(&w, v));
+        }
+    }
+    // A later assignment naming the cell instead: the cell-goal cleanup removes it at the first update.
+    let (mut w, _, v) = goal_scene();
+    let here = w.obj(v).unwrap().pos.cell();
+    w.obj_mut(v).unwrap().dest = Some(Target::Cell(here));
+    glasnost_sim::drive::tick(&mut w, v);
+    assert_eq!(w.obj(v).unwrap().dest, None);
+}
+
+// spec: S-0507 claim 5 (the resting passenger's exact-point guard exception still applies: only exact equality of its world point with the retained point, not the transport's present position, removes the goal)
+#[test]
+fn claim_5_the_guard_exception_compares_the_retained_point() {
+    use glasnost_sim::rules::Behaviour;
+    use glasnost_sim::world::{Pos, Target};
+    for (point_dx, transport_dx, removed) in [(0, 0, true), (0, 90, true), (30, 0, false)] {
+        let (mut w, t, v) = goal_scene();
+        let p = w.obj(v).unwrap().pos;
+        {
+            let o = w.obj_mut(v).unwrap();
+            o.beh.current = Some(Behaviour::Guard);
+            let d = o.drive.as_mut().unwrap();
+            d.for_dest = Some(Target::Object(t));
+            d.goal = Some(Pos::new(p.x - point_dx, p.y, p.z));
+        }
+        w.obj_mut(t).unwrap().pos.x += transport_dx;
+        glasnost_sim::drive::tick(&mut w, v);
+        let kept = w.obj(v).unwrap().dest == Some(Target::Object(t));
+        assert_eq!(kept, !removed, "point {point_dx}, transport {transport_dx}");
+    }
+}
+
+// spec: S-0507 claim 6 (arrival-time boarding is separate from S-0207 claim 26's locomotion cleanup: the retained object goal is what the boarding at the track's end reads, and cleanup by cell equality neither boards the passenger nor ends its enter behaviour)
+#[test]
+fn claim_6_boarding_happens_at_arrival_not_at_cleanup() {
+    use glasnost_sim::rules::Behaviour;
+    use glasnost_sim::world::Target;
+    // Standing in the transport's cell in enter with the transport as contact: cleanup keeps the goal and does not board.
+    let (mut w, t, v) = goal_scene();
+    {
+        let o = w.obj_mut(v).unwrap();
+        o.beh.current = Some(Behaviour::Enter);
+        o.contact = Some(t);
+    }
+    glasnost_sim::drive::tick(&mut w, v);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(t)));
+    assert_eq!(
+        transport::riding(&w, v),
+        None,
+        "no boarding without an arrival"
+    );
+    assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Enter));
+    // Driving in from a distance, the goal is retained all the way and the arrival boards.
+    let r = ruleset();
+    let mut w = game(&r);
+    let t = at(&mut w, Kind::Vehicle, "HAULER", 0, 0, 0);
+    let v = at(&mut w, Kind::Vehicle, "BUGGY", 0, 4, 0);
+    testkit::run(&mut w, 5);
+    click(&mut w, &[v], ClickOn::Object(t));
+    let mut boarded = false;
+    for _ in 0..900 {
+        tick::step(&mut w);
+        if transport::riding(&w, v) == Some(t) {
+            boarded = true;
+            break;
+        }
+        assert_eq!(
+            w.obj(v).unwrap().dest,
+            Some(Target::Object(t)),
+            "the goal is retained until the boarding"
+        );
+    }
+    assert!(boarded, "boarded at arrival");
+}

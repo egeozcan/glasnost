@@ -402,11 +402,9 @@ fn cell_state(w: &World, c: CellXY) -> CellState {
         if o.kind == Kind::Building {
             building = building.or(Some(id));
         }
-        // spec: S-0513 claim 18 (x and y the position's integer lepton coordinates modulo 256; the distance trunc(r(x² + y²)) by S-0204 claim 5's table square root; the reference is the cell's top corner, height and foundation size do not enter)
-        let (x, y) = (
-            o.pos.x.rem_euclid(256) as u64,
-            o.pos.y.rem_euclid(256) as u64,
-        );
+        // spec: S-0513 claim 18 (x and y the reference point's integer lepton coordinates modulo 256, a building's being its foundation centre (Q-0800, S-0204 claim 4) and any other object's its position; the distance trunc(r(x² + y²)) by S-0204 claim 5's table square root; the remainders are compared with (0, 0), height and the building-size distance reduction do not enter)
+        let p = w.reference_point(id);
+        let (x, y) = (p.x.rem_euclid(256) as u64, p.y.rem_euclid(256) as u64);
         let d = root_floor(x * x + y * y, table, mode);
         // spec: S-0513 claim 18 (the smallest integer distance wins; ties go to the first candidate in S-0209 claim 13's listing order)
         if witness.is_none_or(|(b, _)| d < b) {
