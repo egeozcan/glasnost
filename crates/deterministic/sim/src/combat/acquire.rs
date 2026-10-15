@@ -954,9 +954,9 @@ pub fn search(
         ) {
             return None;
         }
-        // spec: S-0309 claim 4 (an unusable opportunity target is dropped; the same search may pick anew)
+        // spec: S-0309 claim 4 (an unusable opportunity target is dropped; the same search may pick anew); for a spawner the drop requests the conditional pending-target clear of S-0506 claim 25, even if the search then picks a new target
         if let Some(ob) = w.obj_mut(a) {
-            ob.target = None;
+            crate::spawn::clear_own_target(ob);
             ob.combat.opportunity = false;
             ob.combat.burst = 0;
         }
@@ -1141,7 +1141,11 @@ fn set_target_from_search(
         _ => None,
     };
     if let Some(ob) = w.obj_mut(a) {
-        ob.target = t;
+        match t {
+            Some(_) => ob.target = t,
+            // spec: S-0309 claim 24 (a nonempty target redirected to none leaves the object with no target and requests a spawner's conditional pending-target clear)
+            None => crate::spawn::redirected_to_none(ob),
+        }
         // spec: S-0309 claim 24 (a different target set by the per-tick search is an opportunity target); claim 1 (so is one set by the teleport search)
         ob.combat.opportunity = matches!(ctx, SearchContext::PerTick | SearchContext::Teleport)
             && t.is_some()
@@ -1304,6 +1308,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
             if ctx == SearchContext::AttackMoveFresh
                 && let Some(ob) = w.obj_mut(a)
             {
+                // spec: S-0309 claim 23 (running as for an object with no target does not itself request a spawner's pending-target clear)
                 ob.target = None;
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
@@ -1322,6 +1327,7 @@ fn attack_move_search(w: &mut World, a: ObjectId) {
                 return;
             }
             if let Some(ob) = w.obj_mut(a) {
+                // spec: S-0309 claim 23 (running as for an object with no target does not itself request a spawner's pending-target clear)
                 ob.target = None;
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }

@@ -403,11 +403,14 @@ fn retarget(w: &mut World, old: ObjectId, new: ObjectId, yard: bool) {
             .is_some_and(|u| u.vehicle_thief);
         if let Some(ob) = w.obj_mut(x) {
             // spec: S-0415 claim 6 (a vehicle thief's target becomes nothing when the building is a construction yard)
-            ob.target = if thief && yard {
-                None
-            } else {
-                Some(Target::Object(new))
-            };
+            crate::spawn::set_own_target(
+                ob,
+                if thief && yard {
+                    None
+                } else {
+                    Some(Target::Object(new))
+                },
+            );
         }
     }
 }

@@ -197,17 +197,17 @@ fn mark_killed(w: &mut World, id: ObjectId) {
         if ob.beh.suspended.is_some() {
             // spec: S-0215 claim 10 (the target is destroyed: the revert comes at the killing hit)
             if let Some((t, d)) = ob.beh.revert() {
-                ob.target = t;
+                crate::spawn::set_own_target(ob, t);
                 if ob.kind.is_mobile() {
                     restored = Some(ob.dest);
                     ob.dest = d;
                 }
             }
             if ob.target == Some(Target::Object(id)) {
-                ob.target = None;
+                crate::spawn::clear_own_target(ob);
             }
         } else {
-            ob.target = None;
+            crate::spawn::clear_own_target(ob);
         }
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         if let Some(before) = restored {

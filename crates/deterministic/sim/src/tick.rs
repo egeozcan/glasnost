@@ -26,7 +26,10 @@ pub fn step(w: &mut World) {
     crate::triggers::poll(w);
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
     crate::econ::resource::part(w);
-    // Rows 2, 10, 11, 12, 3, 13 and 14 (and row 4) have no topic yet: empty seams.
+    // Row 2 (planted bombs) has no topic yet: an empty seam.
+    // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted bombs (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
+    crate::spawn::kamikaze_orders(w);
+    // Rows 10, 11, 12, 3, 13 and 14 (and row 4) have no topic yet: empty seams.
     // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
     // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)
     crate::econ::shroud::regrowth(w);

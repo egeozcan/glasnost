@@ -596,14 +596,14 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         if ob.beh.suspended.is_some()
             && let Some((t, d)) = ob.beh.revert()
         {
-            ob.target = t;
+            crate::spawn::set_own_target(ob, t);
             if ob.kind.is_mobile() {
                 restored = Some(ob.dest);
                 ob.dest = d;
             }
         }
         if ob.target == Some(Target::Object(id)) {
-            ob.target = None;
+            crate::spawn::clear_own_target(ob);
         }
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         if let Some(before) = restored {

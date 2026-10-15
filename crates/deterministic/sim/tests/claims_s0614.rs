@@ -1586,3 +1586,61 @@ fn squid_on_water() {
     assert!(o.on_map);
     assert!(parasite::water_tile(&w, o.pos.cell()));
 }
+
+// spec: S-0614 claim 12 (the host starts curtain protection: 50 ticks of suppression just before release, so a drone parasite is removed silently and a naval parasite exits; the host's hold ends)
+#[test]
+fn claim_12_curtain_protection() {
+    let (mut w, p, host, _) = latched();
+    let until = w.tick + 100;
+    set_hold(&mut w, host, until);
+    parasite::host_curtain_started(&mut w, host);
+    assert!(w.obj(p).is_none(), "the drone is removed silently");
+    assert_eq!(parasite::parasite_of(&w, host), None);
+    assert!(!parasite::held(&w, host), "the host's hold ends");
+    let (mut w, squid, boat, _) = grappled(&ruleset());
+    parasite::host_curtain_started(&mut w, boat);
+    assert_eq!(parasite::host_of(&w, squid), None);
+    assert!(
+        w.obj(squid).is_some_and(|o| o.on_map),
+        "a naval parasite exits"
+    );
+}
+
+// spec: S-0614 claim 18 (deliveries due in the same tick are assigned in host order, not parasite order)
+#[test]
+fn claim_18_deliveries_in_host_order() {
+    let mut r = ruleset();
+    // A delivery every host turn, so that both deliveries fall in one tick.
+    r.sim.weapons.get_mut("Latch").unwrap().rof = Some(1);
+    let mut w = game_of(&r);
+    let h1 = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+    let h2 = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 3), 0);
+    // The parasites are created in the opposite order to their hosts.
+    let p2 = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 3), 64);
+    let p1 = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+    // Both shots in one tick, so that both latch in the same tick and deliver together.
+    assert!(fire::shot(&mut w, p2, 0, Target::Object(h2)));
+    assert!(fire::shot(&mut w, p1, 0, Target::Object(h1)));
+    let mut seen = None;
+    for _ in 0..300 {
+        w.effects.clear();
+        testkit::run(&mut w, 1);
+        let hits: Vec<ObjectId> = w
+            .effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Hit {
+                    id,
+                    attacker: Some(a),
+                    ..
+                } if *a == p1 || *a == p2 => Some(*id),
+                _ => None,
+            })
+            .collect();
+        if hits.len() == 2 {
+            seen = Some(hits);
+            break;
+        }
+    }
+    assert_eq!(seen, Some(vec![h1, h2]), "host order, not parasite order");
+}

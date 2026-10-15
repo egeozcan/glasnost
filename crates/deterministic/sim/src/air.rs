@@ -367,7 +367,7 @@ fn queue(w: &mut World, id: ObjectId, b: Behaviour) {
 
 fn forget(w: &mut World, id: ObjectId) {
     if let Some(o) = w.obj_mut(id) {
-        o.target = None;
+        crate::spawn::clear_own_target(o);
         o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         o.dest = None;
     }
@@ -1646,7 +1646,7 @@ pub fn fall_back_early(w: &mut World, id: ObjectId) -> bool {
         if let Some(ob) = w.obj_mut(id)
             && let Some((tg, d)) = ob.beh.revert()
         {
-            ob.target = tg;
+            crate::spawn::set_own_target(ob, tg);
             ob.dest = d;
             if ob.beh.current == Some(Behaviour::Patrol) {
                 ob.beh.progress = 0;
@@ -1780,7 +1780,7 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
         if let Some(k) = seek_pad(w, id) {
             set_dest(w, id, Some(Target::Object(k)));
             if let Some(ob) = w.obj_mut(id) {
-                ob.target = None;
+                crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             queue(w, id, Behaviour::Enter);
@@ -1814,7 +1814,7 @@ pub fn behaviour_turn(w: &mut World, id: ObjectId) {
         && crate::combat::weapon::in_air(w, x)
         && let Some(ob) = w.obj_mut(id)
     {
-        ob.target = None;
+        crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
     let Some(o) = w.obj(id) else { return };
@@ -1930,7 +1930,7 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
         if let Some(k) = seek_pad(w, id) {
             set_dest(w, id, Some(Target::Object(k)));
             if let Some(ob) = w.obj_mut(id) {
-                ob.target = None;
+                crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
             queue(w, id, Behaviour::Enter);
@@ -2431,7 +2431,7 @@ fn run_end(w: &mut World, id: ObjectId) {
         && let Some(ob) = w.obj_mut(id)
     {
         // spec: S-0501 claim 17 (no ammunition: a visiting or human-controlled house's aircraft forgets its target)
-        ob.target = None;
+        crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
     // spec: S-0501 claim 17 (an airstrike aircraft with ammunition retreats; no airstrike exists in our engine; every other aircraft falls back to rest)
@@ -2526,7 +2526,7 @@ pub fn carrier_attack(w: &mut World, x: ObjectId, target: Target) {
 /// *move* (T4).
 pub fn carrier_return(w: &mut World, x: ObjectId, spawner: ObjectId) {
     if let Some(o) = w.obj_mut(x) {
-        o.target = None;
+        crate::spawn::clear_own_target(o);
         o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
     set_dest(w, x, Some(Target::Object(spawner)));

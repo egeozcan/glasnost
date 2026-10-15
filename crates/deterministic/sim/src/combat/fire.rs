@@ -322,14 +322,14 @@ fn after_shot(w: &mut World, firer: ObjectId, weapon: crate::combat::data::Weapo
         && let Some(ob) = w.obj_mut(firer)
     {
         ob.combat.fired_at.push(x);
-        ob.target = None;
+        crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
     // spec: S-0309 claim 21 (a fire-once weapon drops its target after the shot)
     if rules.combat.weapon(weapon).fire_once
         && let Some(ob) = w.obj_mut(firer)
     {
-        ob.target = None;
+        crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0;
     }
     let _ = tc;

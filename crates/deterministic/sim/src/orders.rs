@@ -275,7 +275,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                     return;
                 }
                 // spec: S-0213 claim 8 (target and destination become nothing; contact broken off)
-                ob.target = None;
+                // spec: S-0215 claim 12 and S-0506 claim 25 (an order's own-target clear obeys the spawner pending-target rule)
+                crate::spawn::explicit_clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.dest = None;
                 ob.contact = None;
@@ -325,7 +326,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             if let Some(ob) = w.obj_mut(actor) {
                 // spec: S-0213 claim 10 (contact broken off, target and destination nothing, unload queued)
                 ob.contact = None;
-                ob.target = None;
+                // spec: S-0215 claim 12 and S-0506 claim 25 (an order's own-target clear obeys the spawner pending-target rule)
+                crate::spawn::explicit_clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 ob.dest = None;
                 ob.beh.queue(Some(Behaviour::Unload));
@@ -527,13 +529,18 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     }
     if b == Behaviour::AreaGuard && mobile {
         // spec: S-0213 table T3 (e) (area guard: target nothing; destination and guard spot the order's target)
-        m.target = None;
+        // spec: S-0215 claim 12 and S-0506 claim 25 (an order's own-target clear obeys the spawner pending-target rule)
+        crate::spawn::explicit_clear_own_target(m);
         m.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         m.dest = target;
         m.guard_spot = target;
     } else {
         // spec: S-0213 table T3 (f) (target and destination from the order)
-        m.target = target;
+        match target {
+            Some(_) => m.target = target,
+            // spec: S-0215 claim 12 and S-0506 claim 25 (an order setting the target to nothing obeys the spawner pending-target rule)
+            None => crate::spawn::explicit_clear_own_target(m),
+        }
         m.dest = dest;
         if mobile {
             // spec: S-0213 table T3 (g) (a mobile actor forgets its guard spot and queued destinations)

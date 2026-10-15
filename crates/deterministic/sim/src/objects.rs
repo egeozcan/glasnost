@@ -322,7 +322,7 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.on_map = false;
         ob.dest = None;
-        ob.target = None;
+        crate::spawn::clear_own_target(ob);
         ob.queued_dests.clear();
         ob.path.steps.clear();
         if let Some(s) = ob.walk.as_mut() {

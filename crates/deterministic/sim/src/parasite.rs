@@ -23,8 +23,8 @@ use crate::world::{Layer, Object, ObjectId, Pos, Target, World};
 const LATCH_BLOCK: i32 = 20; // spec: S-0614 Constants (latch block length 20 ticks)
 /// Height limit for a latching shot, leptons.
 const HEIGHT_LIMIT: i32 = 208; // spec: S-0614 Constants (2 levels, 208 leptons)
-/// Suppression set by unloading or consumption, ticks.
-const UNLOAD_SUPPRESSION: i32 = 50; // spec: S-0614 Constants (50 ticks)
+/// Suppression set by curtain protection, unloading or consumption, ticks.
+const EXIT_SUPPRESSION: i32 = 50; // spec: S-0614 claim 12 and Constants (50 ticks, set by curtain protection, unloading or consumption)
 /// The grab phase ends, and the first push starts, this many ticks after its first tick.
 const GRAB_END: i32 = 29; // spec: S-0614 F3 (grab of 10 frames × 3 ticks, its first frame counted in its first tick: the first push starts at g + 29, so that the first strike is at g + 69)
 /// A push lasts this many ticks; the strike follows in the next tick.
@@ -283,7 +283,7 @@ fn attach(w: &mut World, p: ObjectId, host: ObjectId) {
         // spec: S-0614 claim 3 (it travels with the host)
         o.pos = pos;
         // spec: S-0614 claim 3 (it keeps no target while attached)
-        o.target = None;
+        crate::spawn::clear_own_target(o);
         o.dest = None;
     }
 }
@@ -296,10 +296,10 @@ fn restore_kept(w: &mut World, p: ObjectId) {
         if o.attack_move.is_some()
             && let Some((t, d)) = kept
         {
-            o.target = t;
+            crate::spawn::set_own_target(o, t);
             o.dest = d;
         } else {
-            o.target = None;
+            crate::spawn::clear_own_target(o);
             o.dest = None;
         }
     }
@@ -1044,9 +1044,11 @@ pub fn repair_step(w: &mut World, host: ObjectId) {
     }
 }
 
-/// The host jumps under the teleporting locomotor (S-0207 claim 20 e;
-/// S-0614 claim 12): the parasite exits before the host leaves its old
-/// position. Also the hook for a teleporting superweapon's jump.
+/// The host makes its own jump under the teleporting locomotor (S-0207
+/// claim 20 e; S-0614 claim 12): the parasite exits before the host leaves
+/// its old position. Not the hook for a teleporting superweapon's
+/// departure: whether that releases a drone parasite is unresolved
+/// (S-0614 claim 12 and Open questions).
 pub fn host_jumps(w: &mut World, host: ObjectId) {
     if let Some(p) = parasite_of(w, host) {
         // spec: S-0614 claim 12 (the teleport jump: it exits before the host leaves its old position)
@@ -1073,15 +1075,16 @@ fn suppress_and_exit(w: &mut World, host: ObjectId) {
     let now = w.tick;
     if let Some(s) = state_mut(w, p) {
         // spec: S-0614 claim 12 (50 ticks of suppression just before the exit)
-        s.suppressed_until = Some(now.wrapping_add(UNLOAD_SUPPRESSION));
+        s.suppressed_until = Some(now.wrapping_add(EXIT_SUPPRESSION));
     }
     leave_living(w, p, Leave::Exit);
 }
 
 /// A teleporting superweapon catches the host (claim 12), at launch: a
-/// naval parasite exits at the host's old position; a drone parasite
-/// stays and exits at the jump ([`host_jumps`]). A hook for the
-/// superweapon topic.
+/// naval parasite exits at the host's old position; a drone parasite is
+/// not released at launch. Its fate at the departure is unresolved
+/// (S-0614 claim 12 and Open questions), so no departure hook exists. A
+/// hook for the superweapon topic, which our engine does not model yet.
 pub fn superweapon_teleport(w: &mut World, host: ObjectId) {
     if let Some(p) = parasite_of(w, host)
         && naval(w, p)
@@ -1089,6 +1092,16 @@ pub fn superweapon_teleport(w: &mut World, host: ObjectId) {
         // spec: S-0614 claim 12 (a naval parasite exits at launch, before the teleport)
         leave_living(w, p, Leave::Exit);
     }
+}
+
+/// The host starts curtain protection (S-0513 claim 25; S-0614 claim 12):
+/// 50 ticks of suppression are set just before the release, so a drone
+/// parasite is removed silently and a naval parasite exits by claim 13;
+/// the host's hold ends. A hook for the superweapon topic, which our
+/// engine does not model yet.
+pub fn host_curtain_started(w: &mut World, host: ObjectId) {
+    // spec: S-0614 claim 12 (curtain protection: suppression set just before release)
+    suppress_and_exit(w, host);
 }
 
 /// An effect replaces the host's locomotor (claim 12): only a naval

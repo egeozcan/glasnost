@@ -80,22 +80,40 @@ pub struct SpawnController {
     pub next_pass: i32,
     /// The tick of the controller's last launch (claim 6), if any.
     pub last_launch: Option<i32>,
-    /// The spawner's own target as last seen by [`watch_own_target`].
+    /// A pending-target clear requested by an own-target change and not
+    /// yet settled (claim 25): `Some(true)` for an actual change of a
+    /// nonempty own target to empty (or a nonempty assignment redirected
+    /// to none), `Some(false)` for an explicit clear of an already empty
+    /// one. See [`clear_own_target`] and [`settle_clear`].
     #[serde(default)]
-    pub own_seen: Option<Target>,
+    pub clear_request: Option<bool>,
 }
 
 /// The world's record of spawned objects that outlive their slots
-/// (S-0506 claims 8, 12 and 19; S-0311 claim 8).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// (S-0506 claims 8, 12, 19 and 26; S-0311 claim 8).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpawnedObjects {
     /// Each slot object's spawner (its launcher), kept until the object
     /// leaves play.
     pub launcher: BTreeMap<ObjectId, ObjectId>,
-    /// Each kamikaze and its release cell (claim 12).
-    pub kamikaze: BTreeMap<ObjectId, CellXY>,
-    /// The tick of the next update of the shared re-order cycle (claim 12).
+    /// The enrolled kamikazes with their release cells (claim 12), in
+    /// enrollment order: removal keeps the others' relative order and a new
+    /// enrollment goes last (claim 26).
+    pub kamikaze: Vec<(ObjectId, CellXY)>,
+    /// The tick number on which the shared re-order cycle is next due
+    /// (claim 26).
     pub next_reorder: i32,
+}
+
+impl Default for SpawnedObjects {
+    fn default() -> Self {
+        Self {
+            launcher: BTreeMap::new(),
+            kamikaze: Vec::new(),
+            // spec: S-0506 claim 26 and Constants (in a newly loaded skirmish the first shared re-order cycle is due at tick number 1, not 0)
+            next_reorder: 1,
+        }
+    }
 }
 
 /// A type's spawn fields (S-0506 Import mapping).
@@ -434,7 +452,7 @@ pub fn launcher_of(w: &World, id: ObjectId) -> Option<ObjectId> {
 
 /// Whether an object is a kamikaze (S-0506 Terms).
 pub fn kamikaze(w: &World, id: ObjectId) -> bool {
-    w.spawned.kamikaze.contains_key(&id)
+    w.spawned.kamikaze.iter().any(|&(k, _)| k == id)
 }
 
 // ---------------------------------------------------------------------
@@ -495,6 +513,7 @@ fn new_slot_object(
 /// projectile; the shot's target becomes the pending target unless it is
 /// already the controller target.
 pub fn shot(w: &mut World, spawner: ObjectId, target: Target) {
+    settle_clear(w, spawner);
     let Some(c) = w.obj_mut(spawner).and_then(|o| o.spawn.as_mut()) else {
         return;
     };
@@ -520,22 +539,70 @@ pub fn target_cleared(w: &mut World, spawner: ObjectId) {
     }
 }
 
-/// Watches a spawner's own target for a change to empty (S-0506 claim
-/// 25). Our engine clears targets in many places, so the change is seen
-/// in each of the spawner's turns rather than where it is made: a clear
-/// and a restore of the same target within one tick go unseen, and so
-/// does a clear of an already empty target (docs/development.md).
-pub fn watch_own_target(w: &mut World, spawner: ObjectId) {
-    let Some(o) = w.obj(spawner) else { return };
-    let own = o.target;
-    let Some(c) = o.spawn.as_ref() else { return };
-    let cleared = c.own_seen.is_some() && own.is_none();
-    if cleared {
-        target_cleared(w, spawner);
+/// Sets an object's own target to `t` (S-0506 claim 25; S-0215 claim 12;
+/// S-0309 claims 4 and 24). When this actually changes a nonempty own
+/// target to empty, a spawner requests the conditional pending-target
+/// clear; direct replacement by a nonempty target does not touch pending.
+/// The request is recorded on the controller and settled by
+/// [`settle_clear`] before anything reads the pending or controller
+/// target, so its outcome is the same as an immediate clear.
+pub fn set_own_target(ob: &mut crate::world::Object, t: Option<Target>) {
+    let had = ob.target.is_some();
+    ob.target = t;
+    if t.is_none() && had {
+        request_clear(ob, true);
     }
-    if let Some(c) = w.obj_mut(spawner).and_then(|o| o.spawn.as_mut()) {
-        c.own_seen = own;
+}
+
+/// Clears an object's own target ([`set_own_target`] with none).
+pub fn clear_own_target(ob: &mut crate::world::Object) {
+    set_own_target(ob, None);
+}
+
+/// An explicit own-target clear by an order (S-0213 claims 8 and 10, table
+/// T3; S-0215 claim 12): as [`clear_own_target`], but a clear of an already
+/// empty own target is also recorded, for
+/// `quirks.spawner_pending_target_survives_idle_clear` off.
+pub fn explicit_clear_own_target(ob: &mut crate::world::Object) {
+    let had = ob.target.is_some();
+    ob.target = None;
+    request_clear(ob, had);
+}
+
+/// A nonempty target assigned to the object is redirected to no target
+/// (S-0309 claim 24): the own target becomes empty and a spawner requests
+/// the conditional pending clear even when its old own target was already
+/// empty.
+pub fn redirected_to_none(ob: &mut crate::world::Object) {
+    ob.target = None;
+    // spec: S-0309 claim 24 (assigning a nonempty target redirected to no target requests the conditional clear, even if the old own target was empty)
+    request_clear(ob, true);
+}
+
+fn request_clear(ob: &mut crate::world::Object, counts: bool) {
+    if let Some(c) = ob.spawn.as_mut() {
+        c.clear_request = Some(c.clear_request.unwrap_or(false) || counts);
     }
+}
+
+/// Settles a spawner's recorded pending-target clear request (S-0506 claim
+/// 25): with `quirks.spawner_pending_target_survives_idle_clear` on, a
+/// request from an already empty own target changes nothing, and any other
+/// clears pending only when the controller target is nonempty; off, every
+/// request clears pending.
+pub fn settle_clear(w: &mut World, spawner: ObjectId) {
+    let survives = w.rules().quirks.spawner_pending_target_survives_idle_clear;
+    let Some(c) = w.obj_mut(spawner).and_then(|o| o.spawn.as_mut()) else {
+        return;
+    };
+    let Some(counts) = c.clear_request.take() else {
+        return;
+    };
+    // spec: S-0506 claim 25 and Edge cases (asking to clear an already empty own target leaves pending unchanged; off: every explicit own-target clear empties pending)
+    if survives && !counts {
+        return;
+    }
+    target_cleared(w, spawner);
 }
 
 /// The spawner's firing check answered *impossible* to an attempt with
@@ -571,7 +638,7 @@ pub fn firing_answer(
 /// The spawner's part of its turn: a launch pass when one is due
 /// (S-0506 claim 2).
 pub fn turn(w: &mut World, spawner: ObjectId) {
-    watch_own_target(w, spawner);
+    settle_clear(w, spawner);
     let t = w.tick;
     let due = w
         .obj(spawner)
@@ -589,6 +656,7 @@ pub fn turn(w: &mut World, spawner: ObjectId) {
 
 /// One launch pass (S-0506 claim 2, Slot and Controller tables).
 pub fn pass(w: &mut World, spawner: ObjectId) {
+    settle_clear(w, spawner);
     let Some(n) = w
         .obj(spawner)
         .and_then(|o| o.spawn.as_ref())
@@ -1003,11 +1071,16 @@ fn release(w: &mut World, spawner: ObjectId) -> bool {
         }
     }
     if any {
-        // spec: S-0506 claim 12 (normal salvo release brings the re-order cycle's next update forward to 2 ticks later)
-        w.spawned.next_reorder = t.wrapping_add(2);
+        // spec: S-0506 claim 26 (a normal salvo release replaces the shared deadline with the release tick + 2: a replacement, not a minimum)
+        w.spawned.next_reorder = t.wrapping_add(REORDER_DELAY);
     }
     any
 }
+
+// spec: S-0506 claim 26 and Constants (salvo/reset re-order delay: 2 ticks after release)
+const REORDER_DELAY: i32 = 2;
+// spec: S-0506 claims 12 and 26 and Constants (release re-order interval: 30 ticks)
+const REORDER_INTERVAL: i32 = 30;
 
 /// Releases a slot object (S-0506 claim 12): a missile becomes a kamikaze
 /// with its release cell; an object without the missile-spawn flag starts
@@ -1030,7 +1103,12 @@ fn release_object(w: &mut World, x: ObjectId, target: Option<Target>) {
         let c = o.pos.cell();
         CellXY::new(c.x + dx, c.y + dy)
     });
-    w.spawned.kamikaze.insert(x, cell);
+    // spec: S-0506 claim 26 (enrollment order: a new enrollment follows the earlier ones)
+    if let Some(e) = w.spawned.kamikaze.iter_mut().find(|e| e.0 == x) {
+        e.1 = cell;
+    } else {
+        w.spawned.kamikaze.push((x, cell));
+    }
 }
 
 /// The step direction of S-0506 Formulas F8.
@@ -1083,6 +1161,8 @@ pub fn reset(w: &mut World, spawner: ObjectId) {
         return;
     };
     let r = spawn_rules(w, spawner).unwrap_or_default();
+    let mut any = false;
+    // spec: S-0506 claim 26 (within a reset, enrollment follows increasing slot index)
     for (i, slot) in c.slots.iter().enumerate() {
         if slot.state != SlotState::Preparing {
             continue;
@@ -1092,8 +1172,13 @@ pub fn reset(w: &mut World, spawner: ObjectId) {
         if !missile_type(w, x) {
             continue;
         }
+        any = true;
         release_object(w, x, c.target);
         empty_slot(w, spawner, i, t.wrapping_add(r.regen));
+    }
+    if any {
+        // spec: S-0506 claim 26 (a reset that actually releases a preparing flagged aircraft replaces the shared deadline with the release tick + 2; one that releases none changes no deadline)
+        w.spawned.next_reorder = t.wrapping_add(REORDER_DELAY);
     }
     if let Some(c) = controller_mut(w, spawner) {
         c.target = None;
@@ -1114,7 +1199,7 @@ pub fn clear_slots(w: &mut World, spawner: ObjectId) {
     // spec: S-0506 claim 13 (regeneration time when the spawner has health below 1 or is out of play, else 0)
     let out = w.obj(spawner).is_none_or(|o| o.health < 1 || !o.on_map);
     let until = if out { t.wrapping_add(r.regen) } else { t };
-    // spec: S-0506 claim 13 (crash-start draws in descending slot index)
+    // spec: S-0506 claim 13 (crash-start draws in descending slot index); claim 26 (enrollment in descending slot index, without replacing the shared deadline)
     for i in (0..c.slots.len()).rev() {
         let slot = c.slots[i].clone();
         let Some(x) = slot.object else { continue };
@@ -1169,13 +1254,24 @@ pub fn killed(w: &mut World, id: ObjectId) {
 /// 13): a spawner clears its slots; a slot object is announced as lost;
 /// controllers whose target it is reset unless a pending target waits.
 pub fn removing(w: &mut World, id: ObjectId) {
+    // Clear requests recorded earlier are settled before the loss rules read pending and controller targets.
+    let waiting: Vec<ObjectId> = w
+        .objects
+        .iter()
+        .filter(|(_, o)| o.spawn.as_ref().is_some_and(|c| c.clear_request.is_some()))
+        .map(|(&k, _)| k)
+        .collect();
+    for s in waiting {
+        settle_clear(w, s);
+    }
     if w.obj(id).is_some_and(|o| o.spawn.is_some()) {
         // spec: S-0506 claim 13 (the spawner removed)
         clear_slots(w, id);
     }
     lost(w, id);
     w.spawned.launcher.remove(&id);
-    w.spawned.kamikaze.remove(&id);
+    // spec: S-0506 claim 26 (removing an enrolled aircraft keeps the others' relative order)
+    w.spawned.kamikaze.retain(|&(k, _)| k != id);
     crate::combat::flying::unregister(w, id);
     let gone = Some(Target::Object(id));
     // spec: S-0506 claim 25 (loss notification for the pending target clears it at once, whatever the own target)
@@ -1277,25 +1373,32 @@ pub fn aircraft_return(w: &mut World, x: ObjectId, spawner: ObjectId) {
     }
 }
 
-/// The shared re-order cycle of released missiles (S-0506 claim 12):
-/// every 30 ticks each kamikaze is ordered to attack its release cell. A
-/// rocket missile ignores these orders (its aim point is fixed), so they
-/// matter only for a flagged aircraft outside the rocket types, which
-/// receives the target and queues *attack* (S-0501 T4). Seam: the tick
-/// pipeline does not call it yet (no spec places the cycle in the tick).
+/// The shared re-order cycle of released missiles (S-0506 claims 12 and
+/// 26), once per tick from the tick pipeline, outside object turns. When
+/// due, it schedules the next cycle for its own tick + 30 (even with no
+/// kamikaze), then gives every enrolled aircraft, in enrollment order,
+/// ammunition of exactly 1 round, its release cell as target and *attack*
+/// queued without an immediate start. It takes no random draws. A rocket
+/// missile receives the same changes; they do not alter its flight, whose
+/// aim point is fixed by its first move order (claim 14).
 pub fn kamikaze_orders(w: &mut World) {
     let t = w.tick;
+    // spec: S-0506 claim 26 (the cycle is due on its deadline tick; tick numbers only grow)
     if t < w.spawned.next_reorder {
         return;
     }
-    // spec: S-0506 claim 12 and Constants (release re-order interval 30 ticks)
-    w.spawned.next_reorder = t.wrapping_add(30);
-    let list: Vec<(ObjectId, CellXY)> = w.spawned.kamikaze.iter().map(|(&k, &v)| (k, v)).collect();
+    // spec: S-0506 claim 26 (a cycle schedules the next for its own tick + 30, even when no kamikaze exists)
+    w.spawned.next_reorder = t.wrapping_add(REORDER_INTERVAL);
+    let list = w.spawned.kamikaze.clone();
+    // spec: S-0506 claim 26 (orders in enrollment order)
     for (x, cell) in list {
-        if rocket_type(w, x).is_some() {
-            continue;
-        }
-        aircraft_attack(w, x, Target::Cell(cell));
+        let Some(o) = w.obj_mut(x) else { continue };
+        // spec: S-0506 claim 26 (ammunition set to exactly 1 round)
+        o.combat.ammo = 1;
+        // spec: S-0506 claims 12 and 26 (target: the release cell)
+        o.target = Some(Target::Cell(cell));
+        // spec: S-0506 claim 26 (attack queued, without forcing an immediate behaviour start; no draws)
+        o.beh.queue(Some(crate::rules::Behaviour::Attack));
     }
 }
 
