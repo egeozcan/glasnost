@@ -66,7 +66,7 @@ pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
     } else if u.turret_spins && omega != 0 {
         // spec: S-0206 Edge cases (quirks.turret_spin_quantised off: the facing F2 reads plus 256 × min(ω, 8), unrounded; at ω = 0 no spin)
         let step = 256 * omega.min(8);
-        let f = (i32::from(ob.turret.value(t)) + step).rem_euclid(65536) as u16;
+        let f = ob.turret.value(t).wrapping_add(step as u16);
         ob.turret.turn_to(f, t, omega);
     }
     if u.turret {
