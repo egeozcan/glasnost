@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -145,6 +145,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | The detonation of an object's death weapon (S-0312, claim 6) | no | no | the dying object | the dying object's house |
    | The detonation that follows the impact of an object that crashes while alive (S-0312, claim 16) | no | no | none | none |
    | The damage of a sonic wave (wave specs) | no | no | the wave's firing object | none |
+   | Radiation exposure (S-0525 claims 9 and 10), at distance 0 leptons with the radiation-site warhead | no | yes | none | none |
    | A parasite's delivery (S-0614 claims 6 and 10) | no (yes for a drone's delivery to an infantry host) | yes | the parasite | none |
    | The detonation of the demolition warhead when a destroyed ore-spawning terrain object bursts (claim 20) | no | no | none | none |
    | A detonation set off by the lightning-storm bolt of the weather superweapon (superweapon specs) | no | no | none | the superweapon's owner |
@@ -192,7 +193,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      and the crash impact through S-0312's scenarios D11 and D12; house elimination through
      S-0414 claim 5 and its scenario V11; parasite deliveries through S-0614 claims 6 and 10,
      scenarios P1 and P6, and D31 below for the markers, attacker and absent attacking house; also
-     bridge-destruction hits through S-0511 claims 9–11 and 15 and scenarios B3, B5 and B6),
+     bridge-destruction hits through S-0511 claims 9–11 and 15 and scenarios B3, B5 and B6, and
+     radiation exposure through S-0525 claims 9 and 10, scenarios RF1 and RF7),
      `unmeasured` (a damaging animation's row:
      its hit metadata is not established, so no expected outcome can yet be supplied for a
      discriminating test; a firer removed
@@ -206,7 +208,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      no precise source setup and expected metadata are established here)
    - Confidence: high (detonations and waves never ignore defences and never carry no-escape; a
      detonation of a firer that has not been killed, removed or started to cloak carries it and its
-     owner); medium (a
+     owner; radiation-exposure metadata); medium (a
      detonation of a firer that has been killed carries neither, and the same for a firer that
      stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
      the trigger kill, the contact destruction, the crash impact and the wave; the ore burst's
@@ -384,7 +386,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      minimum and a maximum of 0 or below, D4 for the negative path and S-0314 H1 part c for its
      bypass of a negative maximum, D9 for the inert map, D25 for a positive hit against a
      negative versus value; the falloff at distances above 0 through S-0303's scenario A1, which
-     measures the same formula); `unmeasured` (a hit that comes without a warhead: only scripted
+     measures the same formula, including variant g for the edge product's use of the integer
+     defended amount rather than its single-precision narrowing); `unmeasured` (a hit that comes without a warhead: only scripted
      sources deliver one, and no known scripted source can be set up to deliver it)
    - Confidence: high (medium for the hit without a warhead)
 
@@ -434,9 +437,14 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      S-0303 (claim 9) leaves out of every detonation, so also out of death weapons and storm bolts,
      a candidate that is not alive or has health 0 or less; the trigger kill acts on present objects
      only, which exclude destroyed ones (S-0011, Terms and claim 27). An object that stays in play
-     with health left (a sinking vehicle, a building in a delayed-kill countdown, a crippled
-     cyborg, each with at least 1 health) is not a no-health target at all, and takes hits by the
-     other rows. The sources that this spec cannot place under a filter are the sonic wave, the
+     with health left (a sinking vehicle, a building in a delayed-kill countdown or a crippled
+     cyborg) is not a no-health target at all, and takes hits by the other rows. Sinking supplies
+     no damage or healing immunity: while health is positive, an eligible hit follows the ordinary
+     rules, including another killing result if it takes the remaining health. This grants no new
+     targeting permission and does not guarantee that an already-fired projectile hits (S-0504
+     claims 5, 10 and 13). Not every possible sinking state is asserted to retain positive health:
+     sinking can also begin through a cull (S-0614 claim 11). If a sinking target has no health,
+     the non-building no-health row still stops ordinary damage and healing hits; it is not revived. The sources that this spec cannot place under a filter are the sonic wave, the
      contact destruction, the elimination of a house's objects, the destruction of a bridge section
      and the train crush (claim 1): whether they skip an object with no health is for their specs
      (Open questions).
@@ -471,14 +479,17 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    of 0 is different: when the hit ignores defences it does nothing (except on an undemolishable
    building, which loses 1, claim 7); otherwise its defended amount is 1 (the minimum of claim 5),
    and claim 6 applies to that 1 (a direct hit against a versus value of 0 or more deals trunc(*v*), at most the cap of claim 6).
-   Detonations never deliver 0 (S-0303 claim 2: a detonation of 0 reaches nobody); claim 17 is the
-   one rule known to produce such a hit.
+   Detonations never deliver 0 (S-0303 claim 2: a detonation of 0 reaches nobody); claim 17 is
+   one such source; radiation exposure can also deliver 0 while the exposure level is positive
+   (S-0525 claims 9 and 10).
    - Backing: `measurable` (scenario D6 for invulnerability, D8 for the allies rule (with an
      attacker; D17, part g, for a hit with none), the immune
      and type-immune rows and the bunker rows, D16 for the building, vehicle-factory, bridge-repair-hut,
      laser-fence and being-erased rows (the trigger kill on an immune bridge repair hut in its own
      last run, d2, which expects the hang), D17 for the radiation, psychic and poison rows and for
-     the stages; D26 for the − column of the rows that D6 and D8 do not test); `unmeasured` (the two
+     the stages; D26 for the − column of the rows that D6 and D8 do not test; S-0504 scenarios
+     N10 and N14 for eligible positive-health hits during sinking; S-0525 RF1 variant c for a
+     zero-amount radiation hit); `unmeasured` (the two
      no-health rows and their stages: every source that a scenario of this spec can set up skips an
      object with no health before the hit (*No-health targets* above), and the sources that might
      not skip it belong to specs not yet written, so no scenario can deliver a hit to such an
@@ -589,8 +600,15 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       *unaffected*, even when health rose,
     - a positive amount larger than the remaining health counts as the remaining health, and health
       falls by it; the result is given by claim 12.
-    Health never goes below 0 or above the strength.
-    - Backing: `measurable` (scenarios D1 and D4)
+    Health never goes below 0 or above the strength, subject to the kind-specific survival
+    outcomes: claim 15's crippling, claim 16's delayed kill and S-0312 claim 10's sinking at
+    1 health. A positive-health vessel already sinking is not exempt from this arithmetic.
+    Another lethal hit follows the ordinary death rules; when it again meets the sinking
+    condition it returns to 1 health without restarting descent (S-0504 claim 13). A target
+    with no health remains excluded by claim 8, including from healing.
+    - Backing: `measurable` (scenarios D1 and D4; S-0504 N10 and N14 for positive-health sinking),
+      `unmeasured` for a sinking vessel remaining in play at zero health: no reproducible setup
+      here establishes that state, as S-0504 claim 13 notes
     - Confidence: high
 
 ### Results and thresholds
@@ -708,7 +726,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     attacker when there is one and the attacking house is absent or is the attacker's owner, and
     otherwise to the attacking house; when both are absent nobody is credited. Each hit that takes
     the last health is credited on its own, whether or not the object was killed before (claim 16
-    gives the one case that kills an object more than once). So a shot of a firer that has not
+    gives the delayed-building case; S-0312 owns repeated sinking deaths, with S-0504 claim 13
+    fixing their descent consequence). So a shot of a firer that has not
     been killed, removed or (believed, low) started to cloak since the shot credits the firer (low
     for a firer loaded into a closed transport since the shot). A shot of a firer that was killed while the projectile flew credits nobody, even when the firer
     stays in play for a time (claim 1); a kill by a death weapon credits the dying
@@ -990,7 +1009,7 @@ a warhead:
 
 In case (vi), *g* is the amount after the falloff:
 
-> *f* = RZ₂₄(*d*₃) (exact for *d*₃ ≤ 2²⁴), *a* = RZ₂₄(*f* × *p*), *R* = trunc(RZ₅₃(*s* × 256)) leptons.
+> *f* = RZ₂₄(*d*₃) (exact for *d*₃ ≤ 2²⁴), *a* = RZ₂₄(RZ₅₃(*d*₃ × *p*)), *R* = trunc(RZ₅₃(*s* × 256)) leptons.
 >
 > *g* = *d*₃ (no falloff) when *R* = 0 or *a* = *f*; otherwise
 > *g* = trunc(RZ₅₃(RZ₅₃(RZ₅₃(RZ₅₃(*f* − *a*) × (*R* − *r*)) / *R*) + *a*)), where *R* − *r* is an
@@ -999,7 +1018,9 @@ In case (vi), *g* is the amount after the falloff:
 > Unit: health points (*m*₀, *d*₀, *d*₃, *f*, *a*, *g*, *D*ₘₐₓ); leptons (*r*, *R*).
 
 The falloff part (*f*, *a*, *R*, *g*) is shared with S-0303, which owns *r* and which objects are
-hit; the two must agree. Note the two narrowings to single precision (*f* and *a*). For *r* > *R*
+hit; the two must agree. Note the two narrowings to single precision (*f* and *a*): the edge
+product uses the integer defended amount *d*₃, not the narrowed *f*. The falloff radius *R* is
+not the whole-cell delayed-kill radius *R*′ of F7. For *r* > *R*
 the factor *R* − *r* is negative, so *g* falls below *a* and can reach 0 or below, which the max
 raises to 0.
 
@@ -1963,9 +1984,6 @@ parts use their stated replay checks and rejection thresholds instead.
   carried data and the ignore-defences marker as claim 1 says is for the superweapon specs.
 - Which hits from scripted sources carry the ignore-defences marker (claim 1) should be confirmed by
   each owning spec as it is written.
-- S-0303 (area damage) must state the same falloff (F3, with its two single-precision narrowings and
-  *R* = trunc(256 *s*)) and pass the distance *r* in leptons; the delayed-kill countdown (F7) uses a
-  different radius on purpose.
 - A hit on a unit that carries a parasite can also affect the parasite: S-0315 owns it (claim 6, the
   suppression of the parasite by a hit above the threshold of its type or by a healing hit, and
   claim 7, its release by a sonic warhead and its silent removal when it leaves while suppressed).
