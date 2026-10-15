@@ -2,11 +2,11 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-13
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0083]
 supersedes: []
@@ -55,9 +55,10 @@ S-0301's term (Terms and claim 10).
   passenger (claim 6).
 - **Mode index.** A type's imported passenger mode index: the weapon number a gunner type takes when
   an object of this type becomes its first passenger.
-- **Airborne.** An object is airborne when the original counts it as in the air: an aircraft in
-  flight, a jumpjet in flight, an object falling or carried above the ground. The aircraft and
-  movement specs own the exact test; S-0303 (claim 10) and S-0309 use the same test.
+- **Airborne.** An object is airborne when the original counts it as in the air. For aircraft,
+  use S-0501 claim 18's *in-the-air answer*, as defined in its Terms, not its distinct *in flight*
+  test. The movement specs own the exact test for other objects; S-0303 (claim 10) and S-0309 use
+  the same test.
 - **Water target.** A target object that is not airborne, not on a bridge deck, and whose cell has
   the land type *water* or *beach* (S-0211).
 - **Kamikaze aircraft.** An aircraft in the dive by which it crashes itself into its target. The
@@ -158,9 +159,11 @@ This spec covers skirmish combat and import. Network games and campaigns are out
    - when its last passenger leaves, its weapon number becomes 0,
    - further passengers entering or leaving while at least one remains change nothing.
 
-   For a gunner vehicle that is also a switching type, the weapon is therefore chosen by the
-   passenger that entered the empty vehicle, and it stays while any passenger is aboard, even
-   after that passenger has left. Other gunner vehicles still follow table P for slot choice.
+   For a gunner vehicle that is also a switching type but is not a charge-turret type, the weapon
+   is therefore chosen by the passenger that entered the empty vehicle, and it stays while any
+   passenger is aboard, even after that passenger has left. A charge-turret gunner ignores the
+   weapon-number change request and remains at weapon number 0. Other gunner vehicles still follow
+   table P for slot choice.
    One refinement (low confidence): a
    first passenger whose temporal weapon (an erasing weapon, glossary *being erased*) is still
    erasing a target when it enters hands that erasure over to the vehicle, which carries it on. If
