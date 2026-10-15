@@ -333,8 +333,8 @@ fn fires_a_ready_superweapon_at_seen_enemies() {
     );
 }
 
-// In a whole game each house builds a superweapon building and fires its
-// superweapon when charged.
+// In a whole game both houses build a superweapon building, and a house
+// fires its superweapon when charged.
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
 fn builds_and_fires_a_superweapon() {

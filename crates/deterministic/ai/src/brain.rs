@@ -153,18 +153,29 @@ impl Brain {
         out
     }
 
-    /// Whether building type `b` gives a superweapon (S-0512 Terms: a
-    /// first or second superweapon field).
+    /// Whether the brain fires superweapon type `i`: the missile and storm
+    /// kinds, aimed at enemies.
+    fn aimed(w: &World, i: u32) -> bool {
+        use glasnost_sim::superweapons::SwKind;
+        w.rules()
+            .superweapons
+            .types
+            .get(i as usize)
+            .is_some_and(|t| matches!(t.kind, Some(SwKind::Missile | SwKind::Storm)))
+    }
+
+    /// Whether building type `b` gives a superweapon the brain fires
+    /// (S-0512 Terms: a first or second superweapon field).
     fn gives_superweapon(w: &World, b: u32) -> bool {
         w.rules()
             .superweapons
             .building_sw
             .get(b as usize)
-            .is_some_and(|f| f.iter().any(Option::is_some))
+            .is_some_and(|f| f.iter().flatten().any(|&i| Self::aimed(w, i)))
     }
 
     /// Builds the cheapest building the house can build and place now that
-    /// gives a superweapon, when it has none, keeps its harvesters and is
+    /// gives a superweapon it fires, when it has none, keeps its harvesters and is
     /// not selling out. It comes before the tech climb (it replaces a climb
     /// building this think ordered) but after a building the plan places
     /// or a power plant, refinery or factory it wants.
