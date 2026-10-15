@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -153,7 +153,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | The destruction of the objects in contact with a destroyed building (S-0312, claim 17) | yes | yes | none | none |
    | The impact of an object that crashes while alive (S-0312, claim 16) | yes | yes | none | none |
    | The elimination of a house's remaining objects (S-0414 claim 5) | yes | yes | none | none |
-   | Bridge destruction: ground-layer hits, landing hits after a deck drop, and low-strip kill checks (S-0511 claims 9, 10 and 15) | yes | yes | none | none |
+   | Bridge destruction: ground-layer hits, landing hits after a deck drop, hits on units heading onto a lost deck, and low-strip kill checks (S-0511 claims 9–11 and 15) | yes | yes | none | none |
    | Crushing by trains (S-0210) | yes | S-0210 says | S-0210 says | S-0210 says |
    | The damage of a damaging animation, such as a burning one (S-0109, claim 17) | not traced | not traced | not traced | not traced |
 
@@ -192,7 +192,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      and the crash impact through S-0312's scenarios D11 and D12; house elimination through
      S-0414 claim 5 and its scenario V11; parasite deliveries through S-0614 claims 6 and 10,
      scenarios P1 and P6, and D31 below for the markers, attacker and absent attacking house; also
-     bridge-destruction hits through S-0511 claims 9, 10 and 15 and scenarios B3, B5 and B6),
+     bridge-destruction hits through S-0511 claims 9–11 and 15 and scenarios B3, B5 and B6),
      `unmeasured` (a damaging animation's row:
      its hit metadata is not established, so no expected outcome can yet be supplied for a
      discriminating test; a firer removed
@@ -819,7 +819,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     Any other removal from play has the same consequence while the building remains out of play.
     If a selling building is still alive when the countdown expires, the expiry hit occurs
     during its turn and its death follows S-0312's selling-building case. Starting temporary
-    invulnerability cancels a pending delayed-kill countdown, so expiry then delivers no hit.
+    invulnerability cancels a pending delayed-kill countdown and forgets its recorded charge
+    planter (S-0513 claim 25), so expiry then delivers no hit.
     - Backing: `measurable` (scenario D13, including the tick of the credit and a second hit while
       a countdown runs, and its parts c1, c2 and d for the repeated credit; parts e to h for
       expiry timing, its hit, credit, capture, sale, removal and cancellation; part i for
@@ -833,7 +834,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       blocking, not an erasing lock across expiry; the expiry hit's no-escape marker: this marker affects vehicle crew,
       not the building target, so D13 cannot distinguish its values; credit to a separately
       recorded charge planter: D13 uses no planted charge and no charge-planting scenario is
-      supplied here; removal other than sale before expiry: D13 f tests sale only, and no other
+      supplied here; forgetting the recorded planter when protection cancels the countdown:
+      cancellation prevents the expiry hit that could reveal that identity, so no independent
+      observable distinguishes forgetting it from retaining it; removal other than sale before expiry: D13 f tests sale only, and no other
       nonlethal removal setup is identified here)
     - Confidence: medium (the countdown and its length; the credit at the hit; that the shorter
       countdown is kept; the repeated credit at a second hit, which has not been observed, and the credit for each foundation cell of one
