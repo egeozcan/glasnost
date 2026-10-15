@@ -2,11 +2,11 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160]
 supersedes: []
@@ -164,6 +164,9 @@ they are used.
 ## Behaviour
 
 ### Launch
+
+The general launch rules below have the aircraft velocity exceptions of claim 7, owned by
+S-0501 claim 20.
 
 1. **Shot speed.** A projectile whose turn-rate field ρ is 0 is launched at *s*₁ = *v*(*d*, *g*),
    where *d* is the planar distance from the fire point to the target point of the shot target,
@@ -351,8 +354,15 @@ they are used.
    turn clockwise of the body facing (the body facing plus 16384 facing units), and each later *k*
    turns π / *n* further anticlockwise. A start speed of 0 gives a
    horizontal speed of 100 (F1, Edge cases).
-   - Backing: `measurable` (scenario P4; P20 for radial segments; P28 for the zero speed)
-   - Confidence: high for the construction; medium for radial segments
+   - **Aircraft velocity exceptions.** For a shot from an aircraft, S-0501 claim 20 overrides the
+     general launch velocity: with ρ = 0 the projectile takes the aircraft's body heading,
+     pitch and current ground speed. With ρ = 1 it is aimed towards the target in three
+     dimensions, including the height difference, at the weapon's speed, not horizontally.
+     These exceptions replace the velocity left by the general launch and placement rules,
+     including the steering rescaling of claim 9. Other turn rates keep the general rules.
+   - Backing: `measurable` (scenario P4; P20 for radial segments; P28 for the zero speed, and
+     S-0501 scenario AC12 for the aircraft exceptions)
+   - Confidence: high for the construction; medium for radial segments and the aircraft exceptions
 
 8. **Placement.** The projectile is placed at the fire point (claim 5 for dropping ones) and enters
    play (S-0203 claim 4). Its first turn is in the same tick.
@@ -375,7 +385,8 @@ they are used.
    | otherwise, the line-of-fire walk from the fire point to *K* finds a blocking cell (the wall-damaging warhead exception of S-0307 claim 11 does not apply here) | the centre of the first blocking cell, at the terrain height of that centre |
    | otherwise | *K* |
 
-   A steering projectile's velocity is scaled to length 1 (F10).
+   A steering projectile's velocity is scaled to length 1 (F10), before any aircraft velocity
+   replacement of claim 7.
    - Backing: `measurable` (scenario P6; P3 run d for the flak scatter; P22 for the arm time). The
      firestorm point is `unmeasured`: no event of the original turns a house's firestorm on
      (S-0211, Terms), so it cannot be observed.
@@ -600,8 +611,14 @@ they are used.
     - Backing: `measurable` (scenario P13; P24 for the raise of (a))
     - Confidence: medium
 
-21. **Several detonations.** The detonation itself is S-0303's area damage at the detonation point.
-    What every detonation of this claim passes to S-0303 (Terms there; glossary *detonation*) is:
+21. **Several detonations.** Ordinary detonation damage is S-0303's area damage at the detonation
+    point. A latching weapon is an exception (S-0614 claim 1): its detonation makes no area-damage
+    hit, whether or not the parasite latches. It attempts to latch onto the projectile's target
+    object regardless of the detonation point's distance from that object; a cell target or a
+    target that no longer exists gives a failed latch. S-0614 claim 1 owns that delivery and
+    leaves later visual effects unchanged.
+    What each ordinary area-damage detonation passes to S-0303 (Terms there; glossary
+    *detonation*) is:
     the projectile's damage amount at that moment (the shot's damage, less the points that claim 18
     took in earlier turns; the same amount for every cluster detonation), the warhead of the shot's
     weapon, and the attacker and attacking house that S-0302 (claim 1) gives a projectile's
@@ -629,9 +646,11 @@ they are used.
       the draw of each; P14 variant d, with the random-state recorder, for the ranged draw and raw
       value after every detonation, the last included, for a cluster count of 1 and of 3, and for
       no draw at a cluster count of 0; S-0302's scenarios D13, D17 and D24, which own the rule, for the attacker and attacking house
-      that each detonation carries), and `unmeasured` for the case of a projectile that leaves play during its own detonation (no such
+      that each detonation carries; S-0614 scenarios P1 and P3 for the latching-weapon exception),
+      and `unmeasured` for the case of a projectile that leaves play during its own detonation (no such
       case is established)
-    - Confidence: high for the count and the draw after each detonation, medium for the children
+    - Confidence: high for the count, the draw after each detonation and the absence of area
+      damage for a latching weapon; medium for the children and distance-independent latching
 
 ### Eligibility and line of fire
 
@@ -1375,8 +1394,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   24: the claim 4 radius and direction (the impact point at 256 to 512 from the aim point, which
   changes only the launch direction), then the claim 9 radius and direction; the detonation point as in (d).
 - Falsified if: any distance lies outside its band, the chi-square test of the main run rejects
-  evenly spread directions (*p* ≤ 0.01), or the draw count differs (in particular two draws in
-  (e), or four in (d)).
+  evenly spread directions (*p* ≤ 0.01), or the draw count differs (in particular four draws in
+  (e), or two in (d)).
 - Variant f (open-topped reduction, claim 4 and S-0307 claim 13): the flak-scattering weapon of
   variant b with a range of 10 cells, fired by a stock vehicle that the test file makes an
   open-topped transport with that weapon, carrying one infantry passenger whose type's primary
