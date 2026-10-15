@@ -683,6 +683,69 @@ Provisional rules of M6b bridges, each tied to a request:
 | `bridges::blow::heading_cell` | drive and ship head to the track step's cell, else the destination cell; walk and hover to the destination cell; the height condition is taken as met | Q-0718 |
 | `bridges::area_attempts` | only the attack target equal to the centre cell is dropped | Q-0719 |
 
+## Simulation (M6b: cloak and stealth)
+
+S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak fields, the per-type cloak, sensor, detector and disguise keys, and the weapon and warhead keys are imported by `glasnost_convert`. The ledger is [docs/m6-claims/S-0516.md](m6-claims/S-0516.md); the tests are in `crates/deterministic/sim/tests/claims_s0516_*.rs`, on the invented rules of `tests/cloak_common/mod.rs`.
+
+- **The machine (claims 1 to 18 and 41).** `cloak::machine` holds the four states and their stages. `machine::turn` runs in the object's own turn, from `econ::events::turn`. `machine::uncloak` is the one call of every uncloak cause. Hooks:
+  - movement (`drive`, `walk`, `hover`, `naval`, `air`) for the cells entered and the adjacent-sensor reveal;
+  - `combat::damage` for hits, `combat::fire` for firing, `crush` for crushing;
+  - `econ::events` for entering and leaving the map and owner changes.
+
+  The delay `CloakDelay` reads in single precision, so 0.01 minutes is 8 ticks (F3). An underwater vessel is submerged while it is not uncloaked (`naval::submerged`, claim 41).
+- **Coverage (claims 19 to 23 and 40).** `cloak::field` grows and shrinks cloak fields ring by ring per house; `cloak::sensor` keeps per-house, per-cell sensor and disguise-detector counts (`World::cloak`).
+- **Hidden objects (claims 24 to 29).** `cloak::hidden_from` is the game-state test, used by `combat::check`, `combat::acquire`, `air` and `targeting::selectable_by`. `cloak::view` holds the presentation queries (`look`, `shadow`, `pickable`, `deselects`, `on_radar`). They take a viewing house and are never read by the simulation.
+- **Disguise (claims 30 to 40).** `cloak::disguise` holds the disguise state (`Object::disguise`), disguising by a hit, permanent disguise, disguise when still, loss, and `appears_disguised`. `appears_disguised` feeds targeting, threat, the walker rows of S-0209 and the radar colour (`econ::minimap`).
+- **App, audio and AI.**
+  - The live view draws through the local player's eyes (`mapview::live`, `set_viewer`, `apply_cloak`). The "rippling" look is drawn as 50 % translucent.
+  - Cloak events take objects out of the selection (claim 26).
+  - Audio plays the game-wide cloak sound (claim 15).
+  - The own AI does not see a cloaked enemy it does not sense.
+- **Seams.** These are named functions with doc comments in `cloak/mod.rs`:
+  - C4 planting (S-0519) and the special-weapon causes call `machine::uncloak`;
+  - cloaking crates (S-0520) call `machine::grant_own_flag`;
+  - undeploying (S-0517) calls `disguise::clear`;
+  - a house leaving (S-0414) calls `disguise::house_left`;
+  - the neutral houses' blink draw (S-0309 claim 25 (g)) is `disguise::neutral_sees_through`;
+  - automatic crush choice (S-0210 claim 11) reads `appears_disguised`;
+  - seizing (S-0607), paralysis (S-0214), the chrono warp (S-0514), infiltration (S-0510), mind control (S-0515), and bunkers and occupied buildings (S-0508, S-0509).
+- **Quirks.** All ten are implemented, each on by default:
+  - `quirks.building_sensor_ring_owner_only`;
+  - `quirks.cloak_field_overlap_loss`;
+  - `quirks.cloak_flag_ground_mobile_only`;
+  - `quirks.cloak_zero_speed_stall`;
+  - `quirks.heal_reveals_cloaked`;
+  - `quirks.mirage_adjacent_check_cadence`;
+  - `quirks.sensor_array_removal_radius`;
+  - `quirks.sensor_building_activation_once`;
+  - `quirks.sensor_count_negative`;
+  - `quirks.uncloak_from_cloaking_full_duration`.
+- **Save format 22.** `Object::cloak`, `Object::disguise` and `World::cloak` are new state, and they are hashed.
+- **Not built.**
+  - The app does not draw the disguise image (claim 37), and the cursor, insignia and hover name of claim 36 are not wired into the status drawing.
+  - Buildings drawn as static map scenery get no translucency.
+  - The importer does not warn about an empty mirage disguise list.
+- **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=cloaked-as-owner,cloaked-as-enemy cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` places a cloaking vehicle near the local start, with a plain vehicle beside it. The offered rules have no driving vehicle type with the cloak flag, so the lane gives a plain vehicle its own flag through the crate seam.
+  - `cloaked-as-owner.png` is the local house's own vehicle, fully cloaked after 36 ticks. It is drawn 50 % translucent, without its shadow.
+  - For an enemy house's vehicle, the lane uncloaks it and waits for the fade back. `cloaking-as-enemy.png` shows it translucent mid-fade, 21 ticks later. `cloaked-as-enemy.png` shows it fully cloaked 14 ticks after that, when it is no longer drawn.
+
+  On the first run on the user's install, the scenes took 10 s in all.
+
+Provisional rules of M6b cloak and stealth, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `econ::events::turn` | the cloak update runs at the end of the object's turn (units after movement and firing, buildings after their behaviour); the claim 8 abort test comes before the stage step | Q-0720 |
+| `cloak::machine::entered_cell`, `cloak::sensor::mobile_moved` | a mobile sensor's disc moves in its own turn, on the first turn its centre cell differs from the one it was added around; removal takes it away around the current cell | Q-0721 |
+| `cloak::machine::nearest_top_corner` | the object with the smallest squared distance from its position to the cell's top corner; on a tie, the first in the cell's list | Q-0722 |
+| `crush`, `cloak::machine::crushed` | every crush of an object or an overlay makes the crusher start uncloaking, with the sound | Q-0723 |
+| `cloak::field`, `cloak::field_circle` | a radius of 0 or below gives an empty field; growth adds the circles of radius 1, 2 and so on | Q-0724 |
+| `cloak::machine::turn` | a speed below 0 is treated as 0, so under `quirks.cloak_zero_speed_stall` it stalls uncloaking; for N ≤ 1 the stage arithmetic is used unchanged | Q-0725 |
+| `cloak::machine::uncloak` | a cloaking building that is hit starts uncloaking at once from its current level, with the sound | Q-0726 |
+| `cloak::machine::entered_map` | leaving a transport counts as entering play: a vehicle with its own cloak flag comes out fully cloaked, others in the state they had | Q-0727 |
+| `cloak::disguise::appears_disguised`, `cloak::view::radar_house`, `econ::minimap::compose`, `occupancy` (row WP25) | claim 35 applies unchanged to buildings and aircraft; a disguise without a house shows its owner's radar colour; row WP25 applies only to a disguise with a house | Q-0728 |
+| `cloak::field::turn`, `set_radius`, `remove` | rings are applied in full, whatever stands on them; the restart distance is the straight line between centre cells; a removed generator restarts its neighbours, a captured one does not | Q-0729 |
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.
