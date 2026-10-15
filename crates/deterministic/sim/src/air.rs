@@ -675,6 +675,17 @@ pub fn stopped(w: &World, id: ObjectId) -> bool {
     !st(w, id).unfinished
 }
 
+/// The pre-revision-7 stop test, kept only for T1's ordinary-attacker
+/// firing row: at current fraction 0 and its held height, or on the
+/// ground, and not taking off. Under revision 7 alone an ordinary attacker
+/// hovers short of its spot with an unfinished flight and never fires.
+fn hovering_still(w: &World, id: ObjectId) -> bool {
+    let a = st(w, id);
+    // interim: Q-0651 (an ordinary attacker hovering at fraction 0 at its held height, or on the ground, counts as stopped for T1's firing row, as before revision 7)
+    (a.cur.eq_num(F64::ZERO) && height(w, id) == a.held && !a.taking_off)
+        || (a.ground && !a.taking_off)
+}
+
 /// Moving in the sense of S-0501 claim 26 (its locomotor is moving).
 pub fn moving(w: &World, id: ObjectId) -> bool {
     !stopped(w, id)
@@ -1212,7 +1223,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     let cruise = t.cruise;
     let mut heading = None;
     if let Some(p) = dp {
-        let aim = if a.face_target {
+        // interim: Q-0651 (an ordinary attacker, neither strafer nor fighter, keeps flying toward its firing spot below 512 leptons, as before revision 7 when the spot was the target; it turns toward the target only once hovering, see `hovering_still`)
+        let ordinary = !strafer(w, id) && !fighter(w, id);
+        let aim = if a.face_target && (!ordinary || hovering_still(w, id)) {
             // spec: S-0204 claim 8 and S-0310 F1 (the direction of the target: toward its reference point)
             o.target
                 .map_or(p, |tg| crate::combat::range::target_point(w, tg))
@@ -2675,9 +2688,24 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             }
             let in_range = crate::combat::range::in_range(w, id, primary(w, id), Some(tgv), None);
             // spec: S-0501 T1 (a strafer within range, a fighter, or another aircraft whose locomotor has stopped: firing)
+            // interim: Q-0651 (for that last row a hovering attacker also counts as stopped, see `hovering_still`; while the firing check still answers not facing it stays approaching and turns in place toward the target)
+            if !is_strafer
+                && !is_fighter
+                && !stopped(w, id)
+                && hovering_still(w, id)
+                && matches!(
+                    crate::combat::check::check(w, id, Some(tgv), 0, true),
+                    Answer::NotFacing
+                )
+            {
+                if let Some(s) = st_mut(w, id) {
+                    s.face_target = true;
+                }
+                return Some(1);
+            }
             if (is_strafer && in_range)
                 || (!is_strafer && is_fighter)
-                || (!is_strafer && !is_fighter && stopped(w, id))
+                || (!is_strafer && !is_fighter && (stopped(w, id) || hovering_still(w, id)))
             {
                 set_stage(w, id, Stage::Firing);
                 return None;

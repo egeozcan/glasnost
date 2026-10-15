@@ -205,80 +205,6 @@ fn st(w: &World, id: ObjectId) -> air::AirState {
     w.obj(id).unwrap().air.clone().unwrap_or_default()
 }
 
-/// Q-0651 (interim, a test harness only). Under S-0501 rev 7 an ordinary
-/// attacker's close approach does not reliably end inside T1's 16 leptons:
-/// claim 5's replacement target 0 below 128 leptons and F4's creep restart,
-/// which the same tick's 0.1 adjustment cancels, leave it hovering at
-/// fraction 0 between 16 and 86 leptons short; and below 512 leptons T1 turns
-/// its body toward the target, which, when the target lies beyond the firing
-/// spot's far side, carries it back out past 512, where it turns to the spot
-/// again. Claim 40's unfinished flight keeps it from reporting stopped.
-/// Until that is answered, every aircraft of `w` in T1's steer row
-/// (approaching in attack, below 512 leptons from its flight point and at
-/// least 16) is put where the approach is meant to end: on that point at
-/// its current height, hovering (fractions 0), its body and aiming facing
-/// toward the target. Its next processing then takes T1's below-16 row into
-/// firing; the firing, refiring, round and return logic are the engine's own.
-fn carry(w: &mut World) {
-    let ids: Vec<ObjectId> = w
-        .objects
-        .values()
-        .filter(|o| o.kind == Kind::Aircraft && o.on_map)
-        .map(|o| o.id)
-        .collect();
-    for a in ids {
-        let o = w.obj(a).unwrap().clone();
-        let (Some(d), Some(tg)) = (o.dest, o.target) else {
-            continue;
-        };
-        if st(w, a).stage != air::Stage::Approaching || o.beh.current != Some(Behaviour::Attack) {
-            continue;
-        }
-        let p = air::flight_point(w, a, d);
-        let dd = (i64::from(o.pos.x - p.x).pow(2) + i64::from(o.pos.y - p.y).pow(2)).isqrt();
-        // spec: S-0501 T1 (the steer row's 512 and 16 leptons)
-        if !(16..512).contains(&dd) {
-            continue;
-        }
-        let tp = glasnost_sim::combat::range::target_point(w, tg);
-        let f = glasnost_num::geom::direction(
-            i64::from(tp.x - p.x),
-            i64::from(tp.y - p.y),
-            w.rules().quirks.table_direction,
-        );
-        let to = glasnost_sim::world::Pos::new(p.x, p.y, o.pos.z).cell();
-        let from = o.pos.cell();
-        let ob = w.obj_mut(a).unwrap();
-        ob.pos.x = p.x;
-        ob.pos.y = p.y;
-        ob.body = glasnost_sim::turning::Turning::at(f);
-        ob.turret = ob.body;
-        let s = ob.air.as_mut().unwrap();
-        s.cur = glasnost_num::F64::ZERO;
-        s.tgt = glasnost_num::F64::ZERO;
-        s.replaced = Some(glasnost_num::F64::ZERO);
-        // spec: S-0501 T1 (below 512 leptons it turns toward the target)
-        s.face_target = true;
-        if from != to {
-            w.cells.leave(from, glasnost_sim::world::Layer::Ground, a);
-            w.cells
-                .enter(to, glasnost_sim::world::Layer::Ground, a, false);
-        }
-    }
-}
-
-/// `run_until` with `carry` before every tick.
-fn run_carried(w: &mut World, max: i32, mut done: impl FnMut(&World) -> bool) -> bool {
-    for _ in 0..max {
-        if done(w) {
-            return true;
-        }
-        carry(w);
-        step(w);
-    }
-    done(w)
-}
-
 fn describe(w: &World, id: ObjectId) -> String {
     let o = w.obj(id).unwrap();
     format!(
@@ -337,7 +263,7 @@ fn built_aircraft_stands_docked() {
     assert_eq!(w.obj(a).unwrap().pos, p, "it stays: {}", describe(&w, a));
 }
 
-// spec: S-0501 claims 8, 12 to 15, 17, 18, 21 to 26 and table T1 (end to end: a docked aircraft ordered by a click to attack an enemy vehicle takes off, makes its runs, damages the target, returns to its pad, lands and rearms); the close approach carried for Q-0651
+// spec: S-0501 claims 8, 12 to 15, 17, 18, 21 to 26 and table T1 (end to end: a docked aircraft ordered by a click to attack an enemy vehicle takes off, makes its runs, damages the target, returns to its pad, lands and rearms); the close approach under the interim of Q-0651
 #[test]
 fn attack_take_off_run_return_rearm() {
     let mut r = rules();
@@ -349,9 +275,9 @@ fn attack_take_off_run_return_rearm() {
     click(&mut w, a, ClickOn::Object(v));
     let off = run_until(&mut w, 200, |w| air::height(w, a) > 0);
     assert!(off, "takes off: {}", describe(&w, a));
-    let hit = run_carried(&mut w, 2000, |w| w.obj(v).unwrap().health < full);
+    let hit = run_until(&mut w, 2000, |w| w.obj(v).unwrap().health < full);
     assert!(hit, "damages the target: {}", describe(&w, a));
-    let empty = run_carried(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
+    let empty = run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
     assert!(empty, "spends its rounds: {}", describe(&w, a));
     // spec: S-0501 claim 24 (docked at the docking position by enter's staged processing after touchdown: sleep)
     let back = run_until(&mut w, 3000, |w| {
@@ -390,7 +316,7 @@ fn move_order_flies_to_the_cell() {
     assert!(there, "lands in the cell: {}", describe(&w, a));
 }
 
-// spec: S-0501 claims 35 and 36 and table T4, S-0506 claims 6 to 9 (end to end: a carrier with slot aircraft ordered to attack launches them; they attack, damage the target and come back); the close approach carried for Q-0651
+// spec: S-0501 claims 35 and 36 and table T4, S-0506 claims 6 to 9 (end to end: a carrier with slot aircraft ordered to attack launches them; they attack, damage the target and come back); the close approach under the interim of Q-0651
 #[test]
 fn carrier_launches_attacks_and_recovers() {
     let r = rules();
@@ -414,7 +340,7 @@ fn carrier_launches_attacks_and_recovers() {
         hornets(w).iter().any(|&h| air::height(w, h) > 100)
     });
     assert!(flying, "a slot aircraft flies");
-    let hit = run_carried(&mut w, 3000, |w| w.obj(v).unwrap().health < full);
+    let hit = run_until(&mut w, 3000, |w| w.obj(v).unwrap().health < full);
     let hs = hornets(&w);
     assert!(
         hit,
@@ -777,7 +703,7 @@ fn attacker(r: &Ruleset, name: &str) -> (World, ObjectId, ObjectId) {
     (w, a, v)
 }
 
-// spec: S-0501 claim 15 (one round per run in which it fired, whatever the burst; firing itself does not change the count); the approach carried for Q-0651
+// spec: S-0501 claim 15 (one round per run in which it fired, whatever the burst; firing itself does not change the count); the close approach under the interim of Q-0651
 #[test]
 fn claim_15_one_round_per_run() {
     let mut r = rules();
@@ -788,7 +714,6 @@ fn claim_15_one_round_per_run() {
     let mut seen = 3;
     let mut fired_at_3 = false;
     for _ in 0..3000 {
-        carry(&mut w);
         step(&mut w);
         let ammo = w.obj(a).unwrap().combat.ammo;
         assert!(ammo == seen || ammo == seen - 1, "one round at a time");
@@ -804,7 +729,7 @@ fn claim_15_one_round_per_run() {
     assert_eq!(seen, 1, "{}", describe(&w, a));
 }
 
-// spec: S-0501 claim 14 and quirks.aircraft_endless_refire; the approach carried for Q-0651 (re-approach flag off: on, the run never spends its round; off, each burst-and-refire cycle ends a run)
+// spec: S-0501 claim 14 and quirks.aircraft_endless_refire; the close approach under the interim of Q-0651 (re-approach flag off: on, the run never spends its round; off, each burst-and-refire cycle ends a run)
 #[test]
 fn claim_14_endless_refire_both_ways() {
     for endless in [true, false] {
@@ -813,13 +738,13 @@ fn claim_14_endless_refire_both_ways() {
         let (mut w, a, v) = attacker(&r, "JET");
         let full = w.obj(v).unwrap().health;
         click(&mut w, a, ClickOn::Object(v));
-        run_carried(&mut w, 1500, |_| false);
+        run_until(&mut w, 1500, |_| false);
         let ammo = w.obj(a).unwrap().combat.ammo;
         assert!(w.obj(v).unwrap().health < full);
         if endless {
             assert_eq!(ammo, 2, "never spent: {}", describe(&w, a));
             let h = w.obj(v).unwrap().health;
-            run_carried(&mut w, 300, |_| false);
+            run_until(&mut w, 300, |_| false);
             assert!(w.obj(v).unwrap().health < h, "keeps firing");
         } else {
             assert!(ammo < 2, "runs end: {}", describe(&w, a));
@@ -827,7 +752,7 @@ fn claim_14_endless_refire_both_ways() {
     }
 }
 
-// spec: S-0501 claim 19 and T1, S-0204 claims 4 and 8, S-0310 F1 (a non-strafer attacking a 2 × 2 building turns toward its reference point, the point the facing check measures to, so its run reaches a shot); the approach carried for Q-0651
+// spec: S-0501 claim 19 and T1, S-0204 claims 4 and 8, S-0310 F1 (a non-strafer attacking a 2 × 2 building turns toward its reference point, the point the facing check measures to, so its run reaches a shot); the close approach under the interim of Q-0651
 #[test]
 fn attack_on_a_large_building_fires() {
     let mut r = rules();
@@ -838,9 +763,9 @@ fn attack_on_a_large_building_fires() {
     let a = put(&mut w, Kind::Aircraft, "JET", 0, -4, 0);
     let full = w.obj(b).unwrap().health;
     click(&mut w, a, ClickOn::Object(b));
-    let hit = run_carried(&mut w, 2000, |w| w.obj(b).unwrap().health < full);
+    let hit = run_until(&mut w, 2000, |w| w.obj(b).unwrap().health < full);
     assert!(hit, "damages the building: {}", describe(&w, a));
-    let spent = run_carried(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
+    let spent = run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
     assert!(spent, "spends its rounds: {}", describe(&w, a));
 }
 
@@ -1100,24 +1025,21 @@ fn planar_to(w: &World, a: ObjectId, p: glasnost_sim::world::Pos) -> i64 {
     (i64::from(o.x - p.x).pow(2) + i64::from(o.y - p.y).pow(2)).isqrt()
 }
 
-// spec: S-0501 claim 5, F4, claim 40 and T1; Q-0651 (without the test harness, an ordinary attacker's close approach ends hovering at fraction 0 short of T1's 16 leptons: it never reports stopped and never fires)
+// spec: S-0501 claim 5, F4 and T1; interim: Q-0651 (an ordinary attacker hovering at fraction 0 at its held height short of its spot counts as stopped for T1's firing row, so it fires from there)
 #[test]
-fn claim_40_attacker_hovers_short_of_its_spot() {
+fn q0651_ordinary_attacker_reaches_its_spot_and_fires() {
     let mut r = rules();
     r.sim.general.economy.curley_shuffle = Some(true);
     let (mut w, a, v) = attacker(&r, "JET");
     let full = w.obj(v).unwrap().health;
     click(&mut w, a, ClickOn::Object(v));
-    testkit::run(&mut w, 300);
-    let s = st(&w, a);
-    let d = w.obj(a).unwrap().dest.expect("keeps its firing spot");
-    let dd = planar_to(&w, a, air::flight_point(&w, a, d));
-    assert_eq!(s.stage, air::Stage::Approaching, "{}", describe(&w, a));
-    assert_eq!(s.cur, glasnost_num::F64::ZERO);
-    // spec: S-0501 F4 (the halving case below 86 leptons) and T1 (the below-16 row)
-    assert!((16..86).contains(&dd), "hovers {dd} leptons short");
-    assert!(s.unfinished && !air::stopped(&w, a));
-    assert_eq!(w.obj(v).unwrap().health, full, "no shot");
+    assert!(run_until(&mut w, 50, |w| st(w, a).stage == air::Stage::Approaching));
+    let d = w.obj(a).unwrap().dest.expect("a firing spot");
+    let spot = air::flight_point(&w, a, d);
+    let hit = run_until(&mut w, 2000, |w| w.obj(v).unwrap().health < full);
+    assert!(hit, "fires: {}", describe(&w, a));
+    // spec: S-0501 F4 (the halving case below 86 leptons): it fires from near its spot
+    assert!(planar_to(&w, a, spot) < 86, "{}", describe(&w, a));
 }
 
 // spec: S-0501 claim 39 (the firing spot: a cell on the largest circle of radius ρ − 256 around the target, the last or the preceding record by distance to the attacker, here the cells of facings 49152 and 45056)
@@ -1331,7 +1253,7 @@ fn claim_24_docking_follows_touchdown() {
     let (mut w, k, a) = built_with(&r, "JET");
     let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 10, 0);
     click(&mut w, a, ClickOn::Object(v));
-    assert!(run_carried(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
     let down = run_until(&mut w, 3000, |w| st(w, a).ground);
     assert!(down, "{}", describe(&w, a));
     assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Enter));
