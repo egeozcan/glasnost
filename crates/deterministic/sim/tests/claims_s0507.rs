@@ -593,3 +593,71 @@ fn deploy_while_moving_unloads_after_stopping() {
     );
     assert!(w.obj(p).unwrap().on_map);
 }
+
+// spec: S-0507 Edge cases (quirks.unload_facing_gap_no_wrap off: the signed facing difference; f = 0 gives 96 to both d = 3 and d = 5, the smaller d wins)
+#[test]
+fn unloading_cell_with_the_gap_wrapped() {
+    let mut r = ruleset();
+    r.globals.quirks.unload_facing_gap_no_wrap = false;
+    let mut w = game(&r);
+    let t = at(&mut w, Kind::Vehicle, "HAULER", 0, 0, 0);
+    assert_eq!(transport::choose_direction(&w, t), Some(3));
+}
+
+/// A transport facing 0 (rear direction 4, one cell south) with a
+/// passenger aboard, every other neighbour and the cell beyond the rear
+/// neighbour held by vehicles, and an unload order given.
+fn boxed_in(r: &Ruleset) -> (World, ObjectId, ObjectId) {
+    let mut w = game(r);
+    let t = at(&mut w, Kind::Vehicle, "HAULER", 0, 0, 0);
+    let blockers = [
+        (0, -1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
+        (-1, 1),
+        (-1, 0),
+        (-1, -1),
+        (0, 2),
+    ];
+    for (dx, dy) in blockers {
+        at(&mut w, Kind::Vehicle, "HAULER", 0, dx, dy);
+    }
+    let p = at(&mut w, Kind::Infantry, "WALKER", 0, 5, 5);
+    put_in(&mut w, p, t);
+    testkit::run(&mut w, 5);
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        orders::Order::Behaviour {
+            actor: t,
+            behaviour: glasnost_sim::rules::Behaviour::Unload,
+            attack_move: false,
+            target: None,
+            dest: None,
+        }
+    ));
+    (w, t, p)
+}
+
+// spec: S-0507 claim 10 and Edge cases (quirks.unload_second_round_skips_rear: the only free neighbour is the rear, so nobody gets out)
+#[test]
+fn second_round_skips_the_rear() {
+    let r = ruleset();
+    let (mut w, t, p) = boxed_in(&r);
+    testkit::run(&mut w, 300);
+    assert_eq!(transport::riding(&w, p), Some(t));
+}
+
+// spec: S-0507 Edge cases (switch off: the second round tries the rear direction first)
+#[test]
+fn second_round_tries_the_rear_with_the_quirk_off() {
+    let mut r = ruleset();
+    r.globals.quirks.unload_second_round_skips_rear = false;
+    let (mut w, _t, p) = boxed_in(&r);
+    assert!(
+        run_until(&mut w, 300, |w| transport::riding(w, p).is_none()),
+        "let out behind"
+    );
+    assert_eq!(w.obj(p).unwrap().pos.cell(), testkit::mid(SIZE, 0, 1));
+}
