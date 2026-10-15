@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 43
+revision: 44
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798]
 supersedes: []
 ---
 
@@ -96,6 +96,15 @@ and allied definitions already supply ordinary classification, not these extra r
 Q-0685 is answered by claim 35 d1–d3: opening and closing image positions, rounding,
 endpoints, reversal and zero-time motion. Previously claim 35 d settled the rest tick and
 S-0108 claim 4 settled image selection and clamping, but neither gave those positions.
+Q-0797's behaviour side is answered by claims 22 and 29: neither ordinary vehicle
+processing clears a goal merely for cell equality. S-0207 claim 26 owns cell-goal
+cleanup and its tick timing; depot arrival exchanges remain S-0314 claims 17–18's.
+Q-0798's gate side is answered by claim 32: immediate paired attempts take priority over
+animation delay, a failed gate starts neither, and applicability uses upgrade position 1,
+not installation history or the first nonempty position. S-0301 claims 9 and 14 answer
+the empty-secondary effects and delayed-shot rules; S-0406 claim 12 supplies position/count
+precedence, with weapon resolution owned by S-0308 claim 12. Previously claim 32 already
+supplied the predicate and attempt order, but left these combinations unsettled.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -1462,6 +1471,17 @@ apply in our engine to the actors of every player house.
 22. **Move.** If the actor has no destination, is not moving and has nothing queued, it falls back
     to rest and chooses a delay of 1 tick. Otherwise it chooses the standard delay. The movement
     itself is carried out by the locomotion rules on every tick, not by the processing.
+
+    **Vehicle goal cleanup (Q-0797).** An ordinary driving or ship vehicle's *move*
+    processing does not remove a retained destination merely because the vehicle occupies
+    its goal cell. S-0207 claim 26 owns the separate locomotion cleanup: a cell goal is
+    removed at a qualifying no-track update, not by final-track completion alone. Thus a
+    same-cell move does not remain a moving destination indefinitely. Once that cleanup
+    leaves no destination and the other conditions above hold, the next due *move*
+    processing falls back to rest and chooses 1 tick. Cleanup does not itself expire the
+    processing timer, so the fallback need not be in the cleanup tick or the next tick.
+    A due processing before cleanup still sees the retained destination and uses the
+    standard delay. This does not add a cleanup wait to locomotion.
     - **Vehicles:** a deployed vehicle or one in the middle of deploying or undeploying instead
       queues *guard* and chooses 1 tick (S-0517 claim 10; transitions: S-0517 claims 3 to 8).
       This special fallback applies only to *move*, not to *patrol*.
@@ -1478,7 +1498,8 @@ apply in our engine to the actors of every player house.
       in *move*, the original's deployed computer infantry packs up by itself if its type has a
       negative undeploy delay, and otherwise follows the general rule above).
     - Backing: `measurable` (scenario B3; scenario B25 for deployed infantry; S-0517 P3 b for
-      deployed vehicles and P6 for the inactive cycle). Processing *move* during a vehicle's
+      deployed vehicles and P6 for the inactive cycle; B43 and S-0207 D30 for goal
+      cleanup versus the next due processing). Processing *move* during a vehicle's
       deploy or undeploy transition is `unmeasured`: ordinary orders cannot start it until
       the transition ends (S-0517 claim 10).
     - Confidence: high (the general rule and deployed-vehicle fallback); medium (the infantry
@@ -1895,6 +1916,18 @@ apply in our engine to the actors of every player house.
     Foundation passability is unchanged (S-0209 claim 5); a docking point does not teleport
     the vehicle or make every intervening foundation cell traversable.
 
+    **Goal-cell equality (Q-0797).** In an accepted ordinary entry with contact and no
+    further approach destinations, this processing does not remove the building destination
+    just because the vehicle stands in the supplied docking-point cell, whether it entered
+    that cell this tick or was already there. There is no due-processing cleanup tick for
+    cell equality. The repeated accepted request can retain that destination through later
+    processings. A movement-arrival exchange may queue *sleep* in the arrival tick, as
+    above, but queueing it is not removal of the order-level destination. S-0207 claim 26
+    distinguishes the cell-goal locomotion cleanup from this building goal, including its
+    separate exact-point guard exception. Refusal, replacement orders, entry guidance and
+    servicing can still change destinations by their own rules; this is not a promise of
+    permanent retention or a replacement for those rules.
+
     **Earlier guard transition.** An unarmed repair building in the waiting stage of its guard
     processing can queue repair before the completed entry report: a contacted mobile actor
     must still be in enter, stand still, and have truncated spatial distance strictly below
@@ -1947,7 +1980,7 @@ apply in our engine to the actors of every player house.
       S-0314 H16 and H19 for reservation, tether and movement arrival, H18 for orders,
       queued entry, run-away notices and other interruption consequences, H22 for late
       queued retries, phase-in gating, passenger/parasite ordering and next-turn processing,
-      and scenario B39 for depot processing and orders).
+      and scenarios B39 and B43 for depot processing, orders and goal-cell retention).
       For transport loading, the existing-tether exception inherits S-0507 claim 5's
       `unmeasured` backing; repair-specific tether observations are the H19 cases above.
       Repair-specific tether, movement arrival and docking-point selection inherit
@@ -2077,15 +2110,20 @@ apply in our engine to the actors of every player house.
       So an attacking building is processed every tick or every other tick, and one whose target
       leaves its weapon's range returns to *guard* at its next processing.
 
-      **Upgrade weapon gate.** For a non-SAM building with an installed upgrade, the
-      *can fire* row uses the first installed upgrade's ordinary primary and secondary
+      **Upgrade weapon gate.** For a non-SAM building the gate applies only when its
+      upgrade count is nonzero and upgrade position 1 is occupied (S-0406 claim 12).
+      A zero count or empty position 1 bypasses it, even if higher positions hold upgrades.
+      It never substitutes the first occupied higher position or the most recently installed
+      upgrade. The *can fire* row tests position 1's ordinary primary and secondary
       weapons, not its elite replacements, to decide whether firing is allowed. The
       gate passes only when that upgrade has a primary weapon and at least one of these
       conditions holds: both slots name the same weapon type, the primary's imported
       burst count is greater than 1 shot, or a secondary exists whose imported burst
       count is greater than 1 shot. These are integer comparisons, with no rounding.
-      This tests the first installed upgrade even if another upgrade supplies the weapon
-      chosen for the target (S-0308 claim 12).
+      This tests position 1 even if another eligible position supplies the weapon
+      chosen for the target (S-0308 claim 12). Sales, skipped positions, replacement and
+      an excess wall-tower count follow S-0406 claim 12; they do not change the gate's
+      position-1-only test or supply any fourth valid upgrade position.
 
       When the gate passes, this processing makes a primary firing attempt followed by a
       secondary firing attempt against the target, without another firing check between
@@ -2093,13 +2131,26 @@ apply in our engine to the actors of every player house.
       countdown begun by the primary does not prevent the secondary attempt. When the
       gate fails, neither attempt occurs: the building retains its target and *attack*,
       still sets the ready mark and chooses 1 tick. It can therefore remain in *attack*
-      indefinitely with a *can fire* answer but no shots. With no installed upgrade the
-      gate does not apply and the ordinary selected-weapon firing rule remains in force.
-      This rule is not specific to map placement.
+      indefinitely with a *can fire* answer but no shots. When the gate does not apply,
+      the ordinary selected-weapon firing rule remains in force. This rule is not specific
+      to map placement.
+
+      **Animation-delay priority (Q-0798).** A passing gate makes the pair immediately
+      in that processing even when the building has the animation-delayed-fire flag.
+      It starts no delayed shot: neither a delayed pair nor a replacement delayed single
+      shot. A failed gate with the original quirk setting starts neither attempt nor
+      delayed shot. A bypassed gate uses the ordinary path, including animation delay
+      when enabled (S-0301 claim 14). If the resolved secondary slot is empty, its attempt
+      does nothing: no shot, burst advance, rearm change, ammunition use, random draw or
+      firing-check answer (S-0301 claim 9). A missing secondary on the gate-tested upgrade
+      alone is insufficient for this no-op: another eligible provider or the host may
+      supply the resolved slot (S-0308 claim 12).
 
       The suppression is `quirks.upgrade_attack_weapon_gate`, default original (on).
       With it off, a failed gate instead permits the ordinary selected-weapon attempt,
-      while a passing gate still permits the paired attempts. This changes gameplay, not only
+      including the ordinary animation delay when enabled (S-0301 claim 14),
+      while a passing gate still permits the immediate paired attempts without starting
+      a delayed shot. This changes gameplay, not only
       presentation.
 
       **Turret snap** (low confidence). When the answer is *not facing* and the building is a
@@ -2152,10 +2203,9 @@ apply in our engine to the actors of every player house.
 
       The combat specs own the firing itself.
     - Backing: `measurable` (B36 and its extensions for the upgrade gate's predicate,
-      suppression, first-upgrade and ordinary-weapon selection, ordered paired attempts,
-      readiness and delay, and installation during play). Missing-secondary shot effects
-      remain `unmeasured`: no validated fixture settles whether that attempt has any
-      effect; B36 proposes an investigation, not a predicted shot outcome. The remaining
+      suppression, position-1 and ordinary-weapon selection, ordered paired attempts,
+      readiness and delay, and installation during play; S-0406 PL16 for the position/count
+      cases; S-0301 F17 for empty-secondary effects and animation-delay priority). The remaining
       rules are `measurable` (B36's unarmed follow-up for the absence of a ready-mark
       setter inside unarmed guard; scenarios B8 and B16: cases b and f for the unarmed delays, case g for
       an armed *guard* building that starts *attack* by its own processing, case a for the rows
@@ -2193,7 +2243,8 @@ apply in our engine to the actors of every player house.
         whether it uncloaks to fire, is owned by S-0516, and no scenario here isolates a
         building's *cloaked* answer at a known processing. The row keeps
         the table total.
-    - Confidence: high (upgrade gate predicate, suppression and paired-attempt order),
+    - Confidence: high (upgrade gate applicability, predicate, suppression, paired-attempt
+      order, empty-secondary no-op and animation-delay priority),
       medium (armed and unarmed *guard*, the ready mark, non-SAM *attack* and its delay
       table, SAM *attack* every tick and its stages, firing both weapons); low (the turret snap and
       its bound F8, the SAM aiming tolerance, the power condition and the out-of-stage rule)
@@ -3347,10 +3398,17 @@ absent key keeps the value the earlier layers left).
 | `RadLevel` | weapon section | *W* of claim 31 (of the secondary weapon) | integer |
 | `AreaFire` | weapon section | claim 30 (of the deploy weapon, Terms) | boolean |
 | `Burst` | weapon section | upgrade weapon gate's burst-count comparisons (claim 32) | integer shots; engine default 1, owned by S-0301 claim 4 |
+| `IsAnimDelayedFire`, `DelayedFireDelay` | art, building image section | ordinary animation-delayed firing, bypassed by an active passing upgrade gate (claim 32; S-0301 claim 14) | boolean, default no; integer ticks, default 0 |
+| `Upgrades`, `PowersUpToLevel`, `PowersUpBuilding` | building type section | upgrade count, occupied positions and host eligibility, not installation-history precedence (claim 32) | integer, default 0; integer, default −1; building type, absent none (S-0406 claim 12). No new ordering key. |
 | `SprayAttack` | type section | spray-attack flag: picks the first weapon slot as the deploy weapon (Terms; claim 30) | boolean; absent no |
 | `Turret` | building type section (and the building types installed on it as upgrades) | turret flag of a turreted building (Terms; claim 32) | boolean; absent no |
 | `TurretAnimIsVoxel` | rules, section named by the building type | voxel turret (Terms; claim 32; S-0310 claim 4 and S-0313 claim 10) | boolean; initially no; omission in a later rules layer keeps the current value; art supplies no value or fallback |
 | `ROT` | building type section | turn-rate field *v* of F8 (claim 32) | integer; absent 0 |
+
+Goal-cell cleanup in claims 22 and 29 introduces no imported field, delay or behaviour
+property. The distinction is whether the assigned destination names a cell or a building.
+Locomotion owns cleanup (S-0207 claim 26), and the entry fields retain S-0314 claims 16–18's
+mapping.
 
 **Cells to leptons** (`GuardRange` and `GuardModeStray`). The value is read as S-0003's decimal
 form: a single-precision value widened exactly to double, or, with a percent sign, the
@@ -4672,7 +4730,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   and the mark is cleared, and *guard* is processed in that same turn. The armed defence
   then searches under claim 33 and starts *attack* at a later guard processing. Without
   upgrades it fires when eligible. An upgrade-only defence fires only when claim 32's
-  first-upgrade weapon gate passes; failure leaves it targeting and attacking without shots.
+  position-1 weapon gate passes; failure leaves it targeting and attacking without shots.
   The unarmed one does not fire. Add a no-enemy control and a second upgrade-only case
   differing solely by making the secondary weapon the same type as the primary: that case
   must make both firing attempts in the first eligible attack processing.
@@ -4699,8 +4757,9 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Do not fix the seed or write random-stream state. Use different primary and secondary weapon types
   with only the primary burst count above 1, then only the secondary burst count above 1,
   then both counts at 1. Expect paired attempts in the first two and suppression in the
-  third. Reverse two installed upgrades, only one of which passes the gate: the first
-  installed must decide suppression regardless of which supplies the selected weapon.
+  third. Reverse the types in occupied upgrade positions 1 and 2, only one of which
+  passes the gate: position 1 must decide suppression regardless of which supplies
+  the selected weapon.
   A contrary outcome falsifies the corresponding gate clause. Add a first upgrade with
   no primary, a secondary, and a host primary weapon: expect suppression even if the
   secondary burst count exceeds 1. For the ordinary-versus-elite predicate, give the first
@@ -4716,9 +4775,17 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   control's ordinary selected-weapon attempt, not a forced pair. A placement-dependent
   gate or an upgrade-style pair in that control falsifies the corresponding clause.
 
-  Finally use a primary burst count above 1 with no secondary, recording whether the
-  second attempt has any effect or fails: its result is not yet specified, and must not
-  be inferred from the same-weapon case. Repeat the unarmed case with a separate mark
+  Finally use a primary burst count above 1 with no resolved secondary anywhere, recording
+  attempts, projectiles, burst count, rearm, ammunition and random state at each attempt.
+  The primary attempt occurs; the empty-secondary attempt makes no change and produces no
+  firing-check answer (S-0301 claim 9). Any secondary shot or state/draw change from that
+  attempt falsifies the rule. Repeat with the host's animation-delayed-fire flag enabled
+  and a positive named-test delay: the passing pair is still immediate and starts no
+  delayed shot. A failing original gate starts neither attempts nor delay. A no-upgrade
+  control instead starts the ordinary delayed shot. Use S-0301 F17's recording and
+  falsifiers, three valid runs per case. Test skipped positions and sale/reinstallation
+  separately under S-0406 PL16: position 1 alone gates, while provider eligibility follows
+  the count. An empty position 1 must bypass the gate even when position 2 is occupied. Repeat the unarmed case with a separate mark
   reading immediately at guard entry and exit, before any other readiness rule can run:
   claim 32 predicts no mark set by unarmed guard itself; a clear-to-set transition inside
   that processing falsifies it. If the mark was already set at entry, that sample cannot
@@ -4841,6 +4908,31 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   a blanket destination clear, loss of the neighbouring target or a missing revert
   falsifies the corresponding claim.
 
+- **B43 (claims 22 and 29, Q-0797).** Reuse the common skirmish setup, speed index 2,
+  800 × 600, stock data, no external automated player or state-changing add-on, and
+  no mods. Use S-0207 D30's driving and ship fixtures for an ordinary same-cell move
+  and an ordinary move ending with a final track, and S-0314 H19 f's accepted
+  same-cell depot-entry fixture. Keep contact accepted and approach destinations empty
+  for the entry observation. Record both destinations, track presence, current and queued
+  behaviour, processing timer and the state immediately before and after each due
+  processing and locomotion update. Three valid runs per case, retaining the common
+  bystander void rules. Do not force a timer, behaviour, contact or destination.
+
+  Expected: due ordinary *move* processing retains a present cell goal even at cell
+  equality. Locomotion removes that goal under S-0207 claim 26, after completion at
+  the next qualifying no-track update, or at the first such update after a same-cell
+  order. The next due *move* processing with no destination, no movement and no queued
+  behaviour falls back and chooses 1 tick; it does not have a new fixed cleanup timer.
+  The accepted depot-entry processing retains its building goal at cell equality,
+  including a due processing after a same-cell entry. An arrival exchange can queue
+  *sleep* without deleting that goal. Record any guidance, refusal, replacement or
+  servicing event separately, not as equality cleanup. Deletion inside an otherwise
+  ordinary move/accepted-entry processing solely because cells match, a cleanup-induced
+  processing-timer reset, or an automatic one-tick entry-goal deletion falsifies the
+  corresponding clause. If entry changes phase before a due processing can be captured,
+  that run cannot test processing retention; repeat the same-cell fixture rather than
+  inferring a result from a serviced vehicle.
+
 ## Open questions
 
 - **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
@@ -4927,10 +5019,15 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   set-up queues *guard*, the grand opening sets readiness during placement, and the
   first per-tick start makes *guard* current. Those claims own the opening's other
   effects. Retain these matching contracts at sign-off; no further edit is requested.
-- S-0301 claim 9 must also cover claim 32's unchecked secondary attempt for non-SAM
-  upgrade buildings: primary then secondary without a second firing check, despite
-  rearm begun by the primary.
-- S-0308 claim 12 and scenario W9 parts c/d must distinguish upgrade weapon resolution
+- S-0301 claims 9 and 14's current corrections agree with claim 32's immediate upgrade
+  pair, empty-secondary no-op and priority over animation delay. S-0406 claim 12 agrees
+  on the position-1/count gate; confirm these contracts at joint sign-off.
+- S-0314 claim 17 and H19 f must qualify same-cell retention as a building destination,
+  citing S-0207 claim 26's cell-goal cleanup and exact-point guard exception. Claim 29
+  here supplies accepted-entry processing retention, not an exemption from other entry effects.
+- S-0308 claim 12 must use S-0406 claim 12's count-limited position order, not installation
+  history, and distinguish that provider scan from claim 32's position-1-only gate.
+  Scenario W9 parts c/d must distinguish upgrade weapon resolution
   from claim 32's permission to fire. Give the first upgrade matching primary and
   secondary weapons for those firing tests, and record paired attempts. A single-shot
   primary-only upgrade suppresses firing. Slot 1 is consequently testable through the
