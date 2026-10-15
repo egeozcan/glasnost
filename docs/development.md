@@ -425,6 +425,65 @@ Provisional rules of M6a (aircraft), each tied to a request:
 |---|---|---|
 | `air::step` (F3, the 1-lepton table) | S-0208 F3, S-0105 F1 and S-0205 claim 5 are followed literally: under `quirks.chop_rounding`, a step at facings 32767 to 32772 also moves 1 lepton west, and one at 49148 to 49155 also moves 1 lepton north. S-0501 F3's table and AC24 (b3) expect no such lepton | Q-0654 |
 
+## Simulation (M6b: hover and amphibious)
+
+S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its game-wide values are `GeneralRules::hover` (`rules::HoverRules`: hover height, bob, boost, acceleration, brake, dampen and the gravity), imported by `glasnost_convert` from `[General]`. The ledger is [docs/m6-claims/S-0503.md](m6-claims/S-0503.md); the tests are in `crates/deterministic/sim/tests/claims_s0503.rs` and `crates/convert/src/sim_hover_tests.rs`.
+
+- **Which model (claim 1).** The locomotor field alone chooses it: a vehicle on the hovering locomotor (`rules::Locomotor::Hover`) carries `HoverState` (`Object::hover`) and moves by `hover::tick`, whatever its class or zone. An amphibious type on the driving locomotor drives. The amphibious class only gives land multipliers, and so passability, and the movement zone gives the reach regions.
+- **Travel (claims 2 to 7, F1 to F5).** In `hover::tick`, with a heading point: η turns towards it, then come the throttle (F1), the ramp of φ and the boost (F2), the step *d* = trunc(*s* × φ) with the hover's own ρ (`drive::progress_with`), the stalled-start reset, the arrival test on the map plane (no snap), and the straight step along η (`walk::step_point`). Without a heading point, ρ = 1 and the next point is chosen first. Occupancy moves cell to cell as the position crosses an edge. A high-bridge deck is entered at 416 or more above the surface.
+- **Next heading point (claims 5 and 12, T1).** `hover::choose_next`:
+  - S-0207 claim 19 c (the in-range path discard), then the destination test (its cell, height difference below 208), the fresh search when R has run out, and claim 19 d's arrival stop;
+  - then the step check of table T1, through the entry outcomes of `path::step_outcome` and the driving helpers (`drive::blocked_step`, `attack_obstacle`, `give_up_test`, `give_up`, `request_scatter`), now `pub(crate)`.
+  - A first check that is not *clear* discards the path, searches at once and checks again. Refused rows zero T, φ and ρ.
+  - The body looks one neighbour step beyond the heading point.
+- **Height, wake, spin (claims 8 to 11, F6, F7).** These run in the same tick after the travel, in this order:
+  - the wake every 10 ticks over water while moving now;
+  - the height update (lift, the extra trunc(*g* / 3), gravity, damping, and the bob by the object number);
+  - the spin.
+- **Switching off.** `econ::power::apply_disabled` (the control-centre rule of S-0405 claim 13) switches a hover off when its flag rises (`hover::switched`):
+  - two draws give the spin, unless it is not powered or is in *sleep* or *enter*;
+  - the stop request clears the destination and path only when D ≠ P;
+  - lift stops.
+  - At the spin's end, a hover over water below 104 leptons gets the bomb mark (`hover::bomb_mark`) and starts to fall.
+- **Hooks elsewhere.**
+  - `infantry::destination_assigned` gives ρ = 1 (`hover::take_destination`).
+  - `econ::release::send_out` sets ρ = ½ after a factory exit; the hover leaves by its own locomotor towards (x₀ + 4, y₀ + 1).
+  - `path::failed` clears a hover's destination like a driving unit's.
+  - `occupancy::in_progress`, `path::heading_cell` and the claim 19 count see a hover's heading point and φ.
+  - `scatter::vehicle_request` refuses a switched-off hover (claim 16 g) and centres on its heading point's cell.
+  - `drive::release_claims` frees its flags at removal.
+  - There is no parasite hold for it (S-0614 claim 8 lists none).
+- **Seams.** These are named functions with doc comments:
+  - the fall (`hover::start_fall`, S-0511 claim 10);
+  - the cloaked reveal (`hover::reveal_cloaked`, S-0516);
+  - crate collection (`hover::collect_crate`, S-0520);
+  - the chase cut (`hover::chase_cut`, S-0212 claim 20).
+  - S-0312 claim 11's low-water death of a marked vehicle is not built.
+- **Quirks.** `quirks.hover_brake_undershoot`, `quirks.hover_elevated_heading_point` and `quirks.hover_stalled_start_reset` are now implemented.
+- **Rendering.** The map view draws every mobile object at its world position, z included (`mapview::live`, `build::height_lift`), so the hover height and the bob show with no new drawing code.
+- **Own AI.**
+  - Hovering vehicles are army (`scripted::plays`: any locomotor the simulation moves).
+  - `Script::reachable` already sends a unit to its own reach region by its movement zone; the amphibious zone's region spans sea and land, so a hover's goal across water stays as ordered.
+  - The fixture adds HOVR, a gun hovercraft with the hover class and locomotor and the amphibious zone, built at FACT.
+  - `a_hover_crosses_the_sea_to_a_land_goal` (in `crates/deterministic/ai/tests/ai.rs`) shows a hover on the sea of `fixture::map_naval` sent by the brain at an enemy beside its base, reaching land.
+- **Save format 18.** `Object::hover` is new state.
+- **What play needs.** Data and map:
+  - a vehicle type whose `Locomotor` is the hovering locomotor's identifier, with the hover or amphibious locomotion class and a movement zone (amphibious for a type that crosses water);
+  - land rows whose hover or amphibious multipliers are not 0 on water and on land;
+  - `[General]` `HoverHeight`, `HoverBob`, `HoverBoost`, `HoverAcceleration`, `HoverBrake` and `HoverDampen` (absent keys fall back to the engine defaults of Q-0690's interim rule).
+
+  A person builds the type at an ordinary (not naval) vehicle factory with `Order::Build`; it leaves the factory by itself. Then they move it by `targeting::click` on any cell of its reach region, water or land, and `orders::issue`. A hover whose control centre is lost (`powered_unit`) spins and settles, and over water it gets the bomb mark.
+
+Provisional rules of M6b hover and amphibious movement, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `consts::TWO_PI`, `consts::EVEN_BOB_FACTOR`, `hover::bob_period`, `rules::HoverRules` defaults | 2π and 1.1 are the nearest doubles; Pᵈ = (m × q) × 900 and the argument (ϱ × 2π) / Pᵈ, left to right; an absent field is the engine default read as key text | Q-0690 |
+| `hover::claim`, `hover::release_left`, `hover::between_steps`, `hover::has_speed` | the flag of a chosen heading point's cell is set at once and cleared when the position leaves the cell, unless it is P's cell; cells swung through are not flagged; a hover is between steps while it has no heading point; its current speed is non-zero while φ > 0 | Q-0691 |
+| `hover::fresh_search`, `hover::search_and_recheck`, `hover::travel_turn` | every fresh search, the immediate ones of table T1 included, starts R; a failed search at an arrival does not suppress the already computed step | Q-0692 |
+| `hover::travel_turn` | each arrival at a heading point (F5) is a cell-arrival update (S-0417 claim 7), after the next heading point is chosen; a cell-edge crossing is not | Q-0693 |
+| `objects::place_with` | the movement heading η is set to the body facing each time the vehicle is put on the map | Q-0694 |
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.
@@ -439,7 +498,7 @@ The brain plays in two layers (PLAN §4.7 stage 1 and enough of stage 2):
 
 What it knows is what a person in its seat knows: its own objects, its production lines and sidebar offer, enemy objects on cells its house has explored (`econ::shroud::explored`; fog of war is off in a skirmish, S-0409 claim 19, so a person sees what stands there), the map's start waypoints (lobby knowledge), and the answers of order-legality checks a person's cursor gives (`placement::place_legal`, `placement::cell_test`). Its placement spacing (`Script::free`) counts only its own objects and those on explored cells. A refinery is a building with the refinery flag or a member of the refinery group (S-0407 Import mapping, `PROC`); a role the house cannot build a type for yet does not hold up the next one, and the army waits for harvesters only while a harvester type is buildable, or a vehicle factory is while the house has none. Refused orders are not an error: the next think tries again. Every number in `brain.rs` and `scripted.rs` is tuning of our own opponent (`nocite`), not game behaviour. Types are found by role from the rules among those the house can build, so every faction plays with its own types. A slave miner (S-0402 claim 14) plays the harvester role and its deployed building counts towards the harvesters kept; it is built without a refinery, and a resting one whose slaves are home is sent to harvest with the nearest explored resource cell as its destination, the order a person gives it (no other order starts a player house's slave miner); it then finds its site and deploys by S-0402 claim 22. A slave with a master is never army, even when its type is armed. Only a vehicle that deploys into a construction yard is deployed as the MCV or kept as the lost yard's replacement.
 
-Tests: `crates/deterministic/ai/tests/ai.rs` on the synthetic skirmish (`fixture`): the build-up, a rebuilt power plant, base defence, and shroud honesty (two worlds that differ only by an enemy unit on a cell the house has not explored give identical orders over a think period) in debug; a broke house selling a building (and a house with income not selling), the rebuilt harvesters, the rebuilt construction yard, a slave-miner side earning income from its slaves (and rebuilding a lost slave miner) and two whole games played to one winner with each house's loop checked in release (`cargo test --release -p glasnost-ai -- --include-ignored`). The determinism gate adds three AI duels (`duel`, `duel-diagonal`, `duel-naval`: the AI against itself on `fixture::map`, `fixture::map_diagonal` and the water map `fixture::map_naval`, hashed with `Game::state_hash`, saved and loaded halfway and at the first tick with a rocket in flight and with an aircraft in the air; the loaded game must hash alike and the run goes on from it, and a full run of either land duel must have flown both). The fixture (M6a) adds a pad, an armed plane, a V3-style launcher with its set-A rocket type (not scored, S-0414 claim 4), a naval yard and a gunboat, its own tile catalogue (`fixture::catalogue`, water tile `fixture::WATER_TILE`) and the release tests `flies_aircraft_from_pads` and `builds_a_navy_on_a_water_map` in `tests/skirmish.rs`.
+Tests: `crates/deterministic/ai/tests/ai.rs` on the synthetic skirmish (`fixture`): the build-up, a rebuilt power plant, base defence, and shroud honesty (two worlds that differ only by an enemy unit on a cell the house has not explored give identical orders over a think period) in debug; a broke house selling a building (and a house with income not selling), the rebuilt harvesters, the rebuilt construction yard, a slave-miner side earning income from its slaves (and rebuilding a lost slave miner) and two whole games played to one winner with each house's loop checked in release (`cargo test --release -p glasnost-ai -- --include-ignored`). The determinism gate adds three AI duels (`duel`, `duel-diagonal`, `duel-naval`: the AI against itself on `fixture::map`, `fixture::map_diagonal` and the water map `fixture::map_naval`, hashed with `Game::state_hash`, saved and loaded halfway and at the first tick with a rocket in flight and with an aircraft in the air; the loaded game must hash alike and the run goes on from it, and a full run of either land duel must have flown both). The fixture (M6a) adds a pad, an armed plane, a V3-style launcher with its set-A rocket type (not scored, S-0414 claim 4), a naval yard and a gunboat, its own tile catalogue (`fixture::catalogue`, water tile `fixture::WATER_TILE`) and the release tests `flies_aircraft_from_pads` and `builds_a_navy_on_a_water_map` in `tests/skirmish.rs`. M6b adds HOVR, a gun hovercraft (hovering locomotor, amphibious zone), as army of the vehicle factory, and the debug test `a_hover_crosses_the_sea_to_a_land_goal`.
 
 ## Map triggers (M5b)
 
