@@ -2,11 +2,11 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0018, Q-0020]
 supersedes: []
@@ -646,15 +646,14 @@ The crusher flag's effect in play is S-0210's (crushing).
       two pairs differ in how the bridge is destroyed and rebuilt, which the bridge specs own, and
       in claim 14's deck exception.
     - (d) When a high bridge is destroyed, the cells it marked stop being high-bridge cells, and a
-      rebuilt bridge marks them again. Which cells a destruction or a repair touches belongs to the
-      bridge specs.
+      rebuilt bridge marks them again. Which cells a destruction or a repair touches belongs to
+      S-0511 claims 5 and 19.
     - (e) The bridge-body mark used by S-0406 claim 3 (d) belongs to S-0010 claim 25. The bridge
       axis and the deck-entry mark belong to S-0212 Terms, which define them on the same four
       marked cells.
     - Backing: `measurable` (scenario L21: runs 1 and 2 for the marked cells and part c, run 3 for
       part b on a steep cell; S-0009 scenario M6d part B for the refusal on an already recomputed
-      cell); part d is `unmeasured`: which cells a destruction or a repair touches belongs to the
-      bridge specs, and no scenario of this spec destroys a high bridge
+      cell); part d carries the `measurable` backing of S-0511 claims 5 and 19
     - Confidence: high for the four marked cells and the two directions (read; the numbering of
       the step directions is the one S-0208 and S-0212 use); medium for parts b and d
 
