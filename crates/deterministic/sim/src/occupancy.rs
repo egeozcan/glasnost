@@ -379,11 +379,8 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         } else if !armed {
             // spec: S-0209 claim 4 (row WP22)
             (false, Some(Outcome::Blocked))
-        } else if o.kind == Kind::Infantry
-            && crate::cloak::appears_disguised(w, oid, m.owner)
-            && o.cloak.disguise.is_some_and(|d| d.house.is_some())
-        {
-            // spec: S-0209 claim 4 (row WP25: enemy infantry that appears friendly to the walker's house through a disguise, armed walker) and S-0516 claims 35 and 36; Q-0728 (interim: a disguise with a house)
+        } else if o.kind == Kind::Infantry && crate::cloak::appears_disguised(w, oid, m.owner) {
+            // spec: S-0209 claim 4 (row WP25: enemy infantry that appears friendly to the walker's house through a disguise, armed walker) and S-0516 claim 35; a disguise with no disguise house is included)
             (false, Some(Outcome::StationaryFriendly))
         } else if o.kind == Kind::Infantry {
             // spec: S-0209 claim 4 (row WP26: other enemy infantry, armed: none)

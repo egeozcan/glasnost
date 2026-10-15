@@ -1364,3 +1364,27 @@ fn cloak_and_disguise_fields() {
     assert_eq!(s.weapons["Mimic"].disguise_fake_blink_time, Some(7));
     assert_eq!(s.warheads["Copy"].makes_disguise, Some(true));
 }
+
+/// spec: S-0516 claims 20 and 43, Import mapping (a stage count of 0 or below and a negative effective cloak radius warn; the values are kept, the simulation substitutes)
+#[test]
+fn invalid_cloak_stages_and_radius_warn() {
+    let base = "[BuildingTypes]\n1=Gen\n2=Big\n3=Fine\n\
+                [Gen]\nCloakGenerator=yes\nCloakRadiusInCells=-3\n\
+                [Big]\nCloakGenerator=yes\nCloakRadiusInCells=200\n\
+                [Fine]\nCloakGenerator=yes\nCloakRadiusInCells=0\n\
+                [General]\nCloakingStages=0\n";
+    let (s, w) = sim(base, "", "");
+    assert_eq!(s.general.cloaking_stages, Some(0));
+    assert!(warned(&w, "CloakingStages 0 is 0 or below"));
+    assert!(warned(&w, "Gen CloakRadiusInCells -3"));
+    assert!(
+        warned(&w, "Big CloakRadiusInCells 200"),
+        "200 is −56 as signed 8-bit"
+    );
+    assert!(
+        !warned(&w, "Fine CloakRadiusInCells"),
+        "zero is valid: an empty field"
+    );
+    let (_, w) = sim("[General]\nCloakingStages=1\n", "", "");
+    assert!(!warned(&w, "CloakingStages"));
+}

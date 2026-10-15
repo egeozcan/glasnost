@@ -203,8 +203,8 @@ fn quirk_heal_reveals_cloaked() {
         let mut r = ruleset();
         r.globals.quirks.heal_reveals_cloaked = on;
         let mut w = game(&r);
-        let a = spawn(&mut w, "GHOST", ALPHA, 0, 0);
-        let b = spawn(&mut w, "GHOST", ALPHA, 4, 0);
+        let a = spawn_cloaked(&mut w, "GHOST", ALPHA, 0, 0);
+        let b = spawn_cloaked(&mut w, "GHOST", ALPHA, 4, 0);
         set_health(&mut w, b, 100);
         hit(&mut w, a, 0);
         hit(&mut w, b, -10);
@@ -253,6 +253,36 @@ fn lockstep(a: &mut World, b: &mut World, n: i32) {
         tick::step(a);
         tick::step(b);
         assert_eq!(save::state_hash(a), save::state_hash(b));
+    }
+}
+
+// spec: S-0516 claim 22 and Edge cases (quirks.mobile_sensor_removal_centre: on, a mobile sensor's disc is removed around its current cell, leaving counts where it differs from the last-added disc; off, the disc actually added is removed)
+#[test]
+fn quirk_mobile_sensor_removal_centre() {
+    for on in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.mobile_sensor_removal_centre = on;
+        let mut w = game(&r);
+        let s = spawn(&mut w, "SEEKER", ALPHA, 0, 0);
+        assert!(sensed_at(&w, ALPHA, 0, 0));
+        // The sensor's position moves on to the next cell without a
+        // completed-cell movement event.
+        let p = glasnost_sim::world::Pos::centre(at(1, 0), 0);
+        let z = w.obj(s).unwrap().pos.z;
+        w.obj_mut(s).unwrap().pos = glasnost_sim::world::Pos::new(p.x, p.y, z);
+        objects::remove(&mut w, s);
+        let left = w
+            .cloak
+            .sensors
+            .iter()
+            .filter(|((h, _), n)| *h == ALPHA.0 && **n > 0)
+            .count();
+        if on {
+            assert!(left > 0, "a residue of the added disc");
+        } else {
+            assert_eq!(left, 0);
+        }
+        assert!(w.cloak.sensors.values().all(|&n| n >= 0), "floored at 0");
     }
 }
 

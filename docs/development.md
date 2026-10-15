@@ -687,13 +687,13 @@ S-0511 revision 4 answers Q-0710 and Q-0712 to Q-0718, and S-0511 claim 22 with 
 
 S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak fields, the per-type cloak, sensor, detector and disguise keys, and the weapon and warhead keys are imported by `glasnost_convert`. The ledger is [docs/m6-claims/S-0516.md](m6-claims/S-0516.md); the tests are in `crates/deterministic/sim/tests/claims_s0516_*.rs`, on the invented rules of `tests/cloak_common/mod.rs`.
 
-- **The machine (claims 1 to 18 and 41).** `cloak::machine` holds the four states and their stages. `machine::turn` runs in the object's own turn, from `econ::events::turn`. `machine::uncloak` is the one call of every uncloak cause. Hooks:
-  - movement (`drive`, `walk`, `hover`, `naval`, `air`) for the cells entered and the adjacent-sensor reveal;
+- **The machine (claims 1 to 18 and 41 to 43).** `cloak::machine` holds the four states and their stages. `machine::turn` is the ordinary cloak update (claim 42): a mobile object's runs in `tick::object_turn` after its due behaviour processing and before locomotion and the separate firing; a building's runs at the end of its turn, after its behaviour. `machine::late_turn` (aircraft target checks, disguise) follows at the end of every object's turn. `machine::uncloak` is the one call of every uncloak cause. Hooks:
+  - movement for the cells entered; the completed-cell event (`machine::cell_movement_completed`, the sensor disc move and the adjacent-sensor reveal) comes from `drive` at a track target, and for other movers at the cloak update (Q-0791);
   - `combat::damage` for hits, `combat::fire` for firing, `crush` for crushing;
   - `econ::events` for entering and leaving the map and owner changes.
 
   The delay `CloakDelay` is read in single precision (F3), so the test rules' delay of 0.01 minutes is 8 ticks, not 9. An underwater vessel is submerged while it is not uncloaked (`naval::submerged`, claim 41).
-- **Coverage (claims 19 to 23 and 40).** `cloak::field` grows and shrinks cloak fields ring by ring per house; `cloak::sensor` keeps per-house, per-cell sensor and disguise-detector counts (`World::cloak`).
+- **Coverage (claims 19 to 23 and 40).** `cloak::field` grows and shrinks cloak fields ring by ring per house, in increasing Y then X, stopping at own building centres (`quirks.cloak_field_building_interrupt`); removal and capture are immediate collapses that run the neighbour-restart test; `cloak::sensor` keeps per-house, per-cell sensor and disguise-detector counts (`World::cloak`).
 - **Hidden objects (claims 24 to 29).** `cloak::hidden_from` is the game-state test, used by `combat::check`, `combat::acquire`, `air` and `targeting::selectable_by`. `cloak::view` holds the presentation queries (`look`, `shadow`, `pickable`, `deselects`, `on_radar`). They take a viewing house and are never read by the simulation.
 - **Disguise (claims 30 to 40).** `cloak::disguise` holds the disguise state (`Object::disguise`), disguising by a hit, permanent disguise, disguise when still, loss, and `appears_disguised`. `appears_disguised` feeds targeting, threat, the walker rows of S-0209 and the radar colour (`econ::minimap`).
 - **App, audio and AI.**
@@ -709,13 +709,15 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - the neutral houses' blink draw (S-0309 claim 25 (g)) is `disguise::neutral_sees_through`;
   - automatic crush choice (S-0210 claim 11) reads `appears_disguised`;
   - seizing (S-0607), paralysis (S-0214), the chrono warp (S-0514), infiltration (S-0510), mind control (S-0515), and bunkers and occupied buildings (S-0508, S-0509).
-- **Quirks.** All ten are implemented, each on by default:
+- **Quirks.** All twelve are implemented, each on by default:
   - `quirks.building_sensor_ring_owner_only`;
+  - `quirks.cloak_field_building_interrupt`;
   - `quirks.cloak_field_overlap_loss`;
   - `quirks.cloak_flag_ground_mobile_only`;
   - `quirks.cloak_zero_speed_stall`;
   - `quirks.heal_reveals_cloaked`;
   - `quirks.mirage_adjacent_check_cadence`;
+  - `quirks.mobile_sensor_removal_centre`;
   - `quirks.sensor_array_removal_radius`;
   - `quirks.sensor_building_activation_once`;
   - `quirks.sensor_count_negative`;
@@ -725,6 +727,7 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - The app does not draw the disguise image (claim 37), and the cursor, insignia and hover name of claim 36 are not wired into the status drawing.
   - Buildings drawn as static map scenery get no translucency.
   - The importer does not warn about an empty mirage disguise list.
+  - The importer warns about a `CloakingStages` of 0 or below (imported as 1) and a negative `CloakRadiusInCells` (no field), claims 20 and 43.
 - **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=cloaked-as-owner,cloaked-as-enemy cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` places a cloaking vehicle near the local start, with a plain vehicle beside it. It uses a driving vehicle type with the cloak flag if the ruleset has one, else it gives a plain vehicle its own flag through the crate seam.
   - `cloaked-as-owner.png` is the local house's own vehicle, fully cloaked after 36 ticks. It is drawn 50 % translucent.
   - For an enemy house's vehicle, the lane uncloaks it and waits for the fade back. `cloaking-as-enemy.png` shows it translucent mid-fade, 21 ticks later. `cloaked-as-enemy.png` shows it fully cloaked 14 ticks after that, when it is no longer drawn.
@@ -735,16 +738,8 @@ Provisional rules of M6b cloak and stealth, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `econ::events::turn` | the cloak update runs at the end of the object's turn (units after movement and firing, buildings after their behaviour); the claim 8 abort test comes before the stage step | Q-0720 |
-| `cloak::machine::entered_cell`, `cloak::sensor::mobile_moved` | a mobile sensor's disc moves in its own turn, on the first turn its centre cell differs from the one it was added around; removal takes it away around the current cell | Q-0721 |
-| `cloak::machine::nearest_top_corner` | the object with the smallest squared distance from its position to the cell's top corner; on a tie, the first in the cell's list | Q-0722 |
-| `crush`, `cloak::machine::crushed` | every crush of an object or an overlay makes the crusher start uncloaking, with the sound | Q-0723 |
-| `cloak::field`, `cloak::field_circle` | a radius of 0 or below gives an empty field; growth adds the circles of radius 1, 2 and so on | Q-0724 |
-| `cloak::machine::turn` | a speed below 0 is treated as 0, so under `quirks.cloak_zero_speed_stall` it stalls uncloaking; for N ≤ 1 the stage arithmetic is used unchanged | Q-0725 |
-| `cloak::machine::uncloak` | a cloaking building that is hit starts uncloaking at once from its current level, with the sound | Q-0726 |
-| `cloak::machine::entered_map` | leaving a transport counts as entering play: a vehicle with its own cloak flag comes out fully cloaked, others in the state they had | Q-0727 |
-| `cloak::disguise::appears_disguised`, `cloak::view::radar_house`, `econ::minimap::compose`, `occupancy` (row WP25) | claim 35 applies unchanged to buildings and aircraft; a disguise without a house shows its owner's radar colour; row WP25 applies only to a disguise with a house | Q-0728 |
-| `cloak::field::turn`, `set_radius`, `remove` | rings are applied in full, whatever stands on them; the restart distance is the straight line between centre cells; a removed generator restarts its neighbours, a captured one does not | Q-0729 |
+| `cloak::machine::entered_cell`, `cell_movement_completed` | movement other than drive and ship tracks has its completed-cell event (sensor disc move, adjacency reveal) at the cloak update in the tick its centre cell first differs from the recorded one | Q-0791 |
+| `cloak::field::turn`, `restart_neighbours` | the generator's own centre does not end a growth update; an idle neighbour is one in operation, at any radius | Q-0792 |
 
 ## Own AI (M5b)
 

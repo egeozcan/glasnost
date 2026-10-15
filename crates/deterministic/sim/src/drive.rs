@@ -1250,6 +1250,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
             if let Some(&(_, _, f)) = pts.last() {
                 set_facing(w, id, f);
             }
+            // spec: S-0516 claims 13 and 22 (arrival at the track target's cell centre is the completed-cell movement event: the sensor disc moves and a cloaked mover takes the adjacency check)
+            crate::cloak::machine::cell_movement_completed(w, id);
             // spec: S-0402 claim 10 (second route: the arrival report at the track target, after the position and the cleared track, before cell-centre crushing and any next track)
             crate::econ::harvest::track_arrival(w, id);
             crate::crush::at_cell_centre(w, id);

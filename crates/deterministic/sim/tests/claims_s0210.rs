@@ -537,6 +537,25 @@ fn a_wall_is_crushed_only_by_a_crusher_all_crusher() {
     assert!(!w.obj(id).unwrap().crush_slowdown);
 }
 
+// spec: S-0210 claim 8 and S-0516 claim 11 (c) (crushing only an overlay or wall does not uncloak the crusher)
+#[test]
+fn crushing_only_a_wall_keeps_the_crusher_cloaked() {
+    use glasnost_sim::cloak::{self, CloakState};
+    let (mut w, id) = overlay_world("MASHALL", FENCE, 0, &[]);
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.cloak.state = CloakState::Cloaked;
+        o.cloak.stage = 0;
+    }
+    crush::at_cell_centre(&mut w, id);
+    assert_eq!(
+        overlay_at(&w, cell(0, 0)),
+        NO_OVERLAY,
+        "the wall was crushed"
+    );
+    assert_eq!(cloak::state(&w, id), CloakState::Cloaked);
+}
+
 fn stage_at(w: &World, c: CellXY) -> u8 {
     w.cells.cell(c).unwrap().overlay_data / 16
 }

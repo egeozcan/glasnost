@@ -84,8 +84,9 @@ pub fn mobile_entered(w: &mut World, id: ObjectId) {
     }
 }
 
-/// A mobile sensor changed cell (claim 22): the disc is removed around the
-/// old cell and added around the new one.
+/// A mobile sensor's completed-cell movement event (claim 22): the disc is
+/// removed around the last recorded coverage cell and added around the
+/// current one.
 pub fn mobile_moved(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let Some((h, old)) = o.cloak.disc else { return };
@@ -101,15 +102,25 @@ pub fn mobile_moved(w: &mut World, id: ObjectId) {
     }
 }
 
-/// A mobile sensor leaves play (claim 22): the disc is removed around its
-/// current cell, which may differ from where it was last added (Edge cases,
-/// Q-0721).
+/// A mobile sensor leaves play (claim 22): with
+/// `quirks.mobile_sensor_removal_centre` the disc is removed around its
+/// current cell, which may differ from where it was last added (the drift
+/// of a sensor that crossed a boundary without completing the movement);
+/// off, around the cell where it was last added.
 pub fn mobile_left(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    let Some((h, _)) = o.cloak.disc else { return };
-    let c = centre_cell(w, id);
+    let Some((h, added)) = o.cloak.disc else {
+        return;
+    };
+    let c = if w.rules().quirks.mobile_sensor_removal_centre {
+        // spec: S-0516 claim 22 and quirks.mobile_sensor_removal_centre (removed around the current position cell, destruction and boarding alike)
+        centre_cell(w, id)
+    } else {
+        // spec: S-0516 Edge cases (mobile_sensor_removal_centre off: remove the disc actually last added)
+        added
+    };
     let r = sight(w, id);
-    // spec: S-0516 claim 22 and Edge cases (removed around the current cell, never below 0)
+    // spec: S-0516 claim 22 (removal never takes a mobile sensor's count below 0)
     change(w, Coverage::Sensors, h, c, r, -1, true);
     if let Some(ob) = w.obj_mut(id) {
         ob.cloak.disc = None;

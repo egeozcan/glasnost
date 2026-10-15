@@ -308,6 +308,12 @@ fn claim_36_what_appearing_disguised_changes() {
         occupancy::infantry_outcome(&w, walker, at(1, 0), lvl),
         Outcome::StationaryFriendly
     );
+    // spec: S-0209 claim 4 (row WP25 includes a disguise with no disguise house)
+    set_disguise(&mut w, spy, DisguiseAs::Infantry(wi), None);
+    assert_eq!(
+        occupancy::infantry_outcome(&w, walker, at(1, 0), lvl),
+        Outcome::StationaryFriendly
+    );
     w.obj_mut(spy).unwrap().cloak.disguise = None;
     assert_ne!(
         occupancy::infantry_outcome(&w, walker, at(1, 0), lvl),
@@ -355,7 +361,7 @@ fn claim_37_drawn_as_disguise() {
     );
 }
 
-// spec: S-0516 claim 38 (radar: the owner's colour when the owner allies V, one way; otherwise the disguise house's)
+// spec: S-0516 claim 38 and S-0410 claim 8 (a disguise without a house shows the neutral fallback colour; radar: the owner's colour when the owner allies V, one way; otherwise the disguise house's)
 #[test]
 fn claim_38_radar_colour() {
     let r = rules();
@@ -373,6 +379,13 @@ fn claim_38_radar_colour() {
     );
     ally(&mut w, ALPHA, BETA);
     assert_eq!(view::radar_house(&w, c, Some(BETA)), Some(ALPHA));
+    // A disguise without a house: no house colour, so the neutral fallback
+    // (the same as an ownerless object's), for a viewer the owner does not ally.
+    let mut w = game(&r);
+    let c = spawn(&mut w, "COPIER", ALPHA, 0, 0);
+    set_disguise(&mut w, c, DisguiseAs::Infantry(walker), None);
+    assert_eq!(view::radar_house(&w, c, Some(BETA)), None);
+    assert_eq!(view::radar_house(&w, c, Some(ALPHA)), Some(ALPHA));
 }
 
 // spec: S-0516 claim 39 (a disguise-when-still vehicle that fires sets its fake blink to the weapon's time and keeps its disguise; infantry firing never sets it)

@@ -299,6 +299,15 @@ pub fn force_cloaked(w: &mut World, id: ObjectId) {
     o.cloak.stage = 0;
 }
 
+/// Spawns an object and forces it fully cloaked: placement within the
+/// usable area starts every object uncloaked (S-0516 claim 16), so tests
+/// that need a hidden unit at once set it.
+pub fn spawn_cloaked(w: &mut World, name: &str, h: HouseId, dx: i32, dy: i32) -> ObjectId {
+    let id = spawn(w, name, h, dx, dy);
+    force_cloaked(w, id);
+    id
+}
+
 /// Forces an object uncloaked with no delay running.
 pub fn force_uncloaked(w: &mut World, id: ObjectId) {
     let o = w.obj_mut(id).unwrap();
