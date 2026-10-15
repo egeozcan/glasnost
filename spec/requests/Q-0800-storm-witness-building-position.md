@@ -1,9 +1,9 @@
 ---
 id: Q-0800
 title: Which position a building has in the storm strike witness test
-status: open
+status: answered
 related: [S-0513, S-0209, S-0204]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

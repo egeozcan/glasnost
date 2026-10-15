@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800]
 supersedes: []
 ---
 
@@ -437,16 +437,47 @@ presentation and swept-layer rules below also apply where those specs cite them.
     The strike witness is selected only from the cell's ground-layer listing, including
     buildings and landed aircraft as well as infantry and vehicles, but excluding terrain
     objects. Deck objects and aircraft not in that listing do not count. For each candidate,
-    let *x* and *y* be its position's integer lepton coordinates modulo 256, in 0 … 255.
+    let *x* and *y* be its reference point's integer lepton coordinates modulo 256, in
+    0 … 255 (S-0204 claim 4). For a non-building this is its own position.
     Its distance is trunc(*r*(*x*² + *y*²)) leptons, where *r* is S-0204 claim 5's table
     square root: squares and sum are evaluated in floating point and the root truncates
-    toward zero. The reference is the cell's top corner, not its centre; height and
-    foundation size do not enter. The smallest resulting integer distance wins, with ties
+    toward zero. This compares the point's within-cell remainders with (0, 0), not with
+    the cell centre. Height and the building-size distance reduction do not enter.
+    Foundation dimensions do affect a building's reference point, as detailed below.
+    The smallest resulting integer distance wins, with ties
     going to the first candidate in S-0209 claim 13's listing order. The post-damage
     witness uses the same test. Mere health loss without a changed witness, building or
     height does not trigger debris. “Held nothing” means no qualifying witness
     and no ground-layer building, not an empty object list: a terrain object alone does
     not prevent this condition.
+
+    **Building witnesses (Q-0800).** An on-map ground-layer building is listed in every
+    foundation cell, not just the cell containing its own position or reference point.
+    Foundation cells are those of S-0406 claim 2, excluding any missing cell of an irregular
+    foundation. A strike on any listed foundation cell can therefore select that building.
+    The point tested is always the same foundation centre from S-0204 claim 4, without a
+    bib row: for top-left foundation cell (*a*, *b*) and dimensions *W* × *H* cells,
+    its horizontal coordinates are (256*a* + 128*W*, 256*b* + 128*H*) integer leptons.
+    It is neither the top-left cell centre nor a point relocated into the struck cell.
+    Only its remainders modulo 256 enter the test, even when that centre lies in a
+    different cell. Thus the following distances apply in every listed foundation cell:
+
+    | Foundation dimensions | Remainders (*x*, *y*), leptons | Truncated table-root distance, leptons |
+    |---|---|---|
+    | Both even | (0, 0) | 0 |
+    | Odd width, even height | (128, 0) | 128 |
+    | Even width, odd height | (0, 128) | 128 |
+    | Both odd, including 1 × 1 | (128, 128) | 181 |
+
+    These are integer coordinate calculations with no rounding, followed by the
+    floating-point table-root calculation already specified above. In particular, a
+    one-cell building's own position and reference point coincide at its cell centre
+    (S-0204 claims 3 and 4). A listed infantry unit or vehicle with distance below
+    181 leptons wins against it; at exactly 181 leptons that non-building also wins
+    because it precedes buildings in the listing. A 2 × 2 building instead has distance
+    0 in all four tests, although an earlier-listed candidate also at distance 0 wins
+    the tie. This is a remainder comparison, not the physical distance from the struck
+    cell's top corner to the building centre.
 
     Every debris animation is created at the strike point: the cell centre at its height
     level plus the high-bridge lift, with no additional 20-lepton lift and no horizontal
@@ -457,7 +488,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
     choice; explosion-animation draws; damage draws; debris-count draw; and, for each debris
     piece, its choice and animation-creation draws. Debris pieces deal what their animations
     deal (S-0109).
-    - Backing: `measurable` (scenario SW7 parts d and e)
+    - Backing: `measurable` (scenario SW7 parts d and e; building reference point,
+      per-foundation-cell listing and parity distances: SW7 part f)
     - Confidence: high for the witness, empty-cell test and debris creation point; medium
       for changes to the cell height caused by damage
 
@@ -1275,6 +1307,7 @@ can reliably force its effect-creation failure through ordinary input.
 | `[General]` | `LightningScatterDelay` | scatter period | integer, ticks | 10 |
 | `[General]` | `LightningCellSpread` | cell spread *s* | integer, cells | 10 |
 | `[General]` | `LightningSeparation` | separation | integer, cells | 3 |
+| building art sections | `Foundation` | dimensions and listed foundation cells for building strike witnesses (claim 18) | named foundation vocabulary of S-0108 claim 8; cell exceptions of S-0406 claim 2 | `1x1` (S-0108 claim 8) |
 | `[General]` | `LightningDamage` | storm damage, delivered before target modifiers (S-0302 claim 1) | integer, health points | 200 health points |
 | `[General]` | `LightningWarhead` | storm warhead | warhead name | none: departure (claim 21) |
 | `[General]` | `LightningPrintText` | storm-message flag | boolean | yes |
@@ -1464,6 +1497,28 @@ is not under test.
   test. Record each debris creation point read-only before its first turn: exactly the
   strike point, including bridge lift but no extra lift. Different witness, tie, empty
   result or creation position falsifies the corresponding subclaim.
+  (f) Building witness geometry: on a tiny level skirmish map, speed index 2, director
+  and mods off, use waypoint-triggered isolated strikes on each foundation cell of
+  stock 1 × 1, 2 × 2, odd-by-even and even-by-odd building types where available.
+  Run each cell in a fresh fixture so earlier destruction cannot change the listing.
+  Use named test data only where needed to permit infantry on the footprint, make the
+  building die while that infantry survives, or supply a missing foundation shape.
+  Retain the stock foundation geometry, storm rules and debris list. Keep one bystander
+  computer player outside the test area, voiding runs where it interferes or is defeated.
+  Use the read-only recorder with scripted input to record positions, building removal,
+  infantry survival and storm-debris creation at 800 × 600 over seeds 1 to 16.
+  Baseline each building without infantry: its lethal strike should produce storm debris
+  on every foundation cell. Add infantry with distance strictly between 0 and 128,
+  between 128 and 181, then above 181 leptons, using recorded positions rather than
+  assuming input achieves exact points. Expected: infantry suppress storm debris only
+  when they win claim 18's distance test, with the same building threshold in every
+  foundation cell. In particular the 2 × 2 building wins against every positive-distance
+  infantry candidate, whereas a 1 × 1 building loses to a candidate below 181 leptons.
+  Include a centre-standing infantry candidate to test its 181-lepton tie against a
+  one-cell building. Distinguish storm debris from the building's own death debris by
+  recorded animation choices and the storm's extra count/choice draws. Different
+  thresholds, a threshold changing with the struck foundation cell, or the absence of
+  the building witness from a non-anchor foundation cell falsifies the respective rule.
 - **SW8 — end, credit, height (claims 17, 19, 20).** (a) Record the tick the lighting returns; expected:
   the first weather update after clearing begins that finds no present cloud at its start,
   specifically one update after removal of the last present cloud. Use a named map with a storm
