@@ -6431,6 +6431,16 @@
           "type": "boolean",
           "default": true
         },
+        "anim_fast_rate_freezes": {
+          "description": "A rate above 900 converts to a stage delay of ⌊900 / ρ⌋ = 0, so the animation never advances or ends through playback; off: a positive rate gives max(1, ⌊900 / ρ⌋). Rates of 0 or below give 0 in both settings. Built for the random-rate conversion of an animation's creation draw (S-0109 claim 3); animation playback and the S-0517 claim 7 deploy delay are not implemented yet.",
+          "type": "boolean",
+          "default": true
+        },
+        "anim_random_rate_collapse": {
+          "description": "A converted random rate pair is clamped to [min(d₁, max(d₂, 0)), max(d₂, 0)], so an ascending pair collapses to its faster end and takes no draw; off: the converted pair is put in order and the delay is a ranged draw over [min(d₁, d₂), max(d₁, d₂)], with no draw when they are equal. Changes the number of draws.",
+          "type": "boolean",
+          "default": true
+        },
         "announcement_volume_ignored": {
           "description": "An announcement's volume key has no effect; off: the volume (a fraction, default 1) scales it.",
           "type": "boolean",

@@ -253,10 +253,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0109: animation playback is not implemented",
     ),
     (
-        "anim_fast_rate_freezes",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
         "anim_followup_keeps_step",
         "S-0109: animation playback is not implemented",
     ),
@@ -282,10 +278,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     (
         "anim_pingpong_lower_turn",
-        "S-0109: animation playback is not implemented",
-    ),
-    (
-        "anim_random_rate_collapse",
         "S-0109: animation playback is not implemented",
     ),
     (

@@ -1493,6 +1493,14 @@ pub struct Quirks {
     // spec: S-0517 claim 7 and Edge cases; S-0109 Edge cases
     #[serde(default = "on")]
     pub deploy_stall_zero_delay: bool,
+    /// A rate above 900 converts to a stage delay of ⌊900 / ρ⌋ = 0, so the animation never advances or ends through playback; off: a positive rate gives max(1, ⌊900 / ρ⌋). Rates of 0 or below give 0 in both settings. Built for the random-rate conversion of an animation's creation draw (S-0109 claim 3); animation playback and the S-0517 claim 7 deploy delay are not implemented yet.
+    // spec: S-0109 claim 2, F1 and Edge cases
+    #[serde(default = "on")]
+    pub anim_fast_rate_freezes: bool,
+    /// A converted random rate pair is clamped to [min(d₁, max(d₂, 0)), max(d₂, 0)], so an ascending pair collapses to its faster end and takes no draw; off: the converted pair is put in order and the delay is a ranged draw over [min(d₁, d₂), max(d₁, d₂)], with no draw when they are equal. Changes the number of draws.
+    // spec: S-0109 claim 3, F1 and Edge cases
+    #[serde(default = "on")]
+    pub anim_random_rate_collapse: bool,
     /// A behaviour queued during deploying or undeploying is replaced by *guard* at completion; off: completion starts the pending behaviour, or *guard* if none is pending. Not implemented yet (wave 2).
     // spec: S-0517 claim 8 and Edge cases
     #[serde(default = "on")]
@@ -1917,6 +1925,8 @@ impl Default for Quirks {
             garrison_capacity_equality: true,
             deploy_sound_repeats: true,
             deploy_stall_zero_delay: true,
+            anim_fast_rate_freezes: true,
+            anim_random_rate_collapse: true,
             deploy_transition_discards_orders: true,
             prism_count_survives_dropped_shot: true,
             prism_modifier_reread_scale: true,
@@ -2836,6 +2846,8 @@ impl Quirks {
             ),
             ("deploy_sound_repeats", self.deploy_sound_repeats),
             ("deploy_stall_zero_delay", self.deploy_stall_zero_delay),
+            ("anim_fast_rate_freezes", self.anim_fast_rate_freezes),
+            ("anim_random_rate_collapse", self.anim_random_rate_collapse),
             (
                 "deploy_transition_discards_orders",
                 self.deploy_transition_discards_orders,

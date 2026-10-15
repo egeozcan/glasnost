@@ -176,7 +176,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `damage_swap_drops_occupied` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; damage swaps are not played |
 | `theater_refresh_buildup_range` | S-0108 claim 5 | no theater refresh |
 | `anim_damage_starts_at_one` | S-0109 | animation playback is not implemented |
-| `anim_fast_rate_freezes` | S-0109 | animation playback is not implemented |
 | `anim_followup_keeps_step` | S-0109 | animation playback is not implemented |
 | `anim_followup_start_doubled` | S-0109 | animation playback is not implemented |
 | `anim_hide_at_level_15` | S-0109 | animation playback is not implemented |
@@ -184,7 +183,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `anim_loop_end_from_sprite` | S-0109 | animation playback is not implemented |
 | `anim_low_detail_shows_cloaked` | S-0109 | animation playback is not implemented |
 | `anim_pingpong_lower_turn` | S-0109 | animation playback is not implemented |
-| `anim_random_rate_collapse` | S-0109 | animation playback is not implemented |
 | `anim_reverse_raw_loop_end` | S-0109 | animation playback is not implemented |
 | `anim_translucency_levels` | S-0109 | animation playback is not implemented |
 | `building_resource_pips_hidden` | S-0111 | claim 11: the pip scale is not drawn (health bars, unit brackets and insignia are; they have no switch) |
