@@ -2,7 +2,7 @@
 id: S-0515
 title: Tech buildings (manned state, acquisition bonus, periodic income, ownership changes)
 topic: structures
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -21,7 +21,8 @@ what is particular to them: the *manned* state that an ownership change gives a 
 one-off credit bonus for taking a cash-producing building from a passive house, the periodic income
 of a cash-producing building and how ownership changes and erasure affect it, and what an ownership change
 does and does not do to a secret lab's secret type. Every other service of a tech building is the
-general rule for its type's fields, owned by the specs listed in claim 1.
+general rule for its type's fields, owned by the specs listed in claim 1. This spec covers
+skirmish only; campaigns and network games are out of scope.
 
 ## Terms
 
@@ -70,8 +71,9 @@ general rule for its type's fields, owned by the specs listed in claim 1.
    specs' rules. The airport needs nothing further: S-0512 claim 3 grants its superweapon to a new
    owner, and claim 7 there removes it from the old one, because a giving building does not
    depend on being in operation (S-0512, Terms) and therefore not on being manned.
-   - Backing: `measurable` (scenarios TB6 and TB8 for the airport and the outpost; the other rows
-     are measured by the owning specs' scenarios)
+   - Backing: `measurable` (scenarios TB6 and TB8 for the airport and the outpost).
+     The dependency index is `unmeasured` here: it is not independent confirmation of the
+     owning specs' claims, which retain their own backings and scenarios.
    - Confidence: high
 
 2. **The manned state.** A building becomes manned at its first ownership change, whatever the cause
@@ -88,7 +90,10 @@ general rule for its type's fields, owned by the specs listed in claim 1.
 
    The state is the same for every building; only the needs-engineer flag makes S-0405's engineer
    row read it.
-   - Backing: `measurable` (scenario TB3 parts c and d; TB8)
+   - Backing: `measurable` (scenario TB3 parts c to f; TB8). The services delegated to other
+     specs retain those claims' backings rather than independent confirmation here.
+     A first change between two passive houses is `unmeasured`: no scenario here exposes its
+     manned state without a later ownership change that would itself man the building.
    - Confidence: high (set by every ownership change, never cleared); medium (no other way to set it)
 
 3. **Acquisition bonus.** At an ownership change of a building of a type whose acquisition bonus *B*
@@ -99,7 +104,7 @@ general rule for its type's fields, owned by the specs listed in claim 1.
    building that returns to a passive house pays the bonus again at its next ownership change away
    from it. The bonus is paid straight into the balance: no income factor, country bonus, handicap
    or difficulty factor applies to it.
-   - Backing: `measurable` (scenario TB2)
+   - Backing: `measurable` (scenarios TB2 and TB5)
    - Confidence: high
 
 4. **When the income countdown restarts.** A building's income countdown is restarted with the
@@ -112,7 +117,9 @@ general rule for its type's fields, owned by the specs listed in claim 1.
    out, and so has a countdown restarted with *D* ≤ 0. Because it restarts at an ownership change,
    the countdown of a building taken from another player starts again from the full length: the
    new owner does not inherit the old owner's phase.
-   - Backing: `measurable` (scenario TB2)
+   - Backing: `measurable` (scenarios TB2 and TB9). The exhausted countdown before placement
+     is `unmeasured`: an off-map building has no income turn, and placement replaces its phase
+     before an income payment could expose the initial value.
    - Confidence: high
 
 5. **Income cycles and payments.** In a building's own turn, when the remaining time of its income
@@ -128,9 +135,9 @@ general rule for its type's fields, owned by the specs listed in claim 1.
    restart, otherwise none; with *D* ≤ 0 it has no cycle at all. With *a* = 0 a payment changes
    nothing unless the balance is negative (F2).
    Income does not depend on the game speed except through the tick rate (S-0201).
-   - Backing: `measurable` (scenarios TB1, TB3)
-   - Confidence: high (the cycle at remaining time 1, the period *D* − 1, the conditions and the
-     restart without payment); low (*D* = 1)
+   - Backing: `measurable` (scenarios TB1, TB3, TB5 and TB9)
+   - Confidence: high (the cycle at remaining time 1, the period *D* − 1, the conditions,
+     restart without payment and the delay boundaries)
 
 6. **Income during erasure.** A building that is being erased has no income cycle in its turns,
    while its countdown keeps running in ticks. If the tick in which the
@@ -146,11 +153,14 @@ general rule for its type's fields, owned by the specs listed in claim 1.
    new owner's first payment comes at the first cycle of the countdown restarted by the ownership change
    (claim 4 b), that is, *D* − 1 ticks after the ownership change for *D* ≥ 2. A building owned by a
    passive house, such as a derrick still held by the neutral house, keeps cycling and pays nobody.
-   - Backing: `measurable` (scenario TB2)
+   - Backing: `measurable` (scenario TB2) for recipients and ownership-change phase.
+     Continued cycling under a passive owner is `unmeasured`: it pays nobody, and the next
+     ownership change restarts the countdown, hiding its earlier phase.
    - Confidence: high
 
 8. **Secret labs on an ownership change.** An ownership change does not change a secret lab's secret type
-   and takes no random draw: the type it was given at game start (S-0407 claim 14) stays with it
+   and takes no random draw for secret-type selection: the type it was given at game start
+   (S-0407 claim 14) stays with it
    through any number of ownership changes, and passes from the old owner to the new owner by S-0407
    claims 4 and 15.
    - Backing: `measurable` (scenario TB7)
@@ -163,16 +173,18 @@ general rule for its type's fields, owned by the specs listed in claim 1.
 > `quirks.cash_cycle_one_short` off: *t*₀ + *k*·*D*. Integers, in ticks; no rounding.
 
 > **F2. Payment** (claim 5). Let *Y* be the owner's credit balance before the payment and *Y'*
-> after it. All values are signed integers in credits.
-> - *a* > 0: *Y'* = *Y* + *a*.
-> - *a* ≤ 0: the house spends −*a*: *Y'* = *Y* + *a* when *Y* ≥ −*a*; otherwise *Y'* = 0. In
->   particular *a* = 0 with a negative balance sets the balance to 0.
+> after it. All values are signed 32-bit integers in credits, with wrapping as in S-0205
+> claim 1; no rounding. Write wrap(*x*) for that signed wrapping.
+> - *a* > 0: *Y'* = wrap(*Y* + *a*).
+> - *a* ≤ 0: write *q* = wrap(−*a*). With no stored resources, *Y'* = wrap(*Y* − *q*)
+>   when *Y* ≥ *q*; otherwise *Y'* = 0. In particular *a* = 0 with a negative balance
+>   sets the balance to 0. Skirmish has no stored resources (S-0404 claim 4).
 >
 > Only modified data reaches the second case; stock income amounts are positive.
 
 > **F3. Acquisition bonus** (claim 3). *Y'* = *Y* + *B*, signed integers in credits, for any sign
-> of *B*, with no floor: a negative bonus can take the balance below 0. Only modified data has a
-> negative bonus.
+> of *B*, with signed 32-bit wrapping (S-0205 claim 1), no rounding and no floor: a negative
+> bonus can take the balance below 0. Only modified data has a negative bonus.
 
 ## Constants
 
@@ -194,7 +206,8 @@ general rule for its type's fields, owned by the specs listed in claim 1.
 
 Observable ordering:
 - The bonus and the countdown restart take effect within the ownership change, so the new owner's
-  balance shows the bonus in the tick of the ownership change, before any income from the building.
+  balance shows the bonus in the tick of the ownership change. A later cycle belongs to the new
+  owner; an earlier cycle in that tick belonged to the old owner.
 - The payment of a cycle is made in the building's own turn of that tick (S-0203), so it is in the
   balance by the end of the turn pass of the cycle's tick.
 
@@ -203,12 +216,14 @@ Observable ordering:
 - `quirks.cash_cycle_one_short` (default on = original; claim 5). The cycle comes when one tick
   is left, so the period is *D* − 1 ticks, not *D*. Off: a cycle comes when the full *D* ticks
   have passed since the restart (F1), so the period is *D*, and *D* = 1 pays every tick. The
-  number of payments in a long window differs by a factor of *D* / (*D* − 1).
+  number of payments in a long window differs by a factor of *D* / (*D* − 1) for *D* ≥ 2
+  (a real-valued ratio, without rounding).
 - `quirks.cash_cycle_lapse` (default on = original; claim 6). A cycle that falls while the building
   is being erased is lost together with all later cycles until the next ownership change. Off: for a
-  countdown last restarted with *D* ≥ 1, the building's first turn at or after the tick in which
-  its remaining time reached 1 has the cycle (restart and, if the conditions hold, payment), and
-  cycles continue from there.
+  countdown last restarted with *D* ≥ 1, the building's first turn at or after its due tick
+  has the cycle (restart and, if the conditions hold, payment), and cycles continue from there.
+  The due tick is when one tick remains with `quirks.cash_cycle_one_short` on, and when the
+  full *D* ticks have passed with it off.
 - An ownership change from a passive house to a passive house (for example by a trigger action) pays
   the bonus to the new passive owner, where it has no effect on play.
 - A tech building that a map gives to a player from the start is unmanned (claim 2): it gives
@@ -237,11 +252,15 @@ read-with-current-default rule). No other key feeds this spec's claims.
 
 Common setup: a small purpose-made test map, stock rules plus the named test file that the
 scenario gives, the bench (exact tick numbers, scripted input), with the director and mods off,
-and game speed fixed. The human house H has no harvester, no production, no sale and no other
-income, so its credit balance changes only through the derrick. Only H's balance is read. A
-reading "at tick *t*" is made this way: a test trigger fired at tick *t* gives the derrick to the
-neutral house (which pays nothing to anyone, claim 7), the game runs on until the shown counter
-has settled (S-0416 claims 1 and 2), and the settled value is read. Ownership changes "by trigger" use
+and game speed index 2 at 800 × 600. Each scenario's named test file is
+*tech-buildings-test.map*, whose override sections supply only the test fields described there.
+Remove it after the run. Run each deterministic variant once and repeat any failed run. The
+human house H has no harvester, no production, no sale and no other income, so its credit balance
+changes only through the derrick. A read-only recorder logs tick numbers, ownership and the
+credit balances of H, E and the neutral and special houses. A reading "at tick *t*" means after
+the turn pass of that tick, without changing ownership to stop income. This avoids both the
+sidebar's display lag and a change-owner trigger suppressing a payment in the observed tick.
+Ownership changes "by trigger" use
 the change-owner trigger action (S-0011 claim 24) on the derrick's tag. The bystander rules of the
 glossary (*measurement setup*) apply; the bystander E takes part only through named objects and
 test triggers.
@@ -268,6 +287,16 @@ test triggers.
 - Part (b): as above, but the trigger at *t*₁ gives the derrick to the neutral house and H's
   engineer captures it again at *t*₂: expect *B* twice. Part (c): the derrick starts with the
   neutral house and a trigger gives it to H directly: expect *B* (the cause plays no part).
+- Part (d): transfer from the neutral house to the special house by trigger and record both
+  balances immediately around the transfer. Expect the special house to gain *B*, and no gain
+  to the neutral house. Any different credit delta falsifies the passive-new-owner rule.
+- Part (e): pulse the neutral derrick before transferring it to H by trigger. Expect the full
+  *B* immediately, with no periodic payment while the pulse lasts. Repeat with a different
+  country: *B* must remain unchanged. A missing or scaled bonus falsifies
+  claim 3.
+- Part (f): ask for H to receive its already-owned derrick by trigger 20 ticks after a payment.
+  Expect no bonus and the next payment 30 ticks later. A bonus or a restarted phase falsifies
+  the same-owner rule.
 
 **TB3. Payment conditions** (claims 2, 5).
 - (a) As TB1 with *D* = 51 (payments at *c*, *c* + 50, …): a pulse on the derrick from *c* + 10
@@ -281,6 +310,13 @@ test triggers.
 - (d) Continue (c): at *t*₀ a trigger gives the derrick to the neutral house and a second trigger
   gives it back to H at *t*₀ + 1; read at *t*₀ + 1 + 1000. Expect *a* × ⌊1000 / 50⌋: the owner
   changes have manned it. Falsified by no rise.
+- (e) Repeat (c) with a trigger-created derrick for H rather than one placed at game start.
+  Expect no income until it changes owner; any earlier payment falsifies the claim.
+- (f) After manning the derrick, apply nonlethal damage, a pulse and a power-switch interruption
+  after a successful payment. Once each interruption ends, expect payments on the original
+  phase without another ownership change. Failure to resume falsifies persistence of the
+  manned state. TB4's short-lock control tests persistence through erasure without an
+  ownership change.
 
 **TB4. Erasure lapse** (claim 6, `quirks.cash_cycle_lapse`).
 - Setup: as TB1 with *D* = 51 and a high strength for the test derrick type; a named E unit with
@@ -295,10 +331,17 @@ test triggers.
 
 **TB5. Non-positive amounts** (F2, F3). Test data only, low priority. (a) *B* = −100 captured
 with a balance of 50, and a positive *a* of 100 with *D* = 51: expect the shown counter at 0
-after the capture and at 50 after the first payment (−50 + 100), not 150. (b) *a* = −5 with a
-balance of 3: expect 0 after the first cycle.
+after the capture and at 50 after the first payment (−50 + 100), not 150; the recorder must
+show −50 immediately after capture. (b) *a* = −5 with a balance of 3: expect 0 after the first
+cycle, not −2. (c) With that same negative bonus, set *a* = 0: expect the negative balance to
+become 0 at the first cycle, not to remain negative. (d) Test signed wrapping with a positive
+*a* that takes the balance above the largest signed 32-bit integer: expect the wrapped value,
+not saturation. Repeat with a positive *B* that crosses that boundary at capture. (e) With *a* equal to the smallest signed 32-bit integer and balance 0,
+expect that same smallest integer after the cycle, not 0. Use *D* = 51 for each variant and
+record the balance immediately before and after the cycle. Any different value falsifies F2
+or F3.
 
-**TB6. Airport** (claim 1). A test map gives H an airport from the start (unmanned) and the
+**TB6. Airport** (claims 1 and 2). A test map gives H an airport from the start (unmanned) and the
 neutral house a second one. Expect H's paradrop icon from the start (S-0512 claim 3) although the
 airport is unmanned. A test trigger then gives H's airport to E: expect H to lose the icon in the
 same tick's house update (S-0512 claims 2 and 7). H's engineer then captures the neutral airport:
@@ -307,13 +350,27 @@ expect the icon back. Falsified if the unmanned airport gives nothing.
 **TB7. Secret lab** (claim 8). A test map with one secret lab and test secret lists of length 3
 (S-0407 scenario T9), held by the neutral house. H's engineer captures the lab; then, by trigger,
 it goes to the neutral house and back to H, five times, in quiet ticks. Expect the same secret type
-offered to H every time it owns the lab. Run over 5 seeds: a new draw at each change would change
-the type with probability at least 2/3 per change, so an unchanged type over 25 changes rules it
-out.
+offered to H every time it owns the lab. Run five games, logging the seed without setting it.
+The random-state recorder checks each ownership change against a control with identical
+objects, visual effects and ownership changes but the secret-lab flag disabled. Expect no extra
+selection draw in the lab run; any extra draw or any changed offered type falsifies claim 8.
+An unchanged type alone does not establish absence of a draw.
 
 **TB8. Unmanned outpost** (claims 1, 2). A test map gives H an outpost from the start and puts an
 E vehicle in its range: expect no shot in 600 ticks. Then a test trigger gives it to the neutral
 house and back to H (two ownership changes): expect it to fire at the E vehicle from then on.
+A shot before the transfer, or continued silence after it despite an otherwise legal target,
+falsifies the manned-state firing gate.
+
+**TB9. Delay boundaries and initial phase** (claims 4 and 5). Use the named test map to
+supply derricks with *D* = 1, 0 and −3, positive *a*, and *B* = 0. Give each to H by a trigger
+before the turn pass of a recorded tick, and log balances for 100 ticks. Expect exactly one
+payment in the transfer tick for *D* = 1, then none; expect none for the other delays.
+A later payment falsifies the boundary rule. Repeat with an engineer capture after the
+building's turn: for *D* = 1 expect no payment. For initial placement, use a test derrick
+without the needs-engineer flag, owned by H from game start, and *D* = 51. Log placement tick
+*p* and expect the first cycle at *p* + 50, then every 50 ticks; an immediate payment or a
+different phase falsifies claim 4 (a).
 
 ## Open questions
 
