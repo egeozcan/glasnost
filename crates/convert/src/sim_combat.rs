@@ -106,6 +106,10 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
     ("threat_posed", "ThreatPosed", Int, "S-0309"),
     ("airstrike_team", "AirstrikeTeam", Int, "S-0309"),
     ("drainable", "Drainable", Bool, "S-0308"),
+    ("spawns", "Spawns", Ref(Kind::Aircraft), "S-0506"),
+    ("spawns_number", "SpawnsNumber", Int, "S-0506"),
+    ("spawn_regen_rate", "SpawnRegenRate", Int, "S-0506"),
+    ("spawn_reload_rate", "SpawnReloadRate", Int, "S-0506"),
 ];
 
 /// Combat fields of infantry, vehicle and aircraft types (`UnitType`).
@@ -325,6 +329,279 @@ const AI: &[u8] = b"AI"; // spec: S-0314 Import mapping (`[AI]`)
 
 /// Game-wide combat fields: our name, section, key, form, spec.
 const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
+    (
+        "v3_rocket_type",
+        GENERAL,
+        "V3RocketType",
+        Ref(Kind::Aircraft),
+        "S-0506",
+    ),
+    (
+        "v3_rocket_pause_frames",
+        GENERAL,
+        "V3RocketPauseFrames",
+        Int,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_tilt_frames",
+        GENERAL,
+        "V3RocketTiltFrames",
+        Int,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_pitch_initial",
+        GENERAL,
+        "V3RocketPitchInitial",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_pitch_final",
+        GENERAL,
+        "V3RocketPitchFinal",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_turn_rate",
+        GENERAL,
+        "V3RocketTurnRate",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_raise_rate",
+        GENERAL,
+        "V3RocketRaiseRate",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_acceleration",
+        GENERAL,
+        "V3RocketAcceleration",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_altitude",
+        GENERAL,
+        "V3RocketAltitude",
+        Int,
+        "S-0506",
+    ),
+    ("v3_rocket_damage", GENERAL, "V3RocketDamage", Int, "S-0506"),
+    (
+        "v3_rocket_elite_damage",
+        GENERAL,
+        "V3RocketEliteDamage",
+        Int,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_body_length",
+        GENERAL,
+        "V3RocketBodyLength",
+        Int,
+        "S-0506",
+    ),
+    (
+        "v3_rocket_lazy_curve",
+        GENERAL,
+        "V3RocketLazyCurve",
+        Bool,
+        "S-0506",
+    ),
+    (
+        "d_misl_type",
+        GENERAL,
+        "DMislType",
+        Ref(Kind::Aircraft),
+        "S-0506",
+    ),
+    (
+        "d_misl_pause_frames",
+        GENERAL,
+        "DMislPauseFrames",
+        Int,
+        "S-0506",
+    ),
+    (
+        "d_misl_tilt_frames",
+        GENERAL,
+        "DMislTiltFrames",
+        Int,
+        "S-0506",
+    ),
+    (
+        "d_misl_pitch_initial",
+        GENERAL,
+        "DMislPitchInitial",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "d_misl_pitch_final",
+        GENERAL,
+        "DMislPitchFinal",
+        Dec,
+        "S-0506",
+    ),
+    ("d_misl_turn_rate", GENERAL, "DMislTurnRate", Dec, "S-0506"),
+    (
+        "d_misl_raise_rate",
+        GENERAL,
+        "DMislRaiseRate",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "d_misl_acceleration",
+        GENERAL,
+        "DMislAcceleration",
+        Dec,
+        "S-0506",
+    ),
+    ("d_misl_altitude", GENERAL, "DMislAltitude", Int, "S-0506"),
+    ("d_misl_damage", GENERAL, "DMislDamage", Int, "S-0506"),
+    (
+        "d_misl_elite_damage",
+        GENERAL,
+        "DMislEliteDamage",
+        Int,
+        "S-0506",
+    ),
+    (
+        "d_misl_body_length",
+        GENERAL,
+        "DMislBodyLength",
+        Int,
+        "S-0506",
+    ),
+    (
+        "d_misl_lazy_curve",
+        GENERAL,
+        "DMislLazyCurve",
+        Bool,
+        "S-0506",
+    ),
+    (
+        "c_misl_type",
+        GENERAL,
+        "CMislType",
+        Ref(Kind::Aircraft),
+        "S-0506",
+    ),
+    (
+        "c_misl_pause_frames",
+        GENERAL,
+        "CMislPauseFrames",
+        Int,
+        "S-0506",
+    ),
+    (
+        "c_misl_tilt_frames",
+        GENERAL,
+        "CMislTiltFrames",
+        Int,
+        "S-0506",
+    ),
+    (
+        "c_misl_pitch_initial",
+        GENERAL,
+        "CMislPitchInitial",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "c_misl_pitch_final",
+        GENERAL,
+        "CMislPitchFinal",
+        Dec,
+        "S-0506",
+    ),
+    ("c_misl_turn_rate", GENERAL, "CMislTurnRate", Dec, "S-0506"),
+    (
+        "c_misl_raise_rate",
+        GENERAL,
+        "CMislRaiseRate",
+        Dec,
+        "S-0506",
+    ),
+    (
+        "c_misl_acceleration",
+        GENERAL,
+        "CMislAcceleration",
+        Dec,
+        "S-0506",
+    ),
+    ("c_misl_altitude", GENERAL, "CMislAltitude", Int, "S-0506"),
+    ("c_misl_damage", GENERAL, "CMislDamage", Int, "S-0506"),
+    (
+        "c_misl_elite_damage",
+        GENERAL,
+        "CMislEliteDamage",
+        Int,
+        "S-0506",
+    ),
+    (
+        "c_misl_body_length",
+        GENERAL,
+        "CMislBodyLength",
+        Int,
+        "S-0506",
+    ),
+    (
+        "c_misl_lazy_curve",
+        GENERAL,
+        "CMislLazyCurve",
+        Bool,
+        "S-0506",
+    ),
+    (
+        "v3_warhead",
+        COMBAT_DAMAGE,
+        "V3Warhead",
+        Ref(Kind::Warheads),
+        "S-0506",
+    ),
+    (
+        "v3_elite_warhead",
+        COMBAT_DAMAGE,
+        "V3EliteWarhead",
+        Ref(Kind::Warheads),
+        "S-0506",
+    ),
+    (
+        "d_misl_warhead",
+        COMBAT_DAMAGE,
+        "DMislWarhead",
+        Ref(Kind::Warheads),
+        "S-0506",
+    ),
+    (
+        "d_misl_elite_warhead",
+        COMBAT_DAMAGE,
+        "DMislEliteWarhead",
+        Ref(Kind::Warheads),
+        "S-0506",
+    ),
+    (
+        "c_misl_warhead",
+        COMBAT_DAMAGE,
+        "CMislWarhead",
+        Ref(Kind::Warheads),
+        "S-0506",
+    ),
+    (
+        "c_misl_elite_warhead",
+        COMBAT_DAMAGE,
+        "CMislEliteWarhead",
+        Ref(Kind::Warheads),
+        "S-0506",
+    ),
     ("max_damage", COMBAT_DAMAGE, "MaxDamage", Int, "S-0302"),
     (
         "occupy_rof_multiplier",
@@ -1563,6 +1840,16 @@ impl Builder<'_> {
             rec.put("combat", combat.node());
         }
         self.cfields(rec, t, kind, UNIT_COMBAT);
+        if kind == Kind::Aircraft {
+            // spec: S-0004 claim 14 and S-0506 claim 21 (an aircraft's trailer animation: the art key of its image section; each read's value replaces the held one, none names no type)
+            let trailer = self
+                .art_values(kind, index, t, "Trailer")
+                .iter()
+                .fold(None, |_, (v, _)| Some(self.ref_name(Kind::Animations, v)));
+            if let Some(Some(n)) = trailer {
+                rec.put("trailer", jsonc::string(n));
+            }
+        }
         let name = format!("{} {}", kind.key(), show(&t.name));
         match kind {
             Kind::Vehicles => {

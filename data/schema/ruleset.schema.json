@@ -1602,6 +1602,41 @@
           ],
           "default": null
         },
+        "spawn_regen_rate": {
+          "description": "`SpawnRegenRate`, the regeneration time in ticks (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spawn_reload_rate": {
+          "description": "`SpawnReloadRate`, the reload time in ticks (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spawns": {
+          "description": "`Spawns`, the spawned aircraft type (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "spawns_number": {
+          "description": "`SpawnsNumber`, the spawn count (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "special_threat_value": {
           "description": "`SpecialThreatValue` (S-0309 F4), a double.",
           "anyOf": [
@@ -3825,6 +3860,147 @@
           ],
           "default": null
         },
+        "c_misl_acceleration": {
+          "description": "`CMislAcceleration`, the acceleration of set C, leptons per tick per tick, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "c_misl_altitude": {
+          "description": "`CMislAltitude`, the cruise altitude of set C, leptons (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "c_misl_body_length": {
+          "description": "`CMislBodyLength`, the body length of set C, leptons (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "c_misl_damage": {
+          "description": "`CMislDamage`, the damage of set C (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "c_misl_elite_damage": {
+          "description": "`CMislEliteDamage`, the elite damage of set C (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "c_misl_elite_warhead": {
+          "description": "`CMislEliteWarhead` (combat-damage section), the elite warhead of rocket set C (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "c_misl_lazy_curve": {
+          "description": "`CMislLazyCurve`, the lazy-curve flag of set C (S-0506 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "c_misl_pause_frames": {
+          "description": "`CMislPauseFrames`, the pause time of set C, ticks (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "c_misl_pitch_final": {
+          "description": "`CMislPitchFinal`, the final pitch of set C, quarter turns, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "c_misl_pitch_initial": {
+          "description": "`CMislPitchInitial`, the initial pitch of set C, quarter turns, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "c_misl_raise_rate": {
+          "description": "`CMislRaiseRate`, the raise rate of set C, leptons per tick, truncated (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "c_misl_tilt_frames": {
+          "description": "`CMislTiltFrames`, the tilt (raise) time of set C, ticks (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "c_misl_turn_rate": {
+          "description": "`CMislTurnRate`, the pitch turn rate of set C, radians per tick, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "c_misl_type": {
+          "description": "`CMislType`, the rocket type of set C (aircraft type name) (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "c_misl_warhead": {
+          "description": "`CMislWarhead` (combat-damage section), the warhead of rocket set C (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "chrono_distance_factor": {
           "description": "`ChronoDistanceFactor`, the teleport distance factor k, leptons per\ntick (S-0207 F9).",
           "type": [
@@ -3963,6 +4139,147 @@
         },
         "crush_warhead": {
           "description": "`CrushWarhead` (S-0303 claim 9).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "d_misl_acceleration": {
+          "description": "`DMislAcceleration`, the acceleration of set B, leptons per tick per tick, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "d_misl_altitude": {
+          "description": "`DMislAltitude`, the cruise altitude of set B, leptons (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "d_misl_body_length": {
+          "description": "`DMislBodyLength`, the body length of set B, leptons (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "d_misl_damage": {
+          "description": "`DMislDamage`, the damage of set B (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "d_misl_elite_damage": {
+          "description": "`DMislEliteDamage`, the elite damage of set B (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "d_misl_elite_warhead": {
+          "description": "`DMislEliteWarhead` (combat-damage section), the elite warhead of rocket set B (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "d_misl_lazy_curve": {
+          "description": "`DMislLazyCurve`, the lazy-curve flag of set B (S-0506 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "d_misl_pause_frames": {
+          "description": "`DMislPauseFrames`, the pause time of set B, ticks (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "d_misl_pitch_final": {
+          "description": "`DMislPitchFinal`, the final pitch of set B, quarter turns, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "d_misl_pitch_initial": {
+          "description": "`DMislPitchInitial`, the initial pitch of set B, quarter turns, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "d_misl_raise_rate": {
+          "description": "`DMislRaiseRate`, the raise rate of set B, leptons per tick, truncated (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "d_misl_tilt_frames": {
+          "description": "`DMislTiltFrames`, the tilt (raise) time of set B, ticks (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "d_misl_turn_rate": {
+          "description": "`DMislTurnRate`, the pitch turn rate of set B, radians per tick, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "d_misl_type": {
+          "description": "`DMislType`, the rocket type of set B (aircraft type name) (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "d_misl_warhead": {
+          "description": "`DMislWarhead` (combat-damage section), the warhead of rocket set B (S-0506 Import mapping).",
           "type": [
             "string",
             "null"
@@ -4612,6 +4929,147 @@
               "type": "null"
             }
           ]
+        },
+        "v3_elite_warhead": {
+          "description": "`V3EliteWarhead` (combat-damage section), the elite warhead of rocket set A (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "v3_rocket_acceleration": {
+          "description": "`V3RocketAcceleration`, the acceleration of set A, leptons per tick per tick, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v3_rocket_altitude": {
+          "description": "`V3RocketAltitude`, the cruise altitude of set A, leptons (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "v3_rocket_body_length": {
+          "description": "`V3RocketBodyLength`, the body length of set A, leptons (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "v3_rocket_damage": {
+          "description": "`V3RocketDamage`, the damage of set A (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "v3_rocket_elite_damage": {
+          "description": "`V3RocketEliteDamage`, the elite damage of set A (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "v3_rocket_lazy_curve": {
+          "description": "`V3RocketLazyCurve`, the lazy-curve flag of set A (S-0506 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "v3_rocket_pause_frames": {
+          "description": "`V3RocketPauseFrames`, the pause time of set A, ticks (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "v3_rocket_pitch_final": {
+          "description": "`V3RocketPitchFinal`, the final pitch of set A, quarter turns, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v3_rocket_pitch_initial": {
+          "description": "`V3RocketPitchInitial`, the initial pitch of set A, quarter turns, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v3_rocket_raise_rate": {
+          "description": "`V3RocketRaiseRate`, the raise rate of set A, leptons per tick, truncated (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v3_rocket_tilt_frames": {
+          "description": "`V3RocketTiltFrames`, the tilt (raise) time of set A, ticks (S-0506 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "v3_rocket_turn_rate": {
+          "description": "`V3RocketTurnRate`, the pitch turn rate of set A, radians per tick, a single (S-0506 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "v3_rocket_type": {
+          "description": "`V3RocketType`, the rocket type of set A (aircraft type name) (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "v3_warhead": {
+          "description": "`V3Warhead` (combat-damage section), the warhead of rocket set A (S-0506 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "veteran_armor": {
           "description": "`[General] VeteranArmor` (S-0302 F2), a double.",
@@ -8616,6 +9074,14 @@
           "description": "`TiltsWhenCrushes`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "trailer": {
+          "description": "Art `Trailer` of an aircraft type's image section, the trailer\nanimation of a rocket missile (S-0506 claim 21, S-0004 claim 14).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null
