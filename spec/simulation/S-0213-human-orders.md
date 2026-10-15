@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -431,17 +431,29 @@ Terms).
    | The actor | Effect of the stop order |
    |---|---|
    | Any actor | Its target and destination both become nothing, and it breaks off any contact. Its behaviour is unchanged, except as the harvester row says |
-   | A mobile actor | It has no queued destinations left (claim 5: how they arise is S-0215's) and stops following any planned route. With its destination gone it comes to rest as the movement specs describe for a unit whose destination is removed (this spec does not claim that it halts within the same tick) |
+   | A mobile actor | It has no queued destinations left (claim 5: how they arise is S-0215's) and stops following any planned route. With its order-level destination gone it comes to rest as the movement specs describe, including the hovering vehicle's retained movement destination below (this spec does not claim that it halts within the same tick) |
    | An actor with spawned aircraft (such as a carrier) | Its spawned aircraft are called off their target |
    | An open-topped transport | Its passengers lose their targets too |
    | A harvester whose behaviour is *harvest* or *return* | It gets the behaviour *guard* at once |
    | A vehicle that controls slave units, whatever its behaviour | Its slaves are sent back to guard it |
 
-   Destination clearing here is order-level clearing. For a hovering vehicle, S-0503
-   claim 16 owns the retained motion, the full three-dimensional destination/heading-point
-   equality rule and the possible final already-computed travel step after a stop order.
-   Clearing the order-level destination is not a forced immediate halt of that vehicle.
-   These movement outcomes inherit that claim's backing, confidence and Scenario H12.
+   Destination clearing here is order-level clearing. Behaviours and the factory-report
+   tests of S-0417 claim 7 read that cleared destination. A hovering vehicle's throttle,
+   moving-state tests and completion/search rules instead use its separate movement
+   destination (S-0503 claim 16). When that point equals its heading point in all three
+   dimensions, stop retains it and the stored path; otherwise stop clears both. In either
+   case the heading point and current movement quantities are retained at application:
+   clearing the order-level destination is not a forced immediate halt.
+
+   Under S-0503 claims 15–16, equal retained points still complete on arrival when the
+   ordinary destination-cell and height condition holds. That completion restores the
+   actual-position vehicle-present flag and produces a cell-arrival update even without
+   same-cell contact. Unequal points cleared by stop instead use claim 15's no-movement-
+   destination arrival outcomes. Either case can permit a final already-computed travel
+   step, not an exact-centre stop. The contact break above remains in force: an arrival
+   update does not promise a later factory report through an unchanged contact.
+   These movement outcomes inherit S-0503 claims 15–16's backing, confidence and
+   Scenarios H12 and H15.
 
    The slave-recall row applies only to vehicles: a stop order to a deployed slave-miner
    building does not itself recall its slaves (Scenario O4 part ii b).
