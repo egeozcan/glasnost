@@ -2,7 +2,7 @@
 id: S-0509
 title: Engineers and capture
 topic: structures
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -207,12 +207,10 @@ Neighbouring specs own the rest:
     buildings (claim 8). Nothing else sets it: a takeover (claim 17), a trigger transfer and every
     other ownership change leave it alone. Nothing clears it during the game. Trigger event code 3
     tests this mark for its specified house: whether that house has ever lost a building to an
-    engineer capture. No other gameplay effect of the mark is specified here. No stock map uses
-    that event.
+    engineer capture. No other gameplay effect of the mark is specified here.
     - Backing: `measurable` (scenario E7) for capture, trigger transfer and persistence for the
       observed interval. `unmeasured` for every other transfer and persistence for an arbitrary
-      game duration: E7 cannot exercise every transfer or duration. The absence from all stock
-      maps is `unmeasured` here: it is a data inventory, not a gameplay observation.
+      game duration: E7 cannot exercise every transfer or duration.
     - Confidence: high
 
 ### Building ownership change
@@ -288,14 +286,20 @@ Neighbouring specs own the rest:
       and that house is not passive,
     - the game is not a campaign.
 
-    Every upgrade on the building is removed and its cost is credited to the new owner. The building
-    is then put up for sale. **In our engine** this never applies (lead decision 4): AI houses keep
-    captured buildings by the same rules as human houses. **Note for AI designers:** the original's
-    computer player sells captured buildings of other player houses at once, and gains their
-    upgrade costs. Our AI can choose to sell by an ordinary order.
+    Upgrade removal uses the top-position selection and count changes of S-0408 claim 5 until
+    the upgrade count becomes 0. Each removed upgrade credits the new owner with its full refund:
+    S-0408 claim 1 with refund percentage 1, including its refund override and current country
+    and cost-bonus factors, not necessarily the upgrade's imported cost. A turret upgrade resets
+    the count to 0, so lower recorded upgrades need not be removed by this operation. The building
+    is then put up for sale. **In our engine** this automatic sale never applies to AI player houses:
+    they keep captured buildings by the same rules as human houses (glossary AI house).
+    **Note for AI designers:** the original's computer player sells qualifying captured buildings
+    at once, receiving the full refunds of the removed upgrades. Our AI can choose ordinary sale
+    orders instead.
     - Backing: `measurable` (original only; scenario E11) for immediate sale and upgrade refund
       after capture from a player house. `unmeasured` for the initial-owner and passive-house
-      exceptions: E11 does not vary either condition independently.
+      exceptions, multiple-upgrade removal and the turret count reset: E11 does not vary these
+      conditions independently.
     - Confidence: medium
 
 ### Vehicle-like buildings
@@ -340,13 +344,13 @@ fraction *c*. Row 4 applies when *r* > *c*, strictly; equality does not qualify.
 
 > *D* = *H* − trunc(*S* × *c* × 0.5)
 >
-> *Y* = *S* × (1 − *c* × 0.5) × 0.5
+> *Y* = ((1 − *c* × 0.5) × 0.5) × *S*
 >
 > *A* = trunc(*Y*) if *Y* < *D*, else *D*
 
 Each floating-point multiplication and subtraction is rounded by the convention above, not
-with a wider significand. Products associate left to right within each parenthesised expression:
-*c* × 0.5 is formed before the subtraction from 1. *D* is an integer in hit points; its integer
+with a wider significand. In *D*, multiply *S* by *c*, then by 0.5. In *Y*, multiply *c* by
+0.5, subtract that result from 1, multiply by 0.5, then multiply by *S*. *D* is an integer in hit points; its integer
 subtraction is exact in the ordinary health range. *Y* stays fractional, in hit points, until the
 final truncation. The comparison with *D* is exact, with *D* converted to floating point.
 The hit then passes through S-0302 like any other hit, where warhead modifiers and armour apply.
@@ -540,11 +544,15 @@ Trigger-counter effects must be calibrated to distinguish two firings in one tic
   Falsified by a retained construction-yard placement cursor or cancellation in that control.
 - **E11. Computer-only sale (claim 16, original only).** Let a computer house's engineer capture two
   buildings of the human house, one without upgrades and one with an upgrade. Expected: the computer
-  house puts both up for sale at once, and its credits rise by the upgrade's cost before the sale
-  refund. Record upgrade removal, sale-start tick and credits read-only, keeping the new owner's
-  other income and spending out of that interval. A run with unrelated spending is void.
-  Falsified by no immediate sale, a retained upgrade, or an upgrade credit other than its imported
-  cost. Recorded only to document the original; no AI rule is prescribed by this scenario.
+  house puts both up for sale at once, and its credits rise by the removed upgrade's full refund
+  under S-0408 claim 1 before the building sale refund. Predict that integer credit amount using
+  the new owner's current factors and the upgrade's refund override, if any. Add a named test-map
+  override giving the upgrade a nonzero refund override distinct from its cost: expected the
+  override-based full refund, not the cost. Record upgrade removal, sale-start tick and credits
+  read-only, keeping the new owner's other income and spending out of that interval. A run with
+  unrelated spending is void. Falsified by no immediate sale, retention of the single counted
+  upgrade, or a credit amount differing from that full-refund prediction. Recorded only to
+  document the original; no AI rule is prescribed by this scenario.
 - **E12. Vehicle-like takeover (claim 17).** A test-map override gives a 1 × 1 building type an
   undeploy-into vehicle. Order a vehicle thief into an enemy building of that type. Expected: the
   building changes to the thief's house when the thief reaches its cell, the thief is removed, an
@@ -579,17 +587,9 @@ Trigger-counter effects must be calibrated to distinguish two firings in one tic
 
 ## Changes for other specs
 
-- S-0524 claim 10: use S-0509 claims 2 and 8 for the two capture entry raises and their
-  trigger-state qualification. Do not prescribe an order between capture tag carry-over and
-  ownership change. Its damage-only entry has the general raise (S-0509 claim 2), not zero
-  raises, and cannot be exercised in a skirmish (claim 6); remove that fixture from C9.
-- S-0214's damaging-entry action definition must describe a cursor/order distinction, not
-  promise damage on arrival; eligible skirmish arrivals capture (S-0509 claims 6 and 7).
-- S-0412 claim 1: replace the obsolete planned capture pointer with S-0509 claims 6 and 7.
-- S-0215 claim 28: point its building-arrival effects to S-0509 claims 1 to 11 and S-0510
-  claims 1 to 10 instead of the generic special-abilities pointer.
-- S-0510 claims 1 and 9: its entry raise is S-0509 claim 2's same raise, not an additional
-  one; S-0509 claim 17 owns its vehicle-like destination exception.
+- S-0408, Edge cases and quirks, original computer-player note: replace the ownership-change
+  upgrade-sale description with S-0509 claim 16's initial-owner/passive-house conditions and
+  repeated top-upgrade removal with full refunds. It is not universally just one top upgrade.
 
 ## Open questions
 

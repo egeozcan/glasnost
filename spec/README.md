@@ -109,9 +109,9 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0407](production/S-0407-tech-tree.md) | Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs) | production | 16 | approved | — |
 | [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 6 | approved | — |
 | [S-0501](movement/S-0501-aircraft.md) | Aircraft flight, attack runs and pads | movement | 7 | approved | — |
-| [S-0509](structures/S-0509-engineers-capture.md) | Engineers and capture | structures | 2 | approved | — |
 | [S-0510](infantry/S-0510-spies-infiltration.md) | Spies and infiltration | infantry | 2 | approved | — |
 | [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 3 | approved | — |
 | [S-0524](triggers/S-0524-mp-trigger-completion.md) | Multiplayer trigger completion (remaining stock actions and entry raises) | triggers | 3 | approved | — |
 | [S-0512](superweapons/S-0512-superweapon-charge.md) | "Superweapons: charge and readiness" | superweapons | 3 | approved | — |
 | [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 10 | approved | — |
+| [S-0509](structures/S-0509-engineers-capture.md) | Engineers and capture | structures | 3 | approved | — |
