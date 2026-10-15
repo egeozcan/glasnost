@@ -2,7 +2,7 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -523,8 +523,12 @@ S-0501 claim 20.
 16. **Trailer animations.** A projectile type with a trailer animation creates one at the position
     the projectile holds at the start of the turn, in every turn whose tick number is a multiple of
     the type's effective spawn delay (the tick number of the game, not the projectile's age). These
-    are animations of S-0109 and take whatever draws their creation takes. The effective spawn delay
-    is the type's spawn delay field, except for a type with the scalable flag after a vehicle has
+    are animations of S-0109 and take whatever draws their creation takes. Each is created with an
+    initial loop delay of 1 update, repeat factor 1 and no reverse request. S-0109 claims 11 and 29
+    govern its first-update timing: it is eligible later in the same turn pass, but counting removals
+    can cost it that update. Its first actual update neither advances its stage nor counts down the
+    initial loop delay; its second actual update ends that delay without advancing the stage.
+    The effective spawn delay is the type's spawn delay field, except for a type with the scalable flag after a vehicle has
     fired it: each time a vehicle fires a projectile of a scalable type, that type's effective delay
     becomes spawn delay + trunc(max(*N* − 5, 0) / 3), *N* being the number of projectiles of
     scalable types fired by vehicles that are in play, the new one included, except that a value
@@ -550,7 +554,8 @@ S-0501 claim 20.
       that a later single vehicle shot resets, its variant e for a raised value of 0 and its
       variant f for the file and section the two fields are read from; S-0004 scenarios K1 to K4
       for the gate and the arctic case; S-0007 A24 for retained settings; P10 variant g for the
-      zero-delay departure and its art source)
+      zero-delay departure and its art source; S-0109 scenario AN26 for the initial loop delay,
+      repeat factor, reverse request and first-update timing)
     - Confidence: high for the unscaled delay; medium for the scaled delay (the exact count *N*
       and when entries leave it)
 
@@ -1529,12 +1534,7 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Observable: first velocity; for run d, whether a projectile appears and the firer's rearm
   countdown.
 - Runs: 1 each.
-- Expected: launch angle (atan2 of *V*_z and the horizontal speed) equal to F4's flatter angle on
-  level ground and lower ground, exactly 45° (pitch facing 8191, within 0.01°) for the higher
-  target, F4's steeper angle with the lobber flag; run d: no projectile and no rearm (a void shot:
-  F4 has no solution because *v*⁴ is far below *g*²*d*²), and no draw; the inaccurate run d: the same, with
-  the two scatter draws of claim 4 recorded before the void shot, and run e: F4's steeper angle (the target is
-  higher than it is far, though lower than the fire point), the control run F4's flatter angle.
+- Expected: the launch angle, determined from the recorded vertical velocity and horizontal speed, equals F4's flatter angle on level ground and lower ground, exactly 45° (pitch facing 8191, within 0.01°) for the higher target, and F4's steeper angle with the lobber flag; run d: no projectile and no rearm (a void shot: F4 has no solution because *v*⁴ is far below *g*²*d*²), and no draw; the inaccurate run d: the same, with the two scatter draws of claim 4 recorded before the void shot, and run e: F4's steeper angle (the target is higher than it is far, though lower than the fire point), the control run F4's flatter angle.
   Run f: no projectile and no rearm at the level target (F4 with the start speed 1 has no
   solution), and a projectile launched at pitch facing 8191 at the higher target.
 - Falsified if: the higher target's angle differs from 45° by more than 0.1°, the level shot is
