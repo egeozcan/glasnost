@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 36
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -49,8 +49,7 @@ S-0504's current draft claim 9 now agrees with the spatial table-root distance o
 and S-0204 claim 5, truncated toward zero to integer leptons, for both refresh and chase
 cutting. There is no ship-specific exact-root exception. The shared
 `quirks.table_root_distance` alternative applies as stated under Formulas. Hand off these
-coordinated texts together; the currently approved S-0504 distance wording still contradicts
-this contract.
+coordinated texts together; the currently approved S-0504 claim 9 distance wording agrees with this contract.
 Claim 25a completes the aircraft landing footprint search used by S-0501 claim 41.
 S-0501 claim 41 owns building and fallback-object selection, including equal-distance
 fallback objects, and the unchecked no-result landing destination. Those caller rules are
@@ -1557,6 +1556,7 @@ Terms specific to this spec:
     | Trigger crate placement (S-0524 claim 4) | the waypoint-slot cell | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
     | Random crate placement (S-0520 claim 3) | the candidate cell supplied by S-0520 claim 3 | *float* when the centre's land type is *water*, *track* otherwise | *normal* | none | never | no | no | none |
     | Unit crate placement fallback (S-0520 claim 13) | the crate cell | the awarded unit type's | *normal* | none | never | no | no | none |
+    | Bunker exit (S-0606 claim 12) | the bunker's top-left foundation cell + (−1, +1) cells | the vehicle's | *normal* | none | never | no | no | none |
     | Paradrop target adjustment (S-0522 claim 1) | the target cell | *foot* | *normal* | none | never | no | no | none |
     | Air-strike aircraft placement (S-0519 claim 17) | the strike's arrival cell | *winged* | *normal* | none | never | no | no | none |
     | Parasite exit (S-0614 claim 13) | the host's cell | the host's, *winged* counted as *track* | the host's own | that of the centre cell for that zone, read for its deck in deck mode | the host is on a bridge deck | no | no | none |
@@ -1574,8 +1574,9 @@ Terms specific to this spec:
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
 
-    The trigger-crate, random-crate, unit-crate fallback, paradrop and air-strike rows
-    allow bridge cells and ask for no no-overlay condition. For trigger and random crates, selection
+    The trigger-crate, random-crate, unit-crate fallback, bunker-exit, paradrop and air-strike rows
+    allow bridge cells and ask for no no-overlay condition. S-0606 claim 12 owns
+    bunker-exit release and the still-unestablished outcome when that search finds no cell. For trigger and random crates, selection
     is not placement: a selected cell outside the height-aware usable area or holding
     any overlay is refused without another nearby search around that centre. S-0524
     claim 4 owns trigger placement; S-0520 claim 3 owns random placement's subsequent
@@ -1672,7 +1673,7 @@ Terms specific to this spec:
     teleporting landing (S-0207 claim 20 b) and infantry teleport fallback (S-0208 claim 19),
     action tick for trigger crate placement (S-0524 claim 4), placement-attempt tick for
     random crate placement (S-0520 claim 3), pickup tick for unit-crate placement fallback
-    (S-0520 claim 13), launch tick for paradrop
+    (S-0520 claim 13), unload-processing tick for bunker exit (S-0606 claim 12), launch tick for paradrop
     target adjustment (S-0522 claim 1), start tick for air-strike aircraft placement
     (S-0519 claim 17), exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
     harvester step-off (S-0402 claim 13), release tick for
@@ -1708,7 +1709,10 @@ Terms specific to this spec:
       and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
-      cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the other
+      cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the
+      bunker-exit parameters (S-0606 claim 12): no player-input route to a bunkered vehicle's
+      *unload* has been established. Confidence in those caller settings is high, but their
+      reachability is low. `unmeasured` for the other
       parameters of the no-move rows and for the rows of orders onto an object: they differ from the
       move-order row only in parameters that need a flying or jumpjet unit next to occupied cells.
       P22(a) tests the teleporting landing's strict deck-mode threshold on a high bridge.
