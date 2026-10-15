@@ -5,10 +5,13 @@
 //!
 //! - Buildings: YARD (construction yard, 3 × 3, builds buildings), POWR
 //!   (power plant, 2 × 2), PROC (dock-unload refinery, 3 × 3), PILL (barracks, 2 × 2),
-//!   FACT (war factory, 3 × 3).
+//!   FACT (war factory, 3 × 3), and a tech chain: RADR (2 × 2, needs
+//!   FACT), LAB (2 × 2, needs RADR; a name that is not a generic group word).
 //! - Vehicles: MCV (deploys into YARD, the base unit), MINR (harvester,
-//!   docks at PROC), GUNR (a gun vehicle); the testkit's CART, CRUSHER and
-//!   BUGGY stay registered.
+//!   docks at PROC), GUNR (a gun vehicle), LNCH (a V3-like launcher with
+//!   one rocket slot of the set-A type RKT, needs LAB); the testkit's
+//!   CART, CRUSHER and BUGGY stay registered.
+//! - Aircraft: RKT (the set-A rocket type, S-0506).
 //! - Infantry: WALKER (the testkit's rifleman).
 //! - Resource: ORE (overlays 0 … 11, stages 0 … 11).
 //! - Map: a flat clear square of side [`SIZE`] (cell coordinates 0 … 2·SIZE
@@ -22,7 +25,8 @@ use std::sync::Arc;
 use glasnost_map::{CellXY, Map};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
-    BuildingType, Decimal, LandRow, LandType, LocomotionClass, Locomotor, OverlayType, UnitType,
+    BuildingType, CombatFields, Decimal, LandRow, LandType, LocomotionClass, Locomotor,
+    OverlayType, UnitType, WarheadType, WeaponType,
 };
 use glasnost_rules::sim_econ::TiberiumType;
 use glasnost_sim::econ::setup::{self, Player, Settings};
@@ -106,12 +110,18 @@ pub fn ruleset() -> Ruleset {
     pill.factory = Some("infantry".into());
     let mut fact = building(3, 3, 1500, -30);
     fact.factory = Some("vehicle".into());
+    let mut radr = building(2, 2, 1000, -40);
+    radr.econ.prerequisite = Some(vec!["FACT".into()]);
+    let mut lab = building(2, 2, 1500, -60);
+    lab.econ.prerequisite = Some(vec!["RADR".into()]);
     for (n, b) in [
         ("YARD", yard),
         ("POWR", powr),
         ("PROC", proc_),
         ("PILL", pill),
         ("FACT", fact),
+        ("RADR", radr),
+        ("LAB", lab),
     ] {
         r.sim.buildings.insert(n.into(), b);
         push(&mut r, "buildings", n);
@@ -127,10 +137,70 @@ pub fn ruleset() -> Ruleset {
     gunr.primary = Some("Gun".into());
     gunr.turret = Some(true);
     gunr.combat.primary_fire_flh = Some([90, 0, 70]);
-    for (n, u) in [("MCV", mcv), ("MINR", minr), ("GUNR", gunr)] {
+    let mut lnch = vehicle(300, 4, 1200);
+    lnch.primary = Some("Launch".into());
+    lnch.missile_spawn = Some(true);
+    lnch.econ.prerequisite = Some(vec!["LAB".into()]);
+    lnch.combat.spawns = Some("RKT".into());
+    lnch.combat.spawns_number = Some(1);
+    lnch.combat.spawn_regen_rate = Some(200);
+    lnch.combat.spawn_reload_rate = Some(0);
+    lnch.combat.primary_fire_flh = Some([60, 0, 80]);
+    for (n, u) in [("MCV", mcv), ("MINR", minr), ("GUNR", gunr), ("LNCH", lnch)] {
         r.sim.vehicles.insert(n.into(), u);
         push(&mut r, "vehicles", n);
     }
+    r.sim.aircraft.insert(
+        "RKT".into(),
+        UnitType {
+            strength: Some(40),
+            speed: Some(50),
+            rot: Some(20),
+            missile_spawn: Some(true),
+            spawned: Some(true),
+            locomotor: Some(Locomotor::Rocket),
+            // Not scored (S-0414 claim 4): a rocket stalled at the map edge
+            // (S-0506 claim 18) would otherwise keep a beaten house alive.
+            combat: CombatFields {
+                dont_score: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    push(&mut r, "aircraft", "RKT");
+    r.sim.weapons.insert(
+        "Launch".into(),
+        WeaponType {
+            damage: Some(1),
+            rof: Some(60),
+            range: Some(Decimal("18".into())),
+            projectile: Some("Bullet".into()),
+            warhead: Some("HE".into()),
+            spawner: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim.warheads.insert(
+        "RKTW".into(),
+        WarheadType {
+            cell_spread: Some(Decimal("2".into())),
+            percent_at_max: Some(Decimal("0.5".into())),
+            verses: Some((0..11).map(|_| Decimal("1".into())).collect()),
+            ..Default::default()
+        },
+    );
+    let g = &mut r.sim.general;
+    g.v3_rocket_type = Some("RKT".into());
+    g.v3_rocket_pause_frames = Some(6);
+    g.v3_rocket_tilt_frames = Some(12);
+    g.v3_rocket_altitude = Some(700);
+    g.v3_rocket_pitch_final = Some(Decimal("0.6".into()));
+    g.v3_rocket_acceleration = Some(Decimal("3".into()));
+    g.v3_rocket_damage = Some(250);
+    g.v3_rocket_elite_damage = Some(350);
+    g.v3_warhead = Some("RKTW".into());
+    g.v3_elite_warhead = Some("RKTW".into());
     if let Some(i) = r.sim.infantry.get_mut("WALKER") {
         i.tech_level = Some(1);
         i.owner = owners();

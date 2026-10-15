@@ -14,6 +14,13 @@
 //!    square spiral around the construction yard that passes the place
 //!    order's conditions and the cell test;
 //! 3. build another power plant whenever the drain reaches the output;
+//!    once the base stands and the harvesters are kept, climb the tech
+//!    tree: for an army type the house cannot build yet, build the
+//!    cheapest building that clears one of its blockers (an unmet
+//!    prerequisite, read off the tech tree as a player reads the sidebar's
+//!    tooltips, or a missing factory of its kind), climbing further when
+//!    that building is itself blocked; a building is only ordered when the
+//!    spiral has a cell for it (a naval yard needs water);
 //! 4. keep the plan's harvester count, and send idle or resting harvesters
 //!    to harvest; a slave miner counts as a harvester (and, deployed, its
 //!    building too), needs no refinery, and is sent to harvest at the
@@ -39,6 +46,7 @@ use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
+use glasnost_sim::targeting;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
@@ -96,6 +104,9 @@ const GAP: i32 = 2; // nocite: tuning of our own opponent
 
 /// The largest ring of the placement spiral around the construction yard.
 pub(crate) const SPIRAL_RINGS: i32 = 12; // nocite: tuning of our own opponent
+
+/// How many buildings deep the tech climb looks for one it can build now.
+const CLIMB_DEPTH: u32 = 4; // nocite: tuning of our own opponent
 
 /// What a type is for in the plan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -395,6 +406,9 @@ impl Script {
                 w.obj(id)
                     .is_some_and(|o| self.allowed(w, tech::type_of(o), role))
                     && !(role == Role::Army && slaves::is_slave(w, id))
+                    // A person orders only what they can select.
+                    && (matches!(role, Role::Yard | Role::Power | Role::Refinery | Role::Factory(_))
+                        || targeting::selectable(w, id))
             })
             .collect()
     }
@@ -419,12 +433,98 @@ impl Script {
     /// Orders a build of the cheapest type the house can build for `role`
     /// when its line is free; returns the type ordered.
     fn build(&self, w: &World, role: Role, out: &mut Vec<Order>) -> Option<TypeRef> {
-        let t = *self.candidates(w, role).first()?;
+        let t = self
+            .candidates(w, role)
+            .into_iter()
+            .find(|&t| self.placeable(w, t))?;
+        self.order_build(w, t, out)
+    }
+
+    /// Orders a build of `t` when its line is free.
+    fn order_build(&self, w: &World, t: TypeRef, out: &mut Vec<Order>) -> Option<TypeRef> {
         if self.busy(w, t) {
             return None;
         }
         out.push(Order::Build { what: t });
         Some(t)
+    }
+
+    /// Whether `t` is not a building or the spiral has a cell for it now,
+    /// so that a finished building never waits on its line for a cell.
+    fn placeable(&self, w: &World, t: TypeRef) -> bool {
+        t.kind != Kind::Building || self.place_cell(w, t).is_some()
+    }
+
+    /// The building types that meet prerequisite entry `p` (S-0407
+    /// claim 8): the building itself or a member of the group.
+    fn meeting(w: &World, p: tech::Prereq) -> Vec<u32> {
+        match p {
+            tech::Prereq::Building(i) => vec![i],
+            tech::Prereq::Group(g) => w.rules().econ.tech.groups[g as usize].clone(),
+            tech::Prereq::Upgrade(_) | tech::Prereq::Unmet => Vec::new(),
+        }
+    }
+
+    /// The factory building types that could make `t`: of its kind, naval
+    /// for a naval vehicle (S-0404 Terms).
+    fn factories_for(w: &World, t: TypeRef) -> Vec<u32> {
+        let naval = t.kind == Kind::Vehicle && production::naval(w, t);
+        w.rules()
+            .buildings
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.factory.is_some_and(|f| f.kind() == t.kind) && b.naval == naval)
+            .map(|(i, _)| i as u32)
+            .collect()
+    }
+
+    /// A building the house can build and place now that clears a blocker
+    /// of `t`, looking `depth` buildings deeper when the one that clears it
+    /// is blocked itself; `None` when `t` is not blocked, is refused for
+    /// another reason (tech level, owner, side) or nothing clears it.
+    fn unblocker(&self, w: &World, t: TypeRef, depth: u32) -> Option<TypeRef> {
+        if tech::buildable(w, self.house, t) {
+            return None;
+        }
+        let blockers = tech::unmet_prerequisites(w, self.house, t)?;
+        let mut options: Vec<Vec<u32>> =
+            blockers.into_iter().map(|p| Self::meeting(w, p)).collect();
+        if options.is_empty() {
+            // Only the factory is missing.
+            options.push(Self::factories_for(w, t));
+        }
+        for list in options {
+            let mut list: Vec<TypeRef> = list
+                .into_iter()
+                .map(|index| TypeRef {
+                    kind: Kind::Building,
+                    index,
+                })
+                .collect();
+            list.sort_by_key(|&b| (production::cost_field(w, b), b.index));
+            for b in list {
+                if tech::buildable(w, self.house, b) {
+                    if self.placeable(w, b) {
+                        return Some(b);
+                    }
+                } else if depth > 0
+                    && let Some(x) = self.unblocker(w, b, depth - 1)
+                {
+                    return Some(x);
+                }
+            }
+        }
+        None
+    }
+
+    /// The next building of the tech climb: the cheapest building that
+    /// clears a blocker of an army type the house cannot build yet.
+    pub(crate) fn climb(&self, w: &World) -> Option<TypeRef> {
+        all_types(w)
+            .into_iter()
+            .filter(|&t| self.allowed(w, t, Role::Army) && !tech::buildable(w, self.house, t))
+            .filter_map(|t| self.unblocker(w, t, CLIMB_DEPTH))
+            .min_by_key(|&b| (production::cost_field(w, b), b.index))
     }
 
     /// Updates the economy watch and, when the house is broke (no income:
@@ -495,6 +595,13 @@ impl Script {
         }
     }
 
+    /// Whether the house keeps the plan's harvester count (deployed slave
+    /// miners count).
+    fn harvesters_kept(&self, w: &World) -> bool {
+        self.of_role(w, Role::Harvester).len() + self.slave_buildings(w).len()
+            >= self.plan.harvesters
+    }
+
     /// Whether the house is selling out (see [`Script::think`]).
     pub(crate) fn selling(&self) -> bool {
         self.watch.selling
@@ -560,6 +667,10 @@ impl Script {
                 .find(|&r| !self.candidates(w, r).is_empty());
             if let Some(role) = wanted {
                 self.build(w, role, &mut out);
+            } else if self.harvesters_kept(w)
+                && let Some(t) = self.climb(w)
+            {
+                self.order_build(w, t, &mut out);
             }
         }
 
