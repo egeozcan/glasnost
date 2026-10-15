@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -366,14 +366,13 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
       recheck in the house's next house update; a superweapon found lost at a recheck (event (k))
       is likewise taken up by another recheck in the next house update.
 
-    A recheck works out the whole taken-up set again from the state at that moment, for every type,
-    not only for the types that the triggering event touched. So it also applies every change that
-    earlier non-events (below) left pending: between rechecks the set can be stale, and whichever
-    event comes next makes the stale change visible. An implementation that, at a recheck, looks
-    again only at the types touched by the triggering event does not meet this claim (T8 (f) and
-    (g); T14 runs 6, 8, 9 and 14). Therefore the list of events can be seen in both directions while
-    the set is stale: a missing event delays the appearance or disappearance of an icon until a
-    later event, and an extra event brings it forward. Both are differences from the original.
+    At each recheck, the taken-up set reflects the state at that moment for every type, including
+    changes left pending by earlier non-events. Between rechecks the set can be stale; the next
+    event in the table makes those pending changes visible. For example, after a refinery-alternative
+    vehicle enters a transport, a type whose refinery prerequisite has consequently failed remains
+    offered until the next recheck; an event that makes the whole set reflect the current state
+    sooner or later changes the tick on which the icon appears or disappears. Both timing changes
+    are differences from the original (T8 (f) and (g); T14 runs 6, 8, 9 and 14).
 
     | Event, for the house concerned | Notes |
     |---|---|
@@ -502,9 +501,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
     and 11), as an override building (claim 3) and, for a secret lab, with its secret type (claim 4).
     Capturing does not grant stolen tech (claim 6 needs a spy) and does not change either house's
     ever-built counts. An ownership change leaves a secret lab's secret type unchanged and
-    takes no random draw (S-0515 claim 8).
+    takes no random draw for secret-type selection (S-0515 claim 8).
     - Backing: `measurable` (scenarios T2, T9 and T13; the ever-built counts by T10 (h),
-      secret-type persistence and no ownership-change draw by T9's ownership-change variant)
+      secret-type persistence and no draw for secret-type selection by T9's ownership-change variant)
     - Confidence: high
 
 16. **Queue-time limit.** When a type is queued behind an item (S-0404, claim 3: the line holds an
@@ -945,8 +944,11 @@ of the scenarios.
   of total length 3. After its first capture, give it to the neutral house and back by test
   triggers five times in otherwise quiet ticks. Record the offered secret type after each
   acquisition and the scenario stream state immediately before and after each ownership
-  change. Expected: the same type every time, and no stream advance at any ownership change.
-  A changed type or a draw attributable to the ownership change falsifies the claim.
+  change. Compare each change against a control with identical objects, visual effects and
+  ownership changes but the secret-lab flag disabled, as in S-0515 scenario TB7. Expected:
+  the same type every time, and no extra draw for secret-type selection in the lab run.
+  A changed type or an extra selection draw falsifies the claim; an unchanged type alone
+  does not establish absence of a draw.
 - Run 4 (more labs than entries, and no entries): four labs and test secret lists of total
   length 3; then a second game with four labs and empty secret lists. Expected: in both games the
   stream state is the same before and after the assignment (no draw is taken) and no lab gives a
