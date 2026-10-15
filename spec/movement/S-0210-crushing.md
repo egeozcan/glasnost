@@ -2,7 +2,7 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -328,9 +328,15 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
 11. **Automatic crushing.** A crusher may choose, as a target to drive over, a crushable enemy
     unit, on the occasions on which the behaviour specs (S-0215) let a unit pick a target of its own,
     when all of these hold:
-    - the target is crushable by it (claim 2) and does not appear friendly to the crusher's house,
+    - the target is crushable by it (claim 2) and does not appear disguised to the crusher's house
+      (S-0516 claims 35–36),
     - the distance between their centres (in three dimensions) is at most the crush range (F2),
     - the game-wide player-auto-crush rule is on, or the crusher's type has the auto-crush flag.
+
+    This disguise condition belongs to the automatic choice in this list, not to crushing along an
+    existing route: a unit that appears disguised can still be crushed under claims 2–3 when the
+    crusher is ordered through its cell. The disguise condition does not add a requirement to the
+    omni-crusher or original's attack-target variants below.
 
     When the target is chosen, the crusher is given a move to the target's cell, as if ordered to move
     there. When it reaches the cell centre, claim 3 applies. Which behaviours give the crusher the
@@ -392,7 +398,8 @@ S-0107: *crushable* (the flag), *deploying*. Terms used by this spec:
     - *Original: opportunity targets.* A vehicle of a computer-controlled house with the
       omni-crusher flag drives at an opportunity target too, which the human-controlled vehicle of
       the exception above does not.
-    - Backing: `measurable` (scenario K7). The first list under a human-controlled owner: cases 3
+    - Backing: `measurable` (scenarios K7 and K13; K13 for the disguise condition and its distinction
+      from crushing along an ordered route). The first list under a human-controlled owner: cases 3
       (rule and flag both off, no crushing), 13 and 14 (flag or rule on, crushing), 15 and 16 for the
       range in force and its absent-key default (F2), and 8 and 9 for the
       range condition under a computer-controlled owner. The omni-crusher variant: case 10, and 12h
@@ -1139,6 +1146,27 @@ cell-centre crushing.
   does not change.
 - *Runs:* one each.
 
+**Scenario K13: disguise blocks automatic choice, not a drive-through (claim 11).**
+- *Setup:* the measurement setup, director and mods off, game speed index 2. On a purpose-made
+  flat map, place a human-owned unarmed crusher without the omni-crusher flag, its auto-crush flag
+  enabled through the named test map's override section, and an enemy crushable spy within half
+  the crush range. The spy has copied an infantry unit of the crusher's house. Keep the spy in
+  a one-cell-wide corridor with no scatter exit. Compare separate runs with and without the
+  crusher's house having building disguise-detector coverage on the spy's cell (S-0516 claim 35).
+  The bystander computer player remains outside the test area.
+- *Procedure:* in each run let the crusher stand idle for 600 ticks on an occasion that offers
+  automatic choice under S-0215. In a separate no-coverage run, order it through the spy's cell
+  to a cell beyond it. Record the spy's disguise, owner, position, presence and health, detector
+  coverage, and the crusher's position each tick.
+- *Runs:* three per case. A drive-through run decides nothing unless the crusher reaches the
+  spy's cell centre while the spy remains within the crush radius and still appears disguised.
+- *Expected:* without coverage the crusher does not choose the spy for automatic crushing. With
+  coverage it chooses and crushes the spy. The ordered drive-through crushes the still-disguised
+  spy on arrival at the cell centre, as in claims 2–4.
+- *Falsified if:* the idle crusher automatically chooses the spy while the spy appears disguised,
+  the covered control fails to choose it despite an automatic-choice occasion, or the spy survives
+  a valid drive-through solely because it appears disguised.
+
 ## Open questions
 
 - Whether other locomotors that carry vehicles over the ground (for example hovering vehicles) crush
@@ -1165,5 +1193,3 @@ cell-centre crushing.
   overlay type with registration index 0 as *clear* when it would otherwise get the entry outcome
   *friendly obstacle* or *enemy obstacle* (S-0209). This is the same quirk family as claim 9 but concerns entry,
   which S-0209 owns; it is not specified here.
-- What "appears friendly" means in claim 11 (for example a disguised unit) is shared with S-0209
-  claim 4 and should be defined by the disguise specs.
