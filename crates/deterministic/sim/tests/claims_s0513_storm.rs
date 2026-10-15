@@ -291,6 +291,89 @@ fn claim18_debris_follows_the_top_corner_witness_not_the_centre_nearest_unit() {
     assert!(pieces.is_empty());
 }
 
+/// Whether a strike at the cell offset `strike` makes storm debris when an
+/// `AUXB` building of foundation `found` (top-left cell (0, 0), one hit from
+/// death) and a sturdy infantry unit at in-cell offset `walker_at` of the
+/// cell offset `walker_cell` share the struck cell. Debris follows only a
+/// pre-damage witness that is not infantry, so no debris means the infantry
+/// unit won the witness test.
+fn building_strike_debris(
+    found: [i32; 2],
+    strike: (i32, i32),
+    walker_cell: (i32, i32),
+    walker_at: (i32, i32),
+) -> bool {
+    let mut r = ruleset();
+    {
+        let b = r.sim.buildings.get_mut("AUXB").unwrap();
+        b.strength = Some(40);
+        b.foundation = Some(found);
+    }
+    r.sim.infantry.get_mut("WALKER").unwrap().strength = Some(5000);
+    r.sim.general.metallic_debris = Some(vec!["DEB1".into(), "DEB2".into()]);
+    for n in ["DEB1", "DEB2"] {
+        r.sim
+            .animations
+            .insert(n.into(), glasnost_rules::sim::AnimationType::default());
+        r.registries
+            .entry("animations".into())
+            .or_default()
+            .push(n.into());
+    }
+    let mut w = game(&r);
+    // The infantry unit is placed first, so it also precedes the building in the listing.
+    let walker = spawn(&mut w, "WALKER", BETA, walker_cell.0, walker_cell.1);
+    let bld = spawn(&mut w, "AUXB", BETA, 0, 0);
+    let base = at(walker_cell.0, walker_cell.1);
+    let o = w.obj_mut(walker).unwrap();
+    o.pos.x = base.x * 256 + walker_at.0;
+    o.pos.y = base.y * 256 + walker_at.1;
+    let target = at(strike.0, strike.1);
+    storm::cloud(&mut w, target);
+    for _ in 0..100 {
+        w.effects.clear();
+        step(&mut w);
+        if events(&w)
+            .iter()
+            .any(|e| matches!(e.0, SwEvent::Lightning(_)))
+        {
+            assert!(w.obj(bld).is_none_or(|o| o.health <= 0), "the building died");
+            return w.effects.iter().any(|e| {
+                matches!(e, glasnost_sim::combat::effects::Effect::Anim { name, .. }
+                    if name.starts_with("DEB"))
+            });
+        }
+    }
+    panic!("no strike");
+}
+
+#[test]
+fn claim18_a_building_witness_is_measured_at_its_foundation_centre() {
+    // spec: S-0513 claim 18 (Q-0800: the building's reference point is its foundation centre, (256a + 128W, 256b + 128H); only its remainders modulo 256 enter, so a 1 x 1 building is at distance 181, a 2 x 2 building at 0, odd-by-even and even-by-odd at 128); S-0204 claim 4
+    // 1 x 1: distance 181. Infantry below it win (no debris); above it the building is the witness (debris).
+    assert!(!building_strike_debris([1, 1], (0, 0), (0, 0), (100, 100)));
+    assert!(building_strike_debris([1, 1], (0, 0), (0, 0), (200, 200)));
+    // 2 x 2: distance 0 against every positive-distance candidate.
+    assert!(building_strike_debris([2, 2], (0, 0), (0, 0), (1, 1)));
+    // Odd width, even height (1 x 2): remainders (128, 0), distance 128.
+    assert!(!building_strike_debris([1, 2], (0, 0), (0, 0), (120, 0)));
+    assert!(building_strike_debris([1, 2], (0, 0), (0, 0), (150, 0)));
+    // Even width, odd height (2 x 1): remainders (0, 128), distance 128.
+    assert!(!building_strike_debris([2, 1], (0, 0), (0, 0), (0, 120)));
+    assert!(building_strike_debris([2, 1], (0, 0), (0, 0), (0, 150)));
+}
+
+#[test]
+fn claim18_the_building_threshold_is_the_same_in_every_foundation_cell() {
+    // spec: S-0513 claim 18 (Q-0800: the building is listed in every foundation cell and the same remainder test applies in each; a missing cell of an irregular foundation does not list it); S-0209 claim 13 (per-foundation-cell listing)
+    // A 2 x 2 building struck on its non-anchor cell (1, 1): it still beats a positive-distance infantry unit.
+    assert!(building_strike_debris([2, 2], (1, 1), (1, 1), (1, 1)));
+    assert!(building_strike_debris([2, 2], (1, 0), (1, 0), (255, 255)));
+    // A 3 x 3 building (both odd, 181) struck on a non-anchor cell: infantry at 141 wins, at 282 the building does.
+    assert!(!building_strike_debris([3, 3], (2, 2), (2, 2), (100, 100)));
+    assert!(building_strike_debris([3, 3], (2, 2), (2, 2), (200, 200)));
+}
+
 /// The synthetic rules with both clouds of `frames` image frames and rate
 /// `rate` (None: no rate field).
 fn cloud_rules(frames: i32, rate: Option<i32>) -> glasnost_rules::schema::Ruleset {
