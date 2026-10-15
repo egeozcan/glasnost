@@ -2,7 +2,7 @@
 id: S-0609
 title: Gattling spin-up
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -123,7 +123,9 @@ claim 12. Sound playback and the report-variant rule are S-0701 claims 13, 14 an
    So a vehicle keeps spinning up while it waits between shots, turns to face its target or is
    still turning, and spins down in every tick in which it has no target or cannot attack it.
    A change of target is not itself an event: the update of each tick depends only on that tick's
-   answer.
+   answer. Being bunkered adds no firing-step exclusion or delay (S-0606 claim 9): the same
+   per-tick spin rule applies, subject to ordinary inactivity rules, not a guarantee of a shot
+   every tick.
 
    A shot fired in this firing step uses the stage immediately before this step's spin update.
    Usually that is the stage at the end of the previous tick; another event, such as boarding or
@@ -476,6 +478,10 @@ attacker's turret at the start. Record per run the tick and damage of every hit 
   targets valid and surviving. Record value and stage every tick, not only at shots.
 - *Expected:* while firing-check categories match, all runs have the same values and stages per
   update, including *j*₁ = 3 and *j*₂ = 6. Shot counts and real-time durations may differ.
+- *Bunker variant (claim 5):* repeat with an eligible test vehicle inside a tank bunker and an
+  open-ground control of the same type (S-0606 claim 9). Compare intervals with equal recorded
+  firing-check answers and no ordinary inactivity. Expect the same spin update each tick:
+  bunker-only missing or delayed spin updates falsify the claim. Shot ticks may differ.
 - *Falsified if:* a modifier changes value or stage at a corresponding spin update.
 
 **G4. Building in *attack* (claim 7).**
@@ -610,9 +616,7 @@ attacker's turret at the start. Record per run the tick and damage of every hit 
 
 1. A complete classification of destruction and removal paths that bypass the vehicle firing
    step remains untraced (claim 6); no additional gameplay state is asserted from those paths.
-2. Whether a vehicle inside a tank bunker takes its firing step every tick, and so spins by claim 5,
-   is for S-0606 to state. This spec assumes it does.
-3. Whether the end-after-loop treatment of a spin sound at a spin-down update is audibly different
+2. Whether the end-after-loop treatment of a spin sound at a spin-down update is audibly different
    from stopping it depends on the sound entry's loop words (S-0701 claim 14).
 
 ## Questions for the project lead
