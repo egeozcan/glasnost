@@ -412,12 +412,17 @@ S-0501 (aircraft flight, attack runs and pads) is built in `glasnost_sim::air`. 
   - **Landing placeholder (claim 41, F8).** With the new `quirks.landing_own_cell_no_result` on (the original), an empty own-cell search below 256 leptons gives the placeholder `Target::Cell((0, 0))`. `air::end_turn` discards it (`air::is_placeholder`), clearing the destination and target, and falls back to rest. Off, the other-object fallback runs.
   - Claim 17 now says strike aircraft, not airstrike aircraft. No aircraft is linked to a strike (S-0519 claims 17 and 20).
   - The save format is 17.
+- **Revision 10 (answers Q-0653).**
+  - **The 1-lepton step (claim 4, F3).** No fraction of a lepton is kept, so a 1-lepton step at a body facing from 16391 to 32766 (between east and south) changes neither coordinate. The new `quirks.aircraft_unit_step_stall` (on, the original) keeps this. Off, such a step of at least 1 lepton moves 1 lepton along the axis of its larger component, x on equal magnitudes (`air::step`, with `walk::step_components`). An aircraft with converted speed from 10 to 19 whose step falls to 1 lepton outside the halving zone at such a facing hovers there with a positive fraction (claim 5). An ordinary attacker then never fires, and a *move* or a return to a pad stops short of landing. The Q-0653 interim row is gone, and AC24 (b) is flown from its starts b1 to b6.
+  - **T1 (claim 42).** The new `quirks.aircraft_zero_step_attack_stall` (on, the original) keeps the zero-fraction test. Off, an ordinary attacker in *approaching* whose positive current fraction gives F3 step length 0 also moves to *firing*, keeping its destination, with a 1-tick delay (`air::step_length`). A 1-lepton step that does not move does not count.
+  - Under `quirks.chop_rounding`, two rows of F3's new table differ from S-0208 F3 and S-0205 claim 5 (Q-0654, interim row below).
+  - The save format stays 17: the switches are rules, not state.
 
 Provisional rules of M6a (aircraft), each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `air::tick` (F3 step, F4 slowing) | F3 and F4 are followed literally. An ordinary attacker whose fraction settles near *d* / *S* at a 1-lepton step, on a heading whose step components are both non-negative and below one lepton, makes no progress. It hovers about 2*S* / *V* leptons short with a positive fraction and never fires. Claim 5's "*V* at least 10" consequence and AC24 (b) expect it to reach fraction 0 below 86 leptons | Q-0653 |
+| `air::step` (F3, the 1-lepton table) | S-0208 F3, S-0105 F1 and S-0205 claim 5 are followed literally: under `quirks.chop_rounding`, a step at facings 32767 to 32772 also moves 1 lepton west, and one at 49148 to 49155 also moves 1 lepton north. S-0501 F3's table and AC24 (b3) expect no such lepton | Q-0654 |
 
 ## Own AI (M5b)
 
