@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -21,8 +21,9 @@ aimed, which cells and objects it reaches, when its parts happen, who is credite
 against it, and how its effects combine. Covered: the nuclear strike, the weather storm, the
 invulnerability superweapon (iron curtain), the force shield, the two-stage teleport superweapon
 (chronosphere), the paradrop dispatch and the spy plane. Skirmish only; network games and
-campaigns are out of scope. Psychic reveal is covered by S-0610 claims 13 to 15. The other Yuri
-superweapons (psychic domination and genetic mutation) are M7 and are not covered here.
+campaigns are out of scope. Psychic reveal is covered by S-0610 claims 13 to 15, genetic mutation
+by S-0611 claims 2 to 5, and psychic domination by S-0612 claims 1 to 17. The shared launch
+presentation and swept-layer rules below also apply where those specs cite them.
 
 **What this spec does not restate.**
 - **Charge, readiness, firing and refusal:** S-0512. In particular the order checks and the
@@ -148,7 +149,14 @@ superweapons (psychic domination and genetic mutation) are M7 and are not covere
    high-bridge cell are affected, with deck-layer effects preceding ground-layer effects in
    the observable recipient sequence). The waypoint invulnerability trigger action always
    affects only the ground layer (claim 22).
+
+   Genetic mutation in cell mode shares this effect block, swept-layer rule and
+   `quirks.superweapon_block_one_layer`; S-0611 claim 4 owns its infantry recipients and hits.
+   Its recipients are not cut short by removal of an earlier victim: the list-cut quirk in
+   State and ordering does not apply to mutation.
    - Backing: `measurable` for recipients and ordering (SW9 parts b and g, SW12 parts e and f).
+     Mutation's use of the shared layer rule and its lack of a list cut inherit S-0611 claim 4's
+     backing (scenario MU4).
      Repeated application to a building listed in multiple cells is `unmeasured`: the same-tick
      protection replacement has no distinct observable in these tests
    - Confidence: high
@@ -164,7 +172,12 @@ superweapons (psychic domination and genetic mutation) are M7 and are not covere
    | Force shield | every player near the target | the type's start sound at the target, and later its fading sound (claim 32); no announcement, no radar event |
    | Teleport source | the launching player only | the source marker (claim 33); no announcement, no radar event |
    | Teleport warp | every player | activation announcement; radar events at the source and destination cells |
+   | Genetic mutation | every player | activation announcement; activation sound at the target; radar event at the target cell (S-0611 claim 2) |
+   | Psychic domination | every player | activation announcement; activation sound at the target; radar event at the target cell (S-0612 claim 1) |
    | Paradrop, spy plane | nobody | nothing |
+
+   The genetic-mutation and psychic-domination activation sounds are positional: only players
+   near the target hear them, unlike their announcements.
 
    For the launching player a launch other than a teleport source pick ends the aiming mode and
    silences that type's ready announcement if it is still queued or playing. A source pick instead
@@ -172,6 +185,8 @@ superweapons (psychic domination and genetic mutation) are M7 and are not covere
    launch announcements are muted for that player (S-0701 claim 28). Radar events of the same
    kind close to an earlier one are merged (the interface specs own radar events).
    - Backing: `measurable` (SW2 part f, SW9 part f, SW11 part e, SW12 part g and SW18).
+     The genetic-mutation row inherits S-0611 claim 2's backing (MU1 part a and MU11), and
+     the psychic-domination row inherits S-0612 claim 1's backing (PD1).
      Radar-event merging inherits the interface specs' backing rather than being tested here
    - Confidence: high
 
@@ -195,7 +210,14 @@ superweapons (psychic domination and genetic mutation) are M7 and are not covere
    that is a silo and names this superweapon type in its first or second superweapon field is the
    only type considered, whether or not the house owns one of it
    (`quirks.nuke_silo_first_type_only`, default on = original; off: every such silo type is
-   considered, in type-list order). Of the house's buildings of that type that are on the map,
+   considered, in type-list order). These are the silo type's own fields, not those of an
+   upgrade it carries. Launcher selection is distinct from the *giving building* test of
+   S-0512 claims 3, 6 and 7: it does not require the superweapon's auxiliary building.
+   The auxiliary condition still governs building-based grants and their retention under
+   those claims; it is not an additional effect-level launch test. Thus a ready permanent
+   trigger grant (S-0512 claim 13) can launch through a matching silo even when the auxiliary
+   building is absent. Such a grant does not waive the need for a matching silo.
+   Of the house's buildings of the selected type that are on the map,
    the one the house has owned longest is chosen. Distance, health, power, an electromagnetic pulse
    and selling play no part in the choice. The house is *able to launch* in the sense of S-0512
    claim 8 only when such a building exists and accepts the launch behaviour. A selling silo
@@ -205,8 +227,10 @@ superweapons (psychic domination and genetic mutation) are M7 and are not covere
    launch sounds occur. S-0512 claim 8 decides the charge in all these cases.
 
    A one-time record does not use a building at all (claim 10).
-   - Backing: `measurable` (scenario SW2 parts b, c and e, including named test data for
-     multiple silo types and a busy silo). Health and power independence are `unmeasured`:
+   - Backing: `measurable` (scenario SW2 parts b, c, e and i, including named test data for
+     multiple silo types, a busy silo and the auxiliary-building distinction).
+     Exclusion of upgrade-only superweapon fields is `unmeasured`: no scenario part here
+     puts the nuclear record solely on an upgrade of a silo. Health and power independence are `unmeasured`:
      those parts do not vary them independently. Electromagnetic-pulse independence is
      `unmeasured`: no stock skirmish pulse delivery is established here
    - Confidence: high for the type rule; medium for "owned longest" and for the busy-silo case
@@ -902,10 +926,12 @@ Absent-key defaults are in Import mapping.
   match F1's cell order and S-0209 claim 13's listing order within each cell. Backing:
   `measurable` (SW9 part g); confidence: high.
 - With `quirks.superweapon_list_cut_by_removal` on (default = original), when a reached object
-  leaves its cell immediately during its own effect, later listed objects in that cell are not
+  leaves its cell immediately during its own curtain or warp effect, later listed objects in that cell are not
   reached. With it off, objects listed when the effect begins remain eligible to be reached.
   This distinction also applies to a warp's source effects and landing conflicts when a victim
-  is removed immediately. Backing: `unmeasured`: no fixture here establishes immediate removal
+  is removed immediately. It does not apply to genetic mutation in cell mode (S-0611 claim 4),
+  which still hits later listed infantry after a conversion removes an earlier victim.
+  Backing: `unmeasured` for the curtain and warp list cut: no fixture here establishes immediate removal
   during the effect, rather than a death that completes later. SW9 part g is an exploratory
   search for such a witness, not a guaranteed test of this condition. Confidence: low.
 - A fire order's draws come after the turn pass (S-0203 claim 7); a warp member's later draws come
@@ -972,13 +998,14 @@ can reliably force its effect-creation failure through ordinary input.
 
 | Source | Key | Feeds | Form | Absent |
 |---|---|---|---|---|
-| superweapon type sections | `Type` | superweapon kind (S-0512; psychic reveal: S-0610 claims 13 to 15, other Yuri effects: M7) | word, S-0512 | no kind |
+| superweapon type sections | `Type` | superweapon kind (S-0512; psychic reveal: S-0610 claims 13 to 15; genetic mutation: S-0611 claims 2 to 5; psychic domination: S-0612 claims 1 to 17) | word, S-0512 | no kind |
 | superweapon type sections | `Action` | aim action, claims 1 and 2 | action word | none (no aiming; S-0512) |
 | superweapon type sections | `WeaponType` | the silo's upward weapon (claim 8) | weapon name | none |
 | superweapon type sections | `StartSound`, `SpecialSound` | force-shield sounds (claim 32) | sound name | none |
 | superweapon type sections | `AIDefendAgainst` | computer defence check (claim 6; AI module only) | boolean | no |
 | superweapon type sections | `Range` | cursor-circle radius (presentation only; no game rule) | decimal, held in single-precision floating point, cells | 0 cells |
 | superweapon type sections | `LineMultiplier` | cursor-circle subdivisions (presentation only; no game rule) | integer, subdivisions per cell; non-positive selects a single circle | 0 subdivisions per cell |
+| superweapon type sections | `AuxBuilding` | giving-building condition only (S-0512 claims 3, 6 and 7); not a launcher-selection condition (claim 7) | building type name | none (S-0512 Import mapping) |
 | building type sections | `NukeSilo` | silo (claim 7) | boolean | no |
 | building type sections | `SuperWeapon`, `SuperWeapon2` | the type's superweapon fields (claim 7, S-0512) | type name | none |
 | building type sections | `PsychicDetectionRadius` | warning-marker visibility (claim 11) | integer, cells | 0 |
@@ -1118,6 +1145,17 @@ is not under test.
   predicted first-turn world height; expected: it bursts on its first turn despite descending.
   A continued descent falsifies that threshold rule. Do not count bridge-crossing or other
   earlier detonations as evidence for an altitude test.
+  (i) SW2-i.map gives the nuclear type an auxiliary-building requirement, leaves the normal
+  matching silo and weapons unchanged, and grants the launcher a permanent, non-one-time
+  record by trigger. Keep the house at full power and the silo idle. Wait for readiness,
+  then fire through the sidebar with no auxiliary building owned. Repeat with the required
+  auxiliary building owned, and with no matching silo but the permanent record still ready.
+  Record readiness before the order, charge after it, missile count and launch sounds.
+  Expected: the absent-auxiliary and present-auxiliary runs both launch from the silo on its
+  next update and spend the charge; the no-silo run spends the charge with no missile or
+  launch sounds. Refusal or no missile only when the auxiliary is absent falsifies the
+  distinction from the giving-building test. A missile in the no-silo control falsifies the
+  requirement for a matching silo even with a permanent grant.
 - **SW3 — one-time strike (claims 10, 12).** Grant a one-time nuclear strike by trigger; fire at a
   flat cell with a vehicle; repeat at a high bridge. Record height versus tick, impact tick and
   kill credit. Expected: F2's initial height and downward velocity followed by S-0306 claim 11's
@@ -1363,6 +1401,12 @@ is not under test.
   non-source aiming, an uncancelled ready announcement, or an unmuted post-defeat launch
   announcement falsifies the corresponding part of claim 5. Sounds still follow S-0701's
   ordinary priority and cooldown rules; compare only runs where those rules admit playback.
+
+Genetic mutation's shared swept-layer rule and absence of a list cut are tested by S-0611
+claim 4's scenario MU4. The added launch-feedback rows retain their owning specs' scenarios:
+S-0611 claim 2 (MU1 part a and MU11) for genetic mutation, and S-0612 claim 1 (PD1) for
+psychic domination. Those scenarios, rather than SW18, own the target sounds and radar events
+for these two kinds.
 
 ## Open questions
 

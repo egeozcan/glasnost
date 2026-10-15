@@ -108,7 +108,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 15 | approved | — |
 | [S-0504](movement/S-0504-naval-units.md) | Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards) | movement | 12 | approved | — |
 | [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 8 | approved | — |
-| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 5 | approved | — |
 | [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 4 | approved | — |
 | [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 3 | approved | — |
 | [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 5 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0603](structures/S-0603-grinder.md) | Grinder (recycling units into credits) | structures | 2 | approved | — |
 | [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 3 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 2 | approved | — |
+| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 6 | approved | — |
