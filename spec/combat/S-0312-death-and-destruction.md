@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -189,8 +189,12 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    weapon at death; a non-rocket crashing aircraft fires one when it hits the ground (claim 16).
    Rocket interception follows S-0506 claim 20 instead. The type's
    death-weapon damage factor *φ* (F3) applies to the primary weapon too, not only to a death
-   weapon of the type's own.
-   - Backing: `measurable` (scenario D6; variant d for the debris position)
+   weapon of the type's own. When the chosen weapon has a positive radiation level, its
+   detonation leaves a radiation field at the cell of the dying object's position, or adds
+   to the field centred there (S-0525 claims 1 and 2). This uses the detonation point, not
+   the unplaced projectile's position.
+   - Backing: `measurable` (scenario D6; variant d for the debris position,
+     S-0525 scenario RF9 for radiation-producing death weapons)
    - Confidence: high for the choice and the formula; medium for the multi-turret case; low for
      the position used by the land-type tests and the debris
 
@@ -226,13 +230,16 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    - Confidence: high for the picks; medium for the harvester statement
 
 10. **Sinking.** A killed vehicle of a naval type that is not an underwater type and not organic,
-    whose type's weight is at least the game-wide sinking weight, and that is on a water cell, sinks
+    whose type's weight is at least the game-wide sinking weight, is on a water cell and
+    does not carry the bomb mark, sinks
     instead of exploding: it keeps 1 health point, stays in play and shows no explosion or
     destruction animation (claim 9). Its passengers are handled as in claim 12. S-0504 claims 4
     and 5 own its descent, duration, removal and behaviour while sinking.
     Separately, a grappling parasite's cull starts its host sinking without a killing hit,
     regardless of the host type's weight: health is unchanged and no damage is delivered
     (S-0614 claim 11). This is not a killing hit that takes this spec's death effects.
+    A later killing hit during descent instead follows claim 32, including when the cull's
+    host fails the ordinary sinking conditions.
     - Backing: `measurable` (scenario D8, S-0504 scenarios N5 and N6 for sinking after it starts,
       S-0614 scenario P6 for culling)
     - Confidence: high for the killing-hit condition and the cull distinction; sinking after
@@ -320,8 +327,11 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 15. **Crashing vehicles and removal.** A destroyed vehicle whose type can crash, and which is above
     the terrain, starts to crash (claim 16) and stays in play until it hits the ground. A vehicle
-    that sinks stays in play (claim 10). Every other destroyed vehicle leaves play at the end of its
-    death effects, in the same moment (S-0203 claim 6a).
+    already sinking and whose type cannot crash stays in play, including the zero-health
+    aftermath of claim 32. For a crashable type, failure to start a crash instead removes it
+    immediately, even when it was sinking. Every other destroyed vehicle leaves play at the
+    end of its death effects, in the same moment (S-0203 claim 6a). Types with death image
+    frames retain the separate unresolved death path in Open questions.
     - Backing: `measurable` (scenario D11)
     - Confidence: high
 
@@ -339,8 +349,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     unit-interval value). For an aircraft using ordinary flying movement, S-0501 claim 9 owns
     crash motion: its growing fall counter supplies a downward contribution, not necessarily
     the net descent, because ordinary altitude adjustment can still apply. That claim also owns
-    its sinking branch. For other crashable movement modes, the owning movement spec supplies
-    the motion. The following impact rules exclude rocket missiles: S-0506 claim 20 owns their
+    its sinking branch. A crashable vehicle using jumpjet movement uses the crash motion of
+    S-0502 claim 18, with that claim's idle-update and magnetic-lift qualifications. The
+    non-rocket impact rules below still belong to this claim. For other crashable movement
+    modes, the owning movement spec supplies the motion. The following impact rules exclude rocket missiles: S-0506 claim 20 owns their
     interception outcomes, with detonation governed by S-0506 claim 19. An intercepted rocket
     above the terrain starts to crash but keeps rocket-flight movement and its full detonation
     damage on the next positive-speed movement attempt, including a rejected map-edge attempt.
@@ -357,14 +369,15 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       animation chosen by S-0303 F5 for that amount appears, and a detonation with that amount, the
       demolition warhead, no source object and no source house follows at the impact point.
     - Backing: `measurable` (scenario D11, variant f for an empty explosion list,
-      S-0501 scenario AC5 for dead flying-aircraft crash motion; S-0506 scenario R13 for
+      S-0501 scenario AC5 for dead flying-aircraft crash motion; S-0502 scenario J12 for
+      jumpjet crash motion; S-0506 scenario R13 for
       rocket interception, unchanged phase timers and absence of additional crash fall).
       Living flying-aircraft crashes and aircraft sinking retain the backing limitations
       of S-0501 claim 9.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
       empty list, and their independence from height; rocket interception inherits S-0506
-      claim 20's confidence; medium for the non-rocket impact rules; low for the double death weapon and for which objects
-      use this crash (aircraft and crashable jumpjet types are believed to)
+      claim 20's confidence; jumpjet motion inherits S-0502 claim 18's confidence,
+      medium for the non-rocket impact rules; low for the double death weapon
 
 ### Buildings
 
@@ -832,6 +845,43 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     - Confidence: high for removal ending an untransferred group and the no-recipient
       exception; medium for the notification and presentation outcomes
 
+### Further killing hits during sinking
+
+32. **Sinking does not suppress another killing hit's death effects.** A positive-health
+    sinking vehicle can take another killing hit (S-0302 claims 8 and 11). This applies
+    whether descent began with a killing hit or a grappling parasite's cull. Each such hit
+    registers destruction again, with that hit's attacker or attacking house under S-0302
+    claim 14 and the ordinary score, experience and victim exclusions of S-0311 claim 9
+    and S-0414 claim 21. Claim 29's destruction raises occur again when the vehicle still
+    carries a tag, subject to its existing latches, detachment and extra-group exception.
+    Sinking completion is not another killing hit and adds no such credit or raises.
+
+    The applicable shared effects of claims 4 to 7 occur again, with their ordinary draws
+    and order: debris, any remaining exploding passengers, the death weapon of an exploding
+    object, and a still-attached bomb. Already removed passengers are not recreated and an
+    already detonated bomb does not detonate again. Claims 12 to 14 again handle passengers
+    still held, crew and crates under their ordinary conditions and placement rules. There
+    is no building-survivor round for a vehicle. A previously released crew does not by
+    itself prevent another crew chance and its draws.
+
+    For types without death image frames, the health and animation outcomes are:
+
+    | Condition at this killing hit | Health after the hit's effects | Vehicle animations and removal |
+    |---|---|---|
+    | Ordinary sinking conditions of claim 10 hold | 1 health point | No claim 9 explosion or destruction animation; absent claim 15's crashable removal, descent continues from the existing height, without restarting its removal interval (S-0504 claim 13) |
+    | Those conditions fail, including an underwater or insufficient-weight cull host | 0 health points | Claim 9's explosion and destruction animations and their draws apply, except for claim 11's marked-water replacement; a non-crashable vehicle remains in play because it is already sinking |
+
+    The second row does not grant a new sinking reprieve. At 0 health ordinary subsequent
+    damage and healing cannot revive it (S-0302 claim 8; S-0314 claims 9 and 10).
+    A type that can crash retains claim 15's crash-start/removal precedence; below the surface it
+    cannot start a crash and is removed at the end of these effects. Death-image-frame
+    types retain their unresolved separate path, rather than inheriting either health row.
+    - Backing: `measurable` (scenario D23; S-0504 scenario N14 for eligible repeated hits
+      and unchanged descent). The death-image-frame path is unresolved, not an asserted
+      outcome of this claim.
+    - Confidence: high for repeated credit, raises, applicable effects and the ordinary
+      health/removal branches; medium for isolating the ineligible cull aftermath in play
+
 ### Backing boundaries
 
 These qualifications narrow the numbered claims' backing; a scenario for a neighbouring case
@@ -1002,6 +1052,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 |---|---|---|
 | alive vehicle | killing hit, sinking conditions hold | sinking, 1 health point, in play |
 | living grappling host | cull under S-0614 claim 11 | sinking without a hit or health change, regardless of weight |
+| positive-health sinking vehicle | another killing hit | credit, raises and applicable death effects again; 1 health only under the ordinary reprieve, otherwise claim 32's zero-health/removal outcome |
 | alive vehicle or aircraft | killing hit, can crash, above the terrain | crashing, in play; rocket-missile outcomes follow S-0506 claim 20 |
 | non-rocket crashing object | reaches the ground, was shot down | death weapon, leaves play |
 | non-rocket crashing object | reaches the ground, was alive | destroyed by its remaining health, detonation |
@@ -1720,6 +1771,40 @@ No absent-recipient prediction is tested
 by this civilian-recipient setup; that path remains unmeasured, rather than being inferred
 from successful transfers. No release draw-count prediction is asserted.
 
+**D23. Repeated sinking deaths and culled hosts (claim 32).** Use the common setup at
+speed 6 on a tiny water map, director and mods off except a named map override
+"sinking-repeat". Use a surface vessel meeting claim 10 as a control, and two cullable
+naval vehicle variants, one below the sinking weight and one underwater. Keep death image
+frames absent and crashability off initially. Begin the variants' sinking with S-0614
+scenario P6's cull. Confirm unchanged health at cull, then deliver a lethal area hit from
+an identified enemy before descent ends, rather than relying on a new target assignment.
+For the control, arrange a second already-fired or area hit after its first killing hit.
+Run 30 trials per case, recording health, height, in-play membership, attacker experience,
+house score, kills and losses, tag attachment, animations, passengers, crew and stream state
+immediately around each hit and through removal. Use D20's repeating-tag counter and
+separate action target, distinguishing later tag polls from within-hit raises.
+
+Expected: each actual killing hit registers destruction under the ordinary attribution
+and exclusions and raises the still-attached tag under claim 29. The control returns to
+1 health without a height reset or later removal tick. An ineligible culled vehicle ends
+its hit at 0 health but remains in play, with explosion and destruction-animation list
+picks. Repeat with distinguishable sprite debris and an exploding death weapon, then with
+passengers, a crewed type and a planted bomb in separate runs. Replay the applicable shared
+and vehicle effects from their current state: no duplicate already-lost passengers or bomb,
+but a fresh crew chance when eligible. Include a control capable of releasing a crew on
+land through named amphibious crew test data, so placement failure on water cannot hide a
+second crew attempt. In a crashable ineligible variant already below the surface, expect
+immediate removal instead of retained zero-health sinking. Repeat the marked-water case
+using a bridge-drop fixture only if it establishes the mark on the same descending host.
+A fixture failing to establish cull, hit delivery, passenger loading, bomb attachment or
+the intended mark is inconclusive for that part, not evidence of suppression.
+
+Missing repeat credit or raises with their ordinary conditions met, a different health
+result, an unaccounted effect/draw, a surface reset, or failure of the stated immediate
+crashable removal falsifies the corresponding rule. Merely missing the short interval is
+inconclusive. Types with death image frames are an exploratory recording only: this
+scenario makes no prediction for their untraced path. No measurement is claimed completed.
+
 ## Open questions
 
 - Q-0270 part 3: slave-group destruction paths without an ordinary killing hit, including
@@ -1747,7 +1832,9 @@ from successful transfers. No release draw-count prediction is asserted.
 - Which events set and clear a building's charge planter (claims 18 and 24).
 - Which situations of play are contacts of a building at the moment of its destruction (claim 17),
   beyond factory exits and docking.
-- Whether jumpjet types and other crashable vehicles crash by the same rules as aircraft (claim 16).
+- Crash motion of crashable movement modes other than ordinary flying aircraft, jumpjets
+  and rockets remains for their owning movement specs (claim 16). The jumpjet motion itself
+  is specified by S-0502 claim 18.
 - Whether the state that suppresses survivors (claim 18, "the owner's game is not over") is set by
   the defeat of S-0414 itself or only by the destruction of all the defeated house's objects that
   follows it. The project lead's decision of 2026-10-11 (the game runs on until one alliance
