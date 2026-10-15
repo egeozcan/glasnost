@@ -1,9 +1,9 @@
 ---
 id: Q-0717
 title: Which section an attempt affects when several high-bridge overlays mark the cell
-status: open
+status: answered
 related: [S-0511, S-0211]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

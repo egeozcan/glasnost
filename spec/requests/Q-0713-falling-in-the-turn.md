@@ -1,9 +1,9 @@
 ---
 id: Q-0713
 title: Where a falling object's fall step sits in its turn, and what "its locomotion stops" clears
-status: open
+status: answered
 related: [S-0511, S-0522, S-0203, S-0215]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

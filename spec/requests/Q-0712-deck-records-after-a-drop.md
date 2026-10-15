@@ -1,9 +1,9 @@
 ---
 id: Q-0712
 title: What happens to a dropped object's deck occupancy record
-status: open
+status: answered
 related: [S-0511, S-0209]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

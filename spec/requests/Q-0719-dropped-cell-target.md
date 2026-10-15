@@ -1,9 +1,9 @@
 ---
 id: Q-0719
 title: Which targets are dropped after a successful bridge attempt from area damage
-status: open
+status: answered
 related: [S-0511, S-0309]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

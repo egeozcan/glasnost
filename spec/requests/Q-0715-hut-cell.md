@@ -1,9 +1,9 @@
 ---
 id: Q-0715
 title: Which cell of a bridge repair hut the bridge searches start from
-status: open
+status: answered
 related: [S-0511]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

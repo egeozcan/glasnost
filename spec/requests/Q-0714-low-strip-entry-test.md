@@ -1,9 +1,9 @@
 ---
 id: Q-0714
 title: Which entry test decides that an occupant "could not enter" a changed low-bridge cell
-status: open
+status: answered
 related: [S-0511, S-0209, S-0211]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

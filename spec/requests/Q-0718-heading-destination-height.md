@@ -1,9 +1,9 @@
 ---
 id: Q-0718
 title: The height of a unit's destination for the bridge heading tests
-status: open
+status: answered
 related: [S-0511, S-0207, S-0208]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

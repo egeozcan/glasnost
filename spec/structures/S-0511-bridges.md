@@ -2,13 +2,13 @@
 id: S-0511
 title: Bridges (destruction, collapse, falling and repair)
 topic: structures
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-15
 measurements: []
-requests: []
+requests: [Q-0710, Q-0712, Q-0713, Q-0714, Q-0715, Q-0716, Q-0717, Q-0718, Q-0719]
 supersedes: []
 ---
 
@@ -72,7 +72,16 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
   - *Reference cell:* the pier's cell at sub-tile 4 (bridges along x) or 2 (along y).
   - *Pier column:* the reference cell and its two neighbours across the bridge.
 
-  A pier's state is its tile. Changing the state replaces the tile on every cell of the pier.
+  A pier's state is its tile. For a state replacement, its affected tile cells are the
+  eight-neighbour-connected component containing the reference cell whose cells have exactly
+  that cell's pre-change tile number. Sub-tile numbers and placed-tile origins do not restrict
+  this set. A different tile laid over part of a pier is not changed, and can disconnect cells
+  from the affected component. Adjacent copies of the same tile can belong to one component.
+  For direct attempts, a tile position in both non-collapsed pier ranges takes the x
+  interpretation: test x states 0 to 3 before y states 0 to 3. An x match only at collapsed
+  state 4 does not override a non-collapsed y match. Repair's start-piece selection instead
+  requires the axis-specific sub-tile in claim 18, and span repair uses its selected axis.
+  Claims 6 and 19 own the height effects, separately from this tile replacement.
 - **Ramp.** A tile at a start-ramp or far-ramp position. Ramps are never removed. They only change
   look.
 - **Destroy attempt.** One application of this spec's destruction rules at one cell. It *succeeds*
@@ -95,6 +104,14 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
   These are roles, not type names or absolute registration positions. Subscripts distinguish
   looks that also affect neighbour re-evaluation (claim 14). The same labels apply independently
   to both axes and families. Pieces are placed at map load by S-0202 claim 10.
+- **Hut cell.** The cell containing the hut's actual position: its top-left foundation cell
+  (S-0406 claim 1), not its foundation centre or a cell chosen by the approaching engineer.
+  The *engineer's entry cell* is the cell containing the engineer's own actual position at the
+  entry event. It is not replaced with the hut cell. Claims 16, 18 and 21 use these distinct
+  centres even with a multi-cell foundation.
+- **Responsible section.** A cell remembers which section last marked it as another section's
+  deck cell. A cell marked as a section cell instead selects itself. This is historical
+  marking, not a search for nearby overlays (claim 2).
 - **Falling, fall rate.** A falling object moves down by its *fall rate* (leptons per update)
   until it reaches the surface. The *bomb mark* is S-0312's term.
 - **Hut demolition, repair.** The destruction of a whole bridge from its bridge repair hut (claim
@@ -120,8 +137,8 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
      - Every attempt acts on the centre cell (claim 2).
      - The ion-cannon warhead's repeated attempts (S-0303 claim 18) apply to the high tests only. A
        low test makes one attempt whichever warhead it is.
-     - When an attempt from area damage succeeds, every object whose target is the centre cell
-       itself drops that target.
+     - A success makes the centre cell untargeted under claim 22. This does not apply the
+       effect to the other cells of the removed section.
    - *The trigger action that destroys attached objects* (S-0011 claim 27). After its hits, when
      the raise that fired the trigger carries a cell, the action makes up to 4 attempts at that cell
      and stops at the first that succeeds. The raise of claim 8 carries no cell.
@@ -135,19 +152,34 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
      is the game option of the setup screens; the map's own setting has no effect (Import mapping).
    - Backing: `measurable` (B1, B9, B11 mixed-test variant, and B10 for gate/trigger/target effects,
      S-0524 scenario C5 for code 63)
-   - Confidence: medium (test order and acceptance, the low single attempt, the gate); low (target
-     dropping, the trigger cell)
+   - Confidence: medium (test order and acceptance, the low single attempt, the gate); low (the
+     trigger cell)
 
 2. **What one attempt at a cell acts on.** The cell's first matching condition in the table determines the effect; lower rows apply only when no earlier condition matches.
 
    | Cell condition, in priority order | Effect |
    |---|---|
    | The cell holds a low piece that is not in the destroyed class | The low strip is affected (claim 13). |
-   | The cell is a high-bridge cell | The section whose overlay marks it is affected (claim 3). |
+   | The cell is a high-bridge cell and a family qualifies as described below | Its responsible section is affected (claim 3). |
    | The cell's tile is a pier of either family in state 0 to 3, and its sub-tile is even along x or at most 4 along y | The pier is affected (claim 6). Other pier cells without a deck take no effect. |
    | None of the above | Nothing happens and the attempt fails. |
-   - Backing: `measurable` (scenarios B1, B4, B7)
-   - Confidence: medium
+   The responsible section is the cell itself when it retains the section-cell marking,
+   even if a later section also marks it. Otherwise it is the last section to mark it as a
+   covered cell. Later covering marks replace that remembered responsibility, without removing
+   a pre-existing section-cell marking. There is no nearest-overlay or directional tie-break.
+   A missing or replaced responsible overlay does not cause a search for another section.
+   Family selection prefers the bridge-role family's responsible overlay or a matching
+   non-collapsed pier tile at the attempted cell, then the corresponding wooden-family test.
+   Without either a recognised responsible overlay or such a pier tile, the attempt fails.
+   On a high-marked pier whose responsible overlay has been replaced, the pier can still
+   supply the family: the attempt applies claim 3 to the responsible cell's retained section
+   state, and can remove that replacement overlay. A state outside the section-state table
+   gives no change. This is not a no-deck pier attempt. A missing responsible section altogether
+   is malformed input: our engine does nothing and warns, rather than attempting to use an
+   absent section.
+   - Backing: `measurable` (scenarios B1, B4, B7 and B15)
+   - Confidence: high for responsible-section selection; medium for the other rows and the
+     retained-state malformed-pier case
 
 ### High bridges
 
@@ -217,20 +249,30 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
      blow-ups at pre-collapse heights. Deaths and explosion draws occur in decreasing-cross-
      coordinate, reference, increasing-cross-coordinate order: y across an x bridge, x across
      a y bridge. These effects precede losses caused by the pier's loss notices. Far-side
-     losses precede start-side losses. Both adjacent spans have claim 7's isolated-run result,
-     and subsequent routes reflect claim 12's connectivity, naming the reference cell.
+     losses precede start-side losses. Both adjacent spans have claim 7's isolated-run result:
+     the start-side span is checked to completion before the far-side span, so their band raises
+     do not interleave. Subsequent routes reflect claim 12's connectivity, naming the reference cell.
    - **Collapse from a notice:** the loss propagates onward on the side away from the sender.
      Collapses further along that direction produce their blow-up effects before this pier does.
      This pier's three blow-ups then occur in centre, decreasing-y, increasing-y order along x,
      or decreasing-x, centre, increasing-x order along y. Its tile and height change as above,
      but it starts no span check or connectivity update of its own.
    - Backing: `measurable` (B4 for direct stages, collapse, height drop and notice states,
-     B14 for collapse-effect order)
+     B14 for collapse-effect order, B15 for connected tile cells and span selection)
    - Confidence: medium (direct stages, collapse, height drop); low (the notice table)
 
 7. **The span check: isolated runs fall.** After each successful direct attempt on a high bridge, the
    original checks the span that held the lost section, or the spans on both sides of a collapsed
    pier.
+   - **Finding the span.** From the named loss cell, the first neighbour in N, NE, E, SE,
+     S, SW, W, NW order carrying a deck or bridge-body mark supplies the bridge. Resolve its
+     responsible section, or its body-mark section by claim 16's body rule. From that section
+     cell, search toward the start side up to the legal-map boundary, passing over non-bridge
+     cells, for the nearest start ramp at sub-tile 8 along x or 12 along y, or non-collapsed
+     pier at sub-tile 5 along x or 7 along y. No qualifying neighbour, body resolution or start
+     piece means no span check. For direct pier collapse the two named loss cells are the
+     reference cell's start-side neighbour and then its far-side neighbour. The 29-cell cap
+     applies to the following far-end search, not this start-piece search.
    - The span runs from its start piece (a start ramp at sub-tile 8 or 12, or a pier at sub-tile 5
      or 7) to the nearest far piece within 29 cells along its direction (a far ramp, or a pier, at
      sub-tile 4 or 2).
@@ -275,8 +317,21 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       claim 1's bridge-section row; S-0302 claims 8 and 9 say which protections still stop it).
       Units under the bridge, ships included, therefore die.
    - **Deck layer.** Every object listed in the cell's deck layer leaves the deck: it moves to the
-      ground layer of the same cell at its current position, its locomotion stops, and it starts
-      falling with the bomb mark (claim 10).
+      ground layer of the same cell at its current position and starts falling with the bomb
+      mark (claim 10). This does not issue a stop order: target, destination, queued destinations,
+      path and movement-in-progress state are not cleared by the drop. Falling itself prevents
+      the ordinary locomotion advance (claim 10).
+      A stationary infantry unit's standing-position mark and a stationary vehicle's present
+      flag are cleared on deck during this move, and the corresponding ground mark is made
+      immediately. There is no deferred transfer after claim 11. Movement reservations are
+      cleared at the locomotor's heading point, when it has one, at that point's stored height,
+      as well as the ordinary listing change's marks. These are the ordinary flag/position
+      clearing rules, not ownership-counted reservations (S-0209 claim 1).
+      No general deck-record reset follows the attempt, landing or repair. Unrelated marks
+      remain until their ordinary clearing event. With just a stationary dropped infantry unit
+      or vehicle and no other mark writer, its former deck record is already empty before
+      claim 11, stays empty through its fall and is empty after repair. Its ground mark is
+      present from the drop, not first from landing; its death clears that ground mark.
    - **Explosions.** When the game-wide bridge-explosion list is not empty, draws are taken from the
       scenario random stream in this order (Formulas F2):
       1. a unit-interval value *u*₁. Nothing more happens unless *u*₁ < 0.95,
@@ -291,7 +346,15 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
      empty-list result, because its out-of-list selection has no stable expected outcome
    - Confidence: medium (the kills, the drop, the draw sequence); low (empty-list behaviour)
 
-10. **Falling and landing.** A dropped object falls on each of its own updates (S-0203).
+10. **Falling and landing.** A dropped object falls on each of its own updates (S-0203 claim 4).
+    For an ordinary infantry unit or vehicle, the fall and any landing hit precede that turn's
+    due behaviour processing (S-0215 claim 5), ordinary locomotion advance and firing check.
+    Falling does not suppress the due behaviour processing: it may change orders under the
+    behaviour's usual rules. While still falling after the fall step, the unit does not advance
+    its ordinary locomotion and cannot fire. A surviving landing removes those falling-specific
+    refusals in that same turn. It does not restore a saved deck order or issue a guard order:
+    orders are whatever the intervening ordinary behaviour and target-loss rules have left.
+    The drop itself preserves them as claim 9 states.
     - Its height changes by its fall rate *v* before *v* is updated (Formulas F3). Any attached
       animation enables the parachute rate recurrence, not only a parachute (S-0522 claim 12).
       The alternative is owned by `quirks.paratrooper_any_animation_slow_fall` in S-0522.
@@ -308,7 +371,7 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     - Over a whole drop from a deck (416 leptons above the terrain under it), with no attached
       animation, *v* starting at 0 and the floor of F3 not reached, the object lands on its 30th
       update (Formulas F3).
-    - Backing: `measurable` (B3, including its prior-fall variant) for ordinary and prior
+    - Backing: `measurable` (B3, including its prior-fall and turn-order variants) for ordinary and prior
       parachute drops; `unmeasured` here for a non-parachute attachment selecting the slow
       recurrence, because B3 establishes no fixture that keeps such an attachment during a
       deck drop (S-0522 claim 12 owns that shared condition)
@@ -319,11 +382,21 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     - Let *P* be the centre of *c* at the height of its terrain floor + 416 leptons.
     - Every object in the deck layer, then in the ground layer, of each of the 24 other cells of
       the 5 × 5 block around *c* is examined.
-    - It receives the hit of claim 9's ground layer when its locomotion is heading to *P*: its
-      current destination lies in *c* within 104 leptons of *P*'s height.
-      - For drive and ship locomotion, the destination is the end of the track it is following,
-        if any, else its destination.
-      - Walk and hover locomotion use their destination.
+    - It receives the hit of claim 9's ground layer when its locomotion is heading to *P*.
+      This compares movement points, not the unit's final order destination:
+      - Walk and hover use their current heading point, when present: its cell must be *c*
+        and its stored world height must differ from *P*'s by at most 104 leptons.
+      - Drive and ship accept that same heading-point test. They also accept the endpoint cell
+        of an unfinished current track when it is *c* and the unit's current world height
+        differs from *P*'s by at most 104 leptons. This additional track test uses the unit's
+        height, not a newly sampled terrain height at the endpoint. A failed track test does
+        not prevent the heading-point test. Both drive/ship tests require a current heading
+        point to be present, even when using the unfinished track's endpoint.
+      - A heading point keeps the height assigned when it was chosen. The test does not
+        resample the cell's new surface after destruction. S-0208 claim 18 already gives the
+        ordinary walker's cell-destination height. An object destination is not excluded:
+        it counts when the locomotor has a qualifying heading point or track endpoint, even
+        when the final object or cell destination is elsewhere.
       - Drop-pod, fly, jumpjet, rocket, teleport and tunnel locomotion do not count.
         The mech kind is not established here.
     - Backing: `measurable` (scenario B6) for drive, walk, hover and ship locomotion and the
@@ -420,13 +493,25 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     strips stay unless claim 14 changes them; there is no high-bridge isolated-run collapse.
     - **Kill check.** For each changed cell:
       - Each object in its ground layer receives claim 9's ground-layer hit in these cases:
-        - when it could not enter the cell as it now is (the entry test of S-0209 for its own kind),
+        - when the entry test below gives *blocked*,
         - when the cell became destroyed and the object is of a type with jumpjet locomotion,
         - when the object is an aircraft, even when the change was only to damaged.
       - Then every unit in the ground layer of the other 24 cells of the 5 × 5 block around it
         receives the same hit when its locomotion is heading to that cell at its floor height
-        (claim 11's test) and it could not enter that cell.
-    - Backing: `measurable` (B5, B7, B6 low-bridge variant and B14 low-order variant)
+        (claim 11's test) and its entry test gives *blocked*.
+      **Entry test settings.** Use the object's own-kind entry outcome of S-0209 claims 4
+      and 5 on the changed cell, with no approach facing, no reference height level, no source
+      cell, and include the current locomotor's cell-admission test. Ordinary drive and walk
+      locomotion add no refusal through that last test. This is not a terrain-only test:
+      other occupants and overlays still contribute their ordinary outcomes. Only *blocked*
+      (outcome 7) causes this hit, not *moving blocker*, *stationary friendly*, *destroyable
+      obstacle* or other non-clear outcomes. The mover's own listed presence is passed over
+      under the ordinary self-exclusion, including S-0209 claim 5 row VP1's flag exemption.
+      No additional exemption for other occupants is made. A repaired low strip's changed
+      land type can by itself block a ship and kill it; land type alone is not the general
+      definition of this check. The check uses the state left by preceding deaths in the
+      same change, not a snapshot before the change.
+    - Backing: `measurable` (B5, B7, B6 low-bridge variant, B14 low-order variant and B16)
     - Confidence: medium (low for the jumpjet and aircraft cases)
 
 ### Demolition and repair through the hut
@@ -437,6 +522,8 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
 
     Neither case applies the gate of claim 1. The expiry clears the countdown and the recorded
     planter, and the hut takes no expiry hit.
+    All searches here start from the hut cell defined in Terms, including on a multi-cell
+    foundation. Claim 18 instead uses the engineer's entry cell, before the engineer is removed.
     - **The family.** The wooden-bridge-role family is chosen when any cell of the 5 × 5 block
       around the hut's cell has a tile of the wooden-bridge role or holds a wooden low piece. The
       bridge-role family is chosen otherwise (`quirks.bridge_family_by_block`).
@@ -502,7 +589,8 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
     - Confidence: medium
 
 18. **Which bridge the hut repairs.** The family is chosen as in claim 16, from the 5 × 5 block around
-    the engineer's cell. The selected bridge obeys these priorities:
+    the engineer's entry cell (Terms), its own physical cell at the moment of entry, not a
+    substituted hut-foundation cell. The selected bridge obeys these priorities:
     - **A low bridge.** If any cell of the block holds a low piece of that family (any class), the
        first in the order of claim 16 is taken, and the low repair of claim 20 runs from it.
     - **The bridge cell, when no low piece qualifies.** Otherwise the bridge cell is found as in claim 16's table, from the
@@ -566,19 +654,67 @@ concern ordinary unloading, not passenger escape from a destroyed transport.
       2³² values and the recorder cannot force that value
     - Confidence: medium (low for the stream)
 
-21. **The repair cursor uses its own test.** Whether the engineer's cursor offers a repair over a hut
-    (S-0214 rows I3 and IC2) is decided by a test separate from claim 18. That test asks whether a
-    bridge within the hut's 5 × 5 block is destroyed:
-    - for a low bridge, whether its run holds a destroyed piece,
-    - for an ordinary, unambiguous high bridge, whether its nearby bridge link is not enabled.
-      Selection among several nearby bridges and exceptional link configurations remains open.
+21. **The repair cursor uses its own test.** Whether the engineer's cursor offers repair over a
+    hut (S-0214 rows I3 and IC2) is decided separately from claim 18.
+    - **Candidate.** In the hut cell's 5 × 5 block, choose the last qualifying cell in increasing
+      y, then increasing x order. A cell qualifies when its tile belongs to either bridge role
+      (all 16 positions), or, otherwise, it holds a low piece of either family, destroyed
+      included. At one cell the high tile test takes precedence over its low overlay.
+      If both high-role ranges contain that tile, the wooden-bridge role supplies its position.
+      No candidate means no repair cursor. This does not use claim 16's three-cell rays,
+      engineer position, low-first priority or family-by-block choice.
+    - **Low candidate.** On its own row, not a re-centred strip row, its axis's contiguous run
+      of that family's low pieces must contain a destroyed piece. Test both directions with
+      the candidate included. Neither damaged pieces alone nor a nearby disabled link offers
+      repair for this candidate.
+    - **High candidate.** Let its placed-tile origin be found from its sub-tile and tile width
+      as in S-0307 claim 23. Its zero-based position within the bridge role selects a probe
+      displacement and travel direction from this fixed table, independent of the theater's
+      named ramp and pier positions:
 
-    The different selection tests may make cursor and repair disagree, but no such layout is
-    established here.
-    - Backing: `measurable` (scenario B13) for the ordinary low- and high-bridge cursor tests.
-      `unmeasured` for a disagreement between cursor and repair, because no discriminating layout
-      has yet been established
-    - Confidence: low
+      | Position within role | Probe relative to origin, cells | Direction |
+      |---|---|---|
+      | 0, 1 | (1, 2) | increasing x |
+      | 2 | (0, 2) | decreasing x |
+      | 3, 4 | (2, 1) | increasing y |
+      | 5 | (2, 0) | decreasing y |
+      | 6 to 15 | no probe | no repair cursor |
+
+      At each probe take the first bridge link in creation order within 3 cells, using
+      S-0212 claim 3 and its Terms' link-distance rule. Low links are not excluded. No such
+      link means no repair cursor; this test does not rebuild links. A disabled link offers
+      repair immediately. An enabled link offers repair too when neither endpoint equals the
+      current traversal cell (`quirks.bridge_cursor_unrelated_link`). Otherwise the traversal
+      cell becomes its opposite endpoint, and the next probe is one cell from there in the
+      table's direction. Thus the search can traverse several enabled links before finding
+      a disabled one. The initial traversal cell equals the initial probe. It is not a
+      nearest-link test and not a test of just one link near the hut.
+    Cursor and actual repair may therefore select different bridges in mixed layouts.
+    - Backing: `measurable` (B13 and its mixed-candidate and link-chain variants)
+    - Confidence: high for candidate order and table; medium for link traversal
+
+22. **Cell target loss after area damage.** On each successful area-damage bridge attempt,
+    only references to the detonation's centre cell itself are affected, not references to
+    other marked cells of the section, or to units standing there.
+    - A combat object's attack target equal to that cell is lost. A mobile object first
+      reverts a suspended behaviour, if any, restoring the target and destination put aside
+      by its override (S-0215 claim 10). If that still leaves the centre cell as its attack
+      target, that target is cleared. Without a suspended behaviour there is no such revert.
+      This event neither creates nor refreshes attack-move memory (S-0309 claim 23).
+      Destinations, queued destinations and remembered references are not generally erased
+      just because they name the cell. A revert can nevertheless change destination and
+      behaviour by its own rules; without a revert this event assigns no new behaviour.
+      An aircraft in *attack* also restarts that behaviour's attack-run substate when its
+      target is lost, without changing the behaviour itself.
+    - A projectile's target or recorded firer equal to this cell is cleared too. Ordinary
+      projectiles do not have a cell as firer, but this is not a general deletion of a cell's
+      other references. Subsequent firing and targetless behaviour follow their ordinary
+      rules, not a special immediate guard order.
+    - Backing: `measurable` (B10 target-loss variant) for combat target loss and revert.
+      The recorded-firer equality is `unmeasured`: ordinary play cannot make a cell the
+      firer. B10's aircraft and projectile variants cover the other consequences.
+    - Confidence: high for exact-cell matching and the revert attempt; medium for the
+      aircraft substate consequence
 
 ## Formulas
 
@@ -676,15 +812,15 @@ centre cell uses one accepted value, with any rejected values before it, in walk
 - A ground-layer object dies in its cell's blow-up. A deck object dies only when it lands, some
   updates later (claim 10).
 
-**Cross-spec changes required at joint sign-off.** S-0302 claim 16 must describe hut expiry
-as demolition, not repair, and claim 1's bridge hits can cite claims 9 to 11 and 15 here.
-S-0303 claim 18 must restrict ion-cannon retries to high tests, use the skirmish option gate,
-and adopt claim 1's membership, height and draw-order boundaries. S-0202 claim 13 must include
-claim 20's in-play map-generator draws. S-0011 claims 20 and 27 must adopt claims 8 and 1's
-band and cell-attempt rules. S-0212 claim 3 must use claims 12 and 19's named cells. The
-remaining existing bridge pointers in S-0010 claim 25, S-0211 claim 15, S-0214 rows I3 and IC2,
-and S-0312 claims 11 and 12 should point to the respective rules here without claiming that
-passenger placement or exceptional cursor selection has been resolved.
+**Cross-spec changes required at joint sign-off.** S-0209 claim 1 should point to claim 9
+for immediate drop marks and no later blanket reset. S-0203 claim 4 should point to claim 10
+for the within-turn fall boundary. S-0215 claim 10 must include claim 22's cell-target-loss
+revert cause, and claim 5 should cite claim 10's due behaviour during falling. S-0214 rows
+I3 and IC2 should use claim 21's last-candidate scan and link traversal, not claim 18's repair
+search. S-0211 claim 15 should preserve claim 2's section-cell priority and historical
+responsibility. S-0301 should include claim 10's falling firing refusal and same-turn landing
+boundary. The existing bridge-hit, retry, trigger, draw and connectivity owners remain as
+cited above. Passenger escape from a destroyed transport remains unresolved here.
 
 ## Edge cases and quirks
 
@@ -717,6 +853,14 @@ passenger placement or exceptional cursor selection has been resolved.
 - `quirks.low_bridge_wrong_axis_recheck` (proposed, default on, the original): a low piece of the
   other axis lying along the line is re-evaluated with this line's table. Off: a neighbouring
   strip of the other axis is not re-evaluated. This matters only for unusual map data.
+- `quirks.bridge_cursor_unrelated_link` (proposed, default on, original): an enabled first nearby link
+  that has neither endpoint at the traversal cell offers repair (claim 21). Off: skip links
+  without that endpoint and inspect the first qualifying endpoint link instead; no such link
+  means no repair cursor. This changes exceptional mixed-bridge maps, not ordinary huts.
+- **Malformed responsibility and cycles.** An absent remembered responsible section refuses
+  an attempt and warns (claim 2). A repeated cursor traversal cell refuses repair and warns,
+  rather than allowing a nonterminating search. These are safe malformed-data departures,
+  not new configurable bridge settings.
 - **Empty lists.** With an empty metallic-debris list and *u*₄ < 0.5, the original reads outside
   the list. Our engine takes the draw and creates no debris animation. The same holds for an empty
   bridge-explosion list in the low form of F2, and the importer warns.
@@ -741,6 +885,9 @@ passenger placement or exceptional cursor selection has been resolved.
 | Theater `[General]` | `BridgeBottomRight1`, `BridgeBottomRight2`, `BridgeBottomLeft1`, `BridgeBottomLeft2` | far ramps along x, along y | as above | as above |
 | Theater `[General]` | `BridgeMiddle1`, `BridgeMiddle2` | *m*₁, *m*₂ (piers along x, along y) | as above | as above |
 | Announcements | `EVA_BridgeRepaired` | bridge-repaired announcement (claim 17) | announcement name | none |
+| Map terrain blocks and theater tile catalogue | terrain tile number, sub-tile and tile width | connected pier replacement and cursor tile origin (Terms, claim 21) | integer tile/sub-tile identities and catalogue width, S-0012 claim 6 and S-0010 claim 3 | cited specs' empty-cell rules; no separate pier-cell list |
+| Map overlay blocks | high-bridge placements | responsible section (claim 2) | placement order and cell marking, S-0009 claim 12 and S-0211 claim 15 | no responsible section without a placement |
+| None | none | drop timing, mark clearing, low-change entry settings, heading tolerance, hut search centres and cell-target loss (claims 9 to 11, 15, 16, 18, 22) | fixed behaviour, not imported options | not applicable |
 
 **Piece-role binding.** Hₓ and Hᵧ are the high-overlay identities whose marking directions
 are map north and map west respectively (S-0211 claim 15). The pair identified by the original
@@ -821,6 +968,20 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     of S-0312 claim 11.
   - *Falsified by:* a ground-layer unit surviving the loss, a deck unit dying before a landing
     update, a deck unit surviving its landing, or a drop profile other than *n*(*n* − 1)/2.
+  - *Turn-order and marks variant (Q-0712, Q-0713):* record standing-position and vehicle
+    marks, listing layer, actual position, current heading point, destination, path, queued
+    destinations, attack target, behaviour and firing events. Give one tank an in-range attack
+    target and a second tank and infantry unit move orders before dropping them. Expected:
+    the drop changes layer and marks but does not clear their orders or movement state.
+    A stationary object's deck mark clears during the drop, before the heading sweep, and
+    ground is marked immediately. Due behaviour processing still follows the fall step, but
+    a still-falling unit neither advances horizontally nor fires. Use a protected survivor
+    on a land cell to test the landing boundary: any otherwise-due behaviour, movement or
+    firing uses the landed state in that turn. Repair afterwards and test entry of the old
+    deck cell: the stationary dropped unit leaves no phantom deck mark. A deferred transfer,
+    suppressed due behaviour, firing in descent, erased order at drop, or a surviving phantom
+    mark falsifies the corresponding rule. Record retained target/path state immediately
+    at drop, separately from later behaviour changes. Three runs per kind and order.
   - *Prior-fall variant:* let a paradropped unit land, move it onto the deck, and destroy the
     deck. Record its fall rate at the end of the parachute drop and its next drop's first
     displacement. Expected: the latter equals the retained rate, and later heights follow F3
@@ -859,14 +1020,29 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     the far ramp's tag must not. Either opposite result falsifies the high-bridge endpoints.
 - **B6 (claim 11).** Two vehicles drive toward section 4's deck, from beside the bridge's line and
   from one section away. A third vehicle drives toward a cell two sections away.
-  - *Procedure:* keep a stationary deck unit in the watched cell, and lose section 4 while
-    the first two vehicles are one step away. Record occupancy and movement destinations before
-    and after the loss. Repeat with the watched cell initially empty.
+  - *Procedure:* lose section 4 while the first two vehicles are one step away. Record both
+    occupancy records, heading points with world heights and unfinished track endpoints
+    before and after the loss. Repeat with a stationary deck unit in the watched cell.
+    A stationary dropped unit alone leaves no deck mark for the sweep: that is a negative
+    control, not a way of satisfying its nonempty-record gate. For a positive test arrange
+    a moving unit's reservation in the watched cell while that unit is still outside it,
+    and verify that its mark remains through the blow-ups. Void the positive run if the
+    recorded deck record is empty at the sweep.
   - *Expected:* when its deck occupancy record is nonempty at claim 11's check, vehicles heading
     onto the cell die in that tick, and the third does not. With an empty record there is no such
     heading hit. A hover vehicle heading there dies too. Repeat with walking infantry and a ship
     approaching a cell at floor height for the low-bridge kill check. The drop of the stationary
     unit and all earlier deaths must precede the heading hits.
+  - *Heading variants (Q-0718):* set final destinations two cells past the lost section,
+    but time loss during a track or walking step ending in the watched cell. Use separate
+    approach points at floor and deck heights and record heights rather than inferring
+    them from the final order. Expected: the current heading/unfinished-track tests of
+    claim 11 decide, not the final destination. A stored deck-height heading point continues
+    to qualify after deck removal, and a floor-height point does not satisfy the deck test.
+    An object destination producing the same heading point gives the same result. For low
+    changes the floor-height test instead accepts the floor point and rejects the deck point.
+    A result depending only on the final cell, the presence of an object destination, or
+    a freshly resampled surface falsifies the corresponding rule. Three runs per variant.
   - *Falsified by:* a heading vehicle surviving with the nonempty-record condition satisfied,
     a heading hit despite the empty-record condition, the third vehicle dying, or reversed
     death ordering. The other locomotion kinds remain outside this scenario's backing.
@@ -943,6 +1119,22 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     start another cell attempt. A completed raise's centre-cell target must be dropped after a
     successful area-damage attempt in a separate run; a retained attack target falsifies that
     subclaim.
+  - *Target-loss variant (claim 22, Q-0719):* simultaneously watch a unit force-firing at
+    the centre cell, another moving toward it on the ground, and a third firing at a
+    neighbouring cell of the same section. Record current/suspended behaviours, target,
+    destination, queued destinations and attack-move memory immediately around success.
+    Expected: the first loses its centre-cell attack target; the other two references
+    remain. No attack-move memory is created or refreshed. Repeat with a suspended behaviour
+    and target restored by an override revert: that behaviour, target and saved destination
+    return before any still-equal centre target is cleared. Without a suspended behaviour,
+    no new guard behaviour is assigned by success itself. An indiscriminate destination
+    clear, neighbouring-target loss, new memory, or missing revert falsifies claim 22.
+    Repeat three times; observe later automatic target acquisition separately. Aircraft
+    in an attack run aimed at that cell restart the run's substate but retain *attack*.
+    A travelling projectile targeted at the centre cell loses that reference; one aimed
+    at a neighbouring cell does not. Record the references and aircraft run phase without
+    treating persistence of the projectile itself as target retention. Failure to reset
+    the aircraft run, or clearing a neighbouring projectile target, falsifies claim 22.
   - *Demolition-action variant:* fire code 63 at a defined waypoint on an intact high section
     and then on an intact low strip, with bridge destruction off. Record the five damage events
     and subsequent bridge states. Expected: direct attempts still remove the section or destroy
@@ -1017,6 +1209,23 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
   falsifies the low-bridge test. Repeat for both axes and both families. Repeat with one isolated
   high bridge: intact and damaged sections leave its link enabled and offer no repair, whereas a
   lost section disables it and offers repair. A contrary cursor falsifies the ordinary high test.
+  - *Mixed-candidate variants (Q-0715, Q-0716):* named test maps put distinct intact and broken
+    bridges in the block with their candidate cells ordered differently. Expected: the last
+    cell in y-major/x-minor order decides, high or low, not the first low piece, and the hut's
+    top-left foundation cell centres the block. A bridge only on a distance-3 ray gives no
+    candidate. With a 2 × 2 hut, compare entry from several sides: demolition and cursor use
+    the hut cell, repair uses the engineer's actual entry cell. Record all three cells and
+    which bridge is changed or offered. A centre-cell substitution or a common selection
+    result inconsistent with claims 16, 18 and 21 falsifies those rules.
+  - *Link variants:* use high candidates at each of the 16 role positions, with independently
+    recorded links and probe cells. Expected: positions 0 to 5 use claim 21's table; the rest
+    offer no repair. Construct two links within 3 cells with the earlier-created one farther
+    away, then a chain of enabled links ending at a disabled link. The first-created link
+    wins, no nearest-link ranking occurs, and the disabled link in the chain offers repair.
+    A missing link refuses repair without rebuilding. An earlier unrelated enabled link
+    also offers repair under the default quirk, including one near a low link. A contrary
+    selection, refusal or spontaneous link creation falsifies the applicable subclaim.
+    Record traversal cells to exclude cyclic malformed layouts. Three runs per layout.
 
 - **B14 (claims 3 to 9, 15 and 17, observable ordering).** *Setup:* named small test maps
   with both bridge axes and families, tagged ground occupants in distinct watched cells,
@@ -1049,16 +1258,54 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     unmarked cross-cell: the selected section must match claim 16's displacement formula.
     A different span or activity with no unmarked cell within four steps falsifies that rule.
 
+- **B15 (claims 2, 6, 7 and 19; Q-0710 and Q-0717).** Use named test maps with both
+  bridge families and axes and the common settings above. Record tile number, sub-tile and
+  height of every pier and adjacent tile cell before damage, collapse and repair. Include
+  a partially overlaid pier, two touching copies of the same pier-state tile, a diagonal-only
+  connection, and an attached different-state tile. Expected: tile replacements follow the
+  same-tile eight-neighbour component, not a catalogue rectangle or sub-tile match. Replaced
+  map cells and disconnected components stay unchanged, touching same-state copies change
+  together, and the different state does not join. Collapse sets every changed cell's height
+  to the reference height minus 4; repair raises only the three column cells as claim 19 says.
+  In a named theater-data test make the non-collapsed pier ranges overlap: a direct attempt
+  uses x. Also test an x-collapsed/y-live overlap: the live y range wins.
+  Tag both adjacent spans repeatably and arrange isolated runs on both: start-side span
+  actions complete before far-side span actions. A separated start piece beyond a non-bridge
+  gap remains eligible up to the map boundary; no eight-neighbour bridge candidate gives no
+  span check. Any contrary cell set, axis, band order or bounded start search falsifies the
+  corresponding claim. For overlapping deck marks, swap placement order of parallel high
+  overlays and record section markings. A section-marked attempted cell selects itself,
+  other covered cells select their last marking section. Replacing that overlay does not
+  select the next-nearest overlay. On a high-marked pier, repeat after replacing the
+  responsible overlay but preserving its state: the pier-selected family can still affect
+  that responsible cell and remove the replacement. A different selected section, or refusal
+  solely because that replacement is not a high overlay, falsifies claim 2. Three runs
+  per fixture. Malformed absent responsibility is a safe departure, not an oracle prediction.
+- **B16 (claim 15; Q-0714).** Use a low strip over water with a ship, and a land strip
+  holding a vehicle and walking infantry. Change damage states and repair while recording
+  exact entry outcomes, current locomotor and other occupants. Include other-occupant cases
+  giving *moving blocker*, *stationary friendly* and *blocked*, using named test data or
+  forced placement where needed. Expected: only *blocked* causes the entry-refusal hit,
+  though the separate aircraft and destruction-jumpjet rows still apply. Self-presence alone
+  never supplies that refusal. A ship whose new land type is impassable dies on repair even
+  alone. Other-occupant *blocked* is not ignored as a terrain-only interpretation would
+  require. Death with only a non-blocked entry outcome, survival with a blocked outcome, or
+  refusal caused just by the tested object's self-presence falsifies the corresponding rule.
+  Compare states after each preceding occupant death, since a death may free a later
+  occupant's entry test. Three runs per case, both families and axes.
+
 ## Open questions
 
 - Whether a raise other than an object's arrival carries a cell into the destroy-attached-objects
   action (claim 1). S-0011 owns which raises carry one.
-- The exact cells of a pier's tile, and so whether `quirks.pier_repair_partial_height` changes any
-  stock bridge (claim 19).
+- Whether `quirks.pier_repair_partial_height` changes any stock bridge (claim 19). The affected
+  tile-cell set is settled in Terms; no stock-pier height measurement has yet been run.
 - Where a passenger leaves a vehicle destroyed on a deck (S-0312 claim 12 points here). This spec has
   not established it.
 - Whether mech locomotion counts as heading to a cell (claim 11), and a discriminating fixture
   for each of its other untested locomotion kinds.
-- Exceptional or ambiguous cursor-link selection, and a completed intact-bridge hut entry with
-  which to test unconditional engineer consumption (claims 17 and 21).
-- The cell of a hut used by claims 16 and 18 when its foundation has several cells (low).
+- A completed intact-bridge hut entry with which to test unconditional engineer consumption
+  (claim 17).
+- No safe oracle fixture has yet been established for a cyclic malformed cursor-link chain.
+  Claim 21 describes ordinary terminating chains; our engine refuses a repeated traversal
+  cell with a warning rather than hanging.

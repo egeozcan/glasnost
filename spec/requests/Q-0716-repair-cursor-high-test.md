@@ -1,9 +1,9 @@
 ---
 id: Q-0716
 title: Which bridge and link the repair cursor's high-bridge test looks at
-status: open
+status: answered
 related: [S-0511, S-0214, S-0212]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0710
 title: Which cells form a bridge pier's tile, and the axis of a tile in both pier ranges
-status: open
+status: answered
 related: [S-0511, S-0010, S-0307]
-answered-by: []
+answered-by: [S-0511]
 ---
 
 ## Need
