@@ -17,6 +17,13 @@
 //!   hovering transport carries idle infantry from home to land near the
 //!   next wave's goal, across water when they cannot walk there, loading
 //!   and unloading with the clicks a person gives;
+//! - **superweapons** (S-0512, S-0513): once the harvesters are kept, it
+//!   builds the cheapest building it can that gives a superweapon, when it
+//!   has none, before going on with the tech climb; every tick, a ready
+//!   missile or storm superweapon (as the sidebar shows it) is fired with
+//!   the order a person gives, at the seen enemy cell with the most seen
+//!   enemies around it and none of the house's own objects (the other
+//!   kinds are not used);
 //! - **selling out**: a house with no income for a long while and too few
 //!   credits for an army unit sells its buildings one by one for their
 //!   refunds and builds army units with them, and builds no more buildings;
@@ -79,6 +86,9 @@ const WAIT_FAR: i64 = 6; // nocite: tuning of our own opponent
 /// The ring around a ferry, in cells, searched for land when it cannot
 /// let its passengers out where it stopped.
 const ASHORE: i64 = 4; // nocite: tuning of our own opponent
+/// The radius, in cells, around a superweapon's target cell within which
+/// seen enemies count for its worth and the house's own objects forbid it.
+const STRIKE_RADIUS: i64 = 3; // nocite: tuning of our own opponent
 
 /// The default plan of an AI house: types by role, two harvesters, waves of
 /// six (tuning of our own opponent).
@@ -134,11 +144,104 @@ impl Brain {
         if w.tick % THINK_PERIOD == 0 {
             self.send_for_repair(w, &mut out);
             self.ferry(w, &mut out);
+            self.build_superweapon(w, &mut out);
         }
+        self.fire_superweapons(w, &mut out);
         self.rebuild_yard(w, &mut out);
         self.find_deploy_spot(w, &mut out);
         self.defend(w, &mut out);
         out
+    }
+
+    /// Whether building type `b` gives a superweapon (S-0512 Terms: a
+    /// first or second superweapon field).
+    fn gives_superweapon(w: &World, b: u32) -> bool {
+        w.rules()
+            .superweapons
+            .building_sw
+            .get(b as usize)
+            .is_some_and(|f| f.iter().any(Option::is_some))
+    }
+
+    /// Builds the cheapest building the house can build and place now that
+    /// gives a superweapon, when it has none, keeps its harvesters and is
+    /// not selling out. It comes before the tech climb (it replaces a climb
+    /// building this think ordered) but after a building the plan places
+    /// or a power plant, refinery or factory it wants.
+    fn build_superweapon(&self, w: &World, out: &mut Vec<Order>) {
+        let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
+        if self.script.selling() || !self.script.harvesters_kept(w) || out.iter().any(|o| {
+            matches!(o, Order::Place { .. })
+                || matches!(o, Order::Build { what } if what.kind == Kind::Building && !climb(what))
+        }) {
+            return;
+        }
+        let has = self.script.own(w).into_iter().any(|id| {
+            w.obj(id).is_some_and(|o| {
+                o.kind == Kind::Building && Self::gives_superweapon(w, o.type_index)
+            })
+        });
+        if has {
+            return;
+        }
+        let t = all_types(w)
+            .into_iter()
+            .filter(|t| t.kind == Kind::Building && Self::gives_superweapon(w, t.index))
+            .filter(|&t| tech::buildable(w, self.house(), t))
+            .filter(|&t| self.script.place_cell(w, t).is_some())
+            .min_by_key(|&t| (production::cost_field(w, t), t.index));
+        if let Some(t) = t
+            && !self.script.busy(w, t)
+        {
+            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            out.push(Order::Build { what: t });
+        }
+    }
+
+    /// Fires every ready missile or storm superweapon of the house (granted,
+    /// ready and not suspended: what its sidebar icon shows) at
+    /// [`Brain::strike_cell`], with the fire order a person gives; a storm
+    /// only while no storm is under way (a person sees one).
+    fn fire_superweapons(&self, w: &World, out: &mut Vec<Order>) {
+        use glasnost_sim::superweapons::{StormState, SwKind, charge};
+        let h = self.house();
+        for (i, t) in w.rules().superweapons.types.iter().enumerate() {
+            let i = i as u32;
+            let aimed = match t.kind {
+                Some(SwKind::Missile) => true,
+                Some(SwKind::Storm) => w.sw.storm.state == StormState::Idle,
+                _ => false,
+            };
+            let ready = charge::get(w, h, i).is_some_and(|r| r.granted && r.ready && !r.suspended);
+            if aimed
+                && ready
+                && let Some(cell) = self.strike_cell(w)
+            {
+                out.push(Order::FireSuperweapon { sw: i, cell });
+            }
+        }
+    }
+
+    /// The seen enemy's cell with the most seen enemies within
+    /// [`STRIKE_RADIUS`] and none of the house's own objects; the first in
+    /// cell order on equal counts.
+    fn strike_cell(&self, w: &World) -> Option<CellXY> {
+        let enemies = self.script.seen_enemies(w);
+        let own: Vec<CellXY> = self
+            .script
+            .own(w)
+            .into_iter()
+            .filter_map(|id| w.obj(id).map(|o| o.pos.cell()))
+            .collect();
+        let r2 = STRIKE_RADIUS * STRIKE_RADIUS;
+        enemies
+            .iter()
+            .map(|&(_, c)| c)
+            .filter(|&c| !own.iter().any(|&o| dist2(o, c) <= r2))
+            .max_by_key(|&c| {
+                let n = enemies.iter().filter(|&&(_, e)| dist2(e, c) <= r2).count();
+                (n, std::cmp::Reverse((c.y, c.x)))
+            })
     }
 
     /// Places a finished building of the house.

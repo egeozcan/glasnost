@@ -253,6 +253,119 @@ fn decides_only_on_what_it_sees() {
     }
 }
 
+/// The superweapon launches seen so far in `w`'s effects: (house, type).
+fn launches(w: &World) -> Vec<(Option<HouseId>, Option<u32>)> {
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            glasnost_sim::combat::effects::Effect::Superweapon {
+                event: glasnost_sim::superweapons::SwEvent::Launch,
+                house,
+                sw,
+                ..
+            } => Some((*house, *sw)),
+            _ => None,
+        })
+        .collect()
+}
+
+// A ready superweapon is fired, through the fire order, at the seen enemy
+// cell with the most seen enemies around it (S-0512 claim 8, S-0513
+// claims 7 and 8: the missile kind's silo launch).
+#[test]
+fn fires_a_ready_superweapon_at_seen_enemies() {
+    let mut g = start(5);
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "POWR").is_empty()));
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let free = |w: &World, c: glasnost_map::CellXY| {
+        w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c)
+    };
+    let silo_at = (2..12)
+        .map(|d| glasnost_map::CellXY::new(yard.x, yard.y + d))
+        .find(|&c| {
+            (0..2).all(|dx| {
+                (0..2).all(|dy| free(&g.world, glasnost_map::CellXY::new(c.x + dx, c.y + dy)))
+            })
+        })
+        .expect("a free cell for the silo");
+    testkit::spawn(&mut g.world, Kind::Building, "SILO", 0, silo_at, 0);
+    // A row of three enemy power plants clear of the house, on cells a
+    // scout of the house explored.
+    let clear = |w: &World, c: glasnost_map::CellXY| {
+        (0..6).all(|i| (0..2).all(|j| free(w, glasnost_map::CellXY::new(c.x + i, c.y + j))))
+            && w.objects
+                .values()
+                .filter(|o| o.owner == Some(HouseId(0)))
+                .all(|o| {
+                    let p = o.pos.cell();
+                    (p.x - c.x - 2).pow(2) + (p.y - c.y).pow(2) > 100
+                })
+    };
+    let spot = (0..=2 * fixture::SIZE)
+        .flat_map(|y| (0..=2 * fixture::SIZE).map(move |x| glasnost_map::CellXY::new(x, y)))
+        .filter(|&c| clear(&g.world, c))
+        .min_by_key(|&c| ((c.x - yard.x).pow(2) + (c.y - yard.y).pow(2), c.y, c.x))
+        .expect("a spot clear of the house");
+    let scout_at = glasnost_map::CellXY::new(spot.x + 2, spot.y + 1);
+    let scout = testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, scout_at, 0);
+    g.step();
+    objects::remove(&mut g.world, scout);
+    assert!(shroud::explored(&g.world, HouseId(0), spot));
+    for i in 0..3 {
+        let at = glasnost_map::CellXY::new(spot.x + 2 * i, spot.y);
+        testkit::spawn(&mut g.world, Kind::Building, "POWR", 1, at, 0);
+    }
+    g.world.effects.clear();
+    let limit = g.world.tick + 2000;
+    let fired = step_until(&mut g, limit, |w| !launches(w).is_empty());
+    assert!(
+        fired,
+        "the ready superweapon was fired by tick {}",
+        g.world.tick
+    );
+    assert_eq!(launches(&g.world)[0].0, Some(HouseId(0)));
+    let target = g.world.sw.houses[0]
+        .nuke_target
+        .expect("the strike's target");
+    assert!(
+        (target.x - spot.x - 2).abs() <= 3 && (target.y - spot.y).abs() <= 3,
+        "aimed at the cluster: {target:?} near {spot:?}"
+    );
+}
+
+// In a whole game each house builds a superweapon building and fires its
+// superweapon when charged.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn builds_and_fires_a_superweapon() {
+    let mut g = start(5);
+    let mut fired: Vec<HouseId> = Vec::new();
+    let mut built = [false; 2];
+    while g.world.tick < LIMIT && g.outcome().is_none() && fired.len() < 2 {
+        g.step();
+        for h in 0..2 {
+            built[h as usize] |= !of(&g.world, h, "SILO").is_empty();
+        }
+        for (h, _) in launches(&g.world) {
+            if let Some(h) = h
+                && !fired.contains(&h)
+            {
+                fired.push(h);
+            }
+        }
+        g.world.effects.clear();
+    }
+    assert!(
+        built.iter().all(|&b| b),
+        "both houses built a silo: {built:?}"
+    );
+    assert!(
+        !fired.is_empty(),
+        "a house fired its superweapon by tick {}",
+        g.world.tick
+    );
+}
+
 // A lost harvester is rebuilt.
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
