@@ -2,7 +2,7 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1402,11 +1402,11 @@ and scenario stream state each tick through the first subsequent movement.
   its own cell only while it is not moving. Claims 15 and 19 state the stationary case. A
   moving attacker whose next point lies in another reach region has not been measured.
 
-- **Q-0072 question 2, remaining coverage.** The deploying search beyond S-0215's adjusted
-  reach still needs verification: for a deploy-to-fire vehicle whose own cell fails its deploy
-  test, a primary cell is examined only when it passes that test too. Such a skipped primary
-  is never range-tested, so it never becomes claim 17's failure anchor. The rest of that search
-  has not been traced. Claims 19 to 24 now cover ordinary searches on terrain and
+- **Q-0072 question 2, remaining coverage.** S-0517 claim 14 defines the deploy-to-fire cell
+  test and its primary-cell filter: when the vehicle's own cell fails that test, a primary
+  cell is examined only when it passes the same test. A skipped primary never becomes
+  claim 17's failure anchor. S-0215 claim 37 f2 gives the adjusted reach. The rest of the
+  deploying search still needs verification. Claims 19 to 24 now cover ordinary searches on terrain and
   bridges, cell targets, close-range types, the jumpjet detour exemption, the failure centre
   and legal alternatives outside the usable area. Q-0072 is not yet in this spec's requests list. Crushing destinations are
   owned by S-0210 claim 11 and S-0215 claim 37 h, not by this search.
