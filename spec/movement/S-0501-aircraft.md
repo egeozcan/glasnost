@@ -2,7 +2,7 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -23,6 +23,10 @@ from its pads; and the flight and return of non-missile aircraft launched from a
 The shared spawn-controller cycle, including replacement, reload and release, belongs to
 S-0506 claims 1 to 9 and 11 to 13; missile flight also belongs to S-0506. The spy plane's dispatch and reveal are planned S-0513 and the
 delivery of paratroopers and cargo is planned S-0522; only their flight is covered here.
+Ordinary air-transport eligibility is S-0507 claim 2: capacity counts passengers, without a
+passenger-size or size-limit test. Boarding releases mind control (S-0507 claim 6).
+Landed passenger release is S-0507 claim 13; its airborne unloading transitions remain incomplete.
+Aircraft cloaking and hidden-target loss are S-0516 claims 17 and 25.
 Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rules are S-0314
 claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
 launching-count movement hold: it prevents the next step, not completion of an active step,
@@ -348,9 +352,12 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
     These are the aircraft facing rule and the extra refusal of S-0310 claim 5. How the attack
     run reacts to each answer, including *rearming* and *cloaked* (S-0301 claim 12), is table T1.
+    Cloaking may start only at height 0 or below; take-off alone does not break an already
+    completed cloak (S-0516 claim 17). This height test is not the ground-render-layer
+    alternative in this spec's on-the-ground test.
     - Backing: `measurable` (scenario AC11)
     - Confidence: high (the 2048 tolerance and fighter exemption); medium (the passenger-carrier
-      refusal)
+      refusal and cloak interaction)
 
 20. **What a shot does.** A shot of an aircraft that carries passengers is a drop (planned S-0522). For any
     other shot, the projectile starts as in S-0306, with two aircraft changes: a projectile whose
@@ -517,9 +524,13 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     A pad-bound one crashes if none can be obtained. Sale and a refusal during approach must
     not be treated as equivalent to destruction. An aircraft in *attack* whose target is gone
     ends its run (claim 17). Before processing, an aircraft also clears a target whose
-    in-the-air answer is yes, even when that target is still alive.
+    in-the-air answer is yes, even when that target is still alive. A fully cloaked ground
+    target is also cleared before processing when it is not allied with the aircraft and
+    the aircraft's house does not sense it (S-0516 claim 25). An allied or sensed ground
+    target is not cleared by this additional cloak test.
     - Backing: `measurable` (scenario AC19)
-    - Confidence: high (destruction); medium (recovery after a lost contact)
+    - Confidence: high (destruction); medium (recovery after a lost contact and hidden-target
+      clearing)
 
 ### Other behaviours
 
@@ -614,7 +625,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Confidence: high (the listed draws); low (the unresolved draw inventory)
 
 38. **Boundaries.** This spec does not cover the paradrop and cargo delivery behaviours
-    (*paradrop approach*, *paradrop overfly* and *unload* of a carrying aircraft: planned S-0522), the spy
+    (*paradrop approach* and *paradrop overfly*: planned S-0522). Ordinary air-transport
+    eligibility and landed *unload* are S-0507 claims 2 and 13, not a future cargo-delivery
+    rule; airborne unloading transitions remain incomplete there. This spec also excludes the spy
     plane's dispatch and reveal (planned S-0513), missile flight (S-0506 claim 14), aircraft that lift vehicles
     (out of scope), or the original AI's choice of targets for computer aircraft (out of scope).
     An aircraft's cell-entry outcome is always *clear* in a skirmish (S-0209 claim 14); the landing
@@ -1068,6 +1081,11 @@ listed in Open questions are not claimed confirmed by these scenarios.
   override supplies controllable non-fighters and a passenger carrier with a weapon. Place it
   loaded, unload every passenger, then attempt fire: expect *out of ammunition* from the retained
   carrier mark. A fresh aircraft of the same type placed empty must not get that extra refusal.
+  For claim 19's cloak interaction (S-0516 claim 17), a named test-map override
+  supplies a controllable aircraft with a cloak ability. Compare cloak starts at height 0
+  and above 0, then take off after full cloak without firing or losing its cloak source.
+  Expected: no airborne start, and no loss of a completed cloak solely from take-off.
+  Either contrary outcome falsifies that part; record cloak state and height each tick.
 - **AC12 Projectile launch and reveal (claim 20).** Record the initial projectile velocity of
   a bomb released by an aircraft flying straight, and a turn-rate-1 shot at targets above and
   below the release height. Expected: bomb velocity follows body heading, pitch and effective
@@ -1136,6 +1154,15 @@ listed in Open questions are not claimed confirmed by these scenarios.
   anti-air weapon, then assign an airborne target: expect the target to clear before processing
   despite its being alive and otherwise attackable. These outcomes distinguish contact destruction
   from simple destination loss and target removal from target invalidation.
+  For the hidden-ground-target variant, use the named cloak-target test-map override to
+  supply a durable cloaking ground target, allied and enemy ownership variants, and a
+  sensor that can be moved into and out of coverage. Acquire the target before it cloaks.
+  Record full-cloak completion, alliance, the attacker's house's sensor coverage and target
+  retention immediately before processing. Expected: a fully cloaked enemy target clears
+  without coverage, but the cloak test alone does not clear an allied or sensed ground
+  target. Clearing before full cloak, retaining an unsensed fully cloaked enemy, or clearing
+  solely for cloak while allied or sensed falsifies the respective rule. Keep the target
+  alive, on the ground and otherwise valid to isolate this test from the airborne rule.
 - **AC20 Retreat and spy flight (claim 34).** Dispatch a spy plane and record ground target
   distance, behaviour, run lock, edge destination, processing ticks and exit. Expected: overfly
   begins below 769 leptons, approach cadence is the imported camera-frame count, and retreat
@@ -1214,10 +1241,8 @@ listed in Open questions are not claimed confirmed by these scenarios.
    (F7). Single-occupant outcomes are specified.
 8. Climb and descent variants for drop-ship aircraft types (a separate type flag) are not covered.
 9. Which states switch off an aircraft's locomotor and start a crash (claim 9).
-10. The additional clearing of cloaked, undetected ground targets before processing needs
-    further tracing with S-0309. Airborne-target clearing is stated in claim 32.
-11. The complete draw inventory of edge destinations and nearby flight-point searches still
+10. The complete draw inventory of edge destinations and nearby flight-point searches still
     needs tracing (claim 37).
-12. The two game-wide rocket types whose in-the-air answer comes from their locomotor (Terms) are
+11. The two game-wide rocket types whose in-the-air answer comes from their locomotor (Terms) are
     missiles in stock use (S-0506); whether any aircraft of those types reaches this spec's rules
     was not checked.
