@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -74,9 +74,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   *magnetic wave* attached to the firer, and the target it has taken hold of is the firer's *held
   target* for as long as the wave lasts; what the wave does to that target belongs to the combat
   specs.
-- **Temporal weapon.** A weapon with the imported temporal flag: an erasing weapon (glossary,
-  *being erased*). Its *temporal beam* is attached to its target from the moment it locks on until
-  it lets go. S-0308 (claim 6) and S-0310 (claim 7) also use the term.
+- **Temporal weapon.** A weapon whose warhead has the imported temporal flag: an erasing weapon
+  (glossary, *being erased*). A firer's persistent erasing capability is initially supplied by
+  its primary weapon's warhead. Its *temporal beam* is attached to its target from
+  the moment it locks on until it lets go. S-0308 (claim 6) and S-0310 (claim 7) also use the term.
 - **Holding a target.** A firer *holds* a target with a temporal weapon while its temporal beam is
   attached to that target, and with a magnetic-beam weapon while that target is its held target.
 - **Spawner weapon, spawned aircraft.** A *spawner weapon* is a weapon with the imported spawner
@@ -298,7 +299,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing and capture tests (their feature specs), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), or a sinking firer or target (S-0504 claim 5). S-0214, claim 6(e), defers to these for what the check refuses |
    | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power or the firer is disabled, a hidden target fails the test below (S-0516 claim 24), and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
-   | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy test (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
+   | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy-to-fire cell test of S-0517 claim 14 (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
 
    **Hidden-target refusal (S-0516 claim 24).** A target hidden from the firer's house gives
    *impossible* when the firer's mean weapon damage is above 0 or the target is not allied with
@@ -318,19 +319,19 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | |
    | 8 | cloaked | |
    | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class, the capture tests, the parasite tests (S-0614 claim 5), the target is sinking (S-0504 claim 5), or the firer is held and organic (S-0614 claim 8; a spawner weapon is already refused at rank 4), give *illegal* |
    | 10 | out of range | the attempt asked for the range test and the target is beyond the weapon's range |
-   | 11 | must deploy | a vehicle only (S-0310, claim 9) |
+   | 11 | must deploy | a vehicle only (S-0310 claim 9), whose own cell fails S-0517 claim 14's deploy-to-fire cell test |
    | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). Which of the two wins when both hold is not stated; stock data has no vehicle that gives both |
    | 13 | moving | |
    | 14 | still turning | |
    | 15 | not facing | |
-   | 16 | a refusal of the vehicle's locomotor | a vehicle whose locomotor adds a refusal of its own (S-0310, claim 7, for example some flight phases of a jumpjet) gets it only when no reason above holds; which answer it gives is open (Open questions) |
+   | 16 | a refusal of the vehicle's locomotor | a vehicle whose locomotor adds a refusal of its own gets it only when no reason above holds; which answer it gives is open (Open questions) |
 
    So a firer whose countdown runs gets *rearming* even when its target is out of range or it is
    out of ammunition. The rank of *rearming* for a building's pending delayed shot (claim 14), and
@@ -354,7 +355,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    has no firing check between its shots (S-0501 claim 12).
    - Backing: `measurable` (scenarios F7, F8 and F15; S-0506 scenarios R2 and R6 for spawner
      handoff and lockouts; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
-     N6 for sinking restrictions; S-0501 scenarios AC7 to AC9 for aircraft bursts, and
+     N6 for sinking restrictions; S-0517 scenario P4 for transition and magnetic-beam refusals
+     and P5 for the deploy-to-fire cell test; S-0501 scenarios AC7 to AC9 for aircraft bursts, and
      scenario F15 part f and S-0516 scenario CS9 part c for hidden targets).
      Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
      S-0504 claim 5. `unmeasured` for the order among ranks 1 to 4 when two of them hold at once (only
@@ -660,7 +662,7 @@ nonnegative *A* is capped at *A*.
 | `Burst` (rules, weapon) | burst count *B* | integer | 1 |
 | `IsSonic`, `UseSparkParticles`, `UseFireParticles`, `IsRailgun` (rules, weapon) | effect weapon kinds (claim 5) | boolean | no |
 | `IsMagBeam` (rules, weapon) | magnetic-beam weapon (claim 5, Terms) | boolean | no |
-| `Temporal` (rules, weapon) | temporal weapon (Terms) | boolean | no |
+| `Temporal` (rules, warhead) | temporal weapon; the primary weapon's warhead initially supplies the firer's temporal beam (Terms) | boolean | no |
 | `Spawner` (rules, weapon) | spawner weapon (Terms, claim 9) | boolean | no |
 | `HunterSeeker` (rules, vehicle type) | seeker type (Terms, claim 9) | boolean | no |
 | `DiskLaser` (rules, weapon) | disc laser weapon (claim 8) | boolean | no |
@@ -1036,9 +1038,9 @@ is absent (the control).
 - Aircraft ammunition spending and servicing at landing pads are specified by S-0501 claims
   15 and 26 to 28; starting ammunition is answered by claim 10 (Q-0060 question 1).
 - The support charging of a prism-type building (claim 14) needs a structures spec.
-- The temporal weapon is believed to restart the rearm countdown when its beam lets go. That is not
-  a claim of this spec; whether it holds, with its backing and confidence, belongs to the combat
-  spec of that weapon.
+- Whether a temporal weapon's firing side restarts the rearm countdown when its beam lets go
+  remains open. Beam release itself does not establish such a restart, and
+  no release-time rearm rule is claimed here.
 - Claim 13: once a running firing-frame counter has passed the sync frame *s* (after the sync shot,
   or when no shot was made in that tick), does an attempt with the primary weapon still get
   *rearming* from the gate until the counter is idle, or does the rearm countdown alone decide?
