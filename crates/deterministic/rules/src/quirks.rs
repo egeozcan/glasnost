@@ -1399,6 +1399,10 @@ pub struct Quirks {
     // spec: S-0516 claim 22, Edge cases
     #[serde(default = "on")]
     pub mobile_sensor_removal_centre: bool,
+    /// Ordinary flying movement never relocates a mobile sensor's disc, even on landing; off: each horizontal cell-boundary crossing in flight relocates it to the new cell (coverage only, no adjacency uncloak).
+    // spec: S-0516 claim 22, Edge cases
+    #[serde(default = "on")]
+    pub flying_sensor_disc_stationary: bool,
     /// The neighbouring-infantry check runs on 7 ticks of 8; off: only on multiples of 8.
     // spec: S-0516 Edge cases
     #[serde(default = "on")]
@@ -2135,6 +2139,7 @@ impl Default for Quirks {
             cloak_field_overlap_loss: true,
             cloak_field_building_interrupt: true,
             mobile_sensor_removal_centre: true,
+            flying_sensor_disc_stationary: true,
             mirage_adjacent_check_cadence: true,
             sensor_array_removal_radius: true,
             sensor_building_activation_once: true,
@@ -3086,6 +3091,10 @@ impl Quirks {
             (
                 "mobile_sensor_removal_centre",
                 self.mobile_sensor_removal_centre,
+            ),
+            (
+                "flying_sensor_disc_stationary",
+                self.flying_sensor_disc_stationary,
             ),
             (
                 "mirage_adjacent_check_cadence",

@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 use glasnost_map::CellXY;
 
-use super::{Generator, centre_cell, field_circle, type_radius};
+use super::{FieldPhase, Generator, centre_cell, field_circle, type_radius};
 use crate::rules::Kind;
 use crate::world::{HouseId, ObjectId, World};
 
@@ -66,6 +66,8 @@ pub fn placed(w: &mut World, id: ObjectId) {
             house: h,
             centre: c,
             radius: 0,
+            // spec: S-0516 claim 20 (a generator starts with no covered cells and adds radius 1 on its first growth update)
+            phase: FieldPhase::Growing,
         });
     }
 }
@@ -100,8 +102,11 @@ fn clear(w: &mut World, id: ObjectId, h: HouseId, c: CellXY) -> bool {
     w.cloak.fields.remove(&(h.0, c))
 }
 
-/// A generator's turn (claim 20): one radius more while in operation, one
-/// less while not.
+/// A generator's turn (claim 20): a growth update while growth is pending,
+/// a shrink update while shrinking is pending. Going out of operation makes
+/// shrinking pending; a shrink runs on to its stop at radius 0 even when
+/// the generator is back in operation, and an idle generator in operation
+/// below its full radius has growth pending.
 pub fn turn(w: &mut World, id: ObjectId) {
     let Some(g) = w.obj(id).and_then(|o| o.cloak.field) else {
         return;
@@ -109,61 +114,91 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let full = full_radius(w, id);
     let on = crate::econ::power::in_operation(w, id);
     let interrupt = w.rules().quirks.cloak_field_building_interrupt;
-    if on && g.radius < full {
-        // spec: S-0516 claim 20 (growth: radius 1 on the first growth update, then 2, through r, one per tick; the radius increases even when the update is interrupted)
-        let r = g.radius + 1;
-        set_radius(w, id, r);
-        let mut own = if interrupt {
-            own_centres(w, g.house)
-        } else {
-            BTreeSet::new()
-        };
-        // Q-0792 (interim: the generator's own centre does not end a growth update, so growth begins with the full radius-1 circle as CS18 part D expects)
-        own.remove(&g.centre);
-        let mut new = Vec::new();
-        // spec: S-0516 claim 20 (a growth update examines the whole circle: cells omitted earlier can be covered now)
-        for c in cells(g.centre, r) {
-            if !w.cloak.fields.insert((g.house.0, c)) {
-                // spec: S-0516 claim 20 (already covered building centres do not interrupt again)
-                continue;
+    let phase = match (on, g.phase) {
+        // spec: S-0516 claim 20 (when the generator goes out of operation the field shrinks by one ring per tick to 0)
+        (false, FieldPhase::Growing | FieldPhase::Idle) if g.radius > 0 => FieldPhase::Shrinking,
+        // Q-0796 (interim: a generator out of operation with no field has nothing pending)
+        (false, FieldPhase::Growing) => FieldPhase::Idle,
+        // spec: S-0516 claim 20 (a shrinking generator stays shrinking even if the building is in operation again); Q-0796 (interim: it shrinks on to radius 0 and the stop update, then grows)
+        // Q-0796 (interim: an idle generator in operation below its full radius has growth pending from this update)
+        (true, FieldPhase::Idle) if g.radius < full => FieldPhase::Growing,
+        (_, p) => p,
+    };
+    set_phase(w, id, phase);
+    match phase {
+        FieldPhase::Growing if g.radius >= full => {
+            // spec: S-0516 claim 20 (growing at full radius: the next growth update ends growth; reaching the radius alone has not made it idle)
+            set_phase(w, id, FieldPhase::Idle);
+        }
+        FieldPhase::Growing => {
+            // spec: S-0516 claim 20 (growth: radius 1 on the first growth update, then 2, through r, one per tick; the radius increases even when the update is interrupted)
+            let r = g.radius + 1;
+            set_radius(w, id, r);
+            // spec: S-0516 claim 20 (the generator's own centre is not exempt, including on the first radius-1 update)
+            let own = if interrupt {
+                own_centres(w, g.house)
+            } else {
+                BTreeSet::new()
+            };
+            let mut new = Vec::new();
+            // spec: S-0516 claim 20 (a growth update examines the whole circle: cells omitted earlier can be covered now)
+            for c in cells(g.centre, r) {
+                if !w.cloak.fields.insert((g.house.0, c)) {
+                    // spec: S-0516 claim 20 (already covered building centres do not interrupt again)
+                    continue;
+                }
+                new.push(c);
+                // spec: S-0516 claim 20 and quirks.cloak_field_building_interrupt (the first newly covered centre cell of an own building is covered, then the rest of the update's circle is omitted)
+                if own.contains(&c) {
+                    break;
+                }
             }
-            new.push(c);
-            // spec: S-0516 claim 20 and quirks.cloak_field_building_interrupt (the first newly covered centre cell of an own building is covered, then the rest of the update's circle is omitted)
-            if own.contains(&c) {
-                break;
+            // spec: S-0516 claim 20 (every object on a newly covered cell is re-evaluated)
+            reevaluate(w, &new);
+        }
+        FieldPhase::Shrinking if g.radius <= 0 => {
+            // spec: S-0516 claim 20 (at radius 0 the following shrink update stops without retrying the omitted cells or the restart)
+            set_phase(w, id, FieldPhase::Idle);
+        }
+        FieldPhase::Shrinking => {
+            // spec: S-0516 claim 20 (shrinking: one radius per tick to 0; cells outside the shrinking circle leave at once)
+            let r = g.radius - 1;
+            set_radius(w, id, r);
+            let keep: BTreeSet<CellXY> = cells(g.centre, r).into_iter().collect();
+            let own = if interrupt {
+                own_centres(w, g.house)
+            } else {
+                BTreeSet::new()
+            };
+            let mut gone = Vec::new();
+            let mut interrupted = false;
+            // spec: S-0516 claim 20 (a shrink update clears its own ring; cells an earlier interrupted shrink left are not retried)
+            for c in cells(g.centre, g.radius) {
+                if keep.contains(&c) {
+                    continue;
+                }
+                gone.push(c);
+                // spec: S-0516 claim 20 and quirks.cloak_field_building_interrupt (a shrink update stops after clearing an own building's centre, the generator's own centre included)
+                if clear(w, id, g.house, c) && own.contains(&c) {
+                    interrupted = true;
+                    break;
+                }
+            }
+            reevaluate(w, &gone);
+            // spec: S-0516 claim 20 (an uninterrupted collapse reaching radius 0 restarts the neighbours; an interruption on that update prevents it)
+            if r == 0 && !interrupted {
+                restart_neighbours(w, id);
             }
         }
-        // spec: S-0516 claim 20 (every object on a newly covered cell is re-evaluated)
-        reevaluate(w, &new);
-    } else if !on && g.radius > 0 {
-        // spec: S-0516 claim 20 (shrinking: one radius per tick to 0; cells outside the shrinking circle leave at once)
-        let r = g.radius - 1;
-        set_radius(w, id, r);
-        let keep: BTreeSet<CellXY> = cells(g.centre, r).into_iter().collect();
-        let own = if interrupt {
-            own_centres(w, g.house)
-        } else {
-            BTreeSet::new()
-        };
-        let mut gone = Vec::new();
-        let mut interrupted = false;
-        // spec: S-0516 claim 20 (a shrink update clears its own ring; cells an earlier interrupted shrink left are not retried)
-        for c in cells(g.centre, g.radius) {
-            if keep.contains(&c) {
-                continue;
-            }
-            gone.push(c);
-            // spec: S-0516 claim 20 and quirks.cloak_field_building_interrupt (a shrink update stops after clearing an own building's centre, the generator's own centre included)
-            if clear(w, id, g.house, c) && own.contains(&c) {
-                interrupted = true;
-                break;
-            }
-        }
-        reevaluate(w, &gone);
-        // spec: S-0516 claim 20 (an uninterrupted collapse reaching radius 0 restarts the neighbours; an interruption on that update prevents it)
-        if r == 0 && !interrupted {
-            restart_neighbours(w, id);
-        }
+        FieldPhase::Idle => {}
+    }
+}
+
+fn set_phase(w: &mut World, id: ObjectId, p: FieldPhase) {
+    if let Some(ob) = w.obj_mut(id)
+        && let Some(g) = ob.cloak.field.as_mut()
+    {
+        g.phase = p;
     }
 }
 
@@ -175,18 +210,19 @@ fn set_radius(w: &mut World, id: ObjectId, r: i32) {
     }
 }
 
-/// The neighbour restart of claim 20: every other in-play, powered, idle
-/// generator, of any owner, whose centre cell lies strictly within
-/// Δ*X*² + Δ*Y*² < 4(*r* + 2)² of this one's, *r* this generator's type
-/// radius: at its full radius it restarts from 0, otherwise its radius
-/// decreases by one, floored at 0, and growth resumes.
+/// The neighbour restart of claim 20: every other in-play generator in
+/// operation and idle (neither growth nor shrinking pending), of any owner,
+/// whose centre cell lies strictly within Δ*X*² + Δ*Y*² < 4(*r* + 2)² of
+/// this one's, *r* this generator's type radius: at its full radius it
+/// restarts from 0, otherwise its radius decreases by one, floored at 0;
+/// growth becomes pending either way.
 fn restart_neighbours(w: &mut World, id: ObjectId) {
     let Some(g) = w.obj(id).and_then(|o| o.cloak.field) else {
         return;
     };
     let r = full_radius(w, id);
     if r <= 0 {
-        // spec: S-0516 claim 20 (a zero or negative type radius gives no restart effects)
+        // spec: S-0516 claim 20 (a zero or negative type radius cannot initiate a neighbour restart by shrinking); Q-0796 (interim: nor by an immediate collapse)
         return;
     }
     // spec: S-0516 claim 20 and Constants (the strict integer squared-distance test ΔX² + ΔY² < 4(r + 2)²)
@@ -210,17 +246,18 @@ fn restart_neighbours(w: &mut World, id: ObjectId) {
             continue;
         }
         let full2 = full_radius(w, x);
-        // spec: S-0516 claim 20 (in play, powered and idle); Q-0792 (interim: idle is in operation, at any current radius)
-        if full2 <= 0 || !crate::econ::power::in_operation(w, x) {
+        // spec: S-0516 claim 20 (in play, in operation and idle: no growth or shrinking pending, whatever the radius; a zero-radius generator can receive a restart)
+        if g2.phase != FieldPhase::Idle || !crate::econ::power::in_operation(w, x) {
             continue;
         }
-        // spec: S-0516 claim 20 (at its full radius the neighbour restarts from 0; otherwise its radius decreases by one, floored at 0)
+        // spec: S-0516 claim 20 (at its full radius the neighbour restarts from 0; otherwise its radius decreases by one, floored at 0; growth becomes pending)
         let next = if g2.radius == full2 {
             0
         } else {
             (g2.radius - 1).max(0)
         };
         set_radius(w, x, next);
+        set_phase(w, x, FieldPhase::Growing);
     }
 }
 
@@ -239,6 +276,7 @@ pub fn vanish(w: &mut World, id: ObjectId) {
         set_radius(w, id, 0);
         reevaluate(w, &gone);
     }
+    set_phase(w, id, FieldPhase::Idle);
     // spec: S-0516 claim 20 (an immediate collapse performs the same neighbour-restart test)
     restart_neighbours(w, id);
 }
@@ -257,6 +295,8 @@ pub fn captured(w: &mut World, id: ObjectId) {
             Some(h) => {
                 if let Some(g) = ob.cloak.field.as_mut() {
                     g.house = h;
+                    // spec: S-0516 claim 20 (on capture the field grows again for the new owner if the building is in operation)
+                    g.phase = FieldPhase::Growing;
                 }
             }
             None => ob.cloak.field = None,

@@ -80,6 +80,33 @@ fn quirk_cloak_zero_speed_stall() {
     }
 }
 
+// spec: S-0516 Edge cases and claim 43 (quirks.cloak_zero_speed_stall stalls uncloaking only from a positive stage: with N = 1 uncloaking starts at stage 0 and completes at the next update, on or off)
+#[test]
+fn quirk_cloak_zero_speed_stall_one_stage() {
+    let mut seen = Vec::new();
+    for on in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.cloak_zero_speed_stall = on;
+        r.sim.general.cloaking_stages = Some(1);
+        r.sim
+            .infantry
+            .get_mut("SHADE")
+            .unwrap()
+            .combat
+            .cloaking_speed = Some(0);
+        let mut w = game(&r);
+        let s = spawn(&mut w, "SHADE", ALPHA, 0, 0);
+        force_cloaked(&mut w, s);
+        hit(&mut w, s, 1);
+        assert_eq!(stage(&w, s), 0);
+        let t = transitions(&mut w, s, 30);
+        assert_eq!(t.first().map(|x| x.1), Some(CloakState::Uncloaked), "{on}");
+        seen.push(t[0]);
+    }
+    assert_eq!(seen[0], seen[1]);
+    assert_eq!(seen[0].0, 0, "at the next update");
+}
+
 // spec: S-0516 claim 23 and Edge cases (quirks.sensor_building_activation_once: on, set at first placement only if powered, capture leaves it with the old owner; off, it follows in operation and moves to the new owner)
 #[test]
 fn quirk_sensor_building_activation_once() {
@@ -313,4 +340,34 @@ fn save_round_trip_mid_fade() {
     let mut l = save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
     lockstep(&mut w, &mut l, 60);
+}
+
+// spec: S-0516 claim 22 and Edge cases (quirks.flying_sensor_disc_stationary: on, ordinary flight never relocates a sensor aircraft's disc; off, each horizontal cell crossing in flight moves it to the new cell)
+#[test]
+fn quirk_flying_sensor_disc_stationary() {
+    for on in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.flying_sensor_disc_stationary = on;
+        let mut eye = r.sim.aircraft["WRAITH"].clone();
+        eye.combat.cloakable = None;
+        eye.combat.sensors = Some(true);
+        eye.combat.sensors_sight = Some(SEEKER_SIGHT);
+        r.sim.aircraft.insert("EYE".into(), eye);
+        r.registries.get_mut("aircraft").unwrap().push("EYE".into());
+        let mut w = game(&r);
+        let a = spawn(&mut w, "EYE", ALPHA, 0, 0);
+        assert!(sensed_at(&w, ALPHA, 0, 0));
+        move_to(&mut w, a, at(10, 0));
+        until(&mut w, 400, |w| {
+            w.obj(a).unwrap().pos.cell().x >= at(6, 0).x
+        });
+        let x = w.obj(a).unwrap().pos.cell().x - at(0, 0).x;
+        if on {
+            assert!(sensed_at(&w, ALPHA, 0, 0), "the disc stays at the start");
+            assert!(!sensed_at(&w, ALPHA, x, 0));
+        } else {
+            assert!(!sensed_at(&w, ALPHA, 0, 0), "the disc left the start");
+            assert!(sensed_at(&w, ALPHA, x, 0), "the disc follows the flight");
+        }
+    }
 }

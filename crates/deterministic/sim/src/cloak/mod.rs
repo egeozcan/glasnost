@@ -88,6 +88,26 @@ pub struct Generator {
     /// The applied radius, 0 for no field (S-0516 claim 20: radius 0 is an
     /// empty field).
     pub radius: i32,
+    /// Whether growth or shrinking is pending (S-0516 claim 20, Terms
+    /// *idle generator*).
+    #[serde(default)]
+    pub phase: FieldPhase,
+}
+
+/// A cloak generator's field state (S-0516 Terms, claim 20): idle means
+/// neither growth nor shrinking is pending, independently of the radius and
+/// of being in operation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FieldPhase {
+    /// Neither growth nor shrinking pending.
+    #[default]
+    Idle,
+    /// Growth pending: the next growth update adds a radius, or ends growth
+    /// when the radius is already full.
+    Growing,
+    /// Shrinking pending: the next shrink update removes a radius, or ends
+    /// shrinking at radius 0.
+    Shrinking,
 }
 
 /// An object's cloak and disguise state (S-0516).

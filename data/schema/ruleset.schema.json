@@ -7450,6 +7450,11 @@
           "type": "boolean",
           "default": true
         },
+        "flying_sensor_disc_stationary": {
+          "description": "Ordinary flying movement never relocates a mobile sensor's disc, even on landing; off: each horizontal cell-boundary crossing in flight relocates it to the new cell (coverage only, no adjacency uncloak).",
+          "type": "boolean",
+          "default": true
+        },
         "follow_index_by_place": {
           "description": "The placed vehicle numbered i takes the follow value numbered i, not its own entry's; off: each vehicle takes its own entry's value.",
           "type": "boolean",

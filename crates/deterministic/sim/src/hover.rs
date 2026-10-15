@@ -504,6 +504,8 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
                 Choice::NoPoint | Choice::Completed => {
                     // spec: S-0503 claim 15 (a non-refusing choice that leaves no point, a deferred or failed search included: the actual-position flag, then a cell-arrival update there)
                     mark(w, id, at);
+                    // spec: S-0516 claims 13 and 22 (a hover's non-refusing choice is its cell-arrival update, at its actual position)
+                    crate::cloak::machine::cell_movement_completed(w, id);
                     crate::econ::release::arrival(w, id);
                 }
                 Choice::Idle if !q.hover_idle_arrival_reservation => {
@@ -815,6 +817,8 @@ fn step_check(w: &mut World, id: ObjectId, repeated: bool) -> Choice {
         Outcome::Clear => {
             let p = point_for(w, id, cell);
             // spec: S-0503 claim 15 (a clear choice gives a cell-arrival update at the actual position, before the reservation and the consumption of the stored step; Q-0693 answered)
+            // spec: S-0516 claims 13 and 22 (that update moves a sensor disc to the actual position's cell, not the chosen heading cell, and tests adjacency)
+            crate::cloak::machine::cell_movement_completed(w, id);
             crate::econ::release::arrival(w, id);
             if let Some(ob) = w.obj_mut(id) {
                 // spec: S-0503 claim 5 (on clear the step is used up and the vehicle heads for that point)

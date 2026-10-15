@@ -462,33 +462,71 @@ pub fn late_turn(w: &mut World, id: ObjectId) {
     super::disguise::turn(w, id);
 }
 
-/// Whether the object's own movement has the completed-cell movement event
-/// of S-0516 claim 22: ordinary ground (driving) and ship tracks, whose
-/// event is the arrival at a track target's cell centre.
-fn has_track_arrival(w: &World, id: ObjectId) -> bool {
-    use crate::rules::Locomotor;
-    w.obj(id)
-        .and_then(|o| w.rules().unit(o.kind, o.type_index))
-        // spec: S-0516 claim 22 (for ordinary ground and ship tracks the event is arrival at the cell centre, S-0207 claim 7, S-0504 claim 1)
-        .is_some_and(|u| matches!(u.locomotor, Locomotor::Drive | Locomotor::Ship))
+/// Where a mover's cell-arrival update (S-0516 Terms, claims 13 and 22)
+/// comes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ArrivalSource {
+    /// Its locomotor's own events: driving and ship track arrival
+    /// (`drive::spend`), a walker's arrival and snap (`walk::tick`), a
+    /// hover's non-refusing heading-point choices (`hover`).
+    Locomotor,
+    /// Ordinary flight: no cell-arrival update at all.
+    Flight,
+    /// A locomotor claim 22's table has no row for (teleporting, rocket and
+    /// the locomotors not moved yet, jumpjets among them): the cloak update
+    /// after its centre cell changed (Q-0795, interim).
+    CloakTurn,
 }
 
-/// The completed-cell movement event of a vehicle, infantry unit or
-/// aircraft (S-0516 claims 13 and 22): a mobile sensor's disc moves to its
-/// current cell, then a fully cloaked mover takes the adjacent sensor test.
-/// The driving and ship locomotors call it on reaching a track target
-/// (`drive::spend`); other movement takes it in the cloak turn
-/// ([`turn`]) when the centre cell changed (Q-0791, interim).
+fn arrival_source(w: &World, id: ObjectId) -> ArrivalSource {
+    use crate::rules::Locomotor;
+    let Some(u) = w.obj(id).and_then(|o| w.rules().unit(o.kind, o.type_index)) else {
+        // Q-0795 (interim: a mover without a locomotor row has its cell-arrival update at the cloak update after its centre cell changed)
+        return ArrivalSource::CloakTurn;
+    };
+    match u.locomotor {
+        // spec: S-0516 claim 22 (driving or ship tracks: arrival at the cell centre; walking: arrival and snap to the standing position; hovering: S-0503 claim 15's non-refusing choices and restorations)
+        Locomotor::Drive | Locomotor::Ship | Locomotor::Walk | Locomotor::Hover => {
+            ArrivalSource::Locomotor
+        }
+        // spec: S-0516 claim 22 (ordinary flying aircraft: none from taking off, flight across cells, destination arrival or landing)
+        Locomotor::Fly => ArrivalSource::Flight,
+        // Q-0795 (interim: a locomotor outside claim 22's table has its cell-arrival update at the cloak update after its centre cell changed)
+        Locomotor::Teleport | Locomotor::Rocket | Locomotor::None => ArrivalSource::CloakTurn,
+    }
+}
+
+/// The cell-arrival update of a vehicle, infantry unit or aircraft (S-0516
+/// Terms, claims 13 and 22): a mobile sensor's disc moves to its current
+/// cell, even the cell it was already centred on, then a fully cloaked
+/// mover takes the adjacent sensor test. The driving and ship locomotors
+/// call it on reaching a track target (`drive::spend`), the walking one at
+/// its arrival on a walking target (`walk::tick`), the hovering one at each
+/// non-refusing heading-point choice (`hover`); ordinary flight never does.
+/// Other locomotors take it in the cloak turn ([`turn`]) when the centre
+/// cell changed (Q-0795, interim).
 pub fn cell_movement_completed(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     if !o.on_map || !o.kind.is_mobile() {
         return;
     }
     let c = centre_cell(w, id);
-    // spec: S-0516 claim 22 (at the completed-cell movement event: remove around the last recorded coverage cell, add around the current cell and record it)
+    // spec: S-0516 claim 22 (at a cell-arrival update: remove around the last recorded coverage cell, add around the object's cell and record it, even when it equals the old cell)
     super::sensor::mobile_moved(w, id);
-    // spec: S-0516 claims 13 and 22 (the same event supplies the adjacency check of a fully cloaked mover)
+    // spec: S-0516 claims 13 and 22 (the same event supplies the adjacency check of a fully cloaked mover, sensor or not)
     adjacent_reveal(w, id, c);
+}
+
+/// An aircraft's position crossed into another cell in ordinary flight
+/// (`air`): with `quirks.flying_sensor_disc_stationary` nothing happens;
+/// off, its sensor disc moves to the new cell, with no adjacency test.
+pub fn flight_cell_crossed(w: &mut World, id: ObjectId) {
+    if w.rules().quirks.flying_sensor_disc_stationary {
+        // spec: S-0516 claim 22 and Edge cases (quirks.flying_sensor_disc_stationary: ordinary flying movement never relocates a sensor disc, even on landing)
+        return;
+    }
+    // spec: S-0516 Edge cases (flying_sensor_disc_stationary off: a horizontal cell-boundary crossing relocates the disc to the new current cell; coverage only, no claim 13 adjacency uncloak)
+    super::sensor::mobile_moved(w, id);
 }
 
 /// An object entered cell `c` (S-0516 claims 6, 13 and 22).
@@ -496,8 +534,8 @@ fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
     if let Some(ob) = w.obj_mut(id) {
         ob.cloak.cell = Some(c);
     }
-    if !has_track_arrival(w, id) {
-        // Q-0791 (interim: movement other than driving and ship tracks has its completed-cell event at the cloak turn after the centre cell changed)
+    if arrival_source(w, id) == ArrivalSource::CloakTurn {
+        // Q-0795 (interim: movement outside S-0516 claim 22's table has its cell-arrival update at the cloak turn after the centre cell changed)
         cell_movement_completed(w, id);
     }
     // spec: S-0516 claim 6 (re-evaluated when it enters a cell)
@@ -574,8 +612,8 @@ fn step(w: &mut World, id: ObjectId) {
                 1 // spec: S-0516 claim 18 (an uncloaking building falls one level per tick)
             } else {
                 let s = speed(w, id);
-                if s == 0 && w.rules().quirks.cloak_zero_speed_stall {
-                    // spec: S-0516 Edge cases (quirks.cloak_zero_speed_stall: a speed of 0 never advances uncloaking)
+                if s == 0 && w.rules().quirks.cloak_zero_speed_stall && o.cloak.stage > 0 {
+                    // spec: S-0516 Edge cases (quirks.cloak_zero_speed_stall: a speed of 0 never advances uncloaking from a positive stage; at stage 0, N = 1, it completes at the next ordinary update, claim 43)
                     return;
                 }
                 // spec: S-0516 claim 43 (a negative speed's countdown is always expired: one stage per ordinary update, not a stall)
