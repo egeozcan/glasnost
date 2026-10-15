@@ -35,7 +35,7 @@ pub struct HouseTech {
     /// total of the docking-place counts of the house's placed helipad
     /// buildings, never below 0.
     #[serde(default)]
-    pub pad_total: i32,
+    pub pad_total: i64,
 }
 
 /// An icon in a sidebar tab (S-0004 claim 11): its type and the cost it was
@@ -1216,23 +1216,22 @@ pub fn queue_refused(w: &World, house: HouseId, t: TypeRef, copies: i32) -> bool
     };
     if t.kind == Kind::Aircraft && f.airport_bound {
         let r = &w.rules().econ.tech;
+        // spec: S-0407 F3 and S-0501 F12 (D and T: exact non-negative integer count arithmetic, no wrapping)
+        let count = |pt: TypeRef| {
+            i64::from(present_count(w, house, pt).max(0))
+                + i64::from(crate::econ::production::copies_in_line(w, house, pt).max(0))
+        };
         // spec: S-0407 claim 16 (D: present pad aircraft plus their copies in the aircraft line)
-        let mut d = 0i32;
+        let mut d = 0i64;
         for &p in &r.pad_aircraft {
-            let pt = TypeRef {
+            d += count(TypeRef {
                 kind: Kind::Aircraft,
                 index: p,
-            };
-            // spec: S-0407 F3 (the sums wrap modulo 2³²)
-            d = d
-                .wrapping_add(present_count(w, house, pt))
-                .wrapping_add(crate::econ::production::copies_in_line(w, house, pt));
+            });
         }
         if !q.pad_limit_counts_list_only && !r.pad_aircraft.contains(&t.index) {
             // spec: S-0501 claim 30 and S-0407 claim 16 (quirks.pad_limit_counts_list_only off: the asked-for type outside the list is counted too, never twice)
-            d = d
-                .wrapping_add(present_count(w, house, t))
-                .wrapping_add(crate::econ::production::copies_in_line(w, house, t));
+            d += count(t);
         }
         // spec: S-0407 claim 16 and S-0501 claim 30 (T: the house's saved pad total)
         let total = w
@@ -1268,8 +1267,8 @@ fn add_pads(w: &mut World, house: Option<HouseId>, n: i32) {
     if let Some(h) = house
         && let Some(x) = w.houses.get_mut(usize::from(h.0))
     {
-        // spec: S-0501 claim 30 (the pad total never goes below 0)
-        x.econ.tech.pad_total = x.econ.tech.pad_total.wrapping_add(n).max(0);
+        // spec: S-0501 claim 30 (the pad total never goes below 0) and S-0407 F3 (T: exact count arithmetic, no wrapping)
+        x.econ.tech.pad_total = (x.econ.tech.pad_total + i64::from(n)).max(0);
     }
 }
 

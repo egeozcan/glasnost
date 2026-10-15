@@ -759,7 +759,7 @@ fn claim_16_dock_bound() {
     }
 }
 
-fn pad_total(w: &World, h: u8) -> i32 {
+fn pad_total(w: &World, h: u8) -> i64 {
     w.houses[usize::from(h)].econ.tech.pad_total
 }
 
@@ -801,6 +801,20 @@ fn claim_16_pad_total_running() {
     assert_eq!(pad_total(&w, 1), 0, "the floor of 0");
     objects::remove(&mut w, x);
     assert_eq!(pad_total(&w, 0), 0);
+}
+
+// spec: S-0407 F3 and S-0501 F12 (the pad-capacity quantities use exact non-negative count arithmetic: the pad total does not wrap past the 32-bit range)
+#[test]
+fn f3_pad_total_exact_count() {
+    let mut r = ruleset();
+    let mut b = plain(100);
+    b.helipad = Some(true);
+    b.econ.number_of_docks = Some(3);
+    add_building(&mut r, "PADT", b);
+    let mut w = game(&r);
+    w.houses[0].econ.tech.pad_total = i64::from(i32::MAX);
+    building(&mut w, "PADT", 0, 0, 0);
+    assert_eq!(pad_total(&w, 0), i64::from(i32::MAX) + 3);
 }
 
 // spec: S-0501 claim 30 and F12, S-0407 claim 16 (quirks.pad_limit_counts_list_only: on, a pad-bound type outside the list is limited by the list types only; off, its own present objects and line copies count too)
