@@ -74,6 +74,7 @@ const SCENES: &[Scene] = &[
     ("sw-paradrop-plane", sw_paradrop_plane),
     ("sw-spy-plane", sw_spy_plane),
     ("paratroopers-dropping", paratroopers_dropping),
+    ("transport-unloading", transport_unloading),
     ("trigger-coverage", trigger_coverage),
 ];
 
@@ -958,13 +959,26 @@ fn sw_force_shield(lane: &mut Lane) {
 
 /// S-0513 claims 42 to 45: a plane sent to a cell, followed and shot when it
 /// is within 6 cells of the target.
-fn plane_scene(lane: &mut Lane, sw: u32, shot: &str) {
+/// The plane comes through the aim when the type was found by its kind, else
+/// straight through `launch` (the plane functions of `superweapons::planes`;
+/// Q-0730: stock kind words may not resolve).
+fn plane_scene(
+    lane: &mut Lane,
+    sw: Option<u32>,
+    launch: fn(&mut World, HouseId, CellXY) -> Vec<ObjectId>,
+    shot: &str,
+) {
     let local = lane.local();
     let home = lane.home();
     let target = lane.open_land(CellXY::new(home.x + 14, home.y + 14));
     let before = lane.aircraft(local);
-    if !lane.aim(sw, None, target) {
-        return;
+    let through_aim = match sw {
+        Some(sw) => lane.aim(sw, None, target),
+        None => false,
+    };
+    if !through_aim {
+        let n = launch(lane.world_mut(), local, target).len();
+        println!("no type took the order: {n} plane(s) sent through planes directly");
     }
     let t0 = lane.world().tick;
     let mut plane = None;
@@ -987,7 +1001,10 @@ fn plane_scene(lane: &mut Lane, sw: u32, shot: &str) {
         };
         lane.look_at(c);
         if (c.x - target.x).abs().max((c.y - target.y).abs()) <= 6 {
-            println!("plane within 6 cells of the target {t} ticks after the order");
+            println!(
+                "plane within 6 cells of the target {t} ticks after the order, {} leptons above the ground",
+                glasnost_sim::air::height(lane.world(), id)
+            );
             lane.ticks(1);
             lane.save(shot);
             return;
@@ -1009,17 +1026,23 @@ fn sw_paradrop_plane(lane: &mut Lane) {
     } else {
         SwKind::AmerParadrop
     };
-    let Some(sw) = ready_sw(lane, kind) else {
-        return;
-    };
-    plane_scene(lane, sw, "sw-paradrop-plane");
+    let sw = ready_sw(lane, kind);
+    plane_scene(
+        lane,
+        sw,
+        |w, h, c| glasnost_sim::superweapons::planes::paradrop(w, h, c, false),
+        "sw-paradrop-plane",
+    );
 }
 
 fn sw_spy_plane(lane: &mut Lane) {
-    let Some(sw) = ready_sw(lane, SwKind::SpyPlane) else {
-        return;
-    };
-    plane_scene(lane, sw, "sw-spy-plane");
+    let sw = ready_sw(lane, SwKind::SpyPlane);
+    plane_scene(
+        lane,
+        sw,
+        glasnost_sim::superweapons::planes::spy_plane,
+        "sw-spy-plane",
+    );
 }
 
 /// S-0011 and S-0524: on every offered map, the trigger events and actions
@@ -1136,7 +1159,12 @@ fn paratroopers_dropping(lane: &mut Lane) {
             s.set_centre(glasnost_render::projection::project_lifted(p.x, p.y, p.z));
         }
         if !shot && descending >= 3 {
-            println!("{descending} descending {t} ticks after the order");
+            let heights: Vec<i32> = lane
+                .aircraft(local)
+                .into_iter()
+                .map(|id| glasnost_sim::air::height(lane.world(), id))
+                .collect();
+            println!("{descending} descending {t} ticks after the order; aircraft heights {heights:?}");
             lane.save("paratroopers-dropping");
             shot = true;
             later = Some(t + 60);
@@ -1163,6 +1191,98 @@ fn paratroopers_dropping(lane: &mut Lane) {
     println!("first drop {first:?}; {dropped} dropped within 3000 ticks");
     if !shot {
         lane.save("paratroopers-dropping");
+    }
+}
+
+/// S-0507 claims 3 to 12: infantry clicked onto an own ground transport
+/// board it (shot with the load aboard), then a click on the transport lets
+/// them out one by one (shot while some stand beside it and some are still
+/// inside). The types are found by their flags: a vehicle with passenger
+/// room that walks or drives on land, and plain infantry.
+fn transport_unloading(lane: &mut Lane) {
+    let w = lane.world();
+    let truck = find_type(w, Kind::Vehicle, |_, u| {
+        u.passengers >= 3 && u.locomotor == Locomotor::Drive && !u.combat.naval
+    });
+    let foot = find_type(w, Kind::Infantry, |_, u| u.locomotor == Locomotor::Walk);
+    println!(
+        "transport type found: {}, infantry type found: {}",
+        truck.is_some(),
+        foot.is_some()
+    );
+    let (Some(tn), Some(fnm)) = (truck, foot) else {
+        return;
+    };
+    let home = lane.home();
+    let Some(at) = lane.area(
+        CellXY::new(home.x + 6, home.y + 6),
+        (3, 3),
+        2,
+        |l| l != land::WATER && l != land::ROCK,
+    ) else {
+        println!("no open land");
+        return;
+    };
+    let local = lane.local();
+    let t = lane.spawn(Kind::Vehicle, &tn, local, CellXY::new(at.x + 1, at.y + 1));
+    let riders: Vec<ObjectId> = [(0, 0), (2, 0), (0, 2)]
+        .iter()
+        .map(|&(dx, dy)| lane.spawn(Kind::Infantry, &fnm, local, CellXY::new(at.x + dx, at.y + dy)))
+        .collect();
+    lane.ticks(2);
+    lane.look_at(at);
+    let orders: usize = riders
+        .iter()
+        .map(|&p| lane.order(local, p, ClickOn::Object(t)))
+        .sum();
+    println!("{} riders ordered aboard, {orders} orders", riders.len());
+    let mut loaded_at = None;
+    for i in 0..900 {
+        lane.ticks(1);
+        let n = glasnost_sim::transport::count(lane.world(), t);
+        if n as usize == riders.len() {
+            loaded_at = Some(i);
+            break;
+        }
+    }
+    println!(
+        "loaded after {loaded_at:?} ticks: {} aboard",
+        glasnost_sim::transport::count(lane.world(), t)
+    );
+    lane.ticks(2);
+    lane.save("transport-loaded");
+    let issued = lane.order(local, t, ClickOn::Object(t));
+    println!("unload clicked: {issued} orders");
+    let mut shot = false;
+    for i in 0..900 {
+        lane.ticks(1);
+        let w = lane.world();
+        let aboard = glasnost_sim::transport::count(w, t);
+        let out = riders
+            .iter()
+            .filter(|&&p| {
+                w.obj(p).is_some_and(|o| o.on_map)
+                    && glasnost_sim::transport::riding(w, p).is_none()
+            })
+            .count();
+        if !shot && out >= 1 && aboard >= 1 {
+            println!("{out} out, {aboard} still inside, {i} ticks after the click");
+            lane.save("transport-unloading");
+            shot = true;
+        }
+        if out == riders.len() {
+            println!("all {out} out {i} ticks after the click");
+            if !shot {
+                lane.save("transport-unloading");
+            }
+            lane.ticks(20);
+            lane.save("transport-unloaded");
+            return;
+        }
+    }
+    println!("unloading incomplete; shot {shot}");
+    if !shot {
+        lane.save("transport-unloading");
     }
 }
 

@@ -864,6 +864,8 @@ Provisional rules of M6b multiplayer triggers, each tied to a request:
 | `mp_triggers::capture_seam` | tag carry-over comes before the ownership change | Q-0765 |
 | `mp_triggers::resolve_house` | position values A to H take the house at that start position; S-0009 claim 29's rule for header counts of 9 or more is not applied | — |
 
+Q-0799 interim (airborne shadow point): `mapview::build::vehicle_voxels` draws a flying aircraft's shadow at its position lowered to the terrain level of its cell (`level × 104` leptons, never above its own height); the body keeps its lifted point. The paradrop plane's flight height (1500 leptons in the lane) is drawn.
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.

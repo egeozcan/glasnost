@@ -1365,3 +1365,81 @@ fn parachute_follows_its_paratrooper() {
     live.after_tick();
     assert!(live.attached().is_empty(), "it disappears with its owner");
 }
+
+/// Q-0799 interim (S-0102 claim 18 leaves the airborne shadow point open): a flying
+/// aircraft's body is drawn at its lifted point and its shadow on the ground under it; an
+/// aircraft on the ground draws both at one point.
+#[test]
+fn flying_aircraft_shadow_lies_on_the_ground() {
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let (mut import, catalogue, mut assets) =
+        context_with(&format!("{RULES}[AircraftTypes]\n1=JETX\n"));
+    import.arts.insert(
+        (Kind::Aircraft, 0),
+        TypeArt {
+            voxels: [("body".to_string(), b"jetx.vxl".to_vec())].into(),
+            ..Default::default()
+        },
+    );
+    assets.insert(
+        b"jetx.vxl",
+        VxlWriter {
+            model: &synthetic_model(),
+        }
+        .write(),
+    );
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene: Scene = built.scene;
+    let jet = |z| Mobile {
+        kind: Kind::Aircraft,
+        idx: 0,
+        owner: b"Neutral".to_vec(),
+        pos: (3 * 256 + 128, 3 * 256 + 128, z),
+        body: 16384,
+        turret: 16384,
+        elevation: 0,
+        infantry: None,
+        object: sim_code(ObjectId(5)),
+        harvesting: None,
+    };
+    let mut offset = |z| {
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
+        let items = &entries[0].items;
+        let shadow = items.iter().find(|i| i.paint == Paint::Shadow);
+        let body = items.iter().find(|i| i.paint != Paint::Shadow);
+        (shadow.map(|s| s.y), body.map(|b| b.y))
+    };
+    let (shadow, body) = offset(0);
+    assert!(shadow.is_some() && body.is_some(), "both images drawn");
+    // On the ground the two share a point, so the shadow's top is no lower than the body's
+    // top plus the images' own size difference (checked at height 0 as the reference).
+    let reference = shadow.unwrap() - body.unwrap();
+    let (shadow, body) = offset(1500);
+    // In the air the body is lifted and the shadow is not: the gap grows by the lift.
+    assert_eq!(
+        shadow.unwrap() - body.unwrap(),
+        reference + glasnost_render::projection::height_lift(1500)
+    );
+}

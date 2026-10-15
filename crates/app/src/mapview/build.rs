@@ -3587,6 +3587,18 @@ impl Builder<'_> {
         let (body_raw, turret_raw, elevation) = (m.body, m.turret, m.elevation);
         let pose = move || voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q);
         let object = m.object;
+        // Q-0799 interim: a flying aircraft's shadow lies on the ground under it (the terrain
+        // level of its cell), not at the body's lifted point; everything else keeps the body's point
+        let shadow_point = if kind == Kind::Aircraft {
+            let level = self
+                .map
+                .cells
+                .get(CellXY::new(m.pos.0 / 256, m.pos.1 / 256)) // spec: S-0204 claim 2 (the cell holding a position)
+                .map_or(0, |cell| i32::from(cell.level));
+            project_lifted(m.pos.0, m.pos.1, (level * LEVEL_LEPTONS).min(m.pos.2))
+        } else {
+            point
+        };
         let mut items = Vec::new();
         // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
         let shadow = (!rule_bool(self.import, kind, idx, b"NoShadow", false)).then(|| {
@@ -3614,7 +3626,7 @@ impl Builder<'_> {
             // own drawing; it never paints over its own aircraft)
             items.push(Self::part_item(
                 part,
-                point,
+                shadow_point,
                 u,
                 Paint::Shadow,
                 Group::Shadows,
@@ -3735,7 +3747,7 @@ impl Builder<'_> {
                 // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's own drawing)
                 items.push(Self::part_item(
                     part,
-                    point,
+                    shadow_point,
                     u,
                     Paint::Shadow,
                     Group::Shadows,
