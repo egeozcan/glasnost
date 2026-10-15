@@ -2,11 +2,11 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: []
 supersedes: []
@@ -403,6 +403,11 @@ New terms:
         a high-bridge cell
       - it marks its place in the occupancy record
       - its destination and move order are cleared.
+    - **Sensors and adjacency reveal.** Completed touchdown supplies the cell-arrival update
+      of S-0516 claims 13 and 22: any sensor disc transfers to the landing cell and the
+      adjacency-reveal test applies after landing placement, before the later sight refresh
+      and crate pickup. Take-off, in-flight cell crossings, cruising arrival and hovering
+      supply neither event; S-0516 claim 22 owns the stationary-flight coverage quirk.
     - **If it is still in play and alive,** in the same tick:
       - its sight is refreshed at its new position
       - it releases its hover slot
@@ -411,8 +416,9 @@ New terms:
         does not reverse the completed landing
       - a deploy-to-land vehicle's landing request ends (S-0517).
     - Backing: `measurable` (scenario J9 for ordinary landing checks, entering and living
-      touchdown, and S-0607 scenarios L3 and L6 for seized landing without the ordinary
-      obstruction or water/beach refusal). Seized deploy-turn suppression remains `unmeasured`:
+      touchdown, S-0516 scenario CS20 for touchdown sensor transfer, adjacency reveal and
+      their absence during flight, and S-0607 scenarios L3 and L6 for seized landing without
+      the ordinary obstruction or water/beach refusal). Seized deploy-turn suppression remains `unmeasured`:
       these scenarios do not establish a seized simple deployer during descent.
       The dead/out-of-play touchdown exception is `unmeasured`:
       J9 has only living landings, and a normal kill changes the unit to crashing instead.
@@ -573,15 +579,21 @@ instead rounds to nearest, ties to even. Integer conversions still truncate towa
 values without rounding. Sine and cosine mean the table trigonometry of S-0205 claim 6, not exact
 mathematical functions. Integer arithmetic follows S-0205 claims 1 to 3.
 
-**F1. Speed (claim 6).** Each physics step:
-- if *v*<sub>m</sub> > *v*<sub>c</sub>: *v*<sub>c</sub>′ = min(*v*<sub>c</sub> + *a*, *S*)
-- if *v*<sub>m</sub> < *v*<sub>c</sub>: *v*<sub>c</sub>′ = max(*v*<sub>c</sub> − 1.5 × *a*, 0).
-- If they are equal, the current speed is unchanged. The braking comparison uses the speed
-  after any acceleration in that step; if acceleration overshoots the maximum speed, braking
-  also applies in that step. Neither update clamps to the maximum speed, only to *S* or 0.
+**F1. Speed (claim 6).** For each physics step, let *q* be the speed after the acceleration stage:
 
-Then the speed fraction = *v*<sub>c</sub>′ / *S*, in double precision. *S* = 0 divides by zero
-(Edge cases).
+| Condition | *q* |
+|---|---|
+| *v*<sub>m</sub> > *v*<sub>c</sub> | min(*v*<sub>c</sub> + *a*, *S*) |
+| *v*<sub>m</sub> ≤ *v*<sub>c</sub> | *v*<sub>c</sub> |
+
+The resulting current speed is
+
+| Condition | *v*<sub>c</sub>′ |
+|---|---|
+| *v*<sub>m</sub> < *q* | max(*q* − 1.5 × *a*, 0) |
+| *v*<sub>m</sub> ≥ *q* | *q* |
+
+Thus the braking comparison uses the speed after acceleration, and braking also applies in that step if acceleration overshoots the maximum speed. The acceleration result is capped at *S* and the braking result at 0, not at the maximum speed. If the speeds are equal, the current speed is unchanged. The speed fraction is *v*<sub>c</sub>′ / *S*, in double precision. *S* = 0 divides by zero (Edge cases).
 
 **F2. Wobble and desired height (claim 9).** Here 2π denotes the stored double
 6.283185307179586 radians, not an exact real constant. Evaluate the inner division, outer
