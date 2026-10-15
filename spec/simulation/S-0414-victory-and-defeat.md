@@ -2,7 +2,7 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -250,7 +250,9 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
      After the local player's house is defeated, the alliance-formed and enemy-alliance-formed
      announcements and the superweapon launch and detection announcements of S-0701 claim 28
      are muted. This does not mute every announcement: alliance requests and alliance breaks
-     retain S-0701 claim 36's conditions. The muting also applies while our defeated local player
+     are not muted merely by defeat. Alliance announcement selection and entry bindings are
+     not specified here; S-0701 claim 36 does not supply them. Claim 13 retains the independently
+     stated alliance-break request condition. The muting also applies while our defeated local player
      watches the remaining sides. These are presentation only and reach no game state.
    - **The end test** of claim 6 belongs to the same defeat. It counts the house as already
      defeated, and every house later in house order as it stands before its own house update in
@@ -424,9 +426,10 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
       that enemy.
     Otherwise the order does nothing. When A allies B, A's objects on the map whose current target
     belongs to a house that A now allies (B, an earlier ally, or A itself) drop that target. When A
-    is person-played and B is not passive, a message reports the new alliance, and an announcement
-    follows S-0701 claim 36's request-versus-mutual-alliance conditions and post-defeat muting
-    (presentation). The original's computer player
+    is person-played and B is not passive, a message reports the new alliance. Alliance
+    announcement selection and entry bindings remain unspecified; any such request is subject
+    to claim 5's post-defeat muting (presentation), not to an alliance-selection rule in
+    S-0701 claim 36. The original's computer player
     reacts to some alliances made by human houses (an option of its computer player makes its
     houses ally each other); our AI houses act only through orders.
     - Backing: `measurable` (scenario V9, part a: the one-way effect, the refusal at the last enemy
@@ -1084,9 +1087,11 @@ in play (claim 11); a defeat later with no such object falsifies it.
   is destroyed, the human's result stays a win, game over at the original tick (claim 11).
 
 **V9: alliance orders.** Capture the player list, message area and audio during parts a and b.
-Expected presentation: successful peace orders towards B and C each produce an alliance message
-and announcement; the refused order towards D produces neither. Part b produces a break message
-and announcement. Missing or extra presentation falsifies these presentation rules.
+Expected presentation: successful peace orders towards B and C each produce an alliance message.
+The refused order towards D produces none. Part b produces a break message and announcement
+under claim 13's conditions. Missing or extra claimed presentation falsifies these rules.
+Record peace-order audio as exploratory evidence only: this scenario does not establish
+alliance announcement selection or entry bindings.
 - *Part a.* Three computer players B, C, D at war with the human. The human makes peace with B
   while a human unit is attacking a unit of B, then with C, then tries D. Expected: B and C allied
   by the human (the attacking unit stops, and the human's units ignore B and C from then on), the
