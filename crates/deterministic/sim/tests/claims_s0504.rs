@@ -1314,6 +1314,84 @@ fn claim_32_crashable_sinking_type_is_removed() {
     );
 }
 
+/// The ruleset with death animations, a crashable copy of SKIFF (SKIFFC),
+/// and, when `debris`, one or two debris animations on both.
+fn first_hit_rules(debris: bool) -> Ruleset {
+    let mut r = rules_with_death_anims();
+    if debris {
+        let c = &mut r.sim.vehicles.get_mut("SKIFF").unwrap().combat;
+        c.min_debris = Some(1);
+        c.max_debris = Some(3);
+        c.debris_anims = Some(vec!["CHUNK".to_string()]);
+    }
+    let mut copy = r.sim.vehicles["SKIFF"].clone();
+    copy.crashable = Some(true);
+    r.sim.vehicles.insert("SKIFFC".into(), copy);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("SKIFFC".into());
+    r
+}
+
+/// The first killing hit on `name` at height 0 on open water: the world
+/// after the hit, the vessel, and the draws the hit took.
+fn first_killing_hit(name: &str, debris: bool) -> (World, ObjectId, u64) {
+    let mut w = world(first_hit_rules(debris));
+    let v = at(&mut w, name, 0, 0, 0);
+    open(&mut w);
+    assert_eq!(w.height_above_surface(v), 0);
+    assert!(
+        naval::sinks_at_kill(&w, v),
+        "{name} meets the sinking conditions"
+    );
+    assert!(!naval::sinking(&w, v));
+    w.effects.clear();
+    let before = w.rng.taken();
+    assert_eq!(kill(&mut w, v), HitResult::NowDead);
+    let n = w.rng.taken() - before;
+    (w, v, n)
+}
+
+// spec: S-0312 claims 10 and 15 (Q-0652: a crashable surface vessel meeting the sinking conditions at its first killing hit cannot start a crash and leaves play at the end of that hit, with neither of claim 9's animations nor their list picks and no crash-start draws); S-0504 claim 4 (no descent, sinking wakes or wake draws afterwards). The non-crashable control stays in play at 1 health and descends
+#[test]
+fn claim_4_crashable_vessel_first_killing_hit_is_removed() {
+    let (mut c, cv, cn) = first_killing_hit("SKIFFC", false);
+    let (mut k, kv, kn) = first_killing_hit("SKIFF", false);
+    assert!(c.obj(cv).is_none(), "removed in the killing hit");
+    assert!(anim_names(&c).is_empty(), "{:?}", anim_names(&c));
+    assert_eq!(cn, 0, "no list picks, no crash-start draws");
+    assert_eq!(cn, kn, "the same draws as the non-crashable control");
+    let o = k.obj(kv).expect("the control stays in play");
+    assert_eq!(o.health, 1);
+    assert!(naval::sinking(&k, kv));
+    assert!(anim_names(&k).is_empty());
+    let z0 = o.pos.z;
+    for _ in 0..8 {
+        c.effects.clear();
+        let before = c.rng.taken();
+        tick::step(&mut c);
+        assert!(c.obj(cv).is_none());
+        assert!(wakes(&c).is_empty(), "no sinking wakes");
+        assert_eq!(c.rng.taken(), before, "no wake draws");
+        tick::step(&mut k);
+    }
+    assert_eq!(k.obj(kv).unwrap().pos.z, z0 - 5 * 8, "the control descends");
+}
+
+// spec: S-0312 claims 4, 10 and 15 (Q-0652: the shared death effects that apply, here the debris and its draws, still come before the crashable vessel's removal)
+#[test]
+fn claim_15_crashable_vessel_first_hit_keeps_debris() {
+    let (c, cv, cn) = first_killing_hit("SKIFFC", true);
+    let (k, _, kn) = first_killing_hit("SKIFF", true);
+    assert!(c.obj(cv).is_none());
+    assert!(cn > 0, "the debris draws are taken");
+    assert_eq!(cn, kn, "the same draws as the non-crashable control");
+    let a = anim_names(&c);
+    assert!(!a.is_empty() && a.iter().all(|n| n == "CHUNK"), "{a:?}");
+    assert_eq!(anim_names(&k), a);
+}
+
 // spec: S-0312 claim 32 and S-0302 claim 8 (at 0 health a sinking vessel is out of ordinary damage: a later lethal hit registers no further destruction)
 #[test]
 fn claim_32_zero_health_aftermath_takes_no_further_kill() {

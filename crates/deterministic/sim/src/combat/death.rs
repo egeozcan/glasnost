@@ -289,20 +289,21 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
             let crashable = rules
                 .unit(o.kind, o.type_index)
                 .is_some_and(|u| u.vehicle.crashable);
-            // spec: S-0312 claim 10 and table rows 4 and 8 (a vessel that sinks shows no explosion or destruction animation, takes no list picks and stays in play at 1 health point)
+            // spec: S-0312 claim 10 and table rows 4 and 8 (a vessel that sinks shows neither of claim 9's animations and takes neither list pick; its health is restored to 1 health point)
             let sinks = crate::naval::sinks_at_kill(w, id);
             if sinks {
                 // Passengers (claim 12) need transports.
                 crew(w, id, hit);
                 if let Some(ob) = w.obj_mut(id) {
-                    ob.health = 1; // spec: S-0312 claim 10 (it keeps 1 health point); claim 32 table row 1 (again at a further killing hit)
+                    ob.health = 1; // spec: S-0312 claim 10 (its health is restored to 1 health point); claim 32 table row 1 (again at a further killing hit)
                 }
-                // spec: S-0312 claim 10 and S-0504 claims 4 and 5 (the descent starts at its next own update); S-0504 claim 13 and S-0312 claim 32 row 1 (already sinking: the descent goes on from its height, not restarted)
-                crate::naval::start_sinking(w, id);
-                if already_sinking && crashable {
-                    // spec: S-0312 claims 15 and 32 (a crashable type that was sinking and cannot start a crash, being at or below the surface, is removed at the end of the effects)
+                if crashable {
+                    // spec: S-0312 claims 10 and 15 (Q-0652: a crashable vessel at or below the water surface cannot start a crash and is removed at the end of the hit's effects, whether sinking started at this killing hit or before it; no crash-start draws, no sinking descent); S-0504 claim 4 (no descent, sinking wakes or wake draws afterwards)
                     leave_play(w, id);
+                    return;
                 }
+                // spec: S-0312 claim 10 and S-0504 claims 4 and 5 (a non-crashable vessel stays in play; the descent starts at its next own update); S-0504 claim 13 and S-0312 claim 32 row 1 (already sinking: the descent goes on from its height, not restarted)
+                crate::naval::start_sinking(w, id);
                 return;
             }
             // spec: S-0312 claim 9 (one list pick each: explosion list, then destruction list)
