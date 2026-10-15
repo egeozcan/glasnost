@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -69,10 +69,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   weapon flag). The effect is *alive* from the shot until the effect ends (the combat and rendering
   specs own its duration).
 - **Disc laser weapon.** A weapon with the imported disc-laser flag (S-0203, Terms).
-- **Magnetic-beam weapon.** A weapon with the imported magnetic-beam flag. Its shot makes a
-  *magnetic wave* attached to the firer, and the target it has taken hold of is the firer's *held
-  target* for as long as the wave lasts; what the wave does to that target belongs to the combat
-  specs.
+- **Magnetic-beam weapon.** A weapon with the imported magnetic-beam flag. Its shot can make a
+  *magnetic wave* attached to the firer (S-0607 claim 21). The firer's *held target* is its
+  gripped unit (S-0607 claim 5); that grip lasts until an event of S-0607 claim 12, independently
+  of the wave's lifetime. S-0607 owns the lift and release.
 - **Temporal weapon.** A weapon whose warhead has the imported temporal flag: an erasing weapon
   (glossary, *being erased*). A firer's persistent erasing capability is initially supplied by
   its primary weapon's warhead. Its *temporal beam* is attached to its target from
@@ -155,11 +155,12 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
    The full delay is *D* of Formula F1. Its base is the weapon's rate-of-fire
    field *R* times the firing house's rate-of-fire factor *h* (claim 3) plus one ranged draw
-   R(0, 2) from the scenario random stream, truncated. The veteran factor (claim 6), the garrison
-   division (claim 7), the bunker division (claim 7) and the berserk halving (claim 8) scale it
-   where their condition holds, nested as Formula F1 nests them. Every one of these results is truncated
-   toward zero, so the nesting shows in the delays: the same factors nested otherwise can truncate
-   to a different whole number of ticks. Formula F1 gives the number domain of each result.
+   R(0, 2) from the scenario random stream. Each floating-point operation is rounded according to
+   `quirks.chop_rounding` and S-0205; each conversion to a whole number of ticks is truncated toward
+   zero. The veteran factor (claim 6), the garrison division (claim 7), the bunker division (claim 7)
+   and the berserk halving (claim 8) scale it where their condition holds, nested as Formula F1 nests
+   them. The nesting shows in the delays: the same factors nested otherwise can truncate to a
+   different whole number of ticks. Formula F1 gives the number domain of each result.
    - Backing: `measurable` (scenarios F1 and F2 for the full delay; F3, F4 and F9 for the order)
    - Confidence: high (the full delay, and 1-tick before every other kind); medium (effect weapon
      before in-burst, since stock data has no effect weapon with a burst count above 1: test data
@@ -251,10 +252,20 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
    A magnetic wave shares the sonic wave's single slot, so a live magnetic wave also counts as a
    live sonic effect: it blocks a sonic weapon of the same firer (*rearming* for the sonic weapon's
-   own kind, *impossible* as the other weapon's effect), and the reverse (`quirks.shared_wave_slot`,
+   own kind, *impossible* as the other weapon's effect) (`quirks.shared_wave_slot`,
    default on; the fixed behaviour keeps two slots).
-   - Backing: `measurable` (scenario F4, with its burst and building parts)
-   - Confidence: high (the bare rate, the missing draw, *rearming* for the weapon's own kind),
+
+   This does not make a magnetic-beam weapon an effect weapon of this claim: it does not get
+   the bare rate or the max(*R*′, lifetime) interval. Its own live wave adds *rearming* only
+   when the firer grips a unit and the asked target is neither that unit nor a building
+   (S-0607 claim 11; claim 9, rank 4 here). Holding that very target remains a separate early
+   refusal. There is no general own-wave firing block for a magnetic-beam weapon, including
+   when the shared wave is sonic. A magnetic shot made while a wave is alive creates no new
+   wave (S-0607 claim 21). Grip and wave lifetimes are independent.
+   - Backing: `measurable` (scenario F4, with its burst and building parts; S-0607 scenarios
+     L9 and L10 for magnetic firing, grip independence and wave creation)
+   - Confidence: high (the bare rate, the missing draw, *rearming* for an effect weapon's own
+     kind, and the magnetic conditional gate and absence of a general own-wave block),
      medium (*impossible* for the other weapon, and that the effect's lifetime can lengthen the
      interval, which depends on the effect specs); low for the shared slot of magnetic and sonic
      waves (a firer needs both weapons, so test data must supply the case)
@@ -321,7 +332,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | the firer's ammunition *a* is 0 |
@@ -369,7 +380,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    the table above does not apply to it. S-0215 owns that shot. An aircraft's full burst likewise
    has no firing check between its shots (S-0501 claim 12).
    - Backing: `measurable` (scenarios F7, F8 and F15; S-0506 scenarios R2 and R6 for spawner
-     handoff and lockouts; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
+     handoff and lockouts; S-0607 scenario L9 parts c and d for the gripping lifter's conditional
+     rearming; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
      N6 for sinking restrictions; S-0517 scenario P4 for transition and magnetic-beam refusals
      and P5 for the deploy-to-fire cell test; S-0501 scenarios AC7 to AC9 for aircraft bursts, and
      scenario F15 part f and S-0516 scenario CS9 part c for hidden targets; S-0519 scenario T3 for bomb-planting and disarm legality,
@@ -576,8 +588,8 @@ berserk firer that value is then halved and truncated toward zero, as in the las
 
 **F6. Starting ammunition** (claim 10). *a*₀ = *A* when *J* = −1, otherwise *J*.
 All three quantities are signed 32-bit integers in rounds; this is an exact selection,
-with no rounding. With `quirks.initial_ammo_above_capacity` off, a result above a
-nonnegative *A* is capped at *A*.
+with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an explicit
+*J* above a nonnegative *A* remains *J*. With the switch off, that result is capped at *A*.
 
 ## Constants
 
@@ -813,6 +825,15 @@ firer's shots are made, read from projectile creation or the target's health dro
   sonic one while the magnetic wave is alive. Expected: no sonic shot until the wave ends.
   Falsified if the sonic weapon fires while the wave is alive. Control: with
   `quirks.shared_wave_slot` off it fires at once.
+- Magnetic control: named test map data supplies a magnetic-beam weapon with an ordinary,
+  non-seizing warhead and a full delay shorter than the wave's remaining lifetime. Use a
+  stationary firer and durable target building, speed index 2, director and other mods off.
+  Keep the target unchanged and all other firing gates satisfied. Record shot ticks, grip
+  presence and live wave count with tick-labelled capture and a read-only recorder, for three
+  runs. Expected: no grip; repeated shots follow their claim-2 delays while the first wave
+  remains alive, with no second wave. Falsified by an own-wave-only firing refusal or a new
+  wave on those later shots. S-0607 scenario L9 parts c and d separately tests the conditional
+  refusal while gripping and the continued grip after retargeting to a building.
 - Other weapon: with test data, a firer with a sonic weapon in slot 0 and an ordinary weapon in slot
   1, and a firer with the two the other way round, the sonic weapon's rate-of-fire field set below
   the wave's lifetime so that the rearm countdown is over while the wave is alive. Fire the sonic
@@ -1095,8 +1116,5 @@ is absent (the control).
 - Claim 13: does the counter first fall in the turn of the shot that starts it or in the next
   one? The sync shot of F11 comes at the same tick either way, but the tick at which the counter
   goes idle differs by one.
-- Claim 5: does a magnetic-beam weapon get *rearming* while the firer's own magnetic wave (or, with
-  the shared slot, a sonic wave) is alive, as an effect weapon does for its own kind? And with
-  `quirks.shared_wave_slot` off, does the magnetic wave's own slot block the magnetic-beam weapon?
 - Claim 9, rank 16: which of the answers of claim 9 the locomotor's own refusal gives (S-0310,
   claim 7).
