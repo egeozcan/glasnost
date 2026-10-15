@@ -2,7 +2,7 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -123,15 +123,20 @@ a carrier's controller is launching ordinary aircraft.
    first subsequent no-track locomotion update, possibly in the assignment tick itself,
    not after an extra one-tick delay.
 
-   A building destination is not a cell destination merely because its supplied point
-   lies in that cell. Mere cell equality without a track removes neither destination
-   for a building goal; same-cell entry can retain both until a stop, replacement or
-   applicable behaviour effect. There is a separate exception at rest in *guard*: with
-   a locomotor destination point present, exact equality of the ship's world point and
-   that point in all three integer-lepton coordinates triggers the same removal or
-   approach-destination fallback, even for a building goal. Same-cell equality alone
-   does not satisfy that exception. Entry and servicing effects remain S-0215 claim 29's
-   and S-0314 claims 17 and 18's, not a guaranteed persistence through those effects.
+   A destination naming a building, vehicle, infantry unit or aircraft is not a cell
+   destination merely because its supplied movement point lies in that cell. Mere cell
+   equality without a track removes neither destination for these object goals, whether
+   the named unit is moving or stationary. Same-cell entry can retain both until a stop,
+   replacement or applicable behaviour effect. There is a separate exception at rest in
+   *guard*: with a locomotor destination point present, exact equality of the ship's world
+   point and that point in all three integer-lepton coordinates triggers the same removal
+   or approach-destination fallback, including for all these object goals. Same-cell
+   equality alone does not satisfy that exception. Rest and guard describe the ship,
+   not the named unit. The comparison uses the retained locomotor point, not the named
+   unit's current position; that unit's movement alone does not replace the point, but
+   an accepted replacement instruction can. Entry and servicing effects remain S-0215
+   claim 29's and S-0314 claims 17 and 18's; transport exchanges and arrival-time boarding
+   remain S-0507 claims 5 and 6's. Retention is not guaranteed through those effects.
    Give-up and fallback otherwise use S-0207 claim 25's normal stop/replacement rules,
    not an inferred successful arrival. S-0212 claims 20 to 22 still own search timing
    and give-up conditions.
@@ -142,11 +147,14 @@ a carrier's controller is launching ordinary aircraft.
      scatter and approach; S-0207 D27 for heading-height assignment and retention through
      chaining; S-0207 D29's water controls for the separate locomotor destination's
      assignment and lifetime; S-0207 D30's ship controls for cell-goal cleanup, next-update
-     timing, retained building goals and the exact-point guard exception. The remaining
+     timing, retained building goals and the exact-point guard exception; S-0207 D31's
+     ship controls for vehicle, infantry and aircraft goals, named-unit motion independence
+     and the guard comparison against the retained point. The remaining
      shared-rule assertions are `unmeasured` here: those
      scenarios do not isolate power-ups, lead speed, cell-tag timing, slope tilt or every entry
      outcome; the cited specs' scenarios need ship-specific counterparts.
-   - Confidence: high for shared ordinary rules and tables; medium for lead speed, approach
+   - Confidence: high for shared ordinary rules and tables, object-goal classification and
+     named-unit motion independence; medium for lead speed, approach
      and cell-tag timing, composed cleanup timing and approach-destination fallback lifetime
 
 2. **Wakes behind a moving ship.** In each tick in which a ship is *moving now*, and the tick number
@@ -647,6 +655,21 @@ equality in resting guard triggers cleanup or fallback. A different removal phas
 cell-only building cleanup, or guard cleanup despite a displaced point falsifies
 the corresponding rule. Record intervening entry/arrival effects separately; runs
 without verified guard or fallback preconditions are inconclusive for those controls.
+
+For destinations naming units, also use S-0207 D31's ship controls with separate
+vehicle, infantry and aircraft goals, first stationary and then moving. Keep the
+same speed, settings, repetition count and read-only recording above, and record the
+named unit's position and movement state, supplied movement point, accepted replacement
+instructions and any boarding exchange. Expected: no-track supplied-point cell equality
+alone clears neither destination for any of these kinds. In verified resting *guard*,
+only exact equality with the retained locomotor point triggers cleanup or the verified
+approach fallback, even if the named unit moves elsewhere without a new instruction.
+Cell-only cleanup, a result changed solely by the named unit's motion, or a guard
+comparison against its new position instead of the retained point falsifies the rule.
+Separate boarding, behaviour and replacement effects from locomotion cleanup. If stock
+orders cannot establish a particular kind or guard combination, that control needs a
+verified named-map setup and remains inconclusive; do not substitute a cell destination
+or use memory-writing instrumentation.
 
 **N3. Wake cadence (claims 2, 6).** *Setup:* one surface ship and one underwater ship moving on
 open water; a bridge over part of the path. *Procedure:* run 200 ticks of straight movement and a

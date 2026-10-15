@@ -311,8 +311,14 @@ fn claim_24_pad_docking_raises_no_tag() {
     let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 10, 0);
     let f0 = w.triggers.fired;
     click(&mut w, a, ClickOn::Object(v));
-    assert!(run_until(&mut w, 200, |w| air::height(w, a) > 0), "takes off");
-    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0), "spends its rounds");
+    assert!(
+        run_until(&mut w, 200, |w| air::height(w, a) > 0),
+        "takes off"
+    );
+    assert!(
+        run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0),
+        "spends its rounds"
+    );
     assert!(
         run_until(&mut w, 3000, |w| air::on_ground(w, a)
             && w.obj(a).unwrap().contact == Some(k)

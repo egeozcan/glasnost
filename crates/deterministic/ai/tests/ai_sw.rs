@@ -128,7 +128,14 @@ fn spot(yard: CellXY, dx: i32, dy: i32) -> CellXY {
 /// Three armed vehicles of house 0 in the block of `c`.
 fn group(w: &mut World, c: CellXY) {
     for (dx, dy) in [(0, 0), (1, 0), (0, 1)] {
-        testkit::spawn(w, Kind::Vehicle, "GUNR", 0, CellXY::new(c.x + dx, c.y + dy), 0);
+        testkit::spawn(
+            w,
+            Kind::Vehicle,
+            "GUNR",
+            0,
+            CellXY::new(c.x + dx, c.y + dy),
+            0,
+        );
     }
 }
 
@@ -167,7 +174,9 @@ fn think(w: &World) -> Vec<Order> {
 fn curtains_a_fighting_group_of_vehicles() {
     let (g, yard) = ready("IRONB");
     let c = spot(yard, 10, 8);
-    let walker = |w: &mut World, house, at: CellXY| testkit::spawn(w, Kind::Infantry, "WALKER", house, at, 0);
+    let walker = |w: &mut World, house, at: CellXY| {
+        testkit::spawn(w, Kind::Infantry, "WALKER", house, at, 0)
+    };
 
     let mut quiet = g.world.clone();
     group(&mut quiet, c);
@@ -181,7 +190,11 @@ fn curtains_a_fighting_group_of_vehicles() {
     group(&mut fight, c);
     walker(&mut fight, 1, spot(c, 6, 0));
     glasnost_sim::tick::step(&mut fight);
-    assert_eq!(fires(&think(&fight), "IRON", &fight), vec![c], "the group is curtained");
+    assert_eq!(
+        fires(&think(&fight), "IRON", &fight),
+        vec![c],
+        "the group is curtained"
+    );
 
     let mut with_infantry = g.world.clone();
     group(&mut with_infantry, c);
@@ -237,7 +250,9 @@ fn sends_the_spy_plane_at_the_enemy() {
     assert_eq!(cells.len(), 1, "one spy plane order: {cells:?}");
     let enemy = glasnost_ai::skirmish::start_cells(&fixture::map());
     assert!(
-        enemy.iter().any(|&s| (s.x - cells[0].x).abs() <= 2 && (s.y - cells[0].y).abs() <= 2),
+        enemy
+            .iter()
+            .any(|&s| (s.x - cells[0].x).abs() <= 2 && (s.y - cells[0].y).abs() <= 2),
         "at an enemy start: {cells:?} of {enemy:?}"
     );
 }
@@ -257,8 +272,15 @@ fn teleports_a_group_to_the_enemy_base() {
     group(&mut w, c);
     glasnost_sim::tick::step(&mut w);
     let orders = think(&w);
-    assert_eq!(fires(&orders, "CHRN", &w), vec![c], "the first stage on the group");
-    assert!(fires(&orders, "CHWP", &w).is_empty(), "no second stage without a source");
+    assert_eq!(
+        fires(&orders, "CHRN", &w),
+        vec![c],
+        "the first stage on the group"
+    );
+    assert!(
+        fires(&orders, "CHWP", &w).is_empty(),
+        "no second stage without a source"
+    );
     for o in orders {
         glasnost_sim::orders::issue(&mut w, HouseId(0), o);
     }
@@ -266,7 +288,10 @@ fn teleports_a_group_to_the_enemy_base() {
         glasnost_sim::tick::step(&mut w);
     }
     let orders = think(&w);
-    assert!(fires(&orders, "CHRN", &w).is_empty(), "the source is held: no new pick");
+    assert!(
+        fires(&orders, "CHRN", &w).is_empty(),
+        "the source is held: no new pick"
+    );
     let dest = fires(&orders, "CHWP", &w);
     assert_eq!(dest.len(), 1, "the second stage: {dest:?}");
     let starts = glasnost_ai::skirmish::start_cells(&fixture::map());

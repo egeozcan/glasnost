@@ -88,6 +88,49 @@ fn claim33_source_pick_places_the_marker_for_its_player() {
     assert_eq!(rec(&w, ALPHA, SOURCE).source, Some(at(2, 2)));
 }
 
+#[test]
+fn claim33_the_marker_takes_its_creation_draws_whichever_house_picks() {
+    // spec: S-0513 claim 33 (Q-0741 part 1: the marker is created whichever house is local and takes its ordinary animation creation draws; hiding it for another viewer does not undo them)
+    let mut r = rules();
+    // A random rate pair whose delays differ gives the creation one ranged draw (S-0109 claim 3).
+    r.sim.animations.get_mut("MARK").unwrap().random_rate = Some([450, 225]);
+    for house in [ALPHA, BETA] {
+        let mut w = game(&r);
+        spawn(&mut w, "CHRONOB", house, -9, -9);
+        ready_tick(&mut w, house, SOURCE, 300);
+        let before = w.rng.clone();
+        w.effects.clear();
+        fire_now(&mut w, house, SOURCE, at(2, 2));
+        assert_ne!(w.rng, before, "house {house:?}: the marker's creation drew");
+        assert!(events(&w).contains(&(SwEvent::SourceMarker, Some(house), Some(SOURCE))));
+    }
+    // A marker type with a constant delay takes no draw.
+    let mut w = game(&rules());
+    chrono(&mut w);
+    let before = w.rng.clone();
+    fire_now(&mut w, ALPHA, SOURCE, at(2, 2));
+    assert_eq!(w.rng, before);
+}
+
+#[test]
+fn claim48_a_warp_member_drops_its_target_and_destination() {
+    // spec: S-0513 claim 48 (a vehicle still in the warp drops its target and destination, and its former driving does not continue)
+    let mut w = game(&rules());
+    chrono(&mut w);
+    let a = spawn(&mut w, "CART", ALPHA, 0, 0);
+    let e = spawn(&mut w, "BUGGY", BETA, 4, 4);
+    {
+        let o = w.obj_mut(a).unwrap();
+        o.target = Some(Target::Object(e));
+        o.dest = Some(Target::Cell(at(2, 2)));
+    }
+    warp(&mut w, at(0, 0), at(5, -5));
+    let o = w.obj(a).unwrap();
+    assert!(o.sw.warp.is_some());
+    assert!(o.target.is_none() && o.dest.is_none());
+    assert!(o.path.steps.is_empty());
+}
+
 // --- Claim 34 ------------------------------------------------------------------
 
 #[test]

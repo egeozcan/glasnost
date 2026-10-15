@@ -353,11 +353,28 @@ fn claim9_odd_side_is_the_planes_left() {
 }
 
 #[test]
-fn claim9_refused_drop_keeps_passenger_and_ammunition_and_takes_the_draw() {
-    // spec: S-0522 claims 9 and 16 (a refused attempt: the paratrooper stays first, the ammunition goes back up; reaching the centre-class row still takes R(0, 3))
+fn claim9_entry_refusal_keeps_passenger_and_ammunition_and_takes_no_draw() {
+    // spec: S-0522 claim 9 (Q-0750: an entry outcome that is not clear, a class restriction included, suppresses the standing-position selection: the paratrooper stays first, the ammunition goes back up, no draw is taken)
     let mut w = game(&rules_with("STUCK", 2));
     let p = launch(&mut w);
     let (x, y) = west_of(at(1, 1));
+    hold(&mut w, p, x, y, 0, 3);
+    let before = transport::passengers(&w, p);
+    let expected = w.rng.clone();
+    assert!(!paradrop::attempt(&mut w, p));
+    assert_eq!(transport::passengers(&w, p), before);
+    assert_eq!(w.obj(p).unwrap().combat.ammo, 3);
+    assert_eq!(w.rng, expected, "no standing-position draw");
+}
+
+#[test]
+fn claim9_refusals_after_a_clear_entry_take_the_standing_position_draw() {
+    // spec: S-0522 claims 9 and 16 (Q-0750: once entry is clear the standing position is selected, so a later refusal, here a high-bridge cell without the deck-entry mark, has taken the centre-class row's R(0, 3))
+    let mut w = game(&rules());
+    let p = launch(&mut w);
+    let c = at(1, 1);
+    bridge(&mut w, c, false);
+    let (x, y) = west_of(c);
     hold(&mut w, p, x, y, 0, 3);
     let before = transport::passengers(&w, p);
     let mut expected = w.rng.clone();
@@ -367,6 +384,24 @@ fn claim9_refused_drop_keeps_passenger_and_ammunition_and_takes_the_draw() {
     assert_eq!(transport::passengers(&w, p), before);
     assert_eq!(w.obj(p).unwrap().combat.ammo, 3);
     assert_eq!(w.rng, expected);
+}
+
+#[test]
+fn claim9_the_deck_mark_follows_the_actual_height() {
+    // spec: S-0522 claim 9 (Q-0750: at or above the terrain surface plus 416 leptons on a high-bridge cell the paratrooper marks the deck, below that the ground; exact integer comparisons)
+    for (dz, layer) in [(0, Layer::Deck), (-1, Layer::Ground)] {
+        let mut w = game(&rules());
+        let p = launch(&mut w);
+        let c = at(1, 1);
+        bridge(&mut w, c, true);
+        let (x, y) = west_of(c);
+        hold(&mut w, p, x, y, 0, 3);
+        let surface = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+        w.obj_mut(p).unwrap().pos.z = surface + 416 + dz;
+        let first = transport::passengers(&w, p)[0];
+        assert!(paradrop::attempt(&mut w, p));
+        assert_eq!(w.obj(first).unwrap().layer, layer, "dz {dz}");
+    }
 }
 
 #[test]
@@ -487,6 +522,71 @@ fn claim11_a_carrying_aircrafts_shot_is_a_drop() {
     assert_eq!(w.objects.len(), objects, "no projectile");
 }
 
+/// A gunship holding at the west edge of cell (1, 1) with ammunition 3 and
+/// one passenger of type `passenger`.
+fn carrier(r: &Ruleset, passenger: &str) -> (World, ObjectId, ObjectId) {
+    let mut w = game(r);
+    let g = spawn(&mut w, "GUNSHIP", ALPHA, -4, -4);
+    let inf = spawn(&mut w, passenger, ALPHA, 4, 4);
+    transport::board(&mut w, inf, g);
+    let (x, y) = west_of(at(1, 1));
+    hold(&mut w, g, x, y, 0, 3);
+    (w, g, inf)
+}
+
+#[test]
+fn claim11_a_shot_drop_replaces_the_ordinary_shot_effects() {
+    // spec: S-0522 claim 11 (Q-0751): no ordinary delay and no delay draw, no burst-counter advance, no spray draw, no projectile and no last-fired mark; a successful drop expires the rearm countdown now and resets the passes, its draws are the attempt's alone
+    let r = rules();
+    let (mut a, g, _) = carrier(&r, "WALKER");
+    let (mut b, gb, _) = carrier(&r, "WALKER");
+    // The twin makes the drop attempt directly: the shot adds nothing to its draws.
+    assert!(paradrop::attempt(&mut b, gb));
+    let before = a.obj(g).unwrap().clone();
+    let projectiles = a.projectiles.len();
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut a,
+        g,
+        0,
+        Target::Cell(at(3, 3))
+    ));
+    assert_eq!(a.rng, b.rng, "only the attempt's own draws");
+    let o = a.obj(g).unwrap();
+    assert_eq!(o.combat.burst, before.combat.burst);
+    assert_eq!(o.last_fired, before.last_fired);
+    assert_eq!(o.combat.rearm_delay, before.combat.rearm_delay);
+    assert_eq!(o.combat.rearm_until, a.tick, "expired now");
+    assert_eq!(a.projectiles.len(), projectiles);
+}
+
+#[test]
+fn claim11_a_refused_shot_drop_changes_nothing_but_still_counts_as_a_shot() {
+    // spec: S-0522 claim 11 (Q-0751): a refused drop leaves the rearm countdown, the burst counter, the passes and the draws unchanged, and is not a void shot (the firing pass still makes a round pending, S-0501 claim 15, so the shot reports true)
+    let r = rules();
+    let (mut w, g, inf) = carrier(&r, "STUCK");
+    {
+        let t = w.tick;
+        let o = w.obj_mut(g).unwrap();
+        o.combat.rearm_until = t + 9;
+        o.air.get_or_insert_with(Default::default).passes = 2;
+    }
+    let before = w.obj(g).unwrap().clone();
+    let rng = w.rng.clone();
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        g,
+        0,
+        Target::Cell(at(3, 3))
+    ));
+    assert_eq!(w.rng, rng);
+    let o = w.obj(g).unwrap();
+    assert_eq!(o.combat.rearm_until, before.combat.rearm_until);
+    assert_eq!(o.combat.burst, before.combat.burst);
+    assert_eq!(o.combat.ammo, before.combat.ammo);
+    assert_eq!(o.air.as_ref().unwrap().passes, 2);
+    assert_eq!(transport::passengers(&w, g), vec![inf]);
+}
+
 // --- Claims 12 and 13 --------------------------------------------------------
 
 /// The per-update height changes of a paratrooper dropped from a held
@@ -552,7 +652,7 @@ fn claim12_falling_paratrooper_turns_down_other_sequences() {
 
 #[test]
 fn claim13_no_parachute_type_uses_the_no_parachute_recurrence() {
-    // spec: S-0522 claim 13 and Open questions 2 (Q-0752 interim: with no parachute type nothing is attached, so the no-parachute recurrence applies)
+    // spec: S-0522 claim 13 (Q-0752: with no parachute type nothing stays attached, so after the release tick the no-parachute recurrence applies)
     let mut r = rules();
     r.sim.general.superweapons.parachute = None;
     let (w, id, steps) = descent(&r);
@@ -565,8 +665,44 @@ fn claim13_no_parachute_type_uses_the_no_parachute_recurrence() {
 }
 
 #[test]
+fn claim13_absent_type_uses_the_parachute_recurrence_once_in_the_release_tick() {
+    // spec: S-0522 claim 13 (Q-0752: an absent parachute type does not refuse the release and takes no animation draws; with quirks.paratrooper_any_animation_slow_fall on the release-tick update uses the parachute recurrence once and the no-parachute one from the next tick; off, the no-parachute one from the first update; a parachute floor of 0 tells them apart)
+    let mut r = rules();
+    r.sim.general.superweapons.parachute = None;
+    r.sim.general.parachute_max_fall_rate = Some(0);
+    r.sim.general.no_parachute_max_fall_rate = Some(-50);
+    let (w, id, steps) = descent(&r);
+    assert_eq!(&steps[..4], &[0, 0, -1, -2], "{:?}", &steps[..6]);
+    assert!(!w.obj(id).unwrap().fall.chute && !w.obj(id).unwrap().fall.chute_once);
+    assert!(chute_events(&w).is_empty(), "no attached animation");
+    r.globals.quirks.paratrooper_any_animation_slow_fall = false;
+    let (_, _, off) = descent(&r);
+    assert_eq!(&off[..4], &[0, -1, -2, -3]);
+    // No animation-creation draw: only the standing-position draw.
+    let mut w = game(&r);
+    let p = launch(&mut w);
+    let (x, y) = west_of(at(1, 1));
+    hold(&mut w, p, x, y, 0, 3);
+    let mut expected = w.rng.clone();
+    let half = w.rules().quirks.ranged_draw_half_span;
+    expected.ranged(0, 3, half);
+    assert!(paradrop::attempt(&mut w, p));
+    assert_eq!(w.rng, expected);
+}
+
+#[test]
+fn claim13_an_unlisted_name_is_a_type_not_an_absent_one() {
+    // spec: S-0522 claim 13 (Q-0752: a non-reserved unlisted name creates an animation type; release attaches it normally, it has no fields so takes no draw; the absent-type transient does not apply)
+    let mut r = rules();
+    r.sim.general.superweapons.parachute = Some("NEWCHUTE".into());
+    let (w, id, steps) = descent(&r);
+    assert_eq!(&steps[..5], &[0, -1, -2, -3, -4]);
+    assert!(chute_events(&w).contains(&id));
+}
+
+#[test]
 fn quirk_any_animation_slow_fall_both_settings_agree() {
-    // spec: S-0522 Edge cases (quirks.paratrooper_any_animation_slow_fall: the parachute is the only attachment, so both settings give the same fall)
+    // spec: S-0522 Edge cases (quirks.paratrooper_any_animation_slow_fall: for a held parachute type the parachute is the only attachment, so both settings give the same fall)
     let mut r = rules();
     let (_, _, on) = descent(&r);
     r.globals.quirks.paratrooper_any_animation_slow_fall = false;
@@ -589,6 +725,40 @@ fn claim13_parachute_attached_until_landing() {
     }
     until(&mut w, 2000, |w| !falling(w, first));
     assert!(!w.obj(first).unwrap().fall.chute);
+}
+
+// --- Claim 17 ----------------------------------------------------------------
+
+#[test]
+fn claim17_released_infantry_rests_with_guard_queued_and_takes_no_move_while_falling() {
+    // spec: S-0522 claim 17 (Q-0753): at release the ordinary placement fall-back to rest leaves the current behaviour none with guard or area guard queued, no target and no destination; a falling unit is not movable, so a move click is refused; landing issues, replaces and clears no order, target or destination
+    let mut w = game(&rules());
+    let p = launch(&mut w);
+    let (x, y) = west_of(at(1, 1));
+    hold(&mut w, p, x, y, 0, 3);
+    let first = transport::passengers(&w, p)[0];
+    assert!(paradrop::attempt(&mut w, p));
+    let o = w.obj(first).unwrap();
+    assert_eq!(o.beh.current, None);
+    assert!(
+        matches!(o.beh.queued, Some(Behaviour::Guard | Behaviour::AreaGuard)),
+        "{:?}",
+        o.beh.queued
+    );
+    assert!(o.target.is_none() && o.dest.is_none());
+    assert!(
+        !glasnost_sim::targeting::movable(&w, ALPHA, first),
+        "falling: not movable"
+    );
+    until(&mut w, 2000, |w| !falling(w, first));
+    let o = w.obj(first).unwrap();
+    assert!(o.dest.is_none(), "no move emerges after landing");
+    assert!(
+        !matches!(o.beh.current, Some(Behaviour::Move | Behaviour::QueuedMove)),
+        "{:?}",
+        o.beh.current
+    );
+    assert!(glasnost_sim::targeting::movable(&w, ALPHA, first));
 }
 
 // --- Claim 14 ----------------------------------------------------------------

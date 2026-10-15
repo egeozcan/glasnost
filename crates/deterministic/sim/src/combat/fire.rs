@@ -118,6 +118,16 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     };
     // spec: S-0301 claim 13 (a shot made in the tick the counter equals the sync frame is a sync shot, whether or not the countdown runs)
     let was_sync = crate::combat::check::sync_tick(w, firer, slot, weapon);
+    // spec: S-0501 claim 20 and S-0522 claim 11 (a shot of an aircraft that carries passengers is a drop attempt, exactly as S-0522 claim 9, with no projectile and no ordinary shot effects: no delay and no delay draw, no burst-counter advance, no weapon report, muzzle animation or spray draw, no projectile; a refused drop leaves the rearm countdown unchanged, a successful one expires it now; the ammunition and pass counter changes are the attempt's; it is not a void shot under S-0301 claim 15)
+    if crate::air::is_aircraft(w, firer) && crate::paradrop::shot_drops(w, firer) {
+        let dropped = crate::paradrop::attempt(w, firer);
+        let t = w.tick;
+        if dropped && let Some(ob) = w.obj_mut(firer) {
+            ob.combat.rearm_until = t;
+        }
+        // A firing pass that reaches the attempt still makes a round pending (S-0501 claim 15), even if the drop was refused: the shot counts as made.
+        return true;
+    }
     let tc = crate::combat::veterancy::type_combat(w, firer)
         .cloned()
         .unwrap_or_default();
@@ -150,20 +160,17 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     // spec: S-0302 claim 2 (the shot damage is fixed at the moment of firing)
     let damage = crate::combat::damage::shot_damage(w, firer, weapon);
     let fp = crate::combat::position::fire_point(w, firer, slot, k);
-    // spec: S-0501 claim 20 and S-0522 claim 11 (a shot of an aircraft that carries passengers is a drop attempt, with no projectile)
-    let drop = crate::air::is_aircraft(w, firer) && crate::paradrop::shot_drops(w, firer);
-    let dropped = drop && crate::paradrop::attempt(w, firer);
-    if wr.spawner && !drop {
+    if wr.spawner {
         // spec: S-0301 Terms (spawner weapon) and S-0506 claim 3 (a spawner shot launches no projectile; it hands its target to the spawn controller)
         crate::spawn::shot(w, firer, shot_target);
     }
-    let launched = if wr.spawner || drop {
+    let launched = if wr.spawner {
         None
     } else {
         crate::combat::projectile::launch(w, firer, weapon, shot_target, fp, damage)
     };
-    // spec: S-0301 claim 15 (a void shot: the countdown, burst counter and ammunition stay as they were); Q-0751 interim: a drop shot is never void
-    if launched.is_none() && wr.projectile.is_some() && !wr.spawner && !drop {
+    // spec: S-0301 claim 15 (a void shot: the countdown, burst counter and ammunition stay as they were; a drop shot, S-0522 claim 11, returned above and is never void)
+    if launched.is_none() && wr.projectile.is_some() && !wr.spawner {
         return false;
     }
     // spec: S-0409 claim 16 (a shot from a reveal-on-fire weapon reveals the firer to the target's owner)
@@ -246,10 +253,6 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     // spec: S-0301 claim 13 (a shot that is not a sync shot runs the firing-frame counter at 2F − 1)
     if sync_frames && !was_sync {
         ob.combat.firing_frame = Some(2 * firing_frames - 1);
-    }
-    if dropped {
-        // spec: S-0522 claim 11 (a successful drop clears the aircraft's rearm wait; its pass counter was reset by the drop)
-        ob.combat.rearm_until = t;
     }
     let _ = mode;
     crate::combat::projectile::shot_effect(w, firer, weapon, fp);

@@ -5,6 +5,7 @@
 //! importer warnings those specs ask for.
 
 use super::*;
+use glasnost_rules::sim_econ::{superweapon_action_known, superweapon_kind_number};
 
 /// A table row: our field name, the INI key, the value form and the spec
 /// whose Import mapping maps the key.
@@ -1584,7 +1585,60 @@ impl Builder<'_> {
 
     /// A superweapon record.
     pub(super) fn superweapon(&mut self, rec: &mut Rec, t: &TypeRec) {
-        self.efields(rec, t, Kind::Superweapons, SUPERWEAPON_FIELDS);
+        // The kind, link and action words follow their own layering (below).
+        let plain: Vec<Row> = SUPERWEAPON_FIELDS
+            .iter()
+            .copied()
+            .filter(|r| !matches!(r.0, "kind" | "pre_dependent" | "action"))
+            .collect();
+        self.efields(rec, t, Kind::Superweapons, &plain);
+        // spec: S-0512 claim 24 (Type and PreDependent: only one of the twelve words, matched whole and without regard to case, replaces the kind or link; an unknown word keeps the previous layer's; no hyphen, underscore or space is ignored)
+        for (field, key) in [
+            ("kind", &b"Type"[..]),
+            ("pre_dependent", &b"PreDependent"[..]),
+        ] {
+            let mut unknown = Vec::new();
+            let word = fold(t.keys.get(key), None, |v, e| {
+                let w = value::text(v, value::COMMON_TEXT_LIMIT);
+                let known = std::str::from_utf8(w)
+                    .ok()
+                    .filter(|w| superweapon_kind_number(w).is_some())
+                    .map(str::to_ascii_lowercase);
+                if known.is_none() {
+                    unknown.push((e.layer, e.line, show(w)));
+                }
+                known
+            });
+            for (layer, line, w) in unknown {
+                self.warn(
+                    layer,
+                    line,
+                    format!(
+                        "superweapon {} {field}: {w:?} is no kind word; the previous layer's value is kept (S-0512 claim 24)",
+                        show(&t.name)
+                    ),
+                );
+            }
+            if let Some(w) = word {
+                rec.put(field, jsonc::string(w));
+            }
+        }
+        // spec: S-0512 claim 23 (Action: a nonempty word replaces the action, a word outside the vocabulary setting no action; an empty or omitted value keeps the previous one, S-0001 claim 11)
+        let action = fold(t.keys.get(&b"Action"[..]), None, |v, _| {
+            let w = value::text(v, value::COMMON_TEXT_LIMIT).trim_ascii();
+            (!w.is_empty()).then(|| {
+                let w = String::from_utf8_lossy(w).to_ascii_lowercase();
+                // An unrecognised word sets no action: the explicit word `none`.
+                if superweapon_action_known(&w) {
+                    w
+                } else {
+                    "none".to_owned()
+                }
+            })
+        });
+        if let Some(a) = action {
+            rec.put("action", jsonc::string(a));
+        }
     }
 
     /// The game-wide superweapon values (`general.superweapons`).

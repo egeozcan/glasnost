@@ -96,8 +96,8 @@ pub fn start(w: &mut World, id: ObjectId, kind: ProtectKind, duration: i32) {
 /// (ground layer only, no leaving-stage skip).
 pub fn curtain(w: &mut World, h: Option<HouseId>, cell: CellXY, waypoint: bool) {
     let anim = w.rules().superweapons.curtain_anim.clone();
-    // spec: S-0513 claim 22 (the curtain invoke animation at the target cell's centre, 5 leptons above its surface plus the bridge lift)
-    invoke_anim(w, anim, cell, true);
+    // spec: S-0513 claim 22 (the curtain invoke animation at the target cell's centre, 5 leptons above its surface plus the bridge lift; the waypoint action: the terrain surface plus 5 leptons, no bridge lift)
+    invoke_anim(w, anim, cell, !waypoint);
     let duration = w.rules().superweapons.curtain_duration;
     let organic_defended = w.rules().quirks.curtain_organic_vehicle_defended;
     for (_, c) in super::block(w, cell) {

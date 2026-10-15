@@ -1,9 +1,9 @@
 ---
 id: Q-0830
 title: Is an order-level destination that names a unit removed at the goal cell like a cell or like a building
-status: open
+status: answered
 related: [S-0207, S-0215, S-0507]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need

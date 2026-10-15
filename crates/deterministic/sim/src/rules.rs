@@ -440,6 +440,15 @@ pub struct AnimRules {
     /// μ, the middle image frame (S-0109 claims 14 and 25); `None` when the
     /// import had no art to find it from.
     pub mu: Option<i32>,
+    /// The image-frame count *F* of the type's sprite (S-0513 claim 46);
+    /// `None` when the import had no art for it.
+    pub frames: Option<i32>,
+    /// The canvas height of that sprite's header in pixels (S-0513 F4).
+    pub canvas_height: Option<i32>,
+    /// The rate field ρ (S-0109 claim 2); `None` when not given.
+    pub rate: Option<i32>,
+    /// The game-speed normalisation flag (S-0109 claim 4).
+    pub normalized: bool,
     /// The particles its middle event requests: the particle type's draw
     /// fields and the count (S-0109 claim 14, S-0202 claim 15); `None` for
     /// no particle type.
@@ -1227,6 +1236,13 @@ impl SimRules {
                     // spec: S-0109 Terms (a bouncing type: the bouncer flag or the meteor flag)
                     bouncing: a.bouncer.unwrap_or(false) || a.is_meteor.unwrap_or(false),
                     mu: a.middle_frame,
+                    // spec: S-0513 claim 46 and Import mapping (F, the image-frame count of the sprite; absent without art)
+                    frames: a.frame_count,
+                    // spec: S-0513 F4 (the image header's canvas height)
+                    canvas_height: a.canvas_height,
+                    // spec: S-0109 Import mapping (Rate absent: delay 1; Normalized absent: no)
+                    rate: a.rate,
+                    normalized: a.normalized.unwrap_or(false),
                     particles: a.spawns_particle.as_ref().map(|p| {
                         let t = s.particles.get(p).cloned().unwrap_or_default();
                         let behaves = t.behaves_like.as_deref();

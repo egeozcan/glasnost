@@ -3684,9 +3684,7 @@ mod tests {
             "trigger_crate_expiry_while_disabled",  // spec: S-0524 Edge cases (default: off)
         ];
         assert!(
-            q.named()
-                .iter()
-                .all(|(n, v)| *v != DEFAULT_OFF.contains(n)),
+            q.named().iter().all(|(n, v)| *v != DEFAULT_OFF.contains(n)),
             "every default is the original"
         );
     }

@@ -6,8 +6,8 @@ mod sw_common;
 
 use std::sync::Arc;
 
-use glasnost_map::triggers::{Action, Event, Owner, TagDef, TriggerDef, Triggers};
 use glasnost_map::objects::Placed;
+use glasnost_map::triggers::{Action, Event, Owner, TagDef, TriggerDef, Triggers};
 use glasnost_map::{CellXY, Structure};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Decimal, LandType, WarheadType};
@@ -44,7 +44,11 @@ fn ruleset() -> Ruleset {
     );
     r.sim.general.c4_warhead = Some("DEMO".into());
     // Clear ground is buildable, so that a restored building can be placed.
-    r.sim.land_types.get_mut(&LandType::Clear).unwrap().buildable = Some(true);
+    r.sim
+        .land_types
+        .get_mut(&LandType::Clear)
+        .unwrap()
+        .buildable = Some(true);
     // A 2 × 2 building type for the covering-cell and displacement tests.
     r.sim.buildings.insert(
         "WIDE".into(),
@@ -54,7 +58,10 @@ fn ruleset() -> Ruleset {
             ..Default::default()
         },
     );
-    r.registries.get_mut("buildings").unwrap().push("WIDE".into());
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("WIDE".into());
     r
 }
 
@@ -110,7 +117,12 @@ fn triggers(defs: Vec<TriggerDef>, repeat: i32) -> Triggers {
 
 /// A game on an empty map with `tr`, waypoints `wps` (number, cell) and
 /// pre-placed buildings `structures` (owner, type, cell).
-fn game(r: &Ruleset, tr: Triggers, wps: &[(u16, CellXY)], structures: &[(&str, &str, CellXY)]) -> World {
+fn game(
+    r: &Ruleset,
+    tr: Triggers,
+    wps: &[(u16, CellXY)],
+    structures: &[(&str, &str, CellXY)],
+) -> World {
     game_on(SIZE, r, tr, wps, structures)
 }
 
@@ -148,7 +160,12 @@ fn game_on(
 
 /// A game whose one-time trigger fires `actions` at once (elapsed 0),
 /// owned by `owner`; runs until it has fired.
-fn fired_game(r: &Ruleset, owner: Option<&str>, actions: Vec<Action>, wps: &[(u16, CellXY)]) -> World {
+fn fired_game(
+    r: &Ruleset,
+    owner: Option<&str>,
+    actions: Vec<Action>,
+    wps: &[(u16, CellXY)],
+) -> World {
     let t = trigger("T", owner, event(13, 0), actions);
     let mut w = game(r, triggers(vec![t], 0), wps, &[]);
     fire(&mut w);
@@ -201,7 +218,11 @@ fn hit(w: &mut World, id: ObjectId, amount: i32) {
 }
 
 fn country(w: &World, name: &str) -> i32 {
-    w.rules().country_names.iter().position(|c| c == name).unwrap() as i32
+    w.rules()
+        .country_names
+        .iter()
+        .position(|c| c == name)
+        .unwrap() as i32
 }
 
 fn flashes(w: &World) -> Vec<(i32, Option<glasnost_sim::world::Pos>)> {
@@ -252,7 +273,11 @@ fn claim1_storm_request_at_a_waypoint() {
     assert!(w.sw.storm.countdown <= DEFER - (w.tick - first - 1));
     fire(&mut w);
     assert_eq!(w.sw.storm.state, StormState::Raging);
-    assert_eq!(w.sw.storm.centre, at(3, 0), "an active storm blocks the action");
+    assert_eq!(
+        w.sw.storm.centre,
+        at(3, 0),
+        "an active storm blocks the action"
+    );
 }
 
 // --- Claim 2 -------------------------------------------------------------------
@@ -279,7 +304,12 @@ fn claim2_quirk_suppresses_repeated_strikes() {
         waypoint: wp,
         ..action(90)
     };
-    let w = fired_game(&r, None, vec![a(0), a(0), a(1)], &[(0, at(0, 0)), (1, at(4, 0))]);
+    let w = fired_game(
+        &r,
+        None,
+        vec![a(0), a(0), a(1)],
+        &[(0, at(0, 0)), (1, at(4, 0))],
+    );
     assert_eq!(clouds(&w), 2);
 }
 
@@ -340,7 +370,12 @@ fn claim5_five_demolition_blasts() {
         ..action(63)
     };
     let t = trigger("T", None, event(13, 0), vec![a]);
-    let mut w = game(&r, triggers(vec![t], 0), &[(3, at(0, 0))], &[("Beta", "TOWER", at(0, 0))]);
+    let mut w = game(
+        &r,
+        triggers(vec![t], 0),
+        &[(3, at(0, 0))],
+        &[("Beta", "TOWER", at(0, 0))],
+    );
     let tower = buildings(&w, "TOWER")[0];
     fire(&mut w);
     assert_eq!(health(&w, tower), TOWER_HP - 5 * 10);
@@ -356,7 +391,12 @@ fn claim5_invalid_number_has_no_effect() {
             ..action(63)
         };
         let t = trigger("T", None, event(13, 0), vec![a]);
-        let mut w = game(&r, triggers(vec![t], 0), &[(3, at(0, 0))], &[("Beta", "TOWER", at(0, 0))]);
+        let mut w = game(
+            &r,
+            triggers(vec![t], 0),
+            &[(3, at(0, 0))],
+            &[("Beta", "TOWER", at(0, 0))],
+        );
         let tower = buildings(&w, "TOWER")[0];
         fire(&mut w);
         assert_eq!(health(&w, tower), TOWER_HP);
@@ -391,14 +431,29 @@ fn claim5_undefined_marker_acts_at_the_stand_in_point() {
     };
     let t = trigger("T", None, event(13, 0), vec![a]);
     let near = CellXY::new(NEAR.0, NEAR.1);
-    let mut w = game_on(SMALL, &r, triggers(vec![t], 0), &[(3, CellXY::new(NEAR.0, NEAR.1))], &[("Beta", "TOWER", near)]);
-    assert!(w.cells.cell(CellXY::new(0, 0)).is_none(), "cell (0, 0) is never legal");
+    let mut w = game_on(
+        SMALL,
+        &r,
+        triggers(vec![t], 0),
+        &[(3, CellXY::new(NEAR.0, NEAR.1))],
+        &[("Beta", "TOWER", near)],
+    );
+    assert!(
+        w.cells.cell(CellXY::new(0, 0)).is_none(),
+        "cell (0, 0) is never legal"
+    );
     let tower = buildings(&w, "TOWER")[0];
     w.effects.clear();
     fire(&mut w);
     assert_eq!(
         detonation_points(&w),
-        vec![(128, 128, 0), (213, 213, 0), (43, 213, 0), (213, 43, 0), (43, 43, 0)],
+        vec![
+            (128, 128, 0),
+            (213, 213, 0),
+            (43, 213, 0),
+            (213, 43, 0),
+            (43, 43, 0)
+        ],
         "the five points around the stand-in centre, in precedence order"
     );
     assert_eq!(health(&w, tower), TOWER_HP - 5 * 10);
@@ -414,7 +469,13 @@ fn claim5_defined_marker_uses_its_own_point() {
         ..action(63)
     };
     let t = trigger("T", None, event(13, 0), vec![a]);
-    let mut w = game_on(SMALL, &r, triggers(vec![t], 0), &[(3, CellXY::new(0, 1))], &[]);
+    let mut w = game_on(
+        SMALL,
+        &r,
+        triggers(vec![t], 0),
+        &[(3, CellXY::new(0, 1))],
+        &[],
+    );
     w.effects.clear();
     fire(&mut w);
     let pts = detonation_points(&w);
@@ -430,7 +491,12 @@ fn flash_game(r: &Ruleset) -> World {
         ..action(66)
     };
     let t = trigger("T", None, event(13, 0), vec![a]);
-    let mut w = game(r, triggers(vec![t], 0), &[(2, at(1, 1))], &[("Beta", "TOWER", at(1, 1))]);
+    let mut w = game(
+        r,
+        triggers(vec![t], 0),
+        &[(2, at(1, 1))],
+        &[("Beta", "TOWER", at(1, 1))],
+    );
     w.effects.clear();
     fire(&mut w);
     w
@@ -476,16 +542,32 @@ fn claim6_undefined_marker_flashes_at_the_stand_in_point() {
         ..action(66)
     };
     let t = trigger("T", None, event(13, 0), vec![a]);
-    let mut w = game(&r, triggers(vec![t], 0), &[(2, at(1, 1))], &[("Beta", "TOWER", at(1, 1))]);
+    let mut w = game(
+        &r,
+        triggers(vec![t], 0),
+        &[(2, at(1, 1))],
+        &[("Beta", "TOWER", at(1, 1))],
+    );
     w.effects.clear();
     fire(&mut w);
-    assert_eq!(flashes(&w), vec![(63, Some(glasnost_sim::world::Pos::new(128, 128, 0)))]);
+    assert_eq!(
+        flashes(&w),
+        vec![(63, Some(glasnost_sim::world::Pos::new(128, 128, 0)))]
+    );
     let tower = buildings(&w, "TOWER")[0];
     assert_eq!(health(&w, tower), TOWER_HP);
     // The same gates: no flash without the bright flag.
     let mut quiet = r.clone();
     demo(&mut quiet).bright = Some(false);
-    let t = trigger("T", None, event(13, 0), vec![Action { number: 9, ..action(66) }]);
+    let t = trigger(
+        "T",
+        None,
+        event(13, 0),
+        vec![Action {
+            number: 9,
+            ..action(66)
+        }],
+    );
     let mut v = game(&quiet, triggers(vec![t], 0), &[], &[]);
     fire(&mut v);
     assert!(flashes(&v).is_empty());
@@ -590,7 +672,10 @@ fn claim8_shrink_leaves_excluded_objects_alone() {
     // The excluded armed tower keeps firing at the target in reach (ordinary gates).
     let before = health(&w, target);
     run(&mut w, 200);
-    assert!(w.obj(target).is_none_or(|o| o.health < before), "the excluded tower still attacks");
+    assert!(
+        w.obj(target).is_none_or(|o| o.health < before),
+        "the excluded tower still attacks"
+    );
 }
 
 // spec: S-0524 claim 8 (an object outside the new area is not made untargetable by the action: an ordered attack on it from inside is still an attack and damages it; it is not moved in or removed to stay alive)
@@ -602,7 +687,12 @@ fn claim8_unit_outside_is_still_a_target() {
         ..action(40)
     };
     let t = trigger("T", None, event(13, 0), vec![a]);
-    let mut w = game(&r, triggers(vec![t], 0), &[], &[("Alpha", "TOWER", at(0, 2))]);
+    let mut w = game(
+        &r,
+        triggers(vec![t], 0),
+        &[],
+        &[("Alpha", "TOWER", at(0, 2))],
+    );
     let tower = buildings(&w, "TOWER")[0];
     let walker = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, at(0, 7), 0);
     fire(&mut w);
@@ -625,9 +715,11 @@ fn claim8_unit_outside_is_still_a_target() {
     assert!(issued);
     let before = health(&w, walker);
     run(&mut w, 300);
-    assert!(w.obj(walker).is_none_or(|o| o.health < before), "the object outside was attacked");
+    assert!(
+        w.obj(walker).is_none_or(|o| o.health < before),
+        "the object outside was attacked"
+    );
 }
-
 
 // --- Claim 9 -------------------------------------------------------------------
 
@@ -637,7 +729,11 @@ fn restore_game(r: &Ruleset) -> World {
         r,
         t,
         &[],
-        &[("Alpha", "TOWER", at(0, 0)), ("Alpha", "TOWER", at(4, 0)), ("Beta", "TOWER", at(-4, 0))],
+        &[
+            ("Alpha", "TOWER", at(0, 0)),
+            ("Alpha", "TOWER", at(4, 0)),
+            ("Beta", "TOWER", at(-4, 0)),
+        ],
     )
 }
 
@@ -660,11 +756,18 @@ fn claim9_starting_record() {
     run(&mut w, 2);
     assert_eq!(w.triggers.mp.starting.len(), 3);
     // A later building is not restored: removing it and restoring changes nothing there.
-    let later = *buildings(&w, "TOWER").iter().find(|&&b| w.obj(b).unwrap().pos.cell() == at(0, 4)).unwrap();
+    let later = *buildings(&w, "TOWER")
+        .iter()
+        .find(|&&b| w.obj(b).unwrap().pos.cell() == at(0, 4))
+        .unwrap();
     glasnost_sim::objects::remove(&mut w, later);
     let v = country(&w, "Alphaland");
     mp_triggers::restore_starting_buildings(&mut w, v, None);
-    assert!(buildings(&w, "TOWER").iter().all(|&b| w.obj(b).unwrap().pos.cell() != at(0, 4)));
+    assert!(
+        buildings(&w, "TOWER")
+            .iter()
+            .all(|&b| w.obj(b).unwrap().pos.cell() != at(0, 4))
+    );
 }
 
 // spec: S-0524 claim 9 (code 130 resolves the number slot as a house value; a present recorded building receives a healing hit of minus its strength and returns to full health; the other house's is untouched)
@@ -688,8 +791,14 @@ fn claim9_heals_present_buildings() {
         hit(&mut w, b, 300);
     }
     fire(&mut w);
-    let mine = towers.iter().find(|&&b| w.obj(b).unwrap().owner == Some(ALPHA)).unwrap();
-    let theirs = towers.iter().find(|&&b| w.obj(b).unwrap().owner == Some(BETA)).unwrap();
+    let mine = towers
+        .iter()
+        .find(|&&b| w.obj(b).unwrap().owner == Some(ALPHA))
+        .unwrap();
+    let theirs = towers
+        .iter()
+        .find(|&&b| w.obj(b).unwrap().owner == Some(BETA))
+        .unwrap();
     assert_eq!(health(&w, *mine), TOWER_HP);
     assert_eq!(health(&w, *theirs), TOWER_HP - 300);
 }
@@ -709,9 +818,15 @@ fn claim9_house_values() {
     w.houses[1].start = Some(1);
     assert_eq!(mp_triggers::resolve_house(&w, 4476, None), Some(BETA));
     assert_eq!(mp_triggers::resolve_house(&w, 4475, None), None);
-    assert_eq!(mp_triggers::resolve_house(&w, 9013, Some(ALPHA)), Some(ALPHA));
+    assert_eq!(
+        mp_triggers::resolve_house(&w, 9013, Some(ALPHA)),
+        Some(ALPHA)
+    );
     mp_triggers::restore_starting_buildings(&mut w, 4476, None);
-    let theirs = towers.iter().find(|&&b| w.obj(b).unwrap().owner == Some(BETA)).unwrap();
+    let theirs = towers
+        .iter()
+        .find(|&&b| w.obj(b).unwrap().owner == Some(BETA))
+        .unwrap();
     assert_eq!(health(&w, *theirs), TOWER_HP);
 }
 
@@ -720,7 +835,10 @@ fn claim9_house_values() {
 fn claim9_replaces_missing_buildings_and_displaces() {
     let r = ruleset();
     let mut w = restore_game(&r);
-    let gone = *buildings(&w, "TOWER").iter().find(|&&b| w.obj(b).unwrap().pos.cell() == at(4, 0)).unwrap();
+    let gone = *buildings(&w, "TOWER")
+        .iter()
+        .find(|&&b| w.obj(b).unwrap().pos.cell() == at(4, 0))
+        .unwrap();
     glasnost_sim::objects::remove(&mut w, gone);
     let cart = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(4, 0), 0);
     let v = country(&w, "Alphaland");
@@ -741,7 +859,10 @@ fn claim9_replaces_missing_buildings_and_displaces() {
 fn claim9_wrong_owner_is_not_healed() {
     let r = ruleset();
     let mut w = restore_game(&r);
-    let b = *buildings(&w, "TOWER").iter().find(|&&b| w.obj(b).unwrap().pos.cell() == at(0, 0)).unwrap();
+    let b = *buildings(&w, "TOWER")
+        .iter()
+        .find(|&&b| w.obj(b).unwrap().pos.cell() == at(0, 0))
+        .unwrap();
     w.obj_mut(b).unwrap().owner = Some(BETA);
     hit(&mut w, b, 300);
     let before = buildings(&w, "TOWER").len();
@@ -755,13 +876,20 @@ fn claim9_wrong_owner_is_not_healed() {
 /// displaced vehicle in the same cell.
 fn failed_return(r: &Ruleset) -> (World, ObjectId) {
     let mut w = restore_game(r);
-    let gone = *buildings(&w, "TOWER").iter().find(|&&b| w.obj(b).unwrap().pos.cell() == at(4, 0)).unwrap();
+    let gone = *buildings(&w, "TOWER")
+        .iter()
+        .find(|&&b| w.obj(b).unwrap().pos.cell() == at(4, 0))
+        .unwrap();
     glasnost_sim::objects::remove(&mut w, gone);
     testkit::spawn(&mut w, Kind::Building, "PLANT", 1, at(4, 0), 0);
     let cart = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(4, 0), 0);
     let v = country(&w, "Alphaland");
     mp_triggers::restore_starting_buildings(&mut w, v, None);
-    assert!(buildings(&w, "TOWER").iter().all(|&b| w.obj(b).unwrap().pos.cell() != at(4, 0)));
+    assert!(
+        buildings(&w, "TOWER")
+            .iter()
+            .all(|&b| w.obj(b).unwrap().pos.cell() != at(4, 0))
+    );
     (w, cart)
 }
 
@@ -805,12 +933,25 @@ fn claim9_restoration_follows_creation_order() {
     let plant_ti = w.rules().index_of(Kind::Building, "PLANT").unwrap();
     let tower_ti = w.rules().index_of(Kind::Building, "TOWER").unwrap();
     assert!(tower_ti < plant_ti);
-    let kinds: Vec<u32> = w.triggers.mp.starting.iter().map(|b| b.type_index).collect();
-    assert_eq!(kinds, vec![plant_ti, tower_ti], "the record is in creation order");
+    let kinds: Vec<u32> = w
+        .triggers
+        .mp
+        .starting
+        .iter()
+        .map(|b| b.type_index)
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![plant_ti, tower_ti],
+        "the record is in creation order"
+    );
     for b in w.triggers.mp.starting.iter() {
         assert!(b.cell == at(5, 0) || b.cell == at(0, 0));
     }
-    for id in buildings(&w, "PLANT").into_iter().chain(buildings(&w, "TOWER")) {
+    for id in buildings(&w, "PLANT")
+        .into_iter()
+        .chain(buildings(&w, "TOWER"))
+    {
         glasnost_sim::objects::remove(&mut w, id);
     }
     let v = country(&w, "Alphaland");
@@ -829,7 +970,10 @@ fn claim9_each_action_restores_only_its_house() {
     }
     let b = country(&w, "Betaland");
     mp_triggers::restore_starting_buildings(&mut w, b, None);
-    let owners: Vec<_> = buildings(&w, "TOWER").iter().map(|&i| w.obj(i).unwrap().owner).collect();
+    let owners: Vec<_> = buildings(&w, "TOWER")
+        .iter()
+        .map(|&i| w.obj(i).unwrap().owner)
+        .collect();
     assert_eq!(owners, vec![Some(BETA)], "only the selected house");
     let a = country(&w, "Alphaland");
     mp_triggers::restore_starting_buildings(&mut w, a, None);
@@ -880,10 +1024,18 @@ fn claim9_covering_cell_heals_a_shifted_building() {
 #[test]
 fn claim13_replacement_is_a_fresh_building_under_construction() {
     let r = ruleset();
-    let mut w = game(&r, triggers(vec![], 0), &[], &[("Alpha", "TOWER", at(0, 0))]);
+    let mut w = game(
+        &r,
+        triggers(vec![], 0),
+        &[],
+        &[("Alpha", "TOWER", at(0, 0))],
+    );
     let old = buildings(&w, "TOWER")[0];
     // Map-loading placement: idle body, guard queued.
-    assert_eq!(w.obj(old).unwrap().beh.queued, Some(glasnost_sim::rules::Behaviour::Guard));
+    assert_eq!(
+        w.obj(old).unwrap().beh.queued,
+        Some(glasnost_sim::rules::Behaviour::Guard)
+    );
     hit(&mut w, old, 300);
     glasnost_sim::objects::remove(&mut w, old);
     let a = country(&w, "Alphaland");
@@ -891,15 +1043,25 @@ fn claim13_replacement_is_a_fresh_building_under_construction() {
     let new = buildings(&w, "TOWER")[0];
     assert_ne!(new, old);
     let o = w.obj(new).unwrap();
-    assert_eq!(o.health, TOWER_HP, "full type strength, not the saved health");
-    assert_eq!(o.beh.queued, Some(glasnost_sim::rules::Behaviour::Construction));
+    assert_eq!(
+        o.health, TOWER_HP,
+        "full type strength, not the saved health"
+    );
+    assert_eq!(
+        o.beh.queued,
+        Some(glasnost_sim::rules::Behaviour::Construction)
+    );
     assert!(o.econ.construction.building_up, "its build-up is under way");
     assert!(!o.econ.building.switched_off, "the power switch begins on");
     assert!(!w.triggers.objects.contains_key(&new), "no recorded tag");
     // The ordinary one-stage rules: with no build-up sprite it hands over to guard.
     run(&mut w, 10);
     let o = w.obj(new).unwrap();
-    assert!(!o.econ.construction.building_up, "handed over: {:?} {:?}", o.beh.current, o.beh.queued);
+    assert!(
+        !o.econ.construction.building_up,
+        "handed over: {:?} {:?}",
+        o.beh.current, o.beh.queued
+    );
 }
 
 // spec: S-0524 claim 13 (only ground-layer mobile occupants of the attempted foundation cells are lifted and re-placed, each by S-0212 claim 25's search from its old cell, facing 0; infantry are not packed into a shared cell; a unit in an adjacent non-foundation cell is untouched; Q-0764)
@@ -929,14 +1091,23 @@ fn claim13_displaced_occupants_are_placed_by_the_nearby_search() {
     for id in carts.iter().chain(men.iter()) {
         let o = w.obj(*id).expect("re-placed");
         assert!(o.on_map);
-        assert!(!foundation.contains(&o.pos.cell()), "not left under the new building");
+        assert!(
+            !foundation.contains(&o.pos.cell()),
+            "not left under the new building"
+        );
         assert_eq!(facing_of(&w, *id), 0, "facing 0");
         assert_eq!(o.layer, glasnost_sim::world::Layer::Ground);
     }
     // Infantry are not deliberately packed into one cell.
-    assert_ne!(w.obj(men[0]).unwrap().pos.cell(), w.obj(men[1]).unwrap().pos.cell());
+    assert_ne!(
+        w.obj(men[0]).unwrap().pos.cell(),
+        w.obj(men[1]).unwrap().pos.cell()
+    );
     // The unit outside the foundation was not lifted.
-    assert_eq!((w.obj(outside).unwrap().pos, facing_of(&w, outside)), outside_before);
+    assert_eq!(
+        (w.obj(outside).unwrap().pos, facing_of(&w, outside)),
+        outside_before
+    );
 }
 
 // spec: S-0524 claim 13 (a displaced unit whose search finds no cell is not left off the map: the placement at the stand-in cell fails and the unit is removed; Q-0764)
@@ -947,7 +1118,12 @@ fn claim13_no_nearby_cell_removes_the_unit() {
     let size = 3;
     let fp = glasnost_map::Footprint::new(size, size, [0, 0, size, size]);
     let record = CellXY::new(2, 2);
-    let inside: Vec<CellXY> = vec![record, CellXY::new(3, 2), CellXY::new(2, 3), CellXY::new(3, 3)];
+    let inside: Vec<CellXY> = vec![
+        record,
+        CellXY::new(3, 2),
+        CellXY::new(2, 3),
+        CellXY::new(3, 3),
+    ];
     assert!(inside.iter().all(|&c| fp.is_legal(c)));
     let mut blockers: Vec<(&str, &str, CellXY)> = Vec::new();
     for x in 0..8 {
@@ -968,7 +1144,10 @@ fn claim13_no_nearby_cell_removes_the_unit() {
     let a = country(&w, "Alphaland");
     mp_triggers::restore_starting_buildings(&mut w, a, None);
     assert_eq!(wide(&w).len(), 1, "the building was placed");
-    assert!(w.obj(cart).is_none_or(|o| !o.on_map), "removed, not retained off the map or under the building");
+    assert!(
+        w.obj(cart).is_none_or(|o| !o.on_map),
+        "removed, not retained off the map or under the building"
+    );
 }
 
 // spec: S-0524 claim 13 (when the building cannot be placed, earlier lifted occupants are offered their original points, facing 0, and stay; overlays removed are not restored; Q-0764)
@@ -998,13 +1177,37 @@ fn claim13_failed_placement_returns_occupants_facing_zero() {
 /// carry-over as `carry`), 2 DIE2 (destroyed by anything, no carry-over);
 /// all repeating, each setting a variable.
 fn entry_game(carry: bool) -> World {
-    let mut die = trigger("DIE", None, event(48, 0), vec![Action { number: 1, ..action(56) }]);
+    let mut die = trigger(
+        "DIE",
+        None,
+        event(48, 0),
+        vec![Action {
+            number: 1,
+            ..action(56)
+        }],
+    );
     die.carry_over = carry;
     let t = triggers(
         vec![
-            trigger("ENT", None, event(1, -1), vec![Action { number: 0, ..action(56) }]),
+            trigger(
+                "ENT",
+                None,
+                event(1, -1),
+                vec![Action {
+                    number: 0,
+                    ..action(56)
+                }],
+            ),
             die,
-            trigger("DIE2", None, event(48, 0), vec![Action { number: 2, ..action(56) }]),
+            trigger(
+                "DIE2",
+                None,
+                event(48, 0),
+                vec![Action {
+                    number: 2,
+                    ..action(56)
+                }],
+            ),
         ],
         2,
     );
@@ -1031,11 +1234,19 @@ fn claim10_capture_raises_and_carry_over() {
     mp_triggers::capture_seam(&mut w, b, eng, |w| {
         w.obj_mut(b).unwrap().owner = Some(ALPHA);
     });
-    assert_eq!(w.triggers.fired - f, 3, "two entry raises and one destruction raise");
+    assert_eq!(
+        w.triggers.fired - f,
+        3,
+        "two entry raises and one destruction raise"
+    );
     assert_eq!(w.triggers.objects.get(&b), Some(&tag_index(&w, "DIE")));
     assert_eq!(w.obj(b).unwrap().owner, Some(ALPHA));
     assert!(w.obj(eng).is_none_or(|o| !o.on_map));
-    let old = w.triggers.tags.get(&tag_index(&w, "ENT")).expect("the old tag is not deleted");
+    let old = w
+        .triggers
+        .tags
+        .get(&tag_index(&w, "ENT"))
+        .expect("the old tag is not deleted");
     assert_eq!(old.carriers, 0);
     assert!(w.triggers.variables[0] && w.triggers.variables[1]);
 }
@@ -1067,7 +1278,10 @@ fn claim11_hijack_raises_and_carry_over() {
         w.obj_mut(v).unwrap().owner = Some(ALPHA);
     });
     assert_eq!(w.triggers.fired - f, 1, "the entry raise only");
-    assert!(!w.triggers.variables[1], "no destruction raise for the thief");
+    assert!(
+        !w.triggers.variables[1],
+        "no destruction raise for the thief"
+    );
     assert_eq!(w.triggers.objects.get(&v), Some(&tag_index(&w, "DIE")));
     assert_eq!(w.obj(v).unwrap().owner, Some(ALPHA));
     assert!(w.obj(thief).is_none_or(|o| !o.on_map));
@@ -1084,7 +1298,11 @@ fn claim12_consuming_entry_order() {
     let f = w.triggers.fired;
     let mut during = None;
     mp_triggers::consuming_entry_seam(&mut w, b, spy, |w| {
-        during = Some((w.triggers.fired, w.triggers.variables[0], w.triggers.variables[2]));
+        during = Some((
+            w.triggers.fired,
+            w.triggers.variables[0],
+            w.triggers.variables[2],
+        ));
     });
     assert_eq!(during, Some((f + 1, true, false)));
     assert_eq!(w.triggers.fired - f, 2);
@@ -1112,11 +1330,27 @@ fn claim12_retaining_entry() {
 /// (variable 3) and NEW (variable 4, with the carry-over flag when `carry`).
 /// Within one synchronous seam call nothing polls, so `fired` counts raises.
 fn any_raise_game(carry: bool) -> World {
-    let mut new = trigger("NEW", None, event(8, 0), vec![Action { number: 4, ..action(56) }]);
+    let mut new = trigger(
+        "NEW",
+        None,
+        event(8, 0),
+        vec![Action {
+            number: 4,
+            ..action(56)
+        }],
+    );
     new.carry_over = carry;
     let t = triggers(
         vec![
-            trigger("OLD", None, event(8, 0), vec![Action { number: 3, ..action(56) }]),
+            trigger(
+                "OLD",
+                None,
+                event(8, 0),
+                vec![Action {
+                    number: 3,
+                    ..action(56)
+                }],
+            ),
             new,
         ],
         2,
@@ -1142,7 +1376,11 @@ fn claim10_ownership_change_raises_no_tag() {
             glasnost_sim::econ::events::owner_changed(w, b, old);
             during_takeover = Some(w.triggers.fired - before);
         });
-        assert_eq!(during_takeover, Some(0), "carry {carry}: the ownership change raises nothing");
+        assert_eq!(
+            during_takeover,
+            Some(0),
+            "carry {carry}: the ownership change raises nothing"
+        );
         // Two entry raises on the old tag, then the engineer's own destruction raise.
         assert_eq!(w.triggers.fired - f, 3, "carry {carry}");
         assert_eq!(w.obj(b).unwrap().owner, Some(ALPHA));
@@ -1163,9 +1401,19 @@ fn claim11_vehicle_like_building_entry() {
         entry_before_takeover = w.triggers.variables[0];
         w.obj_mut(b).unwrap().owner = Some(ALPHA);
     });
-    assert!(entry_before_takeover, "the entry raise precedes the takeover effects");
-    assert_eq!(w.triggers.fired - f, 2, "one entry raise and the unit's destruction raise");
-    assert!(w.triggers.variables[1], "the unit's destruction raise acts on the shared tag");
+    assert!(
+        entry_before_takeover,
+        "the entry raise precedes the takeover effects"
+    );
+    assert_eq!(
+        w.triggers.fired - f,
+        2,
+        "one entry raise and the unit's destruction raise"
+    );
+    assert!(
+        w.triggers.variables[1],
+        "the unit's destruction raise acts on the shared tag"
+    );
     assert_eq!(w.triggers.objects.get(&b), Some(&tag_index(&w, "DIE")));
     assert!(w.obj(unit).is_none_or(|o| !o.on_map));
 }
@@ -1184,9 +1432,69 @@ fn claim12_consumed_entrants_passengers_get_no_raise() {
     glasnost_sim::transport::board(&mut w, rider, carrier);
     let f = w.triggers.fired;
     mp_triggers::consuming_entry_seam(&mut w, building, carrier, |_| {});
-    assert_eq!(w.triggers.fired - f, 2, "the entry raise and the entrant's own raise");
+    assert_eq!(
+        w.triggers.fired - f,
+        2,
+        "the entry raise and the entrant's own raise"
+    );
     assert!(w.triggers.variables[2], "the entrant's own raise");
-    assert!(!w.triggers.variables[1], "no raise for the removed passenger");
+    assert!(
+        !w.triggers.variables[1],
+        "no raise for the removed passenger"
+    );
+}
+
+// --- S-0513 claim 22: the waypoint curtain (code 109; Q-0734) ------------------
+
+// spec: S-0513 claim 22 and Import mapping (code 109 applies invulnerability at its waypoint-slot cell: the ground layer of the effect block, no house, the imported curtain duration, the number slot unused; infantry die; the invoke animation at the terrain surface plus 5 leptons, no radar event, no announcement)
+#[test]
+fn s0513_claim22_waypoint_curtain_action() {
+    let r = ruleset();
+    let run_with = |number: i32| {
+        let a = Action {
+            waypoint: 0,
+            number,
+            ..action(109)
+        };
+        let t = trigger("T", None, event(13, 0), vec![a]);
+        let mut w = game(&r, triggers(vec![t], 0), &[(0, at(0, 0))], &[]);
+        let cart = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(0, 1), 0);
+        let walker = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, at(1, 0), 0);
+        let far = testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, at(5, 5), 0);
+        w.effects.clear();
+        fire(&mut w);
+        (w, cart, walker, far)
+    };
+    let (w, cart, walker, far) = run_with(0);
+    assert!(glasnost_sim::superweapons::protected(&w, cart));
+    assert!(!glasnost_sim::superweapons::protected(&w, far));
+    assert!(
+        w.obj(walker).is_none_or(|o| o.health <= 0 || !o.on_map),
+        "infantry die"
+    );
+    // Protected for the imported curtain duration.
+    let p = w.obj(cart).unwrap().sw.protection.unwrap();
+    assert_eq!(p.duration, sw_common::CURTAIN_D);
+    // No radar event, no announcement.
+    assert!(!w.effects.iter().any(|e| matches!(
+        e,
+        Effect::Superweapon {
+            event: glasnost_sim::superweapons::SwEvent::Radar
+                | glasnost_sim::superweapons::SwEvent::Launch,
+            ..
+        }
+    )));
+    // The invoke animation at the terrain surface plus 5 leptons (no bridge lift on this flat map).
+    let surface = w.surface_at(at(0, 0).x * 256 + 128, at(0, 0).y * 256 + 128);
+    assert!(w.effects.iter().any(|e| matches!(
+        e,
+        Effect::Anim { name, pos, .. } if name == "CURTA" && pos.z == surface + 5
+    )));
+    // The number slot changes nothing.
+    let (w2, cart2, _, _) = run_with(77);
+    assert_eq!(w.rng, w2.rng);
+    assert!(glasnost_sim::superweapons::protected(&w2, cart2));
+    assert_eq!(mp_triggers::action_coverage(109), Coverage::Implemented);
 }
 
 // --- Import mapping ------------------------------------------------------------
@@ -1195,9 +1503,12 @@ fn claim12_consumed_entrants_passengers_get_no_raise() {
 #[test]
 fn i1_action_coverage() {
     for c in [40, 63, 66, 73, 90, 95, 102, 130] {
-        assert_eq!(mp_triggers::action_coverage(c), Coverage::Implemented, "{c}");
+        assert_eq!(
+            mp_triggers::action_coverage(c),
+            Coverage::Implemented,
+            "{c}"
+        );
     }
     assert_eq!(mp_triggers::action_coverage(108), Coverage::Seam);
     assert_eq!(mp_triggers::event_coverage(1), Coverage::Implemented);
 }
-

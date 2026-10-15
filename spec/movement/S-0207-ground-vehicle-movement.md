@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830]
 supersedes: []
 ---
 
@@ -28,7 +28,7 @@ its retained state after temporary driving. Claim 22 fixes cell-tag arrival timi
 turning and waiting. Claim 19 states when a vehicle with the driving, ship or hovering locomotor
 that approaches a target stops once the target is in range, and what happens to its destination. Claims 24 and 25 distinguish
 stored heading height and the separate locomotor destination point, including factory exits.
-Claim 26 distinguishes cell-goal removal at rest from retained building entry goals and fixes
+Claim 26 distinguishes cell-goal removal at rest from retained goals naming buildings or units and fixes
 its tick relative to final track completion.
 This spec covers skirmish. Network games and campaigns are out of scope.
 
@@ -1486,7 +1486,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     A point in the vehicle's own cell therefore remains present unless an actual stop,
     replacement or qualifying track completion removes it. Claim 26 defines when standing
     there removes the order-level destination and thereby stops locomotion; it distinguishes
-    a cell destination from a building destination. Cell equality must not be used as a
+    a cell destination from one naming a building or a unit. Cell equality must not be used as a
     substitute for the point-presence test. An order-level destination can remain present
     after the track-completion row has cleared the locomotor destination, or can be removed
     by a later behaviour effect. S-0212 claims 20 to 22 own whether a search failure waits,
@@ -1495,23 +1495,32 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - Confidence: high for assignment, independent presence, stopping and track-completion clearing,
       medium for the resulting lifetime across approach-destination fallback
 
-26. **Removing the order-level goal at rest (Q-0797).** For driving and ship vehicles,
-    a destination that names a cell and a destination that names a building are different
-    kinds of order-level goal. The cell containing a building's supplied movement point
-    does not turn that building destination into a cell destination.
+26. **Removing the order-level goal at rest (Q-0797, Q-0830).** For driving and ship vehicles,
+    a destination that names a cell differs from one that names an object, including a
+    building, vehicle, infantry unit or aircraft. The cell containing an object's supplied
+    movement point does not turn that object destination into a cell destination.
 
     | State at a locomotion update | Event | Result |
     |---|---|---|
     | No active track; order-level destination is a cell | Vehicle occupies that cell | With no approach destinations, the order-level destination is removed and locomotion is stopped, clearing its destination point immediately (claim 25). With approach destinations, the current order-level goal is abandoned and the vehicle falls back to rest under S-0215 claim 13, including any replacement goal that rule supplies |
     | No active track; order-level destination is a building | Vehicle occupies the cell of its supplied movement point | Cell equality alone removes neither destination. Entry exchanges and other behaviour effects remain S-0215 claim 29's and S-0314 claims 17 and 18's |
-    | At rest in guard; locomotor destination point present | Vehicle's world point equals that destination point in all three coordinates | The same removal or approach-destination fallback as in the first row applies, including for a building destination |
+    | No active track; order-level destination is a vehicle, infantry unit or aircraft | Vehicle occupies the cell of its supplied movement point | Cell equality alone removes neither destination, just as for a building. Whether the named unit is moving or stationary makes no difference to this rule |
+    | At rest in guard; locomotor destination point present | Vehicle's world point equals that destination point in all three coordinates | The same removal or approach-destination fallback as in the first row applies, including for a destination naming a building, vehicle, infantry unit or aircraft, whether the named object is moving or stationary |
 
     The first row is a locomotion rule, not a path-search result or a due *move* or *enter*
     processing. It requires neither exact horizontal alignment, a height tolerance, a
     successful search, nor an absent locomotor destination point. It does not depend on
     the current behaviour being *move*. The guard row instead requires exact equality of
     integer-lepton coordinates, including height, without rounding; being in the same
-    cell is insufficient for that row.
+    cell is insufficient for that row. The resting and guard requirements describe the
+    vehicle whose locomotion is being updated, not the unit named by its destination.
+    The guard comparison uses the retained locomotor destination point, not the named
+    unit's current world point. Movement of that unit alone is not a new movement
+    instruction; an accepted replacement instruction can replace the point (claim 25).
+    This is not a promise of indefinite retention: other stop, replacement, search-give-up,
+    approach or boarding effects can still change either destination. S-0215 claims 22
+    and 29 own move and enter processing; S-0507 claims 5 and 6 own transport exchanges
+    and arrival-time boarding, which are separate from cell-equality cleanup.
 
     **Final track.** The qualifying completion of claim 25 clears the locomotor destination
     in the completion tick, not the order-level destination. Completion alone therefore
@@ -1534,8 +1543,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     absent another stop, replacement or applicable behaviour effect, not a guarantee that
     the depot's entry exchange will never change state. The *move* behaviour's subsequent
     fallback when it has no destination is S-0215 claim 22's separate event.
-    - Backing: `measurable` (D30; S-0314 claim 17's H19 f for accepted same-cell entry)
-    - Confidence: high for the cell/building distinction and cleanup conditions; medium for
+    - Backing: `measurable` (D30; D31 for destinations naming units, moving/stationary
+      equivalence and the guard exception; S-0314 claim 17's H19 f for accepted same-cell entry)
+    - Confidence: high for the cell/object distinction, moving/stationary equivalence and cleanup conditions; medium for
       the composed tick timing and approach-destination fallback
 
 ## Formulas
@@ -2177,7 +2187,7 @@ its new destination from that tick.
 | No additional key | Factory exit heading height, claim 24 | Engine constant 0 leptons; not imported from terrain or rules |
 | No additional key | Driving/ship locomotor destination lifetime, claim 25 | Runtime movement state, initially absent; assignment and clearing are not imported settings |
 | No additional key | Destination acceptance lift and arrival height tolerance, claim 25 | Engine constants: 416-lepton high-bridge lift and strict 208-lepton arrival tolerance |
-| No additional key | Order-level goal removal at rest, claim 26 | Runtime cell or building destination and behaviour state; no imported delay, alignment threshold or absent-key default |
+| No additional key | Order-level goal removal at rest, claim 26 | Runtime destination kind (cell, building, vehicle, infantry unit or aircraft), locomotor point and mover behaviour state; the named unit's moving/stationary state does not change cleanup eligibility. No imported delay, alignment threshold or absent-key default |
 
 **T3 Locomotor input-value mapping** (claim 14). Each row maps a value of `Locomotor` in the
 user's rules file to a movement method. The five numbers are dimensionless nonnegative integers,
@@ -3429,6 +3439,41 @@ case three times for each locomotor, excluding unrelated orders, enemies and sca
   retained, or clearing the fallback's new goal solely because the old one was reached,
   falsifies this composition. The recorder must establish the no-track equal-cell
   precondition; a run without it tests neither row.
+
+**D31. Goals naming units (claim 26; Q-0830).** Use D30's stock-data land and
+water lanes, driving and ship movers, game speed index 2, distant bystander computer
+player, director and mods off, scripted input and a read-only recorder at 800 × 600.
+Repeat each qualifying case three times. Record immediately before and after locomotion:
+order-level destination identity and kind, supplied movement point, retained locomotor
+point, mover world point, active track, resting state, behaviour, approach destinations,
+searches, boarding and destination assignments. Also record the named unit's world point
+and movement state. Separate changes caused by behaviour, arrival reporting or boarding
+from cleanup during the no-track update.
+
+- Obtain accepted goals naming, in separate controls, a vehicle, infantry unit and
+  aircraft. Use a vehicle passenger entering a compatible stationary transport, then
+  a moving transport, as ordinary-input witnesses where available (S-0507 claims 5 and 6).
+  Observe a no-track update in the supplied point's cell before boarding or replacement.
+  Expected: cell equality alone retains the object goal and locomotor point, for both
+  stationary and moving named units. A goal naming a cell at the same point is removed
+  under D30. Cell-style removal of a unit goal solely on cell equality falsifies the claim.
+- For each destination kind, establish and verify a named test-map initial resting
+  *guard* mover with the accepted unit destination and a present locomotor point. Test
+  exact three-coordinate equality, a horizontal displacement inside the same cell and
+  a height displacement. Expected: only exact equality triggers removal, or S-0215
+  claim 13's fallback with a verified nonempty approach list. Repeat while the named
+  unit moves without a replacement instruction: compare against the retained point,
+  not that unit's new position. Different cleanup eligibility solely because the named
+  unit moves, retention at exact equality, or clearing on mere cell equality falsifies
+  the respective rule. A separately accepted replacement point changes the comparison
+  point, as claim 25 requires.
+
+A run is void for a control unless the recorder verifies its destination kind and all
+of its no-track, behaviour and point-presence preconditions. A boarding or order exchange
+that changes the goal before locomotion is not evidence of cell-style cleanup. If ordinary
+input cannot establish a particular unit-kind or guard combination, retain that control as
+a measurement proposal needing a verified test-map setup; do not substitute a cell goal
+or report it as measured. No memory-writing oracle tool is proposed.
 
 ## Cross-spec changes to confirm
 

@@ -1150,18 +1150,37 @@ fn claim_6_infantry_boarding_raises_the_transport_tag_once() {
         testkit::run(&mut w, 5);
         let f0 = w.triggers.fired;
         click(&mut w, &[p], ClickOn::Object(t));
-        assert_eq!(w.triggers.fired, f0, "{name}: no raise on receiving the order");
-        assert!(run_until(&mut w, 900, |w| transport::riding(w, p) == Some(t)), "{name}: boarded");
+        assert_eq!(
+            w.triggers.fired, f0,
+            "{name}: no raise on receiving the order"
+        );
+        assert!(
+            run_until(&mut w, 900, |w| transport::riding(w, p) == Some(t)),
+            "{name}: boarded"
+        );
         assert_eq!(w.triggers.fired - f0, 1, "{name}: one entry raise");
-        assert!(var(&w, 0) && !var(&w, 1), "{name}: the passenger gets no destruction raise");
+        assert!(
+            var(&w, 0) && !var(&w, 1),
+            "{name}: the passenger gets no destruction raise"
+        );
         // Unloading adds no entered-by raise; boarding again notifies again.
         let f1 = w.triggers.fired;
         click(&mut w, &[t], ClickOn::Object(t));
-        assert!(run_until(&mut w, 900, |w| transport::riding(w, p).is_none()), "{name}: let out");
+        assert!(
+            run_until(&mut w, 900, |w| transport::riding(w, p).is_none()),
+            "{name}: let out"
+        );
         assert_eq!(w.triggers.fired, f1, "{name}: unloading raises nothing");
         click(&mut w, &[p], ClickOn::Object(t));
-        assert!(run_until(&mut w, 900, |w| transport::riding(w, p) == Some(t)), "{name}: boarded again");
-        assert_eq!(w.triggers.fired - f1, 1, "{name}: a fresh arrival notifies again");
+        assert!(
+            run_until(&mut w, 900, |w| transport::riding(w, p) == Some(t)),
+            "{name}: boarded again"
+        );
+        assert_eq!(
+            w.triggers.fired - f1,
+            1,
+            "{name}: a fresh arrival notifies again"
+        );
     }
 }
 
@@ -1177,7 +1196,10 @@ fn claim_6_vehicle_boarding_raises_nothing() {
     testkit::run(&mut w, 5);
     let f0 = w.triggers.fired;
     click(&mut w, &[v], ClickOn::Object(t));
-    assert!(run_until(&mut w, 900, |w| transport::riding(w, v) == Some(t)), "boarded");
+    assert!(
+        run_until(&mut w, 900, |w| transport::riding(w, v) == Some(t)),
+        "boarded"
+    );
     assert_eq!(w.triggers.fired, f0);
     assert!(!var(&w, 0) && !var(&w, 1));
 }
@@ -1203,5 +1225,9 @@ fn claim_6_refused_boarding_has_already_notified() {
     assert!(!transport::arrival(&mut w, p), "turned away");
     assert_eq!(w.triggers.fired - f0, 1, "the arrival raise came first");
     assert_eq!(transport::riding(&w, p), None);
-    assert_ne!(w.obj(p).unwrap().dest, Some(glasnost_sim::world::Target::Object(t)), "it gave up its destination");
+    assert_ne!(
+        w.obj(p).unwrap().dest,
+        Some(glasnost_sim::world::Target::Object(t)),
+        "it gave up its destination"
+    );
 }

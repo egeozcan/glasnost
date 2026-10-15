@@ -294,7 +294,11 @@ fn claim_1_ship_goal_cleanup() {
     assert_eq!(w.obj(skiff).unwrap().dest, Some(Target::Cell(here)));
     let taken = w.rng.taken();
     glasnost_sim::drive::tick(&mut w, skiff);
-    assert_eq!(w.obj(skiff).unwrap().dest, None, "removed by the first update");
+    assert_eq!(
+        w.obj(skiff).unwrap().dest,
+        None,
+        "removed by the first update"
+    );
     assert_eq!(w.rng.taken(), taken, "no search draw");
     // A move to the next cell: the goal outlives the completion tick by one.
     let goal = CellXY::new(here.x + 1, here.y);
@@ -313,10 +317,18 @@ fn claim_1_ship_goal_cleanup() {
     }
     assert!(done, "the track completes");
     assert_eq!(w.obj(skiff).unwrap().pos.cell(), goal);
-    assert_eq!(w.obj(skiff).unwrap().dest, Some(Target::Cell(goal)), "kept through the completion tick");
+    assert_eq!(
+        w.obj(skiff).unwrap().dest,
+        Some(Target::Cell(goal)),
+        "kept through the completion tick"
+    );
     assert!(!glasnost_sim::drive::goal_present(&w, skiff));
     tick::step(&mut w);
-    assert_eq!(w.obj(skiff).unwrap().dest, None, "removed at the next update");
+    assert_eq!(
+        w.obj(skiff).unwrap().dest,
+        None,
+        "removed at the next update"
+    );
 }
 
 // spec: S-0504 claim 1 (a destination on land: the ship does not leave the water)

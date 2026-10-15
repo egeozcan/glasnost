@@ -299,7 +299,8 @@ fn claim_17_service_docking_raises_no_tag() {
     open(&mut w);
     let f0 = w.triggers.fired;
     click_enter(&mut w, v, d);
-    assert!(run_until(&mut w, 3000, |w| health(w, v) == 600 && contact(w, v).is_none()));
+    assert!(run_until(&mut w, 3000, |w| health(w, v) == 600
+        && contact(w, v).is_none()));
     assert!(run_until(&mut w, 600, |w| w.obj(v).unwrap().dest.is_none()));
     assert_eq!(w.triggers.fired, f0, "no raise reached a firing");
     assert!(!w.triggers.variables[0] && !w.triggers.variables[1]);

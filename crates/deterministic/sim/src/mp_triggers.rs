@@ -112,11 +112,31 @@ pub enum Coverage {
 pub fn action_coverage(code: i32) -> Coverage {
     match code {
         // spec: S-0011 I4 (the subset), S-0512 claims 12 to 15, S-0513 claims 20 and 22, S-0524 I1
-        11 | 17 | 19 | 21 | 23..=27 | 33 | 34 | 40 | 44 | 45 | 53..=57 | 63 | 66 | 73 | 90
-        | 95 | 99 | 102 | 103 | 129 | 130 | 133 => Coverage::Implemented,
+        11
+        | 17
+        | 19
+        | 21
+        | 23..=27
+        | 33
+        | 34
+        | 40
+        | 44
+        | 45
+        | 53..=57
+        | 63
+        | 66
+        | 73
+        | 90
+        | 95
+        | 99
+        | 102
+        | 103
+        | 109
+        | 129
+        | 130
+        | 133 => Coverage::Implemented,
         // spec: S-0011 claim 30 (teams, computer targeting, change owner, destroy attached, explosion, cheer, waypoint animations) and S-0524 claim 4 (crates, S-0520)
-        // spec: S-0011 I4 (109 invulnerability at a waypoint: the waypoint curtain of S-0513 claim 22, owned by the superweapon topic, not built in this module)
-        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 108 | 109 | 113 | 135 => Coverage::Seam,
+        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 108 | 113 | 135 => Coverage::Seam,
         _ => Coverage::Unknown,
     }
 }
@@ -292,10 +312,7 @@ pub fn light_flash(w: &mut World, a: &glasnost_map::triggers::Action) {
 /// force from its start until it ends, clearing included).
 fn storm_in_force(w: &World) -> bool {
     // spec: S-0104 Terms (a clearing ion storm remains in force until it ends)
-    matches!(
-        w.sw.storm.state,
-        StormState::Raging | StormState::Clearing
-    )
+    matches!(w.sw.storm.state, StormState::Raging | StormState::Clearing)
 }
 
 /// Set base ambient (code 73, S-0524 claim 7; S-0104 claim 14).
@@ -550,7 +567,11 @@ fn place_near(w: &mut World, d: &Displaced, taken: &mut BTreeSet<CellXY>) -> boo
         no_overlay: false,
     };
     let infantry = kind == Kind::Infantry;
-    let refuse: BTreeSet<CellXY> = if infantry { taken.clone() } else { BTreeSet::new() };
+    let refuse: BTreeSet<CellXY> = if infantry {
+        taken.clone()
+    } else {
+        BTreeSet::new()
+    };
     let free = |_: &World, c: CellXY| !refuse.contains(&c);
     let Some(c) = crate::path::nearby_filtered(
         w,

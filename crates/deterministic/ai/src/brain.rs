@@ -311,12 +311,15 @@ impl Brain {
         mine.iter()
             .filter(|&&(_, army)| army)
             .map(|&(c, _)| c)
-            .filter(|&c| {
-                !fight || enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT)
-            })
+            .filter(|&c| !fight || enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT))
             .filter(|&c| !mine.iter().any(|&(m, army)| !army && near(m, c)))
             .filter(|&c| !others.iter().any(|&o| near(o, c)))
-            .map(|c| (mine.iter().filter(|&&(m, army)| army && near(m, c)).count(), c))
+            .map(|c| {
+                (
+                    mine.iter().filter(|&&(m, army)| army && near(m, c)).count(),
+                    c,
+                )
+            })
             .filter(|&(n, _)| n >= GROUP_MIN)
             .max_by_key(|&(n, c)| (n, std::cmp::Reverse((c.y, c.x))))
             .map(|(_, c)| c)

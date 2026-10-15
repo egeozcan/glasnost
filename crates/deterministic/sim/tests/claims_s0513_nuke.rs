@@ -72,6 +72,46 @@ fn claim7_busy_silo_records_target_and_sounds_but_no_second_missile() {
     assert_eq!(missiles(&w, "Lift").len(), 1);
 }
 
+#[test]
+fn claim47_busy_silo_interval_is_eight_ticks() {
+    // spec: S-0513 claim 47 (Q-0735: a silo that accepts a launch in tick t emits its missile in t + 1, queues guard in t + 8; a second launch starts a new sequence in t + 8 or later, not before; the new missile leaves on the next turn)
+    for (gap, expect) in [(0, 1), (1, 1), (2, 1), (7, 1), (8, 2), (9, 2)] {
+        let (mut w, silo) = ready_silo();
+        nuke::silo_launch(&mut w, ALPHA, STRIKE, at(0, 0), Some(silo));
+        for _ in 0..gap {
+            step(&mut w);
+        }
+        nuke::silo_launch(&mut w, ALPHA, STRIKE, at(3, 3), Some(silo));
+        for _ in 0..3 {
+            step(&mut w);
+        }
+        assert_eq!(missiles(&w, "Lift").len(), expect, "gap {gap}");
+    }
+}
+
+#[test]
+fn claim47_a_replacement_before_creation_retargets_and_one_after_does_not() {
+    // spec: S-0513 claim 47 (a busy launch still replaces the house's recorded target; an already-created upward missile keeps its own target, one not yet created takes the new one)
+    for (gap, expected) in [(0, at(3, 3)), (2, at(0, 0))] {
+        let (mut w, silo) = ready_silo();
+        nuke::silo_launch(&mut w, ALPHA, STRIKE, at(0, 0), Some(silo));
+        for _ in 0..gap {
+            step(&mut w);
+        }
+        nuke::silo_launch(&mut w, ALPHA, STRIKE, at(3, 3), Some(silo));
+        step(&mut w);
+        step(&mut w);
+        let up = missiles(&w, "Lift");
+        assert_eq!(up.len(), 1, "gap {gap}");
+        assert_eq!(
+            up[0].target,
+            Some(glasnost_sim::world::Target::Cell(expected)),
+            "gap {gap}"
+        );
+        assert_eq!(w.sw.houses[0].nuke_target, Some(at(3, 3)));
+    }
+}
+
 // --- Claims 8, 9 and 12 ------------------------------------------------------------
 
 #[test]

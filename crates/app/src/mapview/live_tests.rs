@@ -1351,6 +1351,9 @@ fn parachute_follows_its_paratrooper() {
     });
     live.after_tick();
     assert_eq!(live.attached(), vec![(trooper, start)]);
+    // spec: S-0522 claim 18 (Q-0754: the parachute carries its carrier's house name, for the house-colour unit palette, and the cell light sampled at creation)
+    let house = live.world.houses[0].name.as_bytes().to_vec();
+    assert_eq!(live.carriers(), vec![(trooper, house)]);
     live.redraw(&inputs, &mut scene);
     assert_eq!(live.counts.anims_drawn, 1, "the parachute is drawn");
     let lower = Pos { z: 590, ..start };

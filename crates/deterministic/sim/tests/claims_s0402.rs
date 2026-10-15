@@ -201,7 +201,10 @@ fn claim_10_refinery_docking_raises_no_tag() {
     testkit::run(&mut w, 200);
     assert_eq!(w.triggers.fired, f0, "no raise reached a firing");
     assert!(!w.triggers.variables[0] && !w.triggers.variables[1]);
-    assert!(w.obj(h).is_some_and(|o| o.on_map), "docking does not consume the harvester");
+    assert!(
+        w.obj(h).is_some_and(|o| o.on_map),
+        "docking does not consume the harvester"
+    );
 }
 
 // spec: S-0402 claim 3 and claim 13 (no building of a dock type: guard queued, 1 tick)

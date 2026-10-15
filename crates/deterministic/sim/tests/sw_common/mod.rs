@@ -32,7 +32,7 @@
 //!   teleporter);
 //! - storm values: countdown 30, duration 60, hit period 10, scatter
 //!   period 5, spread 6, separation 2, damage 50, warhead Bolt, clouds
-//!   CLOUD1 and CLOUD2 (middle frame 3), bolt BOLT, sounds Zap1 and Zap2;
+//!   CLOUD1 and CLOUD2 (7 image frames, no rate field so a stage delay of 1), bolt BOLT (canvas height 0), sounds Zap1 and Zap2;
 //! - curtain duration 100; shield radius 3, duration 80, blackout 120,
 //!   fade lead 20; siren `Siren`; invoke animations CURTA (curtain) and
 //!   SHIELDA (force shield).
@@ -144,8 +144,8 @@ pub fn ruleset() -> Ruleset {
             t.pre_dependent = Some("ChronoSphere".into());
             t
         }),
-        ("DROP", sw(Some("ParachuteDrop"), Some("ParaDrop"))),
-        ("SPY", sw(Some("SpyAircraft"), Some("SpyPlane"))),
+        ("DROP", sw(Some("Paradrop"), Some("ParaDrop"))),
+        ("SPY", sw(Some("SpyPlane"), Some("SpyPlane"))),
         ("SHIELD", {
             let mut t = sw(Some("ForceShield"), Some("ForceShield"));
             t.start_sound = Some("Hum".into());
@@ -153,19 +153,19 @@ pub fn ruleset() -> Ruleset {
             t
         }),
         ("DRAINER", {
-            let mut t = sw(None, Some("Drain"));
+            let mut t = sw(None, Some("Sabotage"));
             t.use_charge_drain = Some(true);
             t.flash_sidebar_tab_frames = Some(30);
             t
         }),
         ("MANUAL", {
-            let mut t = sw(None, Some("Manual"));
+            let mut t = sw(None, Some("Tote"));
             t.manual_control = Some(true);
             t
         }),
         ("SHARED", sw(None, Some("nuke"))),
         ("TIMED", {
-            let mut t = sw(None, Some("Timed"));
+            let mut t = sw(None, Some("Demolish"));
             t.is_powered = Some(false);
             t.show_timer = Some(true);
             t.flash_sidebar_tab_frames = Some(30);
@@ -363,6 +363,9 @@ pub fn ruleset() -> Ruleset {
             n.into(),
             AnimationType {
                 middle_frame: Some(3),
+                // 7 image frames of canvas height 0 (S-0513 claim 46, F4)
+                frame_count: Some(7),
+                canvas_height: Some(0),
                 ..Default::default()
             },
         );

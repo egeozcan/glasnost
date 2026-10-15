@@ -1140,7 +1140,11 @@ fn claim_11_other_locomotion_kinds_never_head_to_the_cell() {
                 exit: false,
             });
         }
-        assert_eq!(glasnost_sim::bridges::blow::heads_to(&w, id, c, z), expect, "{loco:?}");
+        assert_eq!(
+            glasnost_sim::bridges::blow::heads_to(&w, id, c, z),
+            expect,
+            "{loco:?}"
+        );
     }
 }
 

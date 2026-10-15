@@ -34,8 +34,7 @@ use glasnost_sim::world::{GameSetup, HouseId, Layer, Object, ObjectId, World};
 use super::anims::{self, AnimQuirks, Playback, Player};
 use super::build::{
     AnimDraw, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile, Painter,
-    ShadowAnchor,
-    find_type, rule_int,
+    ShadowAnchor, find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
 use super::unload::{self, Unloading};
@@ -334,6 +333,9 @@ struct LiveAnim {
     /// The object it is attached to (S-0109 claim 22), if any: a
     /// paratrooper's parachute (S-0522 claim 13).
     owner: Option<ObjectId>,
+    /// Its carrier's house name and the cell light sampled when it was
+    /// attached (S-0522 claim 18).
+    carrier: Option<(Vec<u8>, i32)>,
 }
 
 /// What playback asks of the live game: the follow-up types, the
@@ -794,6 +796,15 @@ impl Live {
             .collect()
     }
 
+    /// The attached animations' owners and carrier house names (tests).
+    #[cfg(test)]
+    pub(super) fn carriers(&self) -> Vec<(ObjectId, Vec<u8>)> {
+        self.anims
+            .iter()
+            .filter_map(|a| Some((a.owner?, a.carrier.as_ref()?.0.clone())))
+            .collect()
+    }
+
     /// Drops the computer houses' scripts: their houses are played
     /// elsewhere (the game client's `Game`).
     pub fn clear_scripts(&mut self) {
@@ -914,6 +925,7 @@ impl Live {
             layer,
             first_update,
             owner: None,
+            carrier: None,
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
         sprite
@@ -939,8 +951,15 @@ impl Live {
             a.owner = Some(trooper);
             // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
             a.layer = super::slots::Layer::Ground;
-            // Q-0754 interim: the ordinary ground-layer animation order
-            // against the paratrooper and the animation palette.
+            // spec: S-0522 claim 18 (the parachute is in the ground render layer and orders against the unit by S-0102 claims 5 and 6 with its sort adjustment; its palette is the carrier's house-colour unit palette, its brightness the unscaled ground light of the carrier's cell sampled now, at creation)
+            let house = self
+                .world
+                .obj(trooper)
+                .and_then(|o| o.owner)
+                .and_then(|h| self.world.houses.get(usize::from(h.0)))
+                .map(|h| h.name.as_bytes().to_vec());
+            let light = self.painter.ground_light(pos.cell());
+            a.carrier = house.map(|h| (h, light));
         }
     }
 
@@ -969,7 +988,8 @@ impl Live {
     /// The viewer's teleport source marker (S-0513 claims 33 and 34): a
     /// source pick places the marker animation over the picked cell,
     /// replacing an earlier one, and the launch removes it. Presentation
-    /// only, with cosmetic draws (Q-0741 interim: no scenario draws).
+    /// only, with cosmetic draws (the scenario draws of its creation are the
+    /// simulation's, taken at the pick: S-0513 claim 33).
     fn source_marker_event(
         &mut self,
         event: glasnost_sim::superweapons::SwEvent,
@@ -1393,11 +1413,12 @@ impl Live {
                         stage: a.player.stage(),
                         end: a.player.play.end,
                         pos: (a.pos.x, a.pos.y, a.pos.z),
+                        carrier: a.carrier.clone(),
                     },
                 ))
             })
             .collect();
-        let list: Vec<AnimDraw> = playing.iter().map(|(_, _, d)| *d).collect();
+        let list: Vec<AnimDraw> = playing.iter().map(|(_, _, d)| d.clone()).collect();
         let (drawn, notes) = self.painter.anims(inputs, scene, &list);
         self.notes.extend(notes);
         let mut anim_items: BTreeMap<u32, (super::slots::Layer, Vec<Item>)> = BTreeMap::new();

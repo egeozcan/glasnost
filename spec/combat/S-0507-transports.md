@@ -2,7 +2,7 @@
 id: S-0507
 title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -158,12 +158,21 @@ This spec does not repeat what other specs own:
    entry partner it also falls back to rest. Processing ends with the standard delay
    (S-0215 claim 6).
 
+   For a driving or ship passenger, a destination naming the transport is an object goal,
+   not a cell goal. S-0207 claim 26 governs its retention: with no active track, occupying
+   the cell of its supplied movement point alone clears neither the object goal nor the
+   locomotor destination point, whether the transport is moving or stationary. The resting
+   passenger's exact-point *guard* exception still applies. This does not override this
+   claim's loading replies, contact loss or fall-back to rest. A later assignment naming
+   a cell instead uses that claim's cell-goal cleanup, not its object-goal retention.
+
    An air transport accepts a loading request while its count is below its positive capacity,
    even while moving. It calls a passenger not currently moving toward a destination only
    while its own locomotor is stopped. Full aircraft give neither answer. The loading exchange
    does not itself test alliance or claim 4's exclusions.
    - Backing: `measurable` (T5 and T6) for the approach, ordinary stopped/moving and
-     capacity-change exchanges. `unmeasured` for destination-assignment failure, loss of both
+     capacity-change exchanges; S-0207 claim 26's D31 for transport-goal retention.
+     `unmeasured` for destination-assignment failure, loss of both
      entry partners, existing-tether exceptions and the precise turning/contact gates:
      no isolating ordinary-input scenario is established for these combinations.
    - Confidence: high for replies; medium for reach-region interpretation
@@ -171,7 +180,9 @@ This spec does not repeat what other specs own:
 6. **The moment of boarding.** A would-be passenger boards when it arrives at the transport's
    cell while the transport is its destination. A vehicle boards only while its current behaviour
    is *enter* and its contact is a transport. At that moment the transport answers again by claims
-   1, 2 and 4.
+   1, 2 and 4. This arrival-time boarding or refusal is separate from S-0207 claim 26's
+   locomotion cleanup: retaining an object goal on mere cell equality does not suppress
+   either outcome or guarantee that the passenger remains in *enter*.
 
    An infantry unit's qualifying arrival with the transport as destination gives one
    entered-by raise on the transport's current tag, with the infantry unit as causing object,
@@ -739,6 +750,18 @@ unit to enter it while it drives.
 - *Capacity-change variant:* establish contact with a vehicle, fill it with another passenger
   before the first arrives, and record the first requester's next processing. Expected:
   neither answer and, without a tether, broken contact rather than indefinite waiting.
+- *Vehicle-goal distinction (claims 5 and 6):* use a compatible driving or ship passenger
+  and record destination kind, supplied locomotor point, active track, behaviour, contact,
+  loading replies and boarding before and after each locomotion update. Follow S-0207
+  claim 26's D31 controls for moving and stationary transports and the resting passenger's
+  exact-point *guard* exception. With a transport object goal and no active track, mere
+  supplied-point cell equality must not itself clear either destination. A later cell-goal
+  assignment instead follows that claim's cell rule. Record arrival-time acceptance or
+  refusal separately: boarding may remove the passenger from the map, and refusal clears
+  its goal and queues *guard* with forced scatter. These effects do not falsify object-goal
+  retention. Cleanup caused solely by cell equality for a retained object goal, outside
+  the guard exception, does falsify it. A run without a verified ordinary-input or named-map
+  witness is inconclusive; do not write state to establish one.
 
 **T7. Where unloading is refused (claim 7).** A loaded vehicle transport:
 - on a bridge,
