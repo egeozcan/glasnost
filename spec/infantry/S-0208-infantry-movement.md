@@ -2,7 +2,7 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 28
+revision: 29
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -321,7 +321,22 @@ used by this spec:
    supply approach points, not reservations by themselves. Claim 21 below owns the walking
    consequence of a successful shortcut.
 
-   The chosen position is reserved at once: from the tick on which the walker chooses it, the
+   Transport exits also use this occupant-aware choice:
+   - S-0507 claim 10 uses the serving neighbour's centre as the desired point for an infantry
+     passenger leaving a vehicle transport. Its centre-class choice takes one ranged draw over
+     0 to 3 from the scenario random stream, with table O's right/left/bottom preferences.
+     Placement keeps that chosen position without another occupancy choice or position draw.
+   - S-0507 claim 13 uses the aircraft's exact world position, not its cell centre, as the
+     desired point for an infantry passenger released at surface height. Only the aircraft
+     itself is excluded from occupancy for this release; all other occupants still count.
+     A centre-class desired point uses the same randomized preferences; a side-class point
+     uses the corresponding non-random row. This is not S-0507 claim 10's neighbouring-cell choice.
+
+   S-0507 claims 10 and 13 own these release placements and their failure outcomes; their
+   backing is `measurable` (S-0507 scenario T13), with medium confidence for placement.
+   They do not create a walking-target reservation merely by choosing a point.
+
+   For an ordinary walker, the chosen position is reserved at once: from the tick on which the walker chooses it, the
    occupancy record of the cell being entered shows that position as taken, and the walker's
    previous mark is cleared using the former walking target's position and height, or its actual
    position and height when it had no walking target (S-0209 claims 1 and 15). The new position

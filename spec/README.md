@@ -68,7 +68,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0524](triggers/S-0524-mp-trigger-completion.md) | Multiplayer trigger completion (remaining stock actions and entry raises) | triggers | 4 | approved | — |
 | [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 2 | approved | — |
 | [S-0519](combat/S-0519-terror-attack-animals.md) | Terror and attack animals | combat | 2 | approved | — |
-| [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 28 | approved | — |
 | [S-0106](rendering/S-0106-voxel-tilt-slopes.md) | Slope shapes, terrain surface height and voxel tilt on slopes | rendering | 8 | approved | — |
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 15 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 13 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0507](combat/S-0507-transports.md) | Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers) | combat | 4 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 35 | approved | — |
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 39 | approved | — |
+| [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 29 | approved | — |
