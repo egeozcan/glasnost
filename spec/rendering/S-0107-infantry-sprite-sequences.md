@@ -2,11 +2,11 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0087, Q-0212]
 supersedes: []
@@ -33,6 +33,9 @@ Terms from the glossary are used as defined there, in particular *tick*, *facing
 *oracle*. Terms
 used by this spec only:
 
+- **Drawn as its disguise for a viewing house:** the presentation test of S-0516 claim 37,
+  distinct from the game-state test *appears disguised* of S-0516 claim 35. Here the viewing
+  house is the local player's house.
 - **Body sprite** (glossary *sprite*): the infantry type's body sprite holds *L* image frames. The
   first ⌊L/2⌋ image frames are body image frames, the second half are their shadows in the same
   order.
@@ -369,10 +372,12 @@ used by this spec only:
     - Backing: `measurable` (scenario M12)
     - Confidence: medium
 
-13. **Disguise.** When the unit's disguise is in effect against the local player, the image frame
-    is computed with claim 2 from the sequence table of the disguise type, using the unit's own
-    current sequence, stage and facing. The disguise type's entry decides *S*, *C* and *M*, so the
-    wrap of the stage follows the disguise type's frame count.
+13. **Disguise.** When the unit is drawn as its disguise for the local player's house
+    (S-0516 claim 37), the image frame is computed with claim 2 from the sequence table of the
+    disguise type, using the unit's own current sequence, stage and facing. The disguise type's
+    entry decides *S*, *C* and *M*, so the wrap of the stage follows the disguise type's frame
+    count. Otherwise claim 2 uses the unit's own type. This choice is presentation only:
+    whether the unit appears disguised in game state is the separate test of S-0516 claim 35.
     - Backing: `measurable` (scenario M13)
     - Confidence: medium
 
@@ -1586,11 +1591,16 @@ whose …") means any stock type with that property; the property is a precondit
   group then follows the body facing. Falsified if, in the first run, the drawn group changes only
   at the shots. Runs: one circuit of the vehicle per data set.
 - **M13 (claim 13).** Use an infantry type that can disguise, disguised as a type whose walk entry
-  has a different frame count. Watch it walk from the view of an enemy player, the local player.
-  Expected: its image frames are those of the disguise type's walk entry, wrapping after the
-  disguise type's frame count. From its owner's view, its own image frames show. Falsified if the
-  enemy sees the disguised unit's own image frames, or a wrap at its own frame count. Runs: one walk of at least
-  two wraps per view.
+  has a different frame count; named test art may supply distinct counts. In separate skirmish
+  runs, observe a walking unit owned by the local player and one owned by an enemy
+  computer-controlled house, with no disguise-detector coverage in the observed area. Record
+  tick-stamped image frames and the tick the disguise was taken. Expected: the enemy unit uses
+  the disguise type's walk entry and wraps at its frame count. The locally owned unit uses
+  that entry when (current tick − tick the disguise was taken) mod 256 is in 8 to 55,
+  and its own entry otherwise (S-0516 claim 37); translucency follows the same claim. Neither
+  image choice restarts its sequence or stage. Falsified by an entry choice outside those
+  intervals, a wrap at the wrong type's frame count, or a stage restart at an image change.
+  Runs: one walk of at least two wraps and 512 ticks per ownership case, under the common setup.
 - **M14 (claim 18).** Test art for one type: a *walk* cue with cue frame 1 (with *C* ≥ 2) and a
   *stand* cue with cue frame 0. Expected: while walking, the walk cue sounds once per *C* × 3 ticks. The
   *stand* cue sounds once on the tick a completed one-shot hands over to *stand*, for example when
