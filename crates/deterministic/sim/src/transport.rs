@@ -453,8 +453,8 @@ pub fn process_enter(w: &mut World, p: ObjectId) -> i32 {
 }
 
 /// The moment of boarding (claim 6), at a would-be passenger's arrival
-/// update. Returns whether the arrival was at a transport it is entering
-/// (then it boarded or was turned away).
+/// update. Returns whether it boarded (and so left the map); a unit turned
+/// away goes on with its ordinary arrival.
 pub fn arrival(w: &mut World, p: ObjectId) -> bool {
     let Some(o) = w.obj(p).cloned() else {
         return false;
@@ -481,10 +481,11 @@ pub fn arrival(w: &mut World, p: ObjectId) -> bool {
     // spec: S-0507 claim 6 (at that moment the transport answers again by claims 1, 2 and 4; neither counts as a refusal)
     if answer(w, t, p) == Answer::Accepts {
         board(w, p, t);
+        true
     } else {
         turned_away(w, p);
+        false
     }
-    true
 }
 
 /// A would-be passenger that the transport does not accept (claim 6).
@@ -1166,6 +1167,9 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
     // spec: S-0312 claim 12 (the vehicle's body facing rounded to the nearest of 256 steps, S-0204 F4 with n = 256)
     let facing = (n_step(to.body.value(w.tick), 256) * 256) as Facing;
     let reference = occupancy::reference_level(w, t);
+    // Q-0707 (interim: the destroyed vehicle itself is not counted by its passengers' entry test; it is out of its cell's list while they get out)
+    let at = w.cells.list(c, to.layer).iter().position(|&x| x == t);
+    w.cells.leave(c, to.layer, t);
     for p in passengers(w, t) {
         if let Some(tb) = w.obj_mut(t) {
             tb.transport.passengers.retain(|&x| x != p);
@@ -1216,6 +1220,9 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
             ob.beh.queue(Some(Behaviour::Hunt));
         }
     }
+    if let Some(at) = at {
+        w.cells.restore(c, to.layer, t, at);
+    }
 }
 
 /// Whether a passenger of an open-topped transport has its own passenger
@@ -1229,5 +1236,9 @@ pub fn passenger_weapon_index(w: &World, firer: ObjectId) -> Option<usize> {
         .and_then(|o| w.rules().unit(o.kind, o.type_index))
         .map_or(-1, |u| u.combat.open_transport_weapon);
     // spec: S-0308 claim 10 (−1 means choose normally)
-    usize::try_from(i).ok()
+    if i == -1 {
+        return None;
+    }
+    // spec: S-0308 Edge cases (a passenger weapon index outside −1 … 17 is treated as 0, a departure)
+    Some(usize::try_from(i).ok().filter(|&x| x < crate::combat::data::SLOTS).unwrap_or(0))
 }
