@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -610,9 +610,9 @@ superweapons (psychic domination and genetic mutation) are M7 and are not covere
     (claim 35). Every other examined object is left in place if it is protected, already has
     a warp pending, is being erased, is in a leaving stage, is phasing in, or is a vehicle still
     inside the vehicle factory with which it is in contact. Every remaining examined object
-    joins the warp group: it is released from its tank bunker, its docking, repair and similar
-    contact links end, a vehicle ceases to occupy its cell, and the object receives the landing
-    point defined in claim 36. Its subsequent warp follows claims 37 to 40.
+    joins the warp group: its tank-bunker link ends in place with walls-down effects
+    (S-0606 claim 14), its docking, repair and similar contact links end, a vehicle ceases to
+    occupy its cell, and the object receives the landing point defined in claim 36. Its subsequent warp follows claims 37 to 40.
 
     No owner test applies: enemy and neutral objects are warped or killed too. Passengers travel
     inside their transport; a mind-controlled object stays controlled.
@@ -1279,7 +1279,12 @@ is not under test.
   its factory and an aircraft in flight over the block; expected: both stay. A named map makes
   the factory vehicle organic and non-teleporting: it is killed, not exempted. Include a
   protected non-organic unit, a unit already warping, a bunkered vehicle, a controlled vehicle
-  and a loaded transport: the first two stay, the bunker link ends, control and passengers persist.
+  and a loaded transport: the first two stay, the bunker link ends in place with S-0606
+  claim 14's walls-down effects and no release track before the warp, control and passengers
+  persist. Record the bunker's wall animations, sound, occupancy, contact and queued behaviour:
+  expected cleared link and contact, *clearing* entry stage and *guard* queued, without an
+  immediate start. A retained link or contact, missing walls-down effects or a release track
+  before the warp falsifies the bunker-release claim.
   Repeat the pending unit test during its leaving stage: it stays on its original warp timeline.
   Warp a vehicle undergoing repair: its repair link ends and repair does not continue remotely
   after departure. Continued bunker confinement or remote repair falsifies the contact-ending
