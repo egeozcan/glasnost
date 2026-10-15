@@ -1305,39 +1305,39 @@ pub struct Quirks {
     // spec: S-0503 Edge cases
     #[serde(default = "on")]
     pub hover_stalled_start_reset: bool,
-    /// The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell. Not implemented yet (wave 2).
+    /// The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell.
     // spec: S-0511 claim 8, Edge cases
     #[serde(default = "on")]
     pub bridge_event_band_short: bool,
-    /// The bridge family comes from the 5 x 5 block while the high-bridge search reaches 3 cells; off: from the cell claim 16's table finds. Not implemented yet (wave 2).
+    /// The bridge family comes from the 5 x 5 block while the high-bridge search reaches 3 cells; off: from the cell claim 16's table finds.
     // spec: S-0511 claim 16, Edge cases
     #[serde(default = "on")]
     pub bridge_family_by_block: bool,
-    /// A span whose far piece is 30 or more cell steps away is never checked nor repaired; off: no limit. Not implemented yet (wave 2).
+    /// A span whose far piece is 30 or more cell steps away is never checked nor repaired; off: no limit.
     // spec: S-0511 claims 7 and 19, Edge cases
     #[serde(default = "on")]
     pub bridge_span_cap: bool,
-    /// A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated. Not implemented yet (wave 2).
+    /// A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated.
     // spec: S-0511 Edge cases
     #[serde(default = "on")]
     pub low_bridge_wrong_axis_recheck: bool,
-    /// Re-evaluation can turn a damaged strip back to an intact look; off: never from damaged to intact. Not implemented yet (wave 2).
+    /// Re-evaluation can turn a damaged strip back to an intact look; off: never from damaged to intact.
     // spec: S-0511 claim 14, Edge cases
     #[serde(default = "on")]
     pub low_strip_regress: bool,
-    /// A pier chipped on one side ignores a loss notice from that side; off: any pier in state 0 to 2 turns to 3. Not implemented yet (wave 2).
+    /// A pier chipped on one side ignores a loss notice from that side; off: any pier in state 0 to 2 turns to 3.
     // spec: S-0511 claim 6, Edge cases
     #[serde(default = "on")]
     pub pier_loss_notice_skips_chipped: bool,
-    /// Repair raises only the pier column after a collapse lowered the pier's whole tile; off: the whole tile is restored. Not implemented yet (wave 2).
+    /// Repair raises only the pier column after a collapse lowered the pier's whole tile; off: the whole tile is restored.
     // spec: S-0511 Edge cases
     #[serde(default = "on")]
     pub pier_repair_partial_height: bool,
-    /// An engineer entering a hut whose bridge needs no repair is used up; off: it is refused entry. Not implemented yet (wave 2).
+    /// An engineer entering a hut whose bridge needs no repair is used up; off: it is refused entry.
     // spec: S-0511 claims 17 and 18, Edge cases
     #[serde(default = "on")]
     pub repair_consumes_engineer_always: bool,
-    /// The repair walk passes over other bridges' cells and can repair a different bridge; off: it stops at the first cell that is not part of a bridge. Not implemented yet (wave 2).
+    /// The repair walk passes over other bridges' cells and can repair a different bridge; off: it stops at the first cell that is not part of a bridge.
     // spec: S-0511 claim 18, Edge cases
     #[serde(default = "on")]
     pub repair_walk_unbounded: bool,

@@ -3077,6 +3077,14 @@
           ],
           "default": null
         },
+        "bridge_destruction": {
+          "description": "`[MultiplayerDialogSettings] BridgeDestruction`, the default of the\nbridge-destruction game option (S-0511 Import mapping); absent: yes.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "build_off_ally": {
           "description": "`[MultiplayerDialogSettings] BuildOffAlly`, a default offered (S-0412 Import mapping); absent: yes.",
           "type": [
@@ -3914,6 +3922,17 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "bridge_explosions": {
+          "description": "`[General] BridgeExplosions`, animation names (S-0511 claim 9, F2).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
         },
         "bridge_strength": {
           "description": "`BridgeStrength` (S-0303 claim 18).",
@@ -4793,6 +4812,15 @@
           "format": "int32",
           "default": null
         },
+        "no_parachute_max_fall_rate": {
+          "description": "`[General] NoParachuteMaxFallRate`, leptons per update (S-0511 F3).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "normal_targeting_delay": {
           "description": "`NormalTargetingDelay`, ticks (S-0215 F6).",
           "type": [
@@ -4870,6 +4898,15 @@
           "format": "int32",
           "default": null
         },
+        "parachute_max_fall_rate": {
+          "description": "`[General] ParachuteMaxFallRate`, leptons per update (S-0511 F3).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "path_delay": {
           "description": "`[AI] PathDelay`, game minutes (S-0212 F3).",
           "anyOf": [
@@ -4901,6 +4938,14 @@
           "description": "`PlayerScatter` (S-0208 claim 11).",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "repair_bridge_sound": {
+          "description": "`[AudioVisual] RepairBridgeSound`, a sound name (S-0511 claim 17).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null
@@ -6611,17 +6656,17 @@
           "default": true
         },
         "bridge_event_band_short": {
-          "description": "The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell. Not implemented yet (wave 2).",
+          "description": "The last cell along a band is skipped and a one-cell band raises nothing; off: the band is processed to its last cell.",
           "type": "boolean",
           "default": true
         },
         "bridge_family_by_block": {
-          "description": "The bridge family comes from the 5 x 5 block while the high-bridge search reaches 3 cells; off: from the cell claim 16's table finds. Not implemented yet (wave 2).",
+          "description": "The bridge family comes from the 5 x 5 block while the high-bridge search reaches 3 cells; off: from the cell claim 16's table finds.",
           "type": "boolean",
           "default": true
         },
         "bridge_span_cap": {
-          "description": "A span whose far piece is 30 or more cell steps away is never checked nor repaired; off: no limit. Not implemented yet (wave 2).",
+          "description": "A span whose far piece is 30 or more cell steps away is never checked nor repaired; off: no limit.",
           "type": "boolean",
           "default": true
         },
@@ -7421,12 +7466,12 @@
           "default": true
         },
         "low_bridge_wrong_axis_recheck": {
-          "description": "A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated. Not implemented yet (wave 2).",
+          "description": "A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated.",
           "type": "boolean",
           "default": true
         },
         "low_strip_regress": {
-          "description": "Re-evaluation can turn a damaged strip back to an intact look; off: never from damaged to intact. Not implemented yet (wave 2).",
+          "description": "Re-evaluation can turn a damaged strip back to an intact look; off: never from damaged to intact.",
           "type": "boolean",
           "default": true
         },
@@ -7706,12 +7751,12 @@
           "default": true
         },
         "pier_loss_notice_skips_chipped": {
-          "description": "A pier chipped on one side ignores a loss notice from that side; off: any pier in state 0 to 2 turns to 3. Not implemented yet (wave 2).",
+          "description": "A pier chipped on one side ignores a loss notice from that side; off: any pier in state 0 to 2 turns to 3.",
           "type": "boolean",
           "default": true
         },
         "pier_repair_partial_height": {
-          "description": "Repair raises only the pier column after a collapse lowered the pier's whole tile; off: the whole tile is restored. Not implemented yet (wave 2).",
+          "description": "Repair raises only the pier column after a collapse lowered the pier's whole tile; off: the whole tile is restored.",
           "type": "boolean",
           "default": true
         },
@@ -7906,12 +7951,12 @@
           "default": true
         },
         "repair_consumes_engineer_always": {
-          "description": "An engineer entering a hut whose bridge needs no repair is used up; off: it is refused entry. Not implemented yet (wave 2).",
+          "description": "An engineer entering a hut whose bridge needs no repair is used up; off: it is refused entry.",
           "type": "boolean",
           "default": true
         },
         "repair_walk_unbounded": {
-          "description": "The repair walk passes over other bridges' cells and can repair a different bridge; off: it stops at the first cell that is not part of a bridge. Not implemented yet (wave 2).",
+          "description": "The repair walk passes over other bridges' cells and can repair a different bridge; off: it stops at the first cell that is not part of a bridge.",
           "type": "boolean",
           "default": true
         },
