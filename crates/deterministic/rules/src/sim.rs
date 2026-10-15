@@ -364,6 +364,23 @@ pub struct AnimationType {
     /// 25); absent when the import had no art.
     #[serde(default)]
     pub middle_frame: Option<i32>,
+    /// The image-frame count *F* of the type's current (drawn) sprite
+    /// (S-0513 claim 46, not twice the middle frame); absent when the import
+    /// had no such sprite.
+    #[serde(default)]
+    pub frame_count: Option<i32>,
+    /// The canvas height in pixels of that sprite's header (S-0513 F4);
+    /// absent when the import had no such sprite.
+    #[serde(default)]
+    pub canvas_height: Option<i32>,
+    /// `Rate`, the image frames per game minute (S-0109 claim 2); absent
+    /// or −1: not given.
+    #[serde(default)]
+    pub rate: Option<i32>,
+    /// `Normalized`, the game-speed normalisation flag (S-0109 claim 4);
+    /// absent: no.
+    #[serde(default)]
+    pub normalized: Option<bool>,
 }
 
 /// A particle type's fields that its creation draws read (S-0202 claim 15

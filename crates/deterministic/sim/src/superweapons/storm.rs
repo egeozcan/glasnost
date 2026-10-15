@@ -2,13 +2,14 @@
 //!
 //! One game-wide storm ([`super::Storm`]) and its present clouds
 //! ([`super::Cloud`]). The storm's update is row 3 of the tick (S-0203
-//! claim 1), before the turn pass. Cloud playback follows Q-0732's interim
-//! rule: the cloud's frame in tick *t* is ⌊(*t* − *t*₀) / *d*⌋ with *d* its
-//! drawn stage delay (1 when none is drawn), and its frame count is *F* =
-//! 2μ for the animation's middle frame μ (0 when μ is unknown).
+//! claim 1), before the turn pass. A cloud plays as an ordinary forward
+//! one-pass animation (S-0513 claim 46, S-0109 claims 2 to 5): its stage
+//! advances every effective stage delay *d* from the first advance
+//! *a* = *c* + *d*, and it is tested against the frame count *F* of its image.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
+use glasnost_num::geom::root_floor;
 use glasnost_num::{F64, Rounding};
 
 use super::{Cloud, StormState, SwEvent};
@@ -31,10 +32,6 @@ const LEVEL: i32 = 104;
 /// The bridge lift of F4's *b*₄: 4 levels on a high-bridge cell.
 // spec: S-0513 F4 (b₄, the lift of 4 levels on a high-bridge cell)
 const BRIDGE_LIFT: i32 = 4 * LEVEL;
-
-/// The bolt image height *H* the simulation assumes (Q-0739 interim).
-// spec: S-0513 F4 (H, the pixel height of the first bolt animation's image; not imported; Q-0739 interim: 0)
-pub const BOLT_HEIGHT: i32 = 0;
 
 /// *h*_c of F4 for a bolt image height of `h` pixels.
 pub fn cloud_lift(h: i32, mode: Rounding) -> i32 {
@@ -164,6 +161,35 @@ pub fn cloud(w: &mut World, cell: CellXY) {
     make_cloud(w, cell);
 }
 
+/// The effective stage delay of an animation created now (S-0109 claims 2
+/// to 4): the ranged draw `drawn` of a random rate, else its constant
+/// delay, else the rate field's (1 when not given), then the game-speed
+/// normalisation of a normalised type.
+fn stage_delay(w: &World, a: &crate::rules::AnimRules, drawn: Option<i32>) -> i32 {
+    let q = &w.rules().quirks;
+    let (d1, d2) = a.random_delay;
+    let d = if let Some(x) = drawn {
+        // spec: S-0109 claim 3 (d₁′ ≠ d₂′: the ranged draw is the stage delay)
+        x
+    } else if (d1, d2) != (0, 0) {
+        // spec: S-0109 claim 3 (d₁′ = d₂′, not both 0: no draw, the delay is that value)
+        d1
+    } else {
+        match a.rate {
+            // spec: S-0109 claim 2 (a type without the rate field has d = 1)
+            None => 1,
+            // spec: S-0109 claim 2 and F1 (d = ⌊900 / ρ⌋ for ρ > 0, 0 for ρ ≤ 0; a delay of 0 freezes the stage, it is not replaced by 1)
+            Some(r) => crate::rules::anim_delay(r, q.anim_fast_rate_freezes),
+        }
+    };
+    if a.normalized && q.speed_normalised_delays {
+        // spec: S-0109 claim 4 (a normalised type: N(d, s) with s the game speed when the delay is chosen)
+        crate::infantry::normalised(d, w.game_speed)
+    } else {
+        d
+    }
+}
+
 /// A cloud over `cell` (claim 17).
 fn make_cloud(w: &mut World, cell: CellXY) {
     let list = w.rules().superweapons.storm.clouds.clone();
@@ -175,12 +201,28 @@ fn make_cloud(w: &mut World, cell: CellXY) {
     let k = w.rng.list_pick(list.len() as u32) as usize;
     let name = list[k].clone();
     let mode = w.rules().mode;
-    let h_c = if w.rules().superweapons.storm.bolts.is_empty() {
+    let rules = w.rules_arc();
+    let Some(anim) = rules.animation(&name).filter(|a| a.frames.is_some()) else {
+        // spec: S-0513 claim 21 (a selected cloud type with no image: no cloud is made, a bad-data departure; the importer's warning is the type's missing art)
+        w.note(format!(
+            "S-0513 claim 21: the cloud type {name} has no image; no cloud is made"
+        ));
+        return;
+    };
+    let h_c = match rules.superweapons.storm.bolts.first() {
         // spec: S-0513 claim 21 (an empty bolt list: h_c = 0)
-        0
-    } else {
-        // spec: S-0513 F4 (h_c from the first bolt animation's image height H; Q-0739 interim H)
-        cloud_lift(BOLT_HEIGHT, mode)
+        None => 0,
+        Some(bolt) => {
+            // spec: S-0513 F4 (h_c from the canvas height H of the first bolt animation's image header)
+            let Some(h) = rules.animation(bolt).and_then(|b| b.canvas_height) else {
+                // spec: S-0513 claim 21 and F4 (a nonempty bolt list whose first type has no image: no cloud is made, a bad-data departure, no switch)
+                w.note(format!(
+                    "S-0513 claim 21: the first bolt type {bolt} has no image; no cloud is made"
+                ));
+                return;
+            };
+            cloud_lift(h, mode)
+        }
     };
     let mut pos = level_point(w, cell, BRIDGE_LIFT);
     // spec: S-0513 F4 (z = h_level + b₄ + h_c)
@@ -193,30 +235,42 @@ fn make_cloud(w: &mut World, cell: CellXY) {
         delay,
     });
     let t = w.tick;
+    let d = stage_delay(w, anim, delay);
     w.sw.clouds.push(Cloud {
         cell,
         anim: name,
         pos,
         created: t,
-        // spec: S-0513 claim 18 (Q-0732 interim: one frame per drawn stage delay, 1 when none is drawn)
-        delay: delay.unwrap_or(1).max(1),
+        // spec: S-0513 claim 46 (the effective stage delay of the ordinary playback; 0 freezes the stage)
+        delay: d,
         pending: true,
     });
 }
 
-/// A cloud's frame count *F* (Q-0732 interim: 2μ, 0 when μ is unknown).
+/// A cloud's frame count *F* (claim 46): the image-frame count of its
+/// sprite.
 fn frames(w: &World, c: &Cloud) -> i32 {
-    // spec: S-0513 claim 18 (F, the frame count of the cloud's image; Q-0732 interim F = 2μ, μ unknown: 0)
+    // spec: S-0513 claim 46 (F is the frame count of the cloud's current image, not twice a middle field)
     w.rules()
         .animation(&c.anim)
-        .and_then(|a| a.mu)
-        .map_or(0, |mu| 2 * mu)
+        .and_then(|a| a.frames)
+        .unwrap_or(0)
 }
 
-/// A cloud's current frame in tick `t` (Q-0732 interim).
-fn frame(c: &Cloud, t: i32) -> i32 {
-    // spec: S-0513 claim 18 (Q-0732 interim: frame ⌊(t − t₀) / d⌋)
-    (t - c.created) / c.delay.max(1)
+/// A cloud's stage as the weather update of tick `t` finds it (claim 46):
+/// the advances made before it. The cloud is created before the turn pass
+/// (the weather update, or a polled trigger), so its first update is in its
+/// creation tick; with *d* ≥ 1 the first advance is in tick *a* = *c* + *d*
+/// and advance *j* in *a* + (*j* − 1)*d*; weather precedes the animation
+/// turns of its tick.
+fn stage(c: &Cloud, t: i32) -> i32 {
+    // spec: S-0513 claim 46 (a zero stage delay freezes the stage; it is not replaced by 1 tick)
+    if c.delay < 1 {
+        return 0;
+    }
+    // spec: S-0513 claim 46 and S-0109 claim 5 (the first advance is max(c + d, u + 1) = c + d with u = c; advance j ≥ 1 in a + (j − 1)d)
+    let a = c.created.wrapping_add(c.delay);
+    if t <= a { 0 } else { (t - 1 - a) / c.delay + 1 }
 }
 
 /// The storm's update in row 3 of the tick (claims 14 to 19, T1).
@@ -235,19 +289,19 @@ pub fn update(w: &mut World) {
     for i in (0..w.sw.clouds.len()).rev() {
         let c = w.sw.clouds[i].clone();
         let f = frames(w, &c);
-        // spec: S-0513 claim 18 (strikes once its frame exceeds ⌊F / 2⌋; F ≤ 2 never strikes)
-        if c.pending && f > 2 && frame(&c, t) > f / 2 {
+        // spec: S-0513 claim 18 (strikes once its cloud stage exceeds ⌊F / 2⌋, F the frame count of its image; an ordinary cloud with F ≤ 2 is removed first and never strikes)
+        if c.pending && stage(&c, t) > f / 2 {
             if let Some(x) = w.sw.clouds.get_mut(i) {
                 x.pending = false;
             }
             strike(w, c.cell);
         }
     }
-    // spec: S-0513 claim 16 (a cloud is present until its animation reaches its last frame; claim 19: removed in that update)
+    // spec: S-0513 claims 16 and 46 (a cloud is present until a weather update finds its cloud stage at least F − 1; claim 19: removed in that update)
     let keep: Vec<bool> =
         w.sw.clouds
             .iter()
-            .map(|c| frame(c, t) < frames(w, c) - 1)
+            .map(|c| stage(c, t) < frames(w, c) - 1)
             .collect();
     let mut it = keep.into_iter();
     w.sw.clouds.retain(|_| it.next().unwrap_or(false));
@@ -322,45 +376,49 @@ fn raging_clouds(w: &mut World) {
 }
 
 /// What the debris test compares before and after a strike's damage
-/// (claim 18; Q-0740 interim): the cell's first building, its nearest
-/// unit and its height level.
+/// (claim 18): the cell's first ground-layer building, its strike witness
+/// and its height level.
 struct CellState {
     building: Option<ObjectId>,
-    unit: Option<ObjectId>,
+    witness: Option<ObjectId>,
     infantry: bool,
     level: i32,
-    empty: bool,
 }
 
 fn cell_state(w: &World, c: CellXY) -> CellState {
-    let list = w.cells.list(c, Layer::Ground);
-    let centre = Pos::centre(c, 0);
-    let mut unit: Option<(i64, ObjectId)> = None;
+    let table = w.rules().quirks.table_root_distance;
+    let mode = w.rules().mode;
+    let mut witness: Option<(u64, ObjectId)> = None;
     let mut building = None;
-    for &id in list {
+    // spec: S-0513 claim 18 (the witness is selected only from the cell's ground-layer listing, buildings and landed aircraft included, terrain objects excluded; deck objects and aircraft not in that listing do not count)
+    for &id in w.cells.list(c, Layer::Ground) {
         let Some(o) = w.obj(id) else { continue };
-        match o.kind {
-            Kind::Building => {
-                building = building.or(Some(id));
-            }
-            Kind::Infantry | Kind::Vehicle | Kind::Aircraft => {
-                let (dx, dy) = (i64::from(o.pos.x - centre.x), i64::from(o.pos.y - centre.y));
-                let d = dx * dx + dy * dy;
-                // Q-0740 interim: the smallest planar squared distance to the centre, ties to the first listed.
-                if unit.is_none_or(|(b, _)| d < b) {
-                    unit = Some((d, id));
-                }
-            }
-            _ => {}
+        if !matches!(
+            o.kind,
+            Kind::Building | Kind::Infantry | Kind::Vehicle | Kind::Aircraft
+        ) {
+            continue;
+        }
+        if o.kind == Kind::Building {
+            building = building.or(Some(id));
+        }
+        // spec: S-0513 claim 18 (x and y the position's integer lepton coordinates modulo 256; the distance trunc(r(x² + y²)) by S-0204 claim 5's table square root; the reference is the cell's top corner, height and foundation size do not enter)
+        let (x, y) = (
+            o.pos.x.rem_euclid(256) as u64,
+            o.pos.y.rem_euclid(256) as u64,
+        );
+        let d = root_floor(x * x + y * y, table, mode);
+        // spec: S-0513 claim 18 (the smallest integer distance wins; ties go to the first candidate in S-0209 claim 13's listing order)
+        if witness.is_none_or(|(b, _)| d < b) {
+            witness = Some((d, id));
         }
     }
-    let unit = unit.map(|u| u.1);
+    let witness = witness.map(|u| u.1);
     CellState {
         building,
-        unit,
-        infantry: unit.is_some_and(|u| w.obj(u).is_some_and(|o| o.kind == Kind::Infantry)),
+        witness,
+        infantry: witness.is_some_and(|u| w.obj(u).is_some_and(|o| o.kind == Kind::Infantry)),
         level: level(w, c),
-        empty: list.is_empty(),
     }
 }
 
@@ -410,17 +468,20 @@ fn strike(w: &mut World, cell: CellXY) {
         );
     }
     let after = cell_state(w, cell);
+    // spec: S-0513 claim 18 (the pre-damage strike witness is not infantry; no witness also passes)
     let not_infantry = !before.infantry;
+    // spec: S-0513 claim 18 (the first ground-layer building, the strike witness or the cell height level differs after damage; mere health loss without a changed witness, building or height does not)
     let changed = before.building != after.building
-        || before.unit != after.unit
+        || before.witness != after.witness
         || before.level != after.level;
-    // spec: S-0513 claim 18 (an empty cell whose land type is road, rock, wall or weeds, S-0211)
-    let bare = before.empty
+    // spec: S-0513 claim 18 ("held nothing" is neither a ground-layer building nor a strike witness, not an empty object list: a terrain object alone does not prevent it; the land type is road, rock, wall or weeds, S-0211)
+    let bare = before.building.is_none()
+        && before.witness.is_none()
         && matches!(
             land_type,
             land::ROAD | land::ROCK | land::WALL | land::WEEDS
         );
-    // spec: S-0513 claim 18 (debris when the nearest unit before the damage was not infantry and something changed, or the cell held nothing on bare land; Q-0740 interim details)
+    // spec: S-0513 claim 18 (debris as above)
     if not_infantry && (changed || bare) {
         // spec: S-0513 claim 18 (R(2, 4) pieces)
         let n = w.rng.ranged(2, 4, half);
@@ -429,7 +490,7 @@ fn strike(w: &mut World, cell: CellXY) {
             // spec: S-0513 claim 18 (each chosen by R(0, n − 1) over the metallic debris list, then its animation-creation draws)
             let k = w.rng.ranged(0, list.len() as i32 - 1, half);
             if let Some(name) = list.get(k as usize) {
-                // Q-0740 interim: at the strike point.
+                // spec: S-0513 claim 18 (every debris animation is created at the strike point: the cell centre at its height level plus the high-bridge lift, no additional 20-lepton lift, no horizontal displacement)
                 crate::combat::effects::anim(w, name, point);
             }
         }

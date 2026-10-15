@@ -102,7 +102,11 @@ pub fn chrono_seam(w: &World, id: ObjectId) -> bool {
 pub fn pick_source(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
     let mut p = super::cell_point(w, cell, true);
     p.z += super::protect::INVOKE_LIFT;
-    // spec: S-0513 claim 33 (the source marker over the cell, seen and heard by the launching player only; a new pick replaces it; claim 5: no announcement, no radar event); Q-0741 interim: a player-local marker takes no creation draws
+    // spec: S-0513 claim 33 (the marker is created whichever house is local, taking its ordinary animation creation draws on the scenario stream, S-0202 claim 10 and S-0109 claim 13; hiding it and silencing it for a viewer other than the launching player does not undo them)
+    if let Some(name) = w.rules().superweapons.chrono_placement.clone() {
+        let _ = crate::load::anim_created_at(w, &name, Some((p.x, p.y, p.z)));
+    }
+    // spec: S-0513 claim 33 (the source marker over the cell, seen and heard by the launching player only; a new pick replaces it; claim 5: no announcement, no radar event)
     super::event(w, SwEvent::SourceMarker, Some(h), Some(i), Some(p));
 }
 
@@ -263,7 +267,9 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY) {
     let landing = landing_in(w, o.kind, o.pos, to);
     if let Some(ob) = w.obj_mut(id) {
         ob.contact = None;
-        // Q-0738 interim: a member stops moving; the warp update replaces its turn.
+        // spec: S-0513 claim 48 (a member in its leaving stage drops its target and destination, and its former driving does not continue; Q-0738 interim, still open: the warp update replaces its turn)
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         ob.dest = None;
         ob.queued_dests.clear();
         ob.path.steps.clear();

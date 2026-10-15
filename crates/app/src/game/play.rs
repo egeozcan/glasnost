@@ -776,10 +776,26 @@ impl Play {
             Some(hud::Entry::Superweapon(sw)) => {
                 // spec: S-0512 claim 16 (selecting an icon that offers targeting arms that type, by its registration index)
                 if button == Button::Left && charge::offers_targeting(w, self.local, *sw) {
-                    self.tool = Tool::Superweapon {
-                        sw: *sw,
-                        from_source: false,
-                    };
+                    let sw = *sw;
+                    let no_action = w
+                        .rules()
+                        .superweapons
+                        .types
+                        .get(sw as usize)
+                        .is_some_and(|t| t.action.is_none());
+                    if no_action {
+                        // spec: S-0512 claim 23 (an otherwise fireable icon with no aim action issues that type's fire order at cell (0, 0), without entering aiming)
+                        self.issue(vec![Order::FireSuperweapon {
+                            sw,
+                            cell: CellXY::new(0, 0),
+                        }]);
+                    } else {
+                        // spec: S-0512 claim 23 (any recognised nonzero action enters aiming; this alone does not spend the charge)
+                        self.tool = Tool::Superweapon {
+                            sw,
+                            from_source: false,
+                        };
+                    }
                 }
                 return;
             }

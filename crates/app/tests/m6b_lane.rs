@@ -17,8 +17,8 @@
 //! the nuclear strike, the weather storm, the iron curtain, the teleport, the
 //! force shield, the paradrop plane and the spy plane; the type is found by
 //! its kind, never by name), and paratroopers dropping under their
-//! parachutes (S-0522; sent through `planes::paradrop` when no type has the
-//! paradrop kind, Q-0730), and the trigger events and actions of every
+//! parachutes (S-0522; sent through `planes::paradrop` only when no type has the
+//! paradrop kind), and the trigger events and actions of every
 //! offered map counted by how this engine covers them (S-0011, S-0524;
 //! counts and codes only). A new scene is one more function and one more
 //! row of [`SCENES`].
@@ -961,7 +961,7 @@ fn sw_force_shield(lane: &mut Lane) {
 /// is within 6 cells of the target.
 /// The plane comes through the aim when the type was found by its kind, else
 /// straight through `launch` (the plane functions of `superweapons::planes`;
-/// Q-0730: stock kind words may not resolve).
+/// a type of that kind is not found, S-0512 claim 24).
 fn plane_scene(
     lane: &mut Lane,
     sw: Option<u32>,
@@ -1061,7 +1061,9 @@ fn trigger_coverage(_lane: &mut Lane) {
         Coverage::Unknown => 2,
     };
     for i in 0..n {
-        let Some(lane) = Lane::start_on(i) else { return };
+        let Some(lane) = Lane::start_on(i) else {
+            return;
+        };
         let t = &lane.world().triggers.map;
         println!("map {i}: {} triggers", t.triggers.len());
         with += usize::from(!t.triggers.is_empty());
@@ -1077,14 +1079,22 @@ fn trigger_coverage(_lane: &mut Lane) {
                 let k = slot(action_coverage(a.code));
                 actions[k] += 1;
                 if k != 0 {
-                    *other.entry((if k == 1 { "seam action" } else { "action" }, a.code)).or_default() += 1;
+                    *other
+                        .entry((if k == 1 { "seam action" } else { "action" }, a.code))
+                        .or_default() += 1;
                 }
             }
         }
     }
     println!("maps: {n}, with triggers: {with}");
-    println!("events: {} implemented, {} seamed, {} outside", events[0], events[1], events[2]);
-    println!("actions: {} implemented, {} seamed, {} outside", actions[0], actions[1], actions[2]);
+    println!(
+        "events: {} implemented, {} seamed, {} outside",
+        events[0], events[1], events[2]
+    );
+    println!(
+        "actions: {} implemented, {} seamed, {} outside",
+        actions[0], actions[1], actions[2]
+    );
     for ((what, code), k) in other {
         println!("  {what} {code}: {k}");
     }
@@ -1094,7 +1104,7 @@ fn trigger_coverage(_lane: &mut Lane) {
 /// while its paratroopers are descending under their parachutes, then
 /// followed until they have all landed. The plane comes through the aim when
 /// a superweapon type has a paradrop kind, else straight through
-/// `planes::paradrop` (Q-0730: stock kind words may not resolve).
+/// `planes::paradrop` (S-0512 claim 24: the kind words are fixed, so a type is normally found).
 fn paratroopers_dropping(lane: &mut Lane) {
     let local = lane.local();
     let home = lane.home();
@@ -1164,7 +1174,9 @@ fn paratroopers_dropping(lane: &mut Lane) {
                 .into_iter()
                 .map(|id| glasnost_sim::air::height(lane.world(), id))
                 .collect();
-            println!("{descending} descending {t} ticks after the order; aircraft heights {heights:?}");
+            println!(
+                "{descending} descending {t} ticks after the order; aircraft heights {heights:?}"
+            );
             lane.save("paratroopers-dropping");
             shot = true;
             later = Some(t + 60);
@@ -1214,12 +1226,9 @@ fn transport_unloading(lane: &mut Lane) {
         return;
     };
     let home = lane.home();
-    let Some(at) = lane.area(
-        CellXY::new(home.x + 6, home.y + 6),
-        (3, 3),
-        2,
-        |l| l != land::WATER && l != land::ROCK,
-    ) else {
+    let Some(at) = lane.area(CellXY::new(home.x + 6, home.y + 6), (3, 3), 2, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
         println!("no open land");
         return;
     };
@@ -1227,7 +1236,14 @@ fn transport_unloading(lane: &mut Lane) {
     let t = lane.spawn(Kind::Vehicle, &tn, local, CellXY::new(at.x + 1, at.y + 1));
     let riders: Vec<ObjectId> = [(0, 0), (2, 0), (0, 2)]
         .iter()
-        .map(|&(dx, dy)| lane.spawn(Kind::Infantry, &fnm, local, CellXY::new(at.x + dx, at.y + dy)))
+        .map(|&(dx, dy)| {
+            lane.spawn(
+                Kind::Infantry,
+                &fnm,
+                local,
+                CellXY::new(at.x + dx, at.y + dy),
+            )
+        })
         .collect();
     lane.ticks(2);
     lane.look_at(at);

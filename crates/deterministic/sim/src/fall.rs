@@ -33,6 +33,10 @@ pub struct FallState {
     /// attached until the landing.
     #[serde(default)]
     pub chute: bool,
+    /// The absent-type transient of S-0522 claim 13: `chute` is set for the
+    /// release-tick fall update only, and both are cleared by it.
+    #[serde(default)]
+    pub chute_once: bool,
 }
 
 /// Whether `id` is falling.
@@ -85,8 +89,8 @@ pub fn next_chute_rate(w: &World, v: i32) -> i32 {
 /// `quirks.paratrooper_any_animation_slow_fall` (any attached animation, or
 /// the parachute only) select the same objects.
 fn slow(w: &World, o: &crate::world::Object) -> bool {
-    // spec: S-0522 Edge cases (quirks.paratrooper_any_animation_slow_fall: any attached animation, or only the parachute; the parachute is the only attachment, so both coincide)
-    let _ = w.rules().quirks.paratrooper_any_animation_slow_fall;
+    // spec: S-0522 Edge cases (quirks.paratrooper_any_animation_slow_fall: any attached animation, or only the parachute; the parachute is the only attachment, so both coincide for a held type; for an absent type the quirk selects the release-tick transient of claim 13, set at the release)
+    let _ = w;
     o.fall.chute
 }
 
@@ -125,6 +129,11 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
         ob.pos.z = z;
         // spec: S-0511 F3 (v_{n+1} follows every update, the landing update included; the landing test follows the move)
         ob.fall.rate = next;
+        if ob.fall.chute_once {
+            // spec: S-0522 claim 13 (an absent parachute type: the parachute recurrence applied once, in the release-tick update; there is no durable attachment, so the no-parachute recurrence follows)
+            ob.fall.chute_once = false;
+            ob.fall.chute = false;
+        }
         if landed {
             // spec: S-0511 claim 10 (height above the terrain 0 or less after the move: height 0, the fall ends)
             ob.pos.z = ground;

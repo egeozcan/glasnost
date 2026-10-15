@@ -1765,6 +1765,13 @@ impl Builder<'_> {
             if let Some(mu) = mu {
                 rec.put("middle_frame", int_node(mu));
             }
+            // spec: S-0513 claims 46 and F4 (the image-frame count F and the header canvas height of that sprite)
+            if let Some(n) = a.sprite_frames {
+                rec.put("frame_count", int_node(n));
+            }
+            if let Some(h) = a.sprite_height {
+                rec.put("canvas_height", int_node(h));
+            }
         }
         let Some(sec) = self.art_section(&t.name) else {
             return;
@@ -1778,7 +1785,14 @@ impl Builder<'_> {
                 jsonc::array(pair.iter().map(|&x| int_node(x)).collect()),
             );
         }
+        // spec: S-0109 Import mapping (Rate: an integer, delay 1 when absent; −1 keeps the held value, here none)
+        if let Some(r) = sec.value(b"Rate").and_then(value::integer)
+            && r != -1
+        {
+            rec.put("rate", int_node(r));
+        }
         for (field, key) in [
+            ("normalized", "Normalized"),
             ("bouncer", "Bouncer"),
             ("is_meteor", "IsMeteor"),
             ("tiberium_chain_reaction", "TiberiumChainReaction"),

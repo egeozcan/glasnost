@@ -73,6 +73,65 @@ fn claim3_and_5_grant_sets_t_and_readiness_comes_t_ticks_later() {
 }
 
 #[test]
+fn claim5_low_power_change_in_the_completing_update_prevents_completion() {
+    // spec: S-0512 claim 5 (a low-power change that suspends the record in the update where it would complete prevents the completion)
+    let (mut w, _, _) = curtain_game();
+    run(&mut w, 3);
+    // Due in the next house update.
+    let t = w.tick;
+    glasnost_sim::superweapons::record_mut(&mut w, ALPHA, CURTAIN)
+        .unwrap()
+        .restart(t, 0, true);
+    spawn(&mut w, "HOG", ALPHA, -4, 0);
+    step(&mut w);
+    step(&mut w);
+    let x = rec(&w, ALPHA, CURTAIN);
+    assert!(x.suspended && !x.ready, "suspended before completing");
+    assert!(!events(&w).contains(&(SwEvent::Ready, Some(ALPHA), Some(CURTAIN))));
+}
+
+#[test]
+fn claim5_without_the_power_change_the_same_record_completes() {
+    // spec: S-0512 claim 5 (control: a granted, running record whose remaining time reached 0 becomes ready with its announcement)
+    let (mut w, _, _) = curtain_game();
+    run(&mut w, 3);
+    let t = w.tick;
+    glasnost_sim::superweapons::record_mut(&mut w, ALPHA, CURTAIN)
+        .unwrap()
+        .restart(t, 0, true);
+    let mut seen = false;
+    for _ in 0..3 {
+        step(&mut w);
+        seen |= events(&w).contains(&(SwEvent::Ready, Some(ALPHA), Some(CURTAIN)));
+    }
+    assert!(rec(&w, ALPHA, CURTAIN).ready && seen);
+}
+
+#[test]
+fn claim5_a_check_in_the_same_update_does_not_withdraw_the_announcement() {
+    // spec: S-0512 claim 5 (if that update also includes a check under claim 2 (a), the record requests its ready announcement even if the check then removes it)
+    let (mut w, b, _) = curtain_game();
+    run(&mut w, 3);
+    let t = w.tick;
+    glasnost_sim::superweapons::record_mut(&mut w, ALPHA, CURTAIN)
+        .unwrap()
+        .restart(t, 0, true);
+    // The giving building goes between rechecks (no claim 2 (d) check is made here).
+    w.obj_mut(b).unwrap().on_map = false;
+    charge::house_update(&mut w, ALPHA, false);
+    charge::after_recheck(&mut w, ALPHA, true);
+    assert!(
+        events(&w).contains(&(SwEvent::Ready, Some(ALPHA), Some(CURTAIN))),
+        "the announcement was requested at completion"
+    );
+    let x = rec(&w, ALPHA, CURTAIN);
+    assert!(
+        !x.granted && !x.ready,
+        "and the check then removed the record"
+    );
+}
+
+#[test]
 fn claim3_grant_takes_no_draw_and_no_announcement() {
     // spec: S-0512 claim 3 (no announcement; the grant takes no random draw)
     let r = ruleset();
@@ -438,6 +497,63 @@ fn claim10_second_stage_restarts_first_stage() {
     let x = rec(&w, ALPHA, SOURCE);
     assert!(!x.ready && x.running && x.remain == T && x.start == l);
     assert_eq!(rec(&w, ALPHA, WARP), warp_before);
+}
+
+/// The first radar event's cell of the tick's effects.
+fn first_radar_cell(w: &glasnost_sim::world::World) -> Option<glasnost_map::CellXY> {
+    w.effects.iter().find_map(|e| match e {
+        glasnost_sim::combat::effects::Effect::Superweapon {
+            event: SwEvent::Radar,
+            pos: Some(p),
+            ..
+        } => Some(p.cell()),
+        _ => None,
+    })
+}
+
+#[test]
+fn claim10_second_stage_before_any_pick_warps_from_cell_zero_and_restarts_the_first_stage() {
+    // spec: S-0512 claim 10 (Q-0737: before any source has been picked the source is cell (0, 0), the warp is attempted, and a granted first stage restarts from T whether it was ready or still charging; a never-granted one is untouched)
+    for ready in [true, false] {
+        let r = ruleset();
+        let mut w = game(&r);
+        spawn(&mut w, "CHRONOB", ALPHA, 0, 0);
+        if ready {
+            ready_tick(&mut w, ALPHA, SOURCE, 200);
+        } else {
+            grant_tick(&mut w, ALPHA, SOURCE);
+        }
+        assert_eq!(rec(&w, ALPHA, SOURCE).source, None);
+        fire(&mut w, ALPHA, WARP, at(-3, -3));
+        fire(&mut w, BETA, WARP, at(-3, -3));
+        let l = w.tick;
+        w.effects.clear();
+        step(&mut w);
+        let x = rec(&w, ALPHA, SOURCE);
+        assert!(
+            !x.ready && x.running && x.remain == T && x.start == l,
+            "ready {ready}"
+        );
+        assert_eq!(first_radar_cell(&w), Some(glasnost_map::CellXY::new(0, 0)));
+        // The never-granted control acquires no charge.
+        assert_eq!(rec(&w, BETA, SOURCE), Default::default());
+    }
+}
+
+#[test]
+fn claim10_second_stage_before_any_pick_is_refused_with_the_quirk_off() {
+    // spec: S-0512 claim 10 (quirks.second_stage_order_unchecked off: no source selection means refusal, with neither effect nor restart)
+    let mut r = ruleset();
+    r.globals.quirks.second_stage_order_unchecked = false;
+    let mut w = game(&r);
+    spawn(&mut w, "CHRONOB", ALPHA, 0, 0);
+    ready_tick(&mut w, ALPHA, SOURCE, 200);
+    let before = rec(&w, ALPHA, SOURCE);
+    fire(&mut w, ALPHA, WARP, at(-3, -3));
+    w.effects.clear();
+    step(&mut w);
+    assert_eq!(rec(&w, ALPHA, SOURCE), before);
+    assert_eq!(first_radar_cell(&w), None);
 }
 
 #[test]

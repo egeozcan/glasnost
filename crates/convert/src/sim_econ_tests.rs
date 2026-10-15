@@ -43,7 +43,7 @@ const BASE: &str = "[Countries]\n0=Ruritania\n[Ruritania]\nCostUnitsMult=1.25\nI
 [PLANT]\nPower=100\nExtraPower=7\nSight=6\n\
 [VehicleTypes]\n0=TRUCK\n[TRUCK]\nDock=MILL,Elsewhere\nBuildLimit=3\nPoweredUnit=yes\n\
 [Tiberiums]\n0=Rubies\n1=Opals\n[Rubies]\nValue=33\nGrowthPercentage=0.2\nImage=1\n[Opals]\nImage=2\n\
-[SuperWeaponTypes]\n0=Zap\n[Zap]\nDisableableFromShell=yes\nType=Thing\n\
+[SuperWeaponTypes]\n0=Zap\n[Zap]\nDisableableFromShell=yes\nType=IronCurtain\n\
 [General]\nHarvesterLoadRate=9\nAIHateDelays=4,5,6\nPrerequisitePower=PLANT\nPadAircraft=Ghost\n\
 [AI]\nBuildTech=MILL\n\
 [AudioVisual]\nSavourDelay=0.5\n\
@@ -279,7 +279,7 @@ fn tiberiums_superweapons_and_general_econ() {
     assert_eq!(s.tiberiums["Rubies"].image_run, Some([102, 12, 8]));
     assert_eq!(s.tiberiums["Opals"].image_run, Some([27, 12, 0]));
     assert_eq!(s.superweapons["Zap"].disableable_from_shell, Some(true));
-    assert_eq!(s.superweapons["Zap"].kind.as_deref(), Some("Thing"));
+    assert_eq!(s.superweapons["Zap"].kind.as_deref(), Some("ironcurtain"));
     let g = &s.general.economy;
     assert_eq!(g.harvester_load_rate, Some(9));
     assert_eq!(
@@ -296,6 +296,32 @@ fn tiberiums_superweapons_and_general_econ() {
     assert_eq!(g.money, Some(777));
     assert_eq!(g.ai_hate_delays.as_deref(), Some(&[4, 5, 6][..]));
     assert!(g.savour_delay.is_some());
+}
+
+// spec: S-0512 claim 24 (the twelve kind words, whole and without regard to case; an unknown word keeps the previous layer's kind and link; no hyphen, underscore or space is ignored) and claim 23 (a word outside the action vocabulary sets no action; an empty value keeps the previous action)
+#[test]
+fn superweapon_kind_link_and_action_words_layer() {
+    let base = "[SuperWeaponTypes]\n0=Zap\n1=Bolt\n2=Fresh\n\
+[Zap]\nType=IronCurtain\nPreDependent=ChronoSphere\nAction=Nuke\n\
+[Bolt]\nType=MultiMissile\nAction=Nuke\n[Fresh]\nType=Iron-Curtain\nPreDependent=\nAction=\n";
+    let map = "[Zap]\nType=Iron_Curtain\nPreDependent=chrono warp\nAction=\n\
+[Bolt]\nType=PsychicReveal\nAction=Bogus\n";
+    let (s, w) = import_with_map(base, map);
+    let z = &s.superweapons["Zap"];
+    // Unknown spellings keep the base words; the empty action keeps the base action.
+    assert_eq!(z.kind.as_deref(), Some("ironcurtain"));
+    assert_eq!(z.pre_dependent.as_deref(), Some("chronosphere"));
+    assert_eq!(z.action.as_deref(), Some("nuke"));
+    // A listed word replaces the kind; a word outside the vocabulary sets no action.
+    let b = &s.superweapons["Bolt"];
+    assert_eq!(b.kind.as_deref(), Some("psychicreveal"));
+    assert_eq!(b.action.as_deref(), Some("none"));
+    // A type with only unknown words has no kind, link or action.
+    let f = s.superweapons.get("Fresh").cloned().unwrap_or_default();
+    assert_eq!(f.kind, None);
+    assert_eq!(f.pre_dependent, None);
+    assert_eq!(f.action, None);
+    assert!(w.iter().any(|m| m.contains("S-0512 claim 24")));
 }
 
 #[test]

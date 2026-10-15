@@ -79,17 +79,23 @@ pub fn silo_choice(w: &World, h: HouseId, i: u32) -> Option<ObjectId> {
     None
 }
 
+/// The silo's busy interval, ticks: a silo that accepts a post-turn launch
+/// in tick *t* emits its upward missile in *t* + 1, changes its launch
+/// picture in *t* + 2 and queues *guard* in *t* + 8, so a second launch
+/// starts a new sequence in *t* + 8 or later.
+// spec: S-0513 claim 47 (the 1-tick and 6-tick processing waits are engine constants: missile t + 1, picture t + 2, guard t + 8, independent of image frame counts and rates)
+const SILO_BUSY: i32 = 8;
+
 /// Whether a silo accepts the launch behaviour (claim 7): a selling silo
-/// refuses it, and so does one whose accepted launch has not left yet
-/// (Q-0735 interim for the busy silo).
+/// refuses it, and so does one still inside its launch sequence (claim 47).
 pub fn accepts(w: &World, s: ObjectId) -> bool {
     let Some(o) = w.obj(s) else { return false };
     // spec: S-0513 claim 7 (a selling silo refuses the launch behaviour)
     if behaviour_seen_selling(o) {
         return false;
     }
-    // spec: S-0513 claim 7 (one already in its launch sequence with nothing queued need not start a second; Q-0735 interim: busy until its upward missile leaves)
-    o.sw.silo_launch.is_none()
+    // spec: S-0513 claim 7 and claim 47 (one already in its launch sequence with nothing queued starts no second one: busy from acceptance until guard is queued 8 ticks later)
+    w.tick >= o.sw.silo_busy_until
 }
 
 /// A projectile of `weapon` placed now (its first turn is in this tick,
@@ -195,12 +201,20 @@ pub fn silo_launch(w: &mut World, h: HouseId, i: u32, cell: CellXY, silo: Option
     super::house_mut(w, h).nuke_target = Some(cell);
     sounds(w, Some(h), Some(i), cell);
     if !accepts(w, s) {
-        // spec: S-0513 claim 7 (a selling or busy silo: no additional missile)
+        // spec: S-0513 claims 7 and 47 (a selling or busy silo: no additional missile and no restart; a missile not yet created takes the new target)
+        if let Some(o) = w.obj_mut(s)
+            && let Some(l) = o.sw.silo_launch.as_mut()
+        {
+            l.0 = Some(cell);
+        }
         return;
     }
+    let t = w.tick;
     if let Some(o) = w.obj_mut(s) {
         // spec: S-0513 claim 8 (on the silo's next update the upward missile leaves)
         o.sw.silo_launch = Some((Some(cell), i));
+        // spec: S-0513 claim 47 (busy until guard is queued, 8 ticks after acceptance)
+        o.sw.silo_busy_until = t + SILO_BUSY;
     }
 }
 

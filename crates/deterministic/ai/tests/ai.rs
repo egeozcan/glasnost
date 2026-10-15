@@ -844,7 +844,7 @@ fn paradrop_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
     r.sim.superweapons.insert(
         "DROP".into(),
         SuperweaponType {
-            kind: Some("ParachuteDrop".into()),
+            kind: Some("Paradrop".into()),
             action: Some("ParaDrop".into()),
             recharge_time: Some(Decimal("0.1".into())),
             is_powered: Some(false),

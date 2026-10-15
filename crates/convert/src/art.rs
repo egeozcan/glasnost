@@ -190,6 +190,12 @@ pub struct TypeArt {
     /// file while the loading archives are mounted (S-0109 claim 25); none
     /// when there is no such sprite or the file does not parse.
     pub middle_sprite_frames: Option<i32>,
+    /// The image-frame count of [`TypeArt::sprite`], the sprite seen in play
+    /// (S-0513 claim 46: the frame count of the animation's current image);
+    /// none when there is no sprite or the file does not parse.
+    pub sprite_frames: Option<i32>,
+    /// The canvas height of [`TypeArt::sprite`]'s header (S-0513 F4).
+    pub sprite_height: Option<i32>,
     /// Notes on open or unusual cases.
     pub notes: Vec<String>,
 }

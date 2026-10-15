@@ -952,7 +952,7 @@ type TileImages = (
 type SpriteFrame = (u32, (i32, i32), (i32, i32));
 
 /// A playing animation of the live game to draw (S-0109).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AnimDraw {
     /// Its current type's import registration index.
     pub idx: usize,
@@ -964,6 +964,11 @@ pub struct AnimDraw {
     pub end: i32,
     /// World position in leptons.
     pub pos: (i32, i32, i32),
+    /// The house name of the object it is attached to and the unscaled
+    /// ground light of that object's cell sampled at creation: a
+    /// paratrooper's parachute is drawn with its carrier's house-colour unit
+    /// palette (S-0522 claim 18, S-0103 claim 8 row 3).
+    pub carrier: Option<(Vec<u8>, i32)>,
 }
 
 /// One entry of the object pass's ground layer (S-0102 claims 5 and 6).
@@ -2683,12 +2688,18 @@ impl Builder<'_> {
             cell_drawer: false,
             ..t.clone()
         };
-        let row = self.anim_row(
-            &unowned,
-            [0, 0, 0],
-            NEUTRAL_BRIGHTNESS,
-            CellXY::new(a.pos.0 >> 8, a.pos.1 >> 8),
-        );
+        let cell = CellXY::new(a.pos.0 >> 8, a.pos.1 >> 8);
+        let row = if let Some((house, light)) = &a.carrier {
+            // spec: S-0522 claim 18 and S-0103 claim 8 (an ordinary untiled parachute uses the carried infantry's house-colour unit palette, row 3, at the unscaled ground light of its cell sampled at creation, without extra unit light or an airborne-height addition; the normal-light override, special palettes and the tiled-copy exception stay S-0103 claim 8's)
+            let (hsv, _) = self.owner_colour(house);
+            let carried = slots::AnimType {
+                cell_drawer: true,
+                ..t.clone()
+            };
+            self.anim_row(&carried, hsv, *light, cell)
+        } else {
+            self.anim_row(&unowned, [0, 0, 0], NEUTRAL_BRIGHTNESS, cell)
+        };
         // spec: S-0109 claim 20 (an animation other than a building's slot animations has t = 0)
         let code = slots::translucency(&t, self.options.detail.number(), a.stage, a.end);
         let items = self.anim_items(
@@ -3916,6 +3927,14 @@ pub struct Inputs<'a> {
 }
 
 impl Painter {
+    /// The unscaled ground light of a cell (S-0104 claim 13), the neutral
+    /// brightness off the lit area.
+    pub fn ground_light(&self, cell: CellXY) -> i32 {
+        self.lights
+            .get(cell)
+            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
+    }
+
     fn new(art: Document, canvas: voxel::VoxelCanvas) -> Self {
         Self {
             art,

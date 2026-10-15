@@ -174,24 +174,25 @@ pub fn attempt(w: &mut World, plane: ObjectId) -> bool {
 /// `p`: the cell and the standing position's point, or `None` when the
 /// drop is refused.
 ///
-/// The order of the tests is Q-0750's interim: the standing-position
-/// choice first (so a refused attempt that reaches the centre-class row
-/// still takes its draw, claims 9 and 16), then the entry outcome, the
-/// usable area, the deck-entry mark and the nearby-cell qualification.
+/// The order of the tests is claim 9's: the entry outcome first (a refusal
+/// there suppresses the standing-position selection entirely, so it takes no
+/// draw); once entry is clear the standing position is selected, and the
+/// usable-area, deck-entry-mark and nearby-cell qualification refusals that
+/// follow have each taken the centre-class row's draw (claims 9 and 16).
 fn landing(w: &mut World, p: ObjectId, x: i32, y: i32) -> Option<(CellXY, (i32, i32))> {
     let c = Pos::new(x, y, 0).cell();
     w.cells.cell(c)?;
     let (kind, ti) = w.obj(p).map(|o| (o.kind, o.type_index))?;
     let u = w.rules().unit(kind, ti)?.clone();
     let top = w.rules().quirks.top_position_counts_as_centre;
-    // spec: S-0522 claim 9 (S-0208 claim 3 with the drop point as the desired point and the cell's ground occupancy record, also on a bridge cell)
-    let class = walk::position_class(x.rem_euclid(256), y.rem_euclid(256), top); // spec: S-0204 claim 2 (the position within its cell, 0 … 255 per axis)
-    let pos = walk::choose_position(w, c, Layer::Ground, class, false)?;
     let high = w.cells.is_bridge(c);
-    // spec: S-0522 claim 9 (S-0209's entry outcome clear under S-0208 claim 19's landing-entry rules: deck objects and record on a high-bridge cell, the level −6 bypass)
+    // spec: S-0522 claim 9 (S-0209's entry outcome clear under S-0208 claim 19's landing-entry rules: deck objects and record on a high-bridge cell, the level −6 bypass; a refusal here suppresses the standing-position selection, so it takes no draw)
     if !crate::teleport::entry_clear(w, p, c, high) {
         return None;
     }
+    // spec: S-0522 claim 9 (S-0208 claim 3 with the drop point as the desired point and the cell's ground occupancy record, also on a bridge cell; no standing-position result also refuses the drop, without reaching the later conditions)
+    let class = walk::position_class(x.rem_euclid(256), y.rem_euclid(256), top); // spec: S-0204 claim 2 (the position within its cell, 0 … 255 per axis)
+    let pos = walk::choose_position(w, c, Layer::Ground, class, false)?;
     let (su, sv) = walk::standing_point(pos);
     let at = (256 * c.x + su, 256 * c.y + sv); // spec: S-0208 table P (a standing position within the cell)
     // spec: S-0522 claim 9 (the standing position lies inside the usable area)
@@ -214,21 +215,26 @@ fn landing(w: &mut World, p: ObjectId, x: i32, y: i32) -> Option<(CellXY, (i32, 
 fn release(w: &mut World, plane: ObjectId, p: ObjectId, c: CellXY, at: Pos) {
     let plane_pos = w.obj(plane).map(|o| o.pos);
     let owner = w.obj(plane).and_then(|o| o.owner);
-    // spec: S-0522 claim 9 (a paratrooper whose cell is a bridge cell is on the bridge deck); Q-0750 interim: its standing-position mark is in the deck record
-    let layer = crate::teleport::landing_layer(w, c);
-    // spec: S-0522 claim 9 (at the standing position, at the plane's own height, facing 32768); Q-0753 interim: the ordinary placement, with its fall-back to rest
+    // spec: S-0522 claim 9 (a paratrooper whose cell is a bridge cell is on the bridge deck: its standing-position mark is in the deck record throughout descent and after landing, not the ground record that chose the position; the marking test uses the unit's actual height, the deck at or above the terrain surface plus 416 leptons on a high-bridge cell, the ground below it; exact integer comparisons)
+    let layer = if crate::teleport::landing_layer(w, c) == Layer::Deck
+        && at.z >= w.surface_at(at.x, at.y) + crate::teleport::DECK_HEIGHT
+    {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    // spec: S-0522 claim 9 (at the standing position, at the plane's own height, facing 32768) and claim 17 (the ordinary placement fall-back to rest: current behaviour none, guard or area guard queued, no target and no destination)
     crate::transport::drop_out(w, plane, p, at, TROOPER_FACING, layer);
     // spec: S-0522 claim 12 (it falls, from the fall rate it already holds)
     crate::fall::start(w, p, false);
-    // spec: S-0522 claim 13 (the parachute is attached when its type is defined); Q-0752 interim: an absent or unlisted type attaches nothing
-    let chute = w
-        .rules()
-        .superweapons
-        .parachute
-        .clone()
-        .filter(|n| w.rules().animation(n).is_some());
+    // spec: S-0522 claim 13 (the parachute is attached when a type is held; an unlisted name was created as an animation type by the importer, S-0004 claims 2 and 13, and takes no draw when it has no fields; only a genuinely absent type attaches nothing)
+    let chute = w.rules().superweapons.parachute.clone();
+    let slow_fall = w.rules().quirks.paratrooper_any_animation_slow_fall;
     if let Some(ob) = w.obj_mut(p) {
+        // spec: S-0522 claim 13 (an absent type: with quirks.paratrooper_any_animation_slow_fall on, the release-tick fall update uses the parachute recurrence once and the no-parachute one from the next tick, with no durable attachment; with it off, the no-parachute recurrence from the first update)
         ob.fall.chute = chute.is_some();
+        ob.fall.chute_once = chute.is_none() && slow_fall;
+        ob.fall.chute |= ob.fall.chute_once;
     }
     // spec: S-0522 claim 12 and S-0107 claim 21 (the parachute sequence, forced, while it falls)
     crate::infantry::request(w, p, crate::infantry::Seq::Parachute, true);

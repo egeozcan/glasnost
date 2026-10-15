@@ -1,7 +1,7 @@
 //! Claim tests of S-0513 claims 14 to 21 (the weather storm), table T1 and
 //! Formulas F4 to F6, on synthetic rules (`tests/sw_common`: countdown 30,
 //! duration 60, hit period 10, scatter period 5, spread 6, separation 2,
-//! damage 50, clouds with middle frame 3).
+//! damage 50, clouds of 7 image frames with a stage delay of 1).
 
 mod sw_common;
 
@@ -178,7 +178,7 @@ fn claim16_centre_clouds_on_absolute_multiples_and_scatter_separation() {
 
 #[test]
 fn claim17_cloud_height_and_list_pick() {
-    // spec: S-0513 claim 17 and F4 (over the cell centre at h_level + h_c; Q-0739 interim H = 0, h_c = −3); one list pick before the creation draws
+    // spec: S-0513 claim 17 and F4 (over the cell centre at h_level + h_c; the fixture bolt image header has canvas height 0, so h_c = −3); one list pick before the creation draws
     let mut w = game(&ruleset());
     let taken = w.rng.taken();
     storm::cloud(&mut w, at(1, 1));
@@ -213,18 +213,239 @@ fn claim18_trigger_cloud_strikes_while_idle_without_credit() {
     assert!(lightning, "the strike plays a lightning sound");
     assert!(w.obj(cart).is_none_or(|o| o.health < h0));
     assert_eq!(w.sw.storm.state, StormState::Idle);
-    // The cloud goes once it reaches its last frame (Q-0732 interim F = 2μ).
+    // The cloud goes once a weather update finds its stage at F - 1 (claim 46).
     until(&mut w, 100, |w| w.sw.clouds.is_empty());
 }
 
+/// The debris animations a strike at the cell (0, 0) makes with a vehicle at
+/// in-cell offset `cart_at` and an infantry unit at `walker_at` (both in
+/// cell (0, 0) of the middle), the vehicle one hit from death and the
+/// infantry unit sturdy: the debris pieces' positions.
+fn strike_debris(cart_at: (i32, i32), walker_at: (i32, i32)) -> Vec<glasnost_sim::world::Pos> {
+    let mut r = ruleset();
+    r.sim.vehicles.get_mut("CART").unwrap().strength = Some(40);
+    r.sim.infantry.get_mut("WALKER").unwrap().strength = Some(5000);
+    r.sim.general.metallic_debris = Some(vec!["DEB1".into(), "DEB2".into()]);
+    for n in ["DEB1", "DEB2"] {
+        r.sim
+            .animations
+            .insert(n.into(), glasnost_rules::sim::AnimationType::default());
+        r.registries
+            .entry("animations".into())
+            .or_default()
+            .push(n.into());
+    }
+    let mut w = game(&r);
+    let cart = spawn(&mut w, "CART", BETA, 0, 0);
+    let walker = spawn(&mut w, "WALKER", BETA, 0, 0);
+    let base = at(0, 0);
+    for (id, (x, y)) in [(cart, cart_at), (walker, walker_at)] {
+        let o = w.obj_mut(id).unwrap();
+        o.pos.x = base.x * 256 + x;
+        o.pos.y = base.y * 256 + y;
+    }
+    storm::cloud(&mut w, base);
+    for _ in 0..100 {
+        w.effects.clear();
+        step(&mut w);
+        if events(&w)
+            .iter()
+            .any(|e| matches!(e.0, SwEvent::Lightning(_)))
+        {
+            assert!(
+                w.obj(cart).is_none_or(|o| o.health <= 0),
+                "the vehicle died"
+            );
+            return w
+                .effects
+                .iter()
+                .filter_map(|e| match e {
+                    glasnost_sim::combat::effects::Effect::Anim { name, pos, .. }
+                        if name.starts_with("DEB") =>
+                    {
+                        Some(*pos)
+                    }
+                    _ => None,
+                })
+                .collect();
+        }
+    }
+    panic!("no strike");
+}
+
 #[test]
-fn claim18_strike_frame_after_middle_frame() {
-    // spec: S-0513 claim 18 (Q-0732 interim: a cloud with μ = 3 strikes in the first update whose frame ⌊(t − t₀) / d⌋ exceeds 3)
-    let mut w = game(&ruleset());
+fn claim18_debris_follows_the_top_corner_witness_not_the_centre_nearest_unit() {
+    // spec: S-0513 claim 18 (Q-0740: the witness is the ground-layer candidate with the smallest trunc(r(x² + y²)) of its in-cell position, the top corner as reference; debris only when the pre-damage witness is not infantry and the witness changed)
+    // Vehicle near the top corner, infantry near the centre: the vehicle is the witness, it dies, debris.
+    let pieces = strike_debris((20, 20), (130, 130));
+    assert!((2..=4).contains(&pieces.len()), "{}", pieces.len());
+    // Debris is created at the strike point: the cell centre at its height level, no 20-lepton lift.
+    let c = at(0, 0);
+    let level = 0; // flat test map
+    for p in &pieces {
+        assert_eq!((p.x, p.y), (c.x * 256 + 128, c.y * 256 + 128));
+        assert_eq!(p.z, level);
+    }
+    // Reversed: the infantry unit is nearer the top corner, so it is the witness and no debris is left.
+    let pieces = strike_debris((130, 130), (20, 20));
+    assert!(pieces.is_empty());
+}
+
+/// The synthetic rules with both clouds of `frames` image frames and rate
+/// `rate` (None: no rate field).
+fn cloud_rules(frames: i32, rate: Option<i32>) -> glasnost_rules::schema::Ruleset {
+    let mut r = ruleset();
+    for n in ["CLOUD1", "CLOUD2"] {
+        let a = r.sim.animations.get_mut(n).unwrap();
+        a.frame_count = Some(frames);
+        a.middle_frame = Some(frames / 2);
+        a.rate = rate;
+    }
+    r
+}
+
+#[test]
+fn claim46_forward_cloud_strike_and_presence_ticks() {
+    // spec: S-0513 claim 46 (an ordinary forward one-pass cloud created before the turn pass: strike in tick c + (⌊F/2⌋ + 1)d + 1 for F ≥ 3, ceasing to be present in tick c + (F − 1)d + 1; Q-0732)
+    for frames in [3, 5, 8] {
+        for d in [1, 2, 4] {
+            let r = cloud_rules(frames, Some(900 / d));
+            let mut w = game(&r);
+            storm::cloud(&mut w, at(0, 0));
+            let c = w.sw.clouds[0].clone();
+            assert_eq!(c.delay, d, "F {frames} d {d}");
+            let (mut strike, mut gone) = (None, None);
+            for _ in 0..200 {
+                let t = w.tick;
+                if tick_events(&mut w)
+                    .iter()
+                    .any(|e| matches!(e, SwEvent::Lightning(_)))
+                {
+                    strike = Some(t);
+                }
+                if w.sw.clouds.is_empty() {
+                    gone = Some(t);
+                    break;
+                }
+            }
+            assert_eq!(
+                strike,
+                Some(c.created + (frames / 2 + 1) * d + 1),
+                "F {frames} d {d}"
+            );
+            assert_eq!(
+                gone,
+                Some(c.created + (frames - 1) * d + 1),
+                "F {frames} d {d}"
+            );
+        }
+    }
+}
+
+#[test]
+fn claim46_short_clouds_never_strike() {
+    // spec: S-0513 claim 46 and claim 18 (with F of 1 or 2 the ordinary cloud is removed before a striking stage survives to a weather update)
+    for frames in [1, 2] {
+        let r = cloud_rules(frames, Some(450));
+        let mut w = game(&r);
+        let cart = spawn(&mut w, "CART", BETA, 0, 0);
+        let h0 = w.obj(cart).unwrap().health;
+        storm::cloud(&mut w, at(0, 0));
+        while !w.sw.clouds.is_empty() {
+            assert!(w.sw.clouds[0].pending, "F {frames}: never struck");
+            step(&mut w);
+        }
+        assert_eq!(w.obj(cart).unwrap().health, h0);
+    }
+}
+
+#[test]
+fn claim46_zero_delay_freezes_the_stage() {
+    // spec: S-0513 claim 46 and S-0109 claim 2 (a zero stage delay freezes the stage; it is not replaced by 1 tick, so the cloud neither strikes nor goes)
+    let r = cloud_rules(5, Some(0));
+    let mut w = game(&r);
+    storm::cloud(&mut w, at(0, 0));
+    run(&mut w, 60);
+    assert_eq!(w.sw.clouds.len(), 1);
+    assert!(w.sw.clouds[0].pending);
+    assert_eq!(w.sw.clouds[0].delay, 0);
+}
+
+#[test]
+fn claim46_random_rate_uses_the_drawn_delay() {
+    // spec: S-0513 claim 46 and S-0109 claim 3 (a random rate pair with differing delays: the stage delay is the creation's ranged draw)
+    let mut r = cloud_rules(5, Some(900));
+    for n in ["CLOUD1", "CLOUD2"] {
+        r.sim.animations.get_mut(n).unwrap().random_rate = Some([450, 225]);
+    }
+    let mut w = game(&r);
     storm::cloud(&mut w, at(0, 0));
     let c = w.sw.clouds[0].clone();
-    let t = until(&mut w, 200, |w| !w.sw.clouds[0].pending) - 1;
-    assert_eq!(t, c.created + 4 * c.delay);
+    assert!((2..=4).contains(&c.delay), "drawn delay {}", c.delay);
+    let strike = until(&mut w, 200, |w| !w.sw.clouds[0].pending) - 1;
+    assert_eq!(strike, c.created + (5 / 2 + 1) * c.delay + 1);
+}
+
+#[test]
+fn claim46_frame_count_is_the_image_not_twice_the_middle_field() {
+    // spec: S-0513 claim 46 (the threshold uses the frame count F of the current image: odd counts and a middle field from another sprite do not give F = 2μ)
+    let mut r = cloud_rules(5, Some(900));
+    for n in ["CLOUD1", "CLOUD2"] {
+        r.sim.animations.get_mut(n).unwrap().middle_frame = Some(10);
+    }
+    let mut w = game(&r);
+    storm::cloud(&mut w, at(0, 0));
+    let c = w.sw.clouds[0].clone();
+    let strike = until(&mut w, 200, |w| !w.sw.clouds[0].pending) - 1;
+    assert_eq!(strike, c.created + 3 + 1);
+}
+
+#[test]
+fn claim46_normalised_type_takes_the_speed_normalised_delay() {
+    // spec: S-0513 claim 46 and S-0109 claim 4 (a normalised type's delay is N(d, s) for the game speed s when it is chosen)
+    let mut r = cloud_rules(5, Some(225));
+    for n in ["CLOUD1", "CLOUD2"] {
+        r.sim.animations.get_mut(n).unwrap().normalized = Some(true);
+    }
+    let mut w = game(&r);
+    storm::cloud(&mut w, at(0, 0));
+    let expected = glasnost_sim::infantry::normalised(4, w.game_speed);
+    assert_eq!(w.sw.clouds[0].delay, expected);
+}
+
+#[test]
+fn claim21_f4_height_follows_the_header_canvas_height() {
+    // spec: S-0513 F4 (the cloud's height term comes from the first bolt image's header canvas height H)
+    let mut r = ruleset();
+    r.sim.animations.get_mut("BOLT").unwrap().canvas_height = Some(100);
+    let mut w = game(&r);
+    storm::cloud(&mut w, at(1, 1));
+    let lvl = i32::from(w.cells.cell(at(1, 1)).unwrap().level);
+    assert_eq!(w.sw.clouds[0].pos.z, lvl * 104 + 344);
+}
+
+#[test]
+fn claim21_missing_images_make_no_cloud() {
+    // spec: S-0513 claim 21 and F4 (a selected cloud type with no image, or a nonempty bolt list whose first type has no image: no cloud; the selection draw was taken, no creation draw follows)
+    for broken in ["CLOUD1", "BOLT"] {
+        let mut r = ruleset();
+        if broken == "BOLT" {
+            r.sim.animations.get_mut("BOLT").unwrap().canvas_height = None;
+        } else {
+            for n in ["CLOUD1", "CLOUD2"] {
+                r.sim.animations.get_mut(n).unwrap().frame_count = None;
+            }
+        }
+        let mut w = game(&r);
+        let taken = w.rng.taken();
+        storm::cloud(&mut w, at(0, 0));
+        assert!(w.sw.clouds.is_empty(), "{broken}");
+        assert_eq!(
+            w.rng.taken(),
+            taken + 1,
+            "{broken}: only the selection draw"
+        );
+    }
 }
 
 // --- Claim 19 --------------------------------------------------------------------------------
