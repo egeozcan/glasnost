@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -426,10 +426,14 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 
 8. **Vehicles, aircraft and buildings on an object.** The final action of an own vehicle follows
    table V, of an own aircraft table AC and of an own building table B, in the same way.
+   An ordinary click on an already-full repair depot gives no enter order. This differs from
+   enter orders issued together before contact is reserved: their execution can leave a damaged
+   second vehicle waiting under S-0314 claim 23, rather than approaching immediately.
    - Backing: `measurable` (Scenarios T6, T9 part D and T10; S-0504 claim 7 and scenario N7
      for the naval-mismatch docking refusal and amphibious exception; S-0507 claims 2, 4 and 7,
      T2, T4 and T7 for transport answers and readiness; S-0314 claim 16 and H16 a, b and d,
-     plus Scenario T6 below, for depot permission and click outcomes). Rows that the list after Scenario
+     plus Scenario T6 below, for depot permission and click outcomes; S-0314 claim 23 and
+     H18 f for orders issued together and queued entry). Rows that the list after Scenario
      T10 gives as `unmeasured` have no step, each with its reason.
    - Confidence: medium for table V; low for tables AC and B
 
@@ -1268,8 +1272,11 @@ tests. Repair after arrival belongs to S-0314 claim 6.
 At an ordinary one-place depot whose contact is already held by another vehicle, an ordinary
 second vehicle click with *b* = *select* keeps *select* through n4: it does not produce an
 enter order or enqueue a waiting vehicle. This is not automatically *no-enter*. Claim 3
-then makes it a selection click. Simultaneous clicks resolved before any contact exists
-remain subject to claim 2's shared-state rule, not this already-busy case.
+then makes it a selection click. Enter orders issued in the same tick before any contact is
+reserved, including a group click under claim 2's shared-state rule, instead follow S-0314
+claim 23 when executed: the first vehicle takes contact, and a damaged second vehicle waits
+with queued entry. A full-health second vehicle does not queue. This does not grant an enter
+order to a later click on an already-full depot.
 
 | Row | Condition | *n* |
 |---|---|---|
@@ -1987,7 +1994,11 @@ Each actor is tried alone. The cursor gives its action, and the recorder its ord
   after the place is already assigned falsifies this case; two orders issued before any
   contact exists do not. Use the recorder and scripted input in the shared stock skirmish
   setup, three valid runs per case. See S-0314 claim 16 for permission and claim 17 for
-  reservation timing.
+  reservation timing. Contrast a group click with two damaged vehicles while the depot has
+  no contact: expect two enter orders, one approaching vehicle and one waiting with queued
+  entry, followed by entry without another click when the place becomes free. S-0314 claim 23
+  and H18 f own this execution case and its full-health control. A missing second enter order
+  at input, or immediate approach by both vehicles, falsifies the corresponding expectation.
 - A carrier aircraft and an allied tank. Expected: tote, and a move order with the tank as
   destination.
 - An aircraft and its own landing pad whose type lacks the repair-depot flag (a named test rules
