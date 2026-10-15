@@ -12,8 +12,12 @@
 //! a vehicle repaired at a repair depot (S-0314), and a bridge demolished
 //! from its hut and repaired by an engineer (S-0511; the map is the first
 //! offered map with a high bridge and its hut), and a cloaked vehicle seen
-//! by its owner and by an enemy (S-0516 claims 16 and 28). A new scene is one more
-//! function and one more row of [`SCENES`].
+//! by its owner and by an enemy (S-0516 claims 16 and 28), and the local
+//! house's superweapons launched through the client's aim (S-0512, S-0513:
+//! the nuclear strike, the weather storm, the iron curtain, the teleport, the
+//! force shield, the paradrop plane and the spy plane; the type is found by
+//! its kind, never by name). A new scene is one more function and one more
+//! row of [`SCENES`].
 //!
 //! Run with `cargo test --release -p glasnost-app --test m6b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -25,12 +29,15 @@
 use std::rc::Rc;
 
 use glasnost_app::game::client::{Client, run_job};
+use glasnost_app::game::play::{Button, Tool};
 use glasnost_app::mapview::png;
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
 use glasnost_sim::behaviour::Door;
+use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind, Locomotor, UnitRules};
+use glasnost_sim::superweapons::{SwEvent, SwKind, charge};
 use glasnost_sim::targeting::{self, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, Layer, ObjectId, World};
 use glasnost_ui::geom::Rect;
@@ -55,6 +62,13 @@ const SCENES: &[Scene] = &[
     ("bridge-repaired", bridge_repaired),
     ("cloaked-as-owner", cloaked_as_owner),
     ("cloaked-as-enemy", cloaked_as_enemy),
+    ("sw-nuke", sw_nuke),
+    ("sw-storm", sw_storm),
+    ("sw-iron-curtain", sw_iron_curtain),
+    ("sw-chronosphere", sw_chronosphere),
+    ("sw-force-shield", sw_force_shield),
+    ("sw-paradrop-plane", sw_paradrop_plane),
+    ("sw-spy-plane", sw_spy_plane),
 ];
 
 #[test]
@@ -631,6 +645,376 @@ fn cloaked_as_enemy(lane: &mut Lane) {
 }
 
 // ---------------------------------------------------------------------------
+// Superweapons (S-0512, S-0513)
+
+/// Land a building or a vehicle can stand on.
+fn standing(l: u8) -> bool {
+    l != land::WATER && l != land::ROCK
+}
+
+/// Readies the local house's first superweapon type of `kind`: the
+/// building that gives it is placed (with power plants until the house has
+/// enough power), else the record is granted permanently; then the charge
+/// is set full. Returns the type's list position.
+fn ready_sw(lane: &mut Lane, kind: SwKind) -> Option<u32> {
+    let w = lane.world();
+    let types = &w.rules().superweapons.types;
+    let unknown = types.iter().filter(|t| t.kind.is_none()).count();
+    let Some(sw) = w.rules().superweapons.first_of_kind(kind) else {
+        println!(
+            "no superweapon type of this kind ({} types, {unknown} without a recognised kind)",
+            types.len()
+        );
+        return None;
+    };
+    let credits = w.houses[usize::from(lane.local().0)].credits;
+    let local = lane.local();
+    let giver = w
+        .rules()
+        .superweapons
+        .building_sw
+        .iter()
+        .position(|f| f.iter().flatten().any(|&i| i == sw));
+    let giver = giver.map(|b| {
+        let r = &w.rules().buildings[b];
+        (r.name.clone(), r.foundation)
+    });
+    let home = lane.home();
+    let mut placed = false;
+    if let Some((name, size)) = giver
+        && let Some(at) = lane.area(CellXY::new(home.x - 8, home.y + 4), size, 1, standing)
+    {
+        lane.spawn(Kind::Building, &name, local, at);
+        placed = true;
+    }
+    lane.power_up();
+    lane.ticks(3);
+    let granted = charge::get(lane.world(), local, sw).is_some_and(|r| r.granted);
+    if !granted {
+        charge::permanent_grant(lane.world_mut(), local, sw);
+    }
+    let now = lane.world().houses[usize::from(local.0)].credits;
+    println!(
+        "superweapon at list position {sw}: giver building placed {placed}, granted by it {granted}; credits changed by {}",
+        now - credits
+    );
+    charge::set_charge(lane.world_mut(), local, sw, 100);
+    for n in 0..30 {
+        if charge::offers_targeting(lane.world(), local, sw) {
+            println!("ready {n} ticks after the full charge was set");
+            return Some(sw);
+        }
+        lane.ticks(1);
+    }
+    println!("not ready 30 ticks after the full charge was set");
+    None
+}
+
+/// S-0513 claims 7 to 13: a nuclear strike at three enemy vehicles, shot
+/// when the first of them is hit.
+fn sw_nuke(lane: &mut Lane) {
+    let Some(sw) = ready_sw(lane, SwKind::Missile) else {
+        return;
+    };
+    let Some(enemy) = lane.enemy() else {
+        println!("no enemy house");
+        return;
+    };
+    let home = lane.home();
+    let target = lane.open_land(CellXY::new(home.x + 14, home.y + 14));
+    let victims = lane.vehicles(enemy, target, 3);
+    lane.look_at(target);
+    if !lane.aim(sw, None, target) {
+        return;
+    }
+    let t0 = lane.world().tick;
+    let mut launch = None;
+    let mut before: Vec<i32> = victims.iter().map(|&v| lane.permille(v)).collect();
+    for _ in 0..2000 {
+        lane.ticks(1);
+        let t = lane.world().tick;
+        if launch.is_none() && lane.sw_event(|e| e == SwEvent::Launch) {
+            launch = Some(t - t0);
+        }
+        let now: Vec<i32> = victims.iter().map(|&v| lane.permille(v)).collect();
+        // The strike: a vehicle losing at least 300 per mille in one tick.
+        let struck = before.iter().zip(&now).any(|(b, n)| b - n >= 300);
+        before = now;
+        if struck {
+            let dead = before.iter().filter(|&&n| n == 0).count();
+            println!(
+                "launch event {launch:?} ticks after the order; strike {} ticks after it, per mille now {before:?}, {dead} of {} destroyed",
+                t - t0,
+                victims.len()
+            );
+            lane.ticks(2);
+            lane.save("sw-nuke");
+            return;
+        }
+    }
+    println!("launch event {launch:?}; no strike within 2000 ticks");
+    lane.save("sw-nuke");
+}
+
+/// S-0513 claims 14 to 21: a weather storm over three enemy vehicles, shot
+/// just after its first lightning strike.
+fn sw_storm(lane: &mut Lane) {
+    let Some(sw) = ready_sw(lane, SwKind::Storm) else {
+        return;
+    };
+    let Some(enemy) = lane.enemy() else {
+        println!("no enemy house");
+        return;
+    };
+    let home = lane.home();
+    let target = lane.open_land(CellXY::new(home.x + 14, home.y + 14));
+    lane.vehicles(enemy, target, 3);
+    lane.look_at(target);
+    if !lane.aim(sw, None, target) {
+        return;
+    }
+    let t0 = lane.world().tick;
+    let mut start = None;
+    for _ in 0..2000 {
+        lane.ticks(1);
+        let t = lane.world().tick - t0;
+        if start.is_none() && lane.sw_event(|e| e == SwEvent::StormStart) {
+            start = Some(t);
+        }
+        if lane.sw_event(|e| matches!(e, SwEvent::Lightning(_))) {
+            println!(
+                "storm start {start:?} ticks after the order; first lightning {t} ticks after it"
+            );
+            lane.ticks(1);
+            lane.save("sw-storm");
+            return;
+        }
+    }
+    println!("storm start {start:?}; no lightning within 2000 ticks");
+    lane.save("sw-storm");
+}
+
+/// S-0513 claims 22 to 29: the iron curtain on three own vehicles, shot a
+/// few ticks after their protection starts.
+fn sw_iron_curtain(lane: &mut Lane) {
+    let Some(sw) = ready_sw(lane, SwKind::IronCurtain) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let target = lane.open_land(CellXY::new(home.x + 6, home.y + 6));
+    let own = lane.vehicles(local, target, 3);
+    lane.look_at(target);
+    if !lane.aim(sw, None, target) {
+        return;
+    }
+    let t0 = lane.world().tick;
+    for _ in 0..300 {
+        lane.ticks(1);
+        let n = lane.protected(&own);
+        if n > 0 {
+            println!(
+                "protection {} ticks after the order: {n} of {} vehicles",
+                lane.world().tick - t0,
+                own.len()
+            );
+            lane.ticks(5);
+            lane.save("sw-iron-curtain");
+            return;
+        }
+    }
+    println!("no protection within 300 ticks");
+    lane.save("sw-iron-curtain");
+}
+
+/// S-0513 claims 33 to 41: the teleport, its source picked through the aim
+/// and its destination through the aim the pick armed (claim 33), shot as
+/// the group lands.
+fn sw_chronosphere(lane: &mut Lane) {
+    let Some(sw) = ready_sw(lane, SwKind::Chrono) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let source = lane.open_land(CellXY::new(home.x + 6, home.y + 6));
+    let group = lane.vehicles(local, source, 3);
+    let dest = lane.open_land(CellXY::new(source.x + 10, source.y - 10));
+    println!(
+        "source {source:?}, destination {} cells away",
+        (dest.x - source.x).abs().max((dest.y - source.y).abs())
+    );
+    if !lane.aim(sw, None, source) {
+        return;
+    }
+    lane.ticks(1);
+    let tool = lane.c.session.as_ref().unwrap().play.tool;
+    let warp = lane
+        .world()
+        .rules()
+        .superweapons
+        .first_of_kind(SwKind::ChronoWarp);
+    let Tool::Superweapon {
+        sw: armed,
+        from_source: true,
+    } = tool
+    else {
+        println!("the source pick armed no warp type");
+        return;
+    };
+    println!("the pick armed list position {armed}; the first warp-kind type is at {warp:?}");
+    let t0 = lane.world().tick;
+    let s = lane.c.session.as_mut().unwrap();
+    s.play
+        .click_map(Button::Left, None, dest, Modifiers::default());
+    lane.look_at(dest);
+    let mut joined = None;
+    for _ in 0..600 {
+        lane.ticks(1);
+        let t = lane.world().tick - t0;
+        let w = lane.world();
+        let members = group
+            .iter()
+            .filter(|&&v| w.obj(v).is_some_and(|o| o.sw.warp.is_some()))
+            .count();
+        if joined.is_none() && members > 0 {
+            joined = Some(t);
+        }
+        let near = group
+            .iter()
+            .filter(|&&v| {
+                w.obj(v).is_some_and(|o| {
+                    let c = o.pos.cell();
+                    o.on_map
+                        && o.sw.warp.is_none()
+                        && (c.x - dest.x).abs().max((c.y - dest.y).abs()) <= 3
+                })
+            })
+            .count();
+        if near > 0 {
+            println!(
+                "members from {joined:?} ticks after the warp order; {near} of {} at the destination {t} ticks after it",
+                group.len()
+            );
+            lane.ticks(2);
+            lane.save("sw-chronosphere");
+            return;
+        }
+    }
+    println!("members from {joined:?}; none at the destination within 600 ticks");
+    lane.save("sw-chronosphere");
+}
+
+/// S-0513 claims 30 to 32: the force shield aimed at an own building, shot a
+/// few ticks after the shield starts.
+fn sw_force_shield(lane: &mut Lane) {
+    let Some(sw) = ready_sw(lane, SwKind::ForceShield) else {
+        return;
+    };
+    let local = lane.local();
+    let w = lane.world();
+    let Some((b, at)) = w
+        .objects
+        .values()
+        .find(|o| o.on_map && o.owner == Some(local) && o.kind == Kind::Building)
+        .map(|o| (o.id, o.pos.cell()))
+    else {
+        println!("no own building");
+        return;
+    };
+    lane.look_at(at);
+    if !lane.aim(sw, Some(b), at) {
+        return;
+    }
+    let t0 = lane.world().tick;
+    for _ in 0..300 {
+        lane.ticks(1);
+        if lane.sw_event(|e| e == SwEvent::ShieldStart) {
+            let w = lane.world();
+            let shielded = w
+                .objects
+                .values()
+                .filter(|o| o.on_map && o.sw.protection.is_some())
+                .count();
+            println!(
+                "shield start {} ticks after the order; {shielded} objects protected",
+                lane.world().tick - t0
+            );
+            lane.ticks(5);
+            lane.save("sw-force-shield");
+            return;
+        }
+    }
+    println!("no shield start within 300 ticks");
+    lane.save("sw-force-shield");
+}
+
+/// S-0513 claims 42 to 45: a plane sent to a cell, followed and shot when it
+/// is within 6 cells of the target.
+fn plane_scene(lane: &mut Lane, sw: u32, shot: &str) {
+    let local = lane.local();
+    let home = lane.home();
+    let target = lane.open_land(CellXY::new(home.x + 14, home.y + 14));
+    let before = lane.aircraft(local);
+    if !lane.aim(sw, None, target) {
+        return;
+    }
+    let t0 = lane.world().tick;
+    let mut plane = None;
+    for _ in 0..2000 {
+        lane.ticks(1);
+        let t = lane.world().tick - t0;
+        if plane.is_none() {
+            plane = lane
+                .aircraft(local)
+                .into_iter()
+                .find(|id| !before.contains(id));
+            if plane.is_some() {
+                println!("plane on the map {t} ticks after the order");
+            }
+        }
+        let Some(id) = plane else { continue };
+        let Some(c) = lane.world().obj(id).map(|o| o.pos.cell()) else {
+            println!("the plane left the map {t} ticks after the order");
+            break;
+        };
+        lane.look_at(c);
+        if (c.x - target.x).abs().max((c.y - target.y).abs()) <= 6 {
+            println!("plane within 6 cells of the target {t} ticks after the order");
+            lane.ticks(1);
+            lane.save(shot);
+            return;
+        }
+    }
+    println!("plane found {}; not near the target", plane.is_some());
+    lane.save(shot);
+}
+
+fn sw_paradrop_plane(lane: &mut Lane) {
+    let w = lane.world();
+    let kind = if w
+        .rules()
+        .superweapons
+        .first_of_kind(SwKind::Paradrop)
+        .is_some()
+    {
+        SwKind::Paradrop
+    } else {
+        SwKind::AmerParadrop
+    };
+    let Some(sw) = ready_sw(lane, kind) else {
+        return;
+    };
+    plane_scene(lane, sw, "sw-paradrop-plane");
+}
+
+fn sw_spy_plane(lane: &mut Lane) {
+    let Some(sw) = ready_sw(lane, SwKind::SpyPlane) else {
+        return;
+    };
+    plane_scene(lane, sw, "sw-spy-plane");
+}
+
+// ---------------------------------------------------------------------------
 // The lane
 
 fn files(dir: &std::path::Path) -> Vec<PickedFile> {
@@ -843,6 +1227,122 @@ impl Lane {
             n += usize::from(glasnost_sim::orders::issue(self.world_mut(), house, o));
         }
         n
+    }
+
+    /// A player house that is not allied with the local house.
+    fn enemy(&self) -> Option<HouseId> {
+        let w = self.world();
+        let local = self.local();
+        (0..w.houses.len()).map(|i| HouseId(i as u8)).find(|&h| {
+            h != local
+                && !w.allied(Some(local), Some(h))
+                && w.houses[usize::from(h.0)].role == glasnost_sim::world::HouseRole::Player
+        })
+    }
+
+    /// Places `n` plain vehicles of `house` on open land near `near`.
+    fn vehicles(&mut self, house: HouseId, near: CellXY, n: i32) -> Vec<ObjectId> {
+        let Some(name) = find_type(self.world(), Kind::Vehicle, |_, u| plain_vehicle(u)) else {
+            println!("no plain vehicle type");
+            return Vec::new();
+        };
+        // `near` from `open_land` has two free cells on each side.
+        let at = self.open_land(near);
+        (0..n.min(3))
+            .map(|i| self.spawn(Kind::Vehicle, &name, house, CellXY::new(at.x - 1 + i, at.y)))
+            .collect()
+    }
+
+    /// Places the local house's strongest plain power plant until it has
+    /// enough power (at most 6); prints how many.
+    fn power_up(&mut self) {
+        let local = self.local();
+        let w = self.world();
+        let t = &w.rules().econ.tech.buildings;
+        let plant = (0..t.len())
+            .filter(|&b| {
+                t[b].power > 0
+                    && w.rules()
+                        .superweapons
+                        .building_sw
+                        .get(b)
+                        .is_none_or(|f| f.iter().all(Option::is_none))
+            })
+            .max_by_key(|&b| (t[b].power, std::cmp::Reverse(b)))
+            .map(|b| {
+                (
+                    w.rules().buildings[b].name.clone(),
+                    w.rules().buildings[b].foundation,
+                )
+            });
+        let Some((name, size)) = plant else {
+            println!("no power plant type");
+            return;
+        };
+        for i in 0..6 {
+            self.ticks(1);
+            if !glasnost_sim::econ::power::low_power(self.world(), local) {
+                println!("{i} power plants placed");
+                return;
+            }
+            let home = self.home();
+            if let Some(at) = self.area(
+                CellXY::new(home.x + 8, home.y - 8 + 4 * i),
+                size,
+                1,
+                standing,
+            ) {
+                self.spawn(Kind::Building, &name, local, at);
+            }
+        }
+        println!("still low on power after 6 power plants");
+    }
+
+    /// Aims superweapon `sw` through the client (S-0513 claim 1): the tool
+    /// armed as the icon arms it, then a left click on `cell` with no units
+    /// selected. Returns whether the order was taken; prints it.
+    fn aim(&mut self, sw: u32, on: Option<ObjectId>, cell: CellXY) -> bool {
+        let p = &mut self.c.session.as_mut().unwrap().play;
+        p.selection.clear();
+        p.tool = Tool::Superweapon {
+            sw,
+            from_source: false,
+        };
+        let before = p.game.replay().orders.len();
+        p.click_map(Button::Left, on, cell, Modifiers::default());
+        let taken = p.game.replay().orders.len() > before;
+        println!("aimed at {cell:?}: order taken {taken}");
+        taken
+    }
+
+    /// Whether the last tick had a superweapon event matching `f`.
+    fn sw_event(&self, f: impl Fn(SwEvent) -> bool) -> bool {
+        self.c
+            .session
+            .as_ref()
+            .unwrap()
+            .play
+            .effects
+            .iter()
+            .any(|e| matches!(e, Effect::Superweapon { event, .. } if f(*event)))
+    }
+
+    /// How many of `ids` are protected.
+    fn protected(&self, ids: &[ObjectId]) -> usize {
+        let w = self.world();
+        ids.iter()
+            .filter(|&&id| w.obj(id).is_some_and(|o| o.sw.protection.is_some()))
+            .count()
+    }
+
+    /// The aircraft of `house` on the map.
+    fn aircraft(&self, house: HouseId) -> Vec<ObjectId> {
+        self.world()
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.owner == Some(house) && o.kind == Kind::Aircraft)
+            .map(|o| o.id)
+            .collect()
     }
 
     /// The strength of `id`'s type.
