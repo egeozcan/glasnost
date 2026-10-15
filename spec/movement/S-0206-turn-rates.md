@@ -2,7 +2,7 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -98,8 +98,9 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
 - **Simple-deployer vehicle.** A vehicle type with the imported simple-deployer flag: it deploys in
   place into a second, deployed state without becoming a building. Its rules belong to the
   vehicle specs.
-- **Vehicle-seizing weapon.** An enemy weapon that takes hold of a vehicle's locomotor and moves the
-  vehicle (such as a magnetic beam). Its rules belong to the combat specs.
+- **Seizing warhead, seized.** As in the glossary and S-0607 claims 1, 5, 12 and 20. A seizing
+  warhead temporarily replaces a unit's locomotor. The unit remains seized after its grip ends,
+  until its own locomotor returns; seized does not mean parasite-held.
 
 ## Behaviour
 
@@ -228,7 +229,7 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
    | It has a target, the turret was not turning at the end of the previous tick, and it has a turret weapon that is neither turret-locked nor omni-fire | the direction of the target (S-0204, claim 8) |
    | It has a target and its firing check gives a facing error (claim 10) | the direction of the target |
    | It has a target otherwise (the turret was still turning, it has no turret weapon, or that weapon is omni-fire) | no change (`quirks.turret_reaim_after_turn`) |
-   | No target, the turret is not turning, at least *G* + 5 ticks have passed since the vehicle last fired, the vehicle is not inside a tank bunker, and it is not a deployed simple-deployer vehicle; it has a movement destination and no turret-locked turret weapon | the direction of the movement destination, except no change while the vehicle's locomotor is held by an enemy's vehicle-seizing weapon |
+   | No target, the turret is not turning, at least *G* + 5 ticks have passed since the vehicle last fired, the vehicle is not inside a tank bunker, and it is not a deployed simple-deployer vehicle; it has a movement destination and no turret-locked turret weapon | the direction of the movement destination, except no change while the vehicle is seized |
    | The same, but it has no movement destination or its turret weapon is turret-locked | the body's current facing |
    | Otherwise | no change |
 
@@ -281,7 +282,7 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
      locomotor-moving test, and spin without a turret are `unmeasured`: no scenario here varies
      their discriminating conditions. R9 run e tests the seized condition only if its recorded
      movement destination persists; otherwise that condition remains `unmeasured` because the
-     setup has not established the necessary held-with-destination state. Counting the last shot
+     setup has not established the necessary seized-with-destination state. Counting the last shot
      of every weapon is likewise `unmeasured`: R4 run d uses only one weapon.
    - Confidence: high for the spin row, for a spinning turret never counting as turning, and for
      what the facing-error row does when it applies (when it applies is claim 10, medium); medium
@@ -387,12 +388,13 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
     gives the heading a target 11520 facing units clockwise ahead of its current value, modulo
     65536, and the heading turns towards that target by claim 1 at this same rate (S-0502
     claim 18). The lead is not the angular distance travelled in one tick: repeated targeting
-    still uses F1's integer duration, truncated step and remainder jump. A unit held by magnetic
-    lift does not spin (S-0502 claim 18).
+    still uses F1's integer duration, truncated step and remainder jump. A seized unit does not
+    spin, including after its grip ends and before its own locomotor returns (S-0502 claim 18
+    and S-0607 claims 12, 15 and 20).
     - Backing: `measurable` (jumpjet heading and crash spin below, using S-0502 scenarios J7
       and J12 for the rate and ordinary crash spin, and J1 run b for the game-wide rate's lack
       of effect). The initial eastward setting and absent-key default are `unmeasured` here:
-      these turning runs do not isolate attachment or an omitted type field. The magnetic-lift
+      these turning runs do not isolate attachment or an omitted type field. The seized-state
       exception has S-0502 claim 18's backing limitation.
     - Confidence: high for the crash target and its use of claim 1; medium for the remaining
       heading rules
@@ -910,24 +912,27 @@ test magnetic lift.
     removed by a named test rules file (so it has no turret weapon, which counts as not
     turret-locked, and never has a target), is ordered to move to a cell 10 cells to map east and
     3 to map south, so that the direction of its destination is not the 8-direction of any step
-    of its path; while it drives, an enemy vehicle with a vehicle-seizing weapon takes hold of it
+    of its path; while it drives, an enemy vehicle firing a weapon with a seizing warhead seizes it
     and drags it off its line.
 - *Procedure:* runs a to d: order the attack, let the target be destroyed, then record for
-  *G* + 50 ticks. Run e: record from the move order until the vehicle is released.
+  *G* + 50 ticks. Run e: record from the move order through the end of the grip and, if it
+  survives, restoration of its own locomotor.
 - *Observable:* the turret facing over time, against the body facing and, in run e, against the
   direction of the movement destination.
 - *Runs:* 2 each.
 - *Expected:* runs a and c: the turret keeps the facing at which it last fired. Runs b and d: once
   *G* + 5 ticks have passed since the last shot, the turret turns to the body's facing. Run e: before
-  the vehicle is held, its turret turns towards the direction of its destination, not to its body
-  facing; while it is held, no new turret target towards that destination is given. Its prior
+  the vehicle is seized, its turret turns towards the direction of its destination, not to its body
+  facing; while it is seized, no new turret target towards that destination is given. Its prior
   turn may finish, after which it rests at the unchanged target despite the destination direction
-  changing. After release a resting turret turns towards the destination again.
+  changing. Ending the grip does not remove this restriction. After its own locomotor returns,
+  a resting turret turns towards a movement destination again, if one is present and the other
+  rest-row conditions hold.
 - *Falsified if:* in run a or c the turret turns to the body's facing; in run b or d it does not
   (which invalidates the pair); in run e the turret follows the body facing before the vehicle is
-  held, or gets a new turret target towards the changing destination while held. Continuing
-  an already-started turn while held does not falsify the rule. If the recorder shows that
-  a held vehicle has no movement destination, run e tests the no-destination rest row instead
+  seized, or gets a new turret target towards the changing destination while seized. Continuing
+  an already-started turn while seized does not falsify the rule. If the recorder shows that
+  a seized vehicle has no movement destination, run e tests the no-destination rest row instead
   and says nothing about the seized condition.
 
 **R10. A building's turret turn rate (claim 7).**
