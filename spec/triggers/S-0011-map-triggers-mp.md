@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -21,7 +21,7 @@ and what the actions of this revision's subset do (the event and action codes of
 tables I3 and I4), including the order in which the scenario random stream is drawn while a map loads.
 This revision covers skirmish only; network games and campaigns are out of scope. Codes outside
 the subset are parsed; their meaning is deferred except for the companion-spec pointers after
-table I4, which do not extend this spec's supported subset.
+tables I3 and I4, which do not extend this spec's supported subset.
 
 **Hand-off checks.** S-0003 claim 14's exceptions, S-0202's loading-draw table,
 S-0302's survivor rules and S-0409's all-player-house scope agree in their current texts.
@@ -704,6 +704,12 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       S-0512 claims 12 to 15 respectively. Setting a charge percentage preserves
       existing readiness under S-0512 claim 14's default quirk; resetting charge
       clears readiness under S-0512 claim 15.
+    - Evict occupants from the first eligible attached building: S-0508 claims 10 to 13,
+      without hunting and without inside fallback. The house-wide hunt action instead
+      resolves its number slot as a house value (claim 23); its garrison evictions use
+      hunting, without inside fallback (S-0508 claim 13). These are different actions,
+      not two spellings of non-hunting eviction. Their eviction effects inherit S-0508
+      claims 10 to 13's backing and confidence (scenario G13).
     - Create team, destroy team, reinforce and reinforce at a waypoint belong to the
       out-of-scope team system. Preferred target at a waypoint belongs to out-of-scope
       computer-controlled targeting policy, with the owner house as the house concerned.
@@ -1202,6 +1208,15 @@ but not specified in this revision.
 | 60 | type exists | count, with kind 2 type name | yes | no | 21 |
 | 61 | type does not exist | kind 2 type name | yes | no | 21 |
 
+**Companion event outside this subset.** Event code 3 tests the specified house's
+lost-to-capture mark under S-0509 claim 11: whether an engineer has ever captured one of
+that house's buildings. Nothing else sets the mark, and nothing clears it during the
+game. This is a code-matched event (Constants), not a polled condition: an unlatched
+event still needs a raise with code 3 under claim 8. The mark's backing and confidence
+are S-0509 claim 11's; this pointer does not establish when code-3 raises occur or
+extend I3's supported subset. In particular, persistence of the mark alone does not
+establish a later firing without a matching raise or an existing latch.
+
 **I4. Action codes.** Slots are those of I2. Rows citing S-0524 are companion pointers:
 its Import mapping I1 owns those action items, and its cited claims own the effects.
 
@@ -1251,10 +1266,12 @@ are not part of I4's supported subset.
 | Code | Our name | Parameter and owning spec |
 |---|---|---|
 | 1 | win action | number slot; S-0201 scenario T1 part C's fixture assumption only, not a general victory rule specified here |
+| 6 | house-wide hunt | number slot as house value (claim 23); garrison evictions hunt without inside fallback, S-0508 claim 13 |
 | 33 | one-time superweapon grant | number slot as superweapon type index, trigger owner house; S-0512 claim 12 |
 | 34 | permanent superweapon grant | number slot as superweapon type index, trigger owner house; S-0512 claim 13 |
 | 100, 117 | plain and freezing radar-movie actions | number slot, ignored in skirmish; S-0201 claim 11 and its Import mapping. Campaign behaviour is out of scope |
 | 110 | pause action | number slot; S-0201 claim 10, including its departures, warnings and Import mapping |
+| 111 | evict occupants of first eligible attached building | no parameter slot; without hunting or inside fallback, S-0508 claims 10 to 13 |
 | 127 | chrono flash | number slot; S-0201 claim 11, including its quirk rules, warnings and Import mapping |
 | 129 | set superweapon charge | number slot as superweapon type index, kind 11 second number slot as percentage, trigger owner house; S-0512 claim 14 |
 | 133 | reset superweapon charge | number slot as superweapon type index, trigger owner house; S-0512 claim 15 |
