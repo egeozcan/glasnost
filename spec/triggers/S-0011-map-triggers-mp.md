@@ -2,11 +2,11 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0269, Q-0510]
 supersedes: []
@@ -44,6 +44,9 @@ Check the other companion revisions together too. Claim 19 now admits S-0312 cla
 hidden-slave notifications without a slave killing hit, including true sale (S-0408 claim 10a)
 and temporary-group cleanup during successful pack-up (S-0415 claim 10). Hand these passages
 off together; hidden-slave tag attachment remains an unmeasured setup boundary.
+Check claims 20 and 27 with S-0511 claims 1, 7 and 8 at joint sign-off:
+bridge-event bands can include intact cells and give repeated raises with no cell,
+whereas destroy-attached-objects makes ungated attempts only when its raise carries a cell.
 
 ## Terms
 
@@ -499,12 +502,27 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     - Confidence: high for the groups, killing-hit counts and timing; medium for latches,
       no-hit notifications and their counts, and the retained-infantry and hijacker/carry-over cases
 
-20. **Bridge destroyed in a tagged cell.** When a bridge is destroyed, each cell of the destroyed
-    part that carries a tag raises that tag with this code. The event is satisfied in every such
-    raise. Which cells count as part of the destroyed bridge belongs to the bridge specs (no spec
-    yet, a pointer only).
-    - Backing: `measurable` (scenario T13)
-    - Confidence: low
+20. **Bridge-destroyed event bands.** This event is satisfied in every raise with its code.
+    S-0511 claims 7 and 8 define the bands that raise it; they are not limited to cells that
+    actually collapse. A high-bridge band's endpoints are the first cell after the span's
+    start piece and the far piece. A low-bridge band's endpoints are the first and last low
+    pieces of its whole contiguous run, destroyed pieces included.
+    The band is 4 cells wide across the bridge: for each centre-row cell, its own cell,
+    the next cell across toward increasing cross-coordinate, and the one and two cells
+    toward decreasing cross-coordinate. Along an x bridge the cross-coordinate is y,
+    and along a y bridge it is x. Tagged cells raise their tags in increasing
+    along-bridge coordinate order, in that cross-cell order. The last centre-row cell
+    along the band and its cross-cells are skipped; a one-cell band raises nothing
+    (`quirks.bridge_event_band_short`, owned by S-0511 claim 8).
+    Each raise carries no causing object and no cell. A shared tag is raised once per
+    qualifying tagged cell, not once per distinct tag. A destroyed low strip gives one
+    pass over its band. For a high span with a missing section, each pass of the span
+    check gives one band pass: with *n* isolated section losses, there are *n* + 1 passes,
+    before the first loss, between losses and after the last (S-0511 claim 7).
+    A span with no missing section raises nothing.
+    - Backing: `measurable` (scenario T13; S-0511 B5 and B14)
+    - Confidence: medium for low bands, cross-cells and no-object/no-cell raises,
+      low for high-band endpoints and repeated passes
 
 21. **Type exists and type does not exist.** These condition events name a type (by its type name)
     and a count *n*. The type is the building, vehicle, infantry or aircraft type whose stored name
@@ -617,16 +635,21 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     actions nor any later tick happen. Our engine
     damages each such object once per firing and goes on, so a survivor stays (a departure: the
     original's result is a hang), and the importer warns when a trigger-kill setup can leave an
-    object alive under any of the survivor rules above. For a trigger fired from a cell, the original
-    also acts on the cell, which is not established here (Open questions).
+    object alive under any of the survivor rules above.
+    After the object hits, when the raise that fired the trigger carries a cell, the action
+    makes up to 4 bridge destroy attempts at that cell, stopping at the first success
+    (S-0511 claim 1). These attempts ignore the game's bridge-destruction setting.
+    S-0511 claim 2 owns what each attempt affects. A raise with no cell makes no cell
+    attempt; in particular, claim 20's bridge-destroyed raises carry no cell, even though
+    tagged cells produce them.
     - Backing: `measurable` (scenario T9, including the armour variant and variants C and D for
       radiation-kind and berserk survivors; S-0302 scenario D16 parts d2, d3 and d4 for the immune hut,
       delayed-kill building and positive-height-above-the-surface infantry survivors and the
-      resulting hangs). The cell
-      effect is `unmeasured`: T9 raises no tag from a cell and no expected cell outcome is known.
+      resulting hangs; T9 E and S-0511 B10 for cell attempts, the gate and no-cell control).
       Psychic-kind and poison-kind survivors and bypass of temporary invulnerability are
       `unmeasured` here: T9 varies radiation, berserk and armour, not those protections
-    - Confidence: medium (the hang has not been observed)
+    - Confidence: medium for object damage (the hang has not been observed),
+      low for the cell effect
 
 28. **Explosion at a waypoint.** The action's number slot is a weapon's registration index (S-0004)
     and its waypoint slot names a point: the centre of the waypoint's cell, at the cell's centre
@@ -983,6 +1006,10 @@ Claim 14 owns the resource-glint conditions, draw ranges and singleton-frequency
   is satisfied when the causing object's owner is that house (including the "References" rule of
   S-0009 claim 29 on maps with 9 or more header pairs). The importer warns about such a value in
   either case.
+- **Short bridge-event band** (`quirks.bridge_event_band_short`, YR default: on).
+  S-0511 claim 8 owns this switch: the last cell along the band and its cross-cells are
+  skipped, and a one-cell band raises nothing (claim 20). Off: the final cell and its
+  cross-cells are included.
 - **“None” owner.** `quirks.none_owner_is_first_country` (YR default: on). An owner written as `<none>` gives the first country of the country list (claim 5), with an importer warning. Off: `<none>` names no owner country.
 - **Exact type names.** `quirks.exact_trigger_type_names` (YR default: on). The type name of the type-exists and type-does-not-exist events is matched case-sensitively, and `none` and `<none>` are ordinary type-name text, not no-type markers (claim 21); the importer warns when the name matches no type. Off: use S-0003 claim 14's case-insensitive type-name matching and no-type markers.
 
@@ -1433,6 +1460,21 @@ input. *Expected:* from tick 30 the tick counter stops advancing and the game st
 (the recorder shows V's health unchanged, above 0). *Falsified if:* the game goes on past tick 30,
 or V is destroyed. Variant D (berserk protection): use the main-run setup, but make the demolition warhead cause berserk and ensure V is not immune to radiation, psychic or poison damage. *Observable:* V's health and the tick counter and response to input after tick 30. *Expected:* V takes no health damage; as a survivor, it remains above 0 health and the original's action hangs from tick 30. *Falsified if:* V loses health or the game continues responding after tick 30.
 
+T9 variant E (cell attempts): on a small test map, put a cell tag on an intact high-bridge
+section, with entered-by −1 and the destroy-attached-objects action. No object carries
+that tag. Use stock data, director and mods off, one human and a bystander computer player
+kept outside the bridge and approach cells, game speed 2, and the bridge-destruction option
+off. Move a human vehicle onto the tagged deck cell. Record its arrival tick and the
+section's state with video and a read-only recorder; repeat three fresh runs.
+*Expected:* the section is lost in the arrival action despite the option being off: its
+first attempt damages it and the next succeeds under S-0511 claim 3. As a no-cell control,
+use bridge-destroyed instead of entered-by on a tagged cell in the band that retains its
+section, then lose a different section with the option on. The control's action changes
+no additional section. *Falsified if:* qualified arrival leaves the attempted section
+intact or only damaged, or the no-cell control starts further bridge attempts. Record
+bridge state immediately before and after the action to exclude notice and span-check
+losses. S-0511 B10 owns the paired gate/control test.
+
 **Scenario T10 (claims 8, 13, 15, 16, 25).** Variants, each with its own counter:
 - *A:* one-time polled triggers with elapsed time 0, 1 and 7. Expected drops in ticks 0, 15 and 105.
 - *B:* a repeating trigger with elapsed time 3. Expected drops in ticks 45, 90, 135 and so on.
@@ -1518,13 +1560,29 @@ Variant: S sets variable 150 instead. *Observable:* counter drops per tick. *Exp
 every tick from tick 30 (or 31, if W's tag is polled before S's) to tick 89 (or 90, if W's tag is polled
 before C's). Variant: W never. *Falsified if:* W drops only once, outside that range, or in the variant.
 
-**Scenario T13 (claim 20).** *Setup:* a destroyable bridge whose cells carry a one-time tag with the
-bridge-destroyed code and a count action. The human destroys the bridge. *Observable:* the tick of the
-drop against the tick of the collapse. *Expected:* the same tick. *Falsified if:* no drop, or a drop
-without a collapse. Variant: give each cell of the span a distinct one-time tag and counter.
-Record which cells actually collapse. *Expected:* each collapsed tagged cell gives its own count
-in that tick, and a cell that did not collapse gives none. *Falsified if:* a collapsed cell gives
-no count or an intact cell gives one. The extent of a collapse is observed, not predicted here.
+**Scenario T13 (claim 20).** *Setup:* small test maps with a low bridge and a high bridge,
+separately, along each axis. Tag the centre row and four neighbouring rows with distinct
+one-time bridge-destroyed tags and calibrated count actions; keep counters outside all
+collapse and weapon effects. Use stock data, director and mods off, game speed 2,
+one human and a bystander computer player kept outside the bridge and counters, with
+the glossary's void rule. Turn bridge destruction on. *Procedure:* destroy one interior
+low strip, or one high section. Repeat each layout three times with scripted input,
+video and a read-only state recorder. *Observable:* each counter's firing tick and
+position, compared with changed bridge cells. *Expected:* in the destruction tick,
+counts cover claim 20's four cross-cells from the first band cell through the cell before
+its last endpoint, including tagged cells that stay intact. The high cell immediately
+before the far piece counts; the far piece does not. The low run's last strip does not
+count. *Falsified if:* a skipped endpoint counts, a qualifying cell does not, or counts
+are limited to cells that actually collapse.
+
+*Repeating variant:* give several qualifying cells one repeating tag, with count actions
+that leave the bridge and tag unchanged. Record firings within the destruction tick.
+For a destroyed low strip expect one firing per qualifying tagged cell. For a high span
+that loses *n* isolated sections, expect *n* + 1 such groups, before, between and after
+isolated losses, including one group when *n* = 0. A different count or interleaving
+falsifies the claim. Use S-0511 B14's isolated-run fixtures; B5 also tests cross-cell order
+and coincident endpoints, for which a one-cell band gives no firing. A one-time shared
+tag is not suitable for measuring repeated raises because its first firing detaches it.
 
 **Scenario T14 (claim 21).** *Setup:* a repeating polled trigger with type-exists (a vehicle type name,
 count 2) and one with type-does-not-exist (same name), each with its own counter. The human builds two
@@ -1820,7 +1878,6 @@ using named test maps removed afterwards.
   at a unit's arrival, under a unit in the air every 16 ticks, at an attack on a building
   (claim 35) and at team events. S-0312 claim 29 and its Import mapping establish the
   destruction groups; the out-of-subset events' full conditions remain deferred.
-- **Destroy attached objects on a cell.** What the action does to the cell that raised the tag.
 - **Type-exists name lookup across kinds** (claim 21). Which type the type-exists and
   type-does-not-exist events use when types of two kinds share a type name.
 - **Registration order of trigger definitions.** A trigger reference shorter than 3 characters
