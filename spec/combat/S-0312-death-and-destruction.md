@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -196,8 +196,10 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 
 7. **Attached bombs go off.** A bomb attached to the dying object (an infantry-planted time bomb,
    special-abilities specs) detonates at the end of the shared effects, whether or not the object
-   is exploding.
-   - Backing: `measurable` (scenario D6, variant c)
+   is exploding. This applies only to a bomb still attached at death. A building ownership
+   change removes its planted bomb without detonation, and that bomb never goes off later,
+   except on a garrisonable type, where the bomb stays and keeps counting down (S-0509 claim 13).
+   - Backing: `measurable` (scenario D6, variant c; S-0509 scenario E8 for ownership changes)
    - Confidence: medium
 
 8. **Infantry.** A killed infantry unit takes the shared effects of claims 4 to 7 and then the death
@@ -372,10 +374,14 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     demolition warhead, ignoring defences, with the no-escape marker and with no attacker, when the
     spatial distance from the building's reference point (S-0204 claim 4) to the contact's position
     is less than 256 leptons, or whatever the distance when the building is a helipad. Any other
-    contact is only released. Garrisoned infantry leave the building (structures specs).
-    - Backing: `measurable` (scenario D12)
+    contact is only released. Garrisoned infantry are evicted under S-0508 claims 10 to 12,
+    without hunting or an inside fallback (S-0508 claim 13). With no qualifying exit cell,
+    the original removes every occupant without killing it: no occupant death, kill or survivor.
+    S-0508 owns the eviction quirks and their alternatives, including keeping occupants inside
+    when its no-exit-removal quirk is off.
+    - Backing: `measurable` (scenario D12; S-0508 scenarios G7 and G8 for eviction)
     - Confidence: high (the distance rule, the helipad rule and the damage); low (which situations
-      of play are contacts at that moment, and the garrison statement)
+      of play are contacts at that moment); eviction inherits S-0508 claims 10 to 12's confidence
 
 18. **Survivors.** A destroyed building may release survivors, at most *C* of them (Formulas F5).
     When *C* = 0 nothing in this claim happens, and neither does the per-cell smudge step of claim
@@ -842,7 +848,7 @@ otherwise. No measurement has been completed for this revision.
 | 12 | `unmeasured` for bridge-deck escape height and placement: D9 supplies no bridge run, and its placement point remains for the bridge specs to establish. Bomb-mark rows inherit claim 11's backing. |
 | 13 | `unmeasured` for crew trigger-tag inheritance: the kinds of tag that pass on are not established here, so D10 cannot predict a tag outcome. |
 | 16 | `unmeasured` for a crash begun while still alive and the absence of tumbling draws for crashing infantry: no setup is established that starts either case. D11 b is conditional, not measurable backing. |
-| 17 | `unmeasured` for the exact ten-times-strength amount and no-escape marker: D12's contacts die, which alone cannot distinguish that amount from another lethal amount or test crew escape. Also unmeasured are release of a non-helipad contact at or beyond 256 leptons and garrison evacuation: D12 does not establish those contacts or a garrison test. |
+| 17 | `unmeasured` for the exact ten-times-strength amount and no-escape marker: D12's contacts die, which alone cannot distinguish that amount from another lethal amount or test crew escape. Release of a non-helipad contact at or beyond 256 leptons is also unmeasured: D12 does not establish those contacts. Garrison eviction instead uses S-0508 G7 and G8's backing. |
 | 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. Failed survivor placement and the eight-cell 3 × 3 foundation are also unmeasured here: D13 uses free positions and a full nine-cell foundation and supplies no blocked-survivor or eight-cell run. |
 | 18 | `unmeasured`, low confidence, for equating the owner's survivor-suppression state with defeat: no setup separates the two possible moments in Open questions. Ordinary undefeated-owner runs test the rest. |
 | 19(f) | `unmeasured` for the exact eligibility kinds, suppression by an attached system and the below-terrain height boundary: D14 f tests creation and displacement only, not these conditions. |
@@ -987,7 +993,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | 7 | vehicle | crate (claim 14) | the crate's |
 | 8 | vehicle | crash, sinking or leaving play (claim 15); passengers still inside die at the start of a crash (claim 16) | crash: three |
 | 4 | aircraft | explosion animation only with a nonempty explosion list, then crash or leaving play (claim 16) | one list pick only with a nonempty list; crash: three |
-| 4 | building | contacts (claim 17), garrison out | the contacts' deaths |
+| 4 | building | contacts and garrison eviction (claim 17), including removal without occupant deaths when no exit qualifies | the contacts' deaths and successful occupants' scatter requests |
 | 5 | building | claim 19 (a) to (h), with claim 23 inside (c), claim 22 inside (d), and claims 24 and 18 inside (g); claim 18's cells start after the cells claim 24 used | as listed |
 | 6 | building | rubble and crate, leaving play (claims 20, 21); for a type with the explodes flag or a building being sold, awaiting removal instead | the crate's (when it leaves now) |
 | later turn | building awaiting removal | after the general part of its own eligible turn: leaves play and its cells before the second round of claims 18 and 19 (g), then passengers die; removal completes and rubble and crate are placed in this same turn (claim 21) | the second round's, then the crate's |
