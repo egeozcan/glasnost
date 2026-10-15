@@ -2,7 +2,7 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -235,7 +235,9 @@ stream*, *game start*, *absent-key default*, *importer warning*, *quirk switch*,
    - (a) A type is refused when its tech level is −1 or above the house tech level. The tech level's absent-key default is 255, so a type with no tech
      level is refused at every house tech level below 255. The house tech level comes from
      S-0009 claim 45, equally for human and computer lobby houses; naval yards use the same
-     comparison as other types.
+     comparison as other types. The compared type level is the final layered value
+     (S-0006 claims 1 to 3): when the map's own rules section sets that type's tech
+     level, that value is compared, for naval yards as for any other type.
    - (b) A type with a required-countries list is refused unless the house's country is in it; a type
      with a forbidden-countries list is refused when the house's country is in it. Whether a country
      is in a list is decided by its registration index in the country registry, as F1 gives (see
@@ -825,7 +827,9 @@ of the scenarios.
   is not offered, or the type above it is offered.
 
 **T4 naval-yard regression (Q-0647, claim 5 a).**
-- Setup: stock executable, stock rules and a stock coastal map in standard skirmish mode,
+- Setup: stock executable, stock rules and a stock coastal map whose own rules
+  sections set no tech level for any naval yard type. Verify that absence for all
+  three yard types before selecting the map. Use standard skirmish mode,
   launched from the stock setup screen, with no setup-tool override. Use speed index 2,
   800×600, crates off, director off and mods off. Run three fresh games, one human house
   from each side in turn, with a distant bystander computer player. Keep power sufficient
@@ -835,7 +839,8 @@ of the scenarios.
   a valid coastal location. Record the source and imported values of the game's and
   house's tech levels and the yard type's tech level separately in the engine replay.
   Compare those imports with the corresponding source fields using Import mapping here
-  and S-0009 claim 45 and its Import mapping, rather than changing the comparison.
+  and S-0009 claim 45 and its Import mapping, applying S-0006 claims 1 to 3 to
+  include the map's own rules sections, rather than changing the comparison.
 - Observable and tool: scripted mouse and keyboard input, screenshots and the read-only
   sidebar recorder log prerequisite placement, the yard's icon, accepted production,
   completion and successful placement, with ticks. No oracle run is claimed here.
