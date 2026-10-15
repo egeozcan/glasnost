@@ -150,17 +150,20 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     // spec: S-0302 claim 2 (the shot damage is fixed at the moment of firing)
     let damage = crate::combat::damage::shot_damage(w, firer, weapon);
     let fp = crate::combat::position::fire_point(w, firer, slot, k);
-    if wr.spawner {
+    // spec: S-0501 claim 20 and S-0522 claim 11 (a shot of an aircraft that carries passengers is a drop attempt, with no projectile)
+    let drop = crate::air::is_aircraft(w, firer) && crate::paradrop::shot_drops(w, firer);
+    let dropped = drop && crate::paradrop::attempt(w, firer);
+    if wr.spawner && !drop {
         // spec: S-0301 Terms (spawner weapon) and S-0506 claim 3 (a spawner shot launches no projectile; it hands its target to the spawn controller)
         crate::spawn::shot(w, firer, shot_target);
     }
-    let launched = if wr.spawner {
+    let launched = if wr.spawner || drop {
         None
     } else {
         crate::combat::projectile::launch(w, firer, weapon, shot_target, fp, damage)
     };
-    // spec: S-0301 claim 15 (a void shot: the countdown, burst counter and ammunition stay as they were)
-    if launched.is_none() && wr.projectile.is_some() && !wr.spawner {
+    // spec: S-0301 claim 15 (a void shot: the countdown, burst counter and ammunition stay as they were); Q-0751 interim: a drop shot is never void
+    if launched.is_none() && wr.projectile.is_some() && !wr.spawner && !drop {
         return false;
     }
     // spec: S-0409 claim 16 (a shot from a reveal-on-fire weapon reveals the firer to the target's owner)
@@ -243,6 +246,10 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     // spec: S-0301 claim 13 (a shot that is not a sync shot runs the firing-frame counter at 2F − 1)
     if sync_frames && !was_sync {
         ob.combat.firing_frame = Some(2 * firing_frames - 1);
+    }
+    if dropped {
+        // spec: S-0522 claim 11 (a successful drop clears the aircraft's rearm wait; its pass counter was reset by the drop)
+        ob.combat.rearm_until = t;
     }
     let _ = mode;
     crate::combat::projectile::shot_effect(w, firer, weapon, fp);

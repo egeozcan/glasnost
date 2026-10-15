@@ -1,6 +1,6 @@
 //! The paradrop launch and the spy plane (S-0513 claims 42 to 45; S-0522
-//! claims 1 to 3 and 16). Delivery after the launch is the seam
-//! [`crate::paradrop::drop_passengers`]; the camera is in `air`
+//! claims 1 to 3 and 16). Delivery after the launch is
+//! [`crate::paradrop`]; the camera is in `air`
 //! (`spy_camera`) and [`crate::econ::shroud::camera`].
 
 use glasnost_map::CellXY;
@@ -94,8 +94,12 @@ fn send_plane(w: &mut World, h: HouseId, ti: u32, target: CellXY, b: Behaviour) 
     let cell = crate::air::house_edge_cell(w, h);
     if let Some(o) = w.obj_mut(id) {
         // spec: S-0522 claim 3 (a visiting aircraft, so placed at cruise height by S-0501 claim 1)
+        let paradrop = b == Behaviour::ParadropApproach;
         o.air = Some(crate::air::AirState {
             visiting: true,
+            // spec: S-0522 Terms and Constants (the pass counter starts at 5)
+            passes: if paradrop { crate::paradrop::PASSES } else { 0 },
+            paradrop,
             ..Default::default()
         });
     }

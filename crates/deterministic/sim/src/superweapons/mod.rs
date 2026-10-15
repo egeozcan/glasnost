@@ -7,10 +7,10 @@
 //! `econ::houses`); a fire order ([`crate::orders::Order::FireSuperweapon`])
 //! is carried out by [`launch::fire`]. The effects are in [`protect`]
 //! (invulnerability and the force shield), [`nuke`], [`storm`], [`warp`]
-//! and [`planes`] (spy plane and the paradrop hand-off).
+//! and [`planes`] (spy plane and the paradrop launch; the delivery is
+//! [`crate::paradrop`]).
 //!
 //! Seams to specs that are not built (each named where it is used):
-//! - S-0522 (paradrop delivery): `crate::paradrop::drop_passengers`;
 //! - S-0525 (radiation fields): [`nuke::radiation_seam`];
 //! - S-0514 (chrono weapons; units that cannot be teleported): the erasing
 //!   half of [`being_erased`] and [`warp::chrono_seam`];
@@ -249,6 +249,13 @@ pub struct SwRules {
     /// entry one plane carrying `count` units of an infantry type; `None`
     /// sends no plane at all.
     pub payloads: [Option<Vec<(u32, i32)>>; 4], // spec: S-0522 Import mapping (four payload lists)
+    /// The paradrop radius, leptons (S-0522 claims 6 and 7).
+    pub para_radius: i32,
+    /// The parachute animation type (S-0522 claim 13), when the rules name
+    /// one.
+    pub parachute: Option<String>,
+    /// The parachute sound (S-0522 claim 9), when the rules name one.
+    pub chute_sound: Option<String>,
 }
 
 /// The fixed paradrop plane type name (S-0522 Import mapping).
@@ -568,6 +575,12 @@ impl SwRules {
             camera_sound: g.spy_plane_camera.clone(),
             para_plane: names.get(&(Kind::Aircraft, PARA_PLANE.to_owned())).copied(),
             payloads,
+            // spec: S-0522 Import mapping and Constants (ParadropRadius absent: 1024 leptons)
+            para_radius: g.paradrop_radius.unwrap_or(1024),
+            // spec: S-0522 Import mapping (Parachute absent: none; Open questions 2, Q-0752)
+            parachute: g.parachute.clone(),
+            // spec: S-0522 Import mapping (ChuteSound absent: no sound)
+            chute_sound: g.chute_sound.clone(),
         }
     }
 
@@ -1006,6 +1019,19 @@ pub enum SwEvent {
     SourceMarker,
     /// The source marker ends (S-0513 claim 34).
     MarkerEnd,
+    /// The parachute sound of a successful drop, at the plane's position
+    /// (S-0522 claim 9).
+    Chute,
+    /// A parachute animation was attached to a dropped paratrooper (S-0522
+    /// claim 13): the drawing shows it on the unit while the unit's
+    /// parachute is attached. `delay` is the creation's stage delay (S-0109
+    /// claim 3), when a draw gave one.
+    Parachute {
+        /// The paratrooper.
+        trooper: ObjectId,
+        /// The stage delay of the creation.
+        delay: Option<i32>,
+    },
 }
 
 /// Pushes a superweapon presentation event.

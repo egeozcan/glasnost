@@ -694,6 +694,18 @@ pub struct SwGeneral {
     /// absent: none.
     #[serde(default)]
     pub spy_plane_camera: Option<String>,
+    /// `[General] ParadropRadius`, leptons (S-0522 claims 6 and 7); absent:
+    /// 1024.
+    #[serde(default)]
+    pub paradrop_radius: Option<i32>,
+    /// `[General] Parachute`, the parachute animation type (S-0522 claim
+    /// 13); absent: none.
+    #[serde(default)]
+    pub parachute: Option<String>,
+    /// `[AudioVisual] ChuteSound`, the parachute sound (S-0522 claim 9);
+    /// absent: none.
+    #[serde(default)]
+    pub chute_sound: Option<String>,
 }
 
 /// Game-wide economy values (written into `general.economy`), from the

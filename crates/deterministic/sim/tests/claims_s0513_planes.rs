@@ -322,13 +322,3 @@ fn claim44_no_primary_weapon_gives_no_camera_and_warns() {
     assert!(!events(&w).iter().any(|e| e.0 == SwEvent::Camera));
     assert!(w.notes.iter().any(|n| n.contains("claim 44")));
 }
-
-#[test]
-fn paradrop_seam_keeps_planes_holding_their_paratroopers() {
-    // Seam: S-0522 claims 6 to 15 are not built; the plane stays in its paradrop behaviour with its passengers (S-0501 claim 10 keeps it on the map).
-    let mut w = game(&ruleset());
-    let p = planes::paradrop(&mut w, ALPHA, at(0, 0), false)[0];
-    run(&mut w, 50);
-    assert_eq!(transport::count(&w, p), 3);
-    assert!(w.notes.iter().any(|n| n.contains("S-0522")));
-}
