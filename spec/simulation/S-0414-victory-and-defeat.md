@@ -2,11 +2,11 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-15
 measurements: []
 requests: [Q-0150, Q-0151, Q-0193, Q-0267, Q-0285]
 supersedes: []
@@ -220,7 +220,8 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
      no-escape marker, and it has no attacker and no attacking house (S-0302, S-0312). So passengers
      do not escape. An object that is
      being erased (glossary) stops being erased and takes the hit like any other object. Objects
-     under mind control (S-0215, Terms) are treated by their original house:
+     under mind control (S-0601 claim 13) are treated by their original house, given by
+     the original-owner query of S-0601 claim 14:
 
      | Object | Condition | Effect |
      |---|---|---|
@@ -744,7 +745,7 @@ included), is empty (claim 6, departure); our engine does not.
 | defeated | — | defeated | never tested again |
 | any | end of the game | same | pending result set (claim 7); end delay starts |
 | any with a pending result | houses' part of the final tick starts | same, result committed | later defeat tests cannot change the result or expiry (claims 8 and 16); all remaining simulation parts still run |
-| undefeated with a win | defeated during the end delay | defeated | result becomes a loss (claim 9); the end delay restarts when the house is person-played (both with `quirks.defeat_during_end_delay` on) |
+| undefeated with a win | defeated during the end delay | defeated | With `quirks.defeat_during_end_delay` on, the result becomes a loss; the end delay restarts if the house is person-played. With the switch off, the result and end delay remain fixed. A defeat tested in the final tick cannot change a committed result or expiry (claim 16). |
 
 **Observable ordering.**
 - The defeat test of a house update already sees the destruction of a surrender pending for that
@@ -791,12 +792,13 @@ included), is empty (claim 6, departure); our engine does not.
   holds for the person-played house; any other player house defeated in the delay loses and
   leaves the delay alone. Off: results and delay fixed at the end of the game. A defeat tested
   in the final tick cannot change the committed outcome with either setting (claim 16).
-- **Short game with the bases setting off** (S-0412 claim 11). Bases off removes the starting
+- **`quirks.short_game_without_bases`** (S-0412 claim 11; default on, original). With the switch
+  on, a setup with short game on and bases off is allowed, and the ordinary short-game defeat
+  test still applies. With the switch off, that combination of setup settings is refused,
+  even when qualifying objects would otherwise keep a house alive. Bases off removes the starting
   base unit, not the short-game test's other ways to survive: a contender with a counted building
   or an eligible base-unit vehicle supplied by the map or among its budget units still passes
-  claim 2. In our engine these in-game outcomes apply only when the setup is allowed: with
-  `quirks.short_game_without_bases` off, a setup with short game on and bases off is refused
-  (S-0412 claim 11). When none of the contenders has such an object, every tested contender fails at tick 1
+  claim 2. When none of the contenders has such an object, every tested contender fails at tick 1
   (an observer's house remains set aside). The houses are defeated one after another in house
   order, and the game ends at the first defeat after which no hostile pair remains (claim 10).
   The houses still undefeated then fail in their own updates of the same tick and lose (claim 9),
@@ -806,8 +808,10 @@ included), is empty (claim 6, departure); our engine does not.
   with its defeat (claim 6, departure); the human's loss in tick 1 is the same. When some
   contenders have qualifying objects, only those without them fail, and claim 6 decides whether
   those defeats end the game.
-  - Backing: `measurable` for the original (S-0412 scenario K1, parts b and c); the end test and
-    per-house results of our engine are the design rules of claims 6, 7 and 9
+  - Backing: `measurable` for the original (S-0412 scenario K1, parts b and c).
+    The off-state setup refusal is `unmeasured`: it is our engine's alternative, which the
+    original does not provide. The end test and per-house results of our engine are the
+    design rules of claims 6, 7 and 9
   - Confidence: high for the defeat test; medium for the setup cases, as S-0412 claim 11
 - **Observers.** An observer's house (S-0009 claim 22) owns nothing and receives no starting
   units. *The original* creates it like the house of any human participant: it is tested and
