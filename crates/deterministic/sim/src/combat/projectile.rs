@@ -1611,7 +1611,13 @@ fn detonation_inner(
 
 /// The explosion animation of S-0303 F5 (with the electromagnetic case's
 /// draw when it applies).
-fn explosion_anim(w: &mut World, h: WarheadId, d: i32, q: Pos, hit: bool) -> Option<String> {
+pub(crate) fn explosion_anim(
+    w: &mut World,
+    h: WarheadId,
+    d: i32,
+    q: Pos,
+    hit: bool,
+) -> Option<String> {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     let g = &rules.combat.general;

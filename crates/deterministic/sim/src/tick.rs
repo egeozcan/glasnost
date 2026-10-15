@@ -31,7 +31,10 @@ pub fn step(w: &mut World) {
     // bombs detonate in their carrier's turn in row 5 (S-0203 claim 1, S-0519 claim 4), not here.
     // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted-bomb maintenance (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
     crate::spawn::kamikaze_orders(w);
-    // Rows 10, 11, 12, 3 and 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
+    // Rows 10, 11 and 12 have no topic yet: empty seams.
+    // spec: S-0203 claim 1 row 3 (the weather storm's own update and bolt strikes, after rows 10 to 12 and before row 14 and the turn pass; S-0513 claims 14 to 19)
+    crate::superweapons::storm::update(w);
+    // Rows 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
     // maintenance) takes no draws (S-0203 row 13) and is not built yet.
     // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
     // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)

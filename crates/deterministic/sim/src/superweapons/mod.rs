@@ -723,6 +723,9 @@ pub struct Storm {
     pub start: i32,
     /// The tick of the weather update in which clearing began.
     pub clearing_since: i32,
+    /// The tick of the latest weather update (whether a stop request came
+    /// before or after the update of its tick).
+    pub last_update: i32,
 }
 
 impl Default for Storm {
@@ -735,6 +738,7 @@ impl Default for Storm {
             countdown: 0,
             start: 0,
             clearing_since: 0,
+            last_update: -1,
         }
     }
 }

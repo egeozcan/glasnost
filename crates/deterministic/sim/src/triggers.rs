@@ -1023,6 +1023,14 @@ fn action(w: &mut World, a: &glasnost_map::triggers::Action, trigger: u32) {
                 crate::superweapons::storm::request(w, h, c, dur, def);
             }
         }
+        // spec: S-0513 claim 20 and S-0524 Summary (44 storm start: a storm whose duration is the action's number, the game-wide countdown, a random legal cell, no owner)
+        44 => {
+            crate::superweapons::storm::start_action(w, a.number);
+        }
+        // spec: S-0513 claim 20 and S-0524 Summary (45 storm stop: clearing begins while raging)
+        45 => {
+            crate::superweapons::storm::stop(w);
+        }
         // spec: S-0524 claim 2 (90 lightning strike at a waypoint: a cloud whether or not a storm is active)
         90 => {
             if let Some(c) = waypoint_cell(w, a.waypoint) {
