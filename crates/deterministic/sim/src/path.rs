@@ -134,7 +134,7 @@ fn heading_cell(w: &World, id: ObjectId) -> Option<CellXY> {
     let here = o.pos.cell();
     let speed = o.drive.as_ref().is_some_and(|d| d.track.is_some())
         || o.walk.as_ref().is_some_and(|s| s.target.is_some())
-        // Q-0691 (interim: a hovering vehicle's current speed is not zero while φ > 0)
+        // spec: S-0503 claim 14 (a hovering vehicle's current speed is not zero while ρ ≠ 0; Q-0691 answered)
         || crate::hover::has_speed(w, id);
     if speed {
         // spec: S-0212 claim 8 (speed not zero: one step in the 8-direction of its body facing)

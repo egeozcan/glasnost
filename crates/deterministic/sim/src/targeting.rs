@@ -1102,9 +1102,8 @@ fn infantry_on(
 fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
     let on_tunnel = w
         .obj(actor)
-        .and_then(|o| w.cells.cell(o.pos.cell()))
-        .is_some_and(|c| c.land == land::TUNNEL);
-    // spec: S-0214 Terms (deploy readiness: never on a tunnel cell)
+        .is_some_and(|o| crate::transport::tunnel_cell(w, o.pos.cell()));
+    // spec: S-0214 Terms (deploy readiness: never on a tunnel cell, the tunnel-marked or edge predicate of S-0507 claim 7)
     let ready = !on_tunnel;
     let deploy_weapon = uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false));
     // spec: S-0214 table VD row VD3 (deploys in place)
@@ -1422,7 +1421,8 @@ fn cell_action(
     mods: Modifiers,
 ) -> Action {
     let g = generic_cell(w, house, actor, c, mods);
-    let tunnel = w.cells.cell(c).is_some_and(|x| x.land == land::TUNNEL);
+    // spec: S-0214 Terms (tunnel cell: a tunnel-marked cell or a tunnel edge for unloading, S-0507 claim 7)
+    let tunnel = crate::transport::tunnel_cell(w, c);
     match kind(w, actor) {
         Some(Kind::Infantry) => {
             let jumpjet = uflag(w, actor, |u| u.jumpjet);

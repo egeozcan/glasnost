@@ -247,7 +247,7 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
                 if let Some(d) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
                     d.claims = vec![cell];
                 }
-                // spec: S-0503 claim 6 and S-0209 claim 1 (a hovering vehicle's flag of its cell, its own until it leaves the cell; Q-0691 interim)
+                // spec: S-0503 claim 13 (a newly created hover starts between steps, its flag at its actual position; Q-0691 answered)
                 if let Some(h) = w.obj_mut(id).and_then(|ob| ob.hover.as_mut()) {
                     h.claims = vec![(cell, o.layer)];
                 }
@@ -265,10 +265,7 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
         // spec: S-0206 claim 5 (placing sets body and turret facings at once to the placement facing)
         obj.body.set(facing, tick, keeps);
         obj.turret.set(facing, tick, keeps);
-        if let Some(h) = obj.hover.as_mut() {
-            // spec: S-0503 Terms (the movement heading η); Q-0694 (interim: set to the placement facing)
-            h.heading = Turning::at(facing);
-        }
+        // spec: S-0503 claim 15 (placement, factory release and teleport replacement do not reset a hover's movement heading, and the body facing is not copied into it; a newly attached hovering locomotor starts at 0, `hover::HoverState::new`; Q-0694 answered)
     }
     // spec: S-0501 claim 1 (an aircraft's placement height, speed fraction and marks)
     crate::air::placed(w, id);
@@ -361,7 +358,7 @@ pub fn remove(w: &mut World, id: ObjectId) {
     };
     // spec: S-0614 claim 15 (a host removed while a parasite is attached releases it at once)
     crate::parasite::leaving(w, id);
-    // Q-0702 (interim: a transport removed with passengers inside takes them out of play with it; a removed passenger leaves its transport's passenger order)
+    // spec: S-0507 claim 16 (a transport removed with passengers inside: they die without attacker credit; a removed passenger leaves its transport's passenger order)
     crate::transport::removing(w, id);
     // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)
     crate::econ::slaves::removing(w, id);
@@ -698,7 +695,7 @@ pub fn place_map_objects(w: &mut World, map: &Map, sandbox: bool) {
                     && let Some(ov) = pt.wall_overlay
                 {
                     // spec: S-0112 claim 7 (a wall building of the map's building list is placed as a wall built in play: stage 0, owned by the building's owner; c and its four edge neighbours recomputed); S-0406 claim 10 (no building remains)
-                    // Its final owner is S-0210 claim 14 (a)'s, which runs later (Q-0684 interim).
+                    // spec: S-0210 claim 14 (a) (the building's owner is only the initial owner: the nearest-building rule replaces it before play starts, even with no owner as the result; the converted wall building cannot itself qualify; Q-0684 answered)
                     w.objects.remove(&id);
                     // As for a wall placed in play, an overlay already in the cell stays (S-0406 claim 10's interim rule).
                     if w.cells

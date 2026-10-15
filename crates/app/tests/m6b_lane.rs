@@ -125,7 +125,7 @@ fn hover_crossing_water(lane: &mut Lane) {
 
 /// S-0215 claim 35, S-0108 claim 4: an own vehicle ordered straight through
 /// an own gate, shot while the door is half open. The door frame of a
-/// moving gate is the Q-0685 interim.
+/// moving gate is S-0215 claim 35 d1's.
 fn gate_opening(lane: &mut Lane) {
     let w = lane.world();
     let gate = w

@@ -1197,6 +1197,29 @@ fn quirk_smudge_footprints_beyond_map_edge_both_settings() {
     }
 }
 
+// spec: S-0312 claim 26 (zero-coordinate exception), Edge cases (quirks.destruction_smudge_zero_anchor)
+// Smudge types are not modelled, so no candidate fits anywhere: both
+// settings take the same draws (no smudge-choice draw).
+#[test]
+fn quirk_destruction_smudge_zero_anchor_both_settings() {
+    assert!(
+        glasnost_rules::quirks::Quirks::default().destruction_smudge_zero_anchor,
+        "the default is the original"
+    );
+    for on in [true, false] {
+        let mut r = building_rules(3, 3);
+        r.globals.quirks.destruction_smudge_zero_anchor = on;
+        let mut w = game(&r);
+        let id = spawn(&mut w, Kind::Building, "HUT", 0, 0, 0);
+        let mut rr = w.rng.clone();
+        let expect = replay_building(&w, &mut rr, id, true);
+        w.effects.clear();
+        kill(&mut w, id);
+        assert_eq!(anims(&w), expect, "switch {on}");
+        assert_eq!(w.rng, rr, "switch {on}");
+    }
+}
+
 // ---------------------------------------------------------------- F2
 
 // spec: S-0312 F2 (b = 0 points to map north, 64 east, 128 south, 192 west, r leptons away; z unchanged)

@@ -1017,7 +1017,8 @@ fn door_inputs_come_from_the_image_section() {
 
 /// spec: S-0108 claim 4 (a gate opening or closing draws frame p, damaged p + G + 1, from the
 /// body sprite with no clamp, and no bib), claim 2 (a gate at rest: frame 0 and the bib), Import
-/// mapping (GateStages absent: 9); p is the Q-0685 interim (claim 23's door rule with D = G)
+/// mapping (GateStages absent: 9); S-0215 claim 35 d1 (p = trunc(q × G); at rest open while open is
+/// current, G − 1; Q-0685 answered)
 #[test]
 fn moving_gate_draws_its_door_frame() {
     let ctx = || {
@@ -1043,6 +1044,10 @@ fn moving_gate_draws_its_door_frame() {
     // Closing at its start: G, held at G − 1 = 8 (pixel 9).
     let closing = Some(DoorView::Closing { m: 90, r: 90 });
     assert_eq!(live_building_items(ctx(), None, closing, full)[0].4, 9);
+    // At rest open while open is current: G − 1 = 8 (pixel 9), no bib.
+    let open = live_building_items(ctx(), None, Some(DoorView::Open), full);
+    assert_eq!(open.len(), 2, "{open:?}");
+    assert_eq!(open[0].4, 9);
 }
 
 /// spec: S-0417 Terms (unloading: the building's current behaviour is unload, a queued one is not),

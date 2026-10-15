@@ -6530,6 +6530,11 @@
           "type": "boolean",
           "default": true
         },
+        "air_unload_reselects_clear_destination": {
+          "description": "An air transport's unload replaces a destination that passes the landing test (S-0501 claim 40's F7) by the replacement search around map waypoint 700, and takes the height-based approach or reselect transition for one that fails it; off: only a failing destination is replaced, and a passing one takes the approach or reselect transition.",
+          "type": "boolean",
+          "default": true
+        },
         "airborne_deploy_order_dropped": {
           "description": "A deploy order to an airborne in-place deploying type without the deploy-to-land flag is silently dropped; off: the order is kept until the vehicle is on the ground, and the next processing takes the ground deploy step of claim 4. Not implemented yet (wave 2).",
           "type": "boolean",
@@ -6992,6 +6997,11 @@
         },
         "destroyed_rocket_still_detonates": {
           "description": "A rocket missile destroyed in flight still detonates (claim 20).",
+          "type": "boolean",
+          "default": true
+        },
+        "destruction_smudge_zero_anchor": {
+          "description": "A destruction smudge's anchor cell with both coordinates 0 receives\nno smudge and the smudge choice takes no draw; off: that anchor takes\nthe ordinary fit, candidate and choice rules, map legality included.",
           "type": "boolean",
           "default": true
         },

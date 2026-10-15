@@ -1003,16 +1003,17 @@ impl SimRules {
             hover: HoverRules {
                 // spec: S-0503 Import mapping (HoverHeight absent: engine default 120 leptons)
                 height: g.hover_height.unwrap_or(120),
-                // spec: S-0503 Import mapping (HoverBob absent: 30.0; read as the key text, Q-0690)
-                bob: dec(&g.hover_bob, mode).unwrap_or_else(|| constant("30.0")),
-                // spec: S-0503 Import mapping (HoverBoost absent: 1.3; read as the key text, Q-0690)
-                boost: dec(&g.hover_boost, mode).unwrap_or_else(|| constant("1.3")),
-                // spec: S-0503 Import mapping (HoverAcceleration absent: 0.03; read as the key text, Q-0690)
-                acceleration: dec(&g.hover_acceleration, mode).unwrap_or_else(|| constant("0.03")),
-                // spec: S-0503 Import mapping (HoverBrake absent: 0.03; read as the key text, Q-0690)
-                brake: dec(&g.hover_brake, mode).unwrap_or_else(|| constant("0.03")),
-                // spec: S-0503 Import mapping (HoverDampen absent: 0.8; read as the key text, Q-0690)
-                dampen: dec(&g.hover_dampen, mode).unwrap_or_else(|| constant("0.8")),
+                // spec: S-0503 Import mapping (HoverBob: single precision widened to double; absent 30.0, exact binary64)
+                bob: dec(&g.hover_bob, mode).unwrap_or_else(|| nearest_double("30.0")),
+                // spec: S-0503 Import mapping (HoverBoost absent: the binary64 nearest exact decimal 1.3, not through the single-precision text conversion; Q-0690 answered)
+                boost: dec(&g.hover_boost, mode).unwrap_or_else(|| nearest_double("1.3")),
+                // spec: S-0503 Import mapping (HoverAcceleration absent: the binary64 nearest exact decimal 0.03)
+                acceleration: dec(&g.hover_acceleration, mode)
+                    .unwrap_or_else(|| nearest_double("0.03")),
+                // spec: S-0503 Import mapping (HoverBrake absent: the binary64 nearest exact decimal 0.03)
+                brake: dec(&g.hover_brake, mode).unwrap_or_else(|| nearest_double("0.03")),
+                // spec: S-0503 Import mapping (HoverDampen absent: the binary64 nearest exact decimal 0.8)
+                dampen: dec(&g.hover_dampen, mode).unwrap_or_else(|| nearest_double("0.8")),
                 // spec: S-0503 Import mapping and S-0306 Constants (Gravity absent: 3 leptons per tick²)
                 gravity: g.gravity.unwrap_or(3),
             },

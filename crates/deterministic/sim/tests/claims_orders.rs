@@ -1198,18 +1198,27 @@ fn s0215_gate_reverse_snaps() {
         for _ in 0..30 {
             tick::step(&mut w);
         }
-        let Door::Closing { since, .. } = door(&w, gate) else {
+        let Door::Closing { since, ticks: td } = door(&w, gate) else {
             panic!("closing expected");
         };
         process::gate_met(&mut w, gate);
         let reversed = w.tick;
         let ran = reversed - since;
+        if !snaps {
+            // spec: S-0215 claim 35 d2 (off: the reopening uses the opening expression over Td with progress Td − a + e, so it is at rest after a ticks; Q-0685 answered)
+            tick::step(&mut w);
+            let Door::Opening { since: s2, ticks } = door(&w, gate) else {
+                panic!("opening expected");
+            };
+            assert_eq!(ticks, td);
+            assert_eq!(s2 + td - (w.tick - 1), w.tick - 1 - since);
+        }
         let n = run_until(&mut w, 200, |w| process::gate_open(w, gate));
         // The reversal happens in the gate's processing of the next tick.
         if snaps {
             assert_eq!(n, 2);
         } else {
-            assert_eq!(n, ran + 1);
+            assert_eq!(n + 1, ran + 1);
         }
         assert!(ran >= 30);
     }

@@ -125,3 +125,13 @@ pub fn give_up_centre(w: &mut World, id: ObjectId) -> Option<glasnost_map::CellX
     // spec: S-0215 claim 38 and F11 (the central choice, with its ranged and raw draws, for infantry and vehicles whatever their weapons)
     crate::base::selected_centre(w, h)
 }
+
+/// Whether cell `c` is recorded as the entrance of an existing map tube
+/// (S-0212 claim 7), which S-0507's tunnel-marked cell needs. Seam: the
+/// map's tube definitions are not imported, so a map has no tubes and no
+/// cell is an entrance.
+pub fn tube_entrance(w: &World, c: glasnost_map::CellXY) -> bool {
+    // spec: S-0507 Import mapping (map tube definitions: absent, no tubes)
+    let _ = (w, c);
+    false
+}

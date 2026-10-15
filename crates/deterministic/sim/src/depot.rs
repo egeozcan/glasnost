@@ -13,8 +13,8 @@
 //! [`DepotState::serviced`].
 //!
 //! Interim rules tied to requests: the tether moment and the stopping point
-//! (Q-0680), settling while the vehicle moves far away (Q-0681) and the exit
-//! cell of a vehicle sent away without a rally point (Q-0682).
+//! (Q-0680, kept for a depot without the pad flag) and the departure-cell
+//! tests (Q-0674).
 
 use glasnost_map::CellXY;
 use serde::{Deserialize, Serialize};
@@ -434,23 +434,34 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
                 .obj(v)
                 .is_some_and(|o| crate::naval::depot_distance(o.pos, dock) < SETTLING_HOLD);
             if !still(w, v) {
-                // spec: S-0314 claim 21 (settling: within 200 leptons and still moving, the depot checks again on the next tick)
-                // Q-0681 interim: moving at 200 leptons or more, no step and the delay D.
-                return if near { 1 } else { d };
+                if near {
+                    // spec: S-0314 claim 21 (settling: within 200 leptons and still moving, the depot checks again on the next tick)
+                    return 1;
+                }
+                // spec: S-0314 claim 21 (settling, 200 leptons or more and moving: no step, settling and contact kept, the locomotor switched on unless ion-sensitive shutdown is in force, which is never (no ion storms are modelled), and checked again after D ticks)
+                if let Some(o) = w.obj_mut(v) {
+                    o.depot.loco_off = false;
+                }
+                return d;
             }
-            // spec: S-0314 claim 21 (once it stands still, the depot switches its locomotor off before stepping; a vehicle whose locomotor is already off and which has a destination has its movement stopped)
-            let off = w.obj(v).is_some_and(|o| o.depot.loco_off);
-            if off && w.obj(v).is_some_and(|o| o.dest.is_some()) {
-                crate::drive::stop(w, v);
-            }
-            if let Some(o) = w.obj_mut(v) {
-                o.depot.loco_off = true;
+            if near {
+                // spec: S-0314 claim 21 (once it stands still within 200 leptons, the depot switches its locomotor off before stepping; a vehicle whose locomotor is already off and which has a destination has its movement stopped; at 200 leptons or more neither adjustment applies and the stationary vehicle proceeds to the repair step)
+                let off = w.obj(v).is_some_and(|o| o.depot.loco_off);
+                if off && w.obj(v).is_some_and(|o| o.dest.is_some()) {
+                    crate::drive::stop(w, v);
+                }
+                if let Some(o) = w.obj_mut(v) {
+                    o.depot.loco_off = true;
+                }
             }
             match heal::repair_step(w, v) {
-                // spec: S-0314 claim 6 (settling, not needed: sent away at once, no announcement)
+                // spec: S-0314 claim 6 (settling, not needed: sent away at once, no announcement; a failed departure while already settling retains that phase and retries after D ticks)
                 Some(StepOutcome::NotNeeded) | None => {
-                    send_away(w, k, v);
-                    1
+                    if send_away(w, k, v) {
+                        1
+                    } else {
+                        d
+                    }
                 }
                 // spec: S-0314 claim 6 (settling, cannot pay: asks again at its next processing, D ticks later)
                 Some(StepOutcome::CannotPay) => d,
@@ -473,7 +484,10 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
                 // spec: S-0314 claim 6 (done or not needed: the repair-complete announcement for the depot's owner, and the vehicle is sent away)
                 Some(StepOutcome::Done | StepOutcome::NotNeeded) | None => {
                     announce(w, k, v, crate::combat::effects::Sound::UnitRepaired);
-                    send_away(w, k, v);
+                    if !send_away(w, k, v) {
+                        // spec: S-0314 claim 6 (a failed departure from working leaves the vehicle in settling with a 1-tick retry)
+                        set(w, phase::SETTLING);
+                    }
                     1
                 }
                 Some(StepOutcome::CannotPay) => {
@@ -509,23 +523,23 @@ fn announce(w: &mut World, k: ObjectId, v: ObjectId, sound: crate::combat::effec
     });
 }
 
-/// Sends vehicle `v` away from depot `k` (S-0314 claim 6): contact ends,
-/// and it moves to the rally point, else an exit cell next to the depot
-/// (Q-0682 interim); a vehicle of a house that is not human-controlled
-/// with a guard spot moves to the guard spot, which is cleared.
-fn send_away(w: &mut World, k: ObjectId, v: ObjectId) {
-    let Some(o) = w.obj(v).cloned() else { return };
-    release(w, v);
-    if let Some(ob) = w.obj_mut(v) {
-        // spec: S-0314 claims 21 and 22 (the locomotor is switched on when the vehicle receives a destination while a depot occupies its cell)
-        ob.depot.loco_off = false;
-    }
+/// Sends vehicle `v` away from depot `k` (S-0314 claim 6): it moves to
+/// the rally point, else to claim 25's exit cell; a vehicle of a house that
+/// is not human-controlled with a guard spot moves to the guard spot, which
+/// is cleared. With a destination, contact ends; `false` when there is no
+/// destination, in which case nothing is ordered and contact is kept.
+fn send_away(w: &mut World, k: ObjectId, v: ObjectId) -> bool {
+    let Some(o) = w.obj(v).cloned() else {
+        return true;
+    };
     // spec: S-0314 claim 6 (the guard-spot return holds for the neutral and special houses only; no player house takes it)
     let human = o
         .owner
         .and_then(|h| w.houses.get(usize::from(h.0)))
         .is_none_or(|h| h.role == crate::world::HouseRole::Player);
     let rally = w.obj(k).and_then(|b| b.guard_spot);
+    // spec: S-0314 claim 6 (exit selection occurs before the rally-point override; it takes no draw, so only its result matters)
+    let exit = exit_cell(w, k, v).map(Target::Cell);
     let dest = if !human && o.guard_spot.is_some() {
         // spec: S-0314 claim 6 (a vehicle of the neutral or special house with a guard spot moves to it, and the spot is cleared)
         if let Some(ob) = w.obj_mut(v) {
@@ -533,38 +547,114 @@ fn send_away(w: &mut World, k: ObjectId, v: ObjectId) {
         }
         o.guard_spot
     } else if rally.is_some() {
-        // spec: S-0314 claim 6 (the depot's rally point when it has one, S-0213 claim 20)
+        // spec: S-0314 claim 6 (the depot's rally point when it has one, S-0213 claim 20, not subjected to the exit-cell suitability test)
         rally
     } else {
-        // spec: S-0314 claim 6 (otherwise an exit cell the depot picks next to itself; Q-0682 interim: the nearby-cell search of S-0212 claim 25, destination substitution, outside the foundation)
-        exit_cell(w, k, v).map(Target::Cell)
+        // spec: S-0314 claims 6 and 25 (otherwise the exit cell selected by claim 25)
+        exit
     };
-    // spec: S-0314 claim 21 (the destination the depot gives replaces any destination the player gave while docked)
-    crate::econ::assign_destination(w, v, dest);
+    let Some(dest) = dest else {
+        // spec: S-0314 claims 6 and 25 (with no selected cell and no rally point, no departure is ordered and contact is retained; no widening fallback, scatter or forced release)
+        return false;
+    };
+    // spec: S-0314 claim 6 (a selected destination releases contact and tether and clears queued entry)
+    release(w, v);
+    if let Some(ob) = w.obj_mut(v) {
+        // spec: S-0314 claims 21 and 22 (the locomotor is switched on when the vehicle receives a destination while a depot occupies its cell)
+        ob.depot.loco_off = false;
+    }
+    // spec: S-0314 claims 6 and 21 (the destination the depot gives replaces any destination the player gave while docked)
+    crate::econ::assign_destination(w, v, Some(dest));
     if let Some(ob) = w.obj_mut(v) {
         ob.path.steps.clear();
         ob.path.retry_at = 0;
-        if dest.is_some() {
-            ob.beh.queue(Some(Behaviour::Move));
-        } else {
-            ob.beh.queue(Some(Behaviour::Guard));
-        }
+        // spec: S-0314 claim 6 (a selected destination queues move without immediate start)
+        ob.beh.queue(Some(Behaviour::Move));
     }
+    true
 }
 
-/// The exit cell of a vehicle sent away without a rally point (Q-0682
-/// interim).
-fn exit_cell(w: &mut World, k: ObjectId, v: ObjectId) -> Option<CellXY> {
-    let b = w.obj(k)?.clone();
-    let foundation = crate::objects::foundation_cells(b.pos.cell(), b.foundation);
-    crate::regions::ensure(w);
-    let skip = move |_: &World, c: CellXY| !foundation.contains(&c);
-    crate::path::nearby_filtered(
-        w,
-        b.pos.cell(),
-        crate::path::NearbyUse::Substitution { unit: v },
-        Some(&skip),
-    )
+/// Claim 25's candidate cells of the repair departure, in preference order,
+/// each with whether the locomotion-specific entry test also applies.
+fn exit_candidates(w: &World, k: ObjectId, v: ObjectId) -> Vec<(CellXY, bool)> {
+    let Some(b) = w.obj(k) else {
+        return Vec::new();
+    };
+    let Some(bt) = w.rules().buildings.get(b.type_index as usize) else {
+        return Vec::new();
+    };
+    let (x0, y0) = (b.pos.cell().x, b.pos.cell().y);
+    let (fw, fh) = b.foundation;
+    // spec: S-0314 claim 25 (integer cells with signed 16-bit wrapping, S-0205 claim 1)
+    let cell = |a: i32, bb: i32| {
+        CellXY::new(
+            i32::from(x0.wrapping_add(a) as i16),
+            i32::from(y0.wrapping_add(bb) as i16),
+        )
+    };
+    let mut out = Vec::new();
+    let e = &bt.raw.econ;
+    // spec: S-0314 claim 25 (door kinds: (x0 + 1, y0 + 2), (x0 + 2, y0 + 2), (x0 + 2, y0 + 1) for the first, second and third kinds the type has; with the locomotion test)
+    for (has, (a, bb)) in [
+        (e.door_first, (1, 2)),
+        (e.door_second, (2, 2)),
+        (e.door_third, (2, 1)),
+    ] {
+        if has == Some(true) {
+            out.push((cell(a, bb), true));
+        }
+    }
+    if bt.naval && bt.factory == Some(crate::rules::FactoryKind::Vehicle) {
+        // spec: S-0314 claim 25 (a naval vehicle factory: (qx, qy + 1), (qx, qy), (qx − 1, qy + 1) from the cell of the supplied docking point, claim 18; no locomotion test)
+        let q = docking_point(w, k, v).cell();
+        for (a, bb) in [(0, 1), (0, 0), (-1, 1)] {
+            out.push((
+                CellXY::new(
+                    i32::from(q.x.wrapping_add(a) as i16),
+                    i32::from(q.y.wrapping_add(bb) as i16),
+                ),
+                false,
+            ));
+        }
+    }
+    let hospital = bt.raw.hospital == Some(true);
+    let refinery = bt.raw.foundation_refinery == Some(true);
+    let exact = w.rules().quirks.foundation_exit_lists;
+    let list = crate::econ::release::present_exit_list(fw, fh, refinery, exact);
+    match list {
+        // spec: S-0314 claim 25 (S-0404's foundation exit list, when present and the type is not a hospital, in its order with omissions and repeats; no locomotion test; exhausting it gives no cell)
+        Some(l) if !hospital => {
+            out.extend(l.into_iter().map(|(a, bb)| (cell(a, bb), false)));
+        }
+        _ => {
+            // spec: S-0314 claim 25 (otherwise the perimeter: for i from −1 to W, (x0 + i, y0 + H) then (x0 + i, y0 − 1); then for j from −1 to H, (x0 + W, y0 + j) then (x0 − 1, y0 + j); corner repeats intended; with the locomotion test)
+            for i in -1..=fw {
+                out.push((cell(i, fh), true));
+                out.push((cell(i, -1), true));
+            }
+            for j in -1..=fh {
+                out.push((cell(fw, j), true));
+                out.push((cell(-1, j), true));
+            }
+        }
+    }
+    out
+}
+
+/// The exit cell of a vehicle sent away (S-0314 claim 25): the first
+/// candidate that is a legal map cell giving *free* from the vehicle's
+/// cell-entry test. No draw, no route or region test.
+fn exit_cell(w: &World, k: ObjectId, v: ObjectId) -> Option<CellXY> {
+    let reference = crate::occupancy::reference_level(w, v);
+    exit_candidates(w, k, v)
+        .into_iter()
+        .find(|&(c, _loco)| {
+            // spec: S-0314 claim 25 (a legal map cell giving free from the vehicle's cell-entry test, S-0209 claim 5 and S-0211; every non-free result rejects it). Q-0674 interim: the locomotion-specific test of the door and perimeter rows adds nothing to that entry test.
+            w.cells.footprint().is_legal(c)
+                && crate::occupancy::vehicle_outcome(w, v, c, reference)
+                    == crate::occupancy::Outcome::Clear
+        })
+        .map(|(c, _)| c)
 }
 
 /// The early start of an unarmed depot in its guard processing (S-0314
@@ -596,7 +686,7 @@ pub fn early_start(w: &mut World, k: ObjectId) -> Option<i32> {
 }
 
 /// The per-tick queued-entry retry of a vehicle (S-0314 claim 23), in its
-/// own turn before its behaviour processing.
+/// own turn after its locomotor movement.
 pub fn vehicle_turn(w: &mut World, id: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
@@ -625,10 +715,12 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
     take(w, id, k, place);
     // spec: S-0314 claim 23 (with a place it asks permission)
     if accepts(w, k, id, true) {
-        // spec: S-0314 claim 23 (granted: it switches to enter and approaches as in claim 17)
+        // spec: S-0314 claim 23 (granted: it queues enter with immediate start, S-0215 claim 7, making it current in the same turn when ready, without processing it now; the depot becomes its destination and queued entry is cleared)
+        let ready = crate::process::ready(w, id);
         if let Some(ob) = w.obj_mut(id) {
             ob.depot.queued = None;
-            ob.beh.queue_and_start_at_once(Behaviour::Enter, t, stale);
+            ob.beh
+                .queue_and_start(Some(Behaviour::Enter), ready, t, stale);
         }
         crate::econ::assign_destination(w, id, Some(Target::Object(k)));
         if let Some(ob) = w.obj_mut(id) {

@@ -291,7 +291,8 @@ pub struct Live {
     /// sprite image-frame count.
     anim_table: BTreeMap<Vec<u8>, AnimEntry>,
     /// The drawing's cosmetic stream, for the playback draws the
-    /// simulation does not take (interim rule, request Q-0770).
+    /// simulation does not take (a seam: S-0109 claim 28 puts them on the
+    /// scenario stream once playback is in the simulation).
     cosmetic: glasnost_sim::rng::Rng,
     /// Whether our own debug markers are drawn for what has no art (the
     /// viewer); the game client draws only art.
@@ -891,8 +892,8 @@ impl Live {
         for e in &effects {
             if let Effect::Anim { name, pos, delay } = e {
                 self.counts.anims += 1;
-                // spec: S-0109 claim 5 (created during the turn pass: first update in the creation
-                // tick; interim rule, request Q-0771)
+                // spec: S-0109 claims 5 and 29 (created before or during the turn pass: first update
+                // in the creation tick; the lost update of claim 29 needs playback in the simulation)
                 if self.create_anim(&name_bytes(name), *pos, now, *delay) {
                     art_cells.insert(pos.cell());
                 } else if self.debug_markers {
@@ -1183,13 +1184,14 @@ impl Live {
                     facing: o.turret.value(self.world.tick),
                     object: sim_code(o.id),
                     unloading: self.unloading_of(o),
-                    // spec: S-0108 claim 4 (a gate's door: S-0215 claim 35)
-                    gate_door: self
+                    // spec: S-0108 claim 4 (a gate's door, S-0215 claim 35: its special image only while the current behaviour is open; otherwise the stationary rows)
+                    gate_door: (self
                         .rules
                         .buildings
                         .get(o.type_index as usize)
                         .is_some_and(|b| b.gate)
-                        .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
+                        && o.beh.current == Some(Behaviour::Open))
+                    .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
                 })
             })
             .collect();

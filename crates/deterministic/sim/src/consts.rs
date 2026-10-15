@@ -72,14 +72,13 @@ pub const BRIDGE_EXPLOSION_CHANCE: F64 = F64(0x3fee_6666_6666_6666);
 // spec: S-0511 F4 (c, the double-precision constant nearest 1 / (2³² − 1))
 pub const MAP_GENERATOR_C: F64 = F64(0x3df0_0000_0010_0000);
 
-/// 2π of S-0503 F6's bob term: the double nearest 2π (Q-0690 interim, as
-/// S-0306 F7 forms it).
-// spec: S-0503 F6 (sin(ϱ × 2π / Pᵈ)); Q-0690 (interim: the double nearest 2π)
+/// 2π of S-0503 F6's bob term: the binary64 nearest exact 2π.
+// spec: S-0503 F6 (sin(ϱ × 2π / Pᵈ); 2π the binary64 number nearest exact mathematical 2π, not a widened single; Q-0690 answered)
 pub const TWO_PI: F64 = F64(0x4019_21fb_5444_2d18);
 
-/// *m* = 1.1 of S-0503 F6 for an even object number: the double nearest 1.1
-/// (Q-0690 interim).
-// spec: S-0503 F6 (m = 1.1 for an even object number); Q-0690 (interim: the double nearest 1.1)
+/// *m* = 1.1 of S-0503 F6 for an even object number: the binary64 nearest
+/// exact decimal 1.1.
+// spec: S-0503 F6 (m = 1.1 for an even object number, the binary64 number nearest exact decimal 1.1; Q-0690 answered)
 pub const EVEN_BOB_FACTOR: F64 = F64(0x3ff1_9999_9999_999a);
 
 #[cfg(test)]
@@ -132,7 +131,7 @@ mod tests {
         assert_eq!(THREE_QUARTERS, dec("0.75"));
     }
 
-    // spec: S-0503 F6 (2π and m = 1.1 as the doubles nearest them, Q-0690 interim)
+    // spec: S-0503 F6 (2π and m = 1.1 as the binary64 numbers nearest the exact values; Q-0690 answered)
     #[test]
     fn hover_bob_constants() {
         assert_eq!(

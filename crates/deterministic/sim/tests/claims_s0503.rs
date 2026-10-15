@@ -116,6 +116,31 @@ fn world() -> World {
     world_with(rules())
 }
 
+// spec: S-0503 Import mapping (absent HoverBoost, HoverAcceleration, HoverBrake and HoverDampen: the binary64 nearest exact decimal 1.3, 0.03, 0.03 and 0.8, not through the single-precision text conversion; HoverBob absent: 30.0 exact; a present key is single precision widened; Q-0690 answered)
+#[test]
+fn absent_hover_keys_take_nearest_double_defaults() {
+    let mut r = rules();
+    let g = &mut r.sim.general;
+    g.hover_bob = None;
+    g.hover_boost = None;
+    g.hover_acceleration = None;
+    g.hover_brake = None;
+    g.hover_dampen = None;
+    let w = world_with(r);
+    let h = w.rules().general.hover;
+    let near = glasnost_num::decimal::nearest_double;
+    assert_eq!(h.bob, near("30"));
+    assert_eq!(h.boost, near("1.3"));
+    assert_eq!(h.acceleration, near("0.03"));
+    assert_eq!(h.brake, near("0.03"));
+    assert_eq!(h.dampen, near("0.8"));
+    // The key text of the same decimal is read in single precision, so it differs.
+    let mut r = rules();
+    r.sim.general.hover_boost = dec("1.3");
+    let w = world_with(r);
+    assert_ne!(w.rules().general.hover.boost, near("1.3"));
+}
+
 fn at(w: &mut World, name: &str, house: u8, dx: i32, dy: i32, facing: u16) -> ObjectId {
     testkit::spawn(w, Kind::Vehicle, name, house, cell(dx, dy), facing)
 }
@@ -175,6 +200,60 @@ fn settle(w: &mut World) {
     common::run(w, 300);
 }
 
+fn vehicle_flags(w: &World, c: CellXY) -> u32 {
+    u32::from(
+        w.cells
+            .occ(c, glasnost_sim::world::Layer::Ground)
+            .unwrap()
+            .vehicles,
+    )
+}
+
+// spec: S-0503 claim 13 (a new hover starts between steps; a clear choice reserves the point's cell at once; the state ends at the first positive advance with a heading point, which clears the flag at the actual position before moving; crossings while not between steps neither set nor clear flags; Q-0691 answered) and claim 14 (current speed is ρ ≠ 0, even while φ = 0 during the turn)
+#[test]
+fn claim_13_between_steps_and_flags() {
+    let mut w = world();
+    // Facing and heading north, ordered south: it turns (φ = 0) before it advances.
+    let id = at(&mut w, "HOVER", 0, 0, 0, 0);
+    settle(&mut w);
+    let start = w.obj(id).unwrap().pos.cell();
+    assert!(
+        hover::between_steps(&w, id),
+        "a new hover starts between steps"
+    );
+    assert_eq!(vehicle_flags(&w, start), 1);
+    order(&mut w, id, cell(0, 4));
+    let p = hs(&w, id).point.expect("the first choice is made at once");
+    assert_eq!(p.cell(), cell(0, 1));
+    assert_eq!(
+        vehicle_flags(&w, cell(0, 1)),
+        1,
+        "the point's cell reserved"
+    );
+    assert!(
+        hover::between_steps(&w, id),
+        "still between steps before advancing"
+    );
+    assert!(hs(&w, id).phi.eq_num(F64::ZERO));
+    assert!(hover::has_speed(&w, id), "ρ ≠ 0 counts while φ = 0");
+    let x0 = w.obj(id).unwrap().pos;
+    common::run_until(&mut w, 200, |w| {
+        let p = w.obj(id).unwrap().pos;
+        (p.x, p.y) != (x0.x, x0.y)
+    });
+    assert!(!hover::between_steps(&w, id), "the first advance ends it");
+    assert_eq!(vehicle_flags(&w, start), 0, "its own cell's flag cleared");
+    assert_eq!(vehicle_flags(&w, cell(0, 1)), 1);
+    until_stopped(&mut w, id, 2000);
+    assert!(
+        hover::between_steps(&w, id),
+        "an arrival puts it between steps"
+    );
+    assert_eq!(vehicle_flags(&w, w.obj(id).unwrap().pos.cell()), 1);
+    let flagged: u32 = (0..=4).map(|dy| vehicle_flags(&w, cell(0, dy))).sum();
+    assert_eq!(flagged, 1, "no flag left behind");
+}
+
 // spec: S-0503 claim 1 (the locomotor field alone chooses the model: a hovering amphibious type hovers, a driving amphibious type drives)
 #[test]
 fn claim_1_locomotor_chooses_the_model() {
@@ -225,15 +304,12 @@ fn claim_1_hover_crosses_the_shore() {
 #[test]
 fn claim_2_throttle() {
     let mut w = world();
-    // Facing east (body and movement heading), ordered west.
+    // Facing east, movement heading north (S-0503 claim 15), ordered south.
     let id = at(&mut w, "HOVER", 0, 0, 0, 16384);
     settle(&mut w);
-    assert_eq!(
-        hs(&w, id).heading.value(w.tick),
-        16384,
-        "η starts at the placement facing (Q-0694)"
-    );
-    order(&mut w, id, cell(-4, 0));
+    // spec: S-0503 claim 15 (a new hover's movement heading is north, 0, independently of the body facing; Q-0694 answered)
+    assert_eq!(hs(&w, id).heading.value(w.tick), 0, "η starts north");
+    order(&mut w, id, cell(0, 4));
     let start = w.obj(id).unwrap().pos;
     tick::step(&mut w);
     let s = hs(&w, id);
@@ -270,7 +346,7 @@ fn claim_2_throttle() {
         saw.1 |= s.throttle.eq_num(half(&w));
     }
     assert!(saw.0 && saw.1, "full throttle on the way, half at the end");
-    assert_eq!(w.obj(id).unwrap().pos.cell(), cell(-4, 0));
+    assert_eq!(w.obj(id).unwrap().pos.cell(), cell(0, 4));
 }
 
 // spec: S-0503 claim 3 and F2 (φ rises by 1 / (a × 900) towards G = min(1, B × T); above G it falls by 1 / (b × 900), floored at 0, so it can undershoot G)
@@ -368,7 +444,7 @@ fn claim_4_speed_fraction() {
         hs(&w, id).rho.eq_num(F64::ZERO),
         "a new vehicle starts with ρ = 0"
     );
-    order(&mut w, id, cell(0, -4));
+    order(&mut w, id, cell(4, 0));
     assert!(hs(&w, id).rho.eq_num(f(&w, 1)), "ρ = 1 on a given move");
     head(&mut w, id);
     hover::set_exit_fraction(&mut w, id);
@@ -440,6 +516,9 @@ fn claim_6_straight_travel_and_occupancy() {
     let mut w = world();
     let id = at(&mut w, "HOVER", 0, 0, 0, 16384);
     settle(&mut w);
+    // The movement heading starts north (claim 15); turn it east first so the travel is straight.
+    w.obj_mut(id).unwrap().hover.as_mut().unwrap().heading =
+        glasnost_sim::turning::Turning::at(16384);
     let y0 = w.obj(id).unwrap().pos.y;
     order(&mut w, id, cell(4, 0));
     for _ in 0..1000 {
@@ -606,6 +685,40 @@ fn claim_10_stop_request() {
     assert!(hs(&w, id).phi.eq_num(phi), "hover speed not zeroed");
 }
 
+// spec: S-0503 claim 16 (a person's stop order keeps the heading point, throttle, hover speed and ρ at that instant; not a forced halt: it travels on to its heading point and stops there; Q-0696 answered)
+#[test]
+fn claim_16_stop_order_keeps_the_heading_point() {
+    let mut w = world();
+    let id = at(&mut w, "HOVER", 0, -8, 0, 16384);
+    settle(&mut w);
+    order(&mut w, id, cell(-2, 0));
+    common::run(&mut w, 60);
+    let before = hs(&w, id);
+    let p = before.point.expect("a heading point while travelling");
+    assert!(before.phi.gt(F64::ZERO));
+    let owner = w.obj(id).unwrap().owner.unwrap();
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        owner,
+        glasnost_sim::orders::Order::Stop { actor: id }
+    ));
+    let after = hs(&w, id);
+    assert_eq!(after.point, Some(p), "the heading point is kept");
+    assert!(after.throttle.eq_num(before.throttle));
+    assert!(after.phi.eq_num(before.phi), "hover speed not zeroed");
+    assert!(after.rho.eq_num(before.rho), "ρ not set to 0");
+    let x0 = w.obj(id).unwrap().pos;
+    common::run(&mut w, 1);
+    assert_ne!(w.obj(id).unwrap().pos.x, x0.x, "it keeps travelling");
+    until_stopped(&mut w, id, 500);
+    assert!(!hover::moving(&w, id));
+    assert_eq!(
+        w.obj(id).unwrap().pos.cell(),
+        p.cell(),
+        "it stops at its heading point"
+    );
+}
+
 // spec: S-0503 claim 11 (a spin ending over water below 104 leptons gives the bomb mark and starts the fall)
 #[test]
 fn claim_11_sinking_over_water() {
@@ -668,7 +781,7 @@ fn claim_12_clear() {
     assert_eq!(o.path.steps.len(), 2, "one step used up");
 }
 
-// spec: S-0503 claim 12, table T1 (stationary friendly at the first check: no heading point, throttle, φ and ρ at 0; the path is discarded and searched again at once, and R starts, Q-0692)
+// spec: S-0503 claim 12, table T1 (stationary friendly at the first check: no heading point, throttle, φ and ρ at 0; the path is discarded and searched again at once, and R starts, Q-0692 answered)
 #[test]
 fn claim_12_stationary_friendly_first_check() {
     let mut w = world();
@@ -694,7 +807,7 @@ fn claim_12_stationary_friendly_first_check() {
             assert_eq!(
                 o.path.retry_at,
                 t + w.rules().general.retry_delay,
-                "the immediate search starts R (Q-0692)"
+                "the immediate search starts R"
             );
             checked = true;
             break;

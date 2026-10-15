@@ -482,15 +482,23 @@ pub fn ring(fw: i32, fh: i32) -> Vec<(i32, i32)> {
 /// foundation words (S-0108; the importer gives 1 × 1 for an unknown word)
 /// cannot come from imported data and takes its ring.
 pub fn exit_list(fw: i32, fh: i32, refinery: bool, exact: bool) -> Vec<(i32, i32)> {
+    present_exit_list(fw, fh, refinery, exact).unwrap_or_else(|| ring(fw, fh))
+}
+
+/// The foundation exit list of S-0404 Constants when one is present: with
+/// `quirks.foundation_exit_lists` off the ring alternative; on, the listed
+/// word's list, or `None` for a foundation size without one (S-0314 claim
+/// 25's "when present"; Q-0674 interim).
+pub fn present_exit_list(fw: i32, fh: i32, refinery: bool, exact: bool) -> Option<Vec<(i32, i32)>> {
     if !exact {
-        return ring(fw, fh);
+        return Some(ring(fw, fh));
     }
     // spec: S-0404 Constants (the 3 × 3 refinery word has its own list)
     let key = (fw, fh, refinery && (fw, fh) == (3, 3));
     EXIT_LISTS
         .iter()
         .find(|(k, _)| *k == key)
-        .map_or_else(|| ring(fw, fh), |(_, l)| l.to_vec())
+        .map(|(_, l)| l.to_vec())
 }
 
 /// The start cell *S* of an aircraft's edge entry (S-0404 claim 13): `local`

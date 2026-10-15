@@ -1280,13 +1280,22 @@ fn process_open(w: &mut World, id: ObjectId) -> i32 {
                 NOW
             }
             Door::Closing { since, .. } => {
-                // spec: S-0215 claim 35 (quirks.gate_reverse_snaps: the reversed door is at rest open at the next update; off: it retraces the closing's ticks)
-                let ticks = if snaps {
-                    0
+                let door = if snaps {
+                    // spec: S-0215 claim 35 d2 (quirks.gate_reverse_snaps on: q = 1 at once, at rest open at the next gate turn)
+                    Door::Opening { since: t, ticks: 0 }
                 } else {
-                    t.wrapping_sub(since).max(0)
+                    // spec: S-0215 claim 35 d2 (off: closing ran a ticks; the reopening takes a ticks with q = R(min(Td, Td − a + e) / Td), e counted from the reversal; Q-0685 answered)
+                    let td = match gate.door {
+                        Door::Closing { ticks, .. } => ticks.max(0),
+                        _ => 0,
+                    };
+                    let a = t.wrapping_sub(since).clamp(0, td);
+                    Door::Opening {
+                        since: t.wrapping_sub(td.wrapping_sub(a)),
+                        ticks: td,
+                    }
                 };
-                set(w, stage::OPENING, Door::Opening { since: t, ticks }, true);
+                set(w, stage::OPENING, door, true);
                 NOW
             }
         },

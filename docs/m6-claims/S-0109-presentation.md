@@ -19,22 +19,24 @@ Code: `crates/app/src/mapview/anims.rs`, `live.rs` (`create_anim`, `update_anims
 |---|---|---|
 | 1 (image frame a + k) | tested | `plain_playback_an1`, `end_past_the_sprite_an1_t3`; `animation_events_play_their_art_and_end` |
 | 2 (stage delay from the rate) | tested | `plain_playback_an1`, `fast_rate_freezes_an2` |
-| 3 (random rate) | tested | `random_rate_an3` (the simulation's drawn value; equal ends take no draw), `follow_up_redraws_its_delay`. Partly: a follow-up's draw comes from the drawing's cosmetic stream, not the scenario stream (Q-0770) |
+| 3 (random rate) | tested | `random_rate_an3` (the simulation's drawn value; equal ends take no draw), `follow_up_redraws_its_delay`. Partly: a follow-up's draw comes from the drawing's cosmetic stream, not the scenario stream claim 28 requires (playback is not in the simulation) |
 | 4 (game-speed normalisation) | tested | `game_speed_an4` |
-| 5 (when the stage advances) | tested | `first_frame_and_lifetime_an1_t5_t6`, `first_update_after_creation`. Partly: the first-update tick of each in-play creator is an interim rule (Q-0771); lost updates do not arise in the drawing (every animation is updated each shown tick) |
+| 5 (when the stage advances) | tested | `first_frame_and_lifetime_an1_t5_t6`, `first_update_after_creation`. Partly: every reported animation takes its first update in its creation tick, claim 29's case for creation before or during the turn pass; the update lost to a removal in the update order and creation after the pass are not distinguished, because playback is not in the simulation |
 | 6 (passes and end limits) | tested | `plain_playback_an1`, `looped_an5`, `loop_quirks_off` |
 | 7 (remaining passes, endless) | tested | `looped_an5`, `loop_quirks_off` (`anim_loop_count_wrap`) |
 | 8 (reversed play) | tested | `reversed_an6` (with `anim_reverse_raw_loop_end` off) |
 | 9 (ping-pong play) | tested | `ping_pong_an7` (with `anim_pingpong_lower_turn` off) |
 | 10 (shadow types) | tested | `shadow_pass_end_an8`; the shadow frame drawing in the slot tests of `mapview::tests` |
-| 11 (loop delays) | tested | `loop_delay_an9`. Partly: the between-pass draw comes from the cosmetic stream (Q-0770); no creator asks for a loop delay at creation |
+| 11 (loop delays) | tested | `loop_delay_an9`. Partly: the between-pass draw comes from the cosmetic stream, not claim 28's scenario stream; no creator asks for a loop delay at creation |
 | 12 (no random starting frame) | tested | every test starts at frame *a* |
 | 13 (start event) | not implemented | the start event's effects are simulation state (S-0202 claim 15, taken at creation by `load::anim_created_at`); the drawing plays no event |
 | 14 (middle event) | not implemented | simulation state; μ > 0 is not modelled in the simulation (docs/development.md, *Animation start events*) |
 | 15 (follow-up type) | tested | `follow_up_an11` (with `anim_followup_start_doubled` and `anim_followup_keeps_step` off), `follow_up_redraws_its_delay`, `unknown_follow_up_ends` |
 | 16 (end of an animation) | tested | `first_frame_and_lifetime_an1_t5_t6`, `animation_events_play_their_art_and_end` (removed at its end). Infantry-making and burning-walker ends are not modelled (S-0611, S-0615) |
 | 17 (damage over time) | not implemented | simulation state; `anim_damage_starts_at_one` is in NOT_IMPLEMENTED |
-| 18 (timing reaches game state) | not implemented | follows from 13, 14, 15 and 17 in the simulation, which has no playback clock (Q-0770) |
+| 18 (timing reaches game state) | not implemented | follows from 13, 14, 15 and 17 in the simulation, which has no playback clock |
+| 28 (playback draws are simulation effects) | not implemented | the simulation has no playback clock; the drawing's cosmetic stream takes these draws (seam `AnimEnv::draw`) |
+| 29 (creators and first-update timing) | partly | `first_update_after_creation`: an animation reported in a tick's effects is updated first in that tick; the in-pass placement and lost updates need playback in the simulation |
 | 19 (detail level) | tested | slot tests of `mapview::tests` (`Builder::live_anim` uses the same `shown_at`) |
 | 20 (translucency) | partly | `translucency_codes`, `translucent_fade_by_progress` (F4 at *t* = 0). Translucency levels *t* > 0 apply only to building slot animations, which are not played: `anim_translucency_levels`, `anim_hide_at_level_15`, `anim_low_detail_shows_cloaked` are in NOT_IMPLEMENTED |
 | 21 (erasure) | not implemented | no building is erased yet |
@@ -45,9 +47,8 @@ Code: `crates/app/src/mapview/anims.rs`, `live.rs` (`create_anim`, `update_anims
 | 26 (draw point, vertical shift) | tested | slot tests of `mapview::tests`, shared through `Builder::anim_items` |
 | 27 (tiled copies) | tested | slot tests of `mapview::tests`, shared through `Builder::anim_items` |
 
-Requests: Q-0770 (which animations take the playback draws of claims 3 and 11 from the scenario
-stream; interim: the drawing's cosmetic stream), Q-0771 (the first-update tick of animations
-created in play; interim: the creation tick).
+Requests: Q-0770 and Q-0771 are answered by revision 24 (claims 28 and 29); both need playback in
+the simulation, which is not built.
 
 Also: S-0214 claim 30's move-target marker plays `[General] MoveFlash` unattached, created between
 ticks (first update in the next tick, claim 5), with its draws from the cosmetic stream (S-0214

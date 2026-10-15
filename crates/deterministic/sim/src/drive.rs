@@ -146,7 +146,7 @@ pub fn at_chain_point(w: &World, id: ObjectId) -> bool {
 /// Releases every vehicle-present claim of a vehicle.
 pub fn release_claims(w: &mut World, id: ObjectId) {
     let claims: Vec<(CellXY, Layer)> = match w.obj(id) {
-        // spec: S-0209 claim 1 and S-0503 claim 6 (a hovering vehicle clears the flags it set; their moments are Q-0691's interim rule)
+        // spec: S-0209 claim 1 and S-0503 claim 13 (a hovering vehicle clears the flags it set)
         Some(o) if o.hover.is_some() => o
             .hover
             .as_ref()

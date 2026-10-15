@@ -708,3 +708,22 @@ fn s0213_claim_15_only_sell_checks_owner() {
     assert_ne!(o.beh.seen(), Some(Behaviour::Selling), "not sold");
     assert!(o.econ.building.repairing, "the repair order still applies");
 }
+
+// spec: S-0408 claim 11 (a sold vehicle's passengers still aboard are killed without attacker credit or death effects, nested passengers included, by S-0507 claim 16's removal cleanup; they are not released)
+#[test]
+fn claim_11_sold_transport_kills_its_passengers() {
+    let mut r = rules();
+    let cart = r.sim.vehicles.get_mut("CART").unwrap();
+    cart.passengers = Some(2);
+    cart.size_limit = Some(Decimal("1".into()));
+    let mut w = game(&r);
+    put(&mut w, "HUT", 0, c(0, 0));
+    let on = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, c(0, 0), 0);
+    let p = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, c(3, 3), 0);
+    glasnost_sim::transport::board(&mut w, p, on);
+    let rng = w.rng.clone();
+    sell::sell(&mut w, A, on);
+    assert!(w.obj(on).is_none());
+    assert!(w.obj(p).is_none(), "the passenger died");
+    assert_eq!(w.rng, rng, "no draws");
+}
