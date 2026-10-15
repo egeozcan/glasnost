@@ -324,20 +324,50 @@ pub fn area_attempts(
     }
 }
 
-/// After a successful attempt from area damage, every object whose target
-/// is the centre cell itself drops that target (S-0511 claim 1; Q-0719:
-/// the attack target only).
+/// After a successful attempt from area damage, references to the centre
+/// cell itself are lost (S-0511 claims 1 and 22): a mobile object whose
+/// attack target is that cell first reverts a suspended behaviour (S-0215
+/// claim 10), a still-equal attack target is cleared, an aircraft in
+/// *attack* restarts its run, and projectiles aimed at the cell lose it.
 fn drop_cell_targets(w: &mut World, c: CellXY) {
+    let cell = Some(Target::Cell(c));
+    for p in w.projectiles.values_mut() {
+        if p.target == cell {
+            // spec: S-0511 claim 22 (a projectile's target equal to the centre cell is cleared; its recorded firer is an object in our engine, never a cell)
+            p.target = None;
+        }
+    }
     let ids: Vec<ObjectId> = w
         .objects
         .values()
-        .filter(|o| o.target == Some(Target::Cell(c)))
+        .filter(|o| o.target == cell)
         .map(|o| o.id)
         .collect();
     for id in ids {
-        if let Some(o) = w.obj_mut(id) {
-            // Q-0719 (interim: only the attack target is cleared)
-            o.target = None;
+        let aircraft = crate::air::is_aircraft(w, id);
+        let Some(ob) = w.obj_mut(id) else { continue };
+        let mut restored = None;
+        // spec: S-0511 claim 22 (a mobile object first reverts a suspended behaviour, restoring the target and destination its override put aside; S-0215 claim 10)
+        if ob.kind.is_mobile()
+            && let Some((t, d)) = ob.beh.revert()
+        {
+            crate::spawn::set_own_target(ob, t);
+            restored = Some(ob.dest);
+            ob.dest = d;
+        }
+        let lost = ob.target == cell;
+        if lost {
+            // spec: S-0511 claim 22 (an attack target still equal to the centre cell is cleared; no new behaviour, no attack-move memory)
+            crate::spawn::clear_own_target(ob);
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        }
+        if lost && aircraft && ob.beh.current == Some(crate::rules::Behaviour::Attack) {
+            // spec: S-0511 claim 22 (an aircraft in attack restarts the attack-run substate when its target is lost, keeping the behaviour)
+            crate::air::restart_run(w, id);
+        }
+        if let Some(before) = restored {
+            // spec: S-0107 claim 15 (a destination brought back is assigned: the destination-driven get-up)
+            crate::infantry::destination_assigned(w, id, before);
         }
     }
 }

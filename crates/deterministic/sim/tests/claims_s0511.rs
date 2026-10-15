@@ -22,7 +22,7 @@ use glasnost_sim::bridges::pieces::{self, Family, Line, Role};
 use glasnost_sim::bridges::{self, high, hut};
 use glasnost_sim::combat::area::{self, Detonation};
 use glasnost_sim::combat::effects::{Effect, Sound};
-use glasnost_sim::rules::{Kind, SimRules};
+use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{Layer, ObjectId, Pos, Target, World};
 
@@ -416,7 +416,7 @@ fn claim_1_ion_cannon_attempts() {
     );
 }
 
-// spec: S-0511 claim 1 (a successful attempt from area damage makes every object whose target is the centre cell drop it; Q-0719)
+// spec: S-0511 claims 1 and 22 (a successful attempt from area damage makes every object whose attack target is the centre cell itself drop it; a neighbouring cell's target stays)
 #[test]
 fn claim_1_success_drops_cell_targets() {
     let mut m = base();
@@ -438,6 +438,55 @@ fn claim_1_success_drops_cell_targets() {
     assert_eq!(data(&w, c), None);
     assert_eq!(w.obj(v).unwrap().target, None);
     assert_eq!(w.obj(u).unwrap().target, Some(Target::Cell(at(4, 0))));
+}
+
+// spec: S-0511 claim 22 (a suspended behaviour is reverted first, restoring target and destination; a destination naming the centre cell stays; a projectile aimed at the cell loses it, one aimed at a neighbouring cell keeps it; no new behaviour)
+#[test]
+fn claim_22_revert_and_projectile_target_loss() {
+    let mut m = base();
+    high_x(&mut m, Family::Bridge, 0, 6, &[]);
+    let mut w = game(&ruleset(), &m);
+    w.econ.settings.bridge_destruction = Some(true);
+    let c = at(3, 0);
+    let v = spawn(&mut w, Kind::Vehicle, "CART", at(3, 8));
+    let u = spawn(&mut w, Kind::Vehicle, "CART", at(4, 8));
+    let mover = spawn(&mut w, Kind::Vehicle, "CART", at(5, 8));
+    // An override in effect on v: guard put aside with u as target and a destination.
+    {
+        let o = w.obj_mut(v).unwrap();
+        o.target = Some(Target::Cell(c));
+        o.beh.current = Some(Behaviour::Attack);
+        o.beh.suspended = Some(Behaviour::Guard);
+        o.beh.aside = Some((Some(Target::Object(u)), Some(Target::Cell(at(1, 9)))));
+    }
+    w.obj_mut(mover).unwrap().dest = Some(Target::Cell(c));
+    let current = w.obj(mover).unwrap().beh.current;
+    let wp = w
+        .rules()
+        .combat
+        .weapons
+        .iter()
+        .position(|x| x.projectile.is_some())
+        .unwrap() as u32;
+    let from = w.obj(u).unwrap().pos;
+    let hit = glasnost_sim::combat::projectile::launch(&mut w, u, wp, Target::Cell(c), from, 10)
+        .expect("a projectile at the centre cell");
+    let miss =
+        glasnost_sim::combat::projectile::launch(&mut w, u, wp, Target::Cell(at(4, 0)), from, 10)
+            .expect("a projectile at the neighbouring cell");
+    blast(&mut w, c, 416, "BLAST");
+    blast(&mut w, c, 416, "BLAST");
+    assert_eq!(data(&w, c), None, "the attempt succeeded");
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "reverted");
+    assert_eq!(o.beh.suspended, None);
+    assert_eq!(o.target, Some(Target::Object(u)), "restored target");
+    assert_eq!(o.dest, Some(Target::Cell(at(1, 9))), "restored destination");
+    let o = w.obj(mover).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(c)), "a destination is not erased");
+    assert_eq!(o.beh.current, current, "no new behaviour");
+    assert_eq!(w.projectiles[&hit].target, None);
+    assert_eq!(w.projectiles[&miss].target, Some(Target::Cell(at(4, 0))));
 }
 
 // spec: S-0511 claim 2 (a high-bridge cell: the section whose overlay marks it; a pier at a sub-tile without a deck; other pier cells and other cells: nothing, the attempt fails)
