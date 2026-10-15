@@ -217,6 +217,21 @@ pub struct Object {
     /// Teleporting locomotor state (S-0207 claim 20).
     #[serde(default)]
     pub teleport: Option<crate::teleport::TeleportState>,
+    /// The spawn controller of a spawner (S-0506 claim 1).
+    #[serde(default)]
+    pub spawn: Option<crate::spawn::SpawnController>,
+    /// Rocket flight state of a rocket missile (S-0506 claims 14 to 21).
+    #[serde(default)]
+    pub rocket: Option<crate::rocket::RocketState>,
+    /// Parasite links (S-0614).
+    #[serde(default)]
+    pub parasite: Option<crate::parasite::ParasiteState>,
+    /// Flight state of an aircraft with the flying locomotor (S-0501).
+    #[serde(default)]
+    pub air: Option<crate::air::AirState>,
+    /// Naval state of a vessel (S-0504).
+    #[serde(default)]
+    pub naval: Option<crate::naval::NavalState>,
     /// The crush-slowdown state (S-0210 claim 9).
     pub crush_slowdown: bool,
     /// Tick at which the targeting timer has run out (S-0215 claim 33).

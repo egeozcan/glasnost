@@ -127,6 +127,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
         _ if crate::econ::release::temporary_drive(w, id) => drive::tick(w, id),
         // spec: S-0207 claim 20 (d) (the jump on the first movement update after L is fixed; the behaviour is processed before it)
         Some(Locomotor::Teleport) => crate::teleport::tick(w, id),
+        // spec: S-0501 claims 1 to 10 (aircraft flight)
+        Some(Locomotor::Fly) => crate::air::tick(w, id),
+        // spec: S-0506 claims 14 to 19 (rocket flight)
+        Some(Locomotor::Rocket) => crate::rocket::tick(w, id),
+        // spec: S-0504 claim 1 (the ship locomotor)
+        Some(Locomotor::Ship) => crate::naval::tick(w, id),
         _ => false,
     };
     // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)

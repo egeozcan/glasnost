@@ -60,6 +60,12 @@ pub enum Locomotor {
     /// The teleporting locomotor of a vehicle or infantry unit (S-0207 claim
     /// 20, S-0208 claim 19).
     Teleport,
+    /// The flying locomotor of an aircraft (S-0501 Terms).
+    Fly,
+    /// The rocket locomotor of a spawned missile (S-0506 Terms).
+    Rocket,
+    /// The ship locomotor of a vehicle (S-0504 Terms).
+    Ship,
     /// Not moved in M3: every other locomotor, and a locomotor on a kind
     /// whose movement with it no spec gives (S-0207 Open questions).
     None,
@@ -1283,6 +1289,12 @@ fn unit_rules(
         (Kind::Vehicle | Kind::Infantry | Kind::Aircraft, rs::Locomotor::Teleport) => {
             Locomotor::Teleport
         }
+        // spec: S-0501 Terms (an aircraft: an object of an aircraft type that moves with the flying locomotor)
+        (Kind::Aircraft, rs::Locomotor::Fly) => Locomotor::Fly,
+        // spec: S-0506 Terms (a rocket missile: an aircraft-kind object in the rocket-flight movement mode)
+        (Kind::Aircraft, rs::Locomotor::Rocket) => Locomotor::Rocket,
+        // spec: S-0504 Terms (a ship: a vehicle with the ship locomotor)
+        (Kind::Vehicle, rs::Locomotor::Ship) => Locomotor::Ship,
         _ => Locomotor::None,
     };
     let cells = |d: &Option<Decimal>| -> i32 {
