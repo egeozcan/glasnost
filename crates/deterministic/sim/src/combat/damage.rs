@@ -189,9 +189,10 @@ pub fn falloff_versus(w: &World, warhead: WarheadId, d3: i32, r: i32, v: F64) ->
     let rules = w.rules();
     let mode = rules.mode;
     let h = rules.combat.warhead(warhead);
-    // spec: S-0302 F3 (f = RZ₂₄(d₃), a = RZ₂₄(f × p), R = trunc(RZ₅₃(s × 256)))
-    let f = d(i64::from(d3), mode).to_f32(mode).to_f64();
-    let a = f.mul(h.percent_at_max, mode).to_f32(mode).to_f64();
+    // spec: S-0302 F3 (f = RZ₂₄(d₃), a = RZ₂₄(RZ₅₃(d₃ × p)) from the integer d₃, not the narrowed f; R = trunc(RZ₅₃(s × 256)))
+    let d3d = d(i64::from(d3), mode);
+    let f = d3d.to_f32(mode).to_f64();
+    let a = d3d.mul(h.percent_at_max, mode).to_f32(mode).to_f64();
     let big_r = h.spread.mul(d(256, mode), mode).to_i32_common();
     // spec: S-0302 F3 (g = d₃ when R = 0 or a = f)
     let g = if big_r == 0 || a.eq_num(f) {

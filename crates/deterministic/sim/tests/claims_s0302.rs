@@ -556,6 +556,28 @@ fn maximum_damage_caps_the_result() {
     assert_eq!(loss!(w, t, hit(3, h)).0, 3);
 }
 
+// spec: S-0302 F3 (the edge share a = RZ₂₄(RZ₅₃(d₃ × p)) is formed from the integer d₃, not from f = RZ₂₄(d₃); above 2²⁴ the two differ: d₃ = 2²⁵ + 3, p = 0.75, R = 256, r = 128)
+#[test]
+fn f3_edge_share_from_the_defended_amount() {
+    for chop in [true, false] {
+        let mut r = testkit::combat_ruleset();
+        warhead(&mut r, "EDGE", |h| {
+            h.cell_spread = Some(Decimal("1".into()));
+            h.percent_at_max = Some(Decimal("0.75".into()));
+        });
+        r.sim.general.max_damage = Some(i32::MAX);
+        r.globals.quirks.chop_rounding = chop;
+        let w = testkit::game_with(&r, SIZE, 1);
+        let one = F64::from_i64(1, RZ);
+        let d3 = (1 << 25) + 3;
+        let m = damage::falloff_versus(&w, wh(&w, "EDGE"), d3, 128, one);
+        // Chop: f = 33554432, a = 25165826 (from f it would be 25165824, giving 29360128).
+        // Nearest: f = 33554436, a = 25165826 (from f it would be 25165828, giving 29360132).
+        let want = if chop { 29_360_129 } else { 29_360_131 };
+        assert_eq!(m, want, "chop {chop}");
+    }
+}
+
 // spec: S-0302 Edge cases (maximum damage of 0 or below: scenario D3 part c, health 500 stays 500 with 0, rises to 505 with −5, also at a versus value of 0)
 #[test]
 fn maximum_damage_of_zero_or_below() {
