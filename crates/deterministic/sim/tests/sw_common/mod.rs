@@ -31,7 +31,8 @@
 //!   period 5, spread 6, separation 2, damage 50, warhead Bolt, clouds
 //!   CLOUD1 and CLOUD2 (middle frame 3), bolt BOLT, sounds Zap1 and Zap2;
 //! - curtain duration 100; shield radius 3, duration 80, blackout 120,
-//!   fade lead 20; siren `Siren`.
+//!   fade lead 20; siren `Siren`; invoke animations CURTA (curtain) and
+//!   SHIELDA (force shield).
 
 #![allow(dead_code)]
 
@@ -190,6 +191,8 @@ pub fn ruleset() -> Ruleset {
         g.force_shield_blackout_duration = Some(BLACKOUT);
         g.force_shield_play_fade_sound_time = Some(FADE);
         g.dig_sound = Some("Siren".into());
+        g.iron_curtain_invoke_anim = Some("CURTA".into());
+        g.force_shield_invoke_anim = Some("SHIELDA".into());
         g.ally_para_drop_inf = Some(vec!["WALKER".into(), "WALKER".into()]);
         g.ally_para_drop_num = Some(vec![1, 1]);
     }
@@ -327,6 +330,10 @@ pub fn ruleset() -> Ruleset {
     jumper.combat.organic = Some(true);
     r.sim.infantry.insert("JUMPER".into(), jumper);
     reg(&mut r, "infantry", "JUMPER");
+    for n in ["CURTA", "SHIELDA"] {
+        r.sim.animations.insert(n.into(), AnimationType::default());
+        reg(&mut r, "animations", n);
+    }
     for n in ["CLOUD1", "CLOUD2", "BOLT"] {
         r.sim.animations.insert(
             n.into(),

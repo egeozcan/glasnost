@@ -325,8 +325,11 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         || (b.is_some_and(|b| b.bridge_repair_hut) && tc.immune)
         || (inside_factory(w, target) && !ign)
         || (tc.type_immune && same_type_owner && plus)
-        || (building && o.health <= 0);
-    // Temporary invulnerability and being erased (stage 1) need the superweapon and erasing-weapon topics.
+        || (building && o.health <= 0)
+        // spec: S-0302 claim 8 (stage 1: the target is temporarily invulnerable, + hits; S-0513 claim 26)
+        || (crate::superweapons::protected(w, target) && plus)
+        // spec: S-0302 claim 8 (stage 1: the target is being erased, + and − hits; the leaving stage of S-0513 claim 39, the temporal beam is S-0514's seam)
+        || (crate::econ::power::being_erased(w, target) && !ign);
     if stage1 {
         return HitResult::Unaffected;
     }
@@ -746,8 +749,12 @@ pub fn delay_kill_expiry_turn(w: &mut World, id: ObjectId) {
     if now.wrapping_sub(until) < 0 {
         return;
     }
-    // spec: S-0302 claim 16 (only while it is still alive and in play; being erased and an electromagnetic pulse also wait, but neither is modelled)
-    if o.health <= 0 || !o.on_map {
+    // spec: S-0302 claim 16 (only while it is still alive and in play, and neither being erased nor under an electromagnetic pulse; both read their seams)
+    if o.health <= 0
+        || !o.on_map
+        || crate::econ::power::being_erased(w, id)
+        || crate::econ::power::under_pulse(w, id)
+    {
         return;
     }
     let rules = w.rules_arc();

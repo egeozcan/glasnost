@@ -90,6 +90,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.last_turn = t;
     }
+    // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
+    crate::superweapons::protect::tint_turn(w, id);
     if dead {
         if kind == Kind::Building {
             // spec: S-0312 claim 21 (a building awaiting removal: the general part of its turn, then its removal)

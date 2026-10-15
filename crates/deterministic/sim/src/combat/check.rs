@@ -297,6 +297,20 @@ pub fn check(
         // spec: S-0301 claim 9 rank 4 (most target tests give illegal)
         return Answer::Illegal;
     }
+    if let Some(Target::Object(x)) = target
+        && crate::superweapons::protected(w, x)
+    {
+        // spec: S-0513 claim 27 (a protected object is an illegal target for a weapon whose warhead is a parasite warhead)
+        let parasite = r.combat.warhead_of(weapon).is_some_and(|h| h.parasite);
+        // spec: S-0513 claim 28 (departure: every player house takes the human rule; the neutral and special houses get illegal against a protected object)
+        let player = o
+            .owner
+            .and_then(|h| w.houses.get(usize::from(h.0)))
+            .is_none_or(|h| h.role == crate::world::HouseRole::Player);
+        if parasite || !player {
+            return Answer::Illegal;
+        }
+    }
     // spec: S-0301 claim 9 rank 4 and S-0516 claim 24 (a target hidden from the firer's house: impossible when the mean weapon damage is above 0 or the target is not allied with the firer)
     if let Some(Target::Object(x)) = target
         && crate::cloak::hidden_from(w, x, o.owner)

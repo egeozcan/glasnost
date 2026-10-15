@@ -266,6 +266,16 @@ struct Candidate {
     d: i32,
 }
 
+/// The curtain-protection trigger of S-0303 claim 15: curtain kind (not
+/// the force shield's) and an epicentre distance before claim 10's halving
+/// below the trigger distance.
+// spec: S-0303 claim 15 and S-0513 Terms (curtain protection: the iron-curtain kind only; epicentre distance below 85 leptons, before the halving of claim 10)
+fn curtain_trigger(w: &World, id: ObjectId, raw: i32) -> bool {
+    raw < 85
+        && crate::superweapons::protection_kind(w, id)
+            == Some(crate::superweapons::ProtectKind::Curtain)
+}
+
 /// Applies one detonation's area damage (S-0303 claims 1 to 20).
 // spec: S-0303 claim 7 and Constants (raised-detonation building allowance 208 leptons)
 pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
@@ -333,6 +343,12 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         }
     }
     let mut cands: Vec<Candidate> = Vec::new();
+    // spec: S-0303 Terms and Constants (a small detonation: the warhead's spread at most 0.5 cells, inclusive)
+    let small = h
+        .spread
+        .add(h.spread, rules.mode)
+        .le(F64::from_i64(1, rules.mode));
+    let mut nullified = false;
     // spec: S-0303 claim 6 (a detonation above the terrain at the centre of the centre cell also considers the tracked flying objects of the F7 search, before the scanned cells; quirks.ground_detonation_misses_aircraft off: every detonation)
     let cc = Pos::centre(centre, 0);
     if p.z > w.surface_at(cc.x, cc.y) || !q.ground_detonation_misses_aircraft {
@@ -349,9 +365,14 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
                     continue;
                 }
             }
-            let d = half_in_air(w, id, dist(w, p, w.reference_point(id)));
+            let raw = dist(w, p, w.reference_point(id));
+            let d = half_in_air(w, id, raw);
             if d > big_r {
                 continue;
+            }
+            // spec: S-0303 claim 15 (a tracked flying candidate within R, curtain-protected, raw distance below 85 leptons)
+            if small && curtain_trigger(w, id, raw) {
+                nullified = true;
             }
             cands.push(Candidate { id, d });
         }
@@ -395,7 +416,19 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
                 // spec: S-0303 claim 7 (any other object: from P to its position)
                 dist(w, p, w.reference_point(id))
             };
+            let raw = d;
             let d = half_in_air(w, id, d);
+            // spec: S-0303 claim 15 (an object of any kind in the centre cell, alive, raw distance below 85 leptons; R plays no part)
+            if small && c == centre && curtain_trigger(w, id, raw) {
+                let alive = w.obj(id).is_some_and(|o| {
+                    o.health > 0
+                        && o.on_map
+                        && !(o.combat.killed && o.combat.delay_kill_until.is_none())
+                });
+                if alive {
+                    nullified = true;
+                }
+            }
             if d > big_r {
                 continue;
             }
@@ -410,9 +443,14 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             cands.push(Candidate { id, d });
         }
     }
-    // Curtain protection (claim 15) needs the superweapon topic.
+    // spec: S-0303 claim 15 (quirks.curtain_nullifies_small_detonation off: a curtain-protected object only cancels its own hits)
+    let nullified = nullified && q.curtain_nullifies_small_detonation;
     let mut any = false;
     for cand in cands {
+        if nullified && !crate::superweapons::protected(w, cand.id) {
+            // spec: S-0303 claim 15 (a nullified detonation hits only objects under invulnerability, of either kind; all others take nothing)
+            continue;
+        }
         // spec: S-0303 claim 9 (not alive, health 0 or less, not on the map: no hit, judged at the moment of the hit)
         let Some(o) = w.obj(cand.id) else { continue };
         // spec: S-0302 claim 16 (a building in a delayed-kill countdown keeps 1 health and takes the later hits of the detonation)
@@ -432,6 +470,10 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         };
         // spec: S-0303 claim 11 (each hit is resolved completely before the next)
         damage::apply(w, cand.id, hit);
+    }
+    if nullified {
+        // spec: S-0303 claim 15 (a nullified detonation skips claims 18 to 20)
+        return DetonationResult::Nullified;
     }
     // spec: S-0303 claim 18 and S-0511 claim 1 (with the game's bridge-destruction setting on, a warhead that damages walls makes destroy attempts on the bridge in the centre cell)
     if crate::econ::setup::bridge_destruction(w) && h.wall {

@@ -198,6 +198,10 @@ pub fn crushable_by(w: &World, crusher: ObjectId, obj: ObjectId) -> bool {
     if w.allied(c.owner, o.owner) {
         return false;
     }
+    // spec: S-0210 claim 2 (not invulnerable; S-0513 claim 27)
+    if crate::superweapons::protected(w, obj) {
+        return false;
+    }
     let cu = w.rules().unit(c.kind, c.type_index);
     let omni = cu.is_some_and(|u| u.omni_crusher);
     let (crushable, resistant, deployed_uncrushable) = match o.kind {
@@ -304,9 +308,14 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
             // spec: S-0209 claim 4 (row WP2: the walker's master at its unloading cell gives none, and the walker is excused from the vehicle-present flag)
             excused = true;
             (false, None)
-        } else if in_cell_target {
-            // spec: S-0209 claim 4 (row WP3: the mission target overrides: clear)
-            (true, Some(Outcome::Clear))
+        } else if in_cell_target && !crate::econ::power::being_erased(w, oid) {
+            if crate::superweapons::protected(w, oid) {
+                // spec: S-0209 claim 4 (row WP3: blocked when that occupant is invulnerable)
+                (true, Some(Outcome::Blocked))
+            } else {
+                // spec: S-0209 claim 4 (row WP3: the mission target overrides: clear, unless that occupant is being erased)
+                (true, Some(Outcome::Clear))
+            }
         } else if o.kind == Kind::Building {
             let b = &r.buildings[o.type_index as usize];
             if b.invisible {
