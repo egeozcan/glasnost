@@ -1,9 +1,9 @@
 ---
 id: Q-0872
 title: Which cell layer holds the object-present flag of an aircraft that rests with the deck mark set
-status: open
+status: answered
 related: [S-0501, S-0209, S-0105]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

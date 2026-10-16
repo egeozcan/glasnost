@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872]
 supersedes: []
 ---
 
@@ -1064,6 +1064,44 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Backing: `measurable` (scenario AC27)
     - Confidence: high
 
+44. **Ordinary deck-rest occupancy and departure (Q-0872).** For an ordinary flying
+    aircraft resting at height 0 with its aircraft deck mark set on a high bridge,
+    the object-present flag is set in the **deck occupancy record only**, not in both
+    records and not in ground. This assumes the cell was otherwise clear and no other
+    object has marked or cleared it. The aircraft is listed on deck as S-0209 claim 13
+    specifies. These are separate properties: setting or clearing the object-present
+    flag uses the aircraft's actual world height and the high bridge's presence, not
+    its aircraft deck mark or its listing alone. At a marking or clearing event, deck
+    is used when a high bridge is present and world height is at least terrain surface
+    height plus 416 leptons; otherwise ground is used. Comparisons are signed integer
+    comparisons in leptons, with no rounding. Ordinary rest on terrain marks ground.
+
+    On normal deck take-off, the deck object-present flag is cleared in the first
+    movement tick that climbs away from rest. It is not transferred to ground when
+    claim 43 clears the aircraft deck mark. By the end of that tick the aircraft has
+    positive listing height and is absent from both occupant lists. Merely accepting
+    the take-off destination without advancing movement does not release occupancy.
+    There is no later 208-lepton release threshold: that combat-height test is unrelated.
+    These flags are not reference counts; clearing one does not preserve another
+    object's contribution to the same flag (S-0209 claim 1).
+
+    **Vehicles below and on deck.** On a bridge over level ground, a vehicle below
+    uses the ground occupants and ground record, while a vehicle on deck uses the deck
+    occupants and deck record (S-0209 Terms, cell layer). Thus only the deck vehicle's
+    selected record contains this flag. However, **the object-present flag itself gives
+    no vehicle entry refusal on either surface**: S-0209 claim 5's record table does not
+    test it. With no other obstacle, the vehicle below gets *clear*. An ordinary allied
+    aircraft at rest on deck blocks a deck vehicle through its listed presence, giving
+    *stationary friendly* under S-0209 claim 5, row VP20, not through the flag. Enemy
+    aircraft and exceptional moving/contact states retain that claim's occupant rules.
+    After take-off removes the deck listing, neither the old listing nor this flag
+    blocks a deck vehicle. Landing and placement tests are separate: F7 remains a
+    ground-list lookup, and tests of record emptiness must use their own surface rules.
+    This claim covers ordinary flight, not S-0207 claim 20's teleport reservations.
+    - Backing: `measurable` (scenario AC27, occupancy and vehicle variants)
+    - Confidence: high for marking, clearing and vehicle flag exclusion; medium for
+      the combined ordinary deck-take-off and vehicle-entry consequences
+
 ## Formulas
 
 All heights and positions are integers in leptons (S-0204). "⌊ ⌋" on a quotient of integers is
@@ -1450,6 +1488,7 @@ attacking in that same pass; it does not require either neighbour to have been r
 | `Speed` | rules, type | converted integer *V* and *V*ₜ, including F6's zero-divisor warning | S-0207 claim 1; not the raw value in F6 | S-0207 claim 1 |
 | none | — | layer boundary, entry delays, service start, search and edge constants | fixed engine rules, not new import fields | — |
 | none | map terrain and high-bridge presence | aircraft deck mark and the 416-lepton deck reference (claim 43) | fixed runtime transitions; terrain and bridge inputs follow S-0106 claim 2 and S-0211 claim 15 | no mark is granted merely by an aircraft type or a pad |
+| none | actual aircraft position and high-bridge presence | ordinary object-present marking and clearing surface (claim 44) | fixed runtime rule, not a separately imported boolean; terrain and bridge inputs as above | no aircraft-type override and no ground copy of an ordinary deck-rest flag |
 | `Ammo` | rules, type | maximum ammunition *A* | integer | −1 (unlimited) |
 | `Selectable` | rules, object type | visiting test | boolean | yes |
 | `Strength`, `Cost` | rules, type | F11 | integer | S-0302, S-0403 |
@@ -2017,7 +2056,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   the y coordinate falls by exactly 1 lepton. An x (or y) that does not change on those steps
   falsifies the round-toward-zero sum of F3 and matches F3 with `quirks.chop_rounding` off. Repeat due north and due east as controls: no sideways change.
 
-- **AC27 Aircraft deck mark, hover and departure (claim 43; Q-0841).** Use the common
+- **AC27 Aircraft deck mark, hover and departure (claims 43 and 44; Q-0841, Q-0872).** Use the common
   setup with a high bridge over level traversable ground, an otherwise empty landing
   cell, and a human-owned landable aircraft. If necessary, name a test-map override
   making an ordinary flying aircraft landable and not pad-bound; retain its ordinary
@@ -2039,6 +2078,27 @@ listed in Open questions are not claimed confirmed by these scenarios.
   is equivalent to ground rendering. Any isolated transition or shadow anchor contrary
   to these predictions falsifies the corresponding rule. Do not write the mark with a
   recorder or assume that a pad can legally be built on the bridge.
+
+  **Occupancy and vehicle variants.** At the same common game speed, record both
+  object-present flags separately before descent, at rest, after the take-off order
+  and at each movement tick of departure. Use initially clear records and no other
+  flag writer. Expected: ground stays clear; deck becomes set at deck rest and is
+  clear by the end of the first climbing movement tick, with neither list then
+  containing the aircraft. Record world height and the mark as well, so the clearing
+  of the aircraft deck mark is not mistaken for a ground occupancy transfer. A ground
+  flag set by this ordinary deck landing, both records set, or a deck flag retained
+  until a later height threshold falsifies claim 44.
+
+  In separate five-run repeats, keep the aircraft allied and at rest without a
+  destination. Drive one ordinary vehicle toward that cell below the bridge, then
+  repeat from deck level with a different vehicle and no other blockers. Record the
+  entry outcome and whether the cell is entered, not just the chosen route. Expect
+  *clear* below and *stationary friendly* on deck from the listed aircraft. Repeat
+  deck entry after take-off: expect *clear* once the aircraft has left both lists.
+  The read-only recorder and scripted inputs of the common setup suffice; do not
+  manufacture flags or remove listings. The lower vehicle being refused solely by
+  the resting aircraft, or persistent deck refusal after its listing and flag have
+  gone with every other condition unchanged, falsifies the stated consequences.
 
 ## Open questions
 
