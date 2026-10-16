@@ -1021,6 +1021,33 @@ Known limits:
 - The seed of a game comes from the host clock when Start is clicked.
 - Natively, the install is read when the window opens and the game is loaded synchronously after the frame that shows "Loading". The window does not respond while it loads (a few seconds in a debug build).
 
+## M6c step ledger
+
+M6c is the last part of M6 (session of 2026-10-16). Baseline: main 2c92746, spec files unchanged since 732c990 (S-0215 rev 48, S-0105 rev 19). Resume from this table; each row is updated when its step is merged to main.
+
+| Step | Scope | Status | Notes |
+|---|---|---|---|
+| 1 | Spec revisions since 732c990, interim rows of answered requests | baseline: no spec or measurement commit after 732c990; re-checked at every merge and at the end | |
+| 2a | Naval-game construction yard loss after `drive::goal_cleanup` (7cd121b, 2c92746 seed retries) | open | |
+| 2d | Maps 6 and 7 reach no winner in 120 000 ticks | open | |
+| 2b | AI builds and uses every Allied and Soviet superweapon | open | |
+| 2c | AI transports, hover and amphibious use on maps 2, 3 and 5 | open | |
+| 3.1 | S-0508 Garrisons | open | |
+| 3.2 | S-0509 Engineers and capture | open | |
+| 3.3 | S-0510 Spies and infiltration | open | |
+| 3.4 | S-0515 Tech buildings | open | |
+| 3.5 | S-0502 Movement of jumpjets | open | |
+| 3.6 | S-0517 Deployable units | open | |
+| 3.7 | S-0525 Radiation fields | open | |
+| 3.8 | S-0514 Chrono weapons | open | |
+| 3.9 | S-0518 Linked weapons | open | |
+| 3.10 | S-0519 Terror and attack animals | open | |
+| 3.11 | S-0520 Crates | open | |
+| 4 | Lead visual review 2026-10-15 (7 items), re-shoots in `local-lane/m6c/`, Q-0647 map check | open | |
+| 5 | Determinism gate with an AI-vs-AI replay exercising M6c; local lane runs; README Status | open | |
+
+Request numbers: stream A (AI) files Q-0900 to Q-0949, stream B (visual) Q-0950 to Q-0969, the spec track Q-0970 to Q-0999 and above.
+
 ## Tests
 
 ```sh
