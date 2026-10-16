@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 49
+revision: 50
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1027,6 +1027,15 @@ Terms used by this spec:
     stopped falls back to rest at a later processing (claims 22 and 23), once it has stopped moving.
     The order specs own the stop order's further conditions.
 
+    **Destination clears for jumpjets.** S-0502 claim 24 governs every effective destination
+    clear in this spec, including the fall-back outcomes of claims 13 to 15 and the
+    processing outcomes of claim 22, regardless of the caller. A committed jumpjet
+    reroutes and retains its replacement movement point while its order-level destination
+    becomes empty; this is not a direct instruction to move to an absent point. A
+    behaviour change alone is not a destination clear. An unchanged vehicle destination
+    assignment suppressed under S-0502 claim 24 does not reroute or erase the retained
+    movement point. That claim owns the no-commitment outcome and assignment exceptions.
+
     **Spawners' own targets.** Target changes made by these orders, and by the fall-back and
     behaviour rules in this spec, obey S-0506 claim 25. With its quirk at the original setting,
     actually changing a nonempty own target to empty requests a pending-target clear, effective
@@ -1037,7 +1046,9 @@ Terms used by this spec:
     on every tick or launch pass. S-0506 claim 25 owns the alternative quirk setting,
     target-loss notifications and explicit controller resets.
     - Backing: `measurable` (scenario B3; scenario B14, case b, for the two attack-move orders that
-      input creates; S-0506 scenario R19 for actual own-target changes and pending cancellation). Attack-move orders with no established input path (neither target nor
+      input creates; S-0506 scenario R19 for actual own-target changes and pending cancellation,
+      and S-0502 claim 24's scenarios J19 and J22 for effective jumpjet destination clears,
+      inheriting that claim's unmeasured limits for assignment exceptions). Attack-move orders with no established input path (neither target nor
       destination, or a building) are `unmeasured` here: the measurement setup cannot issue them.
       Translation after loss of eligibility is also `unmeasured` here; S-0213 claim 6 owns that
       case and the translation's backing. The stop order's exemption for
