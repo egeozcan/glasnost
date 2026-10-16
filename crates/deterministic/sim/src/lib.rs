@@ -43,6 +43,7 @@ pub mod parasite;
 pub mod passability;
 pub mod path;
 pub mod process;
+pub mod radiation;
 pub mod regions;
 pub mod rng;
 pub mod rocket;

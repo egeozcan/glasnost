@@ -375,6 +375,8 @@ const ELEVATION_MODEL: &[u8] = b"ElevationModel"; // spec: S-0307 Import mapping
 /// The AI intelligence levels section.
 const IQ: &[u8] = b"IQ"; // spec: S-0314 Import mapping (`[IQ]`)
 const AI: &[u8] = b"AI"; // spec: S-0314 Import mapping (`[AI]`)
+/// The radiation settings section.
+const RADIATION: &[u8] = b"Radiation"; // spec: S-0525 Import mapping (`[Radiation]`)
 
 /// Game-wide combat fields: our name, section, key, form, spec.
 const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
@@ -1051,6 +1053,46 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
     ),
     ("hover_brake", GENERAL, "HoverBrake", Dec, "S-0503"),
     ("hover_dampen", GENERAL, "HoverDampen", Dec, "S-0503"),
+    // spec: S-0525 Import mapping ([Radiation]: integers, three decimals held as doubles, the warhead name; RadColor is read apart)
+    (
+        "rad_duration_multiple",
+        RADIATION,
+        "RadDurationMultiple",
+        Int,
+        "S-0525",
+    ),
+    (
+        "rad_application_delay",
+        RADIATION,
+        "RadApplicationDelay",
+        Int,
+        "S-0525",
+    ),
+    ("rad_level_max", RADIATION, "RadLevelMax", Int, "S-0525"),
+    ("rad_level_delay", RADIATION, "RadLevelDelay", Int, "S-0525"),
+    ("rad_light_delay", RADIATION, "RadLightDelay", Int, "S-0525"),
+    (
+        "rad_level_factor",
+        RADIATION,
+        "RadLevelFactor",
+        Dec,
+        "S-0525",
+    ),
+    (
+        "rad_light_factor",
+        RADIATION,
+        "RadLightFactor",
+        Dec,
+        "S-0525",
+    ),
+    ("rad_tint_factor", RADIATION, "RadTintFactor", Dec, "S-0525"),
+    (
+        "rad_site_warhead",
+        RADIATION,
+        "RadSiteWarhead",
+        Ref(Kind::Warheads),
+        "S-0525",
+    ),
 ];
 
 /// The crew types of `[General]` and our field names (S-0312 Import
@@ -1398,10 +1440,13 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
             s if s == WALL_MODEL => "global:WallModel",
             s if s == ELEVATION_MODEL => "global:ElevationModel",
             s if s == IQ => "global:IQ",
+            s if s == RADIATION => "global:Radiation",
             _ => "global:General",
         };
         out.push((cat, (*k).to_owned(), *spec));
     }
+    // spec: S-0525 Import mapping (RadColor, a byte triple)
+    out.push(("global:Radiation", "RadColor".to_owned(), "S-0525"));
     let mut keyed = |cats: &[&'static str], keys: &[String], spec: &'static str| {
         for c in cats {
             for k in keys {
@@ -2584,6 +2629,7 @@ impl Builder<'_> {
                 ));
             }
         }
+        self.radiation_import(rec);
         // spec: S-0303 Import mapping, S-0309 Import mapping (HarvesterUnit: a vehicle-type list)
         let harvesters = self.global(GENERAL, "HarvesterUnit");
         if let Some(list) = self.name_list(
@@ -2634,6 +2680,52 @@ impl Builder<'_> {
             rec.put("disguise_detection_percent", jsonc::array(list));
         }
         self.general_warnings();
+    }
+
+    /// The radiation colour and the warnings of the `[Radiation]` settings
+    /// (S-0525 Import mapping, claim 16 and Edge cases).
+    fn radiation_import(&mut self, rec: &mut Rec) {
+        let colour = self.global(RADIATION, "RadColor");
+        let mut rgb = [0u8; 3]; // spec: S-0525 Import mapping (RadColor absent: the value in force, (0, 0, 0) at a fresh start)
+        let mut given = false;
+        if let Some(st) = &colour {
+            for e in &st.history {
+                let What::Set(v) = &e.what else { continue };
+                // spec: S-0525 Import mapping (RadColor: a byte triple, S-0003 C7; unread components keep the value in force)
+                let (next, unread) = value::byte_triple(v, rgb);
+                rgb = next;
+                given = true;
+                if unread {
+                    self.warn(e.layer, e.line, format!(
+                        "[Radiation] RadColor {:?} has unreadable components; they keep the value in force (S-0003 claim 11, a departure)",
+                        show(v)
+                    ));
+                }
+            }
+        }
+        if given {
+            Self::put_tuple(rec, "rad_color", rgb.map(i32::from));
+        }
+        for k in ["RadApplicationDelay", "RadLevelDelay", "RadLightDelay"] {
+            let state = self.global(RADIATION, k);
+            // spec: S-0525 claim 16 (an application, level or light delay of 0 or less: the original stops or acts oddly; the importer warns and our engine takes the safe results)
+            self.each_int(state.as_ref(), |n| n <= 0, |v| {
+                format!("[Radiation] {k} {v} is 0 or below: the original stops at the first use for 0 (a program error); our engine takes the safe results of S-0525 claim 16 (a departure)")
+            });
+        }
+        let multiple = self.global(RADIATION, "RadDurationMultiple");
+        // spec: S-0525 claim 16 (a duration multiple of 0 or less: a field ends at its first update)
+        self.each_int(multiple.as_ref(), |n| n <= 0, |v| {
+            format!("[Radiation] RadDurationMultiple {v} is 0 or below: a radiation field ends at its first update (S-0525 claim 16)")
+        });
+        let site = self.global(RADIATION, "RadSiteWarhead");
+        let site_given = site
+            .as_ref()
+            .is_some_and(|s| s.history.iter().any(|e| matches!(e.what, What::Set(_))));
+        if !site_given {
+            // spec: S-0525 Edge cases (radiation-site warhead absent: the original's behaviour is unknown; our engine makes fields deal no hits, and the importer warns)
+            self.warn(0, 0, "[Radiation] RadSiteWarhead is given by no rules layer: radiation fields deal no hits (S-0525 Edge cases, a departure)".to_owned());
+        }
     }
 
     fn general_warnings(&mut self) {
@@ -2801,8 +2893,29 @@ impl Builder<'_> {
         let outcome = self.i.outcome;
         let empty = Vec::new();
         let weapons = outcome.registries.get(&Kind::Weapons).unwrap_or(&empty);
+        let rad = |k: &str| int_of(self.global(RADIATION, k).as_ref()).unwrap_or(0);
+        let (m, d_level, d_light) = (
+            rad("RadDurationMultiple"),
+            rad("RadLevelDelay"),
+            rad("RadLightDelay"),
+        );
         for w in weapons {
             let name = format!("weapons {}", show(&w.name));
+            let level = int_of(key(w, "RadLevel")).unwrap_or(0);
+            if level > 0 && m > 0 {
+                // spec: S-0525 Edge cases and claim 16 (a field duration with zero light steps, or zero level steps: the importer warns)
+                let n = level.wrapping_mul(m);
+                if d_light > 0 && n / d_light == 0 {
+                    self.warn_at(key(w, "RadLevel"), format!(
+                        "{name} has radiation level {level}: its field lasts {n} ticks, shorter than the light delay {d_light}, so the original stops when the field is made; our engine keeps the light as made (S-0525 claim 16, a departure)"
+                    ));
+                }
+                if d_level > 0 && n / d_level == 0 {
+                    self.warn_at(key(w, "RadLevel"), format!(
+                        "{name} has radiation level {level}: its field has no level step, so its radiation never decays and adding to it removes nothing (S-0525 claims 5 and 6)"
+                    ));
+                }
+            }
             let warhead =
                 text_of(key(w, "Warhead")).filter(|n| !n.is_empty() && !value::is_no_type(n));
             let Some(h) = warhead

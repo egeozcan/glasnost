@@ -394,6 +394,9 @@ pub struct World {
     /// Superweapon records, the storm and its clouds (S-0512, S-0513).
     #[serde(default)]
     pub sw: crate::superweapons::SwWorld,
+    /// Radiation fields and cell radiation (S-0525).
+    #[serde(default)]
+    pub radiation: crate::radiation::RadWorld,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.

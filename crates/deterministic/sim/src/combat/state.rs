@@ -191,4 +191,8 @@ pub struct Projectile {
     /// Fired by a vehicle from a scalable type: counted in *N* of S-0306
     /// claim 16.
     pub vehicle_scalable: bool,
+    /// One of the nine children of an airburst projectile, which carry no
+    /// weapon of their own and leave no radiation (S-0525 claim 1).
+    #[serde(default)]
+    pub airburst_child: bool,
 }

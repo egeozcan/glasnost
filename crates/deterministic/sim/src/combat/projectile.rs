@@ -492,6 +492,7 @@ pub fn launch(
         fire_point,
         nuke_wait: None,
         vehicle_scalable: o.kind == Kind::Vehicle && p.scalable,
+        airburst_child: false,
     };
     w.projectiles.insert(id, proj);
     if o.kind == Kind::Vehicle
@@ -1387,8 +1388,6 @@ fn detonation_point(
 /// effects (S-0303 claims 21 and 22).
 fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, _after_wait: bool) {
     let rules = w.rules_arc();
-    // spec: S-0513 claim 12 and S-0525 claim 1 (a weapon with a positive radiation level leaves radiation at the detonation cell; seam)
-    crate::superweapons::nuke::radiation_seam(w, pr.weapon, point.cell());
     let half = rules.quirks.ranged_draw_half_span;
     let wr = rules.combat.weapon(pr.weapon).clone();
     // spec: S-0303 claim 2, S-0306 claim 21 and S-0614 claim 1 (a parasite-flag warhead's projectile makes no area hits; its animation and debris stay)
@@ -1412,6 +1411,10 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
         crate::cloak::disguise::disguise_hit(w, pr.attacker, pr.target);
     }
     if p.airburst {
+        // spec: S-0525 claim 1 (the airburst projectile's own detonation leaves radiation with its own weapon; its nine children carry no weapon and leave none)
+        if !pr.airburst_child {
+            crate::radiation::detonation(w, pr.weapon, point.cell());
+        }
         let res = detonation_inner(
             w,
             pr.weapon,
@@ -1432,6 +1435,10 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     // spec: S-0306 Edge cases (a cluster count of 0 or less: no detonation, no draw)
     let mut q = point;
     for _ in 0..p.cluster.max(0) {
+        // spec: S-0525 claim 1 (each detonation of a projectile with a cluster count above 1 leaves radiation at its own point; a child of an airburst leaves none)
+        if !pr.airburst_child {
+            crate::radiation::detonation(w, pr.weapon, q.cell());
+        }
         detonation_inner(
             w,
             pr.weapon,
@@ -1500,6 +1507,7 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             fire_point: cc,
             nuke_wait: None,
             vehicle_scalable: false,
+            airburst_child: true,
         };
         w.projectiles.insert(id, child);
         w.update.enter(id);
@@ -1705,6 +1713,8 @@ pub fn detonate_weapon(
         .combat
         .projectile_of(weapon)
         .is_some_and(|p| p.inviso);
+    // spec: S-0525 claim 1 (a death weapon's detonation leaves radiation at the dying object's position)
+    crate::radiation::detonation(w, weapon, at.cell());
     projectile_detonation(w, weapon, damage, at, source, house, q, inviso);
 }
 

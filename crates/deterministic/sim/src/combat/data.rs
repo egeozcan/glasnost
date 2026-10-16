@@ -702,9 +702,36 @@ pub struct CountryCombat {
     pub veteran: [Vec<u32>; 3], // spec: S-0311 claim 11 (three country veteran lists)
 }
 
+/// The game-wide radiation settings (S-0525 Import mapping).
+#[derive(Clone, Debug)]
+pub struct RadRules {
+    /// The duration multiple *M* (F2).
+    pub duration_multiple: i32,
+    /// The application delay *A*, ticks (claim 9).
+    pub application_delay: i32,
+    /// The level cap *C*<sub>max</sub> (F6).
+    pub level_max: i32,
+    /// The level delay *D*<sub>L</sub>, ticks (claim 5).
+    pub level_delay: i32,
+    /// The light delay *D*<sub>I</sub>, ticks (claim 14).
+    pub light_delay: i32,
+    /// The level factor *k*<sub>L</sub> (F6).
+    pub level_factor: F64,
+    /// The light factor *k*<sub>I</sub> (F7).
+    pub light_factor: F64,
+    /// The tint factor *k*<sub>T</sub> (F7).
+    pub tint_factor: F64,
+    /// The radiation colour (F7).
+    pub colour: [i32; 3],
+    /// The radiation-site warhead (claim 10).
+    pub site_warhead: Option<WarheadId>,
+}
+
 /// Game-wide combat values.
 #[derive(Clone, Debug)]
 pub struct CombatGeneral {
+    /// The radiation settings (S-0525).
+    pub radiation: RadRules,
     /// Maximum damage.
     pub max_damage: i32,
     /// Occupy and bunker rate-of-fire factors m, b (singles, widened).
@@ -1411,6 +1438,19 @@ pub fn combat_rules(
     // spec: S-0314 Constants (repair rates absent: the double nearest 0.016)
     let rate = |d: &Option<Decimal>| dec(d, mode).unwrap_or_else(|| nearest_double("0.016"));
     let general = CombatGeneral {
+        // spec: S-0525 Import mapping (every [Radiation] value absent: the value in force, 0 or none at a fresh start)
+        radiation: RadRules {
+            duration_multiple: g.rad_duration_multiple.unwrap_or(0),
+            application_delay: g.rad_application_delay.unwrap_or(0),
+            level_max: g.rad_level_max.unwrap_or(0),
+            level_delay: g.rad_level_delay.unwrap_or(0),
+            light_delay: g.rad_light_delay.unwrap_or(0),
+            level_factor: dec(&g.rad_level_factor, mode).unwrap_or(F64::ZERO),
+            light_factor: dec(&g.rad_light_factor, mode).unwrap_or(F64::ZERO),
+            tint_factor: dec(&g.rad_tint_factor, mode).unwrap_or(F64::ZERO),
+            colour: g.rad_color.unwrap_or([0, 0, 0]),
+            site_warhead: warhead(&g.rad_site_warhead),
+        },
         // spec: S-0302 Constants (maximum damage absent: 1000)
         max_damage: g.max_damage.unwrap_or(1000),
         // spec: S-0301 Constants (occupy and bunker factors absent: 1.0, singles)

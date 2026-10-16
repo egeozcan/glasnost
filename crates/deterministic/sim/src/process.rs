@@ -743,8 +743,59 @@ fn deployer_rule(w: &mut World, id: ObjectId) -> Option<i32> {
         deployed_firing(w, id);
         return Some(standard_delay(w, id));
     }
-    // The radiation rows need weapon radiation levels (combat); a type that does not deploy to fire follows claims 24 and 26.
+    let immune_fires = w
+        .obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .is_some_and(|u| {
+            u.raw.deploy_fire.unwrap_or(false) && u.raw.immune_to_radiation.unwrap_or(false)
+        });
+    if immune_fires {
+        // spec: S-0215 claim 31 rows 3 to 5 (deploys to fire, immune to radiation)
+        return Some(immune_deployed(w, id));
+    }
+    // A type that does not deploy to fire follows claims 24 and 26.
     None
+}
+
+/// The radiation-immune deployed rows of S-0215 claim 31: a unit on the
+/// centre cell of a field whose current field level is at least
+/// *R* = trunc(*W* / 3), with *W* the radiation level of its secondary
+/// weapon (S-0525 claim 7), does nothing; otherwise it fires at its own
+/// cell when the firing rules let it (the standing row), starting its
+/// deployed-fire sequence; a refused shot only drops the target. The delay
+/// is the sequence's frame count for a shot and *D*<sub>r</sub> + *U*(10, 20)
+/// for the other two rows.
+fn immune_deployed(w: &mut World, id: ObjectId) -> i32 {
+    use crate::combat::check::{Answer, check};
+    let Some(cell) = w.obj(id).map(|o| o.pos.cell()) else {
+        return 0;
+    };
+    // spec: S-0215 claim 31 (R = trunc(W / 3), integer division by the radiation threshold divisor 3; W the secondary slot's radiation level)
+    let level = crate::combat::weapon::slot_weapon(w, id, 1)
+        .map_or(0, |wp| w.rules().combat.weapon(wp).rad_level);
+    let threshold = level / 3;
+    // spec: S-0215 claim 31 and S-0525 claim 7 (only a field centred on the unit's cell counts, by its current integer field level)
+    let suppressed = crate::radiation::centre_field_level(w, cell).is_some_and(|l| l >= threshold);
+    let target = Target::Cell(cell);
+    if !suppressed && check(w, id, Some(target), 1, true) == Answer::CanFire {
+        // spec: S-0215 claim 31 (fires at its own cell, drops the target, starts its deployed-fire sequence; Q-0983: the shot is made at once)
+        crate::combat::fire::shot(w, id, 1, target);
+        if let Some(ob) = w.obj_mut(id) {
+            crate::spawn::clear_own_target(ob);
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        }
+        infantry::request(w, id, Seq::DeployedFire, false);
+        return frame_count(w, id, Seq::DeployedFire);
+    }
+    if !suppressed && let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 31 (the firing rules refuse: it drops the target)
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let dr = rate_delay(w, id);
+    // spec: S-0215 claim 31 (D_r + U(10, 20))
+    dr.wrapping_add(w.rng.ranged(10, 20, half))
 }
 
 /// The deployed-firing rule (S-0517 claim 16) of a deployed infantry unit:

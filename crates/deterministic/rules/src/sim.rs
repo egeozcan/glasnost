@@ -698,6 +698,41 @@ pub struct General {
     /// established.
     #[serde(default)]
     pub default_spark_system: Option<String>,
+    /// `[Radiation] RadDurationMultiple`, the duration multiple *M*
+    /// (S-0525 Import mapping, F2).
+    #[serde(default)]
+    pub rad_duration_multiple: Option<i32>,
+    /// `[Radiation] RadApplicationDelay`, the application delay *A* in ticks
+    /// (S-0525 Import mapping, claim 9).
+    #[serde(default)]
+    pub rad_application_delay: Option<i32>,
+    /// `[Radiation] RadLevelMax`, the level cap (S-0525 Import mapping, F6).
+    #[serde(default)]
+    pub rad_level_max: Option<i32>,
+    /// `[Radiation] RadLevelDelay`, the level delay in ticks (S-0525 Import
+    /// mapping, claim 5).
+    #[serde(default)]
+    pub rad_level_delay: Option<i32>,
+    /// `[Radiation] RadLightDelay`, the light delay in ticks (S-0525 Import
+    /// mapping, claim 14).
+    #[serde(default)]
+    pub rad_light_delay: Option<i32>,
+    /// `[Radiation] RadLevelFactor`, a double (S-0525 Import mapping, F6).
+    #[serde(default)]
+    pub rad_level_factor: Option<Decimal>,
+    /// `[Radiation] RadLightFactor`, a double (S-0525 Import mapping, F7).
+    #[serde(default)]
+    pub rad_light_factor: Option<Decimal>,
+    /// `[Radiation] RadTintFactor`, a double (S-0525 Import mapping, F7).
+    #[serde(default)]
+    pub rad_tint_factor: Option<Decimal>,
+    /// `[Radiation] RadColor`, a byte triple (S-0525 Import mapping, F7).
+    #[serde(default)]
+    pub rad_color: Option<[i32; 3]>,
+    /// `[Radiation] RadSiteWarhead`, a warhead name (S-0525 Import mapping,
+    /// claim 10).
+    #[serde(default)]
+    pub rad_site_warhead: Option<String>,
     /// `[General] WeaponNullifyAnim` (S-0303 claim 15).
     #[serde(default)]
     pub weapon_nullify_anim: Option<String>,

@@ -6,7 +6,7 @@
 //! of S-0203 claim 1, so that their draws land where the original takes them
 //! once they are written. Resource growth (row 9), the production lines (row
 //! 6) and the houses (row 7) run the M5a topics (`crate::econ`). Radiation
-//! maintenance (row 13) takes no draws and is not built yet.
+//! maintenance (row 13, `crate::radiation`) takes no draws.
 
 use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
@@ -34,8 +34,9 @@ pub fn step(w: &mut World) {
     // Rows 10, 11 and 12 have no topic yet: empty seams.
     // spec: S-0203 claim 1 row 3 (the weather storm's own update and bolt strikes, after rows 10 to 12 and before row 14 and the turn pass; S-0513 claims 14 to 19)
     crate::superweapons::storm::update(w);
-    // Rows 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
-    // maintenance) takes no draws (S-0203 row 13) and is not built yet.
+    // spec: S-0203 claim 1 row 13 and S-0525 claims 5, 6 and 11 (radiation maintenance: after the storm, before the turn pass; the most recently created field first; no draws)
+    crate::radiation::maintenance(w);
+    // Rows 14 (and row 4) have no topic yet: empty seams.
     // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
     // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)
     crate::econ::shroud::regrowth(w);
@@ -144,6 +145,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn) and claim 19 (a sinking vehicle still self-heals; health does not end sinking)
     crate::combat::heal::turn(w, id);
+    // spec: S-0525 claims 9 and 11 (the radiation hit, in the object's own turn after its self-healing; a kill ends the turn as S-0312 says)
+    crate::radiation::hit_turn(w, id);
     let sinking = crate::naval::sinking(w, id);
     // spec: S-0511 claim 10 (a dropped object falls on each of its own updates; the fall and any landing hit precede that turn's due behaviour processing, ordinary locomotion advance and firing check)
     let fell = crate::fall::falling(w, id) && crate::fall::turn(w, id);

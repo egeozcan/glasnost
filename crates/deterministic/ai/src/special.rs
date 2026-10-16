@@ -58,6 +58,8 @@ pub struct Uses {
     /// deployed and packed up, deploy-fire vehicles and firing infantry
     /// deployed.
     pub deploys: u32,
+    /// Units sent out of a radiation field (S-0525).
+    pub radiation: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -98,12 +100,18 @@ impl Special {
         self.spies(script, &own, w, out);
         self.jumpjets(script, &own, w, out);
         self.deployers(script, &own, w, out);
+        self.radiation(script, &own, w, out);
     }
 
     /// Counts one deploy order given to a deployable unit (S-0517,
     /// `deployers`).
     pub(crate) fn count_deploy(&mut self) {
         self.uses.deploys += 1;
+    }
+
+    /// Counts one unit sent out of a radiation field (S-0525, `radiation`).
+    pub(crate) fn count_radiation(&mut self) {
+        self.uses.radiation += 1;
     }
 
     /// Counts one order given to a jumpjet unit (S-0502, `jumpjets`).

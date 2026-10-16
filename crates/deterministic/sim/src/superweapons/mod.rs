@@ -11,7 +11,6 @@
 //! [`crate::paradrop`]).
 //!
 //! Seams to specs that are not built (each named where it is used):
-//! - S-0525 (radiation fields): [`nuke::radiation_seam`];
 //! - S-0514 (chrono weapons; units that cannot be teleported): the erasing
 //!   half of [`being_erased`] and [`warp::chrono_seam`];
 //! - S-0610, S-0611 and S-0612 (psychic reveal, genetic mutation, psychic

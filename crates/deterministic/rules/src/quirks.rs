@@ -1607,11 +1607,11 @@ pub struct Quirks {
     // spec: S-0520 claim 13 and Edge cases
     #[serde(default = "on")]
     pub crate_unit_fallback_unit_argument: bool,
-    /// Adding to a radiation field removes F5's amount r from its cells, which can exceed the field's remaining contribution by one decay step and take radiation other fields gave; off: adding removes exactly the field's own remaining contribution. Not implemented yet (wave 2).
+    /// Adding to a radiation field removes F5's amount r from its cells, which can exceed the field's remaining contribution by one decay step and take radiation other fields gave; off: adding removes exactly the field's own remaining contribution.
     // spec: S-0525 claim 4, F5 and Edge cases
     #[serde(default = "on")]
     pub radiation_add_overdraw: bool,
-    /// A radiation field's end takes nothing from its cells, so a contribution its decay steps did not take stays and keeps damaging; off: at its end each cell loses what remains of that field's contribution, not below 0. Not implemented yet (wave 2).
+    /// A radiation field's end takes nothing from its cells, so a contribution its decay steps did not take stays and keeps damaging; off: at its end each cell loses what remains of that field's contribution, not below 0.
     // spec: S-0525 claim 6 and Edge cases
     #[serde(default = "on")]
     pub radiation_residue: bool,

@@ -45,6 +45,7 @@ const SCENES: &[Scene] = &[
     ("tech", engineer_takes_tech_building),
     ("jumpjet", jumpjet_flies),
     ("deploy", unit_deploys),
+    ("radiation", radiation_field),
 ];
 
 #[test]
@@ -674,6 +675,76 @@ fn unit_deploys(lane: &mut Lane) {
     lane.ticks(6);
     println!("form after: {:?}", inplace::form(lane.world(), unit));
     lane.save("deploy-packed");
+}
+
+/// S-0525: a radiation weapon of the install detonates on open ground (as a
+/// shot would); infantry stand at the centre, one cell off and outside the
+/// reach, and the field's ring is drawn. Prints the exposure and the health
+/// lost, never a type name or a rules value.
+fn radiation_field(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let weapon = (0..r.combat.weapons.len() as u32).find(|&i| r.combat.weapon(i).rad_level > 0);
+    let man = (0..r.infantry.len())
+        .find(|&i| {
+            r.unit(Kind::Infantry, i as u32)
+                .is_some_and(|u| !u.raw.immune_to_radiation.unwrap_or(false) && u.strength > 0)
+        })
+        .map(|i| r.infantry[i].name.clone());
+    println!(
+        "radiation weapon found: {}, infantry type found: {}",
+        weapon.is_some(),
+        man.is_some()
+    );
+    let (Some(weapon), Some(man)) = (weapon, man) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let centre = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let spread = lane
+        .world()
+        .rules()
+        .combat
+        .warhead_of(weapon)
+        .map_or(0, |h| h.spread.to_i32_common());
+    let side = CellXY::new(centre.x + 1, centre.y);
+    let far = CellXY::new(centre.x + spread + 3, centre.y);
+    let units: Vec<ObjectId> = [centre, side, far]
+        .iter()
+        .map(|&c| lane.spawn(Kind::Infantry, &man, local, c))
+        .collect();
+    lane.look_at(centre);
+    lane.ticks(4);
+    lane.save("radiation-before");
+    glasnost_sim::radiation::detonation(lane.world_mut(), weapon, centre);
+    lane.ticks(2);
+    println!(
+        "fields {}, spread {spread}, exposure at the centre {}, one cell off {}, outside {}",
+        lane.world().radiation.fields.len(),
+        glasnost_sim::radiation::exposure(lane.world(), centre),
+        glasnost_sim::radiation::exposure(lane.world(), side),
+        glasnost_sim::radiation::exposure(lane.world(), far)
+    );
+    lane.save("radiation-field");
+    let before: Vec<i32> = units
+        .iter()
+        .map(|&u| lane.world().obj(u).map_or(0, |o| o.health))
+        .collect();
+    lane.ticks(90);
+    let after: Vec<i32> = units
+        .iter()
+        .map(|&u| lane.world().obj(u).map_or(0, |o| o.health))
+        .collect();
+    println!(
+        "health lost after 90 ticks: {:?}",
+        before
+            .iter()
+            .zip(&after)
+            .map(|(b, a)| b - a)
+            .collect::<Vec<_>>()
+    );
+    lane.save("radiation-damage");
 }
 
 // ---------------------------------------------------------------------------

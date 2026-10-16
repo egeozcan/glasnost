@@ -2257,3 +2257,7 @@ mod hover_tests;
 #[cfg(test)]
 #[path = "sim_transport_tests.rs"]
 mod transport_tests;
+
+#[cfg(test)]
+#[path = "sim_radiation_tests.rs"]
+mod radiation_tests;

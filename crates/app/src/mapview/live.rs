@@ -1567,6 +1567,21 @@ impl Live {
             let item = self.cache.marker_item(scene, m, at);
             scene.items.push(item);
         }
+        // S-0525: the reach of every radiation field, as a ring (our placeholder for the field's light).
+        for f in &self.world.radiation.fields {
+            if f.spread < 0 {
+                continue;
+            }
+            let p = glasnost_sim::world::Pos::centre(f.centre, 0);
+            let z = self.world.surface_at(p.x, p.y);
+            let m = Marker::Field {
+                half: combat::burst_half_width(f.reach),
+            };
+            let item = self
+                .cache
+                .marker_item(scene, m, project_lifted(p.x, p.y, z));
+            scene.items.push(item);
+        }
         let now = self.shown_tick();
         for t in &self.transients {
             if let Some(m) = t.marker(now) {

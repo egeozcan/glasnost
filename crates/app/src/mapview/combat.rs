@@ -281,6 +281,13 @@ pub enum Marker {
     /// An animation whose type has no sprite was created here (the
     /// viewer's debug layer).
     Anim,
+    /// The reach of a radiation field (S-0525): a green ring of this
+    /// half-width in pixels. Our placeholder for the field's light, which
+    /// the view does not draw (it never relights the map).
+    Field {
+        /// Half-width, pixels.
+        half: i32,
+    },
 }
 
 /// Placeholder palette indices (our own colours).
@@ -422,6 +429,11 @@ fn marker_image(m: Marker) -> IndexedImage {
                 };
                 disc(r, ry, Some(inner), fill, ink::RED)
             }
+        }
+        Marker::Field { half } => {
+            // A ring twice as wide as high (S-0101 F1's ground projection).
+            let r = half.max(4);
+            disc(r, (r / 2).max(1), Some(880), ink::GREEN, ink::GREEN)
         }
         Marker::Anim => {
             // A 9 × 9 hollow square with a diagonal cross.
