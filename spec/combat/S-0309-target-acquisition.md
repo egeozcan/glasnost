@@ -2,11 +2,11 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 18
+revision: 19
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162]
 supersedes: []
@@ -167,11 +167,16 @@ this spec:
    outcomes. Its search context does not by itself settle whether claims 2 and 3 limit that
    search (S-0517, Open questions).
 
-   S-0518 claim 15 owns the charging search's replacement and mark-clearing outcomes: it
-   looks for a candidate despite the held charging target, and keeps that target if none is
-   found. It neither waits for nor restarts the targeting timer. The ordinary behaviour-delay
-   draws still apply (S-0215 claim 21). Whether claims 2 and 3 restrict this search remains
-   open in S-0518; the context here does not settle it. S-0215 claim 33 explicitly excepts
+   S-0518 claim 15 owns the charging search's replacement and mark-clearing outcomes. The
+   held charging target neither prevents the search nor is cleared or tested for usability to
+   permit it. Any nonempty result becomes the target and clears the charging mark, even when
+   it is the same object as the held target; there is no further owner, firing-legality or
+   identity test on that result. An empty result leaves both target and mark unchanged.
+   Claims 2 and 3 do not limit this search. The intrinsic restrictions, candidate tests and
+   ranking of claims 5 to 17 still apply, including claim 5's no-auto-fire restriction: a
+   charging building does not become eligible merely because it is the held target. The search
+   neither waits for nor restarts the targeting timer. The ordinary behaviour-delay draws
+   still apply (S-0215 claim 21). S-0215 claim 33 explicitly excepts
    this search from the targeting-timer reset rule for searches covered by claim 4 here,
    and from its ordering rule for processing draws before per-tick-search draws. A replacement
    found by this search can be attacked in that same processing.
@@ -200,7 +205,8 @@ this spec:
      conditions); the deployed-firing row by S-0517 scenario P7, parts b, c and f, including
      runs with positive ticks left on the targeting timer in part b; the charging break-off
      row and its no-timer-draw rule by scenario A17 below, supplementing S-0518 scenario TC3
-     with positive remaining targeting-timer runs, a no-candidate case and random-state recording. The paragraph on
+     with positive remaining targeting-timer runs, a no-candidate case, permission and same-result
+     controls, and random-state recording. The paragraph on
      other behaviours is a pointer to the specs that own those searches, not a claim of this spec,
      and carries no backing or confidence (Open questions).
    - Confidence: high (the first four and the charging break-off context); medium (the deployed-firing context and the teleport case)
@@ -2344,9 +2350,7 @@ claims give for a human-controlled owner. Target recorder in every part.
   threat coefficient 0 except the special-threat coefficient. Run 1: *Y*'s special threat value
   above *X*'s; run 2: below. *Expected:* run 1: it retaliates against *Y*; run 2: it keeps *X*.
   *Falsified if:* run 1 does not retaliate or run 2 does.
-  Run 3 (draining without a target): let a Floating Disc of the neutral house, placed over an
-  enemy drainable building of the human house, acquire it automatically and form a drain link
-  (S-0608 claims 1 and 2). Once the attempt clears its target and it is in *guard*, have a
+  Run 3 (draining without a target): let a neutral-house drainer, placed over an enemy drainable building of the human house, acquire it automatically and form a drain link (S-0608 claims 1 and 2). Once the attempt clears its target and it is in *guard*, have a
   human-owned anti-air attacker damage it from beyond its weapon range but within its sight.
   Record the link, target, behaviour and attacker's distance at the hit and the target after
   it. Void and repeat if the Disc has acquired any target before the hit, its link has ended,
@@ -2467,6 +2471,16 @@ scenario random state each tick, and identify attack processings using the proce
   fresh runs. *Expected:* the charging building and mark remain, and none of those processings
   restarts the targeting timer. Positive remaining ticks decrease normally; an expired timer
   remains expired rather than receiving the normal targeting delay.
+- *Part c:* repeat part a in named test-map overrides with passive acquisition disabled, then
+  with opportunity fire disabled while no other condition of claim 3 passes in *attack*.
+  Keep the charger armed and otherwise eligible. Record three qualifying processings per
+  variant. *Expected:* replacement and mark clearing still occur. As a control, enable the
+  no-auto-fire restriction for the human-owned charger: expect no result and retention of
+  both charging target and mark. Separately use S-0518 claim 15's scenario TC3 same-result
+  setup, allowing allied candidates and making the held building the sole eligible result.
+  Record three qualifying processings. *Expected:* the target remains the same object but
+  the mark clears, so a later enemy does not trigger this special search. Confirm candidate
+  eligibility under claims 5 to 17; failure to realise it makes that run inconclusive.
 - *Draw observable:* for each counted processing, predict the scenario-stream draws of its
   ordinary behaviour delay under S-0215 claim 21 and any firing under S-0301. Use a weapon
   without random firing effects and keep all unrelated actors away. Compare the recorded state
@@ -2476,7 +2490,9 @@ scenario random state each tick, and identify attack processings using the proce
   draw. Do not discard a tick merely because its observed draw count differs from the prediction.
 - *Falsified if:* a qualifying positive-timer processing waits for expiry to replace the target,
   a search restarts the timer in either part, a failed search discards the charging target or
-  mark, or an isolated processing tick contains the additional targeting-delay draw.
+  mark, passive acquisition or the opportunity gate blocks part c's otherwise eligible
+  search, the no-auto-fire control returns a candidate, a confirmed same-object result retains
+  the mark, or an isolated processing tick contains the additional targeting-delay draw.
 
 ## Open questions
 
