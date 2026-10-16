@@ -778,11 +778,7 @@ S-0512 (charge and readiness) and the S-0513 effects of the Allied and Soviet ki
   - The Yuri kinds (S-0610, S-0611, S-0612) are `launch::yuri_seam`.
   - Tank bunker links (S-0606) do not exist, so the warp has none to end.
 
-Provisional rules of M6b superweapons, each tied to a request:
-
-| Where | Interim rule | Request |
-|---|---|---|
-| `warp::place` | only a landing point outside the map fails the placement of claim 50; the member goes back to the landing retry | Q-0871 |
+Provisional rules of M6b superweapons, each tied to a request: none are open (Q-0870 and Q-0871 answered by S-0513 revision 14).
 
 S-0203 revision 32, S-0301 revision 18 and S-0215 revision 48 (with S-0513 revision 14 claim 51) answer Q-0870 (step 6a, [docs/m6-claims/step6a.md](m6-claims/step6a.md)): the warp update is the whole member turn from the first pending update through arrival effects (`tick::object_turn`), the reload countdown still elapses (`combat::fire::reload_elapsed`), and the expected-health bookkeeping and the protection envelope's phases are ordinary work that resumes after the hold-end test. Its row is retired.
 
