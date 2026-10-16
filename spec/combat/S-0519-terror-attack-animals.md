@@ -2,7 +2,7 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -80,9 +80,10 @@ ignores defences*, *quirk switch*. Also used:
 
 ### Planted bombs
 
-2. **Planting a bomb.** When a projectile whose warhead is a bomb-planting warhead detonates, it
-   does no area damage. Instead it plants a bomb on its target
-   when all of these hold:
+2. **Planting a bomb.** Bomb planting must be the effect selected by S-0514 claim 20.
+   Takeover suppresses planting even when takeover cannot succeed; planting in turn suppresses
+   all lower-priority effects even when no bomb can be planted. With planting selected, the
+   projectile detonation does no area damage. It plants a bomb on its target when all of these hold:
    - the projectile's firer still exists and is an infantry unit,
    - the target is a unit, an infantry unit, an aircraft or a building,
    - the target carries no planted bomb.
@@ -92,7 +93,7 @@ ignores defences*, *quirk switch*. Also used:
    planter's house is the local player, the game-wide bomb-attach sound plays. The accepts-bombs
    flag of the target's type and the bomb-planter flag of the firer's type affect only the cursor
    (S-0214 row I19); planting tests neither.
-   - Backing: `measurable` (scenario T2)
+   - Backing: `measurable` (scenarios T2 and T24)
    - Confidence: high
 
 3. **When a bomb weapon may fire.** Two more *illegal* answers join the late target tests of the
@@ -156,11 +157,14 @@ ignores defences*, *quirk switch*. Also used:
 7. **Disarming.** A disarm removes the bomb with no damage, no animation and no credit. It happens
    when:
    - a projectile with a disarm warhead detonates on a target that carries a bomb (no distance
-     test),
+     test), and disarming is selected by S-0514 claim 20. Every earlier enabled row suppresses
+     disarming even when that effect cannot succeed. Direct rocking is an earlier enabled row
+     only for a vehicle target; disguise-making and nuke-making are later rows and cannot
+     suppress disarming,
    - a building changes owner and its type is not garrisonable (S-0312 claim 7, S-0509 claim 13),
    - the carrier is removed from play other than by death: sold, used up by entering a building,
      or erased.
-   - Backing: `measurable` (scenarios T6 and T9)
+   - Backing: `measurable` (scenarios T6, T9 and T24)
    - Confidence: high
 
 8. **Ownership and planter changes.** A change of owner of a unit, infantry unit or aircraft, for
@@ -314,8 +318,12 @@ ignores defences*, *quirk switch*. Also used:
 ### Air-strike designation
 
 16. **The designation shot.** A designation shot is fired like any other shot (S-0301; S-0308
-    row 6 chooses the weapon). When it detonates, it makes no area hits, as S-0303 claim 2 says of
-    parasite projectiles. The detonation's other effects are not suppressed: radiation creation,
+    row 6 chooses the weapon). Designation must be selected by S-0514 claim 20: takeover,
+    planting, charging, parasite attachment, temporal erasure and locomotor replacement each
+    suppress it when enabled, even when the higher-priority effect cannot succeed. Selected
+    designation suppresses direct rocking, disarming, disguise-making and nuke-making even
+    when no strike can be called. With designation selected, the detonation makes no area hits,
+    as S-0303 claim 2 says of parasite projectiles. The detonation's other effects are not suppressed: radiation creation,
     the explosion animation, warhead debris and the light flash still occur where configured
     (S-0303 claims 2, 21 and 22). Instead of area damage, the strike is called (claim 17) or
     redirected (claim 19) when all of these hold:
@@ -333,7 +341,7 @@ ignores defences*, *quirk switch*. Also used:
     the designation shot detonates, after the firing cadence of S-0301 and the projectile's flight
     (S-0306). The designator need not keep firing once a strike has started, but any change of its
     target cancels the strike (claim 19).
-    - Backing: `measurable` (scenario T16)
+    - Backing: `measurable` (scenarios T16 and T24)
     - Confidence: high
 
 17. **Starting a strike.** At the start the designator's rank decides the strike size *n* and the
@@ -565,7 +573,8 @@ once: ready = (not *P* and *t* ≥ *e* + *R*) or (*P* and *T* ≠ *S*).
 
 ## State and ordering
 
-**Planted bomb.**
+**Planted bomb.** Projectile planting and disarming events below require selection under
+S-0514 claim 20, as specified in claims 2 and 7. Ownership-change and removal disarms do not.
 
 | State | Event | Result |
 |---|---|---|
@@ -592,7 +601,8 @@ once: ready = (not *P* and *t* ≥ *e* + *R*) or (*P* and *T* ≠ *S*).
 | running | curtain protection starts | cancelled (S-0513 claim 25) |
 | running | expiry | S-0302 claim 16 |
 
-**Strike.**
+**Strike.** Designation-shot events below require designation to be selected under S-0514
+claim 20 and delivery to qualify under claim 16.
 
 | State | Event | Result |
 |---|---|---|
@@ -927,6 +937,27 @@ result falsifies that part of its claim.
   engine require a warning, completed death with ordinary presentation, no warhead-selected
   special death effect, and exactly the normal death-weapon detonation. Run each variant three
   times under the common setup, then remove the named file.
+
+- **T24, competing detonation effects (claims 2, 7 and 16).** Under the common setup and
+  three-run rule, use named map weapon/warhead variants from S-0514 scenario E13, enabling
+  only each stated pair of effects. Keep ordinary firing legal and give slow projectiles so
+  delivery can be observed separately. Record bomb attachment, carrier health, strike aircraft
+  count and configured explosion presentation at impact. (a) Combine takeover and planting on
+  an infantry planter whose type supplies no takeover capability: no bomb attaches. (b) Combine
+  planting and designation on that planter: only a bomb attaches. Repeat with a vehicle firer:
+  neither bomb nor strike occurs, even when the vehicle is a designator. (c) Combine designation
+  separately with charging and locomotor replacement; use a designator and a building target
+  for which those earlier effects cannot succeed: no strike starts. Erasure over designation
+  uses S-0514 E13's beam-equipped firer rather than an unsafe missing-beam arrangement.
+  (d) Deliver a combined designation/disarm shot from a non-designator to a bombed building:
+  the bomb remains, with no strike. (e) Combine direct rocking and disarming, using a firer
+  destroyed during flight so rocking cannot succeed: a bombed vehicle keeps its bomb, while a
+  bombed building is disarmed. (f) Combine disarming separately with disguise-making and
+  nuke-making: the bomb is disarmed, and neither later effect occurs. Use long bomb delays
+  so expiry cannot confound these observations. Selected effects make no immediate area hits.
+  Configured shared presentation remains eligible. A suppressed bomb attachment, disarm or
+  strike occurring, or a later effect appearing after an unsuccessful earlier selection,
+  falsifies the relevant claim. Remove all named test overrides after the runs.
 
 ## Open questions
 
