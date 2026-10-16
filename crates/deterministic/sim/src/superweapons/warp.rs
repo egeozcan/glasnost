@@ -7,9 +7,8 @@
 //! other part of its turn (S-0513 claim 48, confirmed); for the other stages
 //! before its arrival hold, whether it takes the rest of its turn is
 //! unmeasured in the original; our engine's rule (S-0513 claim 51, engine
-//! design) is that none of the five kinds of ordinary work runs there, so the
-//! warp update is the whole turn there (Q-0870 interim: the other parts of the
-//! turn, the cloak update, reload timers and so on, are left out as before).
+//! design, Q-0870 answered) is that no ordinary work of the member's turn
+//! runs there, so the warp update is the whole turn there.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -67,6 +66,12 @@ pub struct Member {
     /// (claim 50).
     #[serde(default)]
     pub refused: bool,
+    /// The landing cell could be entered by the member when its last landing
+    /// check passed (claim 50, Q-0871: a later change that makes it
+    /// unenterable refuses the placement; terrain that was already fatal at
+    /// the check is not a new refusal).
+    #[serde(default)]
+    pub entry_ok: bool,
 }
 
 impl Member {
@@ -303,6 +308,7 @@ fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY, fell_back: bool) {
             redirected: false,
             fell_back,
             refused: false,
+            entry_ok: false,
         });
     }
     if fell_back {
@@ -412,6 +418,14 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
     }
 }
 
+/// Whether the member's turn is the warp update alone: from its first
+/// pending update through arrival effects, the arrival hold excluded
+/// (S-0513 claim 51; Q-0870 answered).
+pub fn suppresses_ordinary_work(w: &World, id: ObjectId) -> bool {
+    // spec: S-0513 claim 51 and S-0203 claim 4 (the warp update is the whole member turn before the arrival hold; the hold's ordinary opportunities return after the hold-end test)
+    member(w, id).is_some_and(|m| !matches!(m.stage, Stage::Hold(_)))
+}
+
 /// The departure in t_L + 62 (claim 39).
 fn depart(w: &mut World, id: ObjectId, m: Member) {
     let Some(o) = w.obj(id).cloned() else { return };
@@ -503,12 +517,15 @@ fn check_or_redirect(w: &mut World, id: ObjectId) {
     match check(w, id, &m) {
         Check::Killed => {}
         Check::Pass => {
+            // spec: S-0513 claim 50 (a passed check is not a reservation; the entry test of the checked cell is remembered to detect a terrain or deck change before the placement)
+            let entry_ok = enterable_now(w, id, m.landing.cell());
             // spec: S-0513 T2 (check passed: placed on the next update)
             set_member(
                 w,
                 id,
                 Some(Member {
                     stage: Stage::Away,
+                    entry_ok,
                     ..m
                 }),
             );
@@ -645,13 +662,91 @@ fn redirect(w: &mut World, id: ObjectId, m: Member) {
     }
 }
 
+/// Whether the member could enter cell `c` on the layer it would land on
+/// (the entry test of claim 38).
+fn enterable_now(w: &World, id: ObjectId, c: CellXY) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let r = w.rules_arc();
+    let (class, zone) = r
+        .unit(o.kind, o.type_index)
+        .map_or((None, MovementZone::Normal), |u| (u.class, u.zone));
+    let deck = crate::teleport::landing_layer(w, c) == Layer::Deck;
+    crate::passability::enterable_by_class(&r, w, c, class, zone, deck)
+}
+
+/// Whether the placement at the passed landing check's point may go ahead
+/// now (claim 50, Q-0871 answered): a passed check is not a reservation. It
+/// refuses an illegal cell, a newly blocking building or terrain object, a
+/// newly present protected object, a member that does not fit on the selected
+/// layer with the occupants there (no vehicle or aircraft shares, an infantry
+/// unit only takes a free standing position), and a terrain or deck change
+/// since the check that makes the landing unenterable. Current occupants are
+/// never killed, displaced or ignored; an occupant already destroyed does not
+/// count.
+fn placement_accepted(w: &World, id: ObjectId, m: &Member) -> bool {
+    let c = m.landing.cell();
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0513 claim 50 (an illegal cell refuses the placement)
+    if w.cells.cell(c).is_none() {
+        return false;
+    }
+    let layer = crate::teleport::landing_layer(w, c);
+    for l in super::swept_layers(w, c) {
+        for &v in w.cells.list(c, l) {
+            let Some(vo) = w.obj(v) else { continue };
+            if v == id || crate::combat::damage::dead(vo) {
+                continue;
+            }
+            // spec: S-0513 claim 50 (a newly present protected object refuses the placement; the next update's full check then kills the member)
+            if super::protected(w, v) {
+                return false;
+            }
+            match vo.kind {
+                Kind::Infantry | Kind::Vehicle | Kind::Aircraft => {}
+                // spec: S-0513 claim 50 (a newly blocking building or terrain object refuses the placement)
+                _ => return false,
+            }
+            if l != layer {
+                continue;
+            }
+            match vo.kind {
+                // spec: S-0513 claim 50 and S-0209 claims 4 and 5 (incompatible vehicles or aircraft refuse sharing; the member takes no cell with a vehicle or aircraft in it, and no other member shares with an infantry unit)
+                Kind::Vehicle | Kind::Aircraft => return false,
+                _ if o.kind != Kind::Infantry => return false,
+                _ => {}
+            }
+        }
+    }
+    if o.kind == Kind::Infantry
+        && let Some(rec) = w.cells.occ(c, layer)
+    {
+        let top = w.rules().quirks.top_position_counts_as_centre;
+        let p = crate::walk::position_class(
+            m.landing.x.rem_euclid(256),
+            m.landing.y.rem_euclid(256),
+            top,
+        );
+        // spec: S-0513 claim 50 and S-0209 claim 4 (infantry share a cell only when the landing position is free: no over-capacity overlap; a mark of an infantry unit already destroyed does not count)
+        let live = |mk: &crate::cells::Mark| match mk.by {
+            crate::cells::Marker::Infantry(x, _) => w
+                .obj(x)
+                .is_some_and(|xo| x != id && !crate::combat::damage::dead(xo)),
+            crate::cells::Marker::Terrain(_) => true,
+        };
+        if rec.marks[usize::from(p)].as_ref().is_some_and(live) {
+            return false;
+        }
+    }
+    // spec: S-0513 claim 50 (a terrain or deck change since the passed check that makes the landing no longer enterable refuses it; terrain that was already unenterable at the check keeps its explicit arrival fate of claim 38)
+    !(m.entry_ok && !enterable_now(w, id, c))
+}
+
 /// The placement at the landing point (T2: check passed, next update).
 fn place(w: &mut World, id: ObjectId, m: Member) {
     let Some(o) = w.obj(id).cloned() else { return };
     let c = m.landing.cell();
-    // Q-0871 interim: only a landing point outside the map fails the placement.
-    // spec: S-0513 claim 50 (a placement failure never deletes a member: it stays alive in the landing-retry stage with its landing point, owner and passengers retained and retries on the next update; no retry cap and no timeout death; the first failure per member and warp is reported)
-    if w.cells.cell(c).is_none() {
+    // spec: S-0513 claim 50 (a placement failure never deletes a member: it stays alive and off the map in the landing-retry stage with its landing point, owner and passengers retained; the next update repeats the full landing check of claim 37; the failed placement itself applies no landing-check hits and makes no redirect or draw; no retry cap and no timeout death; the first failure per member and warp is reported)
+    if !placement_accepted(w, id, &m) {
         if !m.refused {
             w.note(format!(
                 "warp: object {} could not be placed at its landing point and stays in the landing retry (S-0513 claim 50)",

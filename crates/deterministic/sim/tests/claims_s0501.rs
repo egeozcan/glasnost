@@ -2377,3 +2377,98 @@ fn s0209_claim_13_ordinary_flight_is_listed_only_at_height_zero() {
         describe(&w, a)
     );
 }
+
+// ---------------------------------------------------------------------------
+// Claim 44: the object-present flag of an aircraft at rest on a bridge deck (Q-0872 answered), with
+// S-0209 claim 1 and the ordinary-aircraft paragraph of claim 5. Scenario AC27, occupancy variants.
+
+/// The object-present counts of a cell's (ground, deck) records.
+fn flags(w: &World, c: glasnost_map::CellXY) -> (u8, u8) {
+    let get = |l| w.cells.occ(c, l).map_or(0, |r| r.others);
+    (
+        get(glasnost_sim::world::Layer::Ground),
+        get(glasnost_sim::world::Layer::Deck),
+    )
+}
+
+// spec: S-0501 claim 44 (ordinary rest on terrain marks ground; rest on a high-bridge deck at height 0 with the deck mark sets the flag in the deck record only, not in both records and not in ground) and S-0209 claim 1 (an ordinary landed aircraft sets the object-present flag)
+#[test]
+#[ignore = "needs the tick.rs / fire.rs / air.rs part that specs-r5a owns; remove after merge"]
+fn claim_44_the_flag_goes_in_the_record_of_the_surface_it_rests_on() {
+    let mut w = game(&rules());
+    let goal = bridge(&mut w, 5, 0);
+    let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -3, 0);
+    let home = w.obj(a).unwrap().pos.cell();
+    assert_eq!(flags(&w, home), (1, 0), "rest on terrain marks ground");
+    click(&mut w, a, ClickOn::Cell(goal));
+    assert!(run_until(&mut w, 800, |w| st(w, a).ground
+        && air::deck_marked(w, a)
+        && w.obj(a).unwrap().pos.cell() == goal));
+    assert_eq!(flags(&w, goal), (0, 1), "deck only, not both records");
+    assert_eq!(flags(&w, home), (0, 0), "the take-off cleared the ground flag");
+    assert_eq!(listed(&w, a), (false, true));
+}
+
+// spec: S-0501 claim 44 (normal deck take-off clears the deck flag in the first movement tick that climbs away from rest, not on accepting the destination, and does not transfer it to ground; by the end of that tick the aircraft is absent from both occupant lists; there is no later 208-lepton release threshold)
+#[test]
+#[ignore = "needs the tick.rs / fire.rs / air.rs part that specs-r5a owns; remove after merge"]
+fn claim_44_deck_take_off_clears_the_deck_flag_in_the_first_climbing_tick() {
+    let mut w = game(&rules());
+    let goal = bridge(&mut w, 5, 0);
+    let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -3, 0);
+    click(&mut w, a, ClickOn::Cell(goal));
+    assert!(run_until(&mut w, 800, |w| st(w, a).ground && air::deck_marked(w, a)));
+    assert_eq!(flags(&w, goal), (0, 1));
+    let far = testkit::mid(SIZE, -9, 3);
+    click(&mut w, a, ClickOn::Cell(far));
+    // The order alone releases nothing.
+    assert_eq!(flags(&w, goal), (0, 1), "accepting the destination keeps the flag");
+    let mut cleared = false;
+    for _ in 0..40 {
+        step(&mut w);
+        if flags(&w, goal) != (0, 1) {
+            assert_eq!(flags(&w, goal), (0, 0), "cleared, never moved to ground");
+            assert_eq!(listed(&w, a), (false, false), "absent from both lists by then");
+            assert!(above_terrain(&w, a) > 416, "{}", describe(&w, a));
+            assert!(!air::deck_marked(&w, a));
+            cleared = true;
+            break;
+        }
+        assert_eq!(air::height(&w, a), 0, "the flag holds while it has not climbed");
+    }
+    assert!(cleared, "{}", describe(&w, a));
+    // No later release threshold: the climb to cruise height leaves both records clear.
+    for _ in 0..60 {
+        step(&mut w);
+        assert_eq!(flags(&w, goal), (0, 0));
+    }
+}
+
+// spec: S-0501 claim 44 and S-0209 claim 5 (the object-present flag alone gives no vehicle entry refusal on either surface: a vehicle below the deck gets clear; a vehicle on deck gets stationary friendly from the resting allied aircraft's listing, row VP20, not from the flag; after take-off removes the listing, deck entry is clear)
+#[test]
+#[ignore = "needs the tick.rs / fire.rs / air.rs part that specs-r5a owns; remove after merge"]
+fn claim_44_the_flag_alone_refuses_no_vehicle_and_the_listing_does() {
+    use glasnost_sim::occupancy::{Outcome, vehicle_outcome};
+    let mut w = game(&rules());
+    let goal = bridge(&mut w, 5, 0);
+    let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -3, 0);
+    click(&mut w, a, ClickOn::Cell(goal));
+    assert!(run_until(&mut w, 800, |w| st(w, a).ground && air::deck_marked(w, a)));
+    assert_eq!(flags(&w, goal), (0, 1));
+    let lv = i32::from(w.cells.cell(goal).unwrap().level);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 4);
+    // Below: the ground record is clear and nothing is listed there.
+    assert_eq!(vehicle_outcome(&w, v, goal, lv), Outcome::Clear);
+    // On deck: the listed allied aircraft with no destination.
+    assert_eq!(
+        vehicle_outcome(&w, v, goal, lv + 4),
+        Outcome::StationaryFriendly
+    );
+    // Take-off: once it has climbed, neither the listing nor the flag blocks the deck.
+    let far = testkit::mid(SIZE, -9, 3);
+    click(&mut w, a, ClickOn::Cell(far));
+    assert!(run_until(&mut w, 40, |w| !air::deck_marked(w, a)));
+    assert_eq!(flags(&w, goal), (0, 0));
+    assert_eq!(vehicle_outcome(&w, v, goal, lv + 4), Outcome::Clear);
+    assert_eq!(vehicle_outcome(&w, v, goal, lv), Outcome::Clear);
+}
