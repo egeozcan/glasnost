@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -65,7 +65,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   read as S-0003 claims 6 and 7 state (a single-precision value unless written with a percent
   sign). The difficulty-row and country factors are held the same way.
 - **Garrisoned building.** A building whose type can be occupied by infantry and may fire while
-  occupied (two imported flags), and which has at least one occupant. Its occupant count is *n*.
+  occupied (two imported flags), and which has at least one occupant. Its occupant count is *n*,
+  with the original/engine distinction of claim 7.
 - **Occupy factor** *m*, **bunker factor** *b*. Two game-wide single-precision decimals from the
   rules data (Import mapping).
 - **Bunkered.** A vehicle that is inside a tank bunker (S-0206, Terms).
@@ -291,8 +292,19 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    that is not a number never reaches *b*: S-0003 claim 8 makes the importer treat it as absent
    (Edge cases). A building is never treated as
    bunkered.
-   - Backing: `measurable` (scenario F5)
-   - Confidence: high (formula); medium (the occupant-count division as observed in play, since
+
+   **Count after a death inside.** In the original, *n* includes retained dead occupant places
+   (S-0508 claim 20), not just living occupants. This describes the divisor, not a promise
+   of a successful shot through a dead place: subsequent use of that place has no dependable
+   original result. Our engine instead uses *n* after same-update death removal under
+   S-0508 claim 23, a safety departure with no quirk switch. Removed places do not contribute
+   to the delay quotient. When removal leaves *n* = 0, the building is no longer garrisoned
+   for this claim and Formula F1 applies neither the occupant division nor the occupy factor.
+   This does not itself grant a shot or an occupant weapon.
+   - Backing: `measurable` (scenario F5; S-0508 scenario G18 for engine death removal).
+     Unsafe original continuation through a dead place is `unmeasured` under S-0508 claim 20:
+     no safe confirming shot outcome is established.
+   - Confidence: high (formula, original retained-count divisor and engine post-removal rule); medium (the occupant-count division as observed in play, since
      which occupant's weapon fires is S-0308's)
 
 8. **Berserk halving.** A firer that is berserk when it makes a shot gets half the delay chosen by
@@ -647,7 +659,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
 **F1. Full delay** (claims 2, 6, 7, 8). *R* is the rate-of-fire field (integer, ticks), *h* the
 house factor (double), *u* = R(0, 2), *v* the veteran factor (double), *n* the occupant count
-(integer), *m* and *b* the occupy and bunker factors (singles, widened exactly to doubles). RZ₅₃ is
+(integer, using claim 7's original retained count or engine post-removal count), *m* and *b* the
+occupy and bunker factors (singles, widened exactly to doubles). RZ₅₃ is
 S-0205's rounding of a double result, which is round toward zero under `quirks.chop_rounding` (the
 default) and round to nearest with it off; trunc is the conversion of S-0205 claim 7.
 
@@ -953,6 +966,16 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   Expected: each division is skipped, so the delay is the one without it. Falsified if a division by
   zero or a changed delay appears.
 - Falsified if: the intervals do not scale as Formula F1 says.
+- Death-removal comparison (our engine only): use S-0508 scenario G18's foreign-owned
+  garrison and defeat its occupants' house. Record the occupant count in the death update.
+  Expected: the count falls by the number killed, reaching 0 after the last death; no removed
+  place supplies a weapon. In G18's controlled partial-removal fixture, retain a living
+  occupant and a legal target, then record each subsequent shot's delay and delay draw.
+  Expected: Formula F1 uses the reduced count, not the pre-death count. A retained count,
+  removed-place shot or delay computed with the old divisor falsifies the engine rule.
+  This is a design check, not an oracle prediction; do not seek confirming original shots
+  through dead places. S-0508 scenario G15 limits the original comparison to count retention
+  before unsafe continuation.
 
 **F6. Berserk.**
 - Setup: a vehicle made berserk by a stock berserk warhead, firing at a nearby unit.
