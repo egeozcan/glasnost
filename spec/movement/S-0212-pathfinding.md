@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 44
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1662,8 +1662,13 @@ Terms specific to this spec:
     is not placement: a selected cell outside the height-aware usable area or holding
     any overlay is refused without another nearby search around that centre. S-0524
     claim 4 owns trigger placement; S-0520 claim 3 owns random placement's subsequent
-    candidate attempts. S-0520 claim 13 owns unit-crate placement and its outcome when
-    the fallback search or placement fails.
+    candidate attempts. The unit-crate fallback search follows a separate direct
+    placement attempt at the crate cell, accepting only the awarded unit's *clear*
+    entry outcome (S-0520 claim 13). That attempt is not ring-zero qualification:
+    it does not require the search's empty occupancy record. The fallback search's
+    selected cell receives the same direct placement test once; refusal causes no
+    further search or placement attempt. S-0520 claim 13 owns those placement tests
+    and the money outcome when the fallback search or placement fails.
     The paradrop row is used only when the target is a water-role tile (S-0522 claim 1).
     Its result replaces the target only when there is a result and it is not itself a
     water-role tile; otherwise the original target remains. This post-selection refusal
@@ -1818,7 +1823,8 @@ Terms specific to this spec:
       displacement settings, reference choice and unchecked no-result placement
       (S-0524 scenario C14), for random-crate
       search settings and post-selection refusal (S-0520 scenario CR1), for unit-crate
-      fallback settings (S-0520 scenario CR9), for paradrop
+      fallback settings, the separate direct-placement test and the single
+      post-selection placement attempt (S-0520 scenario CR9), for paradrop
       target-adjustment settings and retention of the original target after refusal
       (S-0522 scenario P1), for air-strike placement settings and the shared placement
       cell selected at the start tick (S-0519 scenario T17), for the
