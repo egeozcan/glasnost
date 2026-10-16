@@ -110,6 +110,8 @@ struct Game {
     launches: usize,
     /// The launches by superweapon kind (the kind names of the simulation).
     launches_by_kind: BTreeMap<String, usize>,
+    /// House-ticks a superweapon record stood ready, by kind name.
+    ready_ticks: BTreeMap<String, usize>,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Counts-only state of a game that is not over at the end (the own
@@ -532,6 +534,7 @@ fn play_ai(
     g.unloads = tally.unloads;
     g.launches = tally.launches;
     g.launches_by_kind = tally.launches_by_kind;
+    g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
     let world = &game.world;
@@ -618,6 +621,8 @@ pub struct Tally {
     pub launches: usize,
     /// Superweapon launches by kind name.
     pub launches_by_kind: BTreeMap<String, usize>,
+    /// House-ticks a superweapon record stood ready, by kind name.
+    pub ready_ticks: BTreeMap<String, usize>,
     /// The (house, superweapon type) pairs ready after the last tick.
     ready_before: BTreeSet<(usize, usize)>,
     /// The (passenger, transport) pairs of the last tick.
@@ -675,6 +680,15 @@ impl Tally {
                     .entry(kind.map_or("no kind".to_string(), |k| format!("{k:?}")))
                     .or_default() += 1;
             }
+        }
+        // The ticks a record stood ready (what the sidebar shows), by kind:
+        // many ready ticks with few launches name a kind the AI fails to aim.
+        for &(_, i) in &ready_now {
+            let kind = w.rules().superweapons.types[i].kind;
+            *self
+                .ready_ticks
+                .entry(kind.map_or("no kind".to_string(), |k| format!("{k:?}")))
+                .or_default() += 1;
         }
         self.ready_before = ready_now;
     }
@@ -924,6 +938,30 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
                 {
                     note("superweapon buildings");
                 }
+                // The building by the kind of each superweapon it gives.
+                for &i in r
+                    .superweapons
+                    .building_sw
+                    .get(o.type_index as usize)
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                {
+                    use glasnost_sim::superweapons::SwKind as K;
+                    let key = match r.superweapons.types.get(i as usize).and_then(|t| t.kind) {
+                        Some(K::Missile) => "building gives: missile",
+                        Some(K::Storm) => "building gives: storm",
+                        Some(K::IronCurtain) => "building gives: iron curtain",
+                        Some(K::Chrono | K::ChronoWarp) => "building gives: teleport",
+                        Some(K::Paradrop) => "building gives: paradrop",
+                        Some(K::AmerParadrop) => "building gives: american paradrop",
+                        Some(K::SpyPlane) => "building gives: spy plane",
+                        Some(K::ForceShield) => "building gives: force shield",
+                        Some(_) => "building gives: other kind",
+                        None => "building gives: no kind",
+                    };
+                    note(key);
+                }
                 if role_of(w, tech::type_of(o)).is_none() {
                     note("climb buildings");
                 }
@@ -1125,10 +1163,13 @@ fn report(
                 g.hover_loads,
                 g.unloads,
                 g.launches,
-                if g.launches_by_kind.is_empty() {
+                if g.launches_by_kind.is_empty() && g.ready_ticks.is_empty() {
                     String::new()
                 } else {
-                    format!(" (by kind: {:?})", g.launches_by_kind)
+                    format!(
+                        " (by kind: {:?}; house-ticks ready by kind: {:?})",
+                        g.launches_by_kind, g.ready_ticks
+                    )
                 }
             );
         }

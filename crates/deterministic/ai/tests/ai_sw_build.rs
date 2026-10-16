@@ -27,7 +27,7 @@ const KINDS: [(&str, &str, &str); 8] = [
 /// The skirmish ruleset with the superweapon types of `kinds` (indices into
 /// [`KINDS`]) and a cheap building for each; the teleport's building also
 /// gives the linked second stage. Costs differ, so the order is fixed.
-fn rules(kinds: &[usize]) -> std::sync::Arc<glasnost_sim::rules::SimRules> {
+fn rules(kinds: &[usize], blocked: bool) -> std::sync::Arc<glasnost_sim::rules::SimRules> {
     let mut r = fixture::ruleset();
     let reg = |r: &mut glasnost_rules::schema::Ruleset, k: &str, n: &str| {
         r.registries.entry(k.into()).or_default().push(n.into());
@@ -71,15 +71,26 @@ fn rules(kinds: &[usize]) -> std::sync::Arc<glasnost_sim::rules::SimRules> {
         let mut b = fixture::building(2, 2, 200 + 100 * i as i32, -10);
         b.econ.super_weapon = Some(sw.into());
         b.econ.super_weapon2 = second.map(Into::into);
+        if blocked {
+            b.econ.prerequisite = Some(vec!["TCHB".into()]);
+        }
         r.sim.buildings.insert(giver.into(), b);
         reg(&mut r, "buildings", giver);
+    }
+    if blocked {
+        // A plain building that no army type needs: only a superweapon
+        // building's prerequisite.
+        r.sim
+            .buildings
+            .insert("TCHB".into(), fixture::building(2, 2, 300, -10));
+        reg(&mut r, "buildings", "TCHB");
     }
     std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-sw-build"))
 }
 
-fn start(kinds: &[usize]) -> Game {
+fn start(kinds: &[usize], blocked: bool) -> Game {
     Game::new(
-        rules(kinds),
+        rules(kinds, blocked),
         &fixture::map(),
         "synthetic-sw-build",
         fixture::catalogue(),
@@ -105,7 +116,7 @@ fn count(w: &World, h: u8, name: &str) -> usize {
 fn builds_the_building_of_each_kind() {
     for (i, kind) in KINDS.iter().enumerate() {
         let giver = kind.1;
-        let mut g = start(&[i]);
+        let mut g = start(&[i], false);
         while g.world.tick < 12_000
             && g.outcome().is_none()
             && (0..2).all(|h| count(&g.world, h, giver) == 0)
@@ -122,12 +133,38 @@ fn builds_the_building_of_each_kind() {
     }
 }
 
+// A giving building whose prerequisite the house lacks: the house builds the
+// prerequisite first (a person climbs the tech tree to a superweapon), then
+// the giving building. The prerequisite is no army type's blocker.
+#[test]
+fn climbs_to_a_blocked_giving_building() {
+    let iron = KINDS.iter().position(|k| k.2 == "IronCurtain").unwrap();
+    let mut g = start(&[iron], true);
+    let giver = KINDS[iron].1;
+    let mut tech_at = None;
+    while g.world.tick < 15_000
+        && g.outcome().is_none()
+        && (0..2).all(|h| count(&g.world, h, giver) == 0)
+    {
+        g.step();
+        if tech_at.is_none() && (0..2).any(|h| count(&g.world, h, "TCHB") > 0) {
+            tech_at = Some(g.world.tick);
+        }
+    }
+    assert!(tech_at.is_some(), "the prerequisite was built");
+    assert!(
+        (0..2).any(|h| count(&g.world, h, giver) > 0),
+        "{giver} was built by tick {}",
+        g.world.tick
+    );
+}
+
 // All kinds at once: a house ends with one building of every kind and
 // none twice (it does not build a second building for a kind it has).
 #[test]
 fn builds_one_building_of_every_kind() {
     let all: Vec<usize> = (0..KINDS.len()).collect();
-    let mut g = start(&all);
+    let mut g = start(&all, false);
     let mut best = [0usize; 2];
     while g.world.tick < 30_000 && g.outcome().is_none() {
         g.step();

@@ -280,6 +280,31 @@ fn sends_the_spy_plane_at_the_enemy() {
     );
 }
 
+// A pair of armed vehicles is enough for a teleport source (a person sends
+// two tanks too); the iron curtain wants three and a fight.
+#[test]
+fn teleports_a_pair_of_vehicles() {
+    let (g, yard) = ready("CHRNB");
+    let c = spot(yard, 10, 8);
+    let mut w = g.world.clone();
+    for (dx, dy) in [(0, 0), (1, 0)] {
+        testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "GUNR",
+            0,
+            CellXY::new(c.x + dx, c.y + dy),
+            0,
+        );
+    }
+    glasnost_sim::tick::step(&mut w);
+    assert_eq!(
+        fires(&think(&w), "CHRN", &w),
+        vec![c],
+        "the first stage on the pair"
+    );
+}
+
 // The teleport: the first stage on a group of armed vehicles, the second
 // stage (only once a source is held) on a free block next to the enemy base.
 #[test]

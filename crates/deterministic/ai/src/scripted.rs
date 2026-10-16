@@ -126,7 +126,7 @@ pub(crate) const SPIRAL_RINGS: i32 = 12; // nocite: tuning of our own opponent
 pub(crate) const WIDE_RINGS: i32 = 32; // nocite: tuning of our own opponent
 
 /// How many buildings deep the tech climb looks for one it can build now.
-const CLIMB_DEPTH: u32 = 4; // nocite: tuning of our own opponent
+pub(crate) const CLIMB_DEPTH: u32 = 4; // nocite: tuning of our own opponent
 
 /// What a type is for in the plan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -598,7 +598,7 @@ impl Script {
     /// of `t`, looking `depth` buildings deeper when the one that clears it
     /// is blocked itself; `None` when `t` is not blocked, is refused for
     /// another reason (tech level, owner, side) or nothing clears it.
-    fn unblocker(&self, w: &World, t: TypeRef, depth: u32) -> Option<TypeRef> {
+    pub(crate) fn unblocker(&self, w: &World, t: TypeRef, depth: u32) -> Option<TypeRef> {
         if tech::buildable(w, self.house, t) {
             return None;
         }
