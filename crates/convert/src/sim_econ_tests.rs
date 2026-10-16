@@ -740,3 +740,13 @@ Fighter=yes\nFlyBy=no\nFlyBack=yes\nFlightLevel=333\n[GULL]\nStrength=7\n\
     assert_eq!(e.attacking_aircraft_sight_range, Some(3));
     assert_eq!(e.spy_plane_camera_frames, Some(12));
 }
+
+// spec: S-0502 Edge cases (a jumpjet speed or turn rate of 0: an importer warning, no switch)
+#[test]
+fn zero_jumpjet_speed_and_turn_rate_warn() {
+    let base = "[InfantryTypes]\n0=ZS\n1=ZT\n2=OK\n[ZS]\nJumpjetSpeed=0\n[ZT]\nJumpjetTurnRate=0\n[OK]\nJumpjetSpeed=5\nJumpjetTurnRate=4\n";
+    let (_, w) = import(base, "");
+    let hits = |k: &str| w.iter().filter(|m| m.contains(k)).count();
+    assert_eq!(hits("JumpjetSpeed=0"), 1);
+    assert_eq!(hits("JumpjetTurnRate=0"), 1);
+}

@@ -43,6 +43,7 @@ const SCENES: &[Scene] = &[
     ("capture", engineer_captures),
     ("infiltrate", spy_infiltrates),
     ("tech", engineer_takes_tech_building),
+    ("jumpjet", jumpjet_flies),
 ];
 
 #[test]
@@ -464,6 +465,119 @@ fn engineer_takes_tech_building(lane: &mut Lane) {
     }
     println!("income payments (tick, credits): {paid:?}");
     lane.save("tech-income");
+}
+
+/// S-0502: a unit of a jumpjet type (found by its locomotor, never by name)
+/// is ordered by a click to a cell its walkers cannot reach from where it
+/// stands (another reach region of the ground: across water or a cliff,
+/// found from the map) and flies there: it takes off, cruises and lands.
+/// Prints the states and heights by tick only.
+fn jumpjet_flies(lane: &mut Lane) {
+    use glasnost_sim::jump::Phase;
+    let w = lane.world();
+    let r = w.rules();
+    let found = [Kind::Infantry, Kind::Vehicle].into_iter().find_map(|k| {
+        let n = if k == Kind::Infantry {
+            r.infantry.len()
+        } else {
+            r.vehicles.len()
+        };
+        (0..n).find_map(|i| {
+            r.unit(k, i as u32)
+                .filter(|u| {
+                    u.jumpjet_locomotor
+                        && !u.raw.balloon_hover.unwrap_or(false)
+                        && !u.simple_deployer
+                })
+                .map(|u| (k, u.name.clone()))
+        })
+    });
+    println!("jumpjet type found: {}", found.is_some());
+    let Some((kind, name)) = found else { return };
+    let local = lane.local();
+    let home = lane.home();
+    let start = lane.open_land(CellXY::new(home.x + 3, home.y + 3));
+    let unit = lane.spawn(kind, &name, local, start);
+    lane.look_at(start);
+    lane.ticks(4);
+    // A cell 8 to 16 cells away that the ground does not reach from the start, else any open one.
+    let zone = glasnost_rules::sim::MovementZone::Normal;
+    let here = glasnost_sim::regions::reach_in(lane.world(), start, zone);
+    let across = lane
+        .world()
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| {
+            let d2 = (c.x - start.x).pow(2) + (c.y - start.y).pow(2);
+            (64..=256).contains(&d2)
+                && lane.world().cells.usable(c)
+                && glasnost_sim::regions::reach_in(lane.world(), c, zone) != here
+                && lane.world().cells.cell(c).is_some_and(|x| {
+                    x.land != land::WATER && x.land != land::ROCK && x.land != land::BEACH
+                })
+                && lane.world().cells.list(c, Layer::Ground).is_empty()
+        })
+        .min_by_key(|c| ((c.x - start.x).pow(2) + (c.y - start.y).pow(2), c.y, c.x));
+    println!("a cell across an obstacle found: {}", across.is_some());
+    let goal = across.unwrap_or_else(|| lane.open_land(CellXY::new(start.x + 12, start.y)));
+    lane.save("jumpjet-before");
+    let sent = lane.order(local, unit, ClickOn::Cell(goal));
+    println!("jumpjet at {start:?} sent to {goal:?}, {sent} orders");
+    let mut phase = None;
+    let mut shot = false;
+    let mut cruise_ticks = 0;
+    let mut changes = 0;
+    for t in 0..2000 {
+        lane.ticks(1);
+        let Some(o) = lane.world().obj(unit) else {
+            println!("the jumpjet is gone");
+            break;
+        };
+        let p = o.jump.as_ref().map(|j| j.phase);
+        if p != phase && changes < 12 {
+            changes += 1;
+            println!(
+                "tick {}: {:?}, height {}, cell {:?}",
+                lane.world().tick,
+                p,
+                lane.world().height_above_surface(unit),
+                o.pos.cell()
+            );
+            phase = p;
+        }
+        if p == Some(Phase::Cruising) {
+            cruise_ticks += 1;
+            if cruise_ticks == 30 && !shot {
+                let c = o.pos.cell();
+                lane.look_at(c);
+                lane.ticks(1);
+                lane.save("jumpjet-flight");
+                shot = true;
+            }
+        }
+        if p == Some(Phase::Grounded) && t > 20 {
+            break;
+        }
+    }
+    let end = lane.world().obj(unit).map(|o| o.pos.cell());
+    if let Some(o) = lane.world().obj(unit) {
+        let u = lane.world().rules().unit(o.kind, o.type_index);
+        println!(
+            "end state {:?}; has a target: {}; balloon-hover: {}; behaviour {:?}",
+            o.jump.as_ref().map(|j| (j.phase, j.moving)),
+            o.target.is_some(),
+            u.is_some_and(|u| u.raw.balloon_hover.unwrap_or(false)),
+            o.beh.current
+        );
+    }
+    println!("landed at {end:?}, goal {goal:?}");
+    if let Some(c) = end {
+        lane.look_at(c);
+    }
+    lane.ticks(3);
+    lane.save("jumpjet-landed");
 }
 
 // ---------------------------------------------------------------------------

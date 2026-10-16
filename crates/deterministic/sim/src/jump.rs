@@ -435,6 +435,33 @@ pub fn placed(w: &mut World, id: ObjectId) {
     });
 }
 
+/// Puts a grounded jumpjet in the air in `phase` at `height` leptons above
+/// the surface, as if it had flown there: its mark and listing go, its
+/// target height is the height, a hovering one holds its cell's slot, and
+/// a unit in any other state holds a move order. For scenes of other topics and
+/// for tests.
+pub fn start_in_flight(w: &mut World, id: ObjectId, phase: Phase, height: i32) {
+    if !is_jumpjet(w, id) {
+        return;
+    }
+    leave_ground(w, id);
+    let Some(o) = w.obj(id) else { return };
+    let z = w.surface_at(o.pos.x, o.pos.y) + height;
+    if let Some(ob) = w.obj_mut(id) {
+        ob.pos.z = z;
+    }
+    upd(w, id, |j| {
+        j.phase = phase;
+        j.ht = height;
+        // spec: S-0502 Terms (moving: it holds a move order; a unit put in the air in a state other than hovering holds one)
+        j.moving |= phase != Phase::Hovering;
+    });
+    if phase == Phase::Hovering {
+        let c = pos(w, id).cell();
+        claim_slot(w, id, c);
+    }
+}
+
 /// The jumpjet leaves the map or goes inside: every mark, the reservation
 /// and the hover slot are released (claims 4, 7, 13, 14 and 18).
 pub fn leaving(w: &mut World, id: ObjectId) {
@@ -579,7 +606,14 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         // spec: S-0502 claim 16 (a balloon-hover vehicle and a vehicle whose current or queued behaviour is enter keep the exact point)
         Some(p)
     } else {
-        search(w, id, p.cell(), true).map(|c| {
+        // spec: S-0502 claim 16 and scenario J2 (an order to the unit's own cell keeps that cell: the unit's own mark does not count against the cell in the search; Q-0975)
+        let own = st(w, id).and_then(|j| j.mark);
+        lift_mark(w, id);
+        let found = search(w, id, p.cell(), true);
+        if own.is_some() {
+            lay_mark(w, id);
+        }
+        found.map(|c| {
             let z = point_of(w, Target::Cell(c)).z;
             if infantry {
                 free_standing_point(w, id, c, z, p)
@@ -858,7 +892,7 @@ fn height_step(w: &World, id: ObjectId, j: &mut JumpState, f: &JumpFields, mode:
 
 /// F5: the new horizontal position after a step of `v` leptons along the
 /// heading `f`.
-fn step_position(w: &World, p: Pos, heading: Facing, v: i32, mode: Rounding) -> (i32, i32) {
+pub fn step_position(w: &World, p: Pos, heading: Facing, v: i32, mode: Rounding) -> (i32, i32) {
     if v == 0 {
         return (p.x, p.y);
     }

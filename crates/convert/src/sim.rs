@@ -1422,6 +1422,20 @@ impl Builder<'_> {
     fn unit(&mut self, rec: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
         self.speed(rec, kind, t);
         self.fields(rec, t, kind, UNIT_FIELDS);
+        // spec: S-0502 Edge cases and Questions for the project lead (a jumpjet speed or turn rate of 0 divides by zero in the original: the importer warns; the engine's replacement values are Q-0977's)
+        for key in ["JumpjetSpeed", "JumpjetTurnRate"] {
+            let mut last = None;
+            let _ = fold(t.keys.get(key.as_bytes()), None, |v, e| {
+                value::integer(v).inspect(|&x| last = Some((x, e.layer, e.line)))
+            });
+            if let Some((0, layer, line)) = last {
+                self.warn(
+                    layer,
+                    line,
+                    format!("{key}=0 of a jumpjet type divides by zero in the original (S-0502 Edge cases, Q-0977)"),
+                );
+            }
+        }
         self.locomotor(rec, kind, t);
         self.locomotion_class(rec, kind, t);
         self.movement_zone(rec, kind, t);

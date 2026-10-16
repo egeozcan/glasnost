@@ -13,11 +13,13 @@
 //! - [`special`]: garrisoning, engineers capturing and spies infiltrating
 //!   (M6c); [`tech_buildings`]: which tech buildings an engineer is worth
 //!   sending to (S-0515).
+//! - [`jumpjets`]: jumpjet units sent over obstacles to reach the enemy (S-0502).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod brain;
 pub mod fixture;
 pub mod game;
+pub mod jumpjets;
 pub mod scripted;
 pub mod skirmish;
 pub mod special;

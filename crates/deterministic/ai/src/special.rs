@@ -51,6 +51,9 @@ pub struct Uses {
     /// Engineers sent to take over a tech building held by a passive house
     /// (S-0515; a subset of `engineers`).
     pub tech: u32,
+    /// Jumpjet units sent against an enemy a walking unit cannot reach
+    /// (S-0502).
+    pub jumps: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -89,6 +92,12 @@ impl Special {
         self.garrison(house, &own, home, w, out);
         self.engineers(script, &own, w, out);
         self.spies(script, &own, w, out);
+        self.jumpjets(script, &own, w, out);
+    }
+
+    /// Counts one order given to a jumpjet unit (S-0502, `jumpjets`).
+    pub(crate) fn count_jump(&mut self) {
+        self.uses.jumps += 1;
     }
 
     /// Whether the house's object `b` stands on a cell the house has

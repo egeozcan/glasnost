@@ -37,6 +37,7 @@ fn jumper(kind_infantry: bool) -> UnitType {
         movement_zone: Some(MovementZone::Fly),
         locomotor: Some(Locomotor::Jumpjet),
         jumpjet: Some(true),
+        sight: Some(3),
         crushable: Some(true),
         jumpjet_speed: Some(14),
         jumpjet_climb: Some(d("5.0")),
@@ -57,15 +58,15 @@ fn jumper(kind_infantry: bool) -> UnitType {
 /// DEPN (a simple deployer without the landing flag); buildings TALL (art
 /// height 3) and LOW (art height 1).
 pub fn ruleset() -> Ruleset {
-    let mut r = testkit::ruleset();
+    let mut r = testkit::combat_ruleset();
     r.registries
         .get_mut("infantry")
         .unwrap()
-        .extend(["JJ", "JJTURN", "JJFLAT"].map(String::from));
+        .extend(["JJ", "JJTURN", "JJFLAT", "JJFAST", "JJCRASH", "JJTALL"].map(String::from));
     r.registries
         .get_mut("vehicles")
         .unwrap()
-        .extend(["JV", "BALLOON", "DEPL", "DEPN"].map(String::from));
+        .extend(["JV", "BALLOON", "DEPL", "DEPN", "BDEPN"].map(String::from));
     r.registries.insert(
         "buildings".into(),
         ["TALL", "LOW"].map(String::from).to_vec(),
@@ -75,6 +76,15 @@ pub fn ruleset() -> Ruleset {
     let mut turn = jumper(true);
     turn.jump_jet_turn = Some(true);
     s.infantry.insert("JJTURN".into(), turn);
+    let mut fast = jumper(true);
+    fast.jumpjet_speed = Some(40);
+    s.infantry.insert("JJFAST".into(), fast);
+    let mut crash = jumper(true);
+    crash.crashable = Some(true);
+    s.infantry.insert("JJCRASH".into(), crash);
+    let mut tall = jumper(true);
+    tall.jumpjet_height = Some(2000);
+    s.infantry.insert("JJTALL".into(), tall);
     let mut flat = jumper(true);
     flat.jumpjet_no_wobbles = Some(true);
     s.infantry.insert("JJFLAT".into(), flat);
@@ -83,11 +93,17 @@ pub fn ruleset() -> Ruleset {
     s.vehicles.insert("JV".into(), jv);
     let mut bal = jumper(false);
     bal.balloon_hover = Some(true);
+    bal.mobile_fire = Some(true);
+    bal.primary = Some("Cannon".into());
     s.vehicles.insert("BALLOON".into(), bal);
     let mut depl = jumper(false);
     depl.is_simple_deployer = Some(true);
     depl.deploy_to_land = Some(true);
     s.vehicles.insert("DEPL".into(), depl);
+    let mut bdepn = jumper(false);
+    bdepn.balloon_hover = Some(true);
+    bdepn.is_simple_deployer = Some(true);
+    s.vehicles.insert("BDEPN".into(), bdepn);
     let mut depn = jumper(false);
     depn.is_simple_deployer = Some(true);
     s.vehicles.insert("DEPN".into(), depn);
@@ -101,6 +117,19 @@ pub fn ruleset() -> Ruleset {
         b.combat.armor = None;
         s.buildings.insert(n.into(), b);
     }
+    s.weapons.insert(
+        "Cannon".into(),
+        WeaponType {
+            damage: Some(10),
+            rof: Some(20),
+            range: Some(d("5")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("SA".into()),
+            fire_while_moving: Some(false),
+            ..Default::default()
+        },
+    );
     s.weapons.insert(
         "Rifle".into(),
         WeaponType {

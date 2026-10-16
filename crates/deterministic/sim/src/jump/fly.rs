@@ -493,7 +493,12 @@ fn crashing_outcome(w: &mut World, id: ObjectId) {
 /// attacker.
 fn impact(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
-    let at = o.pos;
+    // spec: S-0312 claim 16 (the impact is on the ground: the unit is at the surface under it, which also ends the crash for a unit that a deck crossing stopped above the terrain)
+    let surface = w.surface_at(o.pos.x, o.pos.y);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.pos.z = surface;
+    }
+    let at = Pos::new(o.pos.x, o.pos.y, surface);
     if damage::dead(&o) {
         // spec: S-0312 claim 16 (shot down: its death weapon goes off at the impact point, and it leaves play)
         crate::combat::death::impact_death_weapon(w, id, at);

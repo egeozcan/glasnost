@@ -202,12 +202,10 @@ fn infantry_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
         return true;
     }
     if let Some(fraction) = crate::jump::speed_fraction(w, firer) {
-        let mode = w.rules().mode;
         // spec: S-0310 claim 8 and Constants (the infantry speed fraction above 0.1, compared in double precision) and S-0502 claims 6 and 20 (a jumpjet's fraction is v_c / S)
         if fraction.gt(glasnost_num::decimal::nearest_double("0.1")) {
             return true;
         }
-        let _ = mode;
         // spec: S-0310 claim 8 and S-0502 claim 20 (a jumpjet infantry type with the jumpjet-turn flag gets moving while its locomotor is moving now; grounded and hovering do not)
         if w.rules()
             .unit(o.kind, o.type_index)

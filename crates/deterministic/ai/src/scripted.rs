@@ -978,6 +978,10 @@ impl Script {
         near: &mut BTreeMap<(u8, u32), CellXY>,
     ) -> CellXY {
         let Some(o) = w.obj(id) else { return c };
+        // A jumpjet flies over what stops the ground (S-0502): its goal needs no reach region.
+        if crate::jumpjets::flies(w, id) {
+            return c;
+        }
         let Some(zone) = w.rules().unit(o.kind, o.type_index).map(|u| u.zone) else {
             return c;
         };
