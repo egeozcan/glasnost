@@ -2,11 +2,11 @@
 id: S-0211
 title: Land types and passability
 topic: movement
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0018, Q-0020]
 supersedes: []
@@ -244,9 +244,20 @@ The crusher flag's effect in play is S-0210's (crushing).
      bridge is destroyed or repaired. Some of these changes also recompute the neighbouring cells,
      and the specs of those events say which.
    - an infantry unit, vehicle, aircraft, building or terrain object is put into the cell or taken
-     out of it while it stands on the ground. For a mobile object this includes every ordinary move
-     from one cell to the next, so every cell a unit enters or leaves is recomputed, and for a
-     building or terrain object it covers every cell of its footprint.
+     out of it while it stands on the ground. For a mobile object this includes ordinary ground
+     movement from one cell to the next; for a building or terrain object it covers every cell of
+     its footprint. Flight with the jumpjet locomotor instead has the state-specific events below.
+   - jumpjet flight (S-0502 claims 4 and 26): *hovering* and *cruising* do not recompute either
+     cell merely by crossing a cell boundary. In every other flight state, each physics step
+     recomputes the cell at the previous position, even high above the surface or without
+     horizontal travel. The resulting cell is also recomputed when the new position qualifies
+     for ground-layer placement under S-0502 claim 4. Low ascent or descent can therefore
+     recompute both cells of a crossing; high ascent recomputes the cell left but supplies no
+     new-placement recompute in the cell entered. A crash's additional drop to a legal position
+     likewise recomputes its pre-drop cell and, only when the resulting position qualifies for
+     that placement, its resulting cell. Touchdown adds its ordinary placement recompute.
+     Repeated events in one tick, including events on the same cell, are not collapsed into one:
+     each retains the possible terrain-animation and drawing consequences of S-0010 claim 19.
 
    Resizing the local area in play also recomputes every legal cell, not only cells gained or
    lost by the resize (S-0524 claim 8; S-0010 claim 8). The recompute uses the new local area.
@@ -280,6 +291,7 @@ The crusher flag's effect in play is S-0210's (crushing).
      | Recompute when a building is placed or removed | `unmeasured`: a building changes no land type (claim 5 reads only the tile, the overlay and the neighbours' levels) and, as scenario L20 shows for the three kinds of building that can be set up, no category (claim 11), so the recompute has no visible effect in this spec. The method of scenario L23 (a cell whose tile is dropped by the recompute, read by the placement check on that cell) cannot separate it either: while a building covers the cell the check is blocked by occupancy, and once the building is gone its removal has recomputed the cell too, so placement and removal cannot be told apart; and the check needs stock land data that make rough and clear land differ in buildability, which this spec cannot assume |
      | Recompute when a vehicle moves | `measurable` (S-0010 scenario R1, part E, using the surviving cell in part D2's 4 × 4 block: the first unit to enter or leave that cell makes the recompute visible as a change from its stray tile number to the no-tile marker; the category cannot show it, because it never depends on units, claim 11) |
      | Recompute when an infantry unit moves, and when an aircraft lands in a cell or leaves it | `measurable` (scenario L23, parts A and B, by S-0010 scenario R1 part E's method) |
+     | The jumpjet flight-state events, stationary or high-flight recomputes, and repeated events within one tick | `measurable` (S-0502 scenario J21) |
 
    - Confidence: high for rows 1, 4 and 5; medium for rows 2 and 3 (the map's tile numbers and
      sub-tiles must reach the recompute unchanged); high for the recompute at map load, on overlay
@@ -288,7 +300,8 @@ The crusher flag's effect in play is S-0210's (crushing).
      (S-0524 claim 8); medium for the composed chain-reaction
      sequence during map loading (S-0401 claim 20), and for a
      terrain object put into a cell and for a building placed or removed (both `unmeasured`), for tile
-     and level changes in play, for aircraft on the ground and for whether the list is complete
+     and level changes in play, for aircraft on the ground and for whether the list is complete.
+     High for jumpjet placement events, medium for their animation consequences (S-0010 claim 19)
 
 6. **Tile land codes.** The tile land code *k* maps to a land type by this fixed table:
 
@@ -731,7 +744,8 @@ The crusher flag's effect in play is S-0210's (crushing).
 | any cell | map load; game-start pass after starting-unit placement and before the first tick; overlay placed, changed or removed; terrain changed; local area resized in play (every legal cell) | land recompute: land type (claims 5 to 8) and passability category from the new land type and contents (claim 11) |
 | any cell | an infantry unit, vehicle, aircraft, building or terrain object put into or taken out of the cell while on the ground | land recompute, seeing the contents after the change (claim 5) |
 | cell holding a terrain object | the terrain object is removed or destroyed | land recompute: rule 4 no longer sees it, so the category is decided without it (claim 11) |
-| cell | infantry or vehicle enters or leaves | land recompute; the category is unchanged when its other inputs are unchanged, since it does not depend directly on these units (claim 11) |
+| cell | infantry or vehicle enters or leaves during ordinary ground movement | land recompute; the category is unchanged when its other inputs are unchanged, since it does not depend directly on these units (claim 11) |
+| cell below a jumpjet | flight physics, crash drop or touchdown | claim 5's state-specific recomputes, including repeated events in one tick; a hover/cruise boundary crossing alone supplies none (S-0502 claim 26) |
 | cell with ore or gems, slope shape ≥ 5 | land recompute | overlay removed, tile land type used (claim 7) |
 | cell whose tile was dropped under row 3 | next land recompute | row 2 applies: the overlay's land type if it has an overlay (claim 5) |
 | cell with a bridge | bridge destroyed | bridge overlays removed, land recompute (claim 9) |
@@ -836,6 +850,16 @@ that tile's eligible animation and updates the land type even though the detonat
 terrain. Empty-debris and failed-trial cases still recompute; no-resource and suppressed-reaction
 controls do not. A missing or premature animation start, a land type still reflecting the earlier
 tile, or recomputation in either control falsifies this trigger rule.
+
+**Flight recomputes for jumpjets (claim 5).** Use S-0502 scenario J21's setup, procedure and
+controls. Expected: no recompute from a hover/cruise crossing alone; in other flight states,
+recompute the previous cell even during high or stationary flight, and the resulting cell when
+eligible for ground-layer placement. Crash drops and touchdown can add events in the same tick,
+without merging them. Record position, flight state and eligible terrain-animation creation or
+random-stream changes under S-0010 claim 19. A creation attributable only to a hover/cruise
+crossing, or a missing eligible creation after a non-hover/cruise event, falsifies the rule.
+An animation-ineligible cell cannot distinguish repeated recomputes; retain J21's eligibility
+controls rather than treating a missing animation there as a failure.
 
 **L1: multiplier and cap (claim 2).**
 - *Setup:* flat map of clear ground. A vehicle of class wheel and zone *normal*, with the
