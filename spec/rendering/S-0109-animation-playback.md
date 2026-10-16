@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -172,13 +172,21 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
      turn in that tick, after every object already in the update order, unless a removal costs
      it that turn (S-0203 claims 3, 4 and 10). One created after the turn pass first updates in
      the next tick. Each creator's spec owns its place in the tick.
+   - **Vehicle deploy presentations.** The presentation is created during the vehicle's
+     turn with no initial loop delay and no reverse request for deploy, or a reverse request
+     for undeploy (claim 29). Thus deploy plays forward unless the type itself is reversed
+     (claim 8). Its playback retains this first-update exclusion and uses the
+     selected, possibly random or normalised stage delay. S-0517 claim 7 owns the separate
+     base-delay completion clock: neither this exclusion nor reverse playback pauses or
+     reverses that clock.
    - **Lost updates.** An advance due in a tick with no update waits until the next eligible
      update; the next delay runs from that actual advance, with no catch-up advances. One lost
      update at a due advance therefore extends that image frame by 1 tick if the following
      tick's update is eligible. Further lost updates, holds or loop delays can extend it more.
    - Backing: `measurable` (AN1 for before-pass creation; AN26 for during-pass creation,
      after-pass death effects and the first turn lost to projectile removal). Claim 29 supplies
-     the creator placements; claim 16 gives the resulting lifetime.
+     the creator placements; claim 16 gives the resulting lifetime. Deploy presentation
+     playback and its separate completion clock have S-0517 claim 7's backing (P1 C).
    - Confidence: high for the clock and creator placements; medium for the removal-skip
      fixtures before measurement
 
@@ -777,6 +785,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     | Death or destruction animation from damage | at the damage or death event, in the same tick part as that cause, not a later death-animation pass |
     | Projectile trailer | during the projectile's turn, before its movement and any detonation that turn (S-0306 claim 16); its creator gives it an initial loop delay of 1 update, repeat factor 1 and no reverse request |
     | Moving ship's wake | during the ship's own turn, after locomotor movement (S-0504 claim 2) |
+    | In-place vehicle deploy or undeploy presentation | during the vehicle's turn, with no initial loop delay and repeat factor 1; no reverse request for deploy, a reverse request for undeploy (S-0517 claim 7); the type's own reverse flag still applies (claim 8) |
 
     Death and detonation therefore have no unconditional before/during/after classification.
     A projectile kill, an animation's damaging advance, or a death completed during an
@@ -808,6 +817,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     `quirks.update_order_removal_skip` removes this loss, as S-0203 claim 10 specifies.
     - Backing: `measurable` (AN26); existing phase contracts also have S-0203 claims 1,
       4, 5 and 8, S-0306 claim 16, S-0312 claim 1 and S-0504 claim 2's backing.
+      Vehicle deploy presentations have S-0517 claim 7's backing (P1 C).
     - Confidence: high for creation placement and the conditional rule; medium for the
       minimal explosion/removal fixture before measurement
 
@@ -1659,6 +1669,15 @@ building that can cloak), it sets them in the test map's override section, which
   here as its consumer fixture. Expected: every non-theater property matches its own-section
   control at every read, never the image-section control; claim 25 still determines
   sprite-derived limits. A contrary section choice falsifies the Import mapping rule.
+
+- **Deploy presentation companion scenario (claims 5 and 29).** S-0517 scenario P1 C
+  supplies the grounded vehicle, named presentation data, game settings, recorder, repeated
+  deploy/undeploy pairs and falsifiers. Expected: creation during the vehicle's turn with
+  no initial loop delay; with same-tick first update, positive playback delay *d* and no
+  lost updates, the first image advance is *d* ticks after creation, in the requested
+  direction subject to claim 8. Random rate or normalisation changes playback, not the
+  separate base-delay completion clock of S-0517 claim 7. A creation-tick advance or
+  completion timing that instead tracks the selected playback delay falsifies that contract.
 
 - **Companion scenarios (claims 5 and 13 to 17).** S-0611 scenario MU10 tests generic
   infantry-making animations, terminal-only creation and position-choice draws; its MU9
