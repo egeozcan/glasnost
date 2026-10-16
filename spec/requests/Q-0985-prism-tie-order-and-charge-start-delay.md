@@ -1,9 +1,9 @@
 ---
 id: Q-0985
 title: The acquisition order of equally distant supporters, the delay after a charger starts charging, and the search kind of a charging unit's break-off
-status: open
+status: answered
 related: [S-0518, S-0404, S-0215, S-0309]
-answered-by: []
+answered-by: [S-0518]
 ---
 
 ## Need

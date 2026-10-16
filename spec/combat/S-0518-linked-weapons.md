@@ -2,13 +2,13 @@
 id: S-0518
 title: Linked weapons (prism support beams, charging of overpowerable buildings)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: []
+requests: [Q-0985]
 supersedes: []
 ---
 
@@ -96,10 +96,16 @@ claims (Open questions).
    - Confidence: high (each condition); medium (the build-up and sale cases, never observed)
 
 3. **Which one is chosen.** Of the eligible buildings, the one at the smallest distance F2 is
-   chosen. On a tie, the one that the house acquired first wins (the order in which the house
-   acquired its buildings, S-0404 claim 7).
+   chosen. On a tie, the one that the house acquired first wins (S-0404 claim 7).
+   Acquisition means joining the house's currently owned buildings: placement into play or an
+   ownership change to that house. A captured or transferred building ranks after every building
+   the new owner already held, even if it was created earlier. Losing and later reacquiring a
+   building gives it a new, later rank. Buildings not lost keep their relative order. Acquisitions
+   within one tick rank in the order those acquisition events take effect, not by object number.
+   An unchanged-owner assignment does not reacquire the building. Thus capture time matters,
+   but a capture tick alone is not a complete tie-breaker.
    - Backing: `measurable` (scenario PS4)
-   - Confidence: high (nearest); medium (the tie order)
+   - Confidence: high
 
 4. **One supporter per processing.** When a supporter is found, the master's support count rises
    by 1 and the master does not fire in that processing. The supporter's beam becomes pending
@@ -221,30 +227,47 @@ claims (Open questions).
     - Backing: `measurable` (scenario TC1)
     - Confidence: high
 
-14. **Starting to charge on its own.** An infantry unit or vehicle whose slot-1 weapon has an
-    electric-charge warhead looks for a building to charge:
-    - **when:** in the processing of its *guard* or *area guard* behaviour (S-0215), whenever it
-      has no target at that point. In *area guard* this comes after the guard spot and automatic
-      search steps of that processing,
-    - **where:** the eight cells next to its own cell, taken in step-direction order 0 to 7
-      (glossary, *step direction*),
-    - **what:** the first of these cells that holds a building of an overpowerable type owned by
-      its own house. An ally's building is never chosen.
+14. **Starting to charge on its own.** During *guard* or *area guard* processing, an infantry unit or vehicle whose slot-1 weapon has an electric-charge warhead searches for a building only if it has no target at that point. In *area guard*, the guard-spot and automatic-search steps have already taken place. The search covers the eight cells next to the unit's cell in step-direction order 0 through 7 (glossary, *step direction*); the first cell in that order containing an overpowerable building owned by the unit's own house determines the result. An allied building is not eligible. When such a building is found, it becomes the unit's target, the unit's charging mark is set, and *attack* is queued without starting immediately. Finding a building does not select a special 1-tick delay.
+    The processing keeps its ordinary delay, using the rate of the behaviour being processed,
+    not the queued *attack* rate:
 
-    The unit then takes that building as its target, sets its charging mark and gets *attack*. In
-    *guard*, if no such building is found, the ordinary *guard* processing runs instead; when one
-    is found, it does not run in that processing. A human player can also make a unit charge with
+    | Behaviour being processed | Delay after a successful charging scan | Scenario-stream draws for this delay |
+    |---|---|---|
+    | *guard*, weapon still rearming | rearm ticks remaining | none |
+    | *guard*, not rearming, distributed-fire type with nonempty distributed-fire candidates | 0 ticks | none |
+    | *guard*, otherwise | standard delay, S-0215 claim 24 | one ranged draw over 0 to 2 ticks inclusive |
+    | *area guard* | rate delay plus one ranged draw over 1 to 5 ticks inclusive, shortened by division by 6 under S-0215 claim 26's close-range condition on the newly taken building | one ranged draw over 1 to 5 ticks inclusive |
+
+    Delay arithmetic is signed 32-bit integer arithmetic with wrapping sums and division truncated
+    toward zero; rate conversion and the close-range test are those of S-0215 claims 24 and 26.
+    A delay of at most 1 tick schedules the next processing on the next tick (S-0215 claim 2).
+    In *guard*, if no such building is found, ordinary guard processing runs instead; when one
+    is found, its idle action does not run, but delay selection still does.
+    A human player can also make a unit charge with
     an attack order on an allied overpowerable building (S-0308 row 11). There is no special
     cursor for this. A vehicle charges in the same way, but registers nothing (claim 11).
     - Backing: `measurable` (scenarios TC2 and TC4)
     - Confidence: high (the scan and the own-house rule); medium (the order of the steps within
       *area guard*)
 
-15. **Breaking off.** While an infantry unit's charging mark is set, every processing of its *attack*
-    behaviour first runs an automatic search of the range kind centred on its position (S-0309
-    claim 1). If the search finds a target, the unit takes it instead and the mark clears; it then
-    attacks that target as usual. There is no targeting-timer gate or targeting-timer reset
-    draw for this search; ordinary behaviour-delay draws still apply (S-0215 claim 21).
+15. **Breaking off.** While an infantry unit's charging mark is set, each processing that reaches
+    the general infantry *attack* rules runs an automatic search of the range kind centred on its
+    position, before ordinary target approach. Earlier special-case outcomes still take precedence
+    (S-0215 claim 23). The search is the range search of S-0309
+    claim 1. The held building target does not prevent this search: it is not tested for
+    usability or protected by S-0309 claim 4's target-retention rule, and is not cleared to make
+    the search possible. A nonempty search result becomes the target and clears the mark,
+    without a further test of the held target's owner, firing legality or identity against the
+    result. Even a result equal to the held building clears the mark. If the search finds
+    nothing, the held target and mark remain unchanged. Ordinary candidate tests and ranking
+    still apply (S-0309 claims 5 to 17); in particular the ordinary damaging charger's own-house
+    building is not an enemy candidate merely because it is being charged.
+
+    Neither S-0309 claim 2's passive-acquisition permissions nor claim 3's opportunity gate
+    limits this search. The intrinsic no-auto-fire restriction of S-0309 claim 5 still does.
+    There is no targeting-timer gate or targeting-timer reset draw for this search; ordinary
+    behaviour-delay draws still apply (S-0215 claim 21). The resulting target is approached
+    in the same processing.
     The mark also clears whenever the unit is given a target by an
     order or by any other ordinary target change. A unit that stops aiming at the building drops
     off the building's list at the building's next turn (claim 12). This search belongs to the
@@ -404,6 +427,12 @@ Observable consequences:
 | Art, building image, `IsAnimDelayedFire` | not read for the prism type (claim 7) | boolean | no |
 | Rules, warhead section, `ElectricAssault` | electric-charge warhead (claims 11 and 14) | boolean | no |
 | Rules, building type section, `Overpowerable` | overpowerable type (claims 12 to 14) | boolean | no |
+| Rules, `[Guard]` and `[Area Guard]`, `Rate` | rate delay after automatic charging starts (claim 14) | decimal game minutes, optional percent sign; S-0215 claim 24 or 26 | held value; engine default double nearest 0.016 game minutes |
+| No data key | supporter acquisition tie order (claim 3), successful-scan delay selection (claim 14), break-off gate bypass and replacement (claim 15) | fixed behaviour, not an imported setting | not applicable |
+
+The secondary weapon and its warhead are imported by S-0308 claims 1 to 3. Search candidate
+properties, including the no-auto-fire restriction, retain S-0309 claim 5's import mapping.
+Claim 15 changes which search permissions apply, not those properties' parse forms or defaults.
 
 The modifier is a percentage field (S-0003, Terms and claim 7) scaled by F4. The invented written value
 "125%" becomes the held value 125, while a bare "125" becomes 12500.
@@ -443,6 +472,12 @@ For every case, a different recorded result from the stated expectation falsifie
 - **PS4 (claim 3).** Use a named test-map override with cap 1, two candidates at unequal F2
   distance, then at equal F2 distance. Swap build order and repeat with capture-order reversed.
   Expect nearest in the unequal case, earliest acquired in a tie; record which draws the beam.
+  Create candidate A before B, let the observed house acquire B first and capture A later:
+  expect B to support. Transfer B away and reacquire it while A remains owned: expect A instead.
+  Include two ownership changes in one tick, reversing their event order while keeping object
+  creation order unchanged; expect the first acquisition event to win. A transfer to the same
+  owner must not change the winner. Log placements and ownership-change events with ticks and
+  their within-tick order; a creation-number winner contrary to acquisition order falsifies claim 3.
 - **PS5 (claims 4 to 7).** Use three candidates, and another prism building outside the master's
   reach but within one candidate's reach. Expect three direct beams, no chained beam, and the
   master starting its own delay in the fourth consecutive *can fire* processing. Vary placement
@@ -489,11 +524,29 @@ For every case, a different recorded result from the stated expectation falsifie
   the one first in step-direction order. Reverse directions and repeat. Give an attack order
   to an allied building: expect charging, with no special charge cursor. Put an enemy where
   area guard acquires it first: expect that target rather than charging in that processing.
+  Record the processing that sets the charging target, its selected delay, and the next processing
+  tick, with random state. Use named test-map overrides giving invented distinct rates for guard,
+  area guard and attack. Expect claim 14's delay table using the old behaviour's rate, not a
+  fixed 1-tick delay or the attack rate. Repeat guard while rearming, and with named test data
+  enabling distributed fire and retaining candidates: expect the table's no-draw cases. Repeat
+  area guard inside and outside S-0215 claim 26's close-range band to test truncation by 6.
+  Earlier behaviour-start or forced-processing events invalidate a next-processing-interval test,
+  but not a read-only observation of the selected delay.
 - **TC3 (claim 15).** While infantry charges automatically, bring an eligible enemy into range.
   Expect replacement at the next attack processing, followed by list pruning at *C*'s next
   turn. Repeat after an explicit target-setting order to the same building: the mark must clear,
   so that later approach must not trigger this special break-off search. Record random state:
   expect ordinary behaviour-delay draws but no additional targeting-timer draw for the search.
+  Repeat with no enemy: expect the same building and mark to remain, not an empty target.
+  Introduce two eligible enemies at once: expect S-0309's ordinary ranking despite the retained
+  usable charging target. In named test-map overrides, disable passive acquisition and
+  opportunity fire separately on an otherwise armed charger: expect break-off still. Enable
+  the no-auto-fire restriction on the human-owned charger: expect no break-off candidate.
+  To distinguish unconditional mark clearing from an identity comparison, use named test data
+  allowing allied candidates under S-0309's candidate rules and make the held building the sole
+  eligible result. Record target and mark: expect the same target with the mark cleared, then
+  no special break-off when an enemy arrives. Failure to realise that eligibility makes this
+  sub-test inconclusive, not evidence for retaining the mark.
 - **TC4 (claims 11, 12, 14 and 15, named test-map overrides).** Supply an infantry charge primary
   able to target non-overpowerable and enemy buildings, and a vehicle with a charge secondary.
   Expect infantry registration irrespective of building type or owner, no vehicle registration,
@@ -509,9 +562,6 @@ For every case, a different recorded result from the stated expectation falsifie
 
 - How the support multiplier affects detonation side effects other than ordinary area damage.
   No general rule about those effects is claimed here.
-- Which search-permission restrictions are intrinsic to claim 15's range search, as opposed
-  to the ordinary passive-acquisition gates in S-0309 claims 2 and 3. The no-timer-gate and
-  no-timer-draw rules are traced; a complete permission comparison remains untraced.
 - The exact place of claim 14's scan within the *guard* processing of infantry with special guard
   states. It runs only when nothing earlier in that processing has taken over.
 - Prism-type combinations with the SAM flag or installed upgrades. Those can enter special
