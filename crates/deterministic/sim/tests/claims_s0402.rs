@@ -914,7 +914,10 @@ fn claim_10_row_2_offers_reach_the_dock_test() {
         assert_eq!(o.drive.as_ref().unwrap().goal, None);
     }
     // The ordinary harvester docks.
-    until(&mut w, 800, |w| current(w, ordinary) == Some(Behaviour::Unload)).expect("unload");
+    until(&mut w, 800, |w| {
+        current(w, ordinary) == Some(Behaviour::Unload)
+    })
+    .expect("unload");
     assert!(!w.obj(ordinary).unwrap().econ.refresh);
 }
 

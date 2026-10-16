@@ -61,12 +61,24 @@ fn the_dock_fallback_skips_its_own_point_and_leaves_refresh() {
     w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Guard);
     offer(&mut w, u, c);
     let o = w.obj(u).unwrap();
-    assert_eq!(o.dest, Some(Target::Cell(c)), "the order-level destination is installed");
-    assert_eq!(o.drive.as_ref().unwrap().goal, None, "its movement point is skipped");
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(c)),
+        "the order-level destination is installed"
+    );
+    assert_eq!(
+        o.drive.as_ref().unwrap().goal,
+        None,
+        "its movement point is skipped"
+    );
     assert_eq!(o.drive.as_ref().unwrap().for_dest, Some(Target::Cell(c)));
     assert_eq!(o.beh.current, None);
     assert_eq!(o.beh.queued, Some(Behaviour::Enter));
-    assert_eq!(flags(&w, u), (true, false), "refresh stays, suppression is consumed");
+    assert_eq!(
+        flags(&w, u),
+        (true, false),
+        "refresh stays, suppression is consumed"
+    );
 }
 
 // spec: S-0207 claim 27 (an unchanged assignment is ignored before the dock test without refresh, and reaches it again with refresh pending: there is no once-per-entry limit; each fallback skips its own point and leaves refresh)
@@ -80,14 +92,21 @@ fn a_repeated_offer_reaches_the_test_again_through_refresh() {
     offer(&mut w, u, c);
     let o = w.obj(u).unwrap();
     assert_eq!(o.beh.queued, Some(Behaviour::Enter), "tested again");
-    assert_eq!(o.drive.as_ref().unwrap().goal, None, "its point is skipped again");
+    assert_eq!(
+        o.drive.as_ref().unwrap().goal,
+        None,
+        "its point is skipped again"
+    );
     assert_eq!(flags(&w, u), (true, false));
     // With refresh gone, the unchanged offer is ignored before the test.
     w.obj_mut(u).unwrap().econ.refresh = false;
     w.obj_mut(u).unwrap().beh.queued = None;
     offer(&mut w, u, c);
     let o = w.obj(u).unwrap();
-    assert_eq!(o.beh.queued, None, "an unchanged offer without refresh is ignored");
+    assert_eq!(
+        o.beh.queued, None,
+        "an unchanged offer without refresh is ignored"
+    );
     assert_eq!(flags(&w, u), (false, false));
 }
 
@@ -198,11 +217,19 @@ fn refresh_makes_an_unchanged_jumpjet_assignment_effective() {
     offer(&mut w, u, at(6, 0));
     let t0 = w.rng.taken();
     offer(&mut w, u, at(6, 0));
-    assert_eq!(w.rng.taken(), t0, "an unchanged vehicle assignment is ignored");
+    assert_eq!(
+        w.rng.taken(),
+        t0,
+        "an unchanged vehicle assignment is ignored"
+    );
     w.obj_mut(u).unwrap().econ.refresh = true;
     let point = w.obj(u).unwrap().jump.as_ref().unwrap().dest;
     offer(&mut w, u, at(6, 0));
-    assert_eq!(flags(&w, u), (false, false), "the assignment consumed refresh");
+    assert_eq!(
+        flags(&w, u),
+        (false, false),
+        "the assignment consumed refresh"
+    );
     assert_eq!(w.obj(u).unwrap().jump.as_ref().unwrap().dest, point);
 }
 
@@ -217,16 +244,23 @@ fn temporary_driving_restores_or_falls_back() {
         glasnost_sim::econ::release::install_temporary_drive(&mut w, u);
         w.obj_mut(u).unwrap().contact = Some(refinery);
         if report {
-            w.obj_mut(u).unwrap().drive.as_mut().unwrap().goal = Some(glasnost_sim::world::Pos::centre(at(1, 0), 0));
+            w.obj_mut(u).unwrap().drive.as_mut().unwrap().goal =
+                Some(glasnost_sim::world::Pos::centre(at(1, 0), 0));
         }
         assert!(glasnost_sim::econ::release::temporary_drive(&w, u));
         offer(&mut w, u, at(3, 0));
         if report {
-            assert!(glasnost_sim::econ::release::temporary_drive(&w, u), "no restoration with a report");
+            assert!(
+                glasnost_sim::econ::release::temporary_drive(&w, u),
+                "no restoration with a report"
+            );
             assert_eq!(w.obj(u).unwrap().beh.queued, Some(Behaviour::Enter));
             assert_eq!(flags(&w, u), (true, false));
         } else {
-            assert!(!glasnost_sim::econ::release::temporary_drive(&w, u), "restored");
+            assert!(
+                !glasnost_sim::econ::release::temporary_drive(&w, u),
+                "restored"
+            );
             assert_eq!(flags(&w, u), (false, false));
             assert_eq!(w.obj(u).unwrap().beh.queued, None);
         }

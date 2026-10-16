@@ -14,7 +14,6 @@ use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use jump_common::{SIZE, at, phase, step, until};
 
-
 fn game() -> World {
     let mut w = testkit::game_with(&jump_common::factory::ruleset(), SIZE, 7);
     testkit::run(&mut w, 4);
@@ -68,7 +67,10 @@ fn claim_15_infantry_ends_contact_in_the_quarter_window() {
     let (before, at_report) = run_to_report(&mut w, u, 200).expect("the contact ended");
     let ht = w.obj(u).unwrap().jump.as_ref().unwrap().ht;
     assert_eq!(ht, 500);
-    assert!(before <= ht / 4, "no report while at or below the quarter: {before}");
+    assert!(
+        before <= ht / 4,
+        "no report while at or below the quarter: {before}"
+    );
     assert!(
         ht / 4 < at_report && at_report < ht,
         "the report is inside the window: {at_report}"
@@ -119,7 +121,10 @@ fn claim_15_vehicles_half_and_quarter() {
         assert!(release::tethered(&w, u));
         let (before, at_report) = run_to_report(&mut w, u, 400).expect("the contact ended");
         let ht = w.obj(u).unwrap().jump.as_ref().unwrap().ht;
-        assert!(before <= ht / q, "{name}: no report at or below ht/{q}: {before}");
+        assert!(
+            before <= ht / q,
+            "{name}: no report at or below ht/{q}: {before}"
+        );
         assert!(
             ht / q < at_report && at_report < ht,
             "{name}: inside the window: {at_report}"
@@ -139,7 +144,11 @@ fn claim_15_vehicles_half_and_quarter() {
         assert_ne!(phase(&w, u), Phase::Grounded, "{name}");
         // A further vehicle comes out of the same factory.
         let again = unit(&mut w, Kind::Vehicle, name);
-        assert_eq!(release::release(&mut w, k, again), Outcome::Released, "{name}");
+        assert_eq!(
+            release::release(&mut w, k, again),
+            Outcome::Released,
+            "{name}"
+        );
     }
 }
 
@@ -207,7 +216,10 @@ fn claim_15_type_flags_gate_the_report() {
     for _ in 0..100 {
         step(&mut w);
     }
-    assert!(w.obj(u).unwrap().contact.is_some(), "no report without a flag");
+    assert!(
+        w.obj(u).unwrap().contact.is_some(),
+        "no report without a flag"
+    );
 }
 
 // spec: S-0417 claim 15 (balloon-hover infantry still uses a quarter, q = 4)
@@ -253,7 +265,10 @@ fn claim_5_restoration_needs_no_movement_report() {
     // The track is complete but its destination point is retained: each fall-back to rest leaves the temporary locomotor.
     run_ticks(&mut w, 100);
     let o = w.obj(u).unwrap();
-    assert!(o.econ.temporary_drive, "a retained point prevents restoration");
+    assert!(
+        o.econ.temporary_drive,
+        "a retained point prevents restoration"
+    );
     assert!(o.drive.as_ref().unwrap().goal.is_some());
     assert!(!release::restore_locomotor(&mut w, u));
     // A stop removes the point at once; the next fall-back restores.
