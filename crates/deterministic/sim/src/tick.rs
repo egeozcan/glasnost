@@ -122,7 +122,7 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::death::infantry_death_turn(w, id);
         return;
     }
-    // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claim 48 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; the other stages before the arrival hold are unmeasured, Q-0851 interim: the warp update is the whole turn; no ordering of the warp after the protection tint is implied, and ours puts it after)
+    // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claims 48 and 51 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; engine design for the other stages before the arrival hold: no ordinary healing, behaviour, movement, firing or turret turning, and (Q-0870 interim) nothing else of the turn either, so the warp update is the whole turn; no ordering of the warp after the protection tint is implied, and ours puts it after)
     if crate::superweapons::warp::turn(w, id) {
         return;
     }

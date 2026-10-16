@@ -127,8 +127,14 @@ fn claim48_a_warp_member_drops_its_target_and_destination() {
     warp(&mut w, at(0, 0), at(5, -5));
     let o = w.obj(a).unwrap();
     assert!(o.sw.warp.is_some());
-    assert!(o.target.is_none() && o.dest.is_none());
     assert!(o.path.steps.is_empty());
+    // spec: S-0513 claim 51 (this design adds no earlier target clearing: launch clears the path, the queued destinations and the driving step only)
+    assert_eq!(stage(&w, a), Some(Stage::Pending));
+    assert!(o.target.is_some() && o.dest.is_some());
+    step(&mut w); // the first update: the leaving stage starts
+    let o = w.obj(a).unwrap();
+    assert!(o.sw.warp.as_ref().unwrap().leaving());
+    assert!(o.target.is_none() && o.dest.is_none());
 }
 
 // --- Claim 34 ------------------------------------------------------------------
@@ -513,7 +519,7 @@ fn corner_destination(w: &World) -> CellXY {
 
 #[test]
 fn claim49_an_off_map_destination_is_no_early_refusal() {
-    // spec: S-0513 claim 49 (source object whose corresponding destination cell is off the map: claim 34's parasite release and claim 35's organic death still occur, and an otherwise eligible survivor joins the warp rather than being left in place; its eventual position and fate are unmeasured, Q-0850)
+    // spec: S-0513 claim 49 (source object whose corresponding destination cell is off the map: claim 34's parasite release and claim 35's organic death still occur, and an otherwise eligible survivor joins the warp rather than being left in place; claim 50 gives its position and fate)
     let mut w = game(&rules());
     chrono(&mut w);
     let corner = corner_destination(&w);
@@ -532,7 +538,7 @@ fn claim49_an_off_map_destination_is_no_early_refusal() {
     );
     assert_eq!(stage(&w, cart), Some(Stage::Pending), "it joined the warp");
     assert!(
-        w.notes.iter().any(|n| n.starts_with("Q-0850")),
+        w.notes.iter().any(|n| n.starts_with("warp: object")),
         "the interim is noted"
     );
     // The run goes on through arrival and the end of the hold without a refusal or a panic;
@@ -543,7 +549,7 @@ fn claim49_an_off_map_destination_is_no_early_refusal() {
 
 #[test]
 fn claim49_a_failed_search_replaces_the_landing_point_and_the_retry_sets_the_delay() {
-    // spec: S-0513 claim 49 (blocked landing, nearby search finds no cell: the failed result replaces the landing point without a success test, it does not keep the old point; the unsuccessful check stays in the retry stage; a retry sets the held delay to the teleport delay) and claim 40; the replacement point itself is unmeasured (Q-0850 interim: the stand-in cell)
+    // spec: S-0513 claim 49 (blocked landing, nearby search finds no cell: the failed result replaces the landing point without a success test, it does not keep the old point; the unsuccessful check stays in the retry stage; a retry sets the held delay to the teleport delay) and claim 40; claim 50: the replacement point is the fallback cell (0, 0)
     let mut w = game(&rules());
     chrono(&mut w);
     let a = spawn(&mut w, "CART", ALPHA, 0, 0);
@@ -565,7 +571,7 @@ fn claim49_a_failed_search_replaces_the_landing_point_and_the_retry_sets_the_del
         "the check failed and stays in the retry stage"
     );
     assert!(
-        w.notes.iter().any(|n| n.starts_with("Q-0850")),
+        w.notes.iter().any(|n| n.starts_with("warp: object")),
         "the search found nothing (interim noted)"
     );
     assert_ne!(m.landing, before, "the old point is not kept");

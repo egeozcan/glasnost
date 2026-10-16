@@ -321,7 +321,7 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     w.update.leave(id, skip);
     let q = occ_quirks(w);
     let cell = o.pos.cell();
-    w.cells.leave(cell, o.layer, id);
+    w.cells.leave_both(cell, id);
     if o.kind == Kind::Vehicle {
         // A vehicle going inside (a latching parasite, S-0614 claim 1) releases its claims and its step.
         crate::drive::release_claims(w, id);
@@ -417,7 +417,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
         // spec: S-0506 claim 23 (a rocket missile is in no cell list and marks no occupancy)
         Kind::Aircraft if o.rocket.is_some() => {}
         Kind::Aircraft => {
-            w.cells.leave(cell, o.layer, id);
+            // spec: S-0209 claim 13 (an aircraft is listed in the ground layer, the deck layer or neither, by its listing height)
+            w.cells.leave_both(cell, id);
             // spec: S-0207 claim 20 (a) and (e) (a teleporting aircraft's object-present mark is on its landing point's cell until the jump; on the deck its removal clears the deck flag only)
             for (mc, ml) in crate::teleport::removal_marks(w, id) {
                 if let Some(rec) = w.cells.occ_mut(mc, ml) {
