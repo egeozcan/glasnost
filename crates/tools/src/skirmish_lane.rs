@@ -119,6 +119,12 @@ struct Game {
     ready_ticks: BTreeMap<String, usize>,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
+    /// Per player house: the unit types (infantry, vehicles, aircraft) it
+    /// could build at some sampled tick and the ones it had a new object
+    /// of (not a starting unit), by [`unit_class`] (PLAN 4.7: the own AI
+    /// builds every unit class its side can build).
+    offered: [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
+    made: [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
     /// Counts-only state of a game that is not over at the end (the own
     /// AI's games): per house its objects by kind, the resource left on the
     /// map and the brain's own diagnostic.
@@ -492,9 +498,11 @@ fn play_ai(
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
+    let starting: BTreeSet<u32> = game.world.objects.keys().map(|id| id.0).collect();
     while game.world.tick < max_ticks {
         game.step();
         let w = &game.world;
+        classes(w, &starting, &mut g.offered, &mut g.made);
         // The effects pile up when nobody drains them: count the new ones.
         for e in w.effects.iter().skip(drained) {
             match e {
@@ -1111,6 +1119,73 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
     }
 }
 
+/// The class of a unit type for the lane's coverage line: the first of
+/// harvester, engineer, transport, jumpjet, ship, hover, teleporter,
+/// aircraft, deployer, armed, unarmed that fits.
+fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
+    let Some(u) = w.rules().unit(kind, index) else {
+        return "unknown";
+    };
+    if u.harvester {
+        "harvester"
+    } else if u.engineer {
+        "engineer"
+    } else if u.passengers > 0 {
+        "transport"
+    } else if u.jumpjet_locomotor {
+        "jumpjet"
+    } else if u.locomotor == Locomotor::Ship {
+        "ship"
+    } else if u.locomotor == Locomotor::Hover {
+        "hover"
+    } else if u.raw.locomotor.is_some() && u.locomotor == Locomotor::Teleport {
+        "teleporter"
+    } else if kind == Kind::Aircraft {
+        "aircraft"
+    } else if u.deployer || glasnost_sim::econ::deploy::deploys_into(w, kind, index).is_some() {
+        "deployer"
+    } else if u.primary.is_some() {
+        "armed"
+    } else {
+        "unarmed"
+    }
+}
+
+/// Notes, per player house, the unit types it can build (every 300th tick)
+/// and the types of its new objects (every tick; `starting` holds the ids
+/// that were there at the start).
+fn classes(
+    w: &World,
+    starting: &BTreeSet<u32>,
+    offered: &mut [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
+    made: &mut [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
+) {
+    let units = |t: &glasnost_sim::econ::TypeRef| {
+        matches!(t.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
+    };
+    if w.tick % 300 == 1 {
+        for t in all_types(w).into_iter().filter(units) {
+            for (h, set) in offered.iter_mut().enumerate() {
+                if tech::buildable(w, HouseId(h as u8), t) {
+                    set.insert((unit_class(w, t.kind, t.index), t.kind as u8, t.index));
+                }
+            }
+        }
+    }
+    for (id, o) in &w.objects {
+        if starting.contains(&id.0) || !o.on_map || o.rocket.is_some() {
+            continue;
+        }
+        let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
+            continue;
+        };
+        let t = tech::type_of(o);
+        if units(&t) {
+            made[h].insert((unit_class(w, t.kind, t.index), t.kind as u8, t.index));
+        }
+    }
+}
+
 /// The types house `h` can build now, by role.
 fn offer(w: &World, h: usize) -> BTreeMap<Role, usize> {
     let mut out = BTreeMap::new();
@@ -1303,6 +1378,28 @@ fn report(
             .map(|(k, v)| format!("{k} {}", v.len()))
             .collect();
         let _ = writeln!(s, "  M6 features (distinct objects): {}", f.join(", "));
+        if players != Players::Scripted {
+            for h in 0..PLAYERS {
+                let mut by: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+                for &(c, k, i) in &g.offered[h] {
+                    let e = by.entry(c).or_default();
+                    e.0 += 1;
+                    if g.made[h].contains(&(c, k, i)) {
+                        e.1 += 1;
+                    }
+                }
+                let never: usize = by.values().map(|(o, m)| o - m).sum();
+                let v: Vec<String> = by
+                    .iter()
+                    .map(|(c, (o, m))| format!("{c} {m}/{o}"))
+                    .collect();
+                let _ = writeln!(
+                    s,
+                    "  house {h} unit types by class (built/buildable): {}; buildable but never built: {never}",
+                    v.join(", ")
+                );
+            }
+        }
         for h in 0..PLAYERS {
             if !g.army_end[h].is_empty() {
                 let v: Vec<String> = g.army_end[h]
