@@ -2140,3 +2140,31 @@ fn any_docked_follows_the_slots() {
     // The only slot is launched: none is docked while the missile is out.
     assert_eq!(spawn::any_docked(&w, lna), Some(false));
 }
+
+// spec: S-0105 claim 41 and S-0506 claims 14 to 18, 24 (the drawing reads the missile's current single-precision pitch, read-only, and its set's initial and final pitch fractions; an object that is not a rocket missile has none)
+#[test]
+fn drawing_reads_the_current_pitch() {
+    let r = rules();
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    assert_eq!(glasnost_sim::rocket::drawing(&w, victim), None);
+    let missile = controller(&w, lna).slots[0].object.unwrap();
+    assert_eq!(glasnost_sim::rocket::drawing(&w, missile), None, "docked: no flight state yet");
+    click_attack(&mut w, lna, victim);
+    assert!(testkit_run_until(&mut w, 200, |w| w
+        .obj(missile)
+        .is_some_and(|o| o.on_map)));
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..80 {
+        testkit::run(&mut w, 1);
+        let Some(o) = w.obj(missile) else { break };
+        let rs = o.rocket.as_ref().unwrap();
+        let d = glasnost_sim::rocket::drawing(&w, missile).unwrap();
+        assert_eq!(d.pitch, rs.pitch.0, "the current pitch");
+        seen.insert(d.pitch);
+        let set = w.rules().missiles.set(rs.set);
+        assert_eq!((d.initial, d.final_), (set.pitch_initial.0, set.pitch_final.0));
+    }
+    assert!(seen.len() > 3, "the pitch changes through the flight");
+}

@@ -33,7 +33,8 @@ use glasnost_sim::world::{GameSetup, HouseId, Layer, Object, ObjectId, World};
 
 use super::anims::{self, AnimQuirks, Playback, Player};
 use super::build::{
-    AnimDraw, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile, Painter,
+    AnimDraw, Attitude, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile,
+    Painter,
     ShadowAnchor, find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
@@ -404,6 +405,38 @@ pub fn shadow_anchor(w: &World, o: &Object) -> ShadowAnchor {
         && neighbour.is_some_and(|n| w.cells.is_bridge(n))
         && a >= if marked { 0 } else { 416 };
     ShadowAnchor { ground, deck }
+}
+
+/// How an aircraft body is tilted, read-only from the game state (S-0105
+/// claims 41, 42): a rocket missile's current nose pitch (S-0506) and its set's
+/// pitch fractions, or a flying-locomotor aircraft's signed height, current
+/// speed fraction and unfinished aiming-facing turn.
+pub fn attitude(w: &World, o: &Object) -> Attitude {
+    if let Some(d) = glasnost_sim::rocket::drawing(w, o.id) {
+        return Attitude::Rocket {
+            pitch: d.pitch,
+            initial: d.initial,
+            final_: d.final_,
+        };
+    }
+    if !glasnost_sim::air::is_aircraft(w, o.id) {
+        return Attitude::None;
+    }
+    let air = o.air.as_ref();
+    // spec: S-0105 claim 42 (the signed height used in claim 40: a = z − H − b, b = 416 while marked on a bridge deck)
+    let marked = air.is_some_and(|a| a.deck);
+    let height = o.pos.z - w.surface_at(o.pos.x, o.pos.y) - if marked { 416 } else { 0 };
+    Attitude::Flying {
+        height,
+        speed: air.map_or(0, |a| a.cur.0),
+        // spec: S-0105 claim 42 (S-0206's signed shorter turn of the aiming facing, positive clockwise; an unfinished turn only)
+        turn: if o.turret.turning(w.tick) {
+            o.turret.step.signum()
+        } else {
+            0
+        },
+        crashing: air.is_some_and(|a| a.crash.is_some()),
+    }
 }
 
 /// The import kind of a simulation kind.
@@ -1311,6 +1344,7 @@ impl Live {
             shadow: (kind == Kind::Aircraft).then(|| shadow_anchor(w, o)),
             // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
             alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),
+            attitude: attitude(w, o),
         })
     }
 
