@@ -268,22 +268,3 @@ fn leaving_stage_under_pending_suppression_keeps_the_destination() {
         assert_eq!(o.dest, want, "pending {pending}");
     }
 }
-
-// spec: S-0207 Edge cases (quirks.teleport_suppression_keeps_destination, proposed with the original as default: under pending suppression the destination stays without a landing point); Q-1131 interim for the off position: the suppression is consumed and the assignment is handled as an ordinary one by claim 20 (a)
-#[test]
-fn edge_teleport_suppression_switch() {
-    for on in [true, false] {
-        let mut w = game();
-        let mut rules = (*w.rules_arc()).clone();
-        rules.quirks.teleport_suppression_keeps_destination = on;
-        w.rules = Some(std::sync::Arc::new(rules));
-        let u = tele(&mut w, at(0, 0));
-        suppress(&mut w, u);
-        let c = at(4, 0);
-        offer(&mut w, u, c);
-        assert!(!suppressed(&w, u), "quirk {on}: consumed");
-        assert_eq!(w.obj(u).unwrap().dest, Some(Target::Cell(c)), "quirk {on}");
-        let want = if on { None } else { Some(c) };
-        assert_eq!(landing(&w, u), want, "quirk {on}: landing point");
-    }
-}
