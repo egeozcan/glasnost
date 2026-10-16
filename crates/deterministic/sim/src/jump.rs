@@ -810,7 +810,7 @@ pub fn clear_rejected(w: &mut World, id: ObjectId) -> bool {
             i64::from(t.y - o.pos.y),
             w.rules().quirks.table_direction,
         );
-        facing_difference(d, o.turret.value(w.tick)).abs() <= 16384
+        facing_difference(d, o.turret.value(w.tick)).abs() <= 16384 // spec: S-0502 claim 28 (at most 16384 facing units)
     };
     if !retain {
         return false;
