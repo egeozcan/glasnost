@@ -251,25 +251,3 @@ fn claim_20_b_warp_pending_immobilization_keeps_the_landing_point() {
         "L unchanged"
     );
 }
-
-// spec: S-0207 claim 27 (suppression skips the next otherwise due nonempty point application) and claim 20 (a) (a destination given while phasing in is dropped); Q-1130 interim: a teleporting point is skipped and consumes the suppression, and a refused destination is no application, so the suppression stays
-#[test]
-fn a_teleporting_point_and_pending_suppression_interim() {
-    let mut w = game();
-    let u = spawn(&mut w, Kind::Vehicle, "TELE", at(0, 0));
-    w.obj_mut(u).unwrap().econ.point_suppression = true;
-    offer(&mut w, u, at(4, 0));
-    let o = w.obj(u).unwrap();
-    assert_eq!(o.dest, Some(Target::Cell(at(4, 0))));
-    assert_eq!(o.teleport.as_ref().and_then(|t| t.landing), None);
-    assert!(!o.econ.point_suppression, "consumed");
-    // Phasing in: the destination is dropped and the suppression stays.
-    let t = w.tick;
-    let o = w.obj_mut(u).unwrap();
-    o.econ.point_suppression = true;
-    o.teleport.as_mut().unwrap().phasing = Some((t, 50));
-    offer(&mut w, u, at(5, 0));
-    let o = w.obj(u).unwrap();
-    assert_eq!(o.dest, None, "dropped");
-    assert!(o.econ.point_suppression, "not an application");
-}

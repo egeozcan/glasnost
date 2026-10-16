@@ -313,13 +313,17 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
     };
     let kind = w.obj(id).map_or(Kind::Terrain, |o| o.kind);
     sparkle(w, id);
+    // spec: S-0215 claim 2 and S-0514 claim 17 (a vehicle under a pending point suppression, S-0207 claim 27, keeps its destination; the target is dropped in every case)
+    let keeps = crate::refresh::suppression_pending(w, id);
     if kind != Kind::Building
         && let Some(ob) = w.obj_mut(id)
     {
         // spec: S-0514 claim 17 and S-0215 claim 2 (a mobile object being erased drops its target and destination on each such tick)
         crate::spawn::clear_own_target(ob);
-        ob.dest = None;
-        ob.path.steps.clear();
+        if !keeps {
+            ob.dest = None;
+            ob.path.steps.clear();
+        }
     }
     // spec: S-0514 claim 11 (a leading attacker inside an open-topped transport lets go when its distance exceeds the warp distance; that update makes no reduction, even if another attacker becomes leader; quirks.erasure_distance_leader_only off checks every open-topped passenger)
     let all = !w.rules().quirks.erasure_distance_leader_only;

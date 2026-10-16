@@ -180,8 +180,11 @@ pub fn mark_cell(w: &World, id: ObjectId) -> Option<CellXY> {
 /// a destination is given, and at the movement update for a destination
 /// given where no call reached. A changed destination fixes the landing
 /// point at once and moves the occupancy mark to its cell; one given while
-/// phasing in is dropped. A cleared destination leaves a fixed landing
-/// point in place (part d: the jump follows on the next movement update).
+/// phasing in is dropped. Pending point suppression (claim 27) is tested
+/// first: the destination is kept, no landing point is fixed and the
+/// suppression is consumed, whatever the object's state. A cleared
+/// destination cancels a pending jump but keeps the fixed landing point's
+/// reservation (part h).
 pub fn take_destination(w: &mut World, id: ObjectId) {
     if !is_teleporter(w, id) {
         return;
@@ -193,21 +196,25 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         return;
     }
     let Some(dest) = o.dest else {
+        // spec: S-0207 claim 20 (h) (an empty assignment while a jump is pending cancels the pending jump and the moving state; the fixed landing point stays remembered and its reservation does not move, so the next accepted destination clears it from that point, part a)
+        st.landing = None;
         st.for_dest = None;
         set_state(w, id, st);
         return;
     };
-    // spec: S-0207 claim 20 (a) (dropped while phasing in or held, S-0614 Terms; the electromagnetic pulse and being erased have no state in our engine)
-    if st.phasing.is_some() || crate::parasite::held(w, id) {
-        st.for_dest = None;
-        set_state(w, id, st);
-        drop_destination(w, id);
-        return;
-    }
-    // spec: S-0207 claim 27 (suppression already pending skips this otherwise due nonempty point application, a restored predecessor's included: the order-level destination stays without a landing point being fixed) and Q-1130 (interim: any teleporting point, after claim 20 a's refusal above)
+    // spec: S-0207 claim 27 (Q-1130 table, second row: suppression already pending skips the landing-point fixing of any teleporting vehicle's nonempty destination, whatever its state; the locomotor is not offered the point, so no claim 20 a refusal runs and no earlier landing point, pending jump or reservation changes; the new order-level destination stays and the suppression is consumed)
+    // spec: S-0207 claim 20 (a) (a pending suppression is the only exception to the drop and to the fixing of a landing point)
     if crate::refresh::skip_point(w, id) {
         st.for_dest = Some(dest);
         set_state(w, id, st);
+        return;
+    }
+    // spec: S-0207 claim 20 (a) (dropped while phasing in, held, S-0614 Terms, or being erased by a temporal beam, S-0514 claim 16; the electromagnetic pulse has no state in our engine; a superweapon warp's leaving stage is the warp-pending immobilization of part b below)
+    // spec: S-0207 claim 27 (Q-1130 table, third row: with no suppression pending the order-level destination becomes empty and nothing is consumed)
+    if st.phasing.is_some() || crate::parasite::held(w, id) || crate::temporal::erased(w, id) {
+        st.for_dest = None;
+        set_state(w, id, st);
+        drop_destination(w, id);
         return;
     }
     if o.kind == Kind::Infantry {
@@ -584,6 +591,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             true
         }
         _ => {
+            // spec: S-0207 claim 27 (Q-1130 table, second row, and Edge cases: a destination kept under pending suppression stays without a landing point; no jump follows until a later effective assignment). Only that assignment leaves the taken destination equal to the order-level one with no landing point.
+            if st.landing.is_none() && o.dest.is_some() && o.dest == st.for_dest {
+                return false;
+            }
             // spec: S-0207 claim 20 (d) (L equal to its own position, or none fixed: no jump, the destination is removed)
             if o.dest.is_some() || st.landing.is_some() {
                 set_state(w, id, st.without_landing());
