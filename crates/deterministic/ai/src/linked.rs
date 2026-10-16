@@ -54,7 +54,8 @@ fn count(w: &World, house: HouseId, t: TypeRef) -> usize {
 
 impl Special {
     /// Linked weapons (S-0518): orders a prism building while the house
-    /// has fewer than [`PRISMS_WANTED`] and can pay twice its price; sends
+    /// has fewer than [`PRISMS_WANTED`], its building line is free and it
+    /// can pay twice its price; sends
     /// every idle charger at the nearest own overpowerable building that
     /// has fewer than three chargers aimed at it.
     pub(crate) fn linked(
@@ -67,6 +68,7 @@ impl Special {
         let house = script.house;
         if let Some(t) = prism_type(w, house)
             && count(w, house, t) < PRISMS_WANTED
+            && !script.busy(w, t)
             && !script.selling()
             && glasnost_sim::seams::available_credits(w, house)
                 >= production::cost_field(w, t).saturating_mul(RESERVE)

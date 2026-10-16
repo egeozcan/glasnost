@@ -103,6 +103,19 @@ fn orders_a_prism_building() {
     }
     let mut w = g.world.clone();
     w.houses[0].credits = 100_000;
+    // The building line is free (what the house was building is dropped).
+    for l in w
+        .econ
+        .lines
+        .lines
+        .iter_mut()
+        .filter(|l| l.house == HouseId(0))
+    {
+        if l.item.as_ref().is_some_and(|i| i.t.kind == Kind::Building) {
+            l.item = None;
+            l.queue.clear();
+        }
+    }
     testkit::run(&mut w, 1);
     while w.tick % 15 != 0 {
         testkit::run(&mut w, 1);
@@ -116,6 +129,34 @@ fn orders_a_prism_building() {
     w.houses[0].credits = 0;
     let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
     assert_eq!(builds(&brain.think(&w), "PRSM", &w), 0);
+}
+
+// S-0518, PLAN §4.7: while the building line holds another building the prism building is not ordered (a person waits for the line; the order would be given again at every think).
+#[test]
+fn no_prism_order_while_the_building_line_is_busy() {
+    let mut g = game();
+    for _ in 0..900 {
+        g.step();
+    }
+    let mut w = g.world.clone();
+    w.houses[0].credits = 100_000;
+    let power = glasnost_sim::econ::TypeRef {
+        kind: Kind::Building,
+        index: w.rules().index_of(Kind::Building, "POWR").expect("POWR"),
+    };
+    glasnost_sim::orders::issue(&mut w, HouseId(0), Order::Build { what: power });
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let line = glasnost_sim::econ::production::line_of(&w, HouseId(0), power).expect("a line");
+    assert!(
+        line.item.is_some() || !line.queue.is_empty(),
+        "the line is busy"
+    );
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert_eq!(builds(&brain.think(&w), "PRSM", &w), 0);
+    assert_eq!(brain.special_uses().prisms, 0);
 }
 
 fn attack_of(orders: &[Order], who: ObjectId) -> Option<ObjectId> {
