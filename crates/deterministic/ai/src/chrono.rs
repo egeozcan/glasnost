@@ -60,7 +60,11 @@ impl Special {
             };
             let best = enemies
                 .iter()
-                .filter(|&&(e, _)| erasable(w, e) && scripted::can_attack(w, id, e))
+                .filter(|&&(e, _)| {
+                    erasable(w, e)
+                        && scripted::can_attack(w, id, e)
+                        && self.memory.ok(w, id, Target::Object(e))
+                })
                 .min_by_key(|&&(e, c)| (-i64::from(actual_cost(w, e)), dist2(c, at), e));
             let Some(&(e, _)) = best else { continue };
             out.push(Order::Behaviour {

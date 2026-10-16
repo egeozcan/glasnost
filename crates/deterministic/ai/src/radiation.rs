@@ -70,6 +70,7 @@ impl Special {
             };
             let clean = |c: CellXY| {
                 w.cells.usable(c)
+                    && self.memory.ok(w, id, Target::Cell(c))
                     && shroud::explored(w, house, c)
                     && radiation::exposure(w, c) < 1
                     && regions::reach_in(w, c, zone) == Reach::Region(region)

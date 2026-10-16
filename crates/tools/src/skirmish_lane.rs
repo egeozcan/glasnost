@@ -475,6 +475,20 @@ fn play_ai(
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
+    // `GLASNOST_AI_DUMP=t1,t2,...`: every object of the player houses at those ticks.
+    let dump_at: Vec<i32> = std::env::var("GLASNOST_AI_DUMP")
+        .map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect())
+        .unwrap_or_default();
+    // `GLASNOST_AI_WATCH=id,from,to`: one object's state every tick in a range.
+    let watch_obj: Option<(u32, i32, i32)> =
+        std::env::var("GLASNOST_AI_WATCH").ok().and_then(|v| {
+            let p: Vec<&str> = v.split(',').collect();
+            Some((
+                p.first()?.parse().ok()?,
+                p.get(1)?.parse().ok()?,
+                p.get(2)?.parse().ok()?,
+            ))
+        });
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -494,6 +508,24 @@ fn play_ai(
         features(w, &mut g.features);
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
+        }
+        if let Some((id, from, to)) = watch_obj
+            && (from..=to).contains(&w.tick)
+            && let Some(o) = w.obj(glasnost_sim::world::ObjectId(id))
+        {
+            println!(
+                "watch tick {} obj {id}: at {:?} beh {:?} dest {:?} target {:?} contact {:?} path {:?}",
+                w.tick,
+                o.pos.cell(),
+                o.beh.current,
+                o.dest,
+                o.target,
+                o.contact,
+                o.path
+            );
+        }
+        if dump_at.contains(&w.tick) {
+            print!("{}", dump(w));
         }
         if w.tick == EARLY {
             for h in 0..PLAYERS {
@@ -750,6 +782,65 @@ fn diagnosis(game: &AiGame) -> Vec<String> {
         ));
     }
     out
+}
+
+/// A diagnostic dump of every object of the player houses at this tick: its
+/// type, cell, behaviour, destination and target (counts and states only).
+fn dump(w: &World) -> String {
+    let mut s = String::new();
+    let cell_of = |t: &Option<glasnost_sim::world::Target>| match t {
+        None => "-".to_string(),
+        Some(glasnost_sim::world::Target::Cell(c)) => format!("cell({},{})", c.x, c.y),
+        Some(t) => format!("{t:?}"),
+    };
+    for h in 0..PLAYERS {
+        let _ = writeln!(
+            s,
+            "dump tick {} house {h} credits {} low power {}",
+            w.tick,
+            w.houses[h].credits,
+            glasnost_sim::econ::power::low_power(w, HouseId(h as u8))
+        );
+        for l in w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == HouseId(h as u8))
+        {
+            let _ = writeln!(s, "  line {:?}: {:?}", l.kind, l.item);
+        }
+        for o in w
+            .objects
+            .values()
+            .filter(|o| o.owner == Some(HouseId(h as u8)))
+        {
+            let name = match o.kind {
+                Kind::Building => w
+                    .rules()
+                    .buildings
+                    .get(o.type_index as usize)
+                    .map(|b| b.name.clone()),
+                _ => w.rules().unit(o.kind, o.type_index).map(|u| u.name.clone()),
+            }
+            .unwrap_or_default();
+            let c = o.pos.cell();
+            let _ = writeln!(
+                s,
+                "  obj {} {:?} {name} at ({},{}) hp {} map {} beh {:?} dest {} target {}",
+                o.id.0,
+                o.kind,
+                c.x,
+                c.y,
+                o.health,
+                o.on_map,
+                o.beh.current,
+                cell_of(&o.dest),
+                cell_of(&o.target)
+            );
+        }
+    }
+    s
 }
 
 /// A diagnostic timeline of the player houses at this tick: credits, army

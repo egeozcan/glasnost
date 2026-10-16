@@ -160,6 +160,12 @@ impl Brain {
         self.special.uses()
     }
 
+    /// How many (unit, goal) pairs the brain has given up for now: orders
+    /// a unit did not take (`memory`).
+    pub fn given_up(&self) -> usize {
+        self.special.given_up()
+    }
+
     /// The house.
     pub fn house(&self) -> HouseId {
         self.script.house
