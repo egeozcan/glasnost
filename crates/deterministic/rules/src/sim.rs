@@ -1855,6 +1855,16 @@ pub struct BuildingType {
     /// `NeedsEngineer` (S-0309 claim 25 part e, Import mapping).
     #[serde(default)]
     pub needs_engineer: Option<bool>,
+    /// `ProduceCashStartup`, the acquisition bonus in credits (S-0515
+    /// claim 3, Import mapping).
+    #[serde(default)]
+    pub produce_cash_startup: Option<i32>,
+    /// `ProduceCashAmount`, the income amount in credits (S-0515 claim 5).
+    #[serde(default)]
+    pub produce_cash_amount: Option<i32>,
+    /// `ProduceCashDelay`, the income delay in ticks (S-0515 claims 4 and 5).
+    #[serde(default)]
+    pub produce_cash_delay: Option<i32>,
     /// `Storage`, storage capacity (S-0309 table C, row "storage").
     #[serde(default)]
     pub storage: Option<i32>,

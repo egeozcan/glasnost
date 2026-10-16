@@ -972,6 +972,33 @@
           "maxItems": 2,
           "minItems": 2
         },
+        "produce_cash_amount": {
+          "description": "`ProduceCashAmount`, the income amount in credits (S-0515 claim 5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "produce_cash_delay": {
+          "description": "`ProduceCashDelay`, the income delay in ticks (S-0515 claims 4 and 5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "produce_cash_startup": {
+          "description": "`ProduceCashStartup`, the acquisition bonus in credits (S-0515\nclaim 3, Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "repairable": {
           "description": "`Repairable`.",
           "type": [

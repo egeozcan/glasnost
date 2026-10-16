@@ -1,6 +1,6 @@
 //! The special abilities of the own AI (M6c; PLAN §4.7): garrisoning
-//! buildings (S-0508), engineers capturing buildings (S-0509) and spies
-//! infiltrating them (S-0510).
+//! buildings (S-0508), engineers capturing buildings (S-0509, tech buildings
+//! first: S-0515, `tech_buildings`) and spies infiltrating them (S-0510).
 //!
 //! Like everything the brain does, it uses an ability the way a person in
 //! its seat could, with no limit of attention or speed: it clicks (through
@@ -25,6 +25,7 @@ use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 use crate::scripted::{self, Script, all_types, dist2};
+use crate::tech_buildings;
 
 /// How far, in cells, from the house's home a garrison building is looked
 /// for.
@@ -47,6 +48,9 @@ pub struct Uses {
     pub engineers: u32,
     /// Spies sent to infiltrate a building (S-0510).
     pub spies: u32,
+    /// Engineers sent to take over a tech building held by a passive house
+    /// (S-0515; a subset of `engineers`).
+    pub tech: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -284,8 +288,9 @@ impl Special {
             let targets = Self::engineer_targets(w, house, id);
             let rank = |&(b, a): &(ObjectId, Action)| {
                 (
-                    // Capturing before repairing, then the nearest, never a building another engineer is bound for.
+                    // Capturing before repairing, a tech building that pays before the rest (S-0515), then the nearest, never a building another engineer is bound for.
                     a == Action::RepairBuilding,
+                    tech_buildings::rank(w, b),
                     taken.contains(&b) || Self::en_route(w, house, b) > 0,
                     w.obj(b).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)),
                     b,
@@ -302,12 +307,15 @@ impl Special {
                 out.extend(orders);
                 taken.push(b);
                 self.uses.engineers += 1;
+                if tech_buildings::passive_tech(w, b) {
+                    self.uses.tech += 1;
+                }
             }
         }
         if !any
             && let Some(t) = Self::buildable_infantry(w, house, |u| u.engineer)
             && !Self::has_or_makes(w, house, |id| engineer::is_engineer(w, id))
-            && Self::captureable_in_sight(w, house)
+            && (Self::captureable_in_sight(w, house) || tech_buildings::in_sight(w, house))
         {
             self.order_unit(script, w, t, out);
         }

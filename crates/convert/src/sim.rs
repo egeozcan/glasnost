@@ -465,6 +465,10 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("can_occupy_fire", "CanOccupyFire", Bool),
     ("capturable", "Capturable", Bool),
     ("needs_engineer", "NeedsEngineer", Bool),
+    // spec: S-0515 Import mapping (the three cash keys: acquisition bonus, income amount and income delay, integers; absent 0)
+    ("produce_cash_startup", "ProduceCashStartup", Int),
+    ("produce_cash_amount", "ProduceCashAmount", Int),
+    ("produce_cash_delay", "ProduceCashDelay", Int),
     ("immune_to_radiation", "ImmuneToRadiation", Bool),
     ("storage", "Storage", Int),
     ("spyable", "Spyable", Bool),

@@ -37,7 +37,37 @@ fn rules() -> Arc<SimRules> {
         "PLAIN".to_string(),
         "CAPT".to_string(),
         "SPYB".to_string(),
+        "DERR".to_string(),
+        "LAB".to_string(),
     ]);
+    r.registries
+        .entry("countries".into())
+        .or_default()
+        .push("Neutral".to_string());
+    r.sim.countries.insert(
+        "Neutral".into(),
+        glasnost_rules::sim::Country {
+            multiplay_passive: Some(true),
+            ..Default::default()
+        },
+    );
+    // S-0515: a tech building that pays (DERR) and one that only serves (LAB).
+    for (n, cash) in [("DERR", true), ("LAB", false)] {
+        r.sim.buildings.insert(
+            n.into(),
+            BuildingType {
+                strength: Some(400),
+                foundation: Some([1, 1]),
+                capturable: Some(true),
+                needs_engineer: Some(true),
+                tech_level: Some(99),
+                produce_cash_startup: cash.then_some(300),
+                produce_cash_amount: cash.then_some(25),
+                produce_cash_delay: cash.then_some(21),
+                ..Default::default()
+            },
+        );
+    }
     r.sim.infantry.insert(
         "GARRI".into(),
         UnitType {
@@ -528,5 +558,165 @@ fn orders_a_spy_when_it_has_none() {
     }
     let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
     let orders = brain.think(&w);
+    assert!(orders.iter().any(want), "{orders:?}");
+}
+
+/// The game with a passive Neutral house (house 2) next to the two players.
+fn game_with_neutral(seed: u32) -> Game {
+    let mut setup = fixture::setup(seed);
+    setup.houses.push(glasnost_sim::world::HouseSetup {
+        name: "Neutral".into(),
+        country: "Neutral".into(),
+        human: false,
+        start: None,
+        role: glasnost_sim::world::HouseRole::Neutral,
+        ai: false,
+    });
+    Game::new(
+        rules(),
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        setup,
+    )
+    .expect("the synthetic skirmish loads")
+}
+
+/// A world where house 0 has an idle engineer and a service-only tech
+/// building (LAB, nearer) and a paying one (DERR, farther) of the Neutral
+/// house in sight.
+fn tech_scene(g: &Game) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut w = g.world.clone();
+    let home = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+        .map(|o| o.pos.cell())
+        .expect("an object of house 0");
+    let neutral = w
+        .houses
+        .iter()
+        .position(|h| h.role == glasnost_sim::world::HouseRole::Neutral)
+        .expect("a neutral house") as u8;
+    let lab = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "LAB",
+        neutral,
+        glasnost_map::CellXY::new(home.x + 5, home.y + 5),
+        0,
+    );
+    let derr = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "DERR",
+        neutral,
+        glasnost_map::CellXY::new(home.x + 8, home.y + 8),
+        0,
+    );
+    let unit = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "ENGI",
+        0,
+        glasnost_map::CellXY::new(home.x + 3, home.y + 3),
+        0,
+    );
+    reveal(&mut w, 0, glasnost_map::CellXY::new(home.x + 7, home.y + 7));
+    testkit::run(&mut w, 2);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    (w, lab, derr, unit)
+}
+
+// S-0515, PLAN §4.7: an idle engineer is sent to the tech building that pays (its acquisition bonus and income) before a nearer one that only serves, and the capture pays the bonus.
+#[test]
+fn sends_an_engineer_to_a_paying_tech_building_first() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    let (mut w, lab, derr, unit) = tech_scene(&g);
+    for b in [lab, derr] {
+        assert!(glasnost_sim::econ::shroud::explored(
+            &w,
+            HouseId(0),
+            w.obj(b).unwrap().pos.cell()
+        ));
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(garrison_orders(&orders, unit, derr), "{orders:?}");
+    assert!(!garrison_orders(&orders, unit, lab));
+    let uses = brain.special_uses();
+    assert_eq!((uses.engineers, uses.tech), (1, 1));
+    let before = w.houses[0].credits;
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    for _ in 0..800 {
+        testkit::run(&mut w, 1);
+        if w.obj(unit).is_none() {
+            break;
+        }
+    }
+    assert_eq!(w.obj(derr).unwrap().owner, Some(HouseId(0)), "captured");
+    assert!(w.houses[0].credits >= before + 300, "the acquisition bonus");
+}
+
+// S-0515, PLAN §4.7: it takes the building that only serves when nothing pays, and sees only explored cells.
+#[test]
+fn takes_a_serving_tech_building_and_only_an_explored_one() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    let (mut w, lab, derr, unit) = tech_scene(&g);
+    glasnost_sim::objects::remove(&mut w, derr);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(garrison_orders(&orders, unit, lab), "{orders:?}");
+    // On an unexplored cell nothing is ordered.
+    let far = glasnost_map::CellXY::new(2, 2);
+    assert!(!glasnost_sim::econ::shroud::explored(&w, HouseId(0), far));
+    glasnost_sim::objects::remove(&mut w, lab);
+    let far_derr = testkit::spawn(&mut w, Kind::Building, "DERR", 2, far, 0);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!garrison_orders(&orders, unit, far_derr), "{orders:?}");
+}
+
+// S-0515, PLAN §4.7: with no engineer, a barracks and a seen tech building of the passive house, the house orders an engineer once.
+#[test]
+fn orders_an_engineer_for_a_tech_building() {
+    let mut g = game_with_neutral(5);
+    ready(&mut g);
+    let mut w = g.world.clone();
+    let home = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+        .map(|o| o.pos.cell())
+        .unwrap();
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PILL",
+        0,
+        glasnost_map::CellXY::new(home.x + 5, home.y),
+        0,
+    );
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "DERR",
+        2,
+        glasnost_map::CellXY::new(home.x + 8, home.y + 8),
+        0,
+    );
+    reveal(&mut w, 0, glasnost_map::CellXY::new(home.x + 8, home.y + 8));
+    w.houses[0].credits = 5000;
+    testkit::run(&mut w, 20);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let engi = w.rules().index_of(Kind::Infantry, "ENGI").unwrap();
+    let want = |o: &Order| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == engi);
+    let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
     assert!(orders.iter().any(want), "{orders:?}");
 }

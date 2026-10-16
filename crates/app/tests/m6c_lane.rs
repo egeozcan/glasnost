@@ -42,6 +42,7 @@ const SCENES: &[Scene] = &[
     ("garrison", garrison_and_evict),
     ("capture", engineer_captures),
     ("infiltrate", spy_infiltrates),
+    ("tech", engineer_takes_tech_building),
 ];
 
 #[test]
@@ -360,6 +361,109 @@ fn spy_infiltrates(lane: &mut Lane) {
         w.houses[usize::from(local.0)].infiltrated_infantry_factory,
     );
     lane.save("infiltrate-after");
+}
+
+/// S-0515: an engineer of the local house is sent into a cash-producing tech
+/// building of the neutral house (found by its rules fields, never by name:
+/// the needs-engineer flag with an income amount and delay) with the click a
+/// person gives; the capture pays the acquisition bonus, and the income
+/// follows at the building's cycles. Prints credits and ticks only.
+fn engineer_takes_tech_building(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let man = (0..r.infantry.len())
+        .find(|&i| r.infantry[i].engineer)
+        .map(|i| r.infantry[i].name.clone());
+    let tech = (0..r.buildings.len())
+        .filter(|&b| {
+            let x = &r.buildings[b].raw;
+            x.needs_engineer.unwrap_or(false)
+                && x.capturable.unwrap_or(false)
+                && x.produce_cash_amount.unwrap_or(0) > 0
+                && x.produce_cash_delay.unwrap_or(0) > 0
+                && r.buildings[b].foundation.0 > 0
+        })
+        .min_by_key(|&b| (r.buildings[b].foundation.0 * r.buildings[b].foundation.1, b))
+        .map(|b| {
+            let x = &r.buildings[b].raw;
+            (
+                r.buildings[b].name.clone(),
+                r.buildings[b].foundation,
+                (
+                    x.produce_cash_startup.unwrap_or(0),
+                    x.produce_cash_amount.unwrap_or(0),
+                    x.produce_cash_delay.unwrap_or(0),
+                ),
+            )
+        });
+    println!(
+        "engineer type found: {}, cash-producing tech type found: {}",
+        man.is_some(),
+        tech.is_some()
+    );
+    let (Some(man), Some((name, size, (bonus, amount, delay)))) = (man, tech) else {
+        return;
+    };
+    println!("bonus {bonus}, amount {amount}, delay {delay}");
+    let local = lane.local();
+    let neutral = (0..lane.world().houses.len())
+        .map(|i| HouseId(i as u8))
+        .find(|&h| {
+            lane.world().houses[usize::from(h.0)].role == glasnost_sim::world::HouseRole::Neutral
+        });
+    let Some(neutral) = neutral else {
+        println!("no neutral house");
+        return;
+    };
+    let home = lane.home();
+    let Some(at) = lane.area(CellXY::new(home.x + 8, home.y + 8), size, 2, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("no open ground");
+        return;
+    };
+    let b = lane.spawn(Kind::Building, &name, neutral, at);
+    let start = lane.open_land(CellXY::new(at.x - 6, at.y));
+    let e = lane.spawn(Kind::Infantry, &man, local, start);
+    lane.look_at(at);
+    lane.ticks(3);
+    let credits = |l: &Lane| l.world().houses[usize::from(l.local().0)].credits;
+    println!(
+        "credits before {}, tech building manned: {}",
+        credits(lane),
+        glasnost_sim::econ::power::manned(lane.world(), b)
+    );
+    lane.save("tech-before");
+    let sent = lane.order(local, e, ClickOn::Object(b));
+    println!("engineer at {start:?} sent at {at:?}, {sent} orders");
+    for _ in 0..1500 {
+        lane.ticks(1);
+        if lane.world().obj(e).is_none() {
+            break;
+        }
+    }
+    let captured = lane.world().tick;
+    lane.ticks(1);
+    println!(
+        "captured at tick {captured}: owner is the local house {}, manned {}, credits {}",
+        lane.world().obj(b).and_then(|o| o.owner) == Some(local),
+        glasnost_sim::econ::power::manned(lane.world(), b),
+        credits(lane)
+    );
+    lane.save("tech-captured");
+    let mut paid = Vec::new();
+    let mut last = credits(lane);
+    // Three income cycles after the capture.
+    for _ in 0..(delay.max(2) * 3 + 5) {
+        lane.ticks(1);
+        let now = credits(lane);
+        if now > last {
+            paid.push((lane.world().tick, now - last));
+        }
+        last = now;
+    }
+    println!("income payments (tick, credits): {paid:?}");
+    lane.save("tech-income");
 }
 
 // ---------------------------------------------------------------------------

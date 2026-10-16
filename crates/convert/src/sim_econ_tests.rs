@@ -564,6 +564,26 @@ fn spy_general_keys() {
     assert!(!warned("57%"));
 }
 
+// spec: S-0515 Import mapping (ProduceCashStartup, ProduceCashAmount and ProduceCashDelay: integers on a building type; absent: no value, read as 0; a later section that omits a key keeps the value in force)
+#[test]
+fn cash_keys_of_a_building_type() {
+    let base = "[BuildingTypes]\n0=DERRICK\n1=PLAIN\n[DERRICK]\nProduceCashStartup=1500\nProduceCashAmount=-5\nProduceCashDelay=11\n[PLAIN]\nStrength=100\n";
+    let (s, _) = import_with_map(base, "[DERRICK]\nProduceCashAmount=40\n");
+    let d = &s.buildings["DERRICK"];
+    assert_eq!(d.produce_cash_startup, Some(1500));
+    assert_eq!(d.produce_cash_amount, Some(40));
+    assert_eq!(d.produce_cash_delay, Some(11));
+    let p = &s.buildings["PLAIN"];
+    assert_eq!(
+        (
+            p.produce_cash_startup,
+            p.produce_cash_amount,
+            p.produce_cash_delay
+        ),
+        (None, None, None)
+    );
+}
+
 // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft, read for unit types; absent: no)
 #[test]
 fn considered_aircraft_flag() {
