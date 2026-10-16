@@ -1072,7 +1072,12 @@ impl Script {
         } else {
             SPIRAL_RINGS
         };
-        self.spiral(w, rings).find(|&c| self.fits(w, t, c))
+        // A cramped base (a start in a small clearing) has no cell with the
+        // usual gap: the gap narrows, as a person squeezes a building in
+        // when the room is short, down to none.
+        (0..=GAP)
+            .rev()
+            .find_map(|gap| self.spiral(w, rings).find(|&c| self.fits_gap(w, t, c, gap)))
     }
 
     /// The cells of the square spiral around the construction yard, ring by
@@ -1091,11 +1096,16 @@ impl Script {
     /// Whether a place order for `t` at `c` is legal, the cell test passes
     /// and the foundation is free.
     fn fits(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
+        self.fits_gap(w, t, c, GAP)
+    }
+
+    /// [`Script::fits`] with a gap of `gap` cells to other buildings.
+    fn fits_gap(&self, w: &World, t: TypeRef, c: CellXY, gap: i32) -> bool {
         // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12); an upgrade needs only the former.
         let upgrade = placement::place_type(w, t.index).upgrade_of.is_some();
         placement::place_legal(w, self.house, t, c)
             && (upgrade || placement::cell_test(w, t.index, c, &placement::Test::order(self.house)))
-            && self.free(w, t, c)
+            && self.free_gap(w, t, c, None, gap)
     }
 
     /// The water the base grows toward: when a naval factory type that the
@@ -1155,6 +1165,11 @@ impl Script {
 
     /// [`Script::free`], not counting object `but`.
     pub(crate) fn free_but(&self, w: &World, t: TypeRef, c: CellXY, but: Option<ObjectId>) -> bool {
+        self.free_gap(w, t, c, but, GAP)
+    }
+
+    /// [`Script::free_but`] with a gap of `gap` cells.
+    fn free_gap(&self, w: &World, t: TypeRef, c: CellXY, but: Option<ObjectId>, gap: i32) -> bool {
         let cells = placement::foundation_cells(w, t.index, c);
         // Only what the house knows: its own objects and those on cells it
         // has explored (the AI sees only its own house's shroud; fog is off
@@ -1173,14 +1188,99 @@ impl Script {
                 if o.kind == Kind::Building {
                     let (fw, fh) = o.foundation;
                     cells.iter().all(|k| {
-                        k.x < tl.x - GAP
-                            || k.x > tl.x + fw - 1 + GAP
-                            || k.y < tl.y - GAP
-                            || k.y > tl.y + fh - 1 + GAP
+                        k.x < tl.x - gap
+                            || k.x > tl.x + fw - 1 + gap
+                            || k.y < tl.y - gap
+                            || k.y > tl.y + fh - 1 + gap
                     })
                 } else {
                     !cells.contains(&tl)
                 }
             })
+    }
+
+    /// A diagnostic of the house's plan, counts only (local-lane reports):
+    /// whether it keeps its harvesters, for every role it lacks the cells
+    /// that the placement spiral turns down by stage, the enemies it has
+    /// seen and whether its army reaches them by the movement zone.
+    pub fn diagnose(&self, w: &World) -> String {
+        use std::fmt::Write as _;
+        let mut s = String::new();
+        let _ = write!(
+            s,
+            "selling {}, harvesters {}/{} (slave buildings {}), waiting since {:?}",
+            self.watch.selling,
+            self.of_role(w, Role::Harvester).len(),
+            self.plan.harvesters,
+            self.slave_buildings(w).len(),
+            self.waiting_since
+        );
+        let wanted = [Role::Power, Role::Refinery]
+            .into_iter()
+            .chain(FACTORIES.into_iter().map(Role::Factory));
+        for role in wanted {
+            let have = self.of_role(w, role).len();
+            let cands = self.candidates(w, role);
+            let _ = write!(
+                s,
+                "; {role:?}: have {have}, buildable types {}",
+                cands.len()
+            );
+            if have == 0
+                && let Some(&t) = cands.first()
+            {
+                let (mut cells, mut legal, mut test, mut free, mut bare) = (0, 0, 0, 0, 0);
+                for c in self.spiral(w, SPIRAL_RINGS) {
+                    cells += 1;
+                    let ok = placement::place_legal(w, self.house, t, c);
+                    legal += usize::from(ok);
+                    let t2 = ok
+                        && placement::cell_test(w, t.index, c, &placement::Test::order(self.house));
+                    test += usize::from(t2);
+                    free += usize::from(t2 && self.free(w, t, c));
+                    bare += usize::from(t2 && self.free_gap(w, t, c, None, 0));
+                }
+                let _ = write!(
+                    s,
+                    " (first type: of {cells} spiral cells {legal} legal, {test} pass the cell test, {free} also keep the gap, {bare} are free of objects)"
+                );
+            }
+        }
+        let enemies = self.seen_enemies(w);
+        let ebuild = enemies
+            .iter()
+            .filter(|&&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+            .count();
+        let _ = write!(
+            s,
+            "; seen enemies {} (buildings {ebuild}); army {}",
+            enemies.len(),
+            self.of_role(w, Role::Army).len()
+        );
+        let mut reach: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+        if let Some(home) = self.home(w) {
+            let mut probe = w.clone();
+            regions::ensure(&mut probe);
+            if let Some(&(_, goal)) = enemies.iter().min_by_key(|&&(_, c)| dist2(c, home)) {
+                for id in self.of_role(w, Role::Army) {
+                    let Some(o) = w.obj(id) else { continue };
+                    let Some(zone) = w.rules().unit(o.kind, o.type_index).map(|u| u.zone) else {
+                        continue;
+                    };
+                    let mine = regions::reach_in(&probe, o.pos.cell(), zone);
+                    let e = reach.entry(format!("{zone:?}")).or_default();
+                    e.0 += 1;
+                    e.1 += usize::from(
+                        matches!(mine, Reach::Region(_))
+                            && mine == regions::reach_in(&probe, goal, zone),
+                    );
+                }
+            }
+        }
+        let _ = write!(
+            s,
+            "; army reaching the nearest seen enemy, by zone (units, reaching): {reach:?}"
+        );
+        s
     }
 }

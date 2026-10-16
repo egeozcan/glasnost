@@ -152,6 +152,28 @@ fn defends_the_base() {
     }
 }
 
+// A base in a clearing too small for the usual gap between buildings still
+// gets every building it needs: the gap narrows, as a person squeezes a
+// building in when the room is short (M6c step 2d: on two stock maps both
+// houses stood with credits in the bank and no war factory, because no cell
+// of the placement spiral kept the gap).
+#[test]
+fn builds_every_building_in_a_cramped_base() {
+    let mut g = Game::new(
+        fixture::rules(),
+        &fixture::map_cramped(5),
+        "synthetic-cramped",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the cramped skirmish loads");
+    assert!(step_until(&mut g, 6000, |w| (0..2).all(|h| {
+        ["YARD", "POWR", "PROC", "PILL", "FACT"]
+            .iter()
+            .all(|n| !of(w, h, n).is_empty())
+    })));
+}
+
 // S-0503: the hovercraft is army of the land vehicle factory once a naval
 // yard and a lab stand. The army rotates through the types of its kind, so
 // the hovercraft is built among the others. This is the claim the whole

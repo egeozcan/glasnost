@@ -106,8 +106,14 @@ struct Game {
     loads: usize,
     unloads: usize,
     launches: usize,
+    /// The launches by superweapon kind (the kind names of the simulation).
+    launches_by_kind: BTreeMap<String, usize>,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
+    /// Counts-only state of a game that is not over at the end (the own
+    /// AI's games): per house its objects by kind, the resource left on the
+    /// map and the brain's own diagnostic.
+    diagnosis: Vec<String>,
     replay_ms: u128,
     replay_matches: bool,
     save_matches: bool,
@@ -505,13 +511,15 @@ fn play_ai(
                     .is_some_and(|r| r.granted && r.ready && !r.suspended)
             })
             .collect();
-        g.launches += ready_before
-            .difference(&ready_now)
-            .filter(|&&(h, i)| {
-                glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
-                    .is_some_and(|r| r.granted)
-            })
-            .count();
+        for &(h, i) in ready_before.difference(&ready_now) {
+            if glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
+                .is_some_and(|r| r.granted)
+            {
+                g.launches += 1;
+                let kind = w.rules().superweapons.types[i].kind;
+                *g.launches_by_kind.entry(format!("{kind:?}")).or_default() += 1;
+            }
+        }
         ready_before = ready_now;
         features(w, &mut g.features);
         if trace > 0 && w.tick % trace == 0 {
@@ -594,6 +602,9 @@ fn play_ai(
             }
         }
     }
+    if !g.over {
+        g.diagnosis = diagnosis(&game);
+    }
     let end = game.state_hash();
     if std::env::var_os("GLASNOST_AI_QUICK").is_some() {
         // A diagnostic run: no replay, no save check.
@@ -623,6 +634,48 @@ fn play_ai(
     }
     g.save_matches = same_at_save && loaded.state_hash() == end;
     Ok(())
+}
+
+/// The state of a game that did not end, counts only: per player house its
+/// buildings and units by kind (and the units by movement zone), the
+/// resource cells and bales left on the whole map, and the brain's own
+/// diagnostic.
+fn diagnosis(game: &AiGame) -> Vec<String> {
+    let w = &game.world;
+    let mut out = Vec::new();
+    let mut cells = 0usize;
+    let mut worth = 0i64;
+    for (c, _) in w.cells.grid.iter() {
+        let v = glasnost_sim::econ::resource::worth(w, c);
+        if v > 0 {
+            cells += 1;
+            worth += v;
+        }
+    }
+    out.push(format!(
+        "resource left on the map: {cells} cells, worth {worth}"
+    ));
+    for (h, line) in game.diagnose() {
+        let me = Some(h);
+        let mut kinds: BTreeMap<String, usize> = BTreeMap::new();
+        for o in w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.owner == me)
+        {
+            let zone = w
+                .rules()
+                .unit(o.kind, o.type_index)
+                .map_or(String::new(), |u| format!("/{:?}", u.zone));
+            *kinds.entry(format!("{:?}{zone}", o.kind)).or_default() += 1;
+        }
+        out.push(format!(
+            "house {} credits {}; objects {kinds:?}; {line}",
+            h.0,
+            w.houses[usize::from(h.0)].credits
+        ));
+    }
+    out
 }
 
 /// A diagnostic timeline of the player houses at this tick: credits, army
@@ -1012,8 +1065,15 @@ fn report(
         if players != Players::Scripted {
             let _ = writeln!(
                 s,
-                "  transports: {} loads, {} unloads; superweapon launches: {}",
-                g.loads, g.unloads, g.launches
+                "  transports: {} loads, {} unloads; superweapon launches: {}{}",
+                g.loads,
+                g.unloads,
+                g.launches,
+                if g.launches_by_kind.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (by kind: {:?})", g.launches_by_kind)
+                }
             );
         }
         let f: Vec<String> = g
@@ -1030,6 +1090,9 @@ fn report(
                     .collect();
                 let _ = writeln!(s, "  house {h} army at the end: {}", v.join(", "));
             }
+        }
+        for line in &g.diagnosis {
+            let _ = writeln!(s, "  diagnosis: {line}");
         }
         if g.checks_skipped {
             let _ = writeln!(s, "  replay and save checks skipped (GLASNOST_AI_QUICK)");

@@ -151,6 +151,12 @@ impl Brain {
         self.script.house
     }
 
+    /// A counts-only diagnostic of the brain's state (local-lane reports,
+    /// see [`Script::diagnose`]).
+    pub fn diagnose(&self, w: &World) -> String {
+        self.script.diagnose(w)
+    }
+
     /// Thinks at the start of the world's current tick; returns the orders
     /// to issue, in the order to issue them (a later order to the same unit
     /// replaces an earlier one, so the reactions come last).

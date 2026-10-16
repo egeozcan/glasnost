@@ -116,6 +116,14 @@ impl Game {
         victory::outcome(&self.world)
     }
 
+    /// A counts-only diagnostic line per AI house (local-lane reports).
+    pub fn diagnose(&self) -> Vec<(HouseId, String)> {
+        self.brains
+            .iter()
+            .map(|b| (b.house(), b.diagnose(&self.world)))
+            .collect()
+    }
+
     /// The AI houses.
     pub fn ai_houses(&self) -> Vec<HouseId> {
         self.brains.iter().map(Brain::house).collect()
