@@ -2,11 +2,11 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 53
+revision: 54
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983]
 supersedes: []
@@ -37,7 +37,10 @@ Terms from the glossary are used as defined there, in particular *tick*, *game m
 *scenario random stream*, *rules layer*, *game-wide section*, *game start*, *recorder*, *measurement
 setup*, *departure*, *importer warning*, *quirk switch*, *unspecified* and *round-toward-zero mode*.
 *Sequence kind*, *interruptible*, *deploy kinds*, *frame count* and *idle action* are used as S-0107
-defines them. *Turn* and *turn pass* are used as S-0203 (tick order) defines them.
+defines them. *Turn* and *turn pass* are used as S-0203 (tick order) defines them. *Pending
+suppression* is S-0207 claim 27's point suppression that has not yet been consumed: a one-application
+skip of the next otherwise due nonempty point application. It is not the unchanged-destination
+suppression of S-0502.
 
 Other specs cited: S-0001, S-0003, S-0006, S-0007, S-0009, S-0105, S-0107, S-0202 (random
 streams), S-0203 (tick order), S-0204 (coordinates, distance and facing), S-0205 (number domains),
@@ -506,7 +509,10 @@ Terms used by this spec:
    - its processing timer has expired,
    - it is not an infantry unit or vehicle travelling through a tunnel,
    - it is not an infantry unit or vehicle that is being erased, or that is in the leaving stage of a
-     chrono move (Terms). Such an actor also drops its target and destination on each such tick,
+     chrono move (Terms). Such an actor also drops its target on each such tick, and drops its
+     destination on each such tick, except that a vehicle under a pending point suppression
+     (S-0207 claim 27) keeps its destination, whether it is being erased or in the leaving stage.
+     The target is dropped in every case, and the exclusion from processing is unchanged,
    - it is not a landed aircraft being erased. Such an aircraft drops its target and destination
      and skips ordinary movement, turning, firing and behaviour processing for that turn
      (S-0514 claim 17). This does not exclude its erasure update or presentation effects.
@@ -568,6 +574,10 @@ Terms used by this spec:
      and locomotor phase-in not excluding processing, and the composed field-arrival timing); low
      (the second-turn case and
      matching the original's unresolved superweapon-warp continuation)
+   - Pending-suppression exception (the vehicle clause of the erasing and leaving-stage bullet):
+     Backing: `unmeasured`. S-0207 claim 27 finds its reachability not established (its Reachability
+     paragraph and its table row for a suppressed vehicle in any state, including one being erased),
+     and no scenario here creates the state. Confidence: medium (the rule as S-0207 claim 27 states it).
 
 3. **A behaviour start is processed at once, unless the processing that caused it chooses later.**
    A behaviour start (start-next, claim 8, or force, claim 9) sets the processing timer to "expired
@@ -4238,7 +4248,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   processing tick at least every 2 ticks, and one in *area guard* at least every 5).
   (a) Chrono move: an armed vehicle of the human-controlled house in *guard* is moved by the
   chronosphere. Expected in the original: during its leaving stage the processing timer's expiry
-  does not move forward and target and destination are empty. Record due behaviour actions
+  does not move forward and target and destination are empty, unless a pending point suppression
+  keeps the destination (claim 2; this scenario sets none). Record due behaviour actions
   separately on pending, departure, retry, placement, arrival-effects and arrival-hold turns,
   including hold expiry. Original continuation on those turns remains unmeasured under
   S-0513 claim 48; use its scenario SW23 parts a to e to distinguish the alternatives rather
@@ -4255,7 +4266,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   spec. During phase-in processing continues at least every 5 ticks, whichever of *move*,
   *guard* or *area guard* is current. (b) Erasing: the same vehicle without a chrono move is locked onto by an erasing
   weapon; expected no processing tick from the lock-on until it is removed (or let go), and target
-  and destination empty on those ticks. (c) A test map with a tunnel: an infantry unit and a
+  and destination empty on those ticks, unless a pending point suppression keeps the destination
+  (claim 2; this scenario sets none). (c) A test map with a tunnel: an infantry unit and a
   vehicle ordered through it show no processing tick while inside. Falsified by a processing tick
   during the leaving stage, while being erased or inside the tunnel, or by a gap of more than 5
   ticks between processing ticks during a locomotor jump's phase-in. The original's superweapon
