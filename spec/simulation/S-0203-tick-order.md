@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -532,7 +532,7 @@ phases. Their backing, confidence and proposed measurements remain those of the 
 7. **Orders take effect after the turn pass.** In a single-player game an order that the player
    gives in the cycle that runs tick *n* (S-0201, *cycle*) takes effect after every object's turn
    in tick *n* and after the production lines of tick *n* (claim 8), and before any object's turn in
-   tick *n* + 1, if that next tick runs. The objects it concerns first act on it in their turns of
+   tick *n* + 1, if that next tick runs. The objects it concerns first take ordinary turns on it in
    tick *n* + 1; orders in the final tick still take effect, but there is no next turn (S-0414
    claims 8 and 16). How several
    orders of the same tick are ordered among themselves is S-0213, claim 3. The drawn frame made
@@ -542,6 +542,19 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    surrender destruction until the next tick's house update (S-0414 claim 11). Another consequence
    is the draw order of claim 1: carrying out an order can take draws from the scenario random
    stream (for example by creating objects or firing a superweapon), and so can a house's update.
+
+   **Immediate target-change effects.** Waiting for the next ordinary turn does not defer
+   event-driven effects. Under S-0519 claim 19, changing or losing a designator's target
+   cancels its strike when that change applies, even after the designator has taken its
+   turn. Thus a target lost during a later object's turn cancels in that event's tick.
+   An applied order changing the target in row 8 likewise cancels in row 8 of that tick.
+   The aircraft's cancellation effects do not wait for the designator's next turn,
+   another designation impact or a shared strike pass. Aircraft behaviour processing
+   still follows its own ordinary opportunities. Reapplying the same target does not
+   cancel; changing from A to B and back to A does not undo either cancellation.
+   - Backing for these event effects: `measurable` (S-0519 scenario T19)
+   - Confidence for these event effects: high
+
    - Backing: `measurable` (scenario O2 for the turn pass; scenario O7, part C, for the production
      lines; O13 for the drawing order after row 5; S-0414 scenario V8 for surrender after the
      houses, and V12 part c for orders in the final tick); O16 part D for row-7 tag-action
@@ -886,6 +899,17 @@ A timer-driven planted-bomb release belongs on the excluded, turn-pass side of t
 comparison, not before the cycle. A pre-cycle release fixture would need a distinct
 cause before row 17, not the timed-bomb countdown. End-of-tick samples alone do not
 establish the boundary; an unresolved sub-tick comparison is inconclusive.
+
+**Designator target-change boundary (claim 7).** S-0519 scenario T19 supplies the
+skirmish setup, scripted ordinary input and read-only recording of aircraft ammunition,
+targets, destinations and queued behaviour. Its move-order test expects cancellation in
+the order's application tick, after the turn pass here; its later-turn target-death test
+expects cancellation in the killing tick even though the designator has already acted.
+Record the event boundary and cancellation effects, not merely the next aircraft movement.
+Deferral to the next designator turn falsifies this boundary. The same-target control must
+not cancel; a recorded A-to-B-to-A sequence must not restore the old attack state. Coalesced
+orders or an unresolved event boundary make the corresponding comparison inconclusive.
+Run counts and settings remain those of T19.
 
 **Common setup.** All scenarios run under the glossary's *measurement setup*, as skirmish games on
 purpose-made maps, at game speed index 6, with director and mods off except the named test data.
