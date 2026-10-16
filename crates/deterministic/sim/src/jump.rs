@@ -263,6 +263,17 @@ pub fn destination_cleared(w: &mut World, id: ObjectId) {
     stop_ordered(w, id);
 }
 
+/// The factory ascent report's direct discard of the order-level destination
+/// (S-0417 claim 15): the locomotor's movement point, commitment and flight
+/// continue; this is not claim 24's effective clear and reroutes nothing.
+pub fn discard_order_destination(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id) {
+        o.dest = None;
+    }
+    // spec: S-0417 claim 15 and S-0502 claim 24 (the discard is no assignment the locomotor takes: the point and the commitment stay)
+    upd(w, id, |j| j.order = None);
+}
+
 /// Whether the unit is held by magnetic lift (*seized*, S-0607 Terms).
 /// Seam: magnetic lift is not built, so no unit is ever seized.
 pub fn seized(w: &World, id: ObjectId) -> bool {

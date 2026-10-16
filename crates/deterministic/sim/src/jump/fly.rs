@@ -206,10 +206,20 @@ fn grounded_outcome(w: &mut World, id: ObjectId) {
 }
 
 fn ascending_outcome(w: &mut World, id: ObjectId) {
+    let h = adjusted_height(w, id);
+    if let Some(j) = st(w, id)
+        && w.obj(id).is_some_and(|o| o.contact.is_some())
+    {
+        // spec: S-0417 claim 15 and S-0502 claim 7 (the factory ascent report: the integer window trunc(ht / q) < h < ht after this update's physics, q = 2 for a balloon-hover vehicle and 4 otherwise; with the design fallback, the update in which h reaches or passes ht reports too)
+        let q = if balloon_vehicle(w, id) { 2 } else { 4 };
+        let ht = j.ht;
+        if (ht / q < h && h < ht) || h >= ht {
+            crate::econ::release::ascent_report(w, id);
+        }
+    }
     let Some(f) = fields(w, id) else { return };
     let Some(j) = st(w, id).cloned() else { return };
     let r = height_above(w, id);
-    let h = adjusted_height(w, id);
     // spec: S-0502 claim 7 (one quarter of the target height, one half for a balloon-hover vehicle, each truncated toward zero)
     let threshold = if balloon_vehicle(w, id) {
         j.ht / 2

@@ -1510,6 +1510,60 @@ fn report(w: &mut World, id: ObjectId) -> Option<ObjectId> {
     Some(e.factory)
 }
 
+/// The clear report of a released jumpjet unit climbing away from its
+/// factory (S-0417 claim 15, S-0502 claim 7): contact and tether end in the
+/// same update, then the saved guard spot becomes the destination or the
+/// order-level destination is discarded and a forced scatter request is made.
+/// The caller tests the height window.
+pub fn ascent_report(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    // spec: S-0417 claim 15 (an infantry unit or vehicle using jumpjet locomotion)
+    if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) || !crate::jump::is_jumpjet(w, id) {
+        return;
+    }
+    // spec: S-0417 claim 15 (its type is marked as jumpjet or balloon-hover; the importer keys JumpJet and BalloonHover)
+    let flagged = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.jumpjet || u.raw.balloon_hover.unwrap_or(false));
+    if !flagged {
+        return;
+    }
+    let Some(e) = o.econ.exit else { return };
+    // spec: S-0417 claim 15 (still in contact with a vehicle factory or a building with one of the barracks door kinds)
+    if o.contact != Some(e.factory) {
+        return;
+    }
+    let door = building_rules(w, e.factory).is_some_and(|b| {
+        let x = &b.raw.econ;
+        x.door_first == Some(true) || x.door_second == Some(true) || x.door_third == Some(true)
+    });
+    if !(vehicle_factory(w, e.factory) || door) {
+        return;
+    }
+    // spec: S-0417 claim 15 (both factory contact and the tether end in this unit update; no foundation, distance or arrival test)
+    report(w, id);
+    if let Some(gs) = o.guard_spot
+        && o.dest != Some(gs)
+    {
+        // spec: S-0417 claim 15 (a saved guard spot different from the order-level destination becomes the destination)
+        super::assign_destination(w, id, Some(gs));
+        return;
+    }
+    // spec: S-0417 claim 15 (otherwise the order-level destination is discarded without stopping the jumpjet locomotion: the movement point and commitment stay)
+    crate::jump::discard_order_destination(w, id);
+    // spec: S-0417 claim 15 (then a forced scatter request without a threat point, not move-anywhere; S-0207 claim 16, S-0208 claims 11 to 13)
+    crate::scatter::request(
+        w,
+        id,
+        ScatterRequest {
+            threat: None,
+            forced: true,
+            anywhere: false,
+        },
+    );
+}
+
 /// Whether cell `c` holds a building (S-0417 claims 7 and 8).
 fn building_cell(w: &World, c: CellXY) -> bool {
     w.cells
