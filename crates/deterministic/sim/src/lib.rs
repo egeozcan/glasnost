@@ -47,6 +47,7 @@ pub mod passability;
 pub mod path;
 pub mod process;
 pub mod radiation;
+pub mod refresh;
 pub mod regions;
 pub mod rng;
 pub mod rocket;

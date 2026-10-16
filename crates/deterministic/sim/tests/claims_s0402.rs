@@ -881,6 +881,46 @@ fn claims_8_10_quirk_non_unloading_refinery_off() {
     assert_eq!(harvest::load(&w, h), vec![5, 0]);
 }
 
+// spec: S-0402 claim 10 row 2 (revision 26) and S-0207 claim 27: the docking cell is offered at each processing of enter; a changed offer, or an unchanged one under pending refresh, reaches the dock test, and for a qualified teleport-capable harvester that is not teleporting the fallback installs the order-level cell destination without its movement point and leaves refresh pending; an ordinary harvester takes the destination and its point and docks
+#[test]
+fn claim_10_row_2_offers_reach_the_dock_test() {
+    let mut r = ruleset();
+    // CHRONO here drives (its type has the teleport-capable flag, its current locomotor is not teleporting).
+    r.sim.vehicles.get_mut("CHRONO").unwrap().econ.dock = Some(vec!["REFN".into()]);
+    let mut w = game(&r);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "CHRONO", 0, at(-2, 5), 0);
+    let ordinary = place_vehicle(&mut w, "HARV", 0, at(2, 5), 0);
+    for u in [h, ordinary] {
+        w.obj_mut(u).unwrap().econ.harvest = Some(HarvestState {
+            load: vec![5, 0],
+            phase: Phase::Returning,
+            ..Default::default()
+        });
+        harvest_now(&mut w, u);
+    }
+    until(&mut w, 300, |w| {
+        w.obj(h).unwrap().econ.refresh && w.obj(h).unwrap().contact == Some(refn)
+    })
+    .expect("the fallback");
+    let o = w.obj(h).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(dock_cell())));
+    assert_eq!(o.drive.as_ref().unwrap().goal, None, "its point is skipped");
+    // Every later offer is an effective assignment under refresh and tests again: refresh stays, the point stays skipped.
+    for _ in 0..60 {
+        testkit::run(&mut w, 1);
+        let o = w.obj(h).unwrap();
+        assert!(o.econ.refresh);
+        assert_eq!(o.drive.as_ref().unwrap().goal, None);
+    }
+    // The ordinary harvester docks.
+    until(&mut w, 800, |w| {
+        current(w, ordinary) == Some(Behaviour::Unload)
+    })
+    .expect("unload");
+    assert!(!w.obj(ordinary).unwrap().econ.refresh);
+}
+
 // spec: S-0402 claim 10 row 1 (switched off: refused; not tethered, contact broken off and rest; tethered, contact kept)
 #[test]
 fn claim_10_row_1_refusal() {

@@ -263,6 +263,17 @@ pub fn destination_cleared(w: &mut World, id: ObjectId) {
     stop_ordered(w, id);
 }
 
+/// The factory ascent report's direct discard of the order-level destination
+/// (S-0417 claim 15): the locomotor's movement point, commitment and flight
+/// continue; this is not claim 24's effective clear and reroutes nothing.
+pub fn discard_order_destination(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id) {
+        o.dest = None;
+    }
+    // spec: S-0417 claim 15 and S-0502 claim 24 (the discard is no assignment the locomotor takes: the point and the commitment stay)
+    upd(w, id, |j| j.order = None);
+}
+
 /// Whether the unit is held by magnetic lift (*seized*, S-0607 Terms).
 /// Seam: magnetic lift is not built, so no unit is ever seized.
 pub fn seized(w: &World, id: ObjectId) -> bool {
@@ -714,7 +725,10 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     let dest = o.dest;
     // spec: S-0502 claim 24 (Q-1030, revision 7: an infantry unit of a jumpjet type has no unchanged-destination suppression: repeating a nonempty destination repeats the movement-point adjustment and its draw, and an empty-to-empty assignment is an effective clear; only a vehicle ignores an unchanged order-level destination; equality is the same cell or the same object); S-0213 claim 21
     let infantry = o.kind == Kind::Infantry;
+    // spec: S-0502 claim 27 and S-0207 claim 27 (pending destination refresh makes an unchanged vehicle assignment effective)
+    let refreshed = crate::refresh::pending(w, id);
     if !infantry
+        && !refreshed
         && st(w, id)
             .is_some_and(|j| j.order == dest && !(dest.is_some() && !j.moving && j.dest.is_none()))
     {
@@ -728,7 +742,12 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     }
     upd(w, id, |j| j.order = dest);
     match dest {
-        Some(t) => order_point(w, id, t),
+        Some(t) => {
+            // spec: S-0207 claim 27 and S-0502 claim 27 (the one-application suppression skips this nonempty movement point; the order-level destination changes without it)
+            if !crate::refresh::skip_point(w, id) {
+                order_point(w, id, t);
+            }
+        }
         None => {
             // spec: S-0502 claims 16, 17 and 24 (an effective order-level destination clear is not claim 16's direct no-point instruction: for a jumpjet with a movement commitment, whatever caused the clear, it invokes claim 17's reroute, which assigns a replacement movement point; with none, claim 17 does nothing; Q-1012 answered by revision 6)
             stop_with(w, id, false);
@@ -967,9 +986,13 @@ pub fn stop_ordered(w: &mut World, id: ObjectId) {
     if !is_jumpjet(w, id) {
         return;
     }
-    // spec: S-0502 claims 24, 27 and 28 and S-0213 claims 8 and 21 (a redundant assignment is not an effective clear: an ordinary jumpjet vehicle ignores an unchanged order-level destination, empty-to-empty included, so no reroute happens and the preceding movement point and commitment survive; an infantry unit has no such suppression and reroutes again while its commitment lasts; the destination-refresh state's only activations are the placement interval, in which our placement makes no assignment, and the qualified dock fallback, which our engine does not reach: Q-1090; the balloon-hover rejection is `clear_rejected`, made before this call)
-    if vehicle(w, id) && st(w, id).is_some_and(|j| j.order.is_none()) {
+    // spec: S-0502 claims 24, 27 and 28 and S-0213 claims 8 and 21 (a redundant assignment is not an effective clear: an ordinary jumpjet vehicle ignores an unchanged order-level destination, empty-to-empty included, so no reroute happens and the preceding movement point and commitment survive; an infantry unit has no such suppression and reroutes again while its commitment lasts; pending destination refresh makes the repeat effective (S-0207 claim 27, answers Q-1090) and this assignment consumes it; the balloon-hover rejection is `clear_rejected`, made before this call)
+    let refreshed = crate::refresh::pending(w, id);
+    if vehicle(w, id) && !refreshed && st(w, id).is_some_and(|j| j.order.is_none()) {
         return;
+    }
+    if refreshed && let Some(o) = w.obj_mut(id) {
+        o.econ.refresh = false;
     }
     // The order-level destination is empty, so the locomotor has nothing new to take from it.
     upd(w, id, |j| j.order = None);

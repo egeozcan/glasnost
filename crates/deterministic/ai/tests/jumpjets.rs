@@ -40,6 +40,8 @@ fn rules() -> Arc<SimRules> {
         jumpjet_height: Some(300),
         ..Default::default()
     };
+    // The barracks has a door kind, as every real one has: only such a building qualifies for S-0417 claim 15's ascent report.
+    r.sim.buildings.get_mut("PILL").unwrap().econ.door_first = Some(true);
     r.sim.infantry.insert("JETI".into(), jumper(true));
     r.sim.infantry.insert("JETX".into(), jumper(false));
     Arc::new(SimRules::new(&r, "synthetic-skirmish"))
@@ -214,9 +216,9 @@ fn a_wave_sends_its_jumpjets_across() {
     );
 }
 
-// S-0417 claim 10 (a jumpjet's factory contact and tether end at no established event), PLAN §4.7, Q-1070: with no jumpjet unit, a barracks and a seen enemy no walking unit reaches, the house does not order a jumpjet unit from its sidebar (it would stay tethered to its barracks and close it for good), however much it has to spend, and its army builder never picks the type.
+// spec: S-0417 claim 15 (answers Q-1070: a released jumpjet unit ends its factory contact and tether in its ascent, so no interim hold remains), PLAN §4.7: with no jumpjet unit, a barracks and a seen enemy no walking unit reaches, the house orders a jumpjet unit from its sidebar like a person, builds it, and the barracks is free for the next unit once the unit has climbed away.
 #[test]
-fn orders_no_jumpjet_unit_that_would_jam_its_factory() {
+fn builds_a_jumpjet_unit_and_its_factory_stays_free() {
     let mut g = game(5);
     ready(&mut g);
     let (mut w, jet, _) = scene(&g);
@@ -241,20 +243,46 @@ fn orders_no_jumpjet_unit_that_would_jam_its_factory() {
         kind: Kind::Infantry,
         index: idx,
     };
-    assert!(glasnost_ai::scripted::jams_factory(&w, t));
     assert!(glasnost_sim::econ::tech::buildable(&w, HouseId(0), t));
     let mut brain = Brain::new(&w, &fixture::map_strait(), HouseId(0));
-    for _ in 0..40 {
+    let mut ordered = false;
+    let mut built: Option<ObjectId> = None;
+    let mut freed = false;
+    'run: for _ in 0..400 {
         let orders = brain.think(&w);
-        assert!(
-            !orders.iter().any(
-                |o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == idx)
-            ),
-            "{orders:?}"
+        ordered |= orders.iter().any(
+            |o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == idx),
         );
         for o in orders {
             glasnost_sim::orders::issue(&mut w, HouseId(0), o);
         }
-        testkit::run(&mut w, 15);
+        for _ in 0..15 {
+            testkit::run(&mut w, 1);
+            if built.is_none() {
+                built = w
+                    .objects
+                    .values()
+                    .find(|o| {
+                        o.owner == Some(HouseId(0))
+                            && o.kind == Kind::Infantry
+                            && o.type_index == idx
+                            && o.on_map
+                    })
+                    .map(|o| o.id);
+            }
+            if let Some(u) = built
+                && w.obj(u)
+                    .is_some_and(|o| o.contact.is_none() && o.econ.exit.is_none())
+            {
+                // The link ended while the unit was still climbing: the ascent report, not an arrival or an order.
+                freed = glasnost_sim::jump::phase(&w, u)
+                    == Some(glasnost_sim::jump::Phase::Ascending)
+                    && w.height_above_surface(u) > 0;
+                break 'run;
+            }
+        }
     }
+    assert!(ordered, "the house orders the jumpjet unit");
+    assert!(built.is_some(), "the unit is built and released");
+    assert!(freed, "its factory contact and tether ended");
 }

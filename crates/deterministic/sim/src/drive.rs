@@ -169,12 +169,50 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
         return;
     }
     let dest = o.dest;
+    // spec: S-0207 claim 27 (the one-application suppression skips a nonempty point: the order-level destination changes without a new locomotor destination point; claim 25's driving point is covered equally)
+    if dest.is_some() && given && crate::refresh::skip_point(w, id) {
+        if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
+            d.for_dest = dest;
+        }
+        return;
+    }
     // spec: S-0207 claim 25 (an accepted instruction with a point replaces the old one; one with no point, or a stop that removes the order destination, leaves it absent)
     let goal = dest.and_then(|t| supplied_point(w, id, t));
     if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
         d.for_dest = dest;
         d.goal = goal;
     }
+}
+
+/// The locomotor destination point goes absent at once (S-0207 claim 25,
+/// claim 27's fallback stop); a begun track finishes.
+pub fn stop_point(w: &mut World, id: ObjectId) {
+    if let Some(d) = w.obj_mut(id).and_then(|o| o.drive.as_mut()) {
+        d.goal = None;
+    }
+}
+
+/// The driving movement report of a vehicle with a driving locomotor
+/// (S-0207 claim 27, S-0417 claim 5): true unless there is no locomotor
+/// destination point and no heading point horizontally different from the
+/// vehicle's actual position. With `assigning`, only the stored point
+/// counts (a destination being assigned has not been taken yet).
+pub fn movement_report(w: &World, id: ObjectId, assigning: bool) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(d) = o.drive.as_ref() else {
+        return false;
+    };
+    let point = if assigning {
+        d.goal.is_some()
+    } else {
+        goal_present(w, id)
+    };
+    // spec: S-0207 claim 27 (the heading point is the track's target; horizontally different from the actual position)
+    let heading = d
+        .track
+        .as_ref()
+        .is_some_and(|t| t.target != (o.pos.x, o.pos.y));
+    point || heading
 }
 
 /// Whether the driving or ship locomotor destination point is present

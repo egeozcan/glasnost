@@ -145,6 +145,15 @@ pub struct ObjectEcon {
     /// A slave's own state: its master and its load (S-0402 claim 14).
     #[serde(default)]
     pub slave: Option<slaves::SlaveState>,
+    /// The vehicle's destination-refresh state (S-0207 claim 27, S-0502
+    /// claim 27): an otherwise eligible destination assignment is effective
+    /// even when it repeats the destination. Absent at creation.
+    #[serde(default)]
+    pub refresh: bool,
+    /// The vehicle's pending suppression of one nonempty movement-point
+    /// application (S-0207 claim 27). Absent at creation.
+    #[serde(default)]
+    pub point_suppression: bool,
 }
 
 /// The world's economy state (M5a), one field per topic.
