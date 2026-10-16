@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -123,7 +123,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 - **Slave miner, slave.** A vehicle type that both gathers and processes resources and controls a
   group of infantry *slaves* of the type its enslaves field names (S-0215 calls them the slave
   master and its harvesting slaves). It can deploy into a building that keeps controlling them.
-- **Chrono miner.** A harvester whose type has the teleporter flag: it moves by teleporting.
+- **Chrono miner.** A harvester whose type has the teleporter flag. Its travel is teleporting
+  only while its active locomotion is teleporting. A vehicle-factory-built miner can instead
+  retain temporary driving locomotion for its first field leg (claim 17; S-0417 claim 16).
 - **Group update.** The slave group's periodic opportunity to regenerate, restore or release
   slaves and to reconsider the master's movement (claim 21). Its group states are *at rest*,
   *field seeking*, *travelling*, *retrying deployment* and *working* (claim 22). *Working*
@@ -453,8 +455,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    qualifies, so the result comes from ring 1 or beyond: on open level ground, the cell
    (*x*₀, *y*₀ − 1) above the top-left cell.
 
-   A chrono miner always moves in the last case, even at 768 leptons or less (it teleports,
-   claim 17).
+   A chrono miner always moves in the last case, even at 768 leptons or less. Its active
+   locomotion determines whether that travel teleports or drives (claim 17).
    While a harvester is driving in this phase it does not re-choose, except a chrono miner (claim
    17). The phase takes no draws other than the standard delay's; the search takes none.
    - Backing: `measurable` (scenario H4 parts a, b and f, H8 part f for the chrono miner, and H11
@@ -497,7 +499,14 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     refresh is ignored before that test, even when contact or cell occupancy has changed.
     Acquiring contact alone does not trigger the test. For a qualified chrono miner
     currently using non-teleporting locomotion, that claim determines restoration of a
-    suspended predecessor versus fallback. The non-restorable fallback stops locomotion,
+    suspended predecessor versus fallback. On qualified successful restoration of teleporting
+    locomotion, the restored movement receives that same assignment's otherwise due point,
+    fixing its landing point under S-0207 claim 20. Eligibility uses the driving points already
+    present, not the offered new point. Unless already-pending point suppression or that claim's
+    disabling states prevent it, the miner jumps at its next teleporting movement update,
+    possibly in the same tick. Restoration itself requires neither a preliminary driving leg
+    nor a second offer, and enables neither refresh nor point suppression.
+    The non-restorable fallback stops locomotion,
     clears the current behaviour and queues *enter* without an immediate start. Normally
     that same assignment installs the order-level cell destination but suppresses its
     locomotor movement point, consuming point suppression while leaving newly enabled
@@ -822,15 +831,14 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 17. **Chrono miner.** A chrono miner follows the cycle with these differences:
     - its too-far distance is the chrono-harvester field (claim 9), and when it does not reserve a
       refinery and the waiting choice finds one, it always moves to that refinery's queueing cell
-      (claim 9), which it reaches by teleporting,
+      (claim 9), travelling by its active locomotion,
     - while it is moving in the *returning* phase and a refinery would accept it (the normal
       choice of claim 8 finds one), it drops its movement, so that its next processing reserves it,
     - when it starts seeking with a destination (for example after a *harvest* order on a cell, or
       the remembered cell it adopts as its destination at that moment, claim 3), it drops that
       destination and runs the ring search from where it stands. This rule holds for a harvester
       whose current locomotor is the teleport locomotor, whether or not its type has the teleporter
-      flag, and not for one whose type has the flag but that moves by another locomotor; the two go
-      together in normal data,
+      flag, and not for one whose type has the flag but that moves by another locomotor,
     - in *guard*, a chrono miner queues *harvest* again (1-tick interval, ending the processing as
       a case of row 2 of S-0215 claim 24's vehicle table; the claim 13 note on row 3 does not
       apply to it) when one of its eight
@@ -838,11 +846,26 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       mapping; the dock list is not consulted here), or when it is full and still moving. In the
       original this rule is reached only for a human-controlled owner (a computer-controlled owner
       gets claim 13's rule instead); in our engine it applies to every player house.
-    How it teleports is S-0207 claim 20's. A vehicle whose type has the harvester flag does not
+    **Temporary driving after production.** A vehicle-factory-built chrono miner still using
+    temporary driving drives its first leg to ore found in another cell. The ore destination
+    replaces its retained factory-exit point. Queueing or starting *harvest*, arrival at that
+    first ore cell, and starting loading do not themselves restore teleporting locomotion.
+    S-0417 claim 16 owns the exit point's lifetime, its replacement and clearing, and later
+    eligible restoration. A qualified refinery docking assignment can separately restore
+    teleporting locomotion and supply that same offer to it (claim 10; S-0207 claim 27).
+    A refinery's free unit follows claim 18's distinct release path, not the vehicle-factory
+    exit; its travel is not evidence that a factory-built miner skips this first driving leg.
+
+    How it teleports while teleporting locomotion is active is S-0207 claim 20's.
+    A vehicle whose type has the harvester flag does not
     phase in after a jump (S-0207 claim 20 f).
     - Backing: `measurable` (scenario H8; S-0207 scenario D22 run 2 for no phasing in; H8 part g
-      for the "full and still moving" trigger, `unmeasured` if no run reaches it)
-    - Confidence: medium; high for dropping a destination when seeking and for no phasing in.
+      for the "full and still moving" trigger, `unmeasured` if no run reaches it, and
+      S-0417 claim 16, scenario U15 for the factory-built first field leg, point replacement,
+      clearing and later restoration; claim 10's conditional H10 trace for docking restoration)
+    - Confidence: medium, including the composed factory-built first field leg and later
+      restoration; high for the active-locomotion seeking test, harvest queueing not itself
+      restoring locomotion, and no phasing in.
       Low for the "full and still moving" trigger
 
 ### A building's free unit
@@ -1431,8 +1454,8 @@ For the anchor, let (*X*, *Y*, *Z*) be the vehicle's world position in integer l
 and let *f̂* be 8192*q* reduced to the signed facing range −32768 to 32767. Then
 
 > θ = RZ₅₃((*f̂* − 16383) × *c*), where *c* is the binary64 value nearest −2π / 65534,
-> *X*ₐ = trunc(RZ₅₃(*X* + RZ₅₃(30 × cosT θ))),
-> *Y*ₐ = trunc(RZ₅₃(*Y* − RZ₅₃(30 × sinT θ))), and *Z*ₐ = *Z*.
+> *X*ₐ = trunc(RZ₅₃(*X* + RZ₅₃(30 × *C*ₜ(θ)))),
+> *Y*ₐ = trunc(RZ₅₃(*Y* − RZ₅₃(30 × *S*ₜ(θ)))), and *Z*ₐ = *Z*.
 
 The angle is in radians, the 30 in leptons, and both coordinate conversions truncate
 toward zero. Let *S*ₜ(θ) and *C*ₜ(θ) denote the table sine and cosine required by S-0205
@@ -2056,7 +2079,10 @@ with director and mods off except for the scenario's named test data.
 - *Runs:* 3 for the main run, 1 for each variant.
 
 **H8. Chrono miner (claim 17).**
-- *Setup:* a chrono miner far (40 cells) from its refinery, chrono too-far field 50.
+- *Setup:* a chrono miner with active teleporting locomotion far (40 cells) from its refinery,
+  chrono too-far field 50. Record its active locomotion before each travel or seeking test.
+  Separately use S-0417 claim 16's U15 to test a vehicle-factory-built miner's first distant
+  ore leg and later restoration; distinguish it from the refinery free-unit path of claim 18.
 - *Observable:* its cell per tick (a teleport is a jump of more than 2 cells in one tick), its
   behaviour and phase.
 - *Expected:* when full it reserves the refinery and teleports to dock. With the field set to 10, it
@@ -2131,7 +2157,14 @@ is wrong). *Runs:* 3.
   permission, current and queued behaviours, and the predicates of S-0207 claim 27.
   Compare an unchanged offer without refresh with a changed or refreshed offer, keeping
   the other predicates qualified. The former must not run the dock test. For the latter,
-  distinguish restoration from non-restorable fallback. In the usual fallback with a
+  distinguish restoration from non-restorable fallback. On qualified restoration, expect
+  the restored teleporting locomotion to receive this same offer's otherwise due movement
+  point, using the old driving points for restoration eligibility. With no already-pending
+  suppression or S-0207 claim 20 disabling state, expect its landing point fixed by this
+  assignment and a jump on its next teleporting movement update, possibly in the same tick.
+  A preliminary driving leg or a required second offer in that qualified case falsifies the
+  routing rule. Restoration newly enabling either pending state, or ignoring suppression
+  already pending, also falsifies it. In the usual fallback with a
   nonempty point otherwise due, the order-level cell destination is installed but its
   movement point is skipped in that assignment; suppression is consumed and newly enabled
   refresh remains. A subsequent eligible equal offer may test again. Contact acquisition
