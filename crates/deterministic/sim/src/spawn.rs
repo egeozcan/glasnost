@@ -567,6 +567,10 @@ pub fn set_own_target(ob: &mut crate::world::Object, t: Option<Target>) {
     // spec: S-0518 claim 15 (the charging mark clears whenever the unit is given a target or its target changes)
     ob.combat.charging = false;
     let had = ob.target.is_some();
+    if ob.target != t {
+        // spec: S-0519 claim 19 (every target change is counted, so that a change to B and back to A is two changes)
+        ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1);
+    }
     ob.target = t;
     if t.is_none() && had {
         request_clear(ob, true);
@@ -584,6 +588,9 @@ pub fn clear_own_target(ob: &mut crate::world::Object) {
 /// `quirks.spawner_pending_target_survives_idle_clear` off.
 pub fn explicit_clear_own_target(ob: &mut crate::world::Object) {
     let had = ob.target.is_some();
+    if had {
+        ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1); // spec: S-0519 claim 19 (a target change)
+    }
     ob.target = None;
     request_clear(ob, had);
 }
@@ -593,6 +600,9 @@ pub fn explicit_clear_own_target(ob: &mut crate::world::Object) {
 /// the conditional pending clear even when its old own target was already
 /// empty.
 pub fn redirected_to_none(ob: &mut crate::world::Object) {
+    if ob.target.is_some() {
+        ob.combat.target_epoch = ob.combat.target_epoch.wrapping_add(1); // spec: S-0519 claim 19 (a target change)
+    }
     ob.target = None;
     // spec: S-0309 claim 24 (assigning a nonempty target redirected to no target requests the conditional clear, even if the old own target was empty)
     request_clear(ob, true);

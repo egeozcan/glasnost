@@ -191,7 +191,7 @@ fn a_building_being_sold_refuses_the_charge() {
     assert!(w.obj(b).unwrap().combat.delay_kill_until.is_none());
 }
 
-// spec: S-0519 claim 13 (rearm: the planter's rearm countdown is the delay of a shot of its second weapon, rate 30)
+// spec: S-0519 claim 13 (revision 3: rearm: arrival is not a shot; a fresh planter, counter 0 below the second weapon's burst count of 1, takes the short delay, one draw R(3, 5); claims_s0519_r3.rs tests the other rows)
 #[test]
 fn the_planter_rearms_with_the_second_weapon_delay() {
     let mut w = world(|_| {});
@@ -199,7 +199,7 @@ fn the_planter_rearms_with_the_second_weapon_delay() {
     let s = sabotage(&mut w, "SABO", 0, b);
     bomb::charge_arrival(&mut w, s);
     let d = w.obj(s).unwrap().combat.rearm_delay;
-    assert!((30..=32).contains(&d), "rate 30 plus the draw R(0, 2): {d}");
+    assert!((3..=5).contains(&d), "the short arrival delay R(3, 5): {d}");
 }
 
 // spec: S-0519 claim 13 and Edge cases (a type without the explosive-charges flag plants nothing; only the veterancy ability gives it with quirks.charge_needs_type_flag off)

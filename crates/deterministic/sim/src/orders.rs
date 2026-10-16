@@ -226,6 +226,8 @@ pub fn apply_pending(w: &mut World) {
             .filter(|o| !matches!(o, Order::Behaviour { .. }))
         {
             apply_other(w, HouseId(hi as u8), o);
+            // spec: S-0519 claim 19 (revision 3: a designator's change of target cancels its strike when the change applies, in the tick of the order)
+            crate::strike::sweep(w);
         }
         // spec: S-0213 claim 3 (then the behaviour orders, in issue order)
         let behaviour: Vec<Order> = orders
@@ -235,6 +237,8 @@ pub fn apply_pending(w: &mut World) {
         let dests = group_destinations(w, &behaviour);
         for (o, d) in behaviour.iter().zip(dests) {
             apply_behaviour(w, o, d);
+            // spec: S-0519 claim 19 (revision 3: cancellation when the change applies)
+            crate::strike::sweep(w);
         }
     }
 }

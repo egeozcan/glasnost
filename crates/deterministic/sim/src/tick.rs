@@ -73,6 +73,8 @@ fn turn_pass(w: &mut World) {
     w.update.begin_pass();
     while let Some(id) = w.update.next_turn() {
         object_turn(w, id);
+        // spec: S-0519 claim 19 (revision 3: a designator's change of target cancels its strike in the tick it applies, also a change after the designator's own turn, not at its next look or turn)
+        crate::strike::sweep(w);
     }
     w.update.end_pass();
 }

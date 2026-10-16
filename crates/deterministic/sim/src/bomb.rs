@@ -307,12 +307,10 @@ pub fn charge_arrival(w: &mut World, walker: ObjectId) -> bool {
         }
         crate::cloak::machine::uncloak(w, walker, false);
     }
-    // spec: S-0519 claim 13 (rearm: the delay of a shot of its second weapon)
-    let d = crate::combat::fire::second_weapon_delay(w, walker);
+    // spec: S-0519 claim 13 (rearm: in every row the countdown is replaced by the arrival delay of the second weapon, chosen with the present burst counter; arrival is not a shot and does not advance it)
+    let d = crate::combat::fire::arrival_delay(w, walker);
     let t = w.tick;
-    if let Some(d) = d
-        && let Some(ob) = w.obj_mut(walker)
-    {
+    if let Some(ob) = w.obj_mut(walker) {
         ob.combat.rearm_until = t.wrapping_add(d);
         ob.combat.rearm_delay = d;
     }
