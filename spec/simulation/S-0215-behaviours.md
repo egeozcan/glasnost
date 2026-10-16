@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 47
+revision: 48
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -142,7 +142,7 @@ never applies, or applies to no house, in our engine, it speaks of the player ho
 the neutral and special houses keep that rule. Likewise, where it says that a rule for
 human-controlled owners holds in our engine for every house, for every owner or for AI houses
 included, it means every player house. Claim 18 states this for retaliation. Rules that hold for
-another reason, such as the campaign-only rule of claim 27, are not affected.
+another reason are not affected. Campaign-specific rules are not specified here.
 
 Each claim states its backing and confidence for the original's behaviour, including the parts
 marked as the original's only. Which houses our engine applies a rule to is a design rule of our
@@ -157,8 +157,8 @@ Terms used by this spec:
   house gets at game start: in a skirmish of the original the maximum skill level of the AI
   settings (below) for the house of every computer player, and 0 for every human-controlled house
   and for the neutral and special houses. In our engine an AI house in a skirmish keeps the level
-  0 of a human-controlled house, and the neutral and special houses keep 0 as well. In a campaign
-  mission a house that the map defines takes its level from the map (claim 15).
+  0 of a human-controlled house, and the neutral and special houses keep 0 as well.
+  Campaign house-level assignments are outside this spec's scope.
 - **Sequence frame count as a delay:** claims 22, 30 and 31 use the frame count of a unit's
   sequence entry (S-0107) unchanged as a number of ticks.
 - **Actor:** an infantry, vehicle, aircraft or building object. Only actors have behaviours.
@@ -361,7 +361,6 @@ Terms used by this spec:
   system. That system is out of scope for glasnost, so this spec only notes where membership
   changes a rule of the original. An AI house of our engine has no teams (houses in our engine),
   so a rule's exception or condition for team members never applies to its units.
-- **Campaign game:** a game that is a campaign mission, as opposed to a skirmish or multiplayer game.
 - **2-D distance, 3-D distance:** the distance between two objects' reference points in leptons,
   from the horizontal coordinates only (2-D) or from all three (3-D). The original takes it with the
   *table square root* (the approximate root that approved S-0105, F1, also uses), truncated toward
@@ -507,27 +506,25 @@ Terms used by this spec:
      (S-0514 claim 17). This does not exclude its erasure update or presentation effects.
 
    On a tick on which the tunnel, erasing or leaving-stage exclusion holds (the last three bullets
-   above), the per-tick start of claim 11 takes no effect. On every other tick on which the actor
-   does not process, the per-tick start still takes effect: for example on a tick on which only the
+   above), the per-tick start of claim 11 takes no effect. Subject also to the superweapon-warp
+   design exclusion below, on every other tick on which the actor does not process, the
+   per-tick start still takes effect: for example on a tick on which only the
    timer has not expired (claim 3a, scenario B3, case k). A teleporting locomotor's own
    phase-in does not stop processing: the actor processes under the ordinary eligibility rules.
 
    **Superweapon warp, engine design.** S-0513 claim 51 excludes ordinary behaviour processing
-   for vehicles, teleporter infantry and landed aircraft from the first pending update through
-   arrival effects, including departure, every off-map landing retry and placement, whether
-   successful or failed. No ordinary processing occurs before or after warp work on those
-   turns, even for a survivor of the arrival effects. During arrival hold, the hold-end test
-   precedes ordinary behaviour eligibility: processing is permitted under its usual conditions
-   both while the hold continues and on its expiry turn. This is not permission to ignore
+   and the per-tick behaviour start of claim 11 for vehicles, teleporter infantry and landed
+   aircraft from the first pending update through arrival effects, including departure, every
+   off-map landing retry and placement, whether successful or failed. Neither ordinary
+   processing nor a per-tick start occurs before or after warp work on those turns, even for
+   a survivor of the arrival effects. During arrival hold, the hold-end test precedes ordinary
+   behaviour eligibility: processing and per-tick starts regain their usual eligibility both
+   while the hold continues and on its expiry turn. This is not permission to ignore
    another exclusion, nor does it suppress the target searches or sensor update intrinsic to
    the warp (S-0513 claim 39). It is an engine design rule, not confirmed original behaviour,
-   and has no quirk switch. S-0513 claim 48 retains the original-side uncertainty about
-   continuation on pending, departure, retry, placement, arrival-effects and hold turns.
-
-   One original-side edge (low confidence): when a chrono move reaches its phase-in while
-   the actor is being erased, the exclusion ends for an infantry unit at once and for a vehicle
-   when the phase-in ends, although the erasing goes on. This does not override our engine's
-   superweapon-warp design exclusion.
+   and has no quirk switch. S-0513 claims 48 and 52 retain the original-side uncertainty about
+   processing and per-tick-start continuation on pending, departure, retry, placement,
+   arrival-effects and hold turns.
 
    A processing on tick *t* that chooses the delay *d* sets the timer so that it has expired at
    any later turn of the actor on a tick *t*′ with *t*′ − *t* ≥ *d*. The actor processes again on
@@ -546,13 +543,13 @@ Terms used by this spec:
      in our engine (S-0513 scenario SW23 part f); the original's unresolved continuation
      remains `unmeasured` as S-0513 claim 48 states (SW23 parts a to e, incomplete per-kind
      eligibility evidence). The second-turn case is `unmeasured`: S-0203
-     marks the second turn itself as not observable by a recorder. The erasing edge is
-     `unmeasured`: it needs an erasing weapon locked onto an actor at the moment its chrono move
-     reaches the phase-in, and no setup is known that can time that.
+     marks the second turn itself as not observable by a recorder. No original-side rule
+     is asserted here for an erasure overlapping a chrono arrival; S-0513 and S-0514
+     own those effects, and no isolated fixture is established here.
    - Confidence: high (alive, health, timer, parasite ordering and the engine design contract),
      medium (the tunnel, erasing and leaving-stage exclusions, including landed-aircraft erasure,
-     and locomotor phase-in not excluding processing); low (the second-turn case, the erasing
-     edge and matching the original's unresolved superweapon-warp continuation)
+     and locomotor phase-in not excluding processing); low (the second-turn case and
+     matching the original's unresolved superweapon-warp continuation)
 
 3. **A behaviour start is processed at once, unless the processing that caused it chooses later.**
    A behaviour start (start-next, claim 8, or force, claim 9) sets the processing timer to "expired
@@ -649,8 +646,7 @@ Terms used by this spec:
    processing has itself made another behaviour current (claim 3c) and then chooses a delay from a
    rate, it uses the rate of the behaviour it has just made current. Among the processings that
    this spec describes in full (claims 22 to 28 and 30 to 32), those that can do this are:
-   - *hunt*, whose general with-target outcome can start *capture* or *sabotage*, and whose
-     campaign rule (original only) can start *move* (claim 27),
+   - *hunt*, whose general with-target outcome can start *capture* or *sabotage* (claim 27),
    - *guard* and *area guard* carrying out one of the two occupy instructions (original only), which can start
      *capture* (claims 24 and 26, row 3).
 
@@ -675,12 +671,11 @@ Terms used by this spec:
      delays taking no draw; scenario B27, case d, for the timer and delay draw assignments
      in *area guard*; scenario B30, case a, for a rate whose product with 900 reaches 2⁶³,
      which F1 turns into 0). The not-a-number case of F1 and F9 is `unmeasured`: S-0003's decimal
-     form never yields a not-a-number, so imported data cannot reach it (F1). That the delay's draw also follows the search of *hunt* and the draws
-     of approaching, idle actions and scatter requests is `unmeasured`: the search's own draws are
-     known (S-0309, claim 12: for a player house's actor, only the timer draw), but every *hunt*
-     processing that searches then approaches its target or attempts its idle action, and the
-     specs of those rules, like those of scatter requests, do not state how many draws they take,
-     so a scenario cannot tell which drawn value went to which rule.
+     form never yields a not-a-number, so imported data cannot reach it (F1). The delay draw
+     following a targetless vehicle's *hunt* search is `measurable` (B45 a). Assignment after
+     approaching, infantry idle actions and scatter requests remains `unmeasured`: their
+     draw counts are not fully specified by their owning specs, so total stream advance
+     alone cannot identify the draw assigned to each rule.
    - Confidence: high
 
 ### Changing behaviours
@@ -729,11 +724,12 @@ Terms used by this spec:
    player's order is known to force a behaviour on the actor it is given to (claim 12); the stop
    order given to a slave master gives its harvesting slaves a guard reset.
    - Backing: `measurable` (scenario B3, cases f and i, for the force and the mind-control guard
-     reset; case g for the stop order's guard reset of a slave master's slaves). The other users
-     of the list are `unmeasured` here: deactivation, reactivation, entering an open-topped
-     transport, the replacement of a locomotor and the slave rules are each started by a rule of
-     another topic (combat, transport, locomotion and economy), which owns when it happens; this
-     claim names them only as users of the force, which B3 backs.
+     reset; case g for the stop order's guard reset of a slave master's slaves; also
+     B45 f for disabling and enabling a control-centre-dependent vehicle; S-0607 L2 for
+     magnetic seizure's guard reset when its locomotor is replaced). Entering an open-topped
+     transport and additional slave-rule reset sites remain `unmeasured` here: this spec
+     supplies no isolated fixture for those sites, and the generic force test alone does
+     not establish that each site invokes it.
    - Confidence: high (the rule); medium (the list of rules that force)
 
 10. **Override and revert.** An override puts a temporary behaviour *b* in place with a new target
@@ -818,23 +814,18 @@ Terms used by this spec:
       change, and case h for a target
       cleared by an order, which does not revert; cases h and l for the suspended slot kept across
       a start-next and for a later revert caused by another target). These parts are `unmeasured`:
-      - the cloak and underground cause and its two exceptions: S-0516 owns cloak and
-        sensor timing, but no scenario here isolates a target's cloak transition or underground
-        entry, with and without each exception, while an override is in effect,
+      - underground entry and the own-house exception to cloak target loss: no fixture here
+        establishes those states during an override. Enemy cloak start with and without
+        the observing house's sensor coverage is instead `measurable` (B45 b),
       - the strike-target exceptions to owner change and a locomotor jump, including after a
         strike ends normally, because each needs a living object held as the strike target at
         the moment of that event, and no setup here establishes that timing. Erasing attackers' owner-change target loss and beam retention
         instead inherit S-0514 claim 16's measurable backing (E10 part h),
       - a removal that follows neither a killing hit nor going off the map, because every removal
         that a setup here can make comes after one of those, which has already caused the revert,
-      - the suspended slot kept across a force, because the only force that a setup here can give
-        an actor during an override is the guard reset of a mind-control takeover (claim 9), and
-        a takeover also changes the actor's owner and clears its target, which the combat topic
-        (mind control) owns, so the slot after a takeover does not isolate the force. The other
-        forces of claim 9 do not reach an overridden actor in a setup here: those of claims 23,
-        27 and 30 come from processings of behaviours other than the *attack* an override puts
-        in place, and the slaves' guard reset needs harvesting slaves of the human-controlled
-        house, which do not retaliate in *harvest* (claim 18).
+      The suspended slot retained across a force is `measurable` (B45 f): a control-centre
+      power transition resets the overridden actor without an ownership change, unlike
+      the former takeover-only comparison.
     - Confidence: high (the slot rules, the target replacement, the revert at the killing hit
       and on going off the map, the centre-cell revert and exact-cell matching, and an
       override staying in effect until a revert, so that a later
@@ -857,7 +848,15 @@ Terms used by this spec:
     opportunity. S-0501 claim 31 owns all three aircraft start points. An infantry unit that
     is ready to change and has neither a current nor a queued behaviour falls back to rest (claims
     13 and 14) at its per-tick start, and the behaviour that this fall-back queues, if any, becomes
-    current at that same per-tick start. Readiness depends on the actor kind:
+    current at that same per-tick start.
+
+    These per-tick starts are subject to claim 2's exclusions. In our engine, S-0513 claim 51
+    additionally suppresses them for vehicles, teleporter infantry and landed aircraft from
+    the first pending warp update through arrival effects, before and after warp work. During
+    arrival hold they regain ordinary eligibility after the hold-end test, whether the hold
+    continues or expires. Readiness alone cannot start a queued behaviour on an excluded turn.
+    This is an engine design rule, not a resolved original continuation rule (S-0513 claim 52).
+    Readiness depends on the actor kind:
     - **Infantry** is ready unless any of these holds: its current behaviour is *sticky* or
       *rescue*; it is in the middle of firing; it is falling (for example from a parachute); it is
       moving on this tick while its current behaviour is not *guard* or *hunt* and is not *attack*
@@ -913,7 +912,10 @@ Terms used by this spec:
       *guard* at least once since its last successful per-tick start takes a queued behaviour (for
       example an ordered *attack*) at its next per-tick start, without waiting for its next
       processing.
-    - Backing: `measurable` (scenario B3, cases b, c, g and h; scenario B23 for the vehicle
+    - Backing: the warp start exclusion and hold resumption are `measurable` in our engine
+      (S-0513 scenario SW23 part f, extended by part g); original continuation beyond the
+      leaving-stage exclusion remains `unmeasured` under S-0513 claim 52's incomplete
+      per-kind evidence. Other rules are `measurable` (scenario B3, cases b, c, g and h; scenario B23 for the vehicle
       exceptions of queued *enter* and contact with a vehicle-factory building, and case c for a
       transport letting its passengers out; scenario B16, case d, for buildings; S-0406 PL11 for
       the construction ready mark and second start; scenario B35 for the body-range rule,
@@ -933,10 +935,12 @@ Terms used by this spec:
       claim 17 and scenario B44): placement already queues rest, so no accepted order
       during descent is needed to test readiness. Falling move clicks are refused, not
       deferred until landing. Being in the middle of firing and a sequence that is not
-      interruptible remain `unmeasured`: these last only as long as a firing or sequence
-      that S-0107 and the combat specs own, and no setup here can time an order inside them.
-    - Confidence: high (infantry, and the vehicle conditions on *sticky* or *rescue* and on
-      moving); medium (the list of three vehicle transitions, the unload or deploy cycle, the
+      interruptible are `measurable` (B45 c): scripted input places an order inside a
+      named test sequence or burst, while a read-only recorder verifies both the input
+      boundary and the independently observed readiness conditions.
+    - Confidence: high (the engine warp-start design contract, infantry, and the vehicle
+      conditions on *sticky* or *rescue* and on moving); low (matching the original's unresolved
+      warp-start continuation); medium (the list of three vehicle transitions, the unload or deploy cycle, the
       vehicle-factory conditions and buildings); low (the two *unload* rules, the vehicle below the
       surface); aircraft readiness and start timing have S-0501 claim 31's confidence
 
@@ -1266,9 +1270,7 @@ Terms used by this spec:
     maximum skill level of the AI settings (S-0412, claim 3). So, whenever the area-guard threshold
     is above 0, an armed vehicle of a human-controlled owner, or of the neutral or special house,
     in skirmish rests in *guard* by row 10 unless it has the guard-area ability or its type
-    defaults to area guard. For the future campaign spec only (campaigns are out of scope for now): in a campaign
-    mission of the original each house that the map defines has the level its map gives (absent:
-    0, a value above the maximum: 1).
+    defaults to area guard. Campaign house skill assignments are not specified here.
 
     **In our engine** the rows apply to the vehicles of every house as written, with these
     consequences of the houses rule (Terms):
@@ -1313,8 +1315,6 @@ Terms used by this spec:
         non-harvester *unload* processings belong to other topics (claim 34), which may queue a
         behaviour of their own at the same moment, and the *enter* case lasts only while the
         vehicle drives onto the bunker's cell, which no setup here can time a fall-back into,
-      - the campaign skill levels: campaigns are out of scope for now (decision of the project
-        lead), and the measurement setup runs skirmish games.
     - Confidence: medium (the rows and the skill level of houses); low (the loaner row)
 
 ### Behaviour properties
@@ -1459,14 +1459,12 @@ Terms used by this spec:
 20. **Recruitable.** The recruitable property is imported for every behaviour (Import mapping), and
     in our engine it has no effect: no rule of any house reads it (Terms, houses in our engine).
     **Original only (note for AI designers):** in the original the property affects only the
-    computer player's choice of which actors to send to defend its base when the base is attacked,
-    and which to put into teams: an actor whose current behaviour lacks the property is never
-    picked. Our AI may honour it when it picks units for such tasks.
-    - Backing: `measurable` (scenario B20, for the original's base defence). The teams part is
-      `unmeasured`: it concerns only the original's computer-player team system, which is out of
-      scope, and no scenario here sets up the recruiting of a team, so no setup can show which
-      actors a team takes (Open questions).
-    - Confidence: medium (base defence); low (teams)
+    computer player's choice of which actors to send to defend its base when the base is attacked:
+    an actor whose current behaviour lacks the property is never picked for that defence.
+    Our AI may honour it when it picks units for such tasks. Team recruitment is outside
+    this spec's scope; no restriction on the original's team selection is asserted here.
+    - Backing: `measurable` (scenario B20, for the original's base defence)
+    - Confidence: medium
 
 21. **The anti-air rate is used by buildings only.** The anti-air rate replaces the rate in the
     delay of an armed building's *guard* processing, which also serves its *sticky* and *area guard*
@@ -1818,16 +1816,13 @@ apply in our engine to the actors of every player house.
       immediate start if ready, which the processing's own delay then overrides (claim 3c). Any
       other infantry unit clears its destination and takes the approach step of claim 37; other
       kinds take that step,
-    - without a target (or with the stupid-hunt flag): **original only:** in a campaign game, an
-      actor of a computer-controlled owner moves towards a cell its house picks for attack, if the house has
-      one: it queues *move* there with an immediate start, and a slave master also gives its
-      harvesting slaves a guard reset. If the house has no such cell nothing happens. In every other
-      case the actor only attempts its idle action. So in a skirmish a hunting
-      actor that finds nothing stays put; in our engine that holds in every game, for every house.
+    - without a target (or with the stupid-hunt flag): the actor only attempts its idle
+      action. In a skirmish a hunting actor that finds nothing stays put, for every house.
+      Campaign hunt outcomes are outside this spec's scope.
 
     The delay of this general rule is always the standard delay, with the rate of the behaviour
-    that is current once the outcome above has taken effect: the rate of *capture*, *sabotage* or
-    *move* when the outcome started one (claim 6).
+    that is current once the outcome above has taken effect: the rate of *capture* or
+    *sabotage* when the outcome started one (claim 6).
     - **Vehicles** whose type deploys into a construction yard (or any deploying type that has a
       target or a human-controlled owner) instead try to find a clear spot and deploy there, and
       choose the standard delay. In our engine, where the owner of every player house counts as
@@ -1859,22 +1854,19 @@ apply in our engine to the actors of every player house.
       outcome above instead, which queues *sabotage* with an immediate start if ready and chooses
       the standard delay.
 
-    **In our engine** the campaign move, the per-tick *hunt* of base-building vehicles and the two
-    infantry rules never apply (Terms, houses in our engine). **Original only (note for AI
-    designers):** with them the original's computer player sends hunting units towards its attack
-    cell in campaign missions, puts a base-building vehicle whose house has no construction yard
-    (at the start of a skirmish, or after losing its last one) into *hunt* (so that it looks for a
-    place to deploy), sends its building
+    **In our engine** the per-tick *hunt* of base-building vehicles and the two
+    infantry rules never apply to player houses (Terms, houses in our engine).
+    **Original only (note for AI designers):** the original's computer player puts a
+    base-building vehicle whose house has no construction yard (at the start of a skirmish,
+    or after losing its last one) into *hunt* (so that it looks for a place to deploy), sends its building
     takers straight for a building they have as target, and packs up its deployed infantry when
     it hunts without a target. Our AI can get these results through move, deploy, capture and
     undeploy orders.
     - Backing: `measurable` (scenario B11; cases b and c for the infantry rules, case d for the
       vehicle deploy rule, case e for the general with-target outcome, case f for the original's
-      per-tick *hunt* of base-building vehicles). Two parts are `unmeasured`:
-      - the refused deploy: the vehicle first looks for a spot where the building fits, and no
-        setup is known in which the spot it reaches then refuses the building (Open questions),
-      - the campaign rule (original only): campaigns are out of scope for now (decision of the
-        project lead), and the measurement setup runs skirmish games.
+      per-tick *hunt* of base-building vehicles). The refused deploy remains `unmeasured`:
+      the vehicle first looks for a spot where the building fits, and no setup is known
+      in which the spot it reaches then refuses the building (Open questions).
     - Confidence: high (the general rule and the skirmish case); medium (the special cases, and
       that deploying makes no other behaviour current); low (the refused deploy)
 
@@ -2254,11 +2246,9 @@ apply in our engine to the actors of every player house.
       row, case k for the aiming tolerance, case l for firing both weapons and case m for the
       out-of-stage rule, with a test gate type that has the SAM flag; no stock type reaches that
       rule). These parts are `unmeasured`:
-      - the unchecked secondary shot when that weapon's own firing check would refuse it:
-        B16 (l) supplies a secondary weapon that can hit the target and proves two shots despite
-        the rearm countdown begun by the primary, but does not separately test an out-of-range
-        or otherwise illegal secondary weapon. No scenario here isolates those other refusal
-        categories from the primary check,
+      - secondary refusals other than rearming and range: B16 l and B45 d make the unchecked
+        secondary shot `measurable` despite rearming and despite its own range, respectively.
+        No fixture isolates every other secondary refusal category,
       - the out-of-stage rule after a *repair* or *missile* processing: the structures and
         superweapons specs own those processings and the values they leave, so no setup here can
         put a building in such a stage on purpose,
@@ -2266,10 +2256,9 @@ apply in our engine to the actors of every player house.
         cannon, the superweapon buildings and the empty occupiable building), because the only
         observable difference from the general rule needs such a building to hold a target at a
         processing, and no setup is known that gives one,
-      - the non-SAM answers *illegal*, *impossible* and *out of ammunition*: B16 (e) isolates
-        *out of range*, not these other reasons for returning to *guard*. No scenario here
-        supplies a separately identified illegal or impossible target or exhausts a building's
-        ammunition while it still holds its target,
+      - the non-SAM answers *illegal* and *impossible*: no fixture supplies a separately
+        identified target producing either answer. *Out of ammunition* is `measurable`
+        (B45 e), separately from B16 e's *out of range* case,
       - the SAM answer-specific transitions other than *can fire*, rearming and target loss:
         B16 does not isolate *not facing*, *illegal*, *impossible*, *out of range* or each
         remaining answer in the *aimed* stage. Its timing runs cannot distinguish these
@@ -2373,7 +2362,7 @@ apply in our engine to the actors of every player house.
     cannot remove the same target.
     - Backing: `measurable` for the berserk exception (S-0610 scenario P4).
       The ordinary clearing rule, the other exceptions and the passenger-house substitution
-      are `unmeasured`: no validated stock skirmish fixture here isolates an already-held
+      are `unmeasured`: no validated skirmish fixture here isolates an already-held
       allied target at this maintenance point without another target-loss rule intervening.
       Scenario B41 gives a conditional investigation, not a claim of a completed fixture.
     - Confidence: high (clearing, exception conditions and house selection); medium (observable
@@ -2594,10 +2583,10 @@ apply in our engine to the actors of every player house.
       tick, and the per-tick search of claim 33. It follows that search, not precedes it.
       On a tick without processing its place is unchanged: after the per-tick start and
       the per-tick search opportunity. If no search runs, it still judges the state then held.
-      There is no one-approach-per-tick limit: a processing's approach does not suppress
-      this rule. It takes a second approach step on the same tick if its conditions still
-      hold then. If the processing left a destination, or no target, it does not take that
-      second step. Thus a target found by the per-tick search can receive an approach
+      A processing's approach does not exempt its resulting state from this rule.
+      If the processing left a destination, or no target, this later rule does not apply.
+      Otherwise its destination or target-loss outcome must still hold on that tick.
+      This specifies the resulting state, not a count of internal evaluations. Thus a target found by the per-tick search can receive an approach
       destination, or be dropped, on that very tick, before any later behaviour processing
       acts on it. The final out-of-range drop applies only if no destination remains after
       this step; finding a target does not protect it from this rule.
@@ -2722,10 +2711,9 @@ apply in our engine to the actors of every player house.
       the per-tick rule with an unreachable target, case e for deployed infantry, case f for zero-speed types,
       case g for part a2's order on processing and non-processing ticks and same-tick loss
       of a newly found target; B16 case e for buildings).
-      Part a2's repeated in-range step is `unmeasured`: with no destination and an in-range
-      target, both steps leave the same state and take no search draw, so no observable
-      distinguishes two such steps from one. Its independent eligibility and same-tick
-      destination or target outcomes are measurable by B32 g.
+      Part a2's independent eligibility and same-tick destination or target outcomes are
+      `measurable` (B32 g). An unchanged in-range state imposes no requirement to repeat
+      an indistinguishable evaluation.
       Part i's movement outcomes have S-0207 claim 19's and S-0208 claims 16 and 17's backing and confidence. These parts are `unmeasured`: the magnetic-beam case of part c
       (S-0607 owns the beam, but no scenario here isolates an approach step against the
       object holding the attacker); the draining case of part d (the
@@ -3071,8 +3059,6 @@ from the 768-lepton minimum used by the later random choice.
 | Turret snap bound maximum | 32 768 | facing units | F8 (half a turn) |
 | Normal targeting delay absent-key default | 27 | ticks | F6, engine default |
 | Area-guard targeting delay absent-key default | 36 | ticks | F6, engine default |
-| Campaign house skill level: absent key | 0 | house skill level | Claim 15; for the future campaign spec (campaigns out of scope for now) |
-| Campaign house skill level above the maximum | becomes 1 | house skill level | Claim 15; for the future campaign spec |
 | Human-controlled house skill level in a skirmish | 0 | house skill level | Claim 15; also every AI house of our engine and the neutral and special houses in a skirmish (S-0412, claim 3) |
 | Charge-target search | 8 | cells | Claims 24, 26: the neighbouring cells |
 
@@ -3329,7 +3315,7 @@ are fixed rules, not behaviour-rate or targeting-delay fields.
 | Data input | Concept | Parse form and absent-key result |
 |---|---|---|
 | none | route ownership and alliance perspective (claim 13, Q-0663) | fixed owner-routes departure, including both service alliance guards and non-allied fallback; no imported local-house setting or absent-key choice |
-| none | per-tick approach placement and repeated-step eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
+| none | per-tick approach placement and independent eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
 | none | same-processing qualification of a newly taken own-cell guard spot, search and idle-action outcomes (claim 26, Q-0231) | fixed behaviour, no imported setting or absent-key choice; the existing behaviour-rate and targeting-delay fields still supply their delays |
 | none | ready mark from the grand opening at set-up placement and *guard* current from the first per-tick start (claim 1, Q-0241) | fixed behaviour, not a new data flag; it does not depend on any weapon, turret or upgrade field. Building map entry, upgrade, idle body and turret flag mappings stay with S-0009, S-0108 and the rows below |
 | none | house-centre selection after path give-up (claim 38, Q-0238, Q-0312) | fixed behaviour and constants, F11–F12; no per-behaviour rate or new setting |
@@ -3402,7 +3388,6 @@ absent key keeps the value the earlier layers left).
 | `PlayerReturnFire` | combat-damage settings section (S-0006) | lifts the behaviour restriction of claim 18 | boolean |
 | `PlayerScatter` | combat-damage settings section (S-0006) | player-scatter setting of claim 19 (the scatter from damage; S-0208 claims 11 and 15 for infantry) | boolean |
 | `MaxIQLevels` | `[IQ]` | house skill level of the houses of the original's computer players in a skirmish (claim 15; S-0412, claim 3); not used for AI houses of our engine, nor for the neutral and special houses, which keep 0 | integer |
-| `IQ` | a map's house section | house skill level of that house in a campaign mission (claim 15; for the future campaign spec, campaigns being out of scope for now) | integer; absent 0; above the maximum level becomes 1 |
 | `BuildConst` | `[AI]` | construction-yard types for the vehicle rules of claims 24 and 27 (the original-only rules, and claim 27's deploy rule) | list of building types |
 | `GuardRange` | type section | *g* of F5 | cells, in S-0003's decimal form (claims 6 and 7), converted to leptons as stated below the table; absent or −1 keeps the held value; engine default 0 |
 | `DefaultToGuardArea` | type section | claims 14 and 15 | boolean |
@@ -4169,10 +4154,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   including hold expiry. Original continuation on those turns remains unmeasured under
   S-0513 claim 48; use its scenario SW23 parts a to e to distinguish the alternatives rather
   than expecting processing throughout phase-in. In our engine, SW23 part f tests claim 51's
-  design contract: no ordinary processing from the first pending update through arrival
-  effects, then ordinary eligibility after each arrival-hold expiry test, including while
-  still holding. An ordinary processing in an excluded turn, or refusal solely because
-  of arrival hold after that test, falsifies the engine contract. Separately, order an
+  design contract: no ordinary processing or per-tick behaviour start from the first pending
+  update through arrival effects, then ordinary eligibility for both after each arrival-hold
+  expiry test, including while still holding. Extend this check with SW23 part g's queued
+  behaviour and readiness observations. An ordinary processing or per-tick start in an
+  excluded turn, or refusal solely because of arrival hold after that test, falsifies the
+  engine contract. Separately, order an
   armed non-harvester vehicle, given teleporting locomotion by the
   named test map, to a clear cell 10 cells away. Expected: no leaving stage and no corresponding
   processing exclusion; its jump follows S-0207 claim 20 d, and its phase-in lasts F9 of that
@@ -4674,10 +4661,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   before it, independently of the processing timer. Falsified by the unreachable target
   surviving its acquisition tick in the stated conditions. As a further control, issue an
   *attack* order against a reachable distant target: a destination supplied by processing
-  remains held and does not trigger this later no-destination rule. For the two-step
+  remains held and does not trigger this later no-destination rule. For the unchanged
   in-range case, repeat (d) with the unreachable target stationary in range across a known
-  attack processing tick: expected target kept and no destination, but these end states
-  alone cannot count the two unchanged-state steps (claim 37 a2, backing).
+  attack processing tick: expected target kept and no destination. These end states
+  test the outcome only; no internal evaluation count is required by claim 37 a2.
   Record the stated actor and random-stream observables each tick, using the measurement setup's scripted inputs. No external controller may play either house or alter game state. Run without mods or engine add-ons, apart from the named test data permitted by the common setup. Runs: three valid search ticks of each kind in case g, and three per other case and attacker kind (vehicle and infantry in a, b, c, c2 and f; vehicle only in d and g; infantry only in e).
 
 - **B33 (claim 13, Q-0202).** Common setup and fixed game speed 2. First repeat B15 b/c on a
@@ -4932,7 +4919,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   person playing. These are engine acceptance cases, not proposed original-game measurements.
 
 - **B41 (claim 33a, conditional allied-target investigation).** Use the common tiny-map
-  skirmish setup at game speed 2, stock data, director and mods off, and a read-only recorder
+  skirmish setup at game speed 2, stock data, no external automated player or mods,
+  and a read-only recorder
   of target, owner, behaviour, processing timer and berserk state. First establish that a
   computer-owned repair vehicle carrying an engineer can acquire a damaged own-house vehicle
   as a healing target. Record acquisition and every subsequent own update, including ticks
@@ -5010,6 +4998,108 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   slots, timers or readiness. Other readiness conditions can still delay the start
   after falling ends.
 
+- **B45 (additional discriminating fixtures for claims 6, 10, 11 and 32).** These are
+  proposed measurements, not results. Use the common tiny-map skirmish setup, game speed
+  index 2, 800 × 600, no external automated player or state-changing add-on, and no mods
+  except each part's named test-map rules/art. Read state only; do not force timers,
+  targets, firing-check answers or behaviour slots. Keep subjects alive with named
+  high-health and low-damage test weapons. The common observed areas and void rules apply.
+
+  - **(a) Targetless vehicle hunt and draw assignment.** Place an ordinary armed driving
+    vehicle of the human-controlled house in *hunt*, with no eligible enemy anywhere
+    within search range. Name test-map rules setting the hunt rate to 0.07 game minutes
+    and clearing the stupid-hunt, hover-attack and deploy flags. It is not a slave master,
+    harvester or distributed-fire type. Record each search, targeting-timer restart,
+    processing expiry and full scenario-stream state immediately around the processing,
+    excluding other actors' draws rather than estimating them statistically. No target
+    means no approach, and this vehicle has no infantry idle action. For each observed
+    entry stream state predict both assignments by S-0202: timer *U*(0, 2) then delay
+    *U*(0, 2), or the reverse. Expected: targeting delay *N* plus the first value,
+    processing delay 63 plus the second. A different value, unexpected extra draw,
+    acquisition or movement falsifies the applicable rule; unrelated draws make a sample
+    inconclusive, not confirming evidence. Collect 30 samples whose two predicted timer
+    and delay pairs differ, across naturally seeded runs. This part does not test
+    ordering after infantry idle, approach or scatter draws.
+
+  - **(b) Revert at enemy cloak start.** Extend B7 b with an enemy vehicle given a
+    self-cloaking type flag by named test-map data. Its weapon causes a nonlethal hit
+    and an override on the observer; then a test-map script stops the attacker so its
+    ordinary cloak conditions can become satisfied. Use a long observer processing
+    delay and a weak observer weapon so the attacker survives until cloak starts.
+    Give the observer a named-test weapon rearm delay longer than the attacker's cloak
+    delay and fade duration combined, so its response shot cannot keep restarting the
+    attacker's cloak delay. Record all hits and require a hit-free interval long enough
+    for ordinary cloak eligibility. Repeat with no sensor, then with a sensor of the
+    observer's own house covering the attacker's cell before the hit, outside
+    adjacency-uncloak range. Use S-0516
+    claims 4–6 and 21–23 for cloak eligibility and coverage. Record cloak transition,
+    sensor coverage, target and all behaviour slots immediately around cloak start.
+    Expected without coverage: suspended behaviour restored and suspended slot empty
+    at that event. Expected with coverage: no cloak-caused revert, the same target and
+    suspended behaviour retained. A contrary event result falsifies the corresponding
+    branch. Failure to reach cloak start leaves the branch untested; it is not evidence
+    for retention. Three cloak transitions per coverage condition. This fixture does
+    not test underground entry or the own-house exception.
+
+  - **(c) Infantry readiness inside firing and a noninterruptible sequence.** Name
+    test-map art giving an ordinary non-deployer infantry unit a long *fire-standing*
+    sequence. Keep it stationary in *attack* against a durable stationary enemy.
+    Script a move order during that sequence, recording order application, firing
+    state, sequence kind, motion and queued/current behaviours on each turn.
+    *Fire-standing* is interruptible by S-0107's engine table T1, so its sequence
+    alone does not block readiness. Expected: an accepted *move* remains queued while
+    the unit is in the middle of firing and starts at the first otherwise-ready
+    per-tick start. Test sequence noninterruptibility separately with an infantry
+    deployer whose named art gives *deploy* a long frame count: order deployment,
+    then a move while that sequence plays and no firing or motion is in progress.
+    *Deploy* is noninterruptible by the same engine table; the test art changes only
+    its duration, not that attribute. Expected: *move* stays queued until sequence
+    readiness permits its start, without waiting for the old processing timer.
+    Starting during a verified blocker, or not starting at the first otherwise-ready
+    start, falsifies the respective rule. Readiness here concerns when *move* starts,
+    not its later deployed-infantry destination outcome. A refused input does not
+    test queue readiness. Collect three accepted orders inside each isolated blocker.
+    If no accepted order overlaps firing, that firing sub-test remains inconclusive
+    rather than being inferred from the deployment comparison.
+
+  - **(d) SAM secondary range bypass.** Extend B16 l with a named secondary weapon
+    whose maximum range is shorter than the primary's, retaining its ability to hit
+    aircraft and a distinguishable projectile. Keep the airborne target beyond that
+    secondary range but inside the primary range; verify both ranges by S-0307 and
+    record the primary firing-check result, both weapon attempts and both projectiles
+    on each due aimed processing. Expected: a primary *can fire* still produces both
+    shots, notwithstanding the secondary's range and rearm begun by the primary.
+    Missing the secondary shot on such a processing falsifies this bypass. Retain
+    B16 l's in-range secondary control. Record 20 firing ticks per condition. This
+    does not establish unchecked firing for every other refusal category.
+
+  - **(e) Non-SAM ammunition exhaustion.** Extend B16 a with named test-map rules
+    giving the building one finite ammunition round and a reload delay longer than
+    the observation. Keep its durable target in range and its facing settled. Record
+    ammunition, rearm, firing-check result, ready mark, slots and processing expiry
+    around each processing after the shot, through the first *out of ammunition*
+    answer. Expected at that answer: target cleared, *guard* current by the immediate
+    start, and 1-tick processing delay without a delay draw. Retaining *attack* or
+    target, merely queueing *guard*, or another delay/draw falsifies the rule. A run
+    in which the firing check never returns that answer cannot test this branch.
+    Three valid exhaustion events; compare an otherwise identical unlimited-ammunition
+    control, which must not return to guard on that ground.
+
+  - **(f) Force without ownership change.** Reuse S-0405 claim 13 and W8 a's
+    control-centre switch fixture, retaining its stock vehicle/building types and power
+    conditions. First move the dependent vehicle away from all building cells and let
+    it retaliate under B7 b, leaving *guard* suspended and *attack* current. Switch off
+    its owner's last active control centre while the attacker stays alive. Record
+    operation count, disabling/enabling, owner, slots, target, destination, guard spot,
+    start tick and processing expiry around the power transition. Expected at disabling:
+    owner unchanged, *guard* current, queue empty, target/destination/guard spot clear,
+    processing timer expired now and start tick reset, but the suspended *guard* still
+    present. A cleared suspended slot falsifies retention across force; missing guard
+    reset effects falsify that reset site. With the attacker still alive, switch the
+    centre back on: expect a second guard reset with the same retained suspended slot.
+    Three switch-off/on pairs. No takeover or target-loss event may substitute for the
+    switch; a run without the control-count transition tests neither reset site.
+
 ## Open questions
 
 - **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
@@ -5057,8 +5147,6 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 - The bunker rule of claim 17 and its exact conditions are owned by S-0606 claim 6.
   It is not the only identified threat-point sender: S-0417 claim 4's factory apron-neighbour
   clearing supplies another setup for the paralysed refusal (scenario B6, part c).
-- Whether the recruitable property also keeps actors out of the computer player's teams (claim 20); scenario
-  B20 tests base defence only.
 - The vehicle *unload* processing for deploying vehicles, *retreat* and *patrol*: claims 30
   and 34 point to other topics. S-0507 claims 7–12 own transport unloading.
 - **Q-0641, depot coordination (claim 29).** S-0314 claims 16 to 24 now own permission,
@@ -5099,19 +5187,18 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 - S-0301 claims 9 and 14's current corrections agree with claim 32's immediate upgrade
   pair, empty-secondary no-op and priority over animation delay. S-0406 claim 12 agrees
   on the position-1/count gate; confirm these contracts at joint sign-off.
-- S-0314 claim 17 and H19 f must qualify same-cell retention as a building destination,
+- S-0314 claim 17 already qualifies same-cell retention as a building destination,
   citing S-0207 claim 26's cell-goal cleanup and exact-point guard exception. Claim 29
-  here supplies accepted-entry processing retention, not an exemption from other entry effects.
-- S-0308 claim 12 must use S-0406 claim 12's count-limited position order, not installation
-  history, and distinguish that provider scan from claim 32's position-1-only gate.
-  Scenario W9 parts c/d must distinguish upgrade weapon resolution
-  from claim 32's permission to fire. Give the first upgrade matching primary and
-  secondary weapons for those firing tests, and record paired attempts. A single-shot
-  primary-only upgrade suppresses firing. Slot 1 is consequently testable through the
-  paired attempts, so reconsider claim 12's higher-slot backing.
-- S-0212 claim 23a's backing should inherit claim 38's unmeasured qualifications for
-  separately set centre precedence and start-assigned records: B37 does not supply their
-  legal setup. Its covered geometry, draw and failure-timing backing is unchanged.
+  here supplies accepted-entry processing retention, not an exemption from other entry
+  effects. Retain the matching contract at sign-off; no further edit is requested.
+- S-0308 claim 12 already uses S-0406 claim 12's count-limited position order, not
+  installation history, and distinguishes that provider scan from claim 32's
+  position-1-only gate. Its W9 paired-attempt tests cover slots 0 and 1 separately from
+  permission. Retain those matching contracts; no further edit is requested.
+- S-0212 claim 23a's backing already inherits claim 38's unmeasured qualifications for
+  separately set centre precedence, start-assigned records and price-factor-only
+  changes: B37 supplies no isolated legal setups. Retain those qualifications; its
+  covered geometry, draw and failure-timing backing is unchanged.
   S-0212 claim 23a and its Q-0238 hand-off question already cite
   claim 38 and F11–F12 here for the complete centre geometry and no-base usable-area
   correction. S-0212 claim 25 also supplies the separate base-record-refresh search
