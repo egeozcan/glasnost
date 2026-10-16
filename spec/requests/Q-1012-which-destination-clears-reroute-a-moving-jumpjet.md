@@ -1,9 +1,9 @@
 ---
 id: Q-1012
 title: Which clears of the order-level destination invoke the jumpjet stop reroute
-status: open
+status: answered
 related: [S-0502, S-0213, S-0215, S-0517]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

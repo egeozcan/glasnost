@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981]
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012]
 supersedes: []
 ---
 
@@ -116,6 +116,9 @@ New terms:
   - It is *moving now* in every jumpjet state except *grounded* and *hovering*.
   - Glossary candidate: this is the jumpjet sense of "the locomotor is moving it" in S-0310
     claims 7 and 8.
+- **Destination-refresh state.** A pending requirement to reapply a vehicle's order-level
+  destination even when unchanged (claim 24). Its exceptional activation conditions remain
+  unmeasured here; it is not a new imported field.
 - **Movement point.** The locomotor's stored destination point, distinct from the unit's
   order-level destination (S-0213 claim 8). Here flight headings, distance and arrival use
   this point. Claim 24 distinguishes clearing an order-level destination from giving the
@@ -203,9 +206,23 @@ New terms:
      when its evaluated draw layer is ground (S-0102 claim 3). Listing is on the deck when
      the unit's on-deck state is set, and on the ground otherwise. A jumpjet does not use
      the ordinary aircraft's positive-listing-height exclusion of S-0209 claim 13.
-   - On flat land without bridges this permits listing at positive heights below 208 leptons,
-     but not at 208 leptons or above. The bridge cases use S-0102 claim 3's full jumpjet
-     layer rule, not a blanket 208-lepton comparison with terrain height.
+   - **Exact height predicate (Q-1010).** Let *r* be the signed integer height above the
+     surface: above terrain unless the on-deck state is set, then above the deck. Let
+     *r*′ = *r* − 416 leptons only over a high-bridge cell, with on-deck state unset,
+     *r* ≥ 416 leptons and no bridge/parachute falling state; otherwise *r*′ = *r*.
+     New listing qualifies exactly when *r* < 208 leptons **or** *r*′ = 0 leptons.
+     The 208-lepton test uses *r*, not *r*′. The type's cruise height does not change
+     this predicate; it separates the two non-ground render layers only.
+   - Thus flat-land heights 1, 50 and 100 leptons qualify, while 208 and 250 do not.
+     Above a high bridge without on-deck state, *r* = 416 qualifies if not falling,
+     but *r* = 417 does not: positive clearance below 208 leptons above the deck is
+     not itself sufficient. With on-deck state set, *r* already excludes the deck height.
+     These are exact integer comparisons, without rounding.
+   - **Falling is not crashing.** The bridge/parachute falling state that suppresses the
+     subtraction is distinct from the jumpjet states *crashing* and *crashed*.
+     Starting a jumpjet crash does not itself set that falling state. An ordinary
+     crashing jumpjet therefore still gets the subtraction, unless independently falling.
+     S-0102 claim 3's table must use this same two-height distinction.
    - Actual-position marking follows that placement's ordinary kind-specific rules of
      S-0209 claim 1. In particular a vehicle can mark the cell during low ascent or descent,
      or near the end of a crash. Its first positive height does not permanently forbid that
@@ -252,8 +269,9 @@ New terms:
        (Open questions; S-0417 claim 10 owns factory contact).
      - If the jumpjet is already over its destination cell and is not of a balloon-hover type,
        its target height becomes its current *r* and it enters *cruising*. Away from a bridge,
-       a jumpjet ordered to its own cell therefore stops its take-off climb as soon as it passes
-       that fraction. Above a bridge while not on its deck, the retained target height includes
+       a jumpjet whose accepted movement point remains in its own cell therefore stops its
+       take-off climb as soon as it passes that fraction. This is conditional on the resulting
+       point, not a promise that an own-cell player order is accepted there (claim 23). Above a bridge while not on its deck, the retained target height includes
        the 416 leptons that the threshold height *h* excludes
        (`quirks.jumpjet_bridge_early_cruise_height`; Edge cases).
    - **Once *h* reaches the target height:**
@@ -482,8 +500,9 @@ New terms:
     - A grounded jumpjet takes off (claim 5). A hovering one leaves its hover in the next tick
       (claim 13).
     - Search settings and the infantry standing-position choice are claim 23.
-    - A direct no-point instruction is distinct from an order-level destination clear: the
-      latter invokes claim 17, not this claim's no-point row (claim 24).
+    - A direct no-point instruction is distinct from an effective order-level destination
+      clear: the latter invokes claim 17, not this claim's no-point row. Claim 24 specifies
+      effective clears and redundant assignments that never reach movement.
     - Backing: `measurable` (J10 and J16) for successful orders and re-ascent.
       Direct no-point and failed-adjustment consequences are `unmeasured` (diagnostic J17):
       ordinary clicks do not establish either condition independently of order handling.
@@ -635,8 +654,25 @@ New terms:
     | Animated landing-first undeploy, S-0517 claim 6 | vehicle's current cell | type's own, winged counted as track | type's own, not simplified | centre's region for that zone, read for its deck when on deck; none if that read has no region | vehicle is on deck | no | allowed |
 
     The last row selects the undeploy destination before the subsequent claim-16 search.
-    S-0517 claim 6 owns when it is assigned. Claim 16's search does not excuse or lift a
-    grounded unit's own occupancy: that can affect its search like any other occupancy.
+    S-0517 claim 6 owns when it is assigned.
+
+    **Own-cell orders (Q-1011).** Claim 16's search does not excuse or lift a grounded
+    unit's own occupancy. A nonempty searched occupancy record rejects the cell even
+    when its only mark belongs to the ordered unit (S-0212 claim 25). On flat land a
+    grounded vehicle's own mark therefore excludes its own cell. An ordinary vehicle
+    gets a nearby qualifying cell, not guaranteed own-cell take-off. Balloon-hover and
+    entering vehicles can keep the exact ordered point under claim 16 despite the search
+    finding another cell; the balloon-hover vehicle still has no early-cruise transition.
+    Infantry standing-position adjustment is subsequent to the search and supplies no
+    exemption from this whole-record test.
+
+    There is also an earlier order filter: outside an ion storm, a jumpjet-type infantry
+    unit ignores a nonempty destination assignment whose cell equals its current cell.
+    This applies while grounded too, before claim 16's search, so an ordinary own-cell
+    player order does not start that infantry unit's ascent. This filter concerns the
+    imported jumpjet-type flag, not merely use of the jumpjet locomotor.
+    J2's former unconditional own-cell expectation was incorrect; claim 7 describes the
+    ascent transition only when the accepted movement point actually is in that cell.
 
     Infantry adjustment uses the found cell's centre, not the ordered point's position
     class. The desired point for this choice has world height 0 leptons. It reads ground
@@ -652,14 +688,41 @@ New terms:
       are taken, in which case adjustment fails.
     - An own-cell infantry order also takes this draw when adjustment is eligible. When a
       neighbour step reaches infantry adjustment, this draw follows claim 21's neighbour draw.
-    - Backing: `measurable` (J16). The world-height-0 deck boundary is `unmeasured`
+    - Backing: `measurable` (J2 and J16, including the own-cell filter and occupancy test).
+      The world-height-0 deck boundary is `unmeasured`
       (J16 diagnostic): a legal stock-map fixture at that boundary is not established.
     - Confidence: high for settings and choice rules.
 
-24. **Stop, empty points and off-map failure (Q-0976, Q-0981).** A stop order of S-0213
-    claim 8 clears the order-level destination and invokes claim 17 when moving. It does
-    not send claim 16's direct no-point instruction. A replacement movement point can
-    survive while the order-level destination is empty.
+24. **Destination clearing, stop, empty points and off-map failure (Q-0976, Q-0981,
+    Q-1012).** An effective order-level destination clear invokes claim 17 whenever the
+    jumpjet retains a movement commitment. This is not exclusive to player stop or to
+    failed landing. It applies equally when deploy or behaviour processing supplies the
+    effective clear. It does not send claim 16's direct no-point instruction. After the
+    reroute the order-level destination is empty, while the replacement movement point
+    and commitment survive. Without a commitment claim 17 does nothing. Behaviour
+    changes alone are not destination clears: S-0213 claims 8 and 10 and S-0215
+    claims 13 to 15 and 22 own which orders or processing outcomes assign an empty destination.
+
+    **Redundant assignments.** Not every repeated request to assign an empty destination
+    is an effective clear. An ordinary jumpjet vehicle ignores an unchanged order-level
+    destination, including empty-to-empty, unless its destination-refresh state requires
+    reassignment. A balloon-hover vehicle can first substitute its retained destination
+    while it still has a target. Such a suppressed assignment does not reroute, consume
+    the infantry position draw or erase the movement point. This is distinct from
+    releasing a landing reservation during an effective reroute.
+
+    **Deploy while hovering.** For a landing-first vehicle with a commitment, an effective
+    deploy-order clear reroutes exactly as the table below. It keeps the replacement
+    point for descent and touchdown, not an absent point. If the order-level destination
+    was already empty and its repeated assignment is suppressed, the preceding movement
+    point and commitment remain instead. An equal horizontal replacement lets the landing
+    request of S-0517 claim 5 produce descent under claim 13; a different replacement
+    first causes cruise to that point. Landing and touchdown use the point then retained.
+    With no initial commitment, the clear cannot create one or wake idle hover: the
+    landing request alone does not bypass claim 3's update eligibility.
+
+    A stop order of S-0213 claim 8 is one source of an effective clear. Its successful
+    reroute has these outcomes:
 
     | Flight state when stopped | Successful claim-17 reroute |
     |---|---|
@@ -689,7 +752,13 @@ New terms:
     The original stores its supplied point before adjustment, with no such rejection.
     later off-map queries can encounter S-0009 claim 44's stand-in. A safe original
     completion there is not established.
-    - Backing: `measurable` (J19) for stop. Original direct-empty and off-map aftermath are
+    - Backing: `measurable` (J19 and J22) for effective clears, suppressed assignments and
+      the committed hovering deploy cases. An idle, uncommitted hovering deploy request
+      remains `unmeasured` (J22 diagnostic): an ordinary completed flight usually retains
+      a commitment, and no stock order sequence establishing that idle starting state is
+      settled here. The destination-refresh exception and balloon-hover target substitution
+      are also `unmeasured` (J22 diagnostic): their activation has not been isolated by
+      the ordinary landing-first vehicle runs. Original direct-empty and off-map aftermath are
       `unmeasured` (J17 diagnostic): ordinary input cannot independently establish these
       instructions. The refusal is design, not an original-behaviour claim.
     - Confidence: high for stop dispatch and unchanged flight state; medium for the
@@ -931,7 +1000,7 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 
 | Key | Feeds | Parse form | Absent-key default |
 |---|---|---|---|
-| type key `JumpJet` | jumpjet type (glossary) | boolean | no |
+| type key `JumpJet` | jumpjet type (glossary); infantry own-cell destination filter in claim 23 | boolean | no |
 | type key `BalloonHover` | balloon-hover type (S-0310 Terms) | boolean | no |
 | type key `JumpjetTurnRate` | *T* (claims 11, F6; rate: S-0206 claim 14); zero warns and gives an empty middle band (design, claim 25) | integer | engine default 4 |
 | type key `JumpjetSpeed` | *S*; zero warns and gives zero fraction and all cruise speeds (design, claim 25) | integer, leptons per tick | engine default 14 |
@@ -950,7 +1019,7 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 | `[JumpjetControls]` `TurnRate`, `Speed`, `Climb`, `Acceleration`, `WobblesPerSecond`, `WobbleDeviation` | nothing (claim 2) | read and ignored | — |
 | `[JumpjetControls]` `CruiseHeight` | the layer threshold (S-0102) | integer | S-0102 |
 | Type movement class and movement zone | own-class/zone searches of claim 23 | keys, parse forms and defaults: S-0211 Import mapping | S-0211 Import mapping |
-| No additional rules, art or map key | claims 3, 4, 22 to 24 and 26 | engine behaviour and the stated safety departures, not imported tuning | no configurable default |
+| No additional rules, art or map key | claims 3, 4, 22 to 24 and 26, including the two-height listing test, own occupancy and effective destination clears | engine behaviour and the stated safety departures, not imported tuning | no configurable default |
 
 - **Key case.** Key names are matched case-sensitively. The stock rules data spells two of the
   type keys `JumpJetAccel` and `JumpJetTurnRate`. Those spellings are not the keys above and
@@ -1030,13 +1099,21 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
       move order is not this idle case.
   - Falsifiers: rising in the grounded transition tick, horizontal movement below the ground-hold
     threshold, or any idle change in these recorded values (claims 3, 5 and 7).
-  - Repeat with an order to the unit's own cell. Expected: it climbs past one quarter of *H*,
-    then cruises at that height and lands (claims 7 and 12). Climbing to *H* before changing
-    state, or continuing to hover without a target, falsifies that own-cell result. Repeat with
-    a balloon-hover vehicle variant from *jumpjet-flight-test*: its ascending speed/heading threshold
-    is one half, and it continues to *H* instead. The quarter-height transition or an own-cell
-    early cruise for that variant falsifies claim 7. Repeat the own-cell take-off below a high
-    bridge and from its deck. Record *r*, *h* and target height. Expected: the 416-lepton
+  - Repeat with a player order to the unit's own cell, recording order-level destination,
+    movement point, commitment and occupancy before any rising tick. Expected: grounded
+    jumpjet-type infantry ignores that assignment; an ordinary grounded vehicle's mark
+    excludes its own flat-land cell and its adjusted point is elsewhere (claim 23).
+    An accepted own-cell assignment for that infantry, or self-exclusion from the vehicle
+    search, falsifies those rules. Do not infer a chosen cell from the click alone.
+  - Separately test claim 7 when the accepted point is in the ascent cell: use an entering
+    non-balloon vehicle in named test data, with a successful nearby search and exact-point
+    retention under claim 16, or record a move that reaches its destination cell during
+    ascent. Expected: while still below target height, it enters cruise once over that cell
+    and past the quarter-height threshold. Failure then to enter cruise falsifies claim 7.
+    A balloon-hover vehicle retaining an own-cell point instead uses the half threshold
+    and continues to *H*; early own-cell cruise for it falsifies that exception.
+    Repeat the established same-cell ascent below a high bridge and from its deck.
+    Record *r*, *h* and target height. Expected: the 416-lepton
     adjustment applies only at or above deck height while not on the deck; an early own-cell
     cruise retains *r*, not *h*. Subtracting the deck height below it, or retaining *h* when
     these differ, falsifies claim 7. A balloon-hover infantry variant still uses the quarter
@@ -1052,7 +1129,16 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   ordinary high hover/cruise over previously empty cells expect no new listing/mark.
   A newly created listing there falsifies it. Repeat from a bridge deck: on-deck state ends
   at first rise, and later eligibility follows the bridge layer rule, not zero height alone.
-  Record ground/deck listings and records separately.
+  Record ground/deck listings and records separately. In named test data compare type
+  cruise heights 208 and 500 leptons, recording actual placing steps at flat-land heights
+  100, 208 and 250, and bridge heights *r* = 100, 416, 417 and 516 leptons with on-deck
+  state unset. Predict eligibility from claim 4: true, false, false on flat land and true,
+  true, false, false over the bridge when not independently falling. A cruise-height-dependent
+  cutoff, or listing at *r* = 516 merely because deck clearance is 100, falsifies it.
+  Repeat during an ordinary crash: record bridge/parachute falling separately from the
+  crash state. Crash start alone must not suppress the bridge subtraction. A subtraction
+  suppressed solely by crashing falsifies claim 4. A fixture that independently sets the
+  falling state is diagnostic unless a stock bridge-collapse/parachute sequence establishes it.
 - **J4 Acceleration and braking.** Record the per-tick step during acceleration and the final
   approach. Expected: *v*<sub>c</sub> rises by *a* per tick to *S* and brakes by 1.5 × *a*
   (F1), including the possible acceleration-then-braking tick in F1. The step is
@@ -1271,7 +1357,9 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   independently of reservations. If a low ground listing survives, look-ahead must include
   it even for its owner. Self-exclusion falsifies that predicate; clean removal at the low
   transition falsifies the retained-listing history. A direct-reference interval is not a
-  test of the allowance. Repeat with a deck-only occupant: no ground-layer allowance.
+  test of the allowance. Establish the accepted same-cell point as in J2, rather than
+  assuming an own-cell click bypasses claim 23. Repeat with a deck-only occupant: no
+  ground-layer allowance.
 - **J19 Stop in each state.** Common setup, stock jumpjet infantry and any eligible vehicle.
   Issue stop once each during ascent, cruise, descent and hover with a retained order, and
   separately during grounded/hovering idle. Record order-level destination separately from
@@ -1295,6 +1383,31 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   creation attributable only to land recompute, or missing eligible non-hover placement
   recomputes, falsifies claim 26. Recorder support must be proposed to the user, not added
   to the harness here.
+
+- **J22 Destination-clear sources and deploy.** Common setup; use a landing-first jumpjet
+  vehicle, with named test data only if no stock type supplies the flags. Establish hovering
+  with a movement commitment and record the order-level destination and separate movement
+  point. Issue deploy with a nonempty destination, then in another run after stop has left
+  that destination empty but a commitment retained. Record every destination assignment,
+  refresh state, movement point, flight state, landing request and touchdown position.
+  Expected: the effective first clear runs both searches and keeps their resulting point.
+  the ordinary empty-to-empty vehicle assignment is suppressed and keeps its preceding
+  point without another reroute. A point erased by either case, or an extra reroute on the
+  suppressed assignment, falsifies claim 24. Descent at an equal point and cruise before
+  descent at a different point must follow claim 13 and end at the retained point.
+  Repeat a behaviour-processing destination clear after a nonempty move, identifying the
+  effective assignment in the recorder: the same reroute applies irrespective of its source.
+  Continued old-point travel despite a distinct successful replacement falsifies universality.
+  Repeat an unchanged nonempty vehicle destination as a suppression control. Diagnostic
+  extensions record any destination-refresh exception and balloon-hover substitution while
+  a target remains: if an effective clear reaches movement, expect rerouting; a suppressed
+  assignment must keep the point. No ordinary-input fixture activating the refresh exception
+  independently is established here. Use J19 for
+  stop and J11 for no-cell failure; those outcomes are not replaced by deploy-specific rules.
+  Diagnostic only: if ordinary inputs establish idle hover without a commitment, request
+  deploy and record whether a separate event creates a commitment. Without such an event,
+  landing-request-only motion would falsify the source hypothesis; no stock fixture for
+  this starting state is asserted. Propose missing recorder support rather than writing it.
 
 ## Open questions
 

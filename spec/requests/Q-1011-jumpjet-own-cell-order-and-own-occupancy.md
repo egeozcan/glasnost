@@ -1,9 +1,9 @@
 ---
 id: Q-1011
 title: Does a grounded jumpjet's own occupancy keep its own cell from qualifying when it is ordered to that cell
-status: open
+status: answered
 related: [S-0502, S-0212, S-0209]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
