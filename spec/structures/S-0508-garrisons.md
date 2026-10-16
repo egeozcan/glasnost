@@ -2,13 +2,13 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: [Q-0660]
+requests: [Q-0660, Q-0972, Q-0973]
 supersedes: []
 ---
 
@@ -45,6 +45,9 @@ Neighbouring specs own the rest:
   (Terms) are the occupants of one building. It is off the map and out of play
   (glossary, *in play*), keeps its own owner, and is neither destroyed nor removed. A building's
   occupants form an ordered list: the *first occupant* is the one that has been inside longest.
+  List positions are integers numbered from 0. A *dead occupant place* is a position retained
+  after claim 19's defeat hit kills its occupant. It still counts as a place, not as a living
+  unit (claim 20).
 - **Occupant capacity.** A garrisonable type's imported occupant limit (Import mapping), tested
   for equality as claim 1 specifies, not as a general upper bound.
 - **Occupier type, assaulter type.** Infantry types marked as able to garrison, and as able to clear
@@ -168,6 +171,8 @@ Neighbouring specs own the rest:
    This applies however the building was emptied and however it came to belong to that house, so an
    empty civilian garrison building that the map gives to a player, or that a player captures,
    returns to the civilian house at its first turn.
+   These return and feedback rules require an existing civilian house. Claim 21 describes the
+   original's unsafe missing-house case; retaining the owner silently is not its rule.
    - Backing: `measurable` (scenarios G4 and G6)
    - Confidence: high (the change and the gate on the owner); medium (the radar event throttling the
      announcement)
@@ -177,7 +182,8 @@ Neighbouring specs own the rest:
    without inside fallback. A building emptied this way returns to the civilian house in that
    same turn under claim 8, with feedback for the owner it had before returning. While it stays badly damaged,
    claim 1 refuses every new occupant. A garrisonable building of any other tech level is never
-   evacuated this way.
+   evacuated this way. Evacuation itself does not require a civilian house; if none exists, the
+   occupants still leave but the subsequent ownership operation is unsafe (claim 21).
    - Backing: `measurable` (scenario G6)
    - Confidence: high
 
@@ -199,17 +205,36 @@ Neighbouring specs own the rest:
     The corner cell (x₀ − 1, y₀ − 1) has no rank and is never used (quirk, Edge cases). So the far
     corner (x₀ + W, y₀ + H) has the highest priority. Only the first occupant's view of a cell matters; the
     other occupants are not consulted.
-    - Backing: `measurable` (scenarios G7 and G8) for ranking, skipped corner and first-occupant
-      choice. The exact initial reference level is `unmeasured`: no fixture here separates −1
-      from another reference level while keeping the other entry-check inputs identical.
-    - Confidence: high (order and the skipped corner); medium (the entry outcome used)
+
+    There is no independent legal-cell or usable-area gate in this search. A candidate with no
+    map cell is read as the stand-in cell of S-0009 claim 44 and undergoes the same entry check.
+    A candidate outside the usable area qualifies exactly when that check is *clear*, not merely
+    because its terrain is passable. An ordinary occupant that entered from inside the usable
+    area retains that status while inside the building: S-0209 claim 4's outside-area rejection
+    applies. Exceptions remain those of the entry check, not a new garrison permission. The
+    reference-level bypass of S-0208 claim 19 also applies: terrain level −6 or lower gives
+    *clear* before the usable-area and occupancy tests (`quirks.garrison_negative_level_exit`).
+    Outside-area cells are thus not
+    categorically forbidden; nor is a missing map cell rejected independently of its stand-in
+    reading and the occupant's entry rules. S-0009 claim 44's immutable stand-in departure
+    still applies in our engine.
+    - Backing: `measurable` (scenarios G7, G8 and G16) for ranking, skipped corner,
+      first-occupant choice and ordinary outside-area rejection. Qualification of a missing map
+      cell with an occupant exempt from outside-area rejection is `unmeasured`: G16 does not
+      establish that special occupant state inside a garrison. The negative-level bypass inherits
+      S-0208 claim 19's backing; G16 proposes its exit-specific comparison. The exact initial
+      reference level remains `unmeasured` until that fixture is validated; flat-ground tests
+      do not separate it from other levels.
+    - Confidence: high (order, skipped corner and absence of an independent map-boundary gate),
+      medium (outside-area consequence and placement of a boundary fixture)
 
 11. **Putting occupants out.** With an exit cell, the occupants are put on the map in that one cell,
     from the last occupant to the first, within the same tick. Each faces facing 0 and is placed
     at the cell's centre on its terrain surface, ignoring standing-position occupancy for this
     placement. Several released occupants can therefore overlap at the centre. There is no
     random draw to choose a standing position, unlike S-0208 claim 3's ordinary position choice.
-    An occupant that cannot be placed is removed (not destroyed). Each placed occupant then, before
+    An occupant that cannot be placed is removed (not destroyed). Claim 22 gives the placement
+    conditions; standing-position crowding is not a failure condition. Each placed occupant then, before
     the next one is placed:
     - has its target cleared,
     - receives a scatter request whose threat point is the building's centre, forced and
@@ -269,7 +294,19 @@ Neighbouring specs own the rest:
     positive-health buildings are not excluded, and mind control of the assaulter does not exclude
     it. A type with both marks instead uses claim 1 alone and never assaults.
 
-    On a passing attempt, the raise of claim 3 sees the occupants still inside. Every occupant is then removed during that attempt, with the assaulter weapon's occupant animation at a muzzle point described by S-0313 Terms. The removal order and the correspondence between an occupant and an animation position are not specified here: the available measurement does not distinguish them. The assaulter does not go inside: it has its destination cleared and scatters as in
+    On a passing attempt, the raise of claim 3 sees the occupants still inside. Every occupant is
+    removed during that attempt, from the last list position to position 0. Each occupant's
+    animation and reversed kill credit occur before its removal; its credit and removal precede
+    those of the preceding list position. Destruction-tag effects on the assaulter can therefore
+    observe that reverse order through the credited occupants and their retained state.
+
+    For the occupant at list position i, the assaulter weapon's occupant animation uses the
+    building's muzzle point i, projected as S-0313 claim 6's pixel shift. This is the position
+    in the occupant list, not the shared firing index of claim 18. There is no wrapping by the
+    number of configured points: supported point numbers are 0 through 9. Missing points retain
+    their imported defaults. An occupant at position 10 or later has no supported
+    animation point and no specified safe original result; this is not wrapping to point 0.
+    The assaulter does not go inside: it has its destination cleared and scatters as in
     claim 4. The building, now empty, follows claim 8 at its next turn when it is a civilian
     garrison building.
 
@@ -287,10 +324,12 @@ Neighbouring specs own the rest:
       same-house case tests the reversed notifications and counters, not a nonzero gain.
       The one-way alliance distinction and the build-up, sale, unusable-centre and erasure gates
       are `unmeasured`: G10 establishes neither an asymmetric-alliance arrival nor an already
-      ordered assaulter arriving during those building states. The exact animation position and reverse removal order are
-      also `unmeasured`: simultaneous identical animations do not identify which removed occupant
-      produced which animation, and no discriminating fixture is established.
-    - Confidence: medium
+      ordered assaulter arriving during those building states. Reverse removal and credit order
+      are `measurable` (G17); animation position is `measurable` for supported point numbers
+      (G17's changing-count comparison). Unsupported animation points are `unmeasured`: no safe
+      oracle outcome is established, and G17 deliberately stays within the supported numbers.
+    - Confidence: high (reverse list order, point number and independence from the firing index),
+      medium (other assault rules)
 
 15. **Erasure.** When a building with occupants is erased (glossary, *being erased*), its occupants
     are removed with it, without death and without being put out.
@@ -372,6 +411,72 @@ Neighbouring specs own the rest:
     - Confidence: high (group actions and defeat's off-map inclusion); medium (selective
       mixed-house consequence, retained index and dead firing choice)
 
+20. **Dead places still count; their use is unsafe (Q-0970).** After claim 19's independent
+    defeat death, the list length n still includes the dead occupant place. The capacity test
+    of claim 1, empty-building test of claim 8, delay quotient of S-0301 claim 7 and firing-index
+    modulus of S-0313 claim 6 all use this n, not a count of living occupants. A building with
+    only dead places is not empty for abandonment. No death-specific decrement, compaction or
+    index repair occurs.
+
+    This does not establish a safe shot from a dead place. The original supplies no next-living
+    substitution, dead-place weapon fallback or dead-place experience exemption. Weapon selection
+    (S-0308 claim 13) and the occupant-recipient branch of experience selection (S-0311 claim 8)
+    require an occupant that still exists. Once it has been removed, which weapon fires, whether
+    a launch succeeds and advances the index, and which occupant receives experience have no
+    dependable original result. The ordinary muzzle calculation selects numeric point k
+    independently of occupant health (S-0313 claim 6); it cannot make an unsafe launch safe.
+    A trainable building's own experience branch remains S-0311 claim 8's rule, not a new
+    fallback invented for dead occupants.
+
+    A later eviction has no dead-place skip either. It includes the retained places in the exit
+    search and release attempt, or in removal when there is no exit. It does not intentionally
+    create a replacement unit. Once the occupant no longer exists, neither a successful release
+    nor an orderly skip is guaranteed; no placement for that dead place is specified as safe.
+    A deterministic continuation is a safety departure requiring the project lead, not an
+    original rule that can be recovered by choosing a survivor.
+    - Backing: `measurable` for retained n and non-abandonment (G15's count observation).
+      Delay and modulus use the same count by their cited claims, but firing through a dead
+      place, occupant experience selection and later eviction are `unmeasured`: G15 stops
+      before such unsafe uses. No safe confirming run or outcome is proposed for them.
+    - Confidence: high (unchanged count and absence of dead-place filtering); medium (the
+      boundary beyond which no dependable continuation can be specified)
+
+21. **No civilian house is not silent retention (Q-0971).** With no civilian house, an empty
+    civilian garrison building does not simply keep its owner without feedback. At its turn,
+    the original still requests claim 8's local-owner sound and radar event, with the
+    announcement conditional on event creation, then attempts an ownership change without a
+    receiving house. There is no safe resulting owner or rule for every later turn. The same
+    happens after claim 9's forced evacuation: evacuation is not skipped, and emptying leads
+    into this unsafe ownership operation in that turn. A still-occupied building with a valid
+    owner cannot match a nonexistent civilian house and therefore does not change owner under
+    claim 7. Silent owner retention would be a safety departure, not the original behaviour.
+    - Backing: `unmeasured`: no deliberate missing-house crash run is proposed. A diagnostic
+      variant of G6 would remove civilian-side membership from every instantiated country and
+      observe the first empty-building turn only, but is not a safe confirming scenario for a
+      stable owner. The ordinary existing-house control remains G6.
+    - Confidence: high (feedback attempt, evacuation and absence of an ownership guard),
+      medium (unsafe ownership outcome, not a specific crash time)
+
+22. **Limits of centre placement (Q-0972).** For a living occupant still off-map inside the
+    building, with an ordinary valid centre position during an active game, claim 11's placement
+    succeeds. There is no second infantry entry-outcome test at placement, no test of the later
+    occupants' movement permissions, and no capacity, terrain-passability or usable-area refusal
+    added after choosing the exit cell. A later occupant can thus be placed on terrain which it
+    could not itself have selected as an exit.
+
+    Outside those normal conditions, placement can refuse an invalid position, an inactive game,
+    an object not in its off-map state, or an object already marked on the map. A failed map-entry
+    marking also refuses placement; for ordinary infantry at this site its relevant preconditions
+    are that it is off-map and not already map-marked. There is no random centre-position failure.
+    An absent or already removed occupant is instead claim 20's unsafe case, not a living unit
+    that this rule promises to revive. Existence alone does not guarantee success.
+    - Backing: `measurable` (G7, G9 and G16's different-permissions variant) for normal centre
+      placement and lack of a later-occupant terrain test. Exceptional state refusals are
+      `unmeasured`: no validated data-only fixture supplies a still-listed living occupant in
+      those inconsistent states or invokes eviction outside an active game. G16 records any
+      normal-state loss as a falsifier, not evidence for an unspecified random failure.
+    - Confidence: high
+
 ## Formulas
 
 > Exit ring size = 2 × (W + H) + 4 cells. Ranked distinct candidates = 2 × (W + H) + 3 cells
@@ -394,6 +499,8 @@ rejection condition, not a requirement that an accepted building have positive h
 | Facing of a put-out occupant | 0 | facing unit | claim 11 |
 | Reference level of the exit-cell check | −1 | height level | claim 10 |
 | Absent occupant capacity | 0 | occupants | Import mapping |
+| Supported assault muzzle points | 10 | points, numbered 0 through 9 | claim 14; not a modulus |
+| Highest terrain level receiving the exit-check bypass | −6 | height level | claim 10; integer comparison |
 
 ## State and ordering
 
@@ -430,6 +537,11 @@ Ordering as observed:
   destroyed by each occupant even though it survives. Fixed behaviour: each removed occupant
   instead receives destruction notifications and loss bookkeeping, with kill credit and
   experience for the assaulter under the ordinary rules. The assaulter still survives and scatters.
+- **`quirks.garrison_negative_level_exit`** (default: on). Claim 10's initial reference-level
+  bypass lets an exit candidate at terrain level −6 or lower qualify without the later entry
+  tests. With it off, the candidate receives the ordinary terrain, usable-area and occupancy
+  tests instead, with no connecting-step height restriction. This switch is scoped to garrison
+  exits; it does not change S-0208 claim 19's teleport-specific switch.
 - **`quirks.garrison_exit_skips_corner`** (default: on). The exit search never tries the corner
   cell (x₀ − 1, y₀ − 1). With every other exit ring cell blocked and that corner free, the
   occupants are lost (or put inside, with inside fallback). Fixed behaviour: the corner is tried
@@ -446,9 +558,9 @@ Ordering as observed:
 - **Building ownership change on a garrisoned building.** A capture or trigger that hands a
   garrisoned building to another house leaves the occupants as they are (claim 17).
 - **No civilian house.** With stock data this cannot happen in a skirmish: the neutral house's
-  country belongs to the civilian side, and S-0009 claim 28 never removes a passive house. With data
-  in which no house of the game has a country of the civilian side, claim 8 hands the emptied
-  building to no house, which the original does not handle (Questions for the project lead).
+  country belongs to the civilian side, and S-0009 claim 28 never removes a passive house.
+  Claim 21 describes the unsafe original result with altered data. A safe alternative still
+  needs the project lead's decision; no quirk is proposed for an unsafe result.
 - **Both type marks.** An infantry type marked both occupier and assaulter is an occupier only: it
   never assaults.
 
@@ -468,9 +580,13 @@ Ordering as observed:
 | `BuildingAbandonedSound` (rules, `[AudioVisual]`) | abandoned sound (claim 8); stock data does not set it | sound name | none: no sound |
 | `[EVA_StructureGarrisoned]`, `[EVA_StructureAbandoned]` (EVA file) | the two announcements | as S-0701 | as S-0701 |
 | `OccupantAnim` (rules, weapon) | assault animation (claim 14); also drawing of occupant fire | animation name | none |
-| `MuzzleFlash`*n* (art, building) | muzzle points (claim 14) | as S-0313 | as S-0313 |
+| `MuzzleFlash`*n* (art, building image), n from 0 through 9 | pixel pair for assault animation of list position n (claim 14); no point-count modulus or firing-index selection | two integers in pixels, as S-0313 | (0, 0), as S-0313 |
 | No user-data field | shared occupant/muzzle index and action reset (claims 18 and 19) | runtime integer, not imported | initially 0 (S-0313 claim 6) |
 | No additional user-data field | defeat hits on occupants (claim 19) | event rule, not imported | S-0414 claim 5 and S-0303 Import mapping own the defeat hit and its warhead |
+| No user-data field | retained dead places in capacity, abandonment, delay and modulus (claim 20) | runtime integer count | no automatic filtering |
+| No user-data field | reverse assault credit/removal order (claim 14) | integer list position | independent of the firing index |
+| No additional user-data field | exit qualification and centre-placement conditions (claims 10 and 22) | runtime spatial/state tests | no independent legal-cell gate; outside-map reads as S-0009 claim 44 |
+| No additional user-data field | no-civilian-house case (claim 21) | house lookup using the country-side mapping above | no original silent-retention fallback |
 
 The initial absent defaults above have high confidence and `unmeasured` backing here: no fixture
 removes the supplying stock layer and distinguishes an initial default from a retained earlier
@@ -678,8 +794,8 @@ notifications falsifies the corresponding original-mode prediction. Nonzero expe
 score for hostile occupants remain unmeasured until a validated fixture supplies such occupants
 without requiring orders in another player's name. On our engine with reversed
 kill credit disabled, the notifications and credit instead identify the occupants as victims
-and the assaulter as killer. Exact animation-to-occupant correspondence is not established by
-this scenario.
+and the assaulter as killer. G17 supplements this scenario for ordered credit/removal and
+animation-to-list-position correspondence.
 
 **G11. Erasure (claim 15).** Setup: a garrisoned civilian building, an enemy stock erasing unit,
 and a control empty copy. Give each occupant a destroyed-event counter and note starting kill/loss
@@ -738,15 +854,80 @@ exactly one ordinary shot at a durable target and stops. Verify index 1. A timed
 ownership trigger then transfers the building to B as in G10; verify that occupants still
 belong to A. With the building no longer attacking and all occupants still inside, surrender A
 through normal input. Record the surrender-processing tick, building health and owner,
-occupant health, destruction-counter effects and the numeric index read-only. Observe during
+occupant health, destruction-counter effects, retained list length n and the numeric index
+read-only. Observe during
 that processing before later firing or removal can use the dead occupants. Expected: A's
 occupants receive defeat's killing hits despite being off-map, the B-owned building is not
-hit by A's surrender, no whole-building eviction occurs, and the index remains 1. A reset or
+hit by A's surrender, no whole-building eviction occurs, n remains 3 including all dead places,
+and the index remains 1. If a building turn can be observed without a new dead-place use, it
+must not treat these places as empty or request abandonment. A count decrement, abandonment
+caused by these deaths alone, a reset or
 modulo repair, an eviction caused solely by the occupants' defeat, or exclusion of their hits
 because they are off-map falsifies that part. Repeat three fresh runs. The original's local
 end delay does not prevent observing the surrender tick. Do not continue an unsafe attack
 as a test of a promised credit recipient. This tests numeric retention without assuming a
 validated mixed-house garrison fixture; that selective-survival consequence remains unmeasured.
+
+**G16. Boundary exits and placement permissions (claims 10 and 22).** Use
+`garrison-boundary.map`, game speed index 2, stock setup otherwise as above. Place a legal
+civilian building with its centre inside the usable area and its exit ring crossing that area's
+edge. Keep the first occupant an ordinary stock occupier that entered from inside the usable
+area. Block all higher-ranked usable candidates and compare the best otherwise-clear outside
+candidate with a lower-ranked usable one. Deploy and record candidate cells, first occupant's
+entry outcomes, selected cell and immediate centre placements before scatter. Expected: the
+ordinary outside candidate is rejected, and the usable clear one is selected. A selection based
+only on outside terrain passability falsifies that gate. Repeat with all usable candidates
+blocked: absent another clear candidate, occupants are removed, not placed outside by a special
+escape permission.
+
+In a named negative-level variant, make the outside candidate's terrain level −6 and supply a
+valid building/entry setup. Record the candidate's terrain height and compare a level −5 control.
+Expected: the level −6 candidate passes the entry check's early reference-level bypass, even
+outside the usable area; the ordinary outside-area test still rejects the level −5 control.
+A blocked level −6 entry outcome falsifies the inherited bypass. In our engine, repeat with
+`quirks.garrison_negative_level_exit` off: the outside candidate now undergoes ordinary entry
+tests and is rejected by the outside-area gate. This tests the specified alternative, not the
+original. Do not equate an editor's refusal to construct this variant with an observed game
+outcome; absent a valid imported fixture,
+this exit-specific observation remains unmeasured.
+
+For a full-map-edge variant, where the map geometry permits the same legal building/entry setup,
+include ring coordinates with no legal map cell. Record their stand-in reading and entry outcome:
+selection must agree with that outcome, not an extra nonexistent-cell guard. Ordinary inside-area
+occupants with no exit permission are expected to reject the blank level-0 stand-in. This does
+not validate hypothetical exempt occupants; no such garrison fixture is supplied here.
+
+For the different-permissions variant, use G7's two named occupier types, first one that can enter
+a chosen terrain and then one that cannot. Make that legal cell the highest-ranked clear exit for
+the first occupant. Expected: both living off-map occupants are placed at its centre, despite the
+second type's entry refusal there. Loss of that second occupant solely for terrain permission, or
+any extra standing-position draw, falsifies claim 22. For every valid part use three fresh games,
+record health and off-map/map-marked state before release and positions immediately afterwards.
+Exceptional inconsistent-state refusals and inactive-game invocation are not claimed tested.
+
+**G17. Assault order and numbered points (claim 14).** Use G10's named assault map and normal
+input, retaining its building-only transfer so A's identified occupants remain inside B's building.
+Use one, two and three occupants entered individually in known order, each with distinct recorded
+health or experience. Give the assaulter a repeating destruction counter with no destructive
+side effects. Use a named test-art file with distinguishable small pixel pairs at points 0, 1 and
+2. For each count prepare index 0 and, where possible, a different index by ordinary shots before
+stopping the attack. After assault, record animation creation positions, destruction-counter
+increments and each occupant's existence/removal state at those increments with a read-only
+recorder. Tick-end video alone is insufficient for the credit-order part.
+
+Expected: with three occupants, credit and removal identify positions 2, 1, 0 in that order.
+at each notification the currently credited occupant still exists, and positions processed
+at previous notifications have already been removed. Animation points are 2, 1, 0 respectively,
+regardless of the starting firing index. With counts one and two the point sequences are 0 and
+1, 0; the count comparison identifies each added last occupant's point without needing different
+animation types. Repeat with point 2 omitted in the test art: the third occupant's animation uses
+the absent default pair (0, 0), not a wrap to the configured nonzero point 0. Credit still follows
+the same reverse list order. Use three fresh runs per variant. Any forward credit/removal order,
+a point selected by the firing index, or wrap by configured-point count falsifies that part.
+If event-time recording is unavailable, keep the removal/credit observation unmeasured rather
+than infer it from simultaneous identical animations. Do not run unsupported point numbers as
+a test of a promised safe result. Normal assaulter survival and reversed credit remain G10's
+controls.
 
 ## Open questions
 
@@ -755,29 +936,38 @@ validated mixed-house garrison fixture; that selective-survival consequence rema
   can kill it independently without index repair. Safe firing and experience selection after
   a dead occupant remains among the choices are not answered; S-0308, S-0313 and S-0311 must
   coordinate a project-lead safety decision, rather than infer compaction or a safe recipient.
-- Whether an exit ring cell outside the map or outside the usable area can qualify (claim 10).
-- Which conditions, other than standing-position occupancy, can make placement fail after an
-  exit cell qualifies (claim 11). G7 records any such losses without predicting them.
+- Q-0970: claim 20 answers retained count and the lack of dead-place filtering, but safe
+  weapon/launch/index progression, occupant experience and later eviction still require a
+  safety departure. No dependable original outcome exists after the occupant has been removed.
+- Q-0971: claim 21 answers the original's attempted feedback, evacuation and unsafe ownership
+  operation. A stable safe owner/feedback policy for later turns remains a lead decision.
+- Q-0972 is answered by claims 10 and 22: no independent legal-cell gate, ordinary outside-area
+  rejection through the entry check, and no normal centre-placement crowding or terrain failure.
+  Exception-state and off-map qualification observations retain their stated unmeasured limits.
+- Q-0973 is answered by claim 14: reverse list-order removal/credit and point i for position i,
+  without a point-count modulus or participation by the firing index. Assaults exceeding the
+  ten supported point numbers need a safety policy, not invented wrapping.
 - Whether any skirmish cause other than map action code 6 and the original's computer player
   sends the house-wide hunt order of claim 13.
 
 ## Cross-spec changes required
 
-Joint sign-off must confirm these coordinated changes; the current S-0311 claim 15 and
-S-0308 claim 13 still require reset before individual releases/removals, unlike claim 18 here.
-That requirement is withdrawn as an unobserved intermediate ordering, not replaced by a claim
-that the original resets later.
+The current S-0308 claim 13, S-0313 claim 6 and S-0311 claim 15 already agree on completed-action
+reset and claim 19's defeat exception. Earlier demands to change their reset ordering are satisfied.
+The remaining coordination is:
 
-- **S-0311 claim 15 and its firing-occupant term:** require index 0 after completed eviction or
-  clearing, without constraining reset relative to individual releases/removals. Distinguish
-  claim 19's defeat hits and unchanged numeric index from the limited set-up compaction case.
-  Claim 8's safe experience recipient after a retained dead choice needs the lead decision below.
-- **S-0308 claim 13 and its index table:** use the same completed-action reset and additional-entry
-  retention. Replace the unresolved absence of selective skirmish death with claim 19's
-  own-house-defeat counterexample; do not infer compaction or modulo repair.
-- **S-0313 claim 6:** retain completed-action reset without intermediate ordering, but replace
-  the unresolved selective-death premise with claim 19's defeat counterexample and unchanged
-  numeric index. Dead-choice muzzle safety shares the lead decision below.
+- **S-0301 claim 7:** cite claim 20 for n including retained dead places, without predicting a
+  successful shot through a dead place.
+- **S-0308 claim 13 and S-0313 claim 6:** cite claim 20 for unchanged n and the absence of an
+  original next-living substitution. Numeric muzzle selection is not a safe-launch guarantee.
+- **S-0311 claims 8, 9 and 15:** cite claim 20 for the unsafe dead-place recipient and claim 14
+  for reverse-list assault credit/removal. Trainable-building self-credit remains claim 8's
+  separate branch; no dead-place exemption for every building is implied.
+- **S-0313 claim 6 and its assault measurement:** use claim 14's point i for list position i,
+  without wrapping by configured points or using the firing index. G17 replaces the previously
+  unresolved animation correspondence.
+- **S-0209 claim 4:** cross-reference claims 10 and 22 for this exit-search use. Do not add a
+  blanket missing-cell refusal or a later-occupant terrain test to garrison release.
 
 ## Questions for the project lead
 
@@ -786,6 +976,9 @@ that the original resets later.
   should compact survivors, which survivor should fire next, or who should receive experience.
   Coordinate the decision with S-0308 claim 13, S-0313 claim 6 and S-0311 claims 8 and 15.
   No safe continuation is invented here, and no quirk switch is proposed for an undefined result.
-- With no civilian house (Edge cases), adopt leaving the owner unchanged and skipping abandoned
-  feedback? The unsafe original outcome is `unmeasured`, confidence low: no deliberate unsafe-data
-  run is proposed. This is not reachable with stock skirmish data.
+- With no civilian house, adopt leaving the owner unchanged and skipping abandoned feedback?
+  Claim 21 establishes that this would be a departure, not the original rule. Forced evacuation
+  itself can remain unchanged. No deliberate unsafe-data run is proposed.
+- For assaults with more than ten occupants, select a safe animation policy beyond point 9.
+  The original supplies no point-count wrapping rule. This is separate from ordinary supported
+  assault order and point selection (claim 14).

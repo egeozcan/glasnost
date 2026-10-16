@@ -1,9 +1,9 @@
 ---
 id: Q-0973
 title: Order of occupant removal in an assault and which occupant shows its animation where
-status: open
+status: answered
 related: [S-0508, S-0313, S-0311]
-answered-by: []
+answered-by: [S-0508]
 ---
 
 ## Need

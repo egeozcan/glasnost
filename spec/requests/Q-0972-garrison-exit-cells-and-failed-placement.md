@@ -1,9 +1,9 @@
 ---
 id: Q-0972
 title: Exit-ring cells outside the map or usable area, and a failed placement of a put-out occupant
-status: open
+status: answered
 related: [S-0508, S-0209, S-0208]
-answered-by: []
+answered-by: [S-0508]
 ---
 
 ## Need
