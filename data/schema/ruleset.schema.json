@@ -8484,6 +8484,11 @@
           "type": "boolean",
           "default": true
         },
+        "parasite_suppressed_latch_strands_unit": {
+          "description": "A parasite whose projectile detonates with takeover, bomb planting or electric charging selected stays off the map, unattached and inactive; off: it attempts claim 4's failed-latch return (never attaching).",
+          "type": "boolean",
+          "default": true
+        },
         "parasite_exit_search_host_mobility": {
           "description": "A parasite's exit-cell search uses the host's locomotion class and movement zone; off: the parasite's own.",
           "type": "boolean",
