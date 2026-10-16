@@ -24,6 +24,15 @@
 //! M6b: the fixture's AI ferries infantry in a hovering transport (S-0507);
 //! every full duel must load a passenger and let one out, and is saved and
 //! loaded at the first tick with a passenger aboard.
+//!
+//! M6c step 5: a fourth duel (`golden/duel-m6c.txt`) plays the own AI against
+//! itself on the synthetic M6c map (`glasnost_ai::fixture_m6c`), whose invented
+//! types make a plain game use every special ability of M6c (module [`m6c`]);
+//! the full run asserts that each ability's order and event counters are
+//! above zero, and is saved and loaded at the first tick each kind of M6c
+//! state appears.
+
+pub mod m6c;
 
 use glasnost_ai::{fixture, game::Game, skirmish};
 use glasnost_sim::{save, testkit};
@@ -39,6 +48,15 @@ pub const SEED: u32 = 20_261_010;
 /// failed, and this one, which passed), so this is one passing seed and
 /// nothing more. The purely simulated replays keep [`SEED`].
 pub const DUEL_SEED: u32 = 20_261_011;
+
+/// Seed of the M6c duel. Chosen from a few tried (see `docs/development.md`,
+/// *Determinism gate*): the first of them that exercised every ability within
+/// [`M6C_TICKS`]. One passing seed and nothing more.
+pub const M6C_SEED: u32 = 1;
+
+/// Ticks of the full run of the M6c duel (shorter than the other duels'
+/// games: every ability is exercised well before it).
+pub const M6C_TICKS: i32 = 12_000;
 
 /// Ticks of the full gate run.
 pub const TICKS: i32 = 3000;
@@ -68,17 +86,20 @@ pub enum Scenario {
     DuelDiagonal,
     /// Our own AI against itself on the synthetic water map (M6a).
     DuelNaval,
+    /// Our own AI against itself on the synthetic M6c map (M6c).
+    DuelM6c,
 }
 
 impl Scenario {
     /// Every scenario, in gate order.
-    pub const ALL: [Scenario; 6] = [
+    pub const ALL: [Scenario; 7] = [
         Scenario::Scripted,
         Scenario::Combat,
         Scenario::Skirmish,
         Scenario::Duel,
         Scenario::DuelDiagonal,
         Scenario::DuelNaval,
+        Scenario::DuelM6c,
     ];
 
     /// The scenario's name, also its golden file's stem.
@@ -90,6 +111,7 @@ impl Scenario {
             Scenario::Duel => "duel",
             Scenario::DuelDiagonal => "duel-diagonal",
             Scenario::DuelNaval => "duel-naval",
+            Scenario::DuelM6c => "duel-m6c",
         }
     }
 
@@ -104,6 +126,7 @@ impl Scenario {
             Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => {
                 SKIRMISH_TICKS
             }
+            Scenario::DuelM6c => M6C_TICKS,
             _ => TICKS,
         }
     }
@@ -111,9 +134,11 @@ impl Scenario {
     /// Every how many ticks the golden file keeps a hash.
     pub fn stride(self) -> usize {
         match self {
-            Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => {
-                SKIRMISH_STRIDE
-            }
+            Scenario::Skirmish
+            | Scenario::Duel
+            | Scenario::DuelDiagonal
+            | Scenario::DuelNaval
+            | Scenario::DuelM6c => SKIRMISH_STRIDE,
             _ => 1,
         }
     }
@@ -290,6 +315,17 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
                 false,
             );
         }
+        Scenario::DuelM6c => {
+            let (out, _, ex) = m6c::play(M6C_SEED, ticks);
+            if ticks >= M6C_TICKS {
+                assert!(
+                    ex.missing().is_empty(),
+                    "duel-m6c: the full run did not exercise {:?} ({ex:?})",
+                    ex.missing()
+                );
+            }
+            return out;
+        }
         Scenario::DuelNaval => {
             return duel(
                 &fixture::map_naval(),
@@ -328,7 +364,11 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
     let (rep, rules) = match scenario {
         Scenario::Scripted => (testkit::scripted_replay(SEED, ticks), testkit::rules()),
         Scenario::Combat => (testkit::combat_replay(SEED, ticks), testkit::combat_rules()),
-        Scenario::Skirmish | Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => {
+        Scenario::Skirmish
+        | Scenario::Duel
+        | Scenario::DuelDiagonal
+        | Scenario::DuelNaval
+        | Scenario::DuelM6c => {
             unreachable!("handled above")
         }
     };
@@ -354,6 +394,7 @@ pub fn golden_text(scenario: Scenario, ticks: i32) -> String {
     };
     let seed = match scenario {
         Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => DUEL_SEED,
+        Scenario::DuelM6c => M6C_SEED,
         _ => SEED,
     };
     let mut s = format!(
