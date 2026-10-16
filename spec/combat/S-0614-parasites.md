@@ -2,7 +2,7 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -84,9 +84,15 @@ addition:
    tries to latch onto the projectile's target object: the object the shot was fired at, wherever
    the detonation happens. No distance between the detonation point and the target is tested. When
    the target is a cell or no longer exists, the parasite fails to latch (claim 4).
-   - Backing: `measurable` (scenario P1 for latching onto a moving target, P3 for the failed latch)
+   These detonation attachment and failed-latch outcomes apply only when parasite attachment
+   is the selected special hit under S-0514 claim 20. Takeover, bomb planting and electric
+   charging each suppress attachment, even when the selected effect cannot succeed. Selected
+   attachment suppresses temporal erasure even when latching fails. This selection does not
+   change the separate firing-time departure from the map or the latch block.
+   - Backing: `measurable` (scenario P1 for latching onto a moving target, P3 for the failed latch,
+     P14 for special-hit selection)
    - Confidence: high (leaving the map, the 20-tick block, the latch on the target object, no area
-     damage), medium (that no distance test applies)
+     damage, special-hit selection), medium (that no distance test applies)
 
 2. **Which units a parasite can latch onto.** A target is *latchable* when all of these hold:
    - it is a mobile unit (infantry, vehicle or aircraft) that is on the map and not destroyed, with
@@ -105,8 +111,9 @@ addition:
      no practical setup is known for an on-map mobile target without a cell)
    - Confidence: high
 
-3. **Latching onto a target.** When the projectile detonates and its target is latchable, the
-   parasite becomes attached to it: the target becomes its host. The parasite stays off the map,
+3. **Latching onto a target.** When the projectile detonates, parasite attachment is selected
+   under S-0514 claim 20, and its target is latchable, the parasite becomes attached to it:
+   the target becomes its host. The parasite stays off the map,
    travels with the host and is not hit by anything that hits the host. Its first delivery
    (claims 6 and 10) happens at the host's next turn (S-0203): in the same tick when the host's
    turn in the update order comes after the projectile's, otherwise in the next tick. The parasite
@@ -114,7 +121,8 @@ addition:
    - Backing: `measurable` (scenario P1)
    - Confidence: high; medium (the first-delivery tick)
 
-4. **Failing to latch.** When the target is not latchable at detonation (a mobile target has died, been entered
+4. **Failing to latch.** With parasite attachment selected under S-0514 claim 20, when the
+   target is not latchable at detonation (a mobile target has died, been entered
    by another parasite, entered a tank bunker or left the map, or the shot was at a cell), the parasite does not latch. It comes back on the map at the centre of the cell it
    last stood in before firing, facing map north (facing 0, S-0204), under claim 20's placement
    rules. The centre is the requested point; infantry may take a side position. When it cannot be placed there, it is removed silently. Once placed, its
@@ -617,8 +625,8 @@ Same precision and rounding as S-0311 F3.
 | State | Event | Result |
 |---|---|---|
 | on the map, armed with a latching weapon | fires at a target (claim 5 allows it) | off the map, inside the projectile; mobile target's latch block set to now + 20 |
-| inside the projectile | the projectile detonates; its target is latchable | attached to the target (claim 3) |
-| inside the projectile | the projectile detonates; its target is not latchable, or is a cell | placement attempted in its last cell, facing north, not held (claims 4 and 20); removed silently when that fails |
+| inside the projectile | the projectile detonates with attachment selected under S-0514 claim 20; its target is latchable | attached to the target (claim 3) |
+| inside the projectile | the projectile detonates with attachment selected under S-0514 claim 20; its target is not latchable, or is a cell | placement attempted in its last cell, facing north, not held (claims 4 and 20); removed silently when that fails |
 | inside the projectile | projectile removed without detonation | stranded off the map, unattached (claim 21) |
 | attached (drone) | the host's turn, delivery due | delivery (claim 6); host held for *P* |
 | attached (grappling) | the host's turn | host held for *P*; the cycle advances (table G), or leaves when the host's cell is not water |
@@ -935,6 +943,20 @@ For every part, a result different from its stated expectation falsifies that pa
   falling or lifted hosts where reachable; motion labels alone do not change the answer. Record
   transport entry separately, expecting host-loss handling rather than another carried-state air
   rejection. Any different classification falsifies claim 22.
+
+- **P14, special-hit selection (claim 1).** Under the common setup, use named map weapon
+  variants retaining the launch-inside and parasite flags. Separately add takeover, bomb
+  planting or electric charging, with the firer capability needed by that effect, following
+  S-0514 claim 20 and its E13 scenario. Record firing-time map departure, latch block,
+  attachment, owner, bomb presence, charger count and health. Expected: departure and latch
+  block still occur, but the higher-priority effect suppresses attachment. Repeat with an
+  ineligible target for that effect, changing eligibility after firing where firing legality
+  otherwise prevents delivery: expected no fallback attachment. In a separate variant enable
+  temporal erasure with attachment and use a firer capable of both. Expected: attachment,
+  not erasure; make the target non-latchable during flight and expect claim 4's return, still
+  without erasure. Record beam attachment as well as parasite attachment. Any attachment
+  despite a higher selected effect, erasure despite selected attachment, or missing launch
+  departure falsifies the respective prediction. A shot refused before firing is inconclusive.
 
 ## Open questions
 
