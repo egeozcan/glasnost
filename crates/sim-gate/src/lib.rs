@@ -46,8 +46,13 @@ pub const SEED: u32 = 20_261_010;
 /// that a duel launches a superweapon; this seed does, and every duel still
 /// loads and unloads a transport. Two seeds were tried (the old one, which
 /// failed, and this one, which passed), so this is one passing seed and
-/// nothing more. The purely simulated replays keep [`SEED`].
-pub const DUEL_SEED: u32 = 20_261_011;
+/// nothing more. Moved again in M6c step 5: with the AI's barracks rally
+/// point, its ferry goal and its army type choice of that step no duel of
+/// the old seed launched; of the eight seeds from 20 261 011 to 20 261 018
+/// tried, this one (the last) is the only one whose straight duel launches,
+/// so again one passing seed and nothing more. The purely simulated
+/// replays keep [`SEED`].
+pub const DUEL_SEED: u32 = 20_261_018;
 
 /// Seed of the M6c duel. Chosen from a few tried (see `docs/development.md`,
 /// *Determinism gate*): the first of them that exercised every ability within
