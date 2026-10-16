@@ -29,8 +29,9 @@
 //!    to harvest; a slave miner counts as a harvester (and, deployed, its
 //!    building too), needs no refinery, and is sent to harvest at the
 //!    nearest explored resource cell, the order a person gives it;
-//! 5. once the harvesters are kept, build army units round-robin (one
-//!    type per kind: vehicles, infantry, aircraft), and when
+//! 5. once the harvesters are kept, build army units (one type per kind:
+//!    vehicles, infantry, aircraft; the type it has fewest of, in turn on
+//!    a tie), and when
 //!    a wave is ready attack-move it to the nearest seen enemy or the next enemy start position (lobby
 //!    knowledge: the map's start waypoints), and once every start position
 //!    has been visited, to the nearest cell of a coarse search grid that
@@ -396,9 +397,10 @@ pub struct Script {
     targets: Vec<CellXY>,
     /// The next target's index.
     next_target: usize,
-    /// The next army type's index, one counter per kind of army (vehicle,
-    /// infantry, aircraft): a counter shared by the kinds would step past
-    /// the same types every round and leave some never built.
+    /// Where the next tie among army types starts, one counter per kind of
+    /// army (vehicle, infantry, aircraft): a counter shared by the kinds
+    /// would step past the same types every round and leave some never
+    /// built.
     next_army: [usize; ARMY_KINDS.len()],
     /// The tick since which idle army units have been waiting for a wave.
     waiting_since: Option<i32>,
@@ -962,19 +964,37 @@ impl Script {
         } else {
             self.candidates(w, Role::Army)
         };
+        // Of the types whose line is free (a naval yard's and a war
+        // factory's vehicles do not wait on each other), the one the house
+        // has fewest of on the map, then the one it has built fewest of
+        // (S-0407 claim 10's ever-built count), then the first from the
+        // kind's counter on. A plain turn through a list that grows with
+        // the tech tree reaches its later types too seldom in a short game,
+        // and the two vehicle lines' picks moved one shared counter, so
+        // some types were never built.
+        let own = self.own(w);
+        let living = |t: TypeRef| {
+            own.iter()
+                .filter(|&&id| w.obj(id).is_some_and(|o| tech::type_of(o) == t))
+                .count()
+        };
         for (k, kind) in ARMY_KINDS.into_iter().enumerate() {
             let of_kind: Vec<TypeRef> = army_types
                 .iter()
                 .copied()
                 .filter(|t| t.kind == kind)
                 .collect();
-            if of_kind.is_empty() {
-                continue;
-            }
-            let t = of_kind[self.next_army[k] % of_kind.len()];
-            if !self.busy(w, t) {
-                out.push(Order::Build { what: t });
-                self.next_army[k] += 1;
+            let n = of_kind.len();
+            let pick = (0..n)
+                .filter(|&i| !self.busy(w, of_kind[i]))
+                .min_by_key(|&i| {
+                    let t = of_kind[i];
+                    let built = tech::ever_built(w, self.house, t);
+                    (living(t), built, (i + n - self.next_army[k] % n) % n)
+                });
+            if let Some(i) = pick {
+                out.push(Order::Build { what: of_kind[i] });
+                self.next_army[k] = i + 1;
             }
         }
 
