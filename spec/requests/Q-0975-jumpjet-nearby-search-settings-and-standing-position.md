@@ -1,9 +1,9 @@
 ---
 id: Q-0975
 title: Settings of the nearby-cell searches of a jumpjet and the standing position it takes
-status: open
+status: answered
 related: [S-0502, S-0212, S-0208, S-0209, S-0517]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

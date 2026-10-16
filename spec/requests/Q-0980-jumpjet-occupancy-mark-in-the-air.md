@@ -1,9 +1,9 @@
 ---
 id: Q-0980
 title: The occupancy mark of a jumpjet that is ascending, descending or crashing
-status: open
+status: answered
 related: [S-0502, S-0209]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

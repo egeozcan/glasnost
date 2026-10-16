@@ -1,9 +1,9 @@
 ---
 id: Q-0978
 title: Whether a jumpjet in the air is listed in the cell below it
-status: open
+status: answered
 related: [S-0502, S-0209]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0981
 title: What a stop order does to a flying jumpjet, and when a jumpjet's cells are recomputed
-status: open
+status: answered
 related: [S-0502, S-0213, S-0211]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
