@@ -48,7 +48,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0411](ui/S-0411-sidebar-behaviour.md) | Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement) | ui | 19 | approved | — |
 | [S-0315](combat/S-0315-suppression-panic.md) | Suppression and panic (infantry fear, prone and panic in combat; parasite suppression) | combat | 8 | approved | — |
 | [S-0510](infantry/S-0510-spies-infiltration.md) | Spies and infiltration | infantry | 3 | approved | — |
-| [S-0525](combat/S-0525-radiation-fields.md) | Radiation fields | combat | 1 | approved | — |
 | [S-0310](combat/S-0310-turrets-facing-for-fire.md) | Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving) | combat | 5 | approved | — |
 | [S-0515](structures/S-0515-tech-buildings.md) | Tech buildings (manned state, acquisition bonus, periodic income, ownership changes) | structures | 3 | approved | — |
 | [S-0307](combat/S-0307-range.md) | Weapon range test | combat | 15 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 19 | approved | — |
 | [S-0519](combat/S-0519-terror-attack-animals.md) | Terror and attack animals | combat | 4 | approved | — |
 | [S-0524](triggers/S-0524-mp-trigger-completion.md) | Multiplayer trigger completion (remaining stock actions and entry raises) | triggers | 9 | approved | — |
+| [S-0525](combat/S-0525-radiation-fields.md) | Radiation fields | combat | 2 | approved | — |

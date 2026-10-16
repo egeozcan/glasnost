@@ -2,11 +2,11 @@
 id: S-0525
 title: Radiation fields
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: []
 supersedes: []
@@ -93,6 +93,11 @@ radiation field, never a data setting. In addition:
      claim 3), and its upward missile if that weapon is a radiation weapon,
    - the own-cell deploy shot of S-0215 claim 31.
 
+   Radiation is created or added on the detonation's tick. When the own-cell deploy shot
+   detonates immediately, this is the tick of the behaviour processing that decides to fire:
+   neither a *deployed-fire* animation frame nor a later field update delays it. This does
+   not bypass projectile travel or detonation rules for other weapons.
+
    It happens whatever the warhead does: a parasite warhead (S-0306 claim 21) and the nuclear
    warhead (S-0306 claim 25) leave radiation too, and so does a detonation over water, on a bridge
    or on a cliff. Nothing about the detonation's targets or damage matters. Area damage that does
@@ -103,7 +108,7 @@ radiation field, never a data setting. In addition:
    The spread of the new radiation is *s* = trunc(*S*<sub>w</sub>), the warhead's cell spread
    truncated toward zero to whole cells.
    - Backing: `measurable` (scenario RF1 for a fired shot; RF9 for cluster detonations, airburst
-     children and a death weapon)
+     children and a death weapon; RF4 part e for immediate own-cell detonation timing)
    - Confidence: high for fired shots, death weapons and the payload; medium for cluster
      detonations and airburst children
 
@@ -140,7 +145,11 @@ radiation field, never a data setting. In addition:
      again from the current tick and its level and light steps recomputed for *N*′ (F2),
    - its spread unchanged, so it then adds the contribution of *L*′ over its old reach (claim 3),
    - its light set afresh from *L*′ (claim 14), with its old radius.
-   - Backing: `measurable` (scenario RF4); the over-removal of `quirks.radiation_add_overdraw`
+
+   For an immediately detonating own-cell deploy shot (S-0215 claim 31), this top-up is
+   already effective on the deciding processing's tick, without waiting for an animation
+   frame. Later turns in that tick read the changed cell radiation under claim 11.
+   - Backing: `measurable` (scenario RF4, including part e for immediate own-cell top-up timing); the over-removal of `quirks.radiation_add_overdraw`
      by scenario RF4 part b
    - Confidence: high for the new level, duration and spread; medium for the removal
 
@@ -568,6 +577,15 @@ Field maintenance itself takes no draws; firing, damage and death may do so.
   control with a field already centred on *Y* and current level above the threshold, expect
   that shot to be withheld. Suppression by overlap alone, or firing in the centred control,
   falsifies the centre-field-level test.
+  Part e: use S-0215 scenario B19 case e's immune deployed infantry fixture, with an
+  immediately detonating secondary radiation weapon. Record the deciding guard processing's
+  tick, the centre field's existence and level, and cell radiation before and after that
+  processing with the read-only recorder. Test first on a clean cell, then with a live field
+  centred there whose current level is below the firing threshold. Repeat with different
+  named-test fire frames and deployed-fire frame counts, keeping firing legal.
+  Expected: the new field or claim 4's top-up is effective in the deciding processing's tick
+  in every run. A change postponed until an animation fire frame or a later tick falsifies
+  the claim. This tests field timing, not an exemption from RF1's radiation-hit cadence.
 - **RF5 (residue; claim 6, `quirks.radiation_residue`).** Base values but *D*<sub>L</sub> = 3000
   (*n*<sub>L</sub> = 0). *W* fires at *X*; *V* stays on *X* for 2500 ticks. *Expected:* losses of 62
   every 15 ticks throughout, also after the field's light disappears at 2000 ticks; a new shot at *X*
