@@ -870,7 +870,7 @@ impl Brain {
     /// - empty and away, goes home.
     fn ferry(&self, w: &World, out: &mut Vec<Order>) {
         let house = self.house();
-        let (Some(home), Some(goal)) = (self.script.home(w), self.script.attack_goal(w)) else {
+        let (Some(home), Some(goal)) = (self.script.home(w), self.script.base_goal(w)) else {
             return;
         };
         let mods = Modifiers::default();

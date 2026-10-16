@@ -550,6 +550,23 @@ impl Script {
             })
     }
 
+    /// Where a ferry would go, without choosing it: the seen enemy
+    /// building nearest home, else the next enemy start cell. A person
+    /// ferries infantry to the enemy's base, not to a unit that flies or
+    /// stands where no one walks.
+    pub(crate) fn base_goal(&self, w: &World) -> Option<CellXY> {
+        let home = self.home(w)?;
+        self.seen_enemies(w)
+            .into_iter()
+            .filter(|&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+            .min_by_key(|&(e, c)| (dist2(c, home), e))
+            .map(|(_, c)| c)
+            .or_else(|| {
+                (!self.targets.is_empty())
+                    .then(|| self.targets[self.next_target % self.targets.len()])
+            })
+    }
+
     /// Whether the line of `t` holds an item or a queue.
     pub(crate) fn busy(&self, w: &World, t: TypeRef) -> bool {
         production::line_of(w, self.house, t)
@@ -992,7 +1009,7 @@ impl Script {
         }
         let mut waiting: Vec<ObjectId> = Vec::new();
         let home = self.home(w);
-        let ahead = self.attack_goal(w);
+        let ahead = self.base_goal(w);
         for id in army.iter().copied().filter(|&id| idle(w, id)) {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
                 continue;
