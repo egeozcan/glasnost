@@ -3677,8 +3677,8 @@ impl Builder<'_> {
                     rule_angle(self.import, kind, idx, b"PitchAngle", PITCH_ANGLE_DEFAULT);
                 let bank_angle =
                     rule_angle(self.import, kind, idx, b"RollAngle", ROLL_ANGLE_DEFAULT);
-                let pitch_speed = rule_real(self.import, kind, idx, b"PitchSpeed")
-                    .unwrap_or(PITCH_SPEED_DEFAULT);
+                let pitch_speed =
+                    rule_real(self.import, kind, idx, b"PitchSpeed").unwrap_or(PITCH_SPEED_DEFAULT);
                 // spec: S-0105 claim 42 (a crashing body keeps S-0312's attitude rules, not built here: drawn level)
                 let height = if crashing { 0 } else { height };
                 Tilt::Flying(voxel::flight_attitude(

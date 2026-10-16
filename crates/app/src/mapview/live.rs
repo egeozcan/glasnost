@@ -34,8 +34,7 @@ use glasnost_sim::world::{GameSetup, HouseId, Layer, Object, ObjectId, World};
 use super::anims::{self, AnimQuirks, Playback, Player};
 use super::build::{
     AnimDraw, Attitude, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile,
-    Painter,
-    ShadowAnchor, find_type, rule_int,
+    Painter, ShadowAnchor, find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
 use super::unload::{self, Unloading};

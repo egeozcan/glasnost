@@ -1744,7 +1744,11 @@ fn aircraft_attitude_is_drawn() {
     assert_eq!(up, images(craft(16384, 16384, rocket(0.7))).0);
     assert_eq!(up, images(craft(16384 + 300, 16384, rocket(0.7))).0);
     assert_ne!(up, images(craft(16384, 16384, rocket(0.9))).0);
-    assert_ne!(up, images(craft(20480, 16384, rocket(0.7))).0, "another heading");
+    assert_ne!(
+        up,
+        images(craft(20480, 16384, rocket(0.7))).0,
+        "another heading"
+    );
     // Claim 42: heading is the aiming facing (turret), not the body facing.
     let flying = |height, speed: f64, turn| Attitude::Flying {
         height,
