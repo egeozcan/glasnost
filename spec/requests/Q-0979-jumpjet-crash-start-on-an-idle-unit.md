@@ -1,9 +1,9 @@
 ---
 id: Q-0979
 title: A crash start on a jumpjet that takes no update
-status: open
+status: answered
 related: [S-0502, S-0312]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

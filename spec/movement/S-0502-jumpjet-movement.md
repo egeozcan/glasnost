@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 4
-sources-class: [decomp]
+revision: 5
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: []
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981]
 supersedes: []
 ---
 
@@ -109,11 +109,17 @@ New terms:
   | *crashing* | falling after a crash start |
   | *crashed* | the fall has ended |
 - **Moving, moving now.**
-  - A jumpjet is *moving* while it holds a move order: from the order (claim 16) until it
-    touches down (claim 15) or the order is cleared.
+  - A jumpjet is *moving* while its locomotor retains a movement commitment: a successful
+    point assignment sets it (claim 16), and touchdown or an accepted direct no-point
+    instruction clears it. This is independent of the order-level destination: stop can
+    clear that destination while retaining movement through rerouting (claim 24).
   - It is *moving now* in every jumpjet state except *grounded* and *hovering*.
   - Glossary candidate: this is the jumpjet sense of "the locomotor is moving it" in S-0310
     claims 7 and 8.
+- **Movement point.** The locomotor's stored destination point, distinct from the unit's
+  order-level destination (S-0213 claim 8). Here flight headings, distance and arrival use
+  this point. Claim 24 distinguishes clearing an order-level destination from giving the
+  locomotor no point.
 - **Current speed** *v*<sub>c</sub>, **maximum speed** *v*<sub>m</sub>. Two double-precision
   values in leptons per tick. Both start at 0. The current speed moves towards the maximum
   speed each tick (F1).
@@ -174,27 +180,50 @@ New terms:
      - its height does not change
      - its wobble phase does not advance
      - its speed fraction keeps its last value
-     - a crash start is not taken up (claim 18).
-   - Backing: `measurable` (scenario J2) for tick timing and idle values. The deferred idle
-     crash-start case is `unmeasured`: no scenario establishes a crash request on an idle
-     hovering unit without some other update waking it.
+   - **Safety departure (design).** A pending crash start above the surface also makes the
+     unit eligible for its next update, even without a move order. Claim 18 then applies:
+     a dead hovering unit cannot remain suspended merely because its order ended.
+     A grounded unit cannot start an aerial crash; S-0312 claims 15 and 16 own removal.
+   - The original's movement eligibility does not itself include a pending crash start.
+     A successful later destination assignment would resume updates, but no general automatic
+     wake or independent removal of an idle suspended unit is established here.
+   - Backing: `measurable` (scenario J2) for ordinary tick timing and idle values.
+     The original idle-crash aftermath is `unmeasured` (diagnostic J15): an ordinary killing
+     hit also clears orders and can invoke claim 17, so establishing the otherwise idle case
+     requires recording those effects. The safety departure is a design rule, not an
+     observation of the original.
    - Confidence: high
 
-4. **Ground occupation.**
-   - A *hovering* or *cruising* jumpjet takes no place in the occupancy record (S-0209).
-   - In every other jumpjet state, its occupancy mark is lifted and laid again at its current
-     position in each physics step.
-   - When a jumpjet leaves the ground (its height above the surface rises from 0), its occupancy
-     mark is lifted and it is no longer on a deck.
-   - Backing: `measurable` (scenario J3) for occupancy outcomes. Replacing an unchanged
-     occupancy mark each tick is `unmeasured`: it has no separate observable effect.
-   - Confidence: medium (the per-state marking was read; its interaction with other movers is
-     S-0209's)
+4. **Cell listing and occupation are not a zero-height test.**
+   - A cell-layer listing, an actual-position occupancy mark, a landing reservation and a
+     hover slot are distinct. S-0209 claims 1 and 13 own the first two concepts; claims 15
+     and 21 here own the latter two.
+   - In *grounded*, *ascending*, *descending*, *crashing* and *crashed*, each physics step
+     removes the previous cell listing and makes the new position eligible for listing only
+     when its evaluated draw layer is ground (S-0102 claim 3). Listing is on the deck when
+     the unit's on-deck state is set, and on the ground otherwise. A jumpjet does not use
+     the ordinary aircraft's positive-listing-height exclusion of S-0209 claim 13.
+   - On flat land without bridges this permits listing at positive heights below 208 leptons,
+     but not at 208 leptons or above. The bridge cases use S-0102 claim 3's full jumpjet
+     layer rule, not a blanket 208-lepton comparison with terrain height.
+   - Actual-position marking follows that placement's ordinary kind-specific rules of
+     S-0209 claim 1. In particular a vehicle can mark the cell during low ascent or descent,
+     or near the end of a crash. Its first positive height does not permanently forbid that
+     mark. Descent can therefore supply an actual-position mark as well as its separate
+     landing reservation; the reservation is not the only way a mark returns.
+   - *Hovering* and *cruising* physics make no new cell listing or actual-position mark.
+     Normally they have none after the higher part of ascent. This is not a general erasure
+     of a listing already retained from a low flight-state transition (claim 22).
+   - At the first rise from the surface, the previous occupancy is cleared and the on-deck
+     state ends. Subsequent low-flight placement can mark again as above.
+   - Backing: `measurable` (J3, including separate listing and reservation observations).
+   - Confidence: high for the placement eligibility; medium for the full kind-specific
+     occupancy consequences, which depend on S-0209 claim 1.
 
 ### Take-off and climb
 
 5. **Take-off.** In its first update with a move order, a *grounded* jumpjet (claim 16):
-   - its speed fraction becomes 1
+   - its speed fraction becomes 1, except 0 for *S* = 0 under claim 25's design rule
    - its current and maximum speeds become 0
    - its target height becomes *H*
    - it enters *ascending*.
@@ -206,7 +235,7 @@ New terms:
    - downwards by 1.5 × *a* per tick, not below 0.
 
    The jumpjet's speed fraction is then set to *v*<sub>c</sub> / *S*. S-0310 claim 8 uses that
-   fraction for an infantry jumpjet.
+   fraction for an infantry jumpjet. For *S* = 0 use fraction 0 instead (design, claim 25).
    - Backing: `measurable` (scenario J4)
    - Confidence: high
 
@@ -428,9 +457,10 @@ New terms:
 ### Orders
 
 16. **A move order.** When a jumpjet is given a destination point:
-    - **Release.** It releases any landing reservation it holds, unless it is grounded.
-    - **No point.** If the order gives no point, the jumpjet stops being moving and nothing else
-      happens.
+    - **Release.** It releases any landing reservation it holds, unless it is grounded or
+      claim 24's safety refusal retains the preceding movement.
+    - **No point.** Except for claim 24's safety refusal while moving now, an instruction
+      giving no point clears its movement point and moving flag, changing nothing else.
     - **Destination.** Otherwise a nearby-cell search (S-0212 claim 25) runs from the point's
       cell, for the hover locomotion class and the flying movement zone.
       - The destination becomes the centre of the cell found, at its terrain height (the deck
@@ -438,20 +468,26 @@ New terms:
         that cell (S-0209).
       - Two kinds keep the exact point that was ordered: a balloon-hover vehicle, and a vehicle
         whose current or queued behaviour is *enter*.
-      - If the search finds no cell, the ordered point itself is kept as the destination and
-        the jumpjet's moving state is left as it was. One that was not moving does not start.
-        How a later update uses the retained point remains unresolved (Open questions).
+      - If adjustment finds no point, the ordered point itself remains the movement
+        destination, with the moving flag, flight state, speeds and target height unchanged.
+        A unit already moving uses that point in the ordinary heading, distance, arrival and
+        landing rules, even when it is not a cell centre. A descending unit does not get the
+        successful-order re-ascent below. A grounded or hovering unit without a move order
+        stays idle; merely retaining this point does not start it.
+      - Off-map failure has a safety exception in claim 24.
     - Otherwise it becomes moving.
     - **Descending.** A *descending* jumpjet goes back to *ascending* with target height *H*.
       Any landing request it had for deploying ends, and an *unload* behaviour in progress is
       replaced by *guard* (S-0215; S-0517 owns deploying).
     - A grounded jumpjet takes off (claim 5). A hovering one leaves its hover in the next tick
       (claim 13).
-    - Backing: `measurable` (scenario J10) for successful orders and re-ascent. No-point and
-      failed-search cases are `unmeasured`: J10's ordinary clicks do not establish a cleared
-      destination or failure of the flying-zone search, independently of other order handling.
-    - Confidence: high (the snapping, the exceptions and the re-ascent); medium (the search's
-      class and zone)
+    - Search settings and the infantry standing-position choice are claim 23.
+    - A direct no-point instruction is distinct from an order-level destination clear: the
+      latter invokes claim 17, not this claim's no-point row (claim 24).
+    - Backing: `measurable` (J10 and J16) for successful orders and re-ascent.
+      Direct no-point and failed-adjustment consequences are `unmeasured` (diagnostic J17):
+      ordinary clicks do not establish either condition independently of order handling.
+    - Confidence: high for the snapping, exceptions, retained-point rule and re-ascent.
 
 17. **A stopped or failed landing.** When the movement of a moving jumpjet is stopped (a failed
     landing check, claim 15, is one case):
@@ -464,12 +500,14 @@ New terms:
       remaining health with the demolition warhead, ignoring defences, with the no-escape marker
       and no attacker (so its kill is credited to no one). Its destination is cleared.
 
-    Stopping a jumpjet that is not moving does nothing.
+    Stopping a jumpjet that is not moving does nothing. The search has claim 23's settings.
+    A player stop that clears the order-level destination uses this rule (claim 24); it is
+    not an instruction to erase the locomotor's point.
     - Backing: `measurable` (scenario J11) for rerouting, self-destruction and no kill credit.
       Exact damage amount, warhead, defence bypass and no-escape marker are `unmeasured`:
       J11's unprotected empty infantry unit dies under several damage mechanisms, so the
-      result cannot distinguish those properties. Stopping a non-moving unit is likewise
-      `unmeasured`: no scenario here isolates that stop from ordinary order handling.
+      result cannot distinguish those properties. Stopping a non-moving unit has
+      `measurable` backing through J19's recorded idle cases.
     - Confidence: high (re-routing); medium (self-destruction, which needs a situation with no
       reachable cell)
 
@@ -483,7 +521,8 @@ New terms:
       its height may therefore rise before the extra drop. The −5-lepton target first affects
       ordinary height control in the following update (claim 3). A jumpjet that is neither
       moving nor moving now takes no update, so it does not start this fall until it next
-      updates (Open questions). An infantry jumpjet switches to its *air-death-start* sequence
+      updates in the original. Claim 3's safety departure instead guarantees that next
+      update for a pending aerial crash. An infantry jumpjet switches to its *air-death-start* sequence
       (S-0107). A seized dropped unit instead follows S-0607 claim 15's cell-centre detour
       before crash entry.
     - **Fall.** In each tick of *crashing*:
@@ -560,11 +599,127 @@ New terms:
     - **Draw.** Each step takes one ranged draw over 0 to 7 from the scenario random stream
       (S-0202). The value is a step direction (glossary): the neighbouring cell in that direction
       becomes the jumpjet's new destination, through the move-order rule of claim 16, and it
-      enters *cruising*.
+      enters *cruising*. Infantry point adjustment can then take the additional draw of
+      claim 23; the neighbour draw is not the total draw count of that whole order.
     - **No check before the draw.** Nothing tests the chosen neighbour first. An off-map or
       occupied neighbour is handled only by claim 16's nearby-cell search.
     - Backing: `measurable` (scenario J8 b)
     - Confidence: high (the draw and its range); medium (the handling of an off-map neighbour)
+
+### Clearance, searches and exceptional orders
+
+22. **Listings and self-clearance (Q-0978).** F3 reads actual ground-layer listings, not
+    hover slots or reservations. A listed jumpjet supplies the 85-lepton allowance, including
+    to itself: there is no self-exclusion. A deck-only listing supplies none.
+    - Non-hover/cruise physics removes its own listing before evaluating clearance. Ordinary
+      high hover has no listing left from ascent and therefore no automatic self allowance.
+    - Hover/cruise physics leaves existing listings untouched rather than creating new ones.
+      A low own-cell ascent-to-cruise transition can therefore retain its former ground
+      listing. It counts whenever look-ahead is used, including for itself, until a listing
+      removal. Hover/cruise cell crossings do not transfer it to the new cell. Direct-reference
+      cases of claim 9 do not use this allowance at all.
+    - Backing: `measurable` (J3, J18) for the predicate and normal high-flight absence.
+      Low-flight retained-listing persistence is `unmeasured` pending J18's diagnostic:
+      its history has not been isolated from reservations in an observation.
+    - Confidence: high for the predicate; medium for that exceptional history.
+
+23. **Nearby searches and standing positions (Q-0975).** The following settings complete
+    S-0212 claim 25's single-cell search. Every row uses a 1 × 1-cell footprint, no further
+    test, no no-overlay condition and no reference cell. The search itself takes no draw.
+
+    | Use | Centre | Locomotion class | Movement zone | Reach region | Deck mode | Height condition | Bridge cells |
+    |---|---|---|---|---|---|---|---|
+    | Claim 16, vehicle not balloon-hover | ordered point's cell | hover | flying | none | never | no | excluded |
+    | Claim 16, infantry or balloon-hover vehicle | ordered point's cell | hover | flying | none | centre carries a high bridge | no | allowed |
+    | Claim 17 | unit's current cell | type's own | type's own, not simplified | none | never | no | allowed |
+    | Animated landing-first undeploy, S-0517 claim 6 | vehicle's current cell | type's own, winged counted as track | type's own, not simplified | centre's region for that zone, read for its deck when on deck; none if that read has no region | vehicle is on deck | no | allowed |
+
+    The last row selects the undeploy destination before the subsequent claim-16 search.
+    S-0517 claim 6 owns when it is assigned. Claim 16's search does not excuse or lift a
+    grounded unit's own occupancy: that can affect its search like any other occupancy.
+
+    Infantry adjustment uses the found cell's centre, not the ordered point's position
+    class. The desired point for this choice has world height 0 leptons. It reads ground
+    occupancy, except when the cell has a high bridge whose deck at its centre is at or
+    below world height 0; then it reads deck occupancy. The final point nevertheless has
+    terrain height plus 416 leptons on any high bridge.
+    - The vehicle-present refusal and ground object-present/open-gate refusal of S-0208
+      claim 3 apply, giving no adjusted point and no draw.
+    - Otherwise one ranged draw over 0 to 3 from the scenario random stream selects the
+      corresponding row R0 to R3 of S-0208 claim 3's table O. The first free side position wins:
+      0 or 1 tries right, left, bottom; 2 tries left, bottom, right; 3 tries bottom, right,
+      left. Centre and top are never selected. The draw still occurs if all side positions
+      are taken, in which case adjustment fails.
+    - An own-cell infantry order also takes this draw when adjustment is eligible. When a
+      neighbour step reaches infantry adjustment, this draw follows claim 21's neighbour draw.
+    - Backing: `measurable` (J16). The world-height-0 deck boundary is `unmeasured`
+      (J16 diagnostic): a legal stock-map fixture at that boundary is not established.
+    - Confidence: high for settings and choice rules.
+
+24. **Stop, empty points and off-map failure (Q-0976, Q-0981).** A stop order of S-0213
+    claim 8 clears the order-level destination and invokes claim 17 when moving. It does
+    not send claim 16's direct no-point instruction. A replacement movement point can
+    survive while the order-level destination is empty.
+
+    | Flight state when stopped | Successful claim-17 reroute |
+    |---|---|
+    | ascending | stays ascending towards the replacement point |
+    | cruising | stays cruising towards the replacement point; ordinary arrival applies |
+    | hovering with a move order | remains moving; stays hovering only if the replacement horizontal point equals its position, otherwise claim 13 starts cruise |
+    | descending | reservation released; re-ascends under claim 16 |
+    | grounded or hovering without a move order | claim 17 does nothing |
+
+    Both searches of claims 17 and 16 apply, so the point is not necessarily the current
+    position. Infantry can pick another side position in the same cell. Failure follows
+    claim 17's no-cell outcome. Stop clears the target too (S-0213 claim 8); later arrival
+    uses the then-current target. This is neither an immediate halt nor a command to finish
+    the old destination.
+
+    A direct no-point instruction in the original instead replaces the locomotor point
+    with the absent point and clears its moving flag, without changing state or speeds.
+    Ascending, cruising and descending still satisfy *moving now*; grounded and hovering
+    become idle. It is not a promise to keep flying to the previous point.
+
+    **Safety departure (design).** A failed adjustment that would retain an off-map point
+    is refused: retain the preceding point, moving flag, state, speeds, target height and
+    landing reservation. Do not clamp to the edge. An idle unit remains idle; an active
+    one continues its preceding movement. Also refuse a direct absent-point instruction
+    while *moving now*, retaining that preceding movement instead of navigating towards an
+    absent point. Ordinary player stop still uses the reroute table, not this refusal.
+    The original stores its supplied point before adjustment, with no such rejection.
+    later off-map queries can encounter S-0009 claim 44's stand-in. A safe original
+    completion there is not established.
+    - Backing: `measurable` (J19) for stop. Original direct-empty and off-map aftermath are
+      `unmeasured` (J17 diagnostic): ordinary input cannot independently establish these
+      instructions. The refusal is design, not an original-behaviour claim.
+    - Confidence: high for stop dispatch and unchanged flight state; medium for the
+      complete original exceptional aftermath.
+
+25. **Zero flight fields (design, Q-0977).** For *S* = 0, the speed fraction and every
+    cruise-band speed are 0. Horizontal travel from that speed is zero; vertical take-off
+    and landing retain their own rules. For *T* = 0 the middle cruise band is empty, with
+    no division by *T*. The importer warns for every type having either zero field.
+    No quirk switch controls these safety departures.
+    - Backing: `unmeasured` as original behaviour: the original divisions supply no safe
+      replacement. The replacements are engine design rules, testable by J20 without
+      running invalid data in the original.
+    - Confidence: high for the division sites; design for the replacements.
+
+26. **Flight and land recomputation (Q-0981).** This is S-0211 claim 5's land recompute,
+    including S-0010 claim 19's possible animation and draw consequences.
+    - Hover/cruise travel does not recompute either cell merely by crossing their boundary.
+    - In the other flight states, the cell before every physics step is recomputed on
+      removal of the old placement, even high above it or without horizontal travel.
+      The resulting cell is also recomputed when the new position qualifies for ground-layer
+      placement under claim 4. Low ascent/descent can thus recompute both sides of a cell
+      crossing; high ascent recomputes the cell left, without new placement in the cell entered.
+    - A crash's additional legal-position drop likewise recomputes its pre-drop cell and
+      supplies another placement/recompute only when the new position qualifies under
+      claim 4. Touchdown supplies its ordinary placement/recompute too. Multiple such
+      events within a tick are not collapsed into one.
+    - Backing: `measurable` (J21).
+    - Confidence: high for placement events; medium for animation consequences, whose
+      eligibility belongs to S-0010 claim 19.
 
 ## Formulas
 
@@ -593,7 +748,7 @@ The resulting current speed is
 | *v*<sub>m</sub> < *q* | max(*q* − 1.5 × *a*, 0) |
 | *v*<sub>m</sub> ≥ *q* | *q* |
 
-Thus the braking comparison uses the speed after acceleration, and braking also applies in that step if acceleration overshoots the maximum speed. The acceleration result is capped at *S* and the braking result at 0, not at the maximum speed. If the speeds are equal, the current speed is unchanged. The speed fraction is *v*<sub>c</sub>′ / *S*, in double precision. *S* = 0 divides by zero (Edge cases).
+Thus the braking comparison uses the speed after acceleration, and braking also applies in that step if acceleration overshoots the maximum speed. The acceleration result is capped at *S* and the braking result at 0, not at the maximum speed. If the speeds are equal, the current speed is unchanged. The speed fraction is *v*<sub>c</sub>′ / *S*, in double precision, except that *S* = 0 gives fraction 0 under claim 25's design rule.
 
 **F2. Wobble and desired height (claim 9).** Here 2π denotes the stored double
 6.283185307179586 radians, not an exact real constant. Evaluate the inner division, outer
@@ -668,8 +823,9 @@ round-toward-zero arithmetic.
   | ρ < (50 × *S*) div *T* | *S* / 2; when *D* > 5*T*: max(*S* / 5, 1.0) | trunc(*H* × 0.75) when no target; otherwise unchanged |
   | otherwise | *S* | *H*, whether or not it has a target |
 
-- The speed divisions are of integers. The floor of 1.0 is applied to the result. *T* = 0 divides
-  by zero (Edge cases).
+- The speed divisions are of integers. The floor of 1.0 is applied to the result.
+  Under claim 25's design rule, *T* = 0 makes the middle band empty, and *S* = 0
+  gives speed 0 in every band, including any speed-floor alternative.
 - In the original, *D* comes from the unsigned difference, so a small anticlockwise remaining
   turn reads as nearly 256 (`quirks.jumpjet_turn_slowdown_one_sided`).
 
@@ -702,7 +858,7 @@ round-toward-zero arithmetic.
 
 | State | Event (checked each tick after the physics step) | Next state | Effect |
 |---|---|---|---|
-| grounded | move order | ascending | speeds 0, fraction 1, *h*<sub>t</sub> = *H* (claim 5) |
+| grounded | move order | ascending | speeds 0, fraction 1 (0 for zero speed, design), *h*<sub>t</sub> = *H* (claims 5, 25) |
 | ascending | *h* > ¼ *h*<sub>t</sub> (½ balloon-hover vehicle) | ascending | *v*<sub>m</sub> = *S*, heading towards destination |
 | ascending | over the destination cell, past that fraction, not balloon-hover | cruising | *h*<sub>t</sub> = *r* (claim 7) |
 | ascending | *h* ≥ *h*<sub>t</sub>, slot free | hovering | slot claimed |
@@ -716,7 +872,7 @@ round-toward-zero arithmetic.
 | descending | landing check fails | (stopped) | claim 17 |
 | descending | move order | ascending | *h*<sub>t</sub> = *H* |
 | descending | bridge-adjusted height *h* = 0 | grounded | touchdown effects (claim 15) |
-| any but crashing, crashed | crash started, above the surface, not held by magnetic lift | crashing | *h*<sub>t</sub> = −5 leptons; extra drop this tick, new ordinary height target next tick |
+| any but crashing, crashed | crash started, above the surface, not held by magnetic lift | crashing | pending aerial crash guarantees the next update (design); *h*<sub>t</sub> = −5 leptons; extra drop this tick, new ordinary height target next tick |
 | crashing, ordinary unit | height < 1 lepton or extra drop crosses a deck | crashed | slot released; S-0312 claim 16 impact |
 | crashing, dropped seized unit | height < 1 lepton or extra drop crosses a deck | descending, sinking or crashed | S-0607 claims 16 and 17 |
 
@@ -763,8 +919,7 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   data has neither. In the original, *S* = 0 gives an infinite or undefined speed fraction,
   and *T* = 0 is an integer division by zero that stops the program. Backing: `unmeasured`,
   confidence high for the divisions: no scenario here isolates their consequences before other
-  invalid-data effects. The safe replacement is a decision for the project lead below, not a
-  quirk switch.
+  invalid-data effects. Claim 25 gives the approved safety replacement, with no quirk switch.
 - **No landing slot.** A jumpjet that cannot land and finds no cell nearby destroys itself
   (claim 17). This is the original's behaviour and stays the default
   (`quirks.jumpjet_no_cell_self_destruct`, default on, YR behaviour). Off: it re-enters *hovering* over its
@@ -778,8 +933,8 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 |---|---|---|---|
 | type key `JumpJet` | jumpjet type (glossary) | boolean | no |
 | type key `BalloonHover` | balloon-hover type (S-0310 Terms) | boolean | no |
-| type key `JumpjetTurnRate` | *T* (claims 11, F6; rate: S-0206 claim 14) | integer | engine default 4 |
-| type key `JumpjetSpeed` | *S* | integer, leptons per tick | engine default 14 |
+| type key `JumpjetTurnRate` | *T* (claims 11, F6; rate: S-0206 claim 14); zero warns and gives an empty middle band (design, claim 25) | integer | engine default 4 |
+| type key `JumpjetSpeed` | *S*; zero warns and gives zero fraction and all cruise speeds (design, claim 25) | integer, leptons per tick | engine default 14 |
 | type key `JumpjetClimb` | *c* | decimal, single precision | engine default 5.0 |
 | type key `JumpjetCrash` | *k* | decimal, single precision | engine default 5.0 |
 | type key `JumpjetHeight` | *H* (S-0102 owns its minimum) | integer, leptons | S-0102 |
@@ -794,6 +949,8 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 | `[AudioVisual]` `DeployDir` | the game-wide deploy direction (claim 15) | integer, 8-step direction | engine default 0 at program start; a later missing layer keeps the current value |
 | `[JumpjetControls]` `TurnRate`, `Speed`, `Climb`, `Acceleration`, `WobblesPerSecond`, `WobbleDeviation` | nothing (claim 2) | read and ignored | — |
 | `[JumpjetControls]` `CruiseHeight` | the layer threshold (S-0102) | integer | S-0102 |
+| Type movement class and movement zone | own-class/zone searches of claim 23 | keys, parse forms and defaults: S-0211 Import mapping | S-0211 Import mapping |
+| No additional rules, art or map key | claims 3, 4, 22 to 24 and 26 | engine behaviour and the stated safety departures, not imported tuning | no configurable default |
 
 - **Key case.** Key names are matched case-sensitively. The stock rules data spells two of the
   type keys `JumpJetAccel` and `JumpJetTurnRate`. Those spellings are not the keys above and
@@ -868,8 +1025,8 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
       claim 8's half-height ground-hold threshold, each with its stated integer rounding.
       A new maximum speed affects acceleration in
       the tick after the threshold update
-    - with nothing to do afterwards, a grounded or hovering unit without a move order keeps
-      its height, wobble phase and speed fraction unchanged. A hovering unit that still has a
+    - with nothing to do afterwards and no pending crash start, a grounded or hovering unit
+      without a move order keeps its height, wobble phase and speed fraction unchanged. A hovering unit that still has a
       move order is not this idle case.
   - Falsifiers: rising in the grounded transition tick, horizontal movement below the ground-hold
     threshold, or any idle change in these recorded values (claims 3, 5 and 7).
@@ -884,13 +1041,18 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     cruise retains *r*, not *h*. Subtracting the deck height below it, or retaining *h* when
     these differ, falsifies claim 7. A balloon-hover infantry variant still uses the quarter
     threshold for its speed/heading change; a half threshold falsifies that distinction.
-- **J3 Occupation.** While a jumpjet hovers over a cell, drive a ground vehicle into that cell.
-  Expected: the vehicle enters without blocking (claim 4). Repeat while the jumpjet is ascending
-  in the cell. Expected: the vehicle is blocked while the jumpjet still has ground occupancy.
-  That mark is released as it first rises off the surface. Repeat while cruising, descending
-  with a reservation, and taking off from a deck. Expected: no cruise mark, a descent
-  reservation and no retained on-deck state after take-off. A cruise/hover occupancy block,
-  a missing descent reservation or retained deck state falsifies claim 4.
+- **J3 Occupation.** On flat land drive a ground vehicle towards a jumpjet vehicle's cell
+  during ascent, descent and crash. Record height, listing, actual-position flag and landing
+  reservation separately. Expected: low non-hover/cruise placements can list and mark at
+  heights 1 and 50 leptons; at 300 leptons they do not. The first rise clears the old mark
+  but does not permanently forbid low-height replacement. Descent can reserve before
+  touchdown independently of its actual-position placement. A permanent zero-height cutoff
+  or an ordinary high-flight actual-position placement falsifies claim 4. Repeat with
+  infantry to distinguish its standing-position reservation from a vehicle flag. For an
+  ordinary high hover/cruise over previously empty cells expect no new listing/mark.
+  A newly created listing there falsifies it. Repeat from a bridge deck: on-deck state ends
+  at first rise, and later eligibility follows the bridge layer rule, not zero height alone.
+  Record ground/deck listings and records separately.
 - **J4 Acceleration and braking.** Record the per-tick step during acceleration and the final
   approach. Expected: *v*<sub>c</sub> rises by *a* per tick to *S* and brakes by 1.5 × *a*
   (F1), including the possible acceleration-then-braking tick in F1. The step is
@@ -1063,6 +1225,77 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     A shot in an excluded living phase falsifies claim 20. Failure to fire
     in an otherwise legal grounded/hovering case also falsifies it.
 
+- **J15 Idle crash diagnostic.** Common setup; use a landing-first jumpjet vehicle, or a
+  named test-data equivalent if no stock type establishes the case. Record a hover with its
+  moving flag false before shooting it down. Record crash start, order clear/reroute, health,
+  removal and the next 60 ticks of position/state. The source hypothesis is no movement
+  update from crash-start alone; an update without a new movement order or state change
+  falsifies that hypothesis. An order-induced wake does not. This diagnoses the original
+  uncertainty, not the design rule. Engine test: a pending aerial crash must get its next
+  update without any new order; continued idle suspension falsifies the design rule.
+- **J16 Search settings and position draws.** Common setup; record the destination at order
+  application, cell occupants, selected standing position, tick and scenario stream before
+  and after. Compare the chosen cell with S-0212 claim 25 at that tick and claim 23's row.
+  Use infantry and ordinary/balloon-hover vehicles separately. Include high-bridge centres,
+  an overlay-bearing candidate, candidates over one height level from the centre, and an
+  isolated candidate in a different reach region. Ordinary vehicle claim-16 searches exclude
+  bridges; the infantry/balloon searches allow them and have deck mode at bridge centres.
+  All rows lack a height condition. Repeat during failed landing and animated landing-first
+  undeploy; record their first selection separately from the resulting move-order search.
+  The latter's initial search uses its centre's own-zone region and its current on-deck state.
+  Any result inconsistent with those full search settings falsifies claim 23. On a flat empty
+  cell, eligible infantry adjustment takes one ranged draw over 0 to 3 and chooses a side,
+  never centre. Block the preferred side and compare each remaining preference with table O.
+  Record at least 20 exact seeds; a missing/extra draw, centre choice or wrong preference
+  falsifies the choice rule. A vehicle/object refusal takes no position draw. A full set of
+  taken side positions still takes its eligible position draw and fails adjustment. Test the
+  world-height-0 deck boundary only if a legal negative-elevation map fixture can establish
+  it; this boundary remains diagnostic rather than claimed stock measurement coverage.
+- **J17 Failed-adjustment diagnostic.** Common setup with a map-edge area and a recorder
+  able to confirm actual adjustment failure, rather than inferring it from a rejected click.
+  If stock orders cannot establish failure, record that limitation instead of injecting
+  state. Compare an already moving unit, an idle grounded one and an idle hovering one.
+  Source hypothesis for a legal on-map retained point: unchanged moving flag/state and the
+  ordinary motion rules thereafter, not successful-order re-ascent. A new moving flag for
+  either idle unit or a different retained point falsifies it. Record exact non-centre point,
+  arrival and landing attempts. Off-map and direct-empty outcomes are diagnostics with no
+  claimed safe original result. In the engine's safety test, refusal retains the preceding
+  point and reservation; movement towards an invalid point or edge clamping falsifies the
+  design rule of claim 24. No unsafe original test is required to validate that design.
+- **J18 Self-clearance and low-flight listing.** Common setup; establish ordinary high hover
+  over open flat terrain, no other occupants. Record actual cell lists and height/reference.
+  Expected: no self listing or automatic 85-lepton reference increase. Add a second listed
+  ground vehicle: expect its 85-lepton allowance when look-ahead is eligible. Either contrary
+  result falsifies claim 22. Diagnostic variant: order own-cell early cruise, retaining a
+  target so that low cruise can lead to hover; record lists at every transition and crossing,
+  independently of reservations. If a low ground listing survives, look-ahead must include
+  it even for its owner. Self-exclusion falsifies that predicate; clean removal at the low
+  transition falsifies the retained-listing history. A direct-reference interval is not a
+  test of the allowance. Repeat with a deck-only occupant: no ground-layer allowance.
+- **J19 Stop in each state.** Common setup, stock jumpjet infantry and any eligible vehicle.
+  Issue stop once each during ascent, cruise, descent and hover with a retained order, and
+  separately during grounded/hovering idle. Record order-level destination separately from
+  the movement point, moving flag, reservation, target and state. Expected: claim 24's table,
+  using both searches and any infantry point draw, with cleared order-level target/destination.
+  Idle stopping leaves movement alone; moving descent re-ascends after successful reroute.
+  An immediate no-point moving-flag clear, retained old cruise point despite a different
+  successful reroute, or continued descent after successful replacement falsifies the table.
+- **J20 Zero-field engine test.** Named importer test data, not an original-game oracle run:
+  one type with zero speed, one with zero turn rate, and one with both. Expect a warning for
+  each affected type, zero fraction and all zero cruise speeds for zero speed, no middle
+  band for zero turn rate, and otherwise ordinary vertical motion. A division fault,
+  nonzero zero-speed band/fraction, or missing warning falsifies claim 25's design rule.
+- **J21 Flight recomputation.** Common setup; cross tile-animation-eligible cells during
+  cruise and during low/high ascent, descent and crash. Record per-tick position, state,
+  listing/placement events and animation creation/stream changes. Hold position in a
+  non-hover/cruise state as a no-crossing control. Expected: claim 26's events, including
+  repeated old-cell recomputes even without crossing, but no cruise/hover crossing event.
+  Use S-0010 claim 19 to predict which recomputes can actually create an animation; lack
+  of animation when that eligibility fails does not falsify recomputation. A cruise-crossing
+  creation attributable only to land recompute, or missing eligible non-hover placement
+  recomputes, falsifies claim 26. Recorder support must be proposed to the user, not added
+  to the harness here.
+
 ## Open questions
 
 - **Flying-object registration.** From take-off until it lands or crashes, a jumpjet is entered
@@ -1071,20 +1304,11 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
 - **The factory-contact event.** The internal event that a climbing jumpjet raises while in
   contact with a factory building (claim 7), and the one raised at the end of a crash (claim 18),
   are not traced to an effect.
-- **A crash start while idle.** A grounded jumpjet, or a hovering one with no move order, takes
-  no update (claim 3). Whether something else wakes it when it starts to crash in the air is not
-  traced.
-- **Stopping outside a landing.** Which orders stop a moving jumpjet through claim 17 (for
-  example the stop command of S-0213) is not traced. Only the failed landing is.
-- **A failed move order.** When the nearby-cell search of claim 16 finds nothing, the ordered
-  point is kept as the stored destination while the moving state is unchanged. How a later tick
-  uses that point is not traced.
+- **Original exceptional outcomes.** J15 and J17 retain the unmeasured original idle-crash
+  aftermath and off-map failed-adjustment diagnostic. Claims 3 and 24 supply deterministic
+  safety departures, not a promise that the original recovers safely.
 - **The crashed state.** What a *crashed* jumpjet does until S-0312's impact removes it, and what
   an ordinary dead jumpjet does on water after impact (S-0312's open question), are not settled
   here.
 
-## Questions for the project lead
 
-- For zero speed or zero turn rate, approve the proposed deterministic departure: a speed
-  fraction of 0 for *S* = 0 and an empty middle band for *T* = 0, with an importer warning
-  and no quirk switch. This draft does not yet prescribe those replacement values.

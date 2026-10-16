@@ -1,9 +1,9 @@
 ---
 id: Q-0976
 title: What a jumpjet does with an ordered point whose nearby-cell search finds nothing
-status: open
+status: answered
 related: [S-0502]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-0977
 title: Jumpjet types with a speed field of 0 or a turn-rate field of 0
-status: open
+status: answered
 related: [S-0502]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

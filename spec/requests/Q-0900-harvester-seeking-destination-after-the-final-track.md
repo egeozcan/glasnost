@@ -1,9 +1,9 @@
 ---
 id: Q-0900
 title: Which destination does a seeking harvester test, once its last track has ended in the field cell
-status: open
+status: answered
 related: [S-0402, S-0207, S-0215]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

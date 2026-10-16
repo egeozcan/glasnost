@@ -2,13 +2,13 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: []
+requests: [Q-0982]
 supersedes: []
 ---
 
@@ -55,7 +55,11 @@ Skirmish only. Network games and campaigns are out of scope.
   airborne and its touchdown (claim 5). It is not a transition.
 - **Deploying presentation.** The animation type that a vehicle type names for its deploy (Import
   mapping). It plays at the vehicle's position during each transition. Its start field *a*, end
-  field *E* and stage delay *d* are S-0109's (Terms, claim 2).
+  field *E* are S-0109's (Terms). Its base stage delay *d* is the rate-derived delay of
+  S-0109 claim 2, before random rate selection or game-speed normalisation.
+- **Transition elapsed stages.** A count of elapsed stages for the vehicle's transition, starting
+  at 0 when the presentation is created. It is separate from the presentation's displayed stage.
+  Claim 7 owns its timing and the completion tests.
 - **Deployed image type.** The type whose image draws a deployed vehicle (claim 12).
 - **Deploy-fire vehicle.** A vehicle whose type has the deploy-fire flag but not the in-place deploy
   flag (claim 2).
@@ -166,15 +170,33 @@ Skirmish only. Network games and campaigns are out of scope.
      open question, not a specified rule; P1 establishes assignment, not those settings.
    - Confidence: high (state changes), medium (takeoff and removing the disguise)
 
-7. **Durations.** With ordinary updates on every tick and an uninterrupted presentation, a
-   transition that started at a processing on tick *t*₀ finishes at the first
-   processing on or after the tick given by F1 (deploy) or F2 (undeploy). Since processing happens
-   every tick during a transition (claim 3), that is the tick itself or the next one, depending on
-   whether the stage advance on that tick comes before the processing. The nonpositive thresholds
-   and zero-delay cases are the explicit exceptions in F1/F2 and the zero-delay quirk. A transition
-   never finishes in the processing that started it.
-   - Backing: `measurable` (P1 b, c and V)
-   - Confidence: medium (the step of one stage per delay, and the ±1 tick)
+7. **Exact completion and the two clocks.** With a vehicle update on every tick and an
+   uninterrupted presentation, completion is on *T* + 1 tick in both directions, where
+   *T* = *t*₀ + (*E* − 1)*d* for deploy and *T* = *t*₀ + (*E* − 2)*d* for undeploy,
+   for positive *d* and positive stage thresholds (F1/F2). This is constant, not a choice
+   controlled by start-tick parity, other animations, the vehicle's place among other objects,
+   or a random draw. A lost vehicle update can delay completion; that is not a selection
+   between two otherwise allowed completion ticks.
+
+   Transition elapsed stages first increase at *t*₀ + *d*, never at creation for *d* > 0,
+   and increase by one every *d* ticks thereafter. A processing on the tick of an increase
+   still uses the preceding count: reaching the threshold on tick *T* makes completion
+   possible at the next processing, *T* + 1. The count uses the base delay, not a randomly
+   selected or game-speed-normalised playback delay. No draw selects this count's delay
+   or completion tick. The nonpositive thresholds and zero-delay cases are the explicit
+   exceptions in F1/F2 and the zero-delay quirk. Completion never occurs in the processing
+   that starts the transition.
+
+   The presentation itself follows S-0109 claims 3 to 5 and 8: forward on deploy, reversed
+   on undeploy, with any random rate or normalisation affecting its playback only. It is
+   created during the vehicle's turn, with no initial loop delay. With ordinary same-tick
+   first update, no lost animation updates and positive playback delay *p*, its first
+   displayed-stage advance is *p* ticks after creation, not on the creation tick. With no
+   random rate or normalisation, *p* = *d*. Lost animation turns can delay that image change
+   under S-0109 claim 5 without delaying the vehicle's separate count. Neither a backwards
+   image sequence nor the first-update exclusion reverses or pauses transition elapsed stages.
+   - Backing: `measurable` (P1 b, c, V and C)
+   - Confidence: high
 
 8. **Interrupting.**
    - An ordinary order cannot start a different behaviour during deploying or undeploying: the
@@ -344,25 +366,27 @@ Skirmish only. Network games and campaigns are out of scope.
 
 ## Formulas
 
-**F1. Deploy completion.** For stage delay *d* > 0 and end field *E* > 1, a transition
-started at tick *t*₀ completes on one of these two ticks (claim 7):
+**F1. Deploy completion.** For base stage delay *d* > 0 and end field *E* > 1, a transition
+started at tick *t*₀ completes on this tick (claim 7):
 
-> *T* or *T* + 1 tick, where *T* = *t*₀ + (*E* − 1) × *d*
+> *t*₀ + (*E* − 1) × *d* + 1 tick
 
-Here *d* is the presentation's stage delay (S-0109 claim 2) and *E* its end field after
+Here *d* is the presentation's base stage delay (S-0109 claim 2), without random rate
+selection or normalisation, and *E* its end field after
 absent-key defaults (S-0109 claim 25). Integer ticks and integer stage counts, exact: no rounding.
-Completion requires *E* − 1 stage advances, one per *d* ticks. The initial frame *a* does not
+Completion observes *E* − 1 elapsed-stage increases, one per *d* ticks, with the 1-tick
+observation lag of claim 7. The initial frame *a* does not
 change this duration. With *E* ≤ 1, completion is at *t*₀ + 1 tick. With *d* = 0 and *E* > 1,
 the default is no completion, not *t*₀ + 1 tick; the zero-delay quirk owns both settings.
 
 **F2. Completion of an undeploy.** As F1, with *E* − 2 in place of *E* − 1.
 For *d* > 0 and *E* > 2:
 
-> *T* or *T* + 1 tick, where *T* = *t*₀ + (*E* − 2) × *d*
+> *t*₀ + (*E* − 2) × *d* + 1 tick
 
 With *E* ≤ 2, completion is at *t*₀ + 1 tick. With *d* = 0 and *E* > 2, the zero-delay quirk
 applies. Only when both stage thresholds are positive is the nominal undeploy duration one stage
-delay shorter; each completion still has claim 7's one-tick uncertainty.
+delay shorter; both completions include the same 1-tick lag.
 
 **F3. Deploy-fire delay.**
 
@@ -387,8 +411,8 @@ deploy-fire vehicle's *unload*.
 ## State and ordering
 
 **Table V. In-place deploying vehicle.** "Processing" means a processing of *unload*. The order
-events assume that S-0214 accepted the order. F1/F2 completion events mean the actual completion
-tick allowed by the formulas, not necessarily the earliest possible tick. No completion event
+events assume that S-0214 accepted the order. F1/F2 completion events occur on the exact ticks
+specified by the formulas under claim 7's uninterrupted-update conditions. No completion event
 occurs for a stalled zero-delay transition with its quirk on.
 
 | State | Event | Result |
@@ -488,7 +512,9 @@ All keys are in the vehicle's or infantry's type section of the rules file unles
 | `DeployTime` | decimal, game minutes | 0 | length of a vehicle's unload or deploy cycle, converted to ticks as S-0215 F9 converts a door time; no effect on vehicles (claim 15) |
 | `UndeployDelay` | integer ticks | −1 | infantry undeploy delay (S-0215 claim 30; S-0214) |
 | `DeployedCrushable` | boolean | yes | crushability of deployed infantry (S-0107) |
-| art file, presentation section: `Rate`, `Start`, `End` | as S-0109 | as S-0109 | *d*, *a*, *E* of F1 and F2 |
+| art file, presentation section: `Rate` | integer frames per game minute | base delay 1 tick; −1 keeps held value | base *d* under S-0109 claim 2; vehicle completion does not apply random rate or normalisation (claim 7) |
+| art file, presentation section: `Start`, `End` | integers | 0 for start; end from sprite under S-0109 claim 25 | *a*, *E* of F1 and F2 |
+| art file, presentation section: `RandomRate`, `Normalized` | integer pair; boolean | (0, 0); no | presentation playback only, S-0109 claims 3 and 4; not transition elapsed stages |
 
 ## Measurement scenarios
 
@@ -541,6 +567,26 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
     Compare a deploy landing with an ordinary landing of the same type from the same height.
     Repeat presentation cases with invented end fields of 1, 2 and 5 stages, different initial
     frames, and with no deployed image type. Record deployed state as well as image and height.
+  - (C) Exact-clock variant: grounded, with invented end field *E* = 5, no initial loop delay,
+    no random rate and no normalisation. Test base delays of 1 and 2 ticks. For each delay,
+    perform ten deploy/undeploy pairs at varied even and odd creation ticks, both alone and
+    with other vehicles transitioning and unrelated long-lived animations already present.
+    Vary the test vehicle's creation order among the other vehicles. Keep all updates
+    uninterrupted and record actual presentation creation, each image-stage change, and
+    deployed/mobile state, not merely order-input ticks. Expected deploy durations are 5
+    and 9 ticks respectively, undeploy durations 4 and 7 ticks respectively. The first image
+    advance is respectively 1 and 2 ticks after creation in either direction, with the
+    undeploy image moving backwards. A creation-tick advance, completion on *T* rather than
+    *T* + 1, or any dependency on parity, surrounding animations or actor order falsifies
+    claim 7. In a separate named-data variant, keep base delay fixed but enable a noncollapsed
+    random playback-delay range, then normalisation at two game speeds under S-0109 claims
+    3 and 4. Choose a long enough sprite and playback delays that the presentation survives
+    through completion. Expected: image changes follow the selected playback delay while
+    completion still follows base *d*. Log random state around exclusive completion/count
+    intervals as in P2 R, excluding animation creation, effects and other stream consumers:
+    no draw chooses a completion tick. Ambiguous intervals are inconclusive. Request a
+    read-only tick/image/state recorder and scripted input through the measurement bench.
+    no state writes or installed engine changes are proposed.
   - (Z) Give the presentation a zero rate and an end field of 5 stages. Deploy, wait 500 ticks,
     then destroy the vehicle. Also destroy a vehicle during ordinary deploy, undeploy and
     landing in separate runs; observe that the cycle and its presentation end.
@@ -827,8 +873,6 @@ same map, recorder and five-seed repeats as P1. Each variant is a separate newly
   leave it stuck (Edge cases).
 - The exact nearby-cell eligibility settings used for animated landing-first undeploy (claim 6),
   and its subsequent height when there is no presentation and hence no assigned destination.
-- Whether the stage count really advances by one stage per *d* ticks for every deploying type (F1).
-  One stage is the vehicle's default step, and nothing known changes it.
 - Approved S-0415 claim 1 already specifies the slot-0 weapon and the 14 + *u* tick delay, matching claim 2 here; no cross-spec change is indicated by this point.
 - Approved S-0516 claim 34 already specifies disguise loss when the undeploy step starts, matching claim 6 here; no cross-spec change is indicated by this point.
 - The rest of the approach search of a deploy-to-fire vehicle whose own cell fails (S-0307, Open

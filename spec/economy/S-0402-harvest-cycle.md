@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900]
 supersedes: []
 ---
 
@@ -57,6 +57,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
   step, and as full in the check after a failed load step; it never carries a bale (Edge cases).
 - **Harvest phase.** The part of the *harvest* behaviour a harvester is in: *seeking*, *loading*,
   *returning*, *requesting* or *idle* (claim 3). A harvester enters *harvest* in the seeking phase.
+- **Destination.** Unless qualified otherwise, the order-level destination, not the
+  locomotor destination point or the heading point of S-0207 claims 24 to 26.
+  In particular, an absent locomotor destination point does not mean that a harvester
+  has no destination for the seeking test of claim 3.
 - **Remembered cell.** A cell a harvester keeps so that it can drive back to its field after
   unloading (claims 6 and 12).
 - **Scan range.** A number of cells, taken from one of the rules' scan fields given in leptons
@@ -337,6 +341,44 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     Claim 13 governs rest and the original's computer-only resumption rule.
     - Backing: `measurable` (H20)
     - Confidence: high for the absence of a docking-cell exception in the harvest rules
+
+3b. **Seeking after the final field track (Q-0900).** For an ordinary driving
+    harvester, claim 3 tests the order-level destination alone. It does not test the
+    locomotor destination point, either alone or in combination with that destination.
+    Clearing the locomotor point at a qualifying track completion therefore does not
+    itself permit a seeking search or start loading.
+
+    Consider an uninterrupted arrival at the field cell named by the order-level
+    destination: the harvester is not full, has no remembered cell or approach
+    destinations, remains in *harvest*, owns an available dock-type building, and
+    the arrival cell remains resource land. Let *T* be the final track's completion
+    tick. S-0207 claims 25 and 26 retain that cell destination through completion
+    and remove it in the following tick's locomotion update. Due harvest processing
+    sees the destination before that tick's locomotion can remove it. The observable
+    consequences are:
+
+    | Processing time | Seeking result |
+    |---|---|
+    | In tick *T*, if due | No loading start; the destination is still present before completion. |
+    | In tick *T* + 1, if due | Remains seeking, takes no field search and chooses one standard delay of *harvest*, including its one delay draw. The destination is removed later in this tick, not by this processing. |
+    | First due processing in tick *T* + 2 or later | Finds its own resource cell and starts loading; the next processing is 1 tick later. |
+
+    Thus the first processing strictly after arrival starts loading if it is in
+    tick *T* + 2 or later. If that first processing is in tick *T* + 1, only the
+    following processing starts loading. Arrival neither expires nor restarts the
+    processing timer and causes no extra harvest processing. It is not an
+    unconditional extra standard-delay wait on every arrival.
+
+    F1a gives the ticks from completion to loading and the first load step. The
+    first processing of the loading phase is 1 tick after loading starts, but
+    it takes no load step: the first load-step-bearing processing is 19 ticks
+    after loading starts (claim 5). These two events must not be conflated.
+    - Backing: `measurable` (H27). Arrival-to-first-bale histogram frequencies
+      are `unmeasured`: no arrival sample has been recorded, and distances,
+      order times and shared-stream histories select different populations.
+      F1a specifies conditional timings, not an assumed uniform distribution.
+    - Confidence: high for the destination test and retained seeking; medium for
+      the composed tick timing, pending H27
 
 ### Refineries
 
@@ -1246,6 +1288,30 @@ only at the next load step, in tick *t*₀ + 19 + *C*(9*L* + 1), when that step 
 harvester is full. That processing changes it to *returning*; refinery selection occurs no
 earlier than its following processing. For *L* ≤ 0 see Edge cases.
 
+**F1a. Arrival-to-load timing** (claim 3b). Use claim 3b's uninterrupted
+arrival conditions, effective capacity at least 1 bale, a cell that can deliver
+its first bale, and a positive harvest rate delay *r* in integer ticks
+(S-0215 claim 6). Let *P* be the first due harvest processing tick strictly
+later than track completion tick *T*, and *S* the loading-start tick.
+
+| Condition | *S* | First loading-phase processing | First load-step-bearing processing and first bale |
+|---|---|---|---|
+| *P* = *T* + 1 | *T* + 1 + *r* + *u*, where *u* is that processing's delay draw from 0 through 2 | *S* + 1 | *T* + 20 + *r* + *u* |
+| *P* ≥ *T* + 2 | *P* | *P* + 1 | *P* + 19 |
+
+All arithmetic is integer addition, without rounding; units are ticks. Draw
+selection is S-0202 claim 4's, not a new arrival draw. A processing in *T*
+still uses its ordinary standard delay, which can set *P*. Given continuous
+eligible processing and these conditions, the first bale is no earlier than
+*T* + 21 and no later than *T* + *r* + 22: the longest residual delay is
+*r* + 2, or a processing in *T* + 1 can choose a further *r* + 2 ticks.
+These are bounds, not a claim that every interval occurs equally often or
+that every distance admits every interval. The measured distribution is the
+histogram of *S* − *T* + 19 over the chosen arrivals. No sample-independent
+frequency follows from the load timer alone. Nonpositive rate delays and
+turns excluded from processing instead follow S-0215 claims 2 and 6; the
+positive-rate bounds above do not apply to them.
+
 **F2. Unload timing** (claim 11). Let unloading start at the processing in tick *u*₀ (facing east,
 in contact). The counter seen by a processing in tick *t* is *c* = *t* − *u*₀ − 1 until the first
 payment, and *c* = *t* − *u* after a payment in tick *u*. The processing after the start row comes
@@ -1394,6 +1460,10 @@ The image-frame formula and the visibility conditions are unchanged.
 ## State and ordering
 
 **Harvest phases** (claim 3). "Next" means the harvester's next processing.
+Destination means the order-level destination (Terms). Claim 3b owns the
+post-arrival window: a due seeking processing in the tick after final track
+completion still sees that destination; its removal later that tick does not
+cause a second processing.
 
 | Phase | Condition at a processing | Result | Next processing |
 |---|---|---|---|
@@ -1531,6 +1601,7 @@ select which harvester takes the earlier turn.
 
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
+| No data key | seeking tests the order-level destination, not the locomotor point; final-track arrival adds no processing or timer reset (claim 3b, F1a) | fixed behaviour; seeking's standard delay and its rate/default are imported by S-0215 claim 6; load timing inputs remain claim 5's | fixed |
 | Rules, vehicle type section, `Harvester` | harvester (Terms); eligibility for the vehicle harvesting sprite (claim 5a) | boolean | no |
 | Fixed harvesting asset | vehicle harvesting sprite of claim 5a; loaded as a fixed engine asset, not by a rules or art animation name | sprite file; ordinary asset precedence of S-0005 claim 1 | no alternate harvesting asset is selected |
 | No data key | harvesting-display phase and movement gates, frame selection, 15-tick stationary repetition and 30-lepton anchor displacement (claim 5a, F8) | engine behaviour and constants; ground movement gate uses S-0207 claim 2's integer step, whose speed and acceleration inputs and absent-key defaults are imported by S-0207; no separate display-speed threshold or per-type or per-resource animation setting | fixed |
@@ -1595,6 +1666,44 @@ lead allowed. Unless a scenario says otherwise, the harvester is the human
 house's, the refinery has stock art, there is one harvester, and resource cells do not grow (growth
 and spread fractions 0). Unless stated otherwise, use game-speed index 2 at 800 × 600,
 with director and mods off except for the scenario's named test data.
+
+**H27. Final field track to the first load step (claim 3b, F1a; Q-0900).**
+- *Setup:* a tiny level skirmish map with an isolated resource patch, one ordinary
+  stock-data driving harvester of the human house and its dock-type building,
+  and the bystander kept outside the observed area. Use stock rules and art,
+  game-speed index 2, 800 × 600, director and mods off. Choose a patch with
+  enough resource for a first bale. No approach destinations, teleporting,
+  slave group, combat or replacement orders during each observed arrival.
+- *Procedure:* from at least six different starting distances, issue harvest
+  orders to a named patch cell. Repeat over ten recorded scenario seeds and
+  several order ticks. Use scripted input and the read-only recorder. Retain
+  at least five arrivals whose first post-completion processing is in *T* + 1
+  and five whose first processing is later; expand the distance/order-time
+  sample if needed. Void arrivals whose preconditions in claim 3b fail.
+- *Observable:* final track completion tick *T*, current and queued behaviour,
+  phase, remembered cell and approach destinations, order-level destination
+  presence and kind, locomotor point presence, due-processing ticks, selected
+  delays, counter and pacing period, loading-start tick *S*, first
+  loading-phase processing and first bale tick. Record destinations before
+  due processing and after locomotion, not just once per tick. Record the
+  scenario random state around each seeking processing. Tabulate the
+  arrival-to-first-bale histogram separately by distance and seed.
+- *Expected:* completion clears the locomotor point but not the cell order
+  destination. If processing is due in *T* + 1, it retains seeking and takes
+  one standard-delay draw, then locomotion removes the destination that tick.
+  The following processing starts loading. If the first post-arrival
+  processing is in *T* + 2 or later, it starts loading at that first processing.
+  Loading starts with counter 0 and period 2 ticks. The next processing is
+  *S* + 1, the first load step and bale are *S* + 19, and every valid arrival
+  satisfies F1a. Compare the histogram with the conditional predictions
+  computed from its recorded processing ticks and delays; do not fit a
+  uniform arrival-residual distribution.
+- *Falsified if:* loading starts while the cell order destination remains at
+  the seeking test merely because the locomotor point is absent; a due
+  *T* + 1 processing already starts loading, arrival resets the timer,
+  a first eligible processing from *T* + 2 onward waits a further interval,
+  or a valid first bale differs from *S* + 19. Failure to obtain either
+  timing class leaves that class unmeasured, not confirmed.
 
 **H1. One full cycle: load, travel, unload, credits (claims 1, 2, 3, 5, 6, 11, 12, 16; F1, F2).**
 - *Setup:* load period *L* = 3, dump rate 0.02 (900 × *D* is just below 18 in single precision, so
