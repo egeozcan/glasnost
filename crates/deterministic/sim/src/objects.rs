@@ -305,6 +305,10 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
         obj.turret.set(facing, tick, keeps);
         // spec: S-0503 claim 15 (placement, factory release and teleport replacement do not reset a hover's movement heading, and the body facing is not copied into it; a newly attached hovering locomotor starts at 0, `hover::HoverState::new`; Q-0694 answered)
     }
+    if o.kind == Kind::Building {
+        // spec: S-0518 claim 3 (placement into play is an acquisition by the owning house)
+        crate::linked::acquire(w, id);
+    }
     // spec: S-0502 claim 1 (a jumpjet is placed grounded with its mark)
     crate::jump::placed(w, id);
     // spec: S-0501 claim 1 (an aircraft's placement height, speed fraction and marks)

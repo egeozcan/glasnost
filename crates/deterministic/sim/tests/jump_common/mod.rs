@@ -59,14 +59,16 @@ fn jumper(kind_infantry: bool) -> UnitType {
 /// height 3) and LOW (art height 1).
 pub fn ruleset() -> Ruleset {
     let mut r = testkit::combat_ruleset();
-    r.registries
-        .get_mut("infantry")
-        .unwrap()
-        .extend(["JJ", "JJTURN", "JJFLAT", "JJFAST", "JJCRASH", "JJTALL"].map(String::from));
+    r.registries.get_mut("infantry").unwrap().extend(
+        [
+            "JJ", "JJTURN", "JJFLAT", "JJFAST", "JJCRASH", "JJTALL", "JJLOCO",
+        ]
+        .map(String::from),
+    );
     r.registries
         .get_mut("vehicles")
         .unwrap()
-        .extend(["JV", "BALLOON", "DEPL", "DEPN", "BDEPN"].map(String::from));
+        .extend(["JV", "JVTALL", "BALLOON", "DEPL", "DEPN", "BDEPN"].map(String::from));
     r.registries.insert(
         "buildings".into(),
         ["TALL", "LOW"].map(String::from).to_vec(),
@@ -91,6 +93,14 @@ pub fn ruleset() -> Ruleset {
     let mut jv = jumper(false);
     jv.crashable = Some(true);
     s.vehicles.insert("JV".into(), jv);
+    // The jumpjet locomotor without the JumpJet type flag: the own-cell filter of S-0502 claim 23 concerns the flag.
+    let mut loco = jumper(true);
+    loco.jumpjet = Some(false);
+    s.infantry.insert("JJLOCO".into(), loco);
+    let mut jvtall = jumper(false);
+    jvtall.crashable = Some(true);
+    jvtall.jumpjet_height = Some(2000);
+    s.vehicles.insert("JVTALL".into(), jvtall);
     let mut bal = jumper(false);
     bal.balloon_hover = Some(true);
     bal.mobile_fire = Some(true);
@@ -159,6 +169,31 @@ pub fn put(w: &mut World, name: &str, kind: Kind, house: u8, dx: i32, dy: i32) -
 /// effect on the locomotor).
 pub fn go(w: &mut World, id: ObjectId, c: CellXY) {
     assign_destination(w, id, Some(Target::Cell(c)));
+}
+
+/// Orders a jumpjet vehicle to its own cell with the exact point kept
+/// (S-0502 claim 16: a vehicle whose behaviour is *enter* keeps the ordered
+/// point), the way an accepted same-cell movement point arises (claim 7;
+/// claim 23: an ordinary vehicle's own mark rejects its own cell).
+pub fn go_here_entering(w: &mut World, id: ObjectId) {
+    let c = pos(w, id).cell();
+    w.obj_mut(id)
+        .unwrap()
+        .beh
+        .queue(Some(glasnost_sim::rules::Behaviour::Enter));
+    go(w, id, c);
+}
+
+/// Gives a jumpjet already placed in the air a movement commitment with the
+/// centre of its own cell as the movement point (S-0502 Terms, *moving*): the
+/// state a completed flight leaves a hovering unit in. An order to its own
+/// cell does not give it, since claim 23 filters infantry and the vehicle's
+/// search rejects its own mark.
+pub fn commit_here(w: &mut World, id: ObjectId) {
+    let c = pos(w, id).cell();
+    let j = w.obj_mut(id).unwrap().jump.as_mut().unwrap();
+    j.moving = true;
+    j.dest = Some(Pos::centre(c, 0));
 }
 
 pub fn phase(w: &World, id: ObjectId) -> Phase {

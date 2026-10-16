@@ -17,7 +17,7 @@ use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, World};
 
-pub use jump_common::{at, d, go, height, phase, put, step};
+pub use jump_common::{at, commit_here, d, go, go_here_entering, height, phase, put, step};
 
 pub const SIZE: i32 = jump_common::SIZE;
 pub const A: HouseId = HouseId(0);

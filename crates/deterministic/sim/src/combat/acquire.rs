@@ -317,6 +317,8 @@ pub enum SearchContext {
     Hunt,
     /// The search at the end of a teleporting move (claim 1's last row).
     Teleport,
+    /// The break-off search of a charging unit (S-0518 claim 15): no targeting-timer gate or reset draw, and the held target is neither tested nor protected.
+    BreakOff,
 }
 
 /// The search classes (S-0309 claim 5): infantry, vehicles, aircraft,
@@ -942,13 +944,20 @@ pub fn search(
     } else {
         rules.general.normal_targeting_delay
     };
-    let restart = n.wrapping_add(w.rng.ranged(0, 2, half));
-    let tick = w.tick;
-    if let Some(ob) = w.obj_mut(a) {
-        ob.targeting_timer = tick.wrapping_add(restart);
+    // spec: S-0518 claim 15 (the break-off search has no targeting-timer reset draw and leaves the timer alone)
+    if ctx != SearchContext::BreakOff {
+        let restart = n.wrapping_add(w.rng.ranged(0, 2, half));
+        let tick = w.tick;
+        if let Some(ob) = w.obj_mut(a) {
+            ob.targeting_timer = tick.wrapping_add(restart);
+        }
     }
     // Claim 4: a kept target (an order's, or a usable opportunity target).
-    let fresh = ctx == SearchContext::AttackMoveFresh;
+    // spec: S-0518 claim 15 (the held building target of the break-off search is not tested for usability or protected by S-0309 claim 4's retention rule, and is not cleared to make the search possible)
+    let fresh = matches!(
+        ctx,
+        SearchContext::AttackMoveFresh | SearchContext::BreakOff
+    );
     if let Some(t) = ao.target
         && !fresh
     {

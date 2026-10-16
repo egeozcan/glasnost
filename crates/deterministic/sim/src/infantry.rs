@@ -293,6 +293,10 @@ pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>)
     if o.kind != Kind::Infantry || !o.infantry.as_ref().is_some_and(|i| i.prone) {
         return;
     }
+    // spec: S-0213 claim 21 (revision 34: repeating the cell it occupies requests get-up, unless the jumpjet own-cell filter of S-0502 claim 23 suppresses the assignment)
+    if crate::jump::own_cell_filtered(w, id, new) {
+        return;
+    }
     // spec: S-0107 claim 15 (only the current destination assigned again; quirks.prone_get_up_repeated_destination off: any non-empty one)
     if w.rules().quirks.prone_get_up_repeated_destination && before != Some(new) {
         return;

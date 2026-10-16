@@ -226,6 +226,8 @@ pub fn apply_pending(w: &mut World) {
             .filter(|o| !matches!(o, Order::Behaviour { .. }))
         {
             apply_other(w, HouseId(hi as u8), o);
+            // spec: S-0519 claim 19 (revision 3: a designator's change of target cancels its strike when the change applies, in the tick of the order)
+            crate::strike::sweep(w);
         }
         // spec: S-0213 claim 3 (then the behaviour orders, in issue order)
         let behaviour: Vec<Order> = orders
@@ -235,6 +237,8 @@ pub fn apply_pending(w: &mut World) {
         let dests = group_destinations(w, &behaviour);
         for (o, d) in behaviour.iter().zip(dests) {
             apply_behaviour(w, o, d);
+            // spec: S-0519 claim 19 (revision 3: cancellation when the change applies)
+            crate::strike::sweep(w);
         }
     }
 }
@@ -384,6 +388,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 ob.econ.deploy = crate::econ::deploy::DeployState::default();
                 ob.econ.deploy.form = form;
             }
+            // spec: S-0213 claim 10 and S-0502 claim 24 (the deploy order's destination clear reroutes a jumpjet that retains a movement commitment, as the stop order's does; a suppressed unchanged vehicle assignment keeps the preceding point and commitment)
+            crate::jump::destination_cleared(w, actor);
         }
         Order::GuardSpot { actor, spot } => {
             // spec: S-0213 claim 20 (needs only a live actor; sets its guard spot)

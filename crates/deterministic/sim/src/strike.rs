@@ -37,6 +37,9 @@ pub struct Strike {
     pub active: bool,
     /// The designator's target at the last look (claim 19: a change cancels).
     pub watched: Option<Target>,
+    /// The designator's count of target changes at the last look.
+    #[serde(default)]
+    pub watched_epoch: u32,
 }
 
 /// All strikes of a game, by designator.
@@ -90,19 +93,36 @@ pub fn turn(w: &mut World, id: ObjectId) {
     }
 }
 
+/// Looks at every designator's target after an order or an object's turn:
+/// a change cancels the strike in the tick it applies (claim 19, revision 3),
+/// not at the strike's next look, the designator's next turn or the next
+/// designation impact.
+pub fn sweep(w: &mut World) {
+    if w.strike.strikes.is_empty() {
+        return;
+    }
+    let ds: Vec<ObjectId> = w.strike.strikes.keys().copied().collect();
+    for d in ds {
+        sync(w, d);
+    }
+}
+
 /// Looks at the designator's target (claim 19): any change to anything
 /// else, including none, cancels the strike; the same target does not.
 fn sync(w: &mut World, d: ObjectId) {
     let now = w.obj(d).and_then(|o| o.target);
+    let epoch = w.obj(d).map_or(0, |o| o.combat.target_epoch);
     let Some(s) = w.strike.strikes.get(&d) else {
         return;
     };
-    if s.watched == now {
+    // spec: S-0519 claim 19 (a change from A to B and back to A within one tick still cancels: the changes are counted; restoring A does not undo the retreat orders, ammunition loss or forgotten strike target)
+    if s.watched == now && s.watched_epoch == epoch {
         return;
     }
     cancel(w, d);
     if let Some(s) = w.strike.strikes.get_mut(&d) {
         s.watched = now;
+        s.watched_epoch = epoch;
     }
 }
 
@@ -127,8 +147,10 @@ pub fn designation(w: &mut World, firer: Option<ObjectId>, target: Option<Target
     };
     // The strike exists from the designator's first look at its target.
     let look = w.obj(d).and_then(|o| o.target);
+    let epoch = w.obj(d).map_or(0, |o| o.combat.target_epoch);
     w.strike.strikes.entry(d).or_insert_with(|| Strike {
         watched: look,
+        watched_epoch: epoch,
         ..Default::default()
     });
     sync(w, d);

@@ -140,3 +140,19 @@ fn bad_data_is_warned_about() {
     let ok = warnings(BASE);
     assert!(!ok.iter().any(|m| m.contains("S-0519")), "{ok:?}");
 }
+
+// spec: S-0519 claim 23 and Import mapping (revision 3: a suicide weapon with no game-wide demolition warhead is warned about; with one given it is not)
+#[test]
+fn a_suicide_weapon_without_a_demolition_warhead_warns() {
+    let rules = "[InfantryTypes]\n1=Sabo\n[Sabo]\nPrimary=Kamikaze\n[Kamikaze]\nSuicide=yes\n";
+    let w = warnings(rules);
+    assert!(
+        w.iter()
+            .any(|m| m.contains("suicide weapon") && m.contains("C4Warhead")),
+        "{w:?}"
+    );
+    let ok = warnings(&format!(
+        "{rules}[CombatDamage]\nC4Warhead=Demo\n[Warheads]\n1=Demo\n[Demo]\n"
+    ));
+    assert!(!ok.iter().any(|m| m.contains("suicide weapon")), "{ok:?}");
+}

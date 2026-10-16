@@ -51,6 +51,16 @@ pub struct CombatState {
     /// An overpowerable building's registered chargers (S-0518 Terms).
     #[serde(default)]
     pub chargers: Vec<ObjectId>,
+    /// The number of target changes made so far (S-0519 claim 19): a
+    /// designator's strike is cancelled by any change, even one back to the
+    /// target it had.
+    #[serde(default)]
+    pub target_epoch: u32,
+    /// A building's acquisition rank (S-0518 claim 3): the number of the
+    /// acquisition that last made it one of its house's buildings, from
+    /// `World::acquisitions`.
+    #[serde(default)]
+    pub acquired: u64,
     /// Whether an overpowerable building is overpowered (S-0518 claim 13).
     #[serde(default)]
     pub overpowered: bool,
@@ -121,6 +131,8 @@ impl CombatState {
             support: 0,
             support_beam: None,
             chargers: Vec::new(),
+            acquired: 0,
+            target_epoch: 0,
             overpowered: false,
             charging: false,
             radial_index: 0,

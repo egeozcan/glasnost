@@ -2234,7 +2234,7 @@ mod combat;
 pub use combat::converted_keys;
 
 #[path = "sim_econ.rs"]
-mod econ;
+pub(crate) mod econ;
 pub use econ::converted_keys as econ_converted_keys;
 
 #[cfg(test)]

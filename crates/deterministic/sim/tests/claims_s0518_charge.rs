@@ -181,7 +181,9 @@ fn a_charger_picks_the_first_own_building_by_step_direction() {
     let o = w.obj(u).unwrap();
     assert_eq!(o.target, Some(Target::Object(east)));
     assert!(o.combat.charging);
-    assert_eq!(o.beh.current.or(o.beh.queued), Some(Behaviour::Attack));
+    // spec: S-0518 claim 14 (revision 3: attack is queued without starting immediately)
+    assert_eq!(o.beh.queued, Some(Behaviour::Attack));
+    assert_ne!(o.beh.current, Some(Behaviour::Attack));
     // Nothing next to a unit that already has a target, or no building.
     assert!(!linked::start_charging(&mut w, u));
     let lone = spawn(&mut w, Kind::Infantry, "CHARGER", 0, at(10, 10));

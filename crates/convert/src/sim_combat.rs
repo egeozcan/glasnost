@@ -392,6 +392,9 @@ const WARHEAD_COMBAT: &[Row] = &[
     ("paralyzes", "Paralyzes", Int, "S-0614"),
     ("culling", "Culling", Bool, "S-0614"),
     ("temporal", "Temporal", Bool, "S-0301, S-0514"),
+    // spec: S-0514 Import mapping (the flags of claim 20's selection; each a boolean, absent: no)
+    ("mind_control", "MindControl", Bool, "S-0514"),
+    ("direct_rocker", "directrocker", Bool, "S-0514"),
 ];
 
 /// Combat fields of countries.
@@ -2465,6 +2468,14 @@ impl Builder<'_> {
     pub(super) fn weapon_combat(&mut self, rec: &mut Rec, t: &TypeRec) {
         self.cfields(rec, t, Kind::Weapons, WEAPON_COMBAT);
         let name = format!("weapons {}", show(&t.name));
+        // spec: S-0519 claim 23 and Import mapping (a suicide weapon with no game-wide demolition warhead: the self-hit is still delivered, our engine completes the death deterministically; the importer warns)
+        if bool_of(key(t, "Suicide")) == Some(true)
+            && self.global(COMBAT_DAMAGE, "C4Warhead").is_none()
+        {
+            self.warn_at(key(t, "Suicide"), format!(
+                "{name} is a suicide weapon but no rules layer gives [CombatDamage] C4Warhead: the self-hit is delivered without a warhead and the death completes with the ordinary presentation and no warhead-selected special death effect (S-0519 claim 23, a design departure)"
+            ));
+        }
         // spec: S-0301 Edge cases (a burst count below 1 is treated as 1; the importer warns)
         self.each_int(key(t, "Burst"), |b| b < 1, |v| {
             format!("{name} Burst {v} is below 1; our engine treats it as 1 (S-0301 Edge cases, a departure)")

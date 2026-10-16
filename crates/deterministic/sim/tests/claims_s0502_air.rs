@@ -46,6 +46,7 @@ fn hoverer(w: &mut World, name: &str, kind: Kind, dx: i32, dy: i32, height: i32)
     go(w, u, at(dx, dy));
     w.obj_mut(u).unwrap().target = Some(Target::Object(e));
     jump::start_in_flight(w, u, Phase::Hovering, height);
+    commit_here(w, u);
     u
 }
 
@@ -301,6 +302,8 @@ fn claim_10_jumpjet_turn_exception() {
         // An infantry order to its own cell takes a side standing position (S-0502 claim 23): the hover keeps the movement point at its position.
         let at_p = w.obj(u).unwrap().pos;
         w.obj_mut(u).unwrap().jump.as_mut().unwrap().dest = Some(at_p);
+        // The own-cell order is not accepted (claim 23); the commitment stands as after a flight.
+        w.obj_mut(u).unwrap().jump.as_mut().unwrap().moving = true;
         w.obj_mut(u).unwrap().body = Turning::at(0);
     }
     step_world(&mut w);

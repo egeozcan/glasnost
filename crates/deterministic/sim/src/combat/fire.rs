@@ -285,39 +285,37 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     true
 }
 
-/// The delay a shot of the firer's second weapon would give (S-0301 claims
-/// 1 to 8, for S-0519 claim 13's rearm), with the draws that shot takes;
-/// `None` without a second weapon.
-pub fn second_weapon_delay(w: &mut World, firer: ObjectId) -> Option<i32> {
-    let weapon = crate::combat::weapon::slot_weapon(w, firer, 1)?;
+/// The rearm delay of a charge planter's arrival (S-0519 claim 13, Q-0986
+/// answered by revision 3), in ticks. Arrival is not a shot: the delay is
+/// chosen with the walker's present burst counter *k*, not *k* + 1, which
+/// arrival neither advances nor wraps; no ammunition is used and nothing is
+/// fired; berserk halving does not apply. The first applicable row:
+/// - no second weapon: 1, no draw;
+/// - a sonic weapon: its rate-of-fire field, no draw (a spark-particle,
+///   fire-particle or railgun weapon takes this row only with a live effect
+///   of its kind on the walker; live effects are not built, so it never
+///   does, and such a weapon follows the rows below);
+/// - *k* below the weapon's burst count: one draw R(3, 5);
+/// - otherwise the full delay of S-0301 claim 2 with its draw R(0, 2).
+pub fn arrival_delay(w: &mut World, walker: ObjectId) -> i32 {
+    let Some(weapon) = crate::combat::weapon::slot_weapon(w, walker, 1) else {
+        // spec: S-0519 claim 13 (no second weapon: 1 tick, no draw)
+        return 1;
+    };
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
-    let o = w.obj(firer)?.clone();
+    let k = w.obj(walker).map_or(0, |o| o.combat.burst);
     let wr = rules.combat.weapon(weapon).clone();
-    let j = o.combat.burst + 1;
-    let berserk = o.combat.berserk_until.is_some_and(|u| w.tick < u);
-    let d = if wr.effect() {
-        // spec: S-0301 claim 5 (an effect weapon: its bare rate, no draw)
+    if wr.sonic {
+        // spec: S-0519 claim 13 (a sonic second weapon: its rate-of-fire field unchanged, no draw)
         wr.rof
-    } else if j < wr.burst {
-        // spec: S-0301 claim 4 (the in-burst delay of a vehicle's field, else R(3, 5))
-        let field = if o.kind == Kind::Vehicle && (1..=4).contains(&j) {
-            rules
-                .unit(o.kind, o.type_index)
-                .map_or(-1, |u| u.vehicle.burst_delay[(j - 1) as usize])
-        } else {
-            -1
-        };
-        if field != -1 {
-            field
-        } else {
-            w.rng.ranged(3, 5, half) // spec: S-0301 claim 4 (R(3, 5))
-        }
+    } else if k < wr.burst {
+        // spec: S-0519 claim 13 (the counter below the burst count, a fresh walker with a burst count of 1 included: an inclusive ranged draw 3 through 5)
+        w.rng.ranged(3, 5, half)
     } else {
-        full_delay(w, firer, &wr)
-    };
-    // spec: S-0301 claim 8 (a berserk firer halves the delay, truncated)
-    Some(if berserk && !wr.disk_laser { d / 2 } else { d })
+        // spec: S-0519 claim 13 (otherwise the full delay of S-0301 claim 2, with the factors of claims 3, 6 and 7 and the draw R(0, 2); no berserk halving)
+        full_delay(w, walker, &wr)
+    }
 }
 
 /// The full delay of S-0301 F1, with its draw R(0, 2).

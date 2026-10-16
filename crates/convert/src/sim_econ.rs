@@ -323,7 +323,7 @@ const CRATE_RULES: &[u8] = b"CrateRules"; // spec: S-0412 Import mapping (`[Crat
 const POWERUPS: &[u8] = b"Powerups"; // spec: S-0520 Import mapping (`[Powerups]`)
 
 /// The power-up keys in table order (S-0520 claim 8, Import mapping).
-const POWERUP_KEYS: [&str; 19] = [
+pub(crate) const POWERUP_KEYS: [&str; 19] = [
     "Money",
     "Unit",
     "HealBase",
@@ -1776,6 +1776,12 @@ impl Builder<'_> {
             let mut arg: Option<String> = None;
             if let Some(st) = state {
                 for e in &st.history {
+                    if matches!(e.what, What::Reset) {
+                        // spec: S-0520 claim 28 and S-0006 claim 5 (a layer that contains the power-up section and omits the key resets its weight to 0 and its animation to the lookup of NONE, which is no animation unless an animation type of that name exists; the water flag and the argument keep the held value; the layering records the reset only with quirks.override_resets_keys on)
+                        weight = 0;
+                        anim = self.type_key(Kind::Animations, b"NONE");
+                        continue;
+                    }
                     let What::Set(v) = &e.what else { continue };
                     let items: Vec<&[u8]> =
                         v.split(|&b| b == b',').map(|s| s.trim_ascii()).collect();

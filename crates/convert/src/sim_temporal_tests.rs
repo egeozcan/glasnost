@@ -49,6 +49,28 @@ fn chrono_keys() {
     assert_eq!(s.warheads["Tick"].temporal, Some(true));
 }
 
+/// spec: S-0514 Import mapping (revision 5: the warhead flags of claim 20's selection, `MindControl` and `directrocker`, are booleans, absent: no) and S-0514 claim 20 (the other flags of the table are read by their own specs)
+#[test]
+fn the_selection_flags_of_claim_20() {
+    let (s, i) = sim(
+        "[Warheads]\n1=Mix\n2=Plain\n[Mix]\nMindControl=yes\ndirectrocker=yes\nIsLocomotor=yes\n[Plain]\n",
+    );
+    assert_eq!(s.warheads["Mix"].mind_control, Some(true));
+    assert_eq!(s.warheads["Mix"].direct_rocker, Some(true));
+    assert_eq!(s.warheads["Mix"].is_locomotor, Some(true));
+    assert_eq!(s.warheads["Plain"].mind_control, None);
+    assert_eq!(s.warheads["Plain"].direct_rocker, None);
+    let row = |key: &str| {
+        i.coverage
+            .iter()
+            .find(|r| r.category == "warheads" && r.key == key)
+            .map(|r| (r.outcome, r.spec.clone()))
+    };
+    use crate::coverage::Outcome::Field;
+    assert_eq!(row("MindControl"), Some((Field, "S-0514".into())));
+    assert_eq!(row("directrocker"), Some((Field, "S-0514".into())));
+}
+
 /// spec: S-0514 Import mapping (absent keys stay absent: no animations, warp distance 5 and erasable types by default in the simulation)
 #[test]
 fn absent_chrono_keys() {

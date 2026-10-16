@@ -776,14 +776,20 @@ fn unit(
         random_vehicle(w, house, half)
     };
     let Some(ti) = ti else { return false };
-    // spec: S-0520 claim 13 (created for the collecting house with its creation draw, facing 0, at the crate cell centre at ground height)
+    // spec: S-0520 claim 13 (created for the collecting house with its creation draw, facing 0)
     let id = crate::objects::create(w, Kind::Vehicle, ti, Some(house));
     let Some(u) = r.unit(Kind::Vehicle, ti) else {
         crate::objects::remove(w, id);
         return false;
     };
     crate::regions::ensure(w);
-    // spec: S-0520 claim 13 (the nearby search around the crate cell: the type's class, normal zone, no reach, no deck, no height condition, no further test, bridges allowed, no reference cell)
+    // spec: S-0520 claim 13 (revision 3, Q-0987 answered: first a direct placement attempt at the crate cell centre at ground height, which is not the first candidate of the search; it accepts only the clear entry outcome of the awarded unit)
+    if clear_for(w, id, cell) {
+        let at = point(w, cell);
+        crate::objects::place(w, id, at, 0);
+        return true;
+    }
+    // spec: S-0520 claim 13 (then the nearby search around the crate cell: the type's class, normal zone (not the type's own), no reach, no deck, no height condition, no further test, no no-overlay condition, bridges allowed, no reference cell; it requires the empty occupancy record of S-0212 claim 25)
     let settings = crate::path::NearbySettings {
         class: u.class,
         zone: glasnost_rules::sim::MovementZone::Normal,
@@ -794,15 +800,27 @@ fn unit(
         no_bridges: false,
         no_overlay: false,
     };
-    let Some(found) = crate::path::nearby(w, cell, crate::path::NearbyUse::Settings(settings))
-    else {
-        // spec: S-0520 claim 13 (no cell: the unit is deleted, its creation draw stays taken)
+    let found = crate::path::nearby(w, cell, crate::path::NearbyUse::Settings(settings));
+    // spec: S-0520 claim 13 (a search result is offered the same direct placement test, once, at its cell centre; a refused result does not start another search)
+    let Some(found) = found.filter(|&c| clear_for(w, id, c)) else {
+        // spec: S-0520 claim 13 (no cell, or the placement fails: the unit is deleted, its creation draw stays taken)
         crate::objects::remove(w, id);
         return false;
     };
     let at = point(w, found);
     crate::objects::place(w, id, at, 0);
     true
+}
+
+/// The direct placement test of claim 13: the awarded unit's entry outcome
+/// for the cell is clear (S-0209 claim 5, S-0211 claim 10), with no approach
+/// direction or source elevation, the ground layer's occupants and ground
+/// occupancy record, and no forced-placement exemption. Every other outcome
+/// refuses; the collector counts by its actual listing and reservations.
+fn clear_for(w: &World, unit: ObjectId, cell: CellXY) -> bool {
+    // spec: S-0520 claim 13 (revision 3: the reference level of the asked cell itself, so the ground layer's objects and record are read)
+    let level = w.cells.cell(cell).map_or(0, |c| i32::from(c.level));
+    crate::occupancy::vehicle_outcome(w, unit, cell, level) == crate::occupancy::Outcome::Clear
 }
 
 /// The harvester rule of claim 13.

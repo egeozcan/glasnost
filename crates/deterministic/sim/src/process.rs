@@ -164,9 +164,8 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
     if !o.kind.is_mobile() {
         return;
     }
-    // spec: S-0514 claim 14 (an attached attacker lets go on entering idle behaviour: falling back to rest)
-    crate::temporal::let_go(w, id);
     // spec: S-0501 claim 18 and table T2 (the first three rows come before the common effects)
+    // spec: S-0514 claim 14 (revision 5: an aircraft early exit skips the common effects and so causes no release)
     if crate::air::fall_back_early(w, id) {
         return;
     }
@@ -175,6 +174,8 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
         if let Some(ob) = w.obj_mut(id) {
             ob.beh.last_common_effects = Some(t);
         }
+        // spec: S-0514 claim 14 and S-0215 claim 13 (revision 5: an actor holding an attached temporal beam, whichever weapon is selected, lets its victim go with the common effects of falling back to rest, at most once per tick; clearing a target, the stop order, and processing stop or sleep are not this event)
+        crate::temporal::let_go(w, id);
         // spec: S-0309 claim 23 (b) (the attack-move refresh is among the common effects, at most once per tick)
         // spec: S-0215 claim 13 (attack-move memory is refreshed before the table's effects; the rows judge the state it leaves)
         refresh_attack_move(w, id);
@@ -1020,11 +1021,9 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
         }
         // Row 3 (the weeder's rule) is left by S-0402 to a later revision; row 4 is the original's computer players' only.
     }
-    // spec: S-0518 claim 14 (a charger with no target in guard looks at the cells next to it; when it takes a building the ordinary guard processing does not run; Q-0985: 1 tick)
-    if o.target.is_none() && crate::linked::start_charging(w, id) {
-        return 1;
-    }
-    if o.target.is_none() && o.kind == Kind::Infantry {
+    // spec: S-0518 claim 14 (a charger with no target in guard looks at the cells next to it; when it takes a building its idle action does not run, but the delay selection of the table below still does, with the rate of guard; Q-0985 answered by revision 3)
+    let charging = o.target.is_none() && crate::linked::start_charging(w, id);
+    if !charging && o.target.is_none() && o.kind == Kind::Infantry {
         // spec: S-0215 claim 24 (no target: attempts its idle action, S-0107 claim 14)
         let in_progress = moving(w, id);
         infantry::idle_attempt(w, id, in_progress);
@@ -1229,12 +1228,12 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
             if found.is_some() {
                 return 1;
             }
-            // spec: S-0518 claim 14 (area guard: after the guard spot and automatic search steps, a charger still without a target looks for a building to charge; Q-0985: 1 tick)
-            if w.obj(id).is_some_and(|x| x.target.is_none()) && crate::linked::start_charging(w, id)
+            // spec: S-0518 claim 14 (area guard: after the guard spot and automatic search steps, a charger still without a target looks for a building to charge; when it takes one its idle action does not run and the area guard delay follows: the rate delay plus a draw over 1 to 5, divided by 6 under the close-range condition on the new building; Q-0985 answered by revision 3)
+            if !(w.obj(id).is_some_and(|x| x.target.is_none())
+                && crate::linked::start_charging(w, id))
             {
-                return 1;
+                idle(w);
             }
-            idle(w);
         } else if holds || o.target.is_none() {
             // spec: S-0215 claim 26 (may not search: attempts its idle action)
             idle(w);

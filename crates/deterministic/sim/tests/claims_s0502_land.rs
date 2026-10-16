@@ -44,6 +44,8 @@ fn hoverer(w: &mut World, name: &str, kind: Kind, dx: i32, dy: i32) -> ObjectId 
     w.obj_mut(u).unwrap().beh.force(Behaviour::Move, t, true);
     jump::start_in_flight(w, u, Phase::Hovering, 500);
     js(w, u).dest = Some(d);
+    js(w, u).moving = true; // the commitment of a completed flight (the own-cell order itself is not accepted, claim 23)
+    js(w, u).order = Some(Target::Cell(at(dx, dy)));
     u
 }
 
@@ -56,6 +58,7 @@ fn descender(w: &mut World, name: &str, kind: Kind, dx: i32, dy: i32, height: i3
     w.obj_mut(u).unwrap().beh.force(Behaviour::Move, t, true);
     jump::start_in_flight(w, u, Phase::Descending, height);
     js(w, u).dest = Some(Pos::centre(at(dx, dy), 0));
+    js(w, u).order = Some(Target::Cell(at(dx, dy))); // as the order itself would have left it
     js(w, u).ht = 0;
     u
 }
@@ -346,7 +349,7 @@ fn claim_15_touchdown_on_a_deck() {
     assert_eq!(o.layer, Layer::Deck);
     assert!(w.cells.list(c, Layer::Deck).contains(&u));
     assert!(j(&w, u).on_deck);
-    // Taking off from the deck: the old mark is cleared and it is no longer on a deck (claim 4); a low replacement is on the ground.
+    // Taking off from the deck: the old mark is cleared and it is no longer on a deck (claim 4). Over the high bridge, with the on-deck state unset, a height of 416 leptons would list but a few leptons more does not (revision 6: r < 208 or r' = 0, not r' < 208).
     go(&mut w, u, at(12, 4));
     for _ in 0..4 {
         step(&mut w);
@@ -356,8 +359,8 @@ fn claim_15_touchdown_on_a_deck() {
     assert_eq!(w.obj(u).unwrap().layer, Layer::Ground);
     assert!(!w.cells.list(c, Layer::Deck).contains(&u));
     assert!(
-        w.cells.list(c, Layer::Ground).contains(&u),
-        "listed on the ground again at a low height"
+        !w.cells.list(c, Layer::Ground).contains(&u) && j(&w, u).listed.is_none(),
+        "above the deck by a few leptons it is listed nowhere (S-0502 claim 4, revision 6)"
     );
     for _ in 0..60 {
         step(&mut w);
@@ -598,6 +601,7 @@ fn claim_21_neighbour_step_at_the_end_of_an_ascent() {
     w.obj_mut(u).unwrap().target = Some(Target::Object(e));
     jump::start_in_flight(&mut w, u, Phase::Ascending, 499);
     js(&mut w, u).dest = Some(Pos::centre(at(2, 0), 0));
+    js(&mut w, u).order = Some(Target::Cell(at(2, 0)));
     // Move the climber over the held slot's cell.
     let p = pos(&w, u);
     w.obj_mut(u).unwrap().pos =

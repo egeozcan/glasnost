@@ -1717,6 +1717,19 @@ impl Run<'_> {
                     }
                 }
             }
+            // spec: S-0520 claim 28 and S-0006 claim 5 (a layer whose power-up section survives the empty-entry rules resets every omitted entry's weight and animation, whatever a later layer does; a layer without the section changes none)
+            if quirks.override_resets_keys && name.as_slice() == b"Powerups" && !given.is_empty() {
+                for k in crate::sim::econ::POWERUP_KEYS {
+                    if !has(k) {
+                        let state = keys.entry(k.as_bytes().to_vec()).or_default();
+                        state.history.push(Event {
+                            layer: li,
+                            line: section.line(),
+                            what: What::Reset,
+                        });
+                    }
+                }
+            }
             // spec: S-0518 claim 16 and F4 (a layer with the general section rescales the held support modifier by 100, whether or not the key is given; quirks.prism_modifier_reread_scale off: only a given key counts)
             if name.as_slice() == b"General" {
                 let held = keys

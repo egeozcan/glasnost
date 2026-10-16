@@ -351,6 +351,8 @@ fn claim_5_landing_for_deploy() {
     // It hovers with an order of its own (it is moving) and no landing request.
     go(&mut w, v, at(0, 0));
     jump::start_in_flight(&mut w, v, Phase::Hovering, 300);
+    // The commitment and the point of a completed flight: the own-cell order itself is searched away from the own cell (S-0502 claim 23).
+    commit_here(&mut w, v);
     for _ in 0..30 {
         step(&mut w);
     }
