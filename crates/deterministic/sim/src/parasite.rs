@@ -261,10 +261,27 @@ pub fn carrier_ended(w: &mut World, carrier: ObjectId, weapon: WeaponId, detonat
         // spec: S-0614 claim 21 (removed without detonating: the parasite stays off the map, unattached and unable to act; no latch, return, death or recovery)
         return;
     }
-    // spec: S-0514 claim 20 and S-0614 claims 1 and 3 (attachment is the fourth row: takeover, bomb planting and charging in the same warhead suppress it; what becomes of the carried parasite then is Q-1032, interim: it fails to latch)
-    let selected =
-        crate::combat::projectile::special_of(w, weapon, target.map(crate::world::Target::Object))
-            == Some(crate::combat::projectile::Special::Parasite);
+    let special =
+        crate::combat::projectile::special_of(w, weapon, target.map(crate::world::Target::Object));
+    // spec: S-0614 claim 24 (answers Q-1032: takeover, bomb planting or electric charging selected under S-0514 claim 20 at a detonation leaves the carried parasite off the map, unattached and unable to act, whatever the target's latchability and whether or not the higher effect succeeds; no return, recovery timer, death, experience or replacement); quirks.parasite_suppressed_latch_strands_unit off: the surviving parasite attempts claim 4's return, and never attaches
+    if detonated
+        && matches!(
+            special,
+            Some(
+                crate::combat::projectile::Special::Takeover
+                    | crate::combat::projectile::Special::Bomb
+                    | crate::combat::projectile::Special::Charge
+            )
+        )
+    {
+        if w.rules().quirks.parasite_suppressed_latch_strands_unit {
+            return;
+        }
+        fail_latch(w, p);
+        return;
+    }
+    // spec: S-0514 claim 20 and S-0614 claims 1 and 3 (attachment is the fourth row: attached only when it is the selected special hit)
+    let selected = special == Some(crate::combat::projectile::Special::Parasite);
     match target {
         // spec: S-0614 claim 3 (the projectile's target object is latchable: it becomes the host; no distance is tested)
         Some(t) if detonated && selected && latchable(w, p, t) => attach(w, p, t),

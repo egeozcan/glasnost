@@ -269,7 +269,11 @@ pub fn override_attack(w: &mut World, actor: ObjectId, target: ObjectId) {
     // spec: S-0215 claim 10 (the target and destination are put aside and replaced)
     o.beh.aside = Some((o.target, o.dest));
     o.target = Some(Target::Object(target));
-    if o.kind.is_mobile() {
+    let mobile = o.kind.is_mobile();
+    // spec: S-0215 claim 13 and S-0502 claim 28 (a destination clear requested by behaviour processing, here after the override installed its target: a balloon-hover vehicle with a nonempty destination can reject it, keeping destination, point, commitment and reservation)
+    let retained = mobile && crate::jump::clear_rejected(w, actor);
+    let Some(o) = w.obj_mut(actor) else { return };
+    if mobile && !retained {
         o.dest = None;
     }
     o.combat.opportunity = false;

@@ -1666,16 +1666,81 @@ fn shoot_to_end(w: &mut World, p: ObjectId) {
     panic!("the projectile never ended");
 }
 
-// spec: S-0614 claims 1, 3 and 4 (revision 8, scenario P14) and S-0514 claim 20: attachment is the selected special hit only when no higher row (takeover, bomb planting, charging) is enabled; the firing-time departure and the latch block still happen, the higher row suppresses attachment and the ordinary damage (Q-1032 is open for what becomes of the carried parasite: not asserted)
+type Higher = (&'static str, fn(&mut WarheadType));
+const HIGHER: [Higher; 3] = [
+    ("takeover", |h| h.mind_control = Some(true)),
+    ("bomb planting", |h| h.ivan_bomb = Some(true)),
+    ("charging", |h| h.electric_assault = Some(true)),
+];
+
+// spec: S-0614 claim 24 (answers Q-1032) and Edge cases (quirks.parasite_suppressed_latch_strands_unit on): takeover, bomb planting or charging selected at a detonation strands the carried parasite off the map, unattached and inactive, extant with its health, for 300 ticks and more, with no return, recovery or removal; the target may be latchable, a cell, or no longer there
+#[test]
+fn claim_24_a_higher_hit_strands_the_carried_parasite() {
+    for (name, set) in HIGHER {
+        for case in ["latchable", "cell", "lost"] {
+            let mut r = ruleset();
+            set(r.sim.warheads.get_mut("Grip").unwrap());
+            let mut w = game_of(&r);
+            let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+            let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+            let h0 = health(&w, p);
+            let target = if case == "cell" {
+                Target::Cell(cell(2, 0))
+            } else {
+                Target::Object(host)
+            };
+            assert!(fire::shot(&mut w, p, 0, target), "{name} {case}");
+            if case == "lost" {
+                glasnost_sim::objects::remove(&mut w, host);
+            }
+            shoot_to_end(&mut w, p);
+            let o = w.obj(p).unwrap_or_else(|| panic!("{name} {case}: never removed"));
+            assert!(!o.on_map, "{name} {case}: off the map");
+            assert_eq!(parasite::host_of(&w, p), None, "{name} {case}");
+            assert_eq!(health(&w, p), h0, "{name} {case}");
+            assert_eq!(ps(&w, p).hold_until, None, "{name} {case}: no recovery timer");
+            testkit::run(&mut w, 300);
+            assert!(
+                w.obj(p).is_some_and(|o| !o.on_map && health(&w, p) == h0),
+                "{name} {case}: still stranded after 300 ticks"
+            );
+        }
+    }
+}
+
+// spec: S-0614 claim 24 (quirks.parasite_suppressed_latch_strands_unit off: after the higher selected effect the surviving parasite attempts claim 4's return, placed in its firing cell, and never attaches, even against a latchable host)
+#[test]
+fn claim_24_switch_off_returns_the_parasite_without_attaching() {
+    for (name, set) in HIGHER {
+        let mut r = ruleset();
+        set(r.sim.warheads.get_mut("Grip").unwrap());
+        r.globals.quirks.parasite_suppressed_latch_strands_unit = false;
+        let mut w = game_of(&r);
+        let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+        let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+        assert!(fire::shot(&mut w, p, 0, Target::Object(host)));
+        shoot_to_end(&mut w, p);
+        assert!(w.obj(p).is_some_and(|o| o.on_map), "{name}: returned");
+        assert_eq!(parasite::host_of(&w, p), None, "{name}: never attached");
+    }
+}
+
+// spec: S-0614 claim 4 and claim 24 (control: attachment selected against a target that is gone at detonation returns under claim 4, it is not stranded)
+#[test]
+fn claim_24_control_selected_attachment_to_a_lost_target_returns() {
+    let mut w = game_of(&ruleset());
+    let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+    let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+    assert!(fire::shot(&mut w, p, 0, Target::Object(host)));
+    glasnost_sim::objects::remove(&mut w, host);
+    shoot_to_end(&mut w, p);
+    assert!(w.obj(p).is_some_and(|o| o.on_map), "claim 4's return");
+}
+
+// spec: S-0614 claims 1, 3 and 4 (revision 8, scenario P14) and S-0514 claim 20: attachment is the selected special hit only when no higher row (takeover, bomb planting, charging) is enabled; the firing-time departure and the latch block still happen, the higher row suppresses attachment and the ordinary damage (the carried parasite's fate is claim 24, tested below)
 #[test]
 fn p14_a_higher_row_suppresses_attachment() {
-    type Higher = (&'static str, fn(&mut WarheadType));
-    let rows: [Higher; 3] = [
-        ("takeover", |h| h.mind_control = Some(true)),
-        ("bomb planting", |h| h.ivan_bomb = Some(true)),
-        ("charging", |h| h.electric_assault = Some(true)),
-    ];
-    for (name, set) in rows {
+    for (name, set) in HIGHER {
         let mut r = ruleset();
         set(r.sim.warheads.get_mut("Grip").unwrap());
         let mut w = game_of(&r);

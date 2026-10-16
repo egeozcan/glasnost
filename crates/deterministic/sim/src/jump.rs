@@ -712,8 +712,11 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     }
     let Some(o) = w.obj(id) else { return };
     let dest = o.dest;
-    if st(w, id)
-        .is_some_and(|j| j.order == dest && !(dest.is_some() && !j.moving && j.dest.is_none()))
+    // spec: S-0502 claim 24 (Q-1030, revision 7: an infantry unit of a jumpjet type has no unchanged-destination suppression: repeating a nonempty destination repeats the movement-point adjustment and its draw, and an empty-to-empty assignment is an effective clear; only a vehicle ignores an unchanged order-level destination; equality is the same cell or the same object); S-0213 claim 21
+    let infantry = o.kind == Kind::Infantry;
+    if !infantry
+        && st(w, id)
+            .is_some_and(|j| j.order == dest && !(dest.is_some() && !j.moving && j.dest.is_none()))
     {
         return;
     }
@@ -751,6 +754,76 @@ pub fn own_cell_filtered(w: &World, id: ObjectId, t: Target) -> bool {
         return false;
     }
     point_of(w, t).cell() == o.pos.cell()
+}
+
+/// Whether the unit is a balloon-hover jumpjet vehicle (claim 28), the
+/// kind of actor whose stop order makes a second destination request.
+pub fn balloon_hover_vehicle(w: &World, id: ObjectId) -> bool {
+    is_jumpjet(w, id) && balloon_vehicle(w, id)
+}
+
+/// Whether the unit is of a balloon-hover jumpjet type, vehicle or infantry
+/// (S-0213 claim 8: stop makes a second destination request for the type).
+pub fn balloon_hover_type(w: &World, id: ObjectId) -> bool {
+    is_jumpjet(w, id) && balloon(w, id)
+}
+
+/// The signed wrapped difference of two facings, in -32768 to 32767.
+fn facing_difference(a: Facing, b: Facing) -> i32 {
+    // spec: S-0502 claim 28 (the signed wrapped difference in -32768 to 32767 facing units, integer arithmetic, no rounding)
+    i32::from(a.wrapping_sub(b) as i16)
+}
+
+/// A request to clear the order-level destination (claim 28): a balloon-hover
+/// vehicle with both a nonempty destination and a target rejects it when the
+/// destination is the target itself, the destination is a cell whose first
+/// ground-layer listed object is the target, or the horizontal direction to
+/// the target is within 16384 facing units of the turret facing. A rejection
+/// leaves the destination, movement point, commitment and landing reservation
+/// as they are (no search, no draw) and makes *attack* current unless it is
+/// already the seen behaviour. Returns whether the request was rejected; the
+/// caller then does not clear the destination. Call it where the request is
+/// made: after the order has installed its target, before the target is
+/// cleared.
+pub fn clear_rejected(w: &mut World, id: ObjectId) -> bool {
+    if !balloon_hover_vehicle(w, id) {
+        return false;
+    }
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0502 claim 28 (only an empty assignment is subject to it, and only with a nonempty destination and a target: having a target alone does not retain an empty destination)
+    let (Some(dest), Some(target)) = (o.dest, o.target) else {
+        return false;
+    };
+    let retain = match (dest, target) {
+        // spec: S-0502 claim 28 (row 1: the destination is the target object itself)
+        (Target::Object(d), Target::Object(t)) if d == t => true,
+        // spec: S-0502 claim 28 (row 2: the destination is a cell and the target is its first ground-layer listed object)
+        (Target::Cell(c), Target::Object(t)) if w.cells.list(c, Layer::Ground).first() == Some(&t) => {
+            true
+        }
+        _ => false,
+    } || {
+        // spec: S-0502 claim 28 (row 3: the target direction, S-0204 claim 8's horizontal direction from the vehicle to its target, is at most 16384 facing units from the current turret facing, not the movement heading; a type without a turret uses the same facing; inclusive at 16384)
+        let t = crate::process::target_pos(w, target);
+        let d = direction(
+            i64::from(t.x - o.pos.x),
+            i64::from(t.y - o.pos.y),
+            w.rules().quirks.table_direction,
+        );
+        facing_difference(d, o.turret.value(w.tick)).abs() <= 16384 // spec: S-0502 claim 28 (at most 16384 facing units)
+    };
+    if !retain {
+        return false;
+    }
+    // spec: S-0502 claim 28 and S-0215 claim 13 (a rejection makes attack current and empties the queued behaviour unless the current behaviour, or the queued one when none is current, is already attack; claim 9's behaviour-start effects apply)
+    let tick = w.tick;
+    let stale = w.rules().quirks.stale_suspended_revert;
+    if let Some(o) = w.obj_mut(id)
+        && o.beh.seen() != Some(Behaviour::Attack)
+    {
+        o.beh.force(Behaviour::Attack, tick, stale);
+    }
+    true
 }
 
 /// A direct instruction giving the locomotor no point (claim 16, *No point*):
@@ -894,7 +967,7 @@ pub fn stop_ordered(w: &mut World, id: ObjectId) {
     if !is_jumpjet(w, id) {
         return;
     }
-    // spec: S-0502 claim 24 and S-0213 claims 8 and 21 (a redundant assignment is not an effective clear: an ordinary jumpjet vehicle ignores an unchanged order-level destination, empty-to-empty included, so no reroute happens and the preceding movement point and commitment survive; the destination-refresh state and the balloon-hover substitution have no stated activation, Q-1031)
+    // spec: S-0502 claims 24, 27 and 28 and S-0213 claims 8 and 21 (a redundant assignment is not an effective clear: an ordinary jumpjet vehicle ignores an unchanged order-level destination, empty-to-empty included, so no reroute happens and the preceding movement point and commitment survive; an infantry unit has no such suppression and reroutes again while its commitment lasts; the destination-refresh state's only activations are the placement interval, in which our placement makes no assignment, and the qualified dock fallback, which our engine does not reach: Q-1090; the balloon-hover rejection is `clear_rejected`, made before this call)
     if vehicle(w, id) && st(w, id).is_some_and(|j| j.order.is_none()) {
         return;
     }
