@@ -1,9 +1,9 @@
 ---
 id: Q-1130
 title: How pending point suppression meets a teleporting destination, and when a teleporting chrono miner "starts seeking"
-status: open
+status: answered
 related: [S-0207, S-0502, S-0402, S-0417]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need

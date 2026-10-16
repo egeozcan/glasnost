@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130]
 supersedes: []
 ---
 
@@ -63,6 +63,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
   has no destination for the seeking test of claim 3.
 - **Remembered cell.** A cell a harvester keeps so that it can drive back to its field after
   unloading (claims 6 and 12).
+- **Landing point, pending jump, vehicle-present mark.** S-0207's terms (claims 20, 21 and 27): the
+  fixed landing point of a teleporting object's destination, the jump still to be made to it, and the
+  vehicle-present mark that S-0207 sets on the cell of a vehicle's landing point. Claim 17 calls that
+  mark the "reservation".
 - **Scan range.** A number of cells, taken from one of the rules' scan fields given in leptons
   (S-0003 lepton form): the field divided by 256, truncated toward zero. The *long scan* and *short
   scan* ranges come from the resource scan fields (Import mapping).
@@ -834,9 +838,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       (claim 9), travelling by its active locomotion,
     - while it is moving in the *returning* phase and a refinery would accept it (the normal
       choice of claim 8 finds one), it drops its movement, so that its next processing reserves it,
-    - when it starts seeking with a destination (for example after a *harvest* order on a cell, or
-      the remembered cell it adopts as its destination at that moment, claim 3), it drops that
-      destination and runs the ring search from where it stands. This rule holds for a harvester
+    - at a seeking processing it drops its destination and runs the ring search from where it
+      stands (the *seeking drop*, below). This rule holds for a harvester
       whose current locomotor is the teleport locomotor, whether or not its type has the teleporter
       flag, and not for one whose type has the flag but that moves by another locomotor,
     - in *guard*, a chrono miner queues *harvest* again (1-tick interval, ending the processing as
@@ -846,6 +849,66 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       mapping; the dock list is not consulted here), or when it is full and still moving. In the
       original this rule is reached only for a human-controlled owner (a computer-controlled owner
       gets claim 13's rule instead); in our engine it applies to every player house.
+    **The seeking drop (Q-1130).** The drop is not tied to the first processing after the miner
+    enters *harvest*; it applies at every seeking processing that gets past the *full* test
+    (claim 3's first seeking row). At such a processing the destination the miner had before the
+    ring search is removed, whatever its origin. A remembered cell counts as such a destination: it
+    is adopted by an ordinary destination assignment (which can fix a landing point under S-0207
+    claim 20 a, unless that claim's disabling states or pending point suppression (S-0207 claim 27)
+    prevent it) and removed at once, so the miner never jumps to it. Removing a destination stops the
+    teleporting locomotion, which cancels the pending jump and the moving state. The ring search of
+    claim 4 then runs from the miner's own cell. Any destination that search sets is jumped to in the
+    same turn (claim 3b; S-0207 claim 20 d), so the miner has no destination after the processing
+    unless that jump is blocked.
+
+    The drop therefore acts at each of these events:
+
+    | Seeking event | Dropped? | Consequence |
+    |---|---|---|
+    | full | no | goes *returning* (the returning drop is the second bullet above) |
+    | not full, remembered cell | yes, the adopted cell | the miner never jumps to the remembered cell; it searches from where it stands |
+    | not full, no remembered cell, destination present at the processing | yes | the pending jump, if the miner has not yet made it, is cancelled; it searches from where it stands |
+    | not full, nothing remembered, no destination | nothing to drop | the search runs |
+    | a ring search sent it to another cell at an earlier processing | not at that processing: the destination is new | see below: the next processing finds no destination if the jump was made |
+
+    The drop clears the **order-level destination** and cancels the **pending jump**. It does
+    **not** clear the **fixed landing point** or its occupancy reservation: whatever landing point
+    S-0207 claim 20 a had fixed (for the adopted cell, or for a harvest order's cell) stays
+    remembered, and the vehicle-present reservation stays at that point's cell until the
+    locomotor takes its next destination (S-0207 claim 20 a: clearing an earlier reservation uses
+    the remembered point). A miner that then starts loading at its own cell therefore keeps a
+    reservation at a cell it has not moved to. When no landing point was fixed by the
+    assignment (the miner was disabled or suppression was pending), there is none to retain.
+
+    Within one miner's turn, a due behaviour processing sees the destination state before that
+    turn's locomotion changes it (claim 3b), and a destination that a behaviour processing sets is
+    jumped to in the same turn (S-0207 claim 20 d). Hence in ordinary play:
+    - a destination the ring search sets is jumped to in that same turn and removed by the jump,
+      so the next seeking processing, a standard delay later, finds none; a search that sent the
+      miner away produces a drop at the next processing only if the jump was blocked (the miner
+      disabled by an electromagnetic pulse, *held*, or *being erased*), in which case the pending
+      jump is cancelled and the search runs again from where it stands.
+    - the remembered-cell event occurs at the first seeking processing after each unloading in which
+      the miner holds a remembered cell (the short-scan result of claim 6), and that adopted cell is
+      always dropped.
+    - the "destination present" event is reached for a harvest order on a cell when the
+      order's destination is still unfulfilled at the miner's first seeking processing, that is
+      when no locomotor update jumped it first. Whether the order's destination is dropped before
+      or after the first jump depends on whether the order starts *harvest* so that a processing is
+      due in the first turn after the order (settled by scenario H8 part h; see the confidence below),
+      with the
+      processing first, the miner never jumps and loads at the cell the search finds from where it
+      stands (as in part d); with the jump first, the destination is already gone.
+    The "remains seeking" row of claim 3 (a destination present, no search) is therefore not
+    reached by a miner with active teleporting locomotion in ordinary play, except through the
+    blocked-jump case. It remains the rule for every harvester with other active locomotion,
+    including a vehicle-factory-built miner on its temporary driving leg.
+    - Backing: `measurable` (scenario H8 parts d, h and i)
+    - Confidence: high that every seeking processing past the *full* test drops a destination
+      and that the order-level destination is cleared and the pending jump cancelled; medium
+      for the retained landing point and reservation (it composes this with S-0207 claim 20 a
+      and the locomotor's stop); low for the order-to-first-processing timing of a harvest order
+
     **Temporary driving after production.** A vehicle-factory-built chrono miner still using
     temporary driving drives its first leg to ore found in another cell. The ore destination
     replaces its retained factory-exit point. Queueing or starting *harvest*, arrival at that
@@ -1511,8 +1574,8 @@ cause a second processing.
 |---|---|---|---|
 | any | owner owns no building of a dock type | queues *guard* | 1 tick |
 | seeking | full | → returning | 1 tick |
-| seeking | not full, has a remembered cell | drives there and forgets it; no search in this processing (chrono miner: claim 17) | standard delay |
-| seeking | not full, no remembered cell, has a destination | stays seeking; no search | standard delay |
+| seeking | not full, has a remembered cell | drives there and forgets it; no search in this processing (chrono miner with active teleporting locomotion: the seeking drop of claim 17 removes the adopted cell, and the processing then takes the ring-search rows below) | standard delay; for such a chrono miner, the next processing is that of the row the ring search then reaches |
+| seeking | not full, no remembered cell, has a destination | stays seeking; no search (chrono miner with active teleporting locomotion: the seeking drop removes the destination, and the processing then takes the ring-search rows below) | standard delay; for such a chrono miner, the next processing is that of the row the ring search then reaches |
 | seeking | not full, no remembered cell, no destination, ring search (long scan) gives its own cell | step counter 0, period 2 started; → loading | 1 tick |
 | seeking | not full, no remembered cell, no destination, ring search gives another cell | drives there; stays seeking | standard delay |
 | seeking | not full, no remembered cell, no destination, nothing found | → idle | 105 ticks |
@@ -2101,10 +2164,34 @@ with director and mods off except for the scenario's named test data.
   the locomotor has stopped, it stays in *guard*. If no processing of *guard* ever shows the
   locomotor moving (the miner stops at once when the refinery goes), the part shows nothing and
   the trigger stays `unmeasured` for that reason.
-- *Falsified if:* it drives, stays in *guard* next to its refinery, goes to the ordered cell in part
+  Part (h), the seeking drop's timing for a harvest order (Q-1130): as part (d), with the ordered
+  cell 10 cells away and richer ore next to the miner, record every tick from the order until the
+  first load: the miner's cell, order-level destination, the locomotor's goal, its moving state,
+  its behaviour and phase and the time of each processing. Expected: the destination is gone
+  within a few ticks; either the miner never leaves its cell and loads at the nearby ore (the
+  processing came first), or it jumps to the ordered cell once and then searches from there. Both
+  outcomes are recorded; neither falsifies the drop itself, and the observed one settles the
+  `unmeasured` timing in claim 17.
+  Part (i), the remembered cell and the retained landing point: let a miner with active
+  teleporting locomotion unload at a refinery with ore 10 or more cells away from its first
+  loading cell, so that it has a remembered cell, and record the same fields over the first
+  seeking processing after the unloading, plus the occupancy of the remembered cell (try to move
+  a second vehicle onto it, or read the recorder's vehicle-present mark). Expected: the miner
+  does not jump to the remembered cell (its cell does not change in the processing's tick unless
+  the ring search from where it stands finds another cell); the destination and goal are
+  nothing after the processing; the remembered cell's reservation stays marked until the miner's
+  next accepted destination. Repeat with the miner disabled (electromagnetic pulse) at the
+  processing: the drop still removes the destination and no landing point or mark appears.
+- *Falsified if:* it drives (other than the one jump that part (h) allows), stays in *guard* next to
+  its refinery, keeps the ordered cell as its destination after its first seeking processing in part
   (d), keeps moving in part (e), or stays where it is in part (f); in part (g), a processing of
   *guard* that shows the locomotor moving and is followed by a behaviour other than *harvest*, or
-  *harvest* after the locomotor has stopped.
+  *harvest* after the locomotor has stopped; in part (h), the ordered cell still set as the destination
+  after the first seeking processing; in part (i), the miner jumping to the remembered cell, a
+  destination still set after the seeking processing, the reservation moving back to the miner's cell
+  at the drop, or the drop happening only at the first processing after *harvest* starts (a destination
+  that the search sets at a later seeking processing is gone at the next seeking processing, unless the
+  jump was blocked).
 - *Runs:* 3.
 
 **H9. Stop order and *return* (claim 2).** A harvester in *loading* and another in *returning* are
@@ -2735,6 +2822,10 @@ is wrong). *Runs:* 3.
 
 ## Open questions
 
+- Q-1130 question 3 is answered by the seeking drop in claim 17 (every seeking processing past
+  the *full* test; order-level destination cleared, pending jump cancelled, landing point and
+  reservation retained). Open: whether a harvest order's destination is dropped before the
+  miner's first jump (claim 17; H8 part h). Questions 1 and 2 are S-0207's.
 - Q-0550 is answered by claim 5a, F8 and H26. S-0111 claim 14 already covered load
   pips. The fixed harvesting sprite is not an animation instance, so its frame cycle
   does not require a new S-0109 playback claim.
