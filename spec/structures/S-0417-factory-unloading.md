@@ -2,13 +2,13 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0221, Q-0222, Q-0223, Q-0697]
+requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070]
 supersedes: []
 ---
 
@@ -22,7 +22,9 @@ released aircraft, the destination chosen on release from contact, and the relea
 S-0404 leaves to this spec (claim 14). S-0404 claim 13 owns release positions, facings, busy and
 failed results, and refunds; S-0404 claim 15 owns aircraft pad positions. Skirmish only: campaigns
 and network games are out of scope. This answers Q-0221, Q-0222 and Q-0223 and most of Q-0120.
-Q-0697's teleporting-infantry clear report is specified in claim 10. Still open: possible later
+Q-0697's teleporting-infantry clear report is specified in claim 10. Q-1070's jumpjet
+ascent clear report is claim 15: normal factory-released flight does not hold the factory
+until landing or destination arrival. Still open: possible later
 unsolicited movement without a rally point (Open question 3) and the draws of putting a
 released unit on the map (Open question 8). Claim 14 owns the
 contact-place count, infantry candidate acceptance and edge-entry nearby destination, including
@@ -61,7 +63,7 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
   It need not belong to K's foundation, even when the exit list has eleven or more entries.
 - **Apron neighbours:** E's eight neighbours, in step-direction order 0 to 7 (S-0204 claim 9).
 - **Exit track:** table T1, distinct from the ordinary movement tracks of S-0207.
-- **Clear report:** a tethered unit's notice that releases its contact and tether (claim 7).
+- **Clear report:** a unit's notice that releases its contact and tether (claims 7, 10 and 15).
   The name does not mean that it has physically left the foundation.
 - **Run-away reply:** the reply a vehicle factory gives to that report, governing claim 8.
 
@@ -229,7 +231,9 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
    - Backing: `measurable` (U7 and U6)
    - Confidence: high (track and speed tests); medium (first-point observable consequences)
 
-7. **Clear report.** On a cell-arrival update (defined below) while tethered, a vehicle reports clear unless it
+7. **Clear report on vehicle cell arrival.** A jumpjet's ascent uses claim 15 instead.
+   Its report does not have this claim's arrival or building-cell tests.
+   On a cell-arrival update (defined below) while tethered, a vehicle reports clear unless it
    is in *unload*, or in *enter* with its contacted building as destination, or both these hold:
    it has a destination other than its present cell, and its cell holds a building. A destination
    object other than a cell is not treated as its own cell for this test. The vehicle-factory
@@ -383,16 +387,8 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     - Confidence: high (arrival/report connection, contact and tether loss, absence of vehicle
       suppression); medium (combined factory-release and no-jump consequences)
 
-    **Factory contact during jumpjet ascent.** The ordinary walking report above does not establish
-    when a jumpjet ends factory contact or its tether. The unresolved factory-contact
-    interaction occurs during *ascending*, while the bridge-adjusted integer height of
-    S-0502 claim 7 is strictly above one quarter of the target height and below the target
-    height. The fraction is one half for a balloon-hover vehicle, not for balloon-hover
-    infantry; the integer threshold truncates toward zero. This is not an established
-    clear-report or contact-release rule (Open question 9).
-    - Backing: `unmeasured` for the interaction's effect: no observable consequence has
-      been established. The ascent thresholds inherit S-0502 claim 7's backing.
-    - Confidence: high (threshold conditions), low (contact or tether consequences)
+    **Release of jumpjet infantry.** Claim 15 owns its ascent clear report, which ends both factory
+    contact and tether during the climb, without waiting for a walking arrival or touchdown.
 
     With no rally point (or a rally point in the unit's own cell), neither placement nor the release
     gives a destination or queues *move*. The unit rests in *guard*, and no rule of resting
@@ -402,7 +398,9 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     anything, is therefore not established (Open question 3). The no-arrival contact rule is
     settled: while it remains resting without a cell-arrival update or an independent
     contact-breaking event, it keeps contact and tether and holds one of K's contact places
-    (claim 14). This also applies to teleporting infantry that never jumps (U10 e). With a
+    (claim 14). For a jumpjet, claim 15's ascent report is such an independent event:
+    no-rally release must not be read as retention after it has flown away.
+    This also applies to teleporting infantry that never jumps (U10 e). With a
     single contact place the next infantry release is busy (S-0404 claim 13), which makes
     retention observable (U10 b). This is not a promise that unrelated events can never move
     the unit or break contact.
@@ -534,6 +532,68 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
       move. Their owning general rules remain as cited.
     - Confidence: high (contact-place count, forced *move* and destinations); medium (the entry
       test's exact results, inherited from the cell-entry rules)
+
+15. **Ascent of a jumpjet releases the factory (Q-1070).** A released infantry unit or vehicle
+    currently using jumpjet locomotion, whose type is marked as jumpjet or balloon-hover,
+    gives a clear report on its first qualifying *ascending* update while still in contact
+    with a vehicle factory or a building with one of the barracks door kinds. Both factory
+    contact and the tether end during that same unit update. This is an ascent report,
+    not a cell-arrival report: claim 7's different-destination and building-cell suppression
+    does not apply. No distance from K, foundation departure, cell crossing, first cruise,
+    destination arrival or touchdown is required.
+
+    **Exact tick.** Use the integer bridge-adjusted height *h* and integer target height
+    *h*ₜ of S-0502 claim 7, evaluated after this tick's jumpjet physics (S-0502 claim 3).
+    The qualifying window is trunc(*h*ₜ / *q*) < *h* < *h*ₜ, in leptons, where *q* = 2
+    for a balloon-hover vehicle and *q* = 4 otherwise. Division is signed integer division
+    truncated toward zero, not floating point. Balloon-hover infantry still uses *q* = 4.
+    Equality at either boundary does not qualify. The test applies on every qualifying
+    ascending update, not only on a detected threshold crossing; after a successful report
+    there is no factory contact left to report again. A rise directly to or past the target
+    in one physics step skips this window; this claim does not invent an ascent-completion
+    report for that untested case.
+
+    A ground vehicle factory in the waiting stage of table S1 can start closing on its
+    first subsequent unloading processing that observes the ended link, in the same tick
+    or later according to actor update order and its processing delay. It need not wait
+    for any part of the jumpjet's journey after this report. An infantry factory has no
+    unloading stage: the contacted place becomes free in the report tick itself, so a later
+    release is no longer busy on account of that unit's old contact (claim 14).
+
+    **Rally and no rally.** The report condition itself does not test for a rally point.
+    A ground vehicle receives claim 5's fixed exit destination whether or not K has a
+    rally point, so its ordinary successful exit starts ascent in both cases. Infantry
+    with a rally point outside its own cell starts towards that rally under claim 10.
+    Infantry without such a point receives no release destination; if it later starts
+    ascending, the same report applies. What initiates unsolicited movement of an otherwise
+    resting no-rally infantry unit remains Open question 3, not a prediction that a unit
+    already flying retains its factory forever. A newly commanded legal move can supply
+    the ascent; a refused tethered stop is neither required nor a remedy.
+
+    **Destination after the ascent report.** This report does not use claim 8's ordinary
+    vehicle-arrival run-away handling. If u has a saved guard spot different from its
+    order-level destination, it takes that spot as destination. Otherwise its
+    order-level destination is discarded without directly stopping its jumpjet
+    locomotion, and it receives a forced scatter request without a threat point,
+    not move-anywhere. Scatter acceptance and any resulting destination remain
+    S-0207 claim 16's rules for vehicles and S-0208 claims 11 to 13's rules for infantry.
+    Discarding the order-level destination here is not S-0502 claim 24's effective destination
+    clear and does not itself reroute or erase the locomotor's movement point and
+    commitment; an accepted scatter can supply a replacement destination.
+    Neither a refused scatter nor continued flight recreates factory contact or tether.
+    Thus with a saved rally, a vehicle normally takes it at this report instead of
+    finishing the fixed exit leg; infantry whose placement already consumed its guard spot
+    has no saved spot to reapply.
+    - Backing: `measurable` (U14 for ordinary stock vehicle and infantry release, ascent
+      tick, both links, destination effects and subsequent production). Balloon-hover
+      infantry, non-balloon jumpjet vehicles, missing type flags, a one-step ascent that
+      skips the window and a resting no-rally infantry unit's unsolicited take-off are
+      `unmeasured` here: no stock factory-release fixture exercising those cases is
+      established. The report rule is established conditional on ascent, not on a measured
+      automatic no-rally take-off. U14 records that remaining limitation explicitly.
+    - Confidence: high (report, same-update loss of both links, height and type tests,
+      no foundation test and destination effects); medium (combined normal-release
+      consequences and the first eligible factory processing).
 
 ## Formulas
 
@@ -694,7 +754,10 @@ relative actor update orders; confidence medium.
 | `Accelerates` | rules, vehicle type | boolean speed-update choice | S-0207 |
 | `JumpJet`, `Teleporter` | rules, infantry type | boolean exceptions to initial exit destination | S-0208 and S-0402 |
 | `Locomotor` | rules, infantry type | locomotor identifier, parsed as S-0207 claim 14; actual teleporting locomotion supplies claim 10's jump update, distinct from the boolean destination exception | S-0207 claim 14 |
-| No data key | runtime factory contact and tether | claim 10's jump-arrival clear report and no-arrival retention, not an imported delay | no release-contact timeout |
+| No data key | runtime factory contact and tether | claim 10's teleport arrival report, claim 15's jumpjet ascent report and resting retention, not an imported delay | no release-contact timeout |
+| `JumpJet`, `BalloonHover` | rules, infantry or vehicle type | booleans; either enables claim 15's ascent-notification response; the latter selects the half-height threshold only for vehicles | no for each (S-0502) |
+| `JumpjetHeight` | rules, infantry or vehicle type | integer leptons; imported cruise height starts the ascent target (S-0502 claims 1 and 5); claim 15 reads the current target, not a separate factory height | S-0102 and S-0502 |
+| `GDIBarracks`, `NODBarracks`, `YuriBarracks` | rules, building type | booleans; barracks door kinds that qualify a contacted building for claim 15, as does `WeaponsFactory` | no for each (S-0404) |
 | `Rate` in the current behaviour's section (`[Guard]` and the others named by S-0215) | rules | decimal game minutes, rate of claim 13's delay | S-0215 |
 | `HasStupidGuardMode` | rules, building type | boolean; set means no idle apron clearing (claim 13) | S-0215 |
 | `AirportBound` | rules, aircraft type | boolean; set means the type refuses the release tether (claim 11) | form and default owned by S-0407 |
@@ -890,9 +953,8 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   available from an infantry factory. Expect the rally point as first destination and an empty
   guard spot. Falsifier: an exit-cell leg. Also record contact, tether, flight state,
   target height and S-0502 claim 7's bridge-adjusted height on each ascent tick.
-  Record whether any contact or tether change coincides with the strict quarter-height
-  threshold while still below target height. This observation investigates Open question 9,
-  no contact-loss tick is predicted or scored from that threshold alone.
+  Expect both links to end at the first qualifying ascent update of claim 15, not at
+  touchdown. Apply U14's tick and destination recording to score that report.
   Part d (Q-0697): produce stock teleporting infantry with a clear rally cell several cells
   away. Record landing reservation, actual position, contact, tether, factory contact-place
   use, current/queued behaviour, destination and phasing-in state from release through the
@@ -964,6 +1026,36 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   result. Do not score total release draws as the search's draws: placement draws are open,
   and the zero-draw search rule is owned by S-0212.
 
+- **U14, jumpjet factory release (Q-1070).** Use the shared stock skirmish setup,
+  three recorded seeds, scripted input and the proposed read-only recorder. Produce
+  stock jumpjet infantry and a stock balloon-hover jumpjet vehicle from their normal
+  factories, separately with a distant clear rally cell and without a rally point.
+  Record each unit update's flight state before state handling, height after physics,
+  target height, bridge and on-deck state, contact, tether, guard spot, order-level
+  destination, stored path, movement point and commitment. Record factory processing,
+  unloading state and later releases. Compute the first tick strictly inside claim 15's
+  integer window. Expect both links to end in that unit update, even if still over the
+  foundation and before the first cruise or touchdown. With a saved guard spot distinct
+  from the order-level destination, expect it as the new destination; otherwise expect
+  the order-level destination discarded before scatter. Score scatter under
+  S-0207 claim 16 or S-0208 claims 11 to 13. When scatter is refused, expect the previous
+  movement point and commitment retained, rather than an effective-clear reroute.
+  Falsifiers: either link surviving that eligible
+  update, a foundation/distance gate, a different threshold, or a destination or movement
+  consequence inconsistent with the corresponding row. For infantry without a rally,
+  observe for 300 ticks without orders and record any unsolicited movement without
+  assuming that it must occur. If still grounded, give a legal move to a distant clear
+  cell; expect the same ascent report once it climbs. A grounded interval does not score
+  ascent timing or settle Open question 3. After each report, produce another unit with
+  the exit clear: expect no busy result attributable to the old infantry contact, and
+  the vehicle factory to close by table S1 and release further production. Record both
+  door closure and the new release, rather than equating either with the report tick.
+  If a stock factory-produced non-balloon jumpjet vehicle or balloon-hover infantry
+  exists, repeat and expect respectively the quarter and quarter thresholds; otherwise
+  record those branches as untested. Do not alter type data or force memory states to
+  manufacture them. A stock ascent skipping the strict window supplies a diagnostic,
+  not evidence for an invented fallback release event.
+
 ## Open questions
 
 1. Aircraft docking position: resolved, S-0404 claim 15 owns pad positions. Still open: test
@@ -990,7 +1082,9 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
 8. Whether putting a released unit on the map takes random draws of its own (Q-0120, question 5).
    The search and destination rules of this spec take none, but placement's own effects have not
    been traced.
-9. The jumpjet factory-contact interaction during ascent (claim 10): does it end contact or
-   tether, and on which tick? The ascent threshold alone establishes neither consequence.
-   U10 c records both states across the threshold; S-0502 claim 7 owns the height test.
+9. Resolved for the ascent interaction (Q-1070): claim 15 establishes the clear report
+   and same-update contact/tether loss, with U14 to confirm it. Still unmeasured: a
+   one-step climb that skips the strict window and missing type flags; no stock release
+   fixture is established for either. No fallback tick is inferred. The separate cause
+   of any unsolicited no-rally infantry take-off remains Open question 3.
 

@@ -1,9 +1,9 @@
 ---
 id: Q-1070
 title: When does a jumpjet unit built at a factory stop being tied to the factory
-status: open
+status: answered
 related: [S-0417, S-0502, S-0404]
-answered-by: []
+answered-by: [S-0417]
 ---
 
 ## Need
