@@ -61,7 +61,7 @@ pub fn ruleset() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     r.registries.get_mut("infantry").unwrap().extend(
         [
-            "JJ", "JJTURN", "JJFLAT", "JJFAST", "JJCRASH", "JJTALL", "JJLOCO",
+            "JJ", "JJTURN", "JJFLAT", "JJFAST", "JJCRASH", "JJTALL", "JJLOCO", "JJBAL",
         ]
         .map(String::from),
     );
@@ -90,6 +90,10 @@ pub fn ruleset() -> Ruleset {
     let mut flat = jumper(true);
     flat.jumpjet_no_wobbles = Some(true);
     s.infantry.insert("JJFLAT".into(), flat);
+    // A balloon-hover infantry jumpjet (S-0502 claims 24 and 28: stop makes two empty assignments, with no vehicle equality suppression).
+    let mut jjbal = jumper(true);
+    jjbal.balloon_hover = Some(true);
+    s.infantry.insert("JJBAL".into(), jjbal);
     let mut jv = jumper(false);
     jv.crashable = Some(true);
     s.vehicles.insert("JV".into(), jv);

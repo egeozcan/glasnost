@@ -307,19 +307,25 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                     crate::econ::slaves::recall(w, actor);
                 }
             }
-            if let Some(ob) = w.obj_mut(actor) {
-                if matches!(
+            if w.obj(actor).is_some_and(|ob| {
+                matches!(
                     crate::econ::placement::seen_behaviour(ob),
                     Some(Behaviour::Construction | Behaviour::Selling)
-                ) {
-                    // spec: S-0215 claim 12 (the stop order does nothing in construction or selling)
-                    return;
-                }
+                )
+            }) {
+                // spec: S-0215 claim 12 (the stop order does nothing in construction or selling)
+                return;
+            }
+            // spec: S-0213 claim 8 and S-0502 claim 28 (stop requests the destination clear while the target is still present, so a balloon-hover vehicle can reject it; the target is cleared after)
+            let first_rejected = crate::jump::clear_rejected(w, actor);
+            if let Some(ob) = w.obj_mut(actor) {
                 // spec: S-0213 claim 8 (target and destination become nothing; contact broken off)
                 // spec: S-0215 claim 12 and S-0506 claim 25 (an order's own-target clear obeys the spawner pending-target rule)
                 crate::spawn::explicit_clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-                ob.dest = None;
+                if !first_rejected {
+                    ob.dest = None;
+                }
                 ob.contact = None;
                 // spec: S-0213 claim 8 (an open-topped transport: its passengers lose their targets too)
                 let passengers = ob.transport.passengers.clone();
@@ -342,7 +348,16 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 }
             }
             // spec: S-0213 claim 8 and S-0502 claims 17 and 24 (a jumpjet with a movement commitment is rerouted by the stop; the order-level destination stays empty)
-            crate::jump::stop_ordered(w, actor);
+            if !first_rejected {
+                crate::jump::stop_ordered(w, actor);
+            }
+            // spec: S-0213 claim 8 and S-0502 claim 28 (a balloon-hover type requests the clear again after the target is cleared: that request cannot be rejected, so stop ends with an empty destination; after an effective first clear a vehicle's second, unchanged empty assignment is suppressed, an infantry unit's reroutes again; the rule is per assignment, not one reroute per stop)
+            if crate::jump::balloon_hover_type(w, actor) {
+                if let Some(ob) = w.obj_mut(actor) {
+                    ob.dest = None;
+                }
+                crate::jump::stop_ordered(w, actor);
+            }
         }
         Order::Scatter { actor } => {
             // spec: S-0213 claim 9 (a mobile actor, live, on the map and not tethered: no threat point, forced, not move-anywhere)
@@ -374,13 +389,17 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 // spec: S-0213 claim 10 (an actor on a vehicle-factory cell ignores the order)
                 return;
             }
+            // spec: S-0213 claim 10 and S-0502 claim 28 (deploy makes one destination-clear request, while the target is still present, and no retry after the target is cleared: a balloon-hover vehicle can keep a nonempty destination and end with no target)
+            let rejected = crate::jump::clear_rejected(w, actor);
             if let Some(ob) = w.obj_mut(actor) {
                 // spec: S-0213 claim 10 (contact broken off, target and destination nothing, unload queued)
                 ob.contact = None;
                 // spec: S-0215 claim 12 and S-0506 claim 25 (an order's own-target clear obeys the spawner pending-target rule)
                 crate::spawn::explicit_clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-                ob.dest = None;
+                if !rejected {
+                    ob.dest = None;
+                }
                 ob.beh.queue(Some(Behaviour::Unload));
                 // spec: S-0415 claim 2 (each deploy order begins a new deploy: its first attempt is still to come)
                 // The in-place form (S-0517) is a state of the vehicle, not of the order: a deploy order to a deployed vehicle packs it up (claim 3).
@@ -389,7 +408,9 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 ob.econ.deploy.form = form;
             }
             // spec: S-0213 claim 10 and S-0502 claim 24 (the deploy order's destination clear reroutes a jumpjet that retains a movement commitment, as the stop order's does; a suppressed unchanged vehicle assignment keeps the preceding point and commitment)
-            crate::jump::destination_cleared(w, actor);
+            if !rejected {
+                crate::jump::destination_cleared(w, actor);
+            }
         }
         Order::GuardSpot { actor, spot } => {
             // spec: S-0213 claim 20 (needs only a live actor; sets its guard spot)
@@ -580,6 +601,7 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
         // spec: S-0213 table T3 (h) and claim 5 (a mobile actor controlling slave units, resulting behaviour not attack: its slaves are sent back to guard it; buildings, a deployed slave miner included, are excluded; the mobile masters modelled are vehicles)
         crate::econ::slaves::recall(w, actor);
     }
+    let mut retained = false;
     let Some(m) = w.obj_mut(actor) else { return };
     if !keeps {
         // spec: S-0213 table T3 (b) (otherwise it breaks off any contact)
@@ -608,15 +630,21 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
             // spec: S-0215 claim 12 and S-0506 claim 25 (an order setting the target to nothing obeys the spawner pending-target rule)
             None => crate::spawn::explicit_clear_own_target(m),
         }
-        m.dest = dest;
+        // spec: S-0213 claim 21 and S-0502 claim 28 (an order installs its target before it requests the empty destination, so a balloon-hover vehicle with a nonempty destination can reject that clear and keep its destination, point, commitment and reservation)
+        retained = mobile && dest.is_none() && crate::jump::clear_rejected(w, actor);
+        let Some(m) = w.obj_mut(actor) else { return };
+        if !retained {
+            m.dest = dest;
+        }
         if mobile {
             // spec: S-0213 table T3 (g) (a mobile actor forgets its guard spot and queued destinations)
             m.guard_spot = None;
             m.queued_dests.clear();
         }
     }
-    if mobile {
+    if mobile && !retained {
         // A new destination starts a new path search (S-0212 claim 20).
+        let Some(m) = w.obj_mut(actor) else { return };
         m.path.steps.clear();
         m.path.retry_at = 0;
     }
