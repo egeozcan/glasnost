@@ -167,6 +167,24 @@ fn builds_one_building_of_every_kind() {
     let mut g = start(&all, false);
     let mut best = [0usize; 2];
     while g.world.tick < 30_000 && g.outcome().is_none() {
+        // No army on either side: since the barracks rally point (M6c step 5) either house's
+        // infantry can take the other's base apart before every kind stands, which is not what
+        // this test is about. Only units on the map go: an item in production is an object off the
+        // map, and removing it would cancel the item.
+        let army: Vec<_> = g
+            .world
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.owner.is_some() && o.kind != Kind::Building)
+            .filter(|o| {
+                glasnost_ai::scripted::role_of(&g.world, glasnost_sim::econ::tech::type_of(o))
+                    == Some(glasnost_ai::scripted::Role::Army)
+            })
+            .map(|o| o.id)
+            .collect();
+        for id in army {
+            glasnost_sim::objects::remove(&mut g.world, id);
+        }
         g.step();
         for h in 0..2u8 {
             let n = KINDS.iter().filter(|k| count(&g.world, h, k.1) > 0).count();

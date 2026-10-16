@@ -259,12 +259,33 @@ fn builds_a_hovercraft_once_a_naval_yard_and_a_lab_stand() {
     testkit::spawn(&mut g.world, Kind::Building, "LAB", 0, at(3, 6), 0);
     let sea = glasnost_map::CellXY::new(yard.x, fixture::at(0, fixture::SEA_DY - 4).y);
     testkit::spawn(&mut g.world, Kind::Building, "NAVY", 0, sea, 0);
+    // No army on either side while it waits: since the barracks rally point (M6c step 5) the
+    // infantry comes out and either house can take the other's base apart first, which is not
+    // what this test is about. Only units on the map go: an item in production is an object
+    // off the map, and removing it would cancel the item. The units it builds and loses cost it
+    // money, so it gets enough not to wait for any (the test is about the tech tree).
+    g.world.houses[0].credits = 1_000_000;
     let limit = g.world.tick + 12_000;
-    assert!(
-        step_until(&mut g, limit, |w| !of(w, 0, "HOVR").is_empty()),
-        "a hovercraft was built by tick {}",
-        g.world.tick
-    );
+    let mut ok = false;
+    while g.world.tick < limit && g.outcome().is_none() && !ok {
+        let army: Vec<ObjectId> = g
+            .world
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.kind != Kind::Building && o.owner.is_some())
+            .filter(|o| {
+                let n = name(&g.world, o.id);
+                !matches!(n.as_deref(), Some("HOVR" | "MINR" | "HARV" | "MCV"))
+            })
+            .map(|o| o.id)
+            .collect();
+        for id in army {
+            objects::remove(&mut g.world, id);
+        }
+        g.step();
+        ok = !of(&g.world, 0, "HOVR").is_empty();
+    }
+    assert!(ok, "a hovercraft was built by tick {}", g.world.tick);
 }
 
 // A hovercraft on the sea is army like any armed ground unit: an enemy
@@ -1159,5 +1180,75 @@ fn fires_a_paradrop_whose_troops_join_the_army() {
                 if landed(&w).contains(actor) && *e == enemy
         )),
         "a paratrooper is sent at the enemy: {orders:?}"
+    );
+}
+
+/// House 0's first barracks once it stands, after `limit` ticks at most.
+fn barracks(g: &mut Game, limit: i32) -> ObjectId {
+    assert!(
+        step_until(g, limit, |w| !of(w, 0, "PILL").is_empty()),
+        "a barracks stands"
+    );
+    of(&g.world, 0, "PILL")[0]
+}
+
+// spec: S-0213 claim 20 (a), PLAN §4.7: the house sets a rally point on its barracks with the click a person makes on a cell, outside the building.
+#[test]
+fn sets_a_rally_point_on_its_barracks() {
+    let mut g = start(5);
+    let k = barracks(&mut g, 3000);
+    let t = g.world.tick;
+    let set = step_until(&mut g, t + 100, |w| {
+        w.obj(k).is_some_and(|o| o.guard_spot.is_some())
+    });
+    assert!(set, "the barracks has a rally point");
+    let o = g.world.obj(k).unwrap();
+    let Some(Target::Cell(c)) = o.guard_spot else {
+        panic!("a cell: {:?}", o.guard_spot)
+    };
+    let (x0, y0) = (o.pos.cell().x, o.pos.cell().y);
+    let inside =
+        (x0..x0 + o.foundation.0).contains(&c.x) && (y0..y0 + o.foundation.1).contains(&c.y);
+    assert!(!inside, "{c:?} lies outside the foundation");
+}
+
+// spec: S-0417 claims 10 and 14, S-0404 claims 7 and 13, PLAN §4.7: a unit the barracks releases heads for the rally point, so its contact place is free again and the next unit's release is not refused as busy.
+#[test]
+fn a_released_infantry_unit_frees_its_barracks() {
+    let mut g = start(5);
+    let k = barracks(&mut g, 3000);
+    let starting: Vec<ObjectId> = g
+        .world
+        .objects
+        .values()
+        .filter(|o| o.on_map)
+        .map(|o| o.id)
+        .collect();
+    let mut released = None;
+    let t = g.world.tick;
+    let found = step_until(&mut g, t + 10000, |w| {
+        released = w
+            .objects
+            .values()
+            .find(|o| {
+                o.kind == Kind::Infantry
+                    && o.owner == Some(HouseId(0))
+                    && o.on_map
+                    && !starting.contains(&o.id)
+            })
+            .map(|o| o.id);
+        released.is_some()
+    });
+    assert!(found, "the barracks releases an infantry unit");
+    let u = released.unwrap();
+    let t = g.world.tick;
+    let freed = step_until(&mut g, t + 600, |w| {
+        w.obj(u).is_none_or(|o| o.contact != Some(k))
+    });
+    assert!(freed, "the unit's contact with the barracks ends");
+    assert_eq!(
+        glasnost_sim::econ::release::first_free_place(&g.world, k, 1),
+        0,
+        "the place is free for the next unit"
     );
 }

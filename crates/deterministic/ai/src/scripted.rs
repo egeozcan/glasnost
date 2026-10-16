@@ -103,6 +103,10 @@ const ENGAGE: i64 = 10; // nocite: tuning of our own opponent
 /// brain's ferry takes idle infantry from within twice its home radius).
 const FERRY_GATHER: i64 = 15; // nocite: tuning of our own opponent
 
+/// Cells beyond a barracks, toward the attack goal, that the rally point
+/// click is made on.
+const RALLY_AHEAD: i32 = 3; // nocite: tuning of our own opponent
+
 /// Ticks after which idle army units go as a wave even when fewer than the
 /// plan's wave size.
 const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
@@ -738,6 +742,51 @@ impl Script {
             >= self.plan.harvesters
     }
 
+    /// Rally-point clicks for the house's infantry factories that have
+    /// none: on the cell `RALLY_AHEAD` cells beyond the foundation toward
+    /// the attack goal (the click's own search picks the cell, S-0212
+    /// table T5).
+    fn rally_points(&self, w: &World, own: &[ObjectId], out: &mut Vec<Order>) {
+        let goal = self.attack_goal(w);
+        for &id in own {
+            let Some(o) = w.obj(id) else { continue };
+            let Some(b) = w.rules().buildings.get(o.type_index as usize) else {
+                continue;
+            };
+            if o.kind != Kind::Building
+                || o.guard_spot.is_some()
+                || b.factory != Some(FactoryKind::Infantry)
+            {
+                continue;
+            }
+            let c = o.pos.cell();
+            let (fw, fh) = o.foundation;
+            // Per axis: beyond the side the goal lies on, the middle when the goal is level with the building (and beyond the far side with no goal).
+            let toward = |lo: i32, n: i32, g: Option<i32>| match g {
+                Some(g) if g < lo => lo - 1 - RALLY_AHEAD,
+                Some(g) if g < lo + n => lo + n / 2,
+                _ => lo + n + RALLY_AHEAD,
+            };
+            let at = CellXY::new(
+                toward(c.x, fw, goal.map(|g| g.x)),
+                toward(c.y, fh, goal.map(|g| g.y)),
+            );
+            let click = targeting::click(
+                w,
+                self.house,
+                &[id],
+                targeting::ClickOn::Cell(at),
+                targeting::Modifiers::default(),
+            );
+            out.extend(
+                click
+                    .orders
+                    .into_iter()
+                    .filter(|o| matches!(o, Order::GuardSpot { .. })),
+            );
+        }
+    }
+
     /// Whether the house is selling out (see [`Script::think`]).
     pub(crate) fn selling(&self) -> bool {
         self.watch.selling
@@ -765,6 +814,14 @@ impl Script {
                 out.push(Order::Deploy { actor: id });
             }
         }
+
+        // 1b. A barracks without a rally point gets one, by a click on a
+        // cell beyond it like a person's (S-0213 claim 20 (a)): without
+        // one a released infantry unit is given no destination and stays
+        // in contact at the barracks (S-0417 claim 10, S-0404 claim 13), so
+        // the next unit's release finds no free place and is cancelled
+        // (S-0404 claim 7, S-0417 claim 14).
+        self.rally_points(w, &own, &mut out);
 
         // 2 and 3. Buildings: a done building is placed first; otherwise the
         // next wanted one is ordered.
