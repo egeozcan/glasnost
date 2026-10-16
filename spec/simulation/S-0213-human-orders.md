@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 34
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -191,6 +191,16 @@ Terms).
    together to a free repair depot do not both see it as free: the first takes contact,
    and the later order has S-0314 claim 23's occupied-depot outcome. Their order is issue
    order, hence selection order for that click (claim 1).
+   **Air-strike cancellation at applied target changes.** S-0519 claim 19 applies to
+   each target change produced under this precedence, not just to the target left at the
+   boundary's end. Changing a designator's target from A to B and back to A within one
+   tick still cancels its strike; restoring A does not restore the aircraft's attack
+   orders, lost ammunition or forgotten strike target. An order that assigns the identical
+   current target does not cancel the strike. Issuing an order without an applied target
+   change does not itself cancel it. These effects inherit S-0519 claim 19's high
+   confidence and backing (Scenario T19); the same-tick order conflict is an engine
+   consequence, not an established normal-input oracle fixture (claim 1).
+
    This specifies outcomes and checks, not an internal work schedule. Thus a stop issued after a move to the same actor in that tick leaves the move in force. A person's input in the original cannot produce that conflict, because each tick's orders come from one input event (claim 1); it can arise through our engine's AI houses, whose orders follow the same precedence rule.
 
    In our engine, house creation order (S-0009 claim 19) supplies between-house
@@ -2102,6 +2112,13 @@ scenarios, not measurements already performed here.
 - *Falsified if:* a starts scrolling from the blocked press, including automatic
   start at unblock, or b stops from the blocked release. An unblocked press/release
   control must work; otherwise that run is inconclusive.
+
+**Air-strike target changes (claim 3).** S-0519 Scenario T19 supplies the setup,
+procedure, cancellation observables and falsifiers, including identical-target orders
+and successive changes back to the original target. Record applied changes, not merely
+issued orders or the final target. Claim 1's one-input-event limit means that a same-tick
+A-to-B-to-A order sequence has no established normal-input oracle fixture here; test
+that precedence consequence on our engine without claiming an oracle measurement.
 
 **Production-start ordering (claim 3).** S-0404 P11 B/C supplies the setup, procedure,
 observables, expected assignment and falsifiers for same-boundary cancellation starts and
