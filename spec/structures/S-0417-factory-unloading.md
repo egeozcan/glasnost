@@ -2,11 +2,11 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0221, Q-0222, Q-0223, Q-0697]
 supersedes: []
@@ -167,7 +167,14 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
    involve no rounding. The vehicle's own height while travelling remains surface-derived
    under S-0207 claim 5, including its deck rule, rather than being forced to 0.
    Tunnelling and teleporting vehicles temporarily receive driving
-   locomotion and use the same track; restoration belongs to S-0215 claim 13. S-0207 claim 21
+   locomotion and use the same track; restoration belongs to S-0215 claim 13, with
+   temporary-driving eligibility owned by S-0207 claim 27. Restoration requires a suspended
+   predecessor, no driving movement report, no restoration lock and a vehicle that is not
+   seized. The driving report is false only when there is no locomotor destination point
+   and no heading point horizontally different from u's actual position. Completing T1
+   alone is therefore insufficient: a retained locomotor destination point still prevents
+   restoration. Restoration alone enables neither the destination-refresh state nor the
+   one-application point suppression of S-0207 claim 27. S-0207 claim 21
    owns the suspended teleporting state and its occupancy consequences: destinations accepted
    while driving use driving movement, not the suspended teleporting movement, and restoration
    alone neither resets that state nor moves an occupancy mark. Those rules inherit that claim's
@@ -195,10 +202,15 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
      reset are `measurable` (U6 and S-0503 H8), with backing inherited from S-0503 claim 4.
      Stored driving heading and locomotor destination heights inherit S-0207 claims 24
      and 25's `measurable` backing (D28, also U6).
+     Temporary-driving restoration eligibility is `measurable` in U6; a restoration lock
+     or seizure during that exit remains `unmeasured` here unless an ordinary stock
+     sequence establishes it. The no-pending-state consequence inherits S-0207 claim 27's
+     `unmeasured` backing for isolated restoration: U6 proposes a conditional trace.
      Immediate heading-point choice and its arrival update inherit the `measurable`
      backing of S-0503 claims 5 and 15 (H8).
    - Confidence: high (driving, stored movement-point heights and fixed destination),
-     medium (temporary replacement),
+     medium (temporary replacement), high (temporary-driving restoration predicates
+     and no pending state enabled by restoration, inherited from S-0207 claim 27),
      medium (immediate hover choice, inherited from S-0503 claim 5),
      high (clear-choice arrival update, inherited from S-0503 claim 15),
      low (duration of the hovering exit fraction, inherited from S-0503 claim 4)
@@ -796,8 +808,22 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   a complete first-point jump. Unavailable stock types remain untested.
   For the teleporting vehicle, also record destination, suspended landing point, pending jump,
   phasing-in state and expiry tick, and ground/deck occupancy marks before temporary driving,
-  throughout it and across restoration. Separate restoration itself from the other effects of
-  falling back to rest. Repeat with a scripted move order during temporary driving, scoring
+  throughout it and across restoration. Also record the suspended predecessor's presence,
+  driving movement report, locomotor destination and heading points, actual horizontal
+  position, restoration lock and seizure at each restoration attempt. Under S-0215 claim 13,
+  expect restoration only with a predecessor present, no movement report, no lock and no
+  seizure (S-0207 claim 27). Track completion alone must not restore while a locomotor
+  destination remains or a heading point differs horizontally from the actual position.
+  Restoration despite any failed predicate falsifies eligibility; failure to restore at
+  a fall-back attempt with all predicates met falsifies the successful-restoration rule.
+  Score locked or seized controls only if an ordinary stock sequence establishes them.
+  do not manufacture states through memory writes. Where the recorder can isolate
+  restoration, record destination refresh and one-application point suppression before
+  and after: neither is enabled by restoration alone. Either newly enabled solely by
+  restoration falsifies that rule; a trace unable to separate destination assignments
+  supplies no backing for this exclusion.
+  Separate restoration itself from the other effects of falling back to rest.
+  Repeat with a scripted move order during temporary driving, scoring
   only runs where it is accepted then. After restoration and fall-back finish, give a new
   distant clear-cell move order. Expect destinations accepted while driving to leave the
   suspended teleporting landing point and reservation unchanged; occupancy follows S-0209's
