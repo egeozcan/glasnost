@@ -27,4 +27,4 @@ None (the original stops with an error).
 ## Current workaround
 
 `jump::fly::speed_step` gives fraction 0 for *S* = 0 and the cruise bands skip the middle band for
-*T* = 0. No importer warning is written yet.
+*T* = 0. The importer warns for either key set to 0 (`JumpjetSpeed=0`, `JumpjetTurnRate=0`).

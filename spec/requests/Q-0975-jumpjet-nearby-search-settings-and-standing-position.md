@@ -44,4 +44,5 @@ and the standing position it lands on, with the random-state recorder around the
 condition on, no reference cell, bridge cells allowed, no overlay condition, for all three uses.
 `jump::free_standing_point` takes the position class of the ordered point if it is free, then the
 side positions in S-0208 table O's order for that class with draw value 0, else the centre; it
-takes no draw.
+takes no draw. The unit's own occupancy mark is lifted for the move-order search and laid again
+after it, so that an order to its own cell finds that cell (scenario J2).
