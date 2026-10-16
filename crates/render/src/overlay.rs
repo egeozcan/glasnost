@@ -35,6 +35,8 @@ pub struct OverlayQuirks {
     pub overlay_shadow_from_stored_type: bool,
     /// `quirks.image_two_keeps_sloped_run` (claim 10).
     pub image_two_keeps_sloped_run: bool,
+    /// `quirks.crate_data_value_ignored` (claim 1 row 6, claim 8).
+    pub crate_data_value_ignored: bool,
 }
 
 impl Default for OverlayQuirks {
@@ -45,13 +47,37 @@ impl Default for OverlayQuirks {
             resource_palettes_from_start: true,
             overlay_shadow_from_stored_type: true,
             image_two_keeps_sloped_run: true,
+            crate_data_value_ignored: true, // spec: S-0112 Edge cases and quirks (crates ignore their data value)
         }
     }
 }
 
 impl OverlayQuirks {
+    /// The image frame of a crate's body (claim 1 row 6): 0 with
+    /// `quirks.crate_data_value_ignored` on, else the overlay data value.
+    pub fn crate_body_frame(&self, data: u8) -> usize {
+        // spec: S-0112 claim 1 row 6 (data value 0 with the switch on; the overlay data value with it off)
+        if self.crate_data_value_ignored {
+            0
+        } else {
+            usize::from(data)
+        }
+    }
+
+    /// The image frame of a crate's shadow (claim 8 precedence 1) for a
+    /// sprite of `n` frames: ⌊*N*/2⌋ with the switch on, else the data value
+    /// plus ⌊*N*/2⌋.
+    pub fn crate_shadow_frame(&self, data: u8, n: usize) -> usize {
+        // spec: S-0112 claim 8 precedence 1 (N/2 with the switch on; the data value + N/2 with it off)
+        if self.crate_data_value_ignored {
+            n / 2
+        } else {
+            usize::from(data) + n / 2
+        }
+    }
+
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 4] {
+    pub fn named(&self) -> [(&'static str, bool); 5] {
         [
             ("wall_local_player_colour", self.wall_local_player_colour),
             (
@@ -66,6 +92,7 @@ impl OverlayQuirks {
                 "image_two_keeps_sloped_run",
                 self.image_two_keeps_sloped_run,
             ),
+            ("crate_data_value_ignored", self.crate_data_value_ignored),
         ]
     }
 }
@@ -329,6 +356,25 @@ mod tests {
         assert_eq!(tiberium_of(110, &runs), Some(1));
         assert_eq!(tiberium_of(30, &runs), Some(2));
         assert_eq!(tiberium_of(5, &runs), Some(0));
+    }
+
+    /// spec: S-0112 claim 1 row 6 and claim 8 (the crate switch: frame 0 and N/2 with it on, the data value and data + N/2 with it off)
+    #[test]
+    fn crate_frames_follow_the_switch() {
+        let on = OverlayQuirks::default();
+        assert!(on.crate_data_value_ignored);
+        assert_eq!(
+            (on.crate_body_frame(5), on.crate_shadow_frame(5, 4)),
+            (0, 2)
+        );
+        let off = OverlayQuirks {
+            crate_data_value_ignored: false,
+            ..on
+        };
+        assert_eq!(
+            (off.crate_body_frame(5), off.crate_shadow_frame(5, 4)),
+            (5, 7)
+        );
     }
 
     /// spec: S-0112 claim 6 (deck frames vary for data 0 and 9)
