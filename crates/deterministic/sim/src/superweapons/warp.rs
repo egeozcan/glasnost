@@ -351,11 +351,15 @@ pub fn turn(w: &mut World, id: ObjectId) -> bool {
     let t = w.tick;
     match m.stage {
         Stage::Pending => {
+            // spec: S-0215 claim 2 (a vehicle in the leaving stage under a pending point suppression, S-0207 claim 27, keeps its destination; the target is dropped in every case)
+            let keeps = crate::refresh::suppression_pending(w, id);
             if let Some(ob) = w.obj_mut(id) {
                 // spec: S-0513 claim 48 (a member in its leaving stage drops its target and destination) and claim 51 (this design adds no earlier target clearing)
                 crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-                ob.dest = None;
+                if !keeps {
+                    ob.dest = None;
+                }
             }
             // spec: S-0513 claim 39 and T2 (the leaving stage in t_L + 1; the fixed wait starts)
             set_member(

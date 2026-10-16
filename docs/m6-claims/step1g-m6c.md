@@ -75,6 +75,8 @@ No spec commit landed on main after bd86e84 while this step was worked (`git log
 
 ## Request Q-1130 and its interim rule
 
+Answered by S-0207 revision 36 and S-0402 revision 28. The interim rules below were retired at step 1h; see [step1h-m6c.md](step1h-m6c.md).
+
 [spec/requests/Q-1130-teleporting-point-suppression-and-chrono-seeking-drop.md](../../spec/requests/Q-1130-teleporting-point-suppression-and-chrono-seeking-drop.md). The interim rules are in `docs/development.md`, section *Simulation (M6c: destination refresh and the dock fallback)*:
 - Pending one-application suppression skips any teleporting vehicle's nonempty landing-point fixing and is consumed by it. The order-level destination stays.
 - The suppression test comes after claim 20 (a)'s phasing-in and held refusal. A refused destination is no application, so the suppression stays pending (`a_teleporting_point_and_pending_suppression_interim`).

@@ -12,11 +12,11 @@
 //! Seams: the building animations of claim 11 (no building animation is
 //! modelled, so none is ever playing and none delays the harvester), a
 //! second-route arrival report to a building other than a dock-unload
-//! refinery (claim 10; the entry-exchange specs own it), and the chrono
-//! miner's dropped seeking destination of claim 17 (request Q-1130: which
-//! seeking processing "starts seeking"; interim: no destination is dropped,
-//! so a chrono miner with an active teleporting locomotor keeps it like any
-//! harvester). A chrono miner travels by its active locomotion: teleporting
+//! refinery (claim 10; the entry-exchange specs own it). A chrono miner
+//! with an active teleporting locomotor drops its destination (a remembered
+//! cell included) at every seeking processing past the *full* test and
+//! searches from where it stands (claim 17, the seeking drop, Q-1130). A
+//! chrono miner travels by its active locomotion: teleporting
 //! (S-0207 claim 20), or the temporary driving of a factory exit (S-0417
 //! claim 16), which drives its first leg to the ore. The slave cycle of claim 14 and the slave groups of
 //! claims 19 to 25 are `crate::econ::slaves`; the wake-up rule is
@@ -1078,6 +1078,8 @@ fn seeking(w: &mut World, id: ObjectId) -> i32 {
         set_phase(w, id, Phase::Returning);
         return 1;
     }
+    // spec: S-0402 claim 17 (the seeking drop holds for a harvester whose current locomotor is the teleport locomotor, whether or not its type has the teleporter flag; not for a flagged type moving by another locomotor, S-0417 claim 16)
+    let drops = crate::teleport::is_teleporter(w, id);
     let s = st(w, id);
     if let Some(c) = s.remembered {
         // spec: S-0402 claim 3 (a remembered cell: it drives there and forgets it; no search)
@@ -1085,11 +1087,18 @@ fn seeking(w: &mut World, id: ObjectId) -> i32 {
             x.remembered = None;
         }
         drive_to(w, id, Target::Cell(c));
-        return standard(w, id);
-    }
-    if w.obj(id).is_some_and(|o| o.dest.is_some()) {
-        // spec: S-0402 claim 3 (a destination: stays seeking, no search)
-        return standard(w, id);
+        if !drops {
+            return standard(w, id);
+        }
+        // spec: S-0402 claim 17 (the seeking drop: the remembered cell, adopted by an ordinary destination assignment, is removed at once, so the miner never jumps to it; the processing then takes the ring-search rows of claim 3)
+        drive_to_none(w, id);
+    } else if w.obj(id).is_some_and(|o| o.dest.is_some()) {
+        if !drops {
+            // spec: S-0402 claim 3 (a destination: stays seeking, no search)
+            return standard(w, id);
+        }
+        // spec: S-0402 claim 17 (the seeking drop at every seeking processing past the full test: the order-level destination is removed and the pending jump cancelled, S-0207 claim 20 h; the landing point and its reservation stay; the ring search then runs from the miner's own cell)
+        drive_to_none(w, id);
     }
     let Some(here) = w.obj(id).map(|o| o.pos.cell()) else {
         return 1;

@@ -26,6 +26,14 @@ pub fn pending(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.econ.refresh)
 }
 
+/// Whether a vehicle has a pending one-application point suppression (S-0215
+/// Terms, *pending suppression*: S-0207 claim 27's suppression not yet
+/// consumed). Reading it does not consume it.
+pub fn suppression_pending(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .is_some_and(|o| o.kind == Kind::Vehicle && o.econ.point_suppression)
+}
+
 /// Enables or clears the refresh state.
 fn set_refresh(w: &mut World, id: ObjectId, on: bool) {
     if let Some(o) = w.obj_mut(id) {
