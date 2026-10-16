@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110]
 supersedes: []
 ---
 
@@ -90,6 +90,12 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
   questions).
+- **Warp-pending immobilization.** The external-teleport commitment that begins when a
+  superweapon warp is accepted, before its leaving stage, and ends when the object
+  leaves its old position. It includes the leaving wait, not the arrival hold.
+  S-0513 claims 34 and 39 own that warp's eligibility and timing. This is distinct
+  from *phasing in*, the parasite-related *held* countdown and the restoration lock.
+  An ordinary own-locomotor jump does not create this commitment (claim 27).
 - **Restoration lock.** A hold that prevents a temporary driving locomotor from being
   released and its suspended predecessor restored. It is distinct from a stopped
   vehicle, a movement destination, power and the tether. It starts absent on a new
@@ -1131,7 +1137,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       *L* is the centre of the chosen cell, and its height is *H* there. The point within the
       destination cell does not matter. No path is searched, so the object can land beyond cliffs,
       across water, on another island or at any height. Two cases leave *L* unchanged: the
-      object is held in place by a superweapon teleport's after-effect, or the search gives no
+      object has warp-pending immobilization (Terms), or the search gives no
       cell. Then, when *L* is still the object's own position or no *L* was ever fixed, no jump
       happens and the destination is removed.
     - (c) **The landing point of an infantry unit.** S-0208 claim 19 owns the standing-position
@@ -1564,7 +1570,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - Confidence: high for the cell/object distinction, moving/stationary equivalence and cleanup conditions; medium for
       the composed tick timing and approach-destination fallback
 
-27. **Destination refresh at placement and a teleporting dock approach (Q-1090).**
+27. **Destination refresh at placement and a teleporting dock approach (Q-1090, Q-1110).**
     This claim covers vehicles whatever their current locomotor. A destination-refresh
     state makes an otherwise eligible assignment effective even when it names the
     unchanged cell or object, including empty-to-empty. It starts absent.
@@ -1595,7 +1601,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     earlier offer. No separate periodic dock test is required between assignments.
 
     All these conditions must hold: the vehicle's type has the teleport-capable flag,
-    it is not immobilized by teleport aftereffects, has no magnetic-lift source and is
+    it has no warp-pending immobilization, has no magnetic-lift source and is
     not seized, its current contact is a building permitting dock unloading, the offered
     destination is a cell containing no ground-layer vehicle, and its current locomotor
     is not teleporting. A vehicle of any house on the ground layer disqualifies the cell,
@@ -1603,9 +1609,20 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     independent of the currently active locomotor. Failure of any predicate adds no
     stop, restoration or pending state through this dock rule.
 
+    **Which immobilization.** The predicate reads the vehicle's warp-pending
+    immobilization, even when its current locomotor is not teleporting. It does not
+    read phasing in after an own-locomotor jump or a superweapon arrival, the held
+    countdown, or a cooldown before another jump. Own-locomotor jumps neither set
+    this state nor introduce a separate cooldown (claim 20 f–g). An ordinary factory
+    exit does not set it either. An ordinary accepted superweapon warp installs
+    teleporting movement, so that warp alone does not furnish a non-teleporting
+    dock-test fixture while immobilized. A simultaneous immobilization and
+    non-teleporting locomotor, if reachable by another interaction, must still fail
+    this dock test; ordinary-play reachability of that combination is not established.
+
     | Qualified assignment's locomotion state | Dock consequence |
     |---|---|
-    | Temporary driving with a suspended predecessor, no movement report, no restoration lock, and vehicle not seized | Restore the predecessor without enabling either pending state. For driving, the movement report is false only with no locomotor destination point and no heading point horizontally different from the vehicle's position. The restored teleporting state follows claim 21 |
+    | Temporary driving with a suspended predecessor, no movement report, no restoration lock, and vehicle not seized | Restore the predecessor without enabling either pending state. For driving, the movement report is false only with no locomotor destination point and no heading point horizontally different from the vehicle's position. Eligibility uses the driving points already present, not the destination offered by this assignment. The restored predecessor, not driving movement, receives this assignment's otherwise due movement point. The restored teleporting state follows claim 21 |
     | No suspended predecessor, including an ordinary driving locomotor | Stop the active locomotion, clear current behaviour and queue *enter* without an immediate start. Enable refresh and one-application point suppression |
     | Suspended predecessor exists but restoration is not permitted | Same fallback stop, behaviour and pending states as the preceding row, not a wait for restoration |
 
@@ -1617,6 +1634,19 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     factory exit of S-0417 claim 5 supplies an established temporary-driving case,
     not a restriction on the dock fallback to vehicles currently leaving a factory.
     The fallback does not turn ordinary driving into teleporting locomotion.
+
+    **The restoring assignment's destination.** With a teleporting predecessor,
+    successful restoration makes that same assignment fix its landing point under
+    claim 20, rather than install a driving destination point first. Provided no
+    already-pending point suppression or claim 20 disabling state prevents it, the
+    vehicle jumps on its next teleporting movement update, possibly in the same tick
+    (claim 20 d). A pending earlier teleport can therefore be replaced by this offered
+    destination. Restoration sets neither pending state, but does not exempt this
+    application from suppression already pending before the assignment. A retained
+    driving destination point prevents restoration even when the offered destination
+    differs or would be immediately reachable. Assignment-time restoration here is
+    separate from a later fall-back-to-rest restoration under S-0215 claim 13; factory
+    exit point clearing belongs to S-0417 claim 5, not an extra clear supplied here.
 
     **Separate consumption events.** A changed or refreshed unchanged assignment
     consumes any refresh already pending even if subsequent point adjustment fails.
@@ -1638,11 +1668,16 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     enable refresh. Neither successful restoration alone nor destination retention
     implies that either pending state was set.
     - Backing: `measurable` (D32 and S-0502 J24 for placement and ordinary-order
-      nonactivation). The qualified dock evaluation, fallback and separate consumption
-      are `unmeasured`: no ordinary stock sequence isolating every predicate and both
-      outcomes is established. D32 gives conditional diagnostics, not evidence that
-      those paths are unreachable or that their states may be omitted.
-    - Confidence: high for the assignment event, predicates, temporary-driving eligibility,
+      nonactivation; D33 for warp-pending immobilization versus phasing in and an
+      ordinary factory exit). The qualified dock evaluation, fallback, restored
+      predecessor's same-assignment destination and separate consumption are
+      `unmeasured`: no ordinary stock sequence isolating every predicate and both
+      outcomes is established. In particular the immobilized, non-teleporting
+      combination has no established ordinary-play fixture. D32 gives conditional
+      diagnostics, not evidence that those paths are unreachable or that their states
+      may be omitted.
+    - Confidence: high for immobilization identity, the assignment event, predicates,
+      temporary-driving eligibility, routing to the restored predecessor,
       placement clear and distinct consumption events; medium for ordinary stock
       reachability beyond placement
 
@@ -2282,6 +2317,10 @@ its new destination from that tick.
 
 | Input | Concept | Form and absent-key rule |
 |---|---|---|
+| No additional key | Warp-pending immobilization, claim 27 | Runtime external-teleport commitment, initially absent; not a cooldown or an independently imported delay. Warp timing belongs to S-0513 claim 39 |
+| No additional key | Restored predecessor's same-assignment destination, claim 27 | Runtime destination routing; no imported ordering option or absent-key value |
+| vehicle type section, key `Teleporter` | Teleport-capable flag for claim 27's dock test, independent of current locomotor | Boolean; keeps the earlier layer's value; engine default no |
+| building type section, key `DockUnload` | Dock-unloading permission in claim 27 | Boolean; keeps the earlier layer's value; engine default no. Refinery interaction belongs to S-0402 claim 10 |
 | No additional key | Factory exit heading height, claim 24 | Engine constant 0 leptons; not imported from terrain or rules |
 | No additional key | Driving/ship locomotor destination lifetime, claim 25 | Runtime movement state, initially absent; assignment and clearing are not imported settings |
 | No additional key | Destination acceptance lift and arrival height tolerance, claim 25 | Engine constants: 416-lepton high-bridge lift and strict 208-lepton arrival tolerance |
@@ -3614,7 +3653,17 @@ position and the restoration lock. A suspended predecessor is restored only with
 no movement report, no lock and no seizure. Compare no predecessor, an unfinished
 exit and a completed, unlocked exit where stock play permits these states.
 
-Expect successful restoration to set neither pending state. Otherwise the fallback
+Expect successful restoration to set neither pending state. For a teleporting
+predecessor, record its landing point and pending jump within this very assignment:
+without pre-existing suppression or a disabling state, the offered destination must
+fix the teleport landing point, not a driving destination point, and the next
+teleporting movement update must jump there under claim 20. Record the driving points
+before the offer: restoration eligibility must use those stored points, not the
+new offered point. If suppression was already pending, expect it to skip this
+application even after restoration. Driving the new leg first, evaluating eligibility
+against the newly offered point, or waiting for another assignment to fix the landing
+point without another refusal cause falsifies the respective rule.
+Otherwise the fallback
 stops locomotion, clears current behaviour, queues *enter* without immediate start,
 and enables both states during the assignment. Record point applications within that
 same assignment, not merely on later ticks: its nonempty point is skipped, including
@@ -3629,7 +3678,39 @@ establishing all these diagnostic states is known here; do not manufacture them
 through writes or count an unqualified docking run as confirmation. Void a run if
 an unlisted bystander object affects the test area.
 
+**D33. Immobilization identity (claim 27; Q-1110).**
+
+Use a tiny flat revealed skirmish map, stock data, speed index 2, director and mods off,
+one human house and one distant bystander computer player. Use an ordinary ground
+vehicle eligible for a superweapon warp, an own-locomotor teleporting non-harvester,
+and a factory-produced chrono miner. With a read-only recorder, log the warp-pending
+immobilization, phasing-in and held states, current locomotor, position and tick.
+Perform one clean superweapon warp, one own-locomotor jump, and one ordinary factory
+exit, then repeat each once. Expect immobilization from accepted superweapon commitment
+through the leaving wait, cleared at departure when phasing in begins. Expect the
+own-locomotor jump and ordinary factory exit not to set it. An immobilization starting
+only after landing, persisting for the arrival hold, or newly set by either control
+falsifies this identity. S-0513 claim 39 owns absolute warp timing; this comparison
+adds no delay. Void runs affected by an unlisted bystander object. Propose missing
+recorder support to the user; do not write state. This scenario distinguishes states,
+not the unestablished immobilized/non-teleporting dock combination; D32 remains the
+conditional diagnostic for that combination and assignment-time restoration.
+
 ## Cross-spec changes to confirm
+
+- Q-1110: S-0502 claim 27 must replace the undefined aftereffects predicate with
+  warp-pending immobilization from claim 27 here, not phasing in, held or a cooldown.
+  the predicate is checked independently of current locomotor. Its successful-restoration
+  case must route this assignment's point to the restored predecessor, subject to
+  already-pending suppression and ordinary destination refusal.
+- Q-1110: S-0417 claim 5 and U6 must distinguish assignments completed while driving
+  from an assignment that itself restores the predecessor under claim 27 here: the
+  latter applies its point to the restored movement, not to driving first. S-0417 owns
+  the factory exit point-clearing event and the first ore leg asked about in question 3.
+- Q-1110: S-0402 claim 10 and H10 should state that a qualified successful restoration
+  routes the same docking-cell offer to teleporting movement under claims 20 and 27
+  here, subject to existing suppression and disabling states; no preliminary driving
+  leg or second offer is required by restoration itself.
 
 - S-0502 claim 27 and J24 must use claim 27 here for the effective placement clear,
   assignment-time dock test and same-assignment suppression. Newly enabled refresh
