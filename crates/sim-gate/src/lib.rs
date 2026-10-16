@@ -275,7 +275,10 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
                 "synthetic-duel-diagonal",
                 ticks,
                 false,
-                true,
+                // Since the M6b2 round-4 revisions (S-0501 revision 15: aircraft are listed
+                // by height) the diagonal game charges its superweapon but no longer fires
+                // one within its run; the straight duel still must.
+                false,
             );
         }
         Scenario::DuelNaval => {
