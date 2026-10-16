@@ -2,11 +2,11 @@
 id: S-0112
 title: Overlay and terrain object drawing
 topic: rendering
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0012, Q-0021]
 supersedes: []
@@ -69,6 +69,9 @@ and *quirk switch*.
 - **The tiberium of an overlay.** For a tiberium overlay: the first tiberium, in the order of the
   tiberium list (S-0004), whose flat or sloped run contains the overlay's list position. If none
   does, the first tiberium of the list (claim 4).
+- **Resource stage-picture count.** The integer count limiting resource stages, also used by
+  S-0520 claim 24. Every image number establishing a run sets it to 12 pictures (claim 10),
+  numerically equal to *F*, not *F* + *S* or the sprite frame count *N*.
 - **Frame count *N*.** The number of image frames in a sprite. Body image frames are 0 to
   ⌊*N*/2⌋ − 1 by convention and shadow image frames follow them, but the rules below are stated for
   any image frame index.
@@ -124,7 +127,7 @@ and *quirk switch*.
    | 3 | tiberium overlay | the start-up resource table | 1000 ‰ | chosen by claim 4 | the overlay data value |
    | 4 | wall overlay | the local player's 53-shade house-colour palette | the cell's unscaled ground level *U* | the cell's overlay type | the overlay data value |
    | 5 | the vein overlay | the start-up resource table | the cell's scaled ground level | the cell's overlay type | the overlay data value |
-   | 6 | overlay type with the crate flag | the cell's tile shade table | the cell's scaled ground level | the cell's overlay type | 0 |
+   | 6 | overlay type with the crate flag | the cell's tile shade table | the cell's scaled ground level | the cell's overlay type | 0 with `quirks.crate_data_value_ignored` on; the overlay data value with it off |
    | 7 | overlay type with the rubble flag | the cell's tile shade table | the cell's scaled ground level | claim 5 | claim 5 |
    | 8 | any other overlay | the cell's tile shade table | the cell's scaled ground level | the cell's overlay type | the overlay data value |
 
@@ -411,7 +414,7 @@ and *quirk switch*.
 
    | Precedence | Cell | Sprite of the shadow | Shadow image frame |
    |---|---|---|---|
-   | 1 | overlay type with the crate flag | the cell's overlay type | ⌊*N*/2⌋ |
+   | 1 | overlay type with the crate flag | the cell's overlay type | ⌊*N*/2⌋ with `quirks.crate_data_value_ignored` on; the overlay data value + ⌊*N*/2⌋ with it off |
    | 2 | overlay type with the rubble flag, in a cell that is not a rubble cell | — | none |
    | 3 | rubble overlay in a rubble cell whose building type does not leave rubble | — | none |
    | 4 | rubble overlay in a rubble cell, building with a rubble sprite | that rubble sprite | ⌊*N*/2⌋ |
@@ -469,6 +472,12 @@ and *quirk switch*.
     - the value 2 sets *P* and *F* only, and *S* keeps the value the tiberium already had,
     - the value −1 changes nothing, like an absent key.
 
+    Every image number other than −1 also sets the resource stage-picture count to 12 pictures,
+    numerically equal to the flat-run length *F*. It is not the combined run length *F* + *S*
+    and is independent of the sprite frame count *N*: even a one-frame sprite does not establish
+    a one-stage resource. An absent image number or −1 leaves the held count unchanged.
+    S-0520 claim 24 owns its use for resource crates.
+
     *S* is therefore always 0 or 8. It is 0 for a tiberium that has never been given a value other
     than 2 and −1, and 8 once it has. A tiberium that has never been given a value other than −1 has
     no run at all (claim 12). The values already there are the tiberium's held values in the sense
@@ -484,7 +493,8 @@ and *quirk switch*.
     These positions also count as its sloped run when the tiberium of an overlay is determined
     (Terms).
     - Backing: `measurable` (OV13 part A for a lower layer of the same game, part B for an earlier
-      game, part C for the value −1; OV4 for the runs that values 2, 3 and others set)
+      game, part C for the value −1; OV4 for the runs that values 2, 3 and others set, and
+      S-0520 claim 24 for the stage-picture count, tested by CR18's sprite-count control)
     - Confidence: high for the values each image number sets and for −1; medium for the carry-over
       between games, which rests on S-0006 claim 10
 
@@ -583,7 +593,8 @@ Import mapping). These are positions built into the original, not stock data:
 | −1, or the key absent | nothing is set: the run stays as it was, and a tiberium never given another value has none (claims 10 and 12) | | |
 
 *P* is an integer overlay list position; *F* and *S* are integer counts of overlay types in the
-flat and sloped runs respectively.
+flat and sloped runs respectively. Every row establishing a run also sets the resource
+stage-picture count to 12 pictures, numerically *F*, not *F* + *S* or *N* (claim 10).
 
 ## State and ordering
 
@@ -657,7 +668,7 @@ flat and sloped runs respectively.
 - **Shadows of the marker overlays** (claims 1 and 8). The marker overlays' bodies are skipped but their
   shadows are not, and those shadows have the depth of every overlay shadow (claim 8). No switch: it
   follows the general shadow rule.
-- **Crates ignore their data value** (claim 1, row 6, and claim 8). No switch.
+- **Crates ignore their data value** (claim 1, row 6, and claim 8). `quirks.crate_data_value_ignored` (default on, the YR behaviour). Off: the crate body's image frame is its overlay data value, and its shadow image frame is that value plus ⌊*N*/2⌋, as specified in claims 1 and 8.
 - **Image number 2 keeps the sloped run** (claim 10). Image number 2 sets the first position and
   the flat run but leaves the sloped run as it was, so whether such a tiberium has sloped pictures
   depends on the values it was given before, in this game or (through tiberium carry-over) an
@@ -675,7 +686,7 @@ flat and sloped runs respectively.
 | rules, overlay type | `Wall` | boolean | wall overlay: row 4, claim 7 | no |
 | rules, overlay type | `Crate` | boolean | row 6; shadow row of claim 8 | no |
 | rules, overlay type | `IsRubble` | boolean | row 7, claim 5 | no |
-| rules, tiberium | `Image` | integer (S-0003) | image number *v*: the run of claim 4 (claim 10, Constants table) | −1 (an explicit −1 acts the same): the run is left as it was (claim 10); a tiberium never given another value has none (claim 12) |
+| rules, tiberium | `Image` | integer (S-0003) | image number *v*: the run of claim 4 and resource stage-picture count of 12 (claim 10, Constants table) | −1 (an explicit −1 acts the same): the run is left as it was (claim 10); a tiberium never given another value has none (claim 12) |
 | rules, terrain object type | `SpawnsTiberium` | boolean | ore-spawning terrain object: start-up mine table, *U* (claim 3) | no |
 | rules, building type | `LeaveRubble` | boolean | rubble drawn at all (claim 5; creation is S-0312 claim 20) | as S-0312 gives it |
 | art, building | `Rubble` | sprite name (S-0007 claim 11) | separate rubble sprite (claim 5) | none: the body sprite's image frame 3 is used |
@@ -1078,6 +1089,11 @@ inconclusive, never evidence for the claim.
     *Expected:* those cells look exactly as in a control run without the override section.
   - *Falsified if:* part A or game 2 of part B stops, or their ramp cells show any positions other
     than 39 to 46; or the cells of part C differ from the control.
+- **Stage-picture count companion test (claim 10).** S-0520 claim 24's CR18 specifies the
+  resource-crate setup, read-only stage recording, one-frame and different-frame-count sprite
+  controls, expected cap of stage 11 and sprite-dependent-cap falsifier. Run that control for
+  each image-number row establishing a run in Constants. The expected stage-picture count is
+  always 12, whether *S* is 0 or 8, not *F* + *S* or *N*.
 - **OV14, a tiberium without an image number (claim 12).** Each run starts with a fresh program
   start, with a loose copy of the rules file (named test file) in which a tiberium *Y* that is not
   first in the tiberium list has no image number key. Run 1: a map with cells of an overlay type
