@@ -2,13 +2,13 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0620, Q-0621, Q-0622, Q-0623]
+requests: [Q-0620, Q-0621, Q-0622, Q-0623, Q-1032]
 supersedes: []
 ---
 
@@ -21,6 +21,8 @@ S-0315 claims 6 and 7 own suppression by damage and healing; network games and c
 out of scope. Claims 15, 20 and 23 answer Q-0620. Claims 21 and 22 answer Q-0621 and Q-0623,
 and claim 18 answers Q-0622. S-0209 claims 4 and 5 already supply entry outcomes, and S-0208
 claim 3 already supplies standing-position choice; this spec establishes their placement uses.
+Claim 24 answers Q-1032: a higher selected special hit strands the carried parasite rather
+than returning it after a failed latch. S-0514 claim 20 already owns effect precedence.
 
 ## Terms
 
@@ -36,8 +38,9 @@ addition:
 - **Latching weapon.** A weapon whose warhead has the *parasite* flag and whose launch puts the
   firer inside its own projectile (the *launch-inside* flag of the weapon). The firer leaves the
   map when it fires and travels in the projectile (claim 1). Both flags come from the imported data
-  (Import mapping). Weapons without the launch-inside flag and building-targeted latching detonations
-  are not covered here (Open questions).
+  (Import mapping). Weapons without the launch-inside flag and building-targeted detonations with
+  attachment selected are not covered here (Open questions). Claim 24 covers suppressed attachment
+  even for building targets.
 - **Drone parasite, grappling parasite.** A parasite whose type is both naval (S-0315, Terms) and
   organic is a *grappling parasite*; every other parasite is a *drone parasite*. *Organic* is a
   yes/no field of a mobile type (Import mapping). A *naval parasite* (S-0315) is a parasite of a
@@ -52,8 +55,9 @@ addition:
   renewal of the hold lasts.
 - **Latch block.** A per-unit tick number: until that tick, no shot of a latching weapon may be
   fired at the unit (claim 5).
-- **Latching onto, failing to latch.** What a parasite does when its projectile detonates: it
-  either becomes attached to the projectile's target (claim 3) or fails to latch (claim 4).
+- **Latching onto, failing to latch.** The two outcomes when parasite attachment is selected at
+  detonation: attachment to the projectile's target (claim 3) or failed-latch return (claim 4).
+  Suppression of attachment by a higher selected effect is neither outcome (claim 24).
 - **Leaving a living host.** As S-0315 (Terms, *Leaving a living host*): any way a parasite stops being
   attached while the host still exists. Claim 12 lists the ways; claim 13 gives where it comes out.
 - **Losing the host.** The host leaves the map or is removed while a parasite is attached (claim 15).
@@ -88,7 +92,8 @@ addition:
    is the selected special hit under S-0514 claim 20. Takeover, bomb planting and electric
    charging each suppress attachment, even when the selected effect cannot succeed. Selected
    attachment suppresses temporal erasure even when latching fails. This selection does not
-   change the separate firing-time departure from the map or the latch block.
+   change the separate firing-time departure from the map or the latch block. When a higher
+   effect is selected, claim 24 owns the carried parasite's fate, not claim 4.
    - Backing: `measurable` (scenario P1 for latching onto a moving target, P3 for the failed latch,
      P14 for special-hit selection)
    - Confidence: high (leaving the map, the 20-tick block, the latch on the target object, no area
@@ -544,6 +549,30 @@ addition:
     - Confidence: high (failed-choice position, survival versus removal, placement choices),
       medium (accepted-point bridge-height consequences)
 
+24. **A higher special hit strands the carried parasite.** When the projectile of claim 1
+    detonates with takeover, bomb planting or electric charging selected under S-0514 claim 20,
+    its carried parasite stays off the map, unattached and unable to act. It does not attempt
+    claim 4's return to its firing cell, and no recovery timer starts. Detonation and subsequent
+    projectile removal do not themselves kill or silently remove it, award kill experience,
+    play its death effects or create a replacement unit. This is the same stranded state as
+    claim 21, but reached through a detonation rather than removal without detonation.
+
+    Target latchability makes no difference: a legal mobile host, a mobile target that has
+    become non-latchable during flight, a building, a cell or a lost target all give this
+    outcome. Success or failure of the selected higher effect makes no difference either.
+    The selected effect's own consequences remain with S-0601 claim 5, S-0519 claim 2 and
+    S-0518 claim 11 respectively; this claim does not prevent a separate effect from removing
+    the parasite itself. Firing legality remains claim 5: a shot refused before launch never
+    creates a carried parasite.
+
+    This is `quirks.parasite_suppressed_latch_strands_unit` (default original). With it off,
+    after the higher selected effect the surviving carried parasite instead attempts claim 4's
+    return, including claim 20's placement refusal and silent removal. This alternative does
+    not permit attachment or any other suppressed special effect. It is independent of
+    `quirks.parasite_carrier_loss_strands_unit`, which covers removal without detonation only.
+    - Backing: `measurable` (P14)
+    - Confidence: high
+
 ## Formulas
 
 **F1, drone delivery ticks and the hold.** *t*₀ is the first delivery tick (claim 3), *R* ≥ 0 the
@@ -627,6 +656,7 @@ Same precision and rounding as S-0311 F3.
 | on the map, armed with a latching weapon | fires at a target (claim 5 allows it) | off the map, inside the projectile; mobile target's latch block set to now + 20 |
 | inside the projectile | the projectile detonates with attachment selected under S-0514 claim 20; its target is latchable | attached to the target (claim 3) |
 | inside the projectile | the projectile detonates with attachment selected under S-0514 claim 20; its target is not latchable, or is a cell | placement attempted in its last cell, facing north, not held (claims 4 and 20); removed silently when that fails |
+| inside the projectile | detonates with takeover, bomb planting or electric charging selected, whether successful or not | stranded off the map, unattached, regardless of target latchability (claim 24) |
 | inside the projectile | projectile removed without detonation | stranded off the map, unattached (claim 21) |
 | attached (drone) | the host's turn, delivery due | delivery (claim 6); host held for *P* |
 | attached (grappling) | the host's turn | host held for *P*; the cycle advances (table G), or leaves when the host's cell is not water |
@@ -655,6 +685,11 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
   refused from the next firing check onward.
 
 ## Edge cases and quirks
+
+- **`quirks.parasite_suppressed_latch_strands_unit`** (default original): claim 24 leaves a
+  carried parasite stranded when a higher selected special hit suppresses attachment, even
+  against a latchable target. Off: attempt claim 4's return after that selected effect,
+  without allowing any suppressed effect. This does not change claim 21's separate switch.
 
 - **`quirks.parasite_carrier_loss_strands_unit`** (default original): claim 21 strands a parasite
   off the map when its carrying projectile is removed without detonating. Off: attempt claim 4's
@@ -696,6 +731,7 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 | Source | Key | Parse form | Feeds | Absent-key default |
 |---|---|---|---|---|
 | rules, warhead section | `Parasite` | boolean | the parasite flag (latching weapon, Terms) | no |
+| rules, warhead section | `MindControl`, `IvanBomb`, `ElectricAssault` | boolean, each | takeover, bomb-planting and electric-charging selection, respectively (S-0514 claim 20); each suppresses attachment and invokes claim 24's stranded outcome | no, each |
 | rules, warhead section | `Paralyzes` | integer | paralysis length *P*, ticks | 0 |
 | rules, warhead section | `Culling` | boolean | cull flag (claim 11) | no |
 | rules, warhead section | `Sonic` | boolean | sonic warhead (S-0315) | as S-0315 |
@@ -710,7 +746,7 @@ one per 4 ticks in a push. The phase ends when its 10th frame is reached.
 | rules, any mobile section | `SuppressionThreshold` | integer | S-0315 | 0 |
 | rules, any mobile section | `ReselectIfLimboed` | boolean | the re-select flag: re-selection on exit (presentation) | no |
 | rules, mobile type section | `SpeedType`, `MovementZone`, `Locomotor` | class name, zone name, locomotor identifier | placement mobility (claim 20); interpretation owned by S-0211 claim 10 and S-0207 claim 14 | as S-0211 and S-0207 |
-| none | none | not imported | within-host-turn order (claim 18), carrier loss (claim 21), air threshold (claim 22), placement options, failed-choice outcome and fallback surface (claims 15, 20 and 23) | fixed engine behaviour; no separate INI setting |
+| none | none | not imported | within-host-turn order (claim 18), carrier loss (claim 21), suppressed-attachment fate (claim 24), air threshold (claim 22), placement options, failed-choice outcome and fallback surface (claims 15, 20 and 23) | fixed engine behaviour; no separate INI setting |
 | rules `[AudioVisual]` | `ConditionRed`, `ConditionYellow` | ratio (S-0003) | red and yellow ratios (F6) | as S-0111 |
 | rules `[General]` | `VeteranRatio`, `VeteranCap` | as S-0311 | F5 | as S-0311 |
 | rules `[CombatDamage]` | `SplashList` | list of animation names | the splash effects and the size *n* of claim 10 | as S-0303 |
@@ -944,7 +980,7 @@ For every part, a result different from its stated expectation falsifies that pa
   transport entry separately, expecting host-loss handling rather than another carried-state air
   rejection. Any different classification falsifies claim 22.
 
-- **P14, special-hit selection (claim 1).** Under the common setup, use named map weapon
+- **P14, special-hit selection and carried-parasite fate (claims 1 and 24; Q-1032).** Under the common setup, use named map weapon
   variants retaining the launch-inside and parasite flags. Separately add takeover, bomb
   planting or electric charging, with the firer capability needed by that effect, following
   S-0514 claim 20 and its E13 scenario. Record firing-time map departure, latch block,
@@ -958,13 +994,32 @@ For every part, a result different from its stated expectation falsifies that pa
   despite a higher selected effect, erasure despite selected attachment, or missing launch
   departure falsifies the respective prediction. A shot refused before firing is inconclusive.
 
+  For each of the three higher effects, retain a clear firing cell and record the parasite's
+  existence, health, map presence and attachment at detonation and for 300 ticks afterwards.
+  Include an ordinary vehicle firer whose electric-charging attempt cannot succeed, and a
+  named infantry-parasite variant that can charge a building or plant a bomb. A takeover
+  variant must supply its ordinary takeover capability. Compare a latchable mobile target
+  with one made non-latchable during flight, plus building and forced cell targets where
+  firing rules permit. Record lost-target detonations too; discard shots removed without
+  detonation, which instead test claim 21. Where eligibility prevents firing, change the
+  target during flight rather than bypassing the firing check. Use three completed shots
+  per reachable arrangement. Expected: the surviving parasite remains extant, off the map,
+  unattached and inactive, with no failed-latch return, death effects, kill experience or
+  recovery, regardless of host legality or higher-effect success. The building's charging
+  or bomb outcome is recorded separately, not mistaken for parasite attachment. Return,
+  attachment or removal caused solely by carrier completion falsifies claim 24. Include an
+  attachment-selected control that becomes non-latchable during flight: it returns under
+  claim 4. The recorder must distinguish an extant off-map unit from silent removal, not
+  infer either from disappearance on screen. No completed oracle measurement is claimed.
+
 ## Open questions
 
 - Whether creating the spark effect, the delivery animation, the wakes or the splash animations draws
   from the scenario random stream besides the draws listed in claims 9 and 10.
 - A weapon with the parasite flag on its warhead but without the launch-inside flag.
-- Building-targeted latching detonations: no parasite-specific firing guard applies, but their
-  attachment result is not established.
+- Building-targeted detonations with parasite attachment selected: no parasite-specific firing
+  guard applies, but their attachment result is not established. Suppression by a higher selected
+  effect is settled by claim 24, including building targets.
 - Nonempty delivery-animation lists shorter than eight entries: out-of-list results are not
   established; no wrap or safe fallback is claimed.
 - Whether and how a superweapon's teleport releases a drone parasite at departure: the ordinary

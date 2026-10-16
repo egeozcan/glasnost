@@ -1,9 +1,9 @@
 ---
 id: Q-1032
 title: What becomes of a carried parasite when a higher-ranked special hit suppresses its attachment
-status: open
+status: answered
 related: [S-0514, S-0614]
-answered-by: []
+answered-by: [S-0614]
 ---
 
 ## Need
