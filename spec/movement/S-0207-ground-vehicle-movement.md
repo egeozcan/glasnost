@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 35
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1247,6 +1247,20 @@ The *order-level destination* is the destination that behaviours and factory rep
       phasing in is dropped, unless a pending suppression (claim 27) keeps it. Whether a behaviour
       that chases a moving target gives a new
       destination after the jump is S-0215's.
+      **An empty assignment while a jump is pending.** Assigning an empty order-level destination
+      (what S-0402's seeking drop does) to an object whose landing point is fixed and whose jump
+      has not happened cancels the pending jump and the moving state, so the object does not jump.
+      The object then has a fixed landing point with no pending jump. That is the case claim 21
+      describes as a retained landing point without a pending move. Part (d)'s jump on the first
+      movement update therefore does not apply to it, and it does not jump until a later nonempty
+      destination is accepted and fixes a new landing point (part a). The remembered landing point is
+      not forgotten, and its occupancy reservation does not move: the vehicle-present (or
+      object-present) mark stays at that point's cell, and the next accepted destination clears it
+      from the remembered point (part a). Its backing is `unmeasured`: no scripted order is known to
+      reach the window between fixing and the jump, and the one route into it that the spec describes
+      is S-0402's seeking drop, whose timing S-0402 claim 17 itself leaves `unmeasured`. Confidence:
+      medium, as for part (h)'s consequences. Run 17 (Measurement scenarios) is a conditional
+      diagnostic that checks whether the window can be reached.
     - (i) **Random draws.** Landing choice and position change take no draw of their own.
       The two warp animations are ordinary animation creations and take every applicable
       creation draw of S-0202 claim 10. The old-point animation's creation draws precede
@@ -1694,6 +1708,12 @@ The *order-level destination* is the destination that behaviours and factory rep
     | Not disabled, held, being erased or phasing in | no | Claim 20 (a) fixes the landing point |
     | Any state, including disabled, held, being erased or phasing in | yes | The locomotor is not offered the point: no landing point is fixed, no claim 20 (a) refusal test runs, and no earlier landing point, pending jump or reservation changes. Suppression is consumed. The new nonempty order-level destination stays |
     | Disabled, held, being erased or phasing in | no | The destination is dropped: the order-level destination becomes empty (claim 20 a). Nothing is consumed |
+
+    S-0402's seeking drop adopts a harvester's remembered cell by an ordinary destination
+    assignment, so these rows apply to it: pending suppression keeps the cell without a landing
+    point, and the disabling states drop it (claims 20 a and 27); the drop that follows then fixes
+    no landing point for the adopted cell in either case. Any earlier remembered landing point and
+    its reservation are kept, as the table above and part (h) say.
 
     So a pending suppression is consumed by a teleporting vehicle even while it is phasing in or
     held, and the order-level destination then stays without a landing point; the vehicle
@@ -2257,6 +2277,8 @@ its target in the direction of travel, and end with facing equal to the last ste
 | teleporting, idle | destination given, not disabled, not held, not being erased, not phasing in, no suppression pending | landing point *L* fixed at once, kind-specific occupancy reservation moved to *L* (claim 20 a–c) |
 | teleporting, any state | destination given, suppression pending (claim 27) | no landing point fixed, no jump; destination kept; suppression consumed (claim 27, Q-1130 table, second row) |
 | teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: target-loss and revert subject to claim 20 e's airstrike and restored-target distinctions, projectiles lose it, kind-specific arrival and crate rules apply, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
+| teleporting, *L* fixed, jump pending | empty destination assigned | pending jump and moving state cancelled; remembered *L* and its occupancy reservation retained (claim 20 h) |
+| teleporting, *L* fixed, no pending jump (cancelled by an empty assignment) | its next movement update | no jump; the jump row above does not apply to it; remembered *L* and its reservation kept until the next accepted destination (claim 20 h; claim 21) |
 | teleporting, *L* fixed | its next movement update, *L* equals its position or none was fixed | destination removed, no jump (claim 20 b, d) |
 | phasing in | destination given | dropped (claim 20 a), unless suppression is pending (claim 27): then kept, no landing point |
 | phasing in | first tick with *t* − *t*₀ ≥ *D* (at least *t*₀ + 1) | phasing in ends; only with no target, conditional timer shortening then gated teleport search, whose normal timer draw replaces the shortening when both occur; idle fallback when no target is set (claim 20 f) |
@@ -3417,6 +3439,14 @@ cell before *X*.
     that the pickup's ground-step refusal does not reverse the completed teleport landing.
     Record the created unit and collector positions; a return to the departure cell falsifies
     that distinction. Do not generalise this test to superweapon transport.
+  - Run 17 (conditional diagnostic, claim 20 h). First establish whether any scripted order, or any
+    order that sets an empty order-level destination, can take effect after a landing point is fixed
+    and before its jump. If it can, use *T* as in run 1, with a stop order given on each tick of that
+    window. Record position, facing, listings, occupancy marks, moving state and the remembered point
+    each tick. *Expected:* no jump and no change of mark until a later nonempty destination is
+    accepted. If the window cannot be reached, record that; the empty-assignment rule then stays
+    `unmeasured` (claim 20 h). A jump in the window, or a mark that moves at the empty assignment, falsifies
+    the rule.
 
 **D23: temporary drive and return to teleporting (claim 21; Q-0233).**
 - *Setup:* S-0417 U6's stock vehicle factory and produced chrono miner, a human house,
