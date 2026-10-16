@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 37
+revision: 38
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -649,6 +649,19 @@ rank* and *elite weapon*), *n*
    - Backing: `measurable` (S-0312 claim 12's scenario D9, variant g, for the scoped exclusion
      and stationary-vehicle comparison)
    - Confidence: high for the scoped exclusion and conditional comparison
+
+   **Garrison exit use.** S-0508 claim 10 uses these entry outcomes to qualify an exit
+   candidate for the first occupant, with initial reference level −1 and no connecting-step
+   direction. That claim owns boundary qualification, including the inherited outside-area
+   rejection and its exceptions, the missing-cell stand-in of S-0009 claim 44, and
+   `quirks.garrison_negative_level_exit`. There is no independent missing-cell refusal.
+   S-0508 claim 22 owns the subsequent centre-placement conditions: placement does not
+   repeat the entry check or test later occupants' terrain permissions, capacity or usable area.
+   These are exit-search and placement uses, not ordinary walking asks.
+   - Backing: inherits S-0508 claims 10 and 22, including their `measurable` scenarios G7,
+     G8, G9 and G16 and their stated `unmeasured` boundary and exceptional-state cases
+   - Confidence: high for no independent boundary gate and no later-occupant terrain test,
+     medium for outside-area consequences, as in S-0508 claims 10 and 22
 
    *4a. Terrain checks.* Terrain checks that give *blocked* belong to S-0211 and S-0212 and are not
    repeated here: height steps (S-0212 claim 10), impassable land, a land type whose walker speed
