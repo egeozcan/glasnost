@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 51
+revision: 52
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1051,7 +1051,14 @@ Terms used by this spec:
     is not itself a cancellation, and a targetless actor is not swept for pending cancellation
     on every tick or launch pass. S-0506 claim 25 owns the alternative quirk setting,
     target-loss notifications and explicit controller resets.
-    - Backing: `measurable` (scenario B3; scenario B14, case b, for the two attack-move orders that
+    **Strike designators' targets.** Every actual designator target change caused by an
+    order, fall-back or behaviour rule here cancels its strike immediately under S-0519
+    claim 19, including a change to no target. Setting the same target again does not cancel.
+    Changing away and back within one tick still cancels; restoring the target does not undo
+    cancellation. This happens when the target change applies, not at a later strike update,
+    behaviour processing or designation impact.
+    - Backing: `measurable` (scenario B3; S-0519 scenario T18 for immediate strike cancellation,
+      scenario B14, case b, for the two attack-move orders that
       input creates; S-0506 scenario R19 for actual own-target changes and pending cancellation,
       and S-0502 claim 24's scenarios J19 and J22 for effective jumpjet destination clears,
       inheriting that claim's unmeasured limits for assignment exceptions). Attack-move orders with no established input path (neither target nor
@@ -1133,8 +1140,12 @@ Terms used by this spec:
 
     These effects take place at most once per actor per tick: in a second fall-back to rest on the
     same tick none of them happens, and only the rest-choice rules of claim 14 or 15
-    (aircraft: S-0501 claim 18) apply. An actor using a temporal
-    weapon also lets its victim go. Attack-move memory is refreshed before the table's effects:
+    (aircraft: S-0501 claim 18) apply. An actor with an attached temporal beam also releases
+    that beam as a common fall-back effect (S-0514 claim 14). Release shares this once-per-tick
+    limit and is skipped by the aircraft early exits above. It tests for an attachment, not
+    merely a temporal weapon. Stop-order target clearing alone, or assigning or processing
+    *stop* or *sleep*, does not cause this release. A later fall-back can do so; no release
+    in the stop order's application tick is promised. Attack-move memory is refreshed before the table's effects:
     S-0309 claim 23 (b) owns removal and resumption. The rows judge the current behaviour and
     destinations left by that refresh, including any readiness-dependent immediate start.
     Row 1 of claims 14 and 15 sees only memory that survived the refresh. The refresh shares
@@ -1185,7 +1196,8 @@ Terms used by this spec:
     playing another house, qualifies for the owner-based service branch; using that person's
     house instead fails the reverse-alliance guard even if the ordinary classification is
     *enter*. This is a design consequence, not an additional observed route case in the original.
-    - Backing: `measurable` (scenario B15: cases a and d for the guard-spot row, case b for the
+    - Backing: `measurable` (S-0514 scenario E10 for attached-beam release and the distinction
+      from target clearing and stop/sleep processing; scenario B15: cases a and d for the guard-spot row, case b for the
       route row's eventual movement; B15 e and S-0417 U6 for temporary driving restoration,
       B33 for route-order timing; B40 for repair/reload route-point selection; S-0309 scenario A6, parts g, n and o, for attack-move refresh preceding the
       rest table and its resumption or removal outcomes). The original's choice of the local player's routes over the owner's is
@@ -1570,13 +1582,17 @@ apply in our engine to the actors of every player house.
     | Rule | Applies when | Effect |
     |---|---|---|
     | hover-attack cell | the actor's type is a hover-attack type and its height above the surface is 0, with or without a target | it takes a nearby cell as its destination |
-    | charge-target check | the actor is aiming at a charge target | it looks for a real threat within its weapon range and, if it finds one, makes it the target instead |
+    | charging break-off search | the actor is infantry with its charging mark set, and processing reaches these general rules | it runs S-0518 claim 15's automatic range search; any nonempty result becomes its target and clears the mark, even if equal to the held target; an empty result leaves target and mark unchanged |
     | approach | the actor has a target | it takes the approach step of claim 37 (engaging the target is the combat specs') |
     | fall-back | the actor has no target | it falls back to rest |
 
     "Has a target" and "has no target" are judged on the target the actor has once the
-    charge-target check has taken effect, so a threat found by that check is approached in the same
-    processing.
+    charging break-off search has taken effect, so a nonempty result is approached in the same
+    processing. The mark, not the held target's ownership or usability, gates the search.
+    S-0518 claim 15 owns candidate eligibility and ranking, the bypass of target-retention,
+    passive-acquisition and opportunity gates, and the absence of a targeting-timer gate or
+    reset draw. A nonempty result is accepted without another held-target ownership,
+    firing-legality or identity check. Vehicles do not run this break-off search.
 
     The delay of these general rules is the standard delay, *D* = *D*<sub>r</sub> + *U*(0, 2),
     with the draw taken whether or not the halving below applies. It is halved, trunc(*D* / 2),
@@ -1585,7 +1601,7 @@ apply in our engine to the actors of every player house.
     from 282 to 768 leptons (Formulas F3, F4).
     - **Infantry:** the rules of this table take precedence over the general rules above. When a
       row applies (the first that does), it decides the outcome and the delay, and none of the
-      general rules happens (no hover-attack cell, no charge-target check, no approach, no
+      general rules happens (no hover-attack cell, no charging break-off search, no approach, no
       halving):
 
       | Situation | Result | Delay | Draws |
@@ -1600,14 +1616,15 @@ apply in our engine to the actors of every player house.
       computer player that is attacking a building it may take goes straight for it, in *capture*; our
       AI can get the same result with a capture or occupy order (S-0213, S-0214).
     - Backing: `measurable` (scenario B9; cases c and d for the second and third infantry
-      rows; scenario B24, case d for the hover-attack cell and case c for the charge-target check).
+      rows; scenario B24, case d for the hover-attack cell and case c, with S-0518 scenarios
+      TC3 and TC4, for the mark-gated charging break-off search and replacement).
       The explosive-charges row is `unmeasured`: S-0214 translates a player's attack order on
       a building that accepts charges into *sabotage*, and S-0309 claim 18 prevents such a
       human-controlled unit from retaliating against a building. B9 (b)'s former retaliation
       setup therefore cannot reach *attack* with that target. No replacement input that isolates
       this row is established here.
-    - Confidence: high (the delay rule, and that the 1-tick rows replace the general rules and take
-      no draw); medium (the conditions of the infantry rows)
+    - Confidence: high (the delay rule, mark-gated break-off search and replacement, and that
+      the 1-tick rows replace the general rules and take no draw); medium (the conditions of the infantry rows)
 
 24. **Guard.** The actor stays where it is. The kind-specific rules at the end of this claim
     (deploying infantry, vehicles) take precedence over the general rules below.
@@ -1932,7 +1949,9 @@ apply in our engine to the actors of every player house.
     processing: S-0509 claims 1–11 own general entry and engineer outcomes, and S-0510
     claims 1–10 own infiltration and other ordinary entrants. S-0508 claims 1–5 and 14–17
     own garrison entry and assault; S-0509 claim 17 owns vehicle-like building destinations.
-    Demolition remains with its special-ability topic. *Eaten* is processed by the same table,
+    S-0519 claim 13 owns charge planting at walking-step arrival, including its non-shot
+    rearm replacement and delay draws without burst advance; these are not sabotage-processing
+    effects or part of this processing delay. *Eaten* is processed by the same table,
     except that occupiers, assaulters and infiltrators do not count as building takers and the hunt
     rule never applies. Its second row sends the same scatter request.
     - Backing: `measurable` (scenario B12; scenario B29, case c, for *eaten* and for the
