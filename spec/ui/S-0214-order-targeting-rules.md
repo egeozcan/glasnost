@@ -2,11 +2,11 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 37
+revision: 38
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742]
 supersedes: []
@@ -129,7 +129,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   after-effect, the *arrival hold*, instead follows S-0513 claim 40, including its persistent
   held delay and `quirks.warp_hold_persists`; it is not a universal rules-delay hold.
   A destination given to the teleporting locomotor while phasing in is dropped, not saved for
-  the end (S-0207 claim 20 (a), (f)).
+  the end (S-0207 claim 20 (a), (f)), except under a pending point suppression (S-0207 Terms
+  and claim 27), which keeps it as the order-level destination, fixes no landing point and
+  consumes the suppression.
   This is separate from the click refusal of row GC1.
 - **Parasite.** An object that has latched onto a mobile unit and harms it from there (for
   example a unit that climbs inside a vehicle, or one that grabs a ship). Its rules belong to
