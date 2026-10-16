@@ -173,7 +173,9 @@ pub struct AnimType {
     pub y_sort_adjust: i32,
 }
 
-/// Reads an animation type's drawing fields from its art section.
+/// Reads an animation type's playback and drawing fields from `image`, which
+/// must be its own art section, the section named by its type name, whatever
+/// section its image name names (S-0007 claim 34).
 pub fn read_anim(art: &Document, image: &[u8]) -> AnimType {
     let int = |k: &[u8]| art.value(image, k).and_then(value::integer);
     let flag = |k: &[u8], d: bool| art.value(image, k).and_then(value::boolean).unwrap_or(d);

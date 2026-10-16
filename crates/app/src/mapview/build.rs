@@ -262,6 +262,19 @@ pub fn find_type(import: &Import, kind: Kind, name: &[u8]) -> Option<usize> {
         .position(|t| value::type_name_eq(&t.name, name))
 }
 
+/// An animation type's own art section: the section named by its type name
+/// (S-0007 Terms and claim 34). Its playback and drawing properties come
+/// from this section alone, whatever section its image name names.
+pub fn anim_own_section(import: &Import, idx: usize) -> &[u8] {
+    // spec: S-0007 claim 34 (own art section = section named by the animation's type name)
+    import
+        .outcome
+        .registries
+        .get(&Kind::Animations)
+        .and_then(|r| r.get(idx))
+        .map_or(&[][..], |t| &t.name)
+}
+
 /// A rules key of a type, as layered.
 fn rule<'a>(import: &'a Import, kind: Kind, idx: usize, key: &[u8]) -> Option<&'a [u8]> {
     import
@@ -2563,8 +2576,8 @@ impl Builder<'_> {
                 continue;
             };
             any = true;
-            // interim: Q-0951 (the playback fields come from the image-name section, S-0007 claim 2)
-            let t = slots::read_anim(&self.p.art, &art.image);
+            // spec: S-0007 claim 34 (the playback and drawing fields come from the animation's own art section, whatever section its image name names)
+            let t = slots::read_anim(&self.p.art, anim_own_section(self.import, a));
             // spec: S-0109 claim 19 (detail field above the player's level: not drawn)
             if !slots::shown_at(&t, self.options.detail.number()) {
                 continue;
@@ -2722,7 +2735,8 @@ impl Builder<'_> {
     fn live_anim(&mut self, a: &AnimDraw) -> Option<(slots::Layer, i64, Vec<Item>)> {
         let art = self.import.arts.get(&(Kind::Animations, a.idx)).cloned()?;
         let sprite = art.sprite.clone()?;
-        let t = slots::read_anim(&self.p.art, &art.image);
+        // spec: S-0007 claim 34 (the animation's own art section)
+        let t = slots::read_anim(&self.p.art, anim_own_section(self.import, a.idx));
         // spec: S-0109 claim 19 (detail field above the player's level: not drawn, still updated)
         if !slots::shown_at(&t, self.options.detail.number()) {
             return None;
@@ -4288,7 +4302,8 @@ impl Painter {
     /// count of its sprite (0 without one), for playback (S-0109 F2).
     pub fn anim_type(&self, inputs: &Inputs, idx: usize) -> Option<(slots::AnimType, i32)> {
         let art = inputs.import.arts.get(&(Kind::Animations, idx))?;
-        let t = slots::read_anim(&self.art, &art.image);
+        // spec: S-0007 claim 34 (the animation's own art section)
+        let t = slots::read_anim(&self.art, anim_own_section(inputs.import, idx));
         let n = art
             .sprite
             .as_ref()
