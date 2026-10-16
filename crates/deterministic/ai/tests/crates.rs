@@ -13,6 +13,10 @@ use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Pos, Target, World};
 
 fn game() -> Game {
+    game_on(&fixture::map())
+}
+
+fn game_on(map: &glasnost_map::Map) -> Game {
     let mut r = fixture::ruleset();
     r.registries
         .entry("overlays".into())
@@ -28,7 +32,7 @@ fn game() -> Game {
     );
     let mut g = Game::new(
         std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-skirmish")),
-        &fixture::map(),
+        map,
         "synthetic",
         fixture::catalogue(),
         fixture::setup(5),
@@ -43,6 +47,16 @@ fn game() -> Game {
 /// A world with a unit of house 0 near its base and a crate of money 8 cells
 /// from it; `seen` explores the crate's cell for the house.
 fn scene(g: &Game, seen: bool) -> (World, ObjectId, CellXY) {
+    scene_at(g, seen, |at, _| CellXY::new(at.x + 8, at.y))
+}
+
+/// As [`scene`], with the crate on the cell `crate_at` picks from the
+/// unit's cell.
+fn scene_at(
+    g: &Game,
+    seen: bool,
+    crate_at: impl Fn(CellXY, &World) -> CellXY,
+) -> (World, ObjectId, CellXY) {
     let mut w = g.world.clone();
     let home = w
         .objects
@@ -52,7 +66,7 @@ fn scene(g: &Game, seen: bool) -> (World, ObjectId, CellXY) {
         .unwrap();
     let at = CellXY::new(home.x, home.y + 6);
     let unit = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at, 0);
-    let c = CellXY::new(at.x + 8, at.y);
+    let c = crate_at(at, &w);
     // The fixture has no crate overlay: the place is enough for the brain, which asks the world.
     let o = w
         .rules()
@@ -156,4 +170,30 @@ fn ignores_an_unseen_crate() {
     let seen = glasnost_sim::econ::shroud::explored(&w, HouseId(0), c);
     let orders = brain.think(&w);
     assert_eq!(moves(&orders, c).is_empty(), !seen);
+}
+
+// S-0520, S-0212 claim 4, PLAN §4.7: a crate on a water cell is not given to a unit that walks: it would keep its move for ever without getting there.
+#[test]
+fn a_crate_on_water_sends_no_walker() {
+    let g = game_on(&fixture::map_strait());
+    let (w, _, c) = scene_at(&g, true, |at, w| {
+        w.cells
+            .grid
+            .iter()
+            .filter(|(_, x)| x.land == glasnost_map::terrain::land::WATER)
+            .map(|(k, _)| k)
+            .min_by_key(|k| ((k.x - at.x).pow(2) + (k.y - at.y).pow(2), k.y, k.x))
+            .expect("the strait has water")
+    });
+    assert!(
+        glasnost_sim::crates::is_crate(&w, c),
+        "the crate is on the map"
+    );
+    let mut brain = Brain::new(&w, &fixture::map_strait(), HouseId(0));
+    let orders = brain.think(&w);
+    let walkers: Vec<ObjectId> = moves(&orders, c)
+        .into_iter()
+        .filter(|&id| w.obj(id).is_some_and(|o| o.kind == Kind::Infantry))
+        .collect();
+    assert!(walkers.is_empty(), "{orders:?}");
 }

@@ -24,9 +24,9 @@ const REACH: i64 = 30; // nocite: tuning of our own opponent
 
 /// Whether unit `id` can walk or drive to `c` by the ground it stands on
 /// (the crate is in the unit's reach region, S-0212 claim 4), as a person
-/// sees from the map: a crate on another island is not worth a click. A
-/// unit outside every region (a factory's exit) or a goal outside every
-/// region is not ruled out.
+/// sees from the map: a crate on another island, or on water for a unit
+/// that walks or drives, is not worth a click. A unit outside every region
+/// (a factory's exit) is not ruled out.
 fn same_region(w: &World, id: ObjectId, c: CellXY) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let Some(zone) = w.rules().unit(o.kind, o.type_index).map(|u| u.zone) else {
@@ -37,6 +37,9 @@ fn same_region(w: &World, id: ObjectId, c: CellXY) -> bool {
         regions::reach_in(w, c, zone),
     ) {
         (Reach::Region(a), Reach::Region(b)) => a == b,
+        // A goal outside every region of the unit's zone (water for a
+        // walker): it never gets there.
+        (Reach::Region(_), _) => false,
         _ => true,
     }
 }
