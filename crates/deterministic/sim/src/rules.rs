@@ -1197,18 +1197,28 @@ impl SimRules {
         // spec: S-0306 Constants (gravity absent: 3 leptons per tick²)
         let gravity = g.gravity.unwrap_or(3);
         // spec: S-0520 Edge cases (the gas warhead is the one registered under the fixed name; when the rules name none, a warhead with every field at its absent-key default is created)
-        let mut warhead_map = s.warheads.clone();
-        if !warhead_map.keys().any(|k| k.eq_ignore_ascii_case("GAS")) {
-            warhead_map.insert("GAS".to_owned(), Default::default());
-        }
-        let (weapons_c, projectiles_c, warheads_c, weapon_index) = crate::combat::data::tables(
+        let (weapons_c, projectiles_c, mut warheads_c, weapon_index) = crate::combat::data::tables(
             &s.weapons,
             &s.projectiles,
-            &warhead_map,
+            &s.warheads,
             gravity,
             quirks.negative_range_fields,
             mode,
         );
+        if !s.warheads.keys().any(|k| k.eq_ignore_ascii_case("GAS")) {
+            // The default warhead goes last, so no other warhead's index moves.
+            let one: BTreeMap<String, rs::WarheadType> =
+                [("GAS".to_owned(), Default::default())].into();
+            let (_, _, mut added, _) = crate::combat::data::tables(
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &one,
+                gravity,
+                quirks.negative_range_fields,
+                mode,
+            );
+            warheads_c.append(&mut added);
+        }
         // spec: S-0309 Import mapping (the game-wide default coefficients; engine default 0)
         let coefficient_defaults: [F64; 5] = g
             .coefficient_defaults
@@ -1410,7 +1420,7 @@ impl SimRules {
             terrain,
             weapons: s.weapons.clone(),
             projectiles: s.projectiles.clone(),
-            warheads: warhead_map,
+            warheads: s.warheads.clone(),
             names,
             hash: hash.to_owned(),
         }

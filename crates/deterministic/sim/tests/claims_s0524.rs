@@ -344,9 +344,9 @@ fn claim3_nuclear_strike_ignores_the_number_slot() {
 
 // --- Claim 4 -------------------------------------------------------------------
 
-// spec: S-0524 claim 4 (code 108 is recognised; crates, S-0520, are a seam: no effect and a note)
+// spec: S-0524 claim 4 (code 108 creates a crate at the waypoint's cell through S-0520's trigger placement, with crates off too)
 #[test]
-fn claim4_crate_action_is_a_seam() {
+fn claim4_crate_action_places_a_crate() {
     let r = ruleset();
     let a = Action {
         waypoint: 0,
@@ -354,9 +354,10 @@ fn claim4_crate_action_is_a_seam() {
         ..action(108)
     };
     let w = fired_game(&r, None, vec![a], &[(0, at(0, 0))]);
-    assert_eq!(mp_triggers::action_coverage(108), Coverage::Seam);
-    assert!(w.notes.iter().any(|n| n.starts_with("S-0524 claim 4")));
+    assert_eq!(mp_triggers::action_coverage(108), Coverage::Implemented);
+    // The test rules name no crate overlay: the placement is unsafe data and has no effect (S-0524 Edge cases).
     assert!(w.cells.cell(at(0, 0)).unwrap().overlay == glasnost_map::NO_OVERLAY);
+    assert!(w.crates.places.is_empty());
 }
 
 // --- Claim 5 -------------------------------------------------------------------
@@ -1499,17 +1500,16 @@ fn s0513_claim22_waypoint_curtain_action() {
 
 // --- Import mapping ------------------------------------------------------------
 
-// spec: S-0524 I1 (the codes this spec adds are recognised; 108 is a seam)
+// spec: S-0524 I1 (the codes this spec adds are recognised and take effect; 108 places a crate, S-0520)
 #[test]
 fn i1_action_coverage() {
-    for c in [40, 63, 66, 73, 90, 95, 102, 130] {
+    for c in [40, 63, 66, 73, 90, 95, 102, 108, 130] {
         assert_eq!(
             mp_triggers::action_coverage(c),
             Coverage::Implemented,
             "{c}"
         );
     }
-    assert_eq!(mp_triggers::action_coverage(108), Coverage::Seam);
     assert_eq!(mp_triggers::event_coverage(1), Coverage::Implemented);
 }
 

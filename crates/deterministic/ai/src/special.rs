@@ -76,6 +76,8 @@ pub struct Uses {
     pub sabotages: u32,
     /// Air-strike designators sent against an enemy building (S-0519).
     pub strikes: u32,
+    /// Units sent to run over a crate (S-0520).
+    pub crates: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -120,6 +122,7 @@ impl Special {
         self.chrono(script, &own, w, out);
         self.linked(script, &own, w, out);
         self.terror(script, &own, w, out);
+        self.crates(script, &own, w, out);
     }
 
     /// Counts one deploy order given to a deployable unit (S-0517,
@@ -136,6 +139,11 @@ impl Special {
     /// Counts one charger sent at a building (S-0518, `linked`).
     pub(crate) fn count_charge(&mut self) {
         self.uses.charges += 1;
+    }
+
+    /// Counts one unit sent to a crate (S-0520, `crates`).
+    pub(crate) fn count_crate(&mut self) {
+        self.uses.crates += 1;
     }
 
     /// Counts one bomb planter sent at an enemy (S-0519, `terror`).

@@ -1598,6 +1598,15 @@ impl Live {
                 .marker_item(scene, m, project_lifted(p.x, p.y, z));
             scene.items.push(item);
         }
+        // S-0520: every crate on the map, a box on its cell (our placeholder).
+        for place in self.world.crates.places.values() {
+            let p = glasnost_sim::world::Pos::centre(place.cell, 0);
+            let z = self.world.surface_at(p.x, p.y);
+            let item =
+                self.cache
+                    .marker_item(scene, Marker::Crate, project_lifted(p.x, p.y, z + 40));
+            scene.items.push(item);
+        }
         // S-0519: planted bombs the viewer sees, charges counting down and buildings marked by a strike (our placeholders).
         let viewer = self.viewer;
         let mut extra: Vec<(Marker, (i32, i32))> = Vec::new();

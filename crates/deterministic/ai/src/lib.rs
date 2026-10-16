@@ -20,6 +20,7 @@
 
 pub mod brain;
 pub mod chrono;
+pub mod crates;
 pub mod deployers;
 pub mod fixture;
 pub mod game;

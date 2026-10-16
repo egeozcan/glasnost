@@ -2280,3 +2280,7 @@ mod linked_tests;
 #[cfg(test)]
 #[path = "sim_terror_tests.rs"]
 mod terror_tests;
+
+#[cfg(test)]
+#[path = "sim_crate_tests.rs"]
+mod crate_tests;

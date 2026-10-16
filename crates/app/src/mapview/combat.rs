@@ -299,6 +299,9 @@ pub enum Marker {
     Charge,
     /// A building marked by an air strike (S-0519 claim 17): a cyan ring.
     Marked,
+    /// A crate on the map (S-0520): a yellow box, our placeholder for the
+    /// crate overlay's picture, which the view draws only from the map.
+    Crate,
 }
 
 /// Placeholder palette indices (our own colours).
@@ -479,6 +482,24 @@ fn marker_image(m: Marker) -> IndexedImage {
             IndexedImage::new(13, 13, px).expect("sized")
         }
         Marker::Marked => disc(20, 10, Some(880), ink::CYAN, ink::CYAN),
+        Marker::Crate => {
+            // A 13 × 11 box with an outline and a cross.
+            let mut px = vec![0u8; 143];
+            for y in 0..11usize {
+                for x in 0..13usize {
+                    let edge = x == 0 || y == 0 || x == 12 || y == 10;
+                    let cross = x == 6 || y == 5;
+                    px[y * 13 + x] = if edge {
+                        ink::ORANGE
+                    } else if cross {
+                        ink::WHITE
+                    } else {
+                        ink::YELLOW
+                    };
+                }
+            }
+            IndexedImage::new(13, 11, px).expect("sized")
+        }
         Marker::Anim => {
             // A 9 × 9 hollow square with a diagonal cross.
             let mut px = vec![0u8; 81];

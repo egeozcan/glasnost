@@ -49,6 +49,7 @@ const SCENES: &[Scene] = &[
     ("chrono", chrono_erases),
     ("prism", prism_supports),
     ("terror", terror_attacks),
+    ("crates", crate_pickup),
 ];
 
 #[test]
@@ -1161,6 +1162,73 @@ fn terror_attacks(lane: &mut Lane) {
             }
         }
         println!("strike called at tick {called:?}");
+    }
+}
+
+/// S-0520: a trigger crate of fixed money contents is put on open land with
+/// the rules' own overlays, a unit of the local house is ordered over it, and
+/// the credits, the crate and its replacement (crates on) are watched; then a
+/// heal-all crate and a reveal crate are picked up the same way.
+fn crate_pickup(lane: &mut Lane) {
+    let local = lane.local();
+    let home = lane.home();
+    let spot = lane.open_land(CellXY::new(home.x + 6, home.y + 6));
+    let man = {
+        let r = lane.world().rules();
+        (0..r.infantry.len())
+            .find(|&i| {
+                r.unit(Kind::Infantry, i as u32)
+                    .is_some_and(|u| !u.engineer && u.strength > 0)
+            })
+            .map(|i| r.infantry[i].name.clone())
+    };
+    println!("infantry type found: {}", man.is_some());
+    let Some(man) = man else { return };
+    lane.world_mut().econ.settings.crates = Some(true);
+    let start = lane.open_land(CellXY::new(spot.x - 4, spot.y));
+    let unit = lane.spawn(Kind::Infantry, &man, local, start);
+    lane.look_at(spot);
+    for (kind, label) in [(0, "money"), (2, "heal"), (8, "reveal")] {
+        let at = CellXY::new(spot.x + 2 * (kind / 2), spot.y + 2);
+        let placed = glasnost_sim::crates::place_trigger(lane.world_mut(), at, kind);
+        let seen = lane
+            .world()
+            .crates
+            .places
+            .values()
+            .filter(|p| p.trigger)
+            .count();
+        println!("{label} crate placed: {placed}, crates on the map: {seen}");
+        lane.ticks(3);
+        if kind == 0 {
+            lane.save("crate-before");
+        }
+        let credits = lane.world().houses[usize::from(local.0)].credits;
+        let target = lane
+            .world()
+            .crates
+            .places
+            .values()
+            .filter(|p| p.trigger)
+            .map(|p| p.cell)
+            .last();
+        let Some(target) = target else { continue };
+        let orders = lane.order(local, unit, glasnost_sim::targeting::ClickOn::Cell(target));
+        println!("click on the crate cell: {orders} orders");
+        let mut got = None;
+        for t in 0..400 {
+            lane.ticks(1);
+            if !glasnost_sim::crates::is_crate(lane.world(), target) {
+                got = Some(t);
+                break;
+            }
+        }
+        let after = lane.world().houses[usize::from(local.0)].credits;
+        println!(
+            "{label} crate picked up at tick {got:?}, credits {credits} -> {after}, crates left {}",
+            lane.world().crates.places.len()
+        );
+        lane.save(&format!("crate-{label}"));
     }
 }
 

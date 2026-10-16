@@ -461,7 +461,7 @@ The teleporting locomotor's own move (S-0207 claims 20 to 22, F9; S-0208 claims 
 
 - **Presentation events.** The two warp animations (`WarpOut`) go through `combat::effects::anim`, so the view draws them; they keep their creation draws (claim 20 i). The departure and arrival sounds are `Sound::ChronoOut` at the old point and `Sound::ChronoIn` at *L*; audio plays the type's `ChronoOutSound` or `ChronoInSound`, else the game-wide one.
 - **Arrival effects.** A vehicle's landing has the effects of reaching a track target: the arrival report to a contacted building (S-0402 claim 10, and a tethered vehicle's clear report to its factory, S-0417 claims 7 and 8) and cell-centre crushing (S-0210 claims 3 and 8), then the entered-by raise (claim 22). A teleporting crusher crushes what it lands on. A tethered infantry unit's landing gives its clear report to its infantry factory (S-0417 claim 10), so a teleporting unit that jumps away no longer holds the factory's contact place.
-- **Seams.** Crate collection at *L* (S-0520), the airstrike target-retention exception (S-0519), the electromagnetic pulse (S-0511), *being erased* (S-0514) and a superweapon's hold (S-06xx) have no state in our engine; `teleport::take_destination` and `teleport::jump` mark where they go.
+- **Seams.** The airstrike target-retention exception (S-0519, S-0207 Open questions), the electromagnetic pulse (S-0511), *being erased* (S-0514) and a superweapon's hold (S-06xx) have no state in our engine; `teleport::take_destination` and `teleport::jump` mark where they go.
 - **What play needs.** A vehicle, infantry or aircraft type with `Locomotor=` the teleporting locomotor (the importer maps it). A person selects it and clicks a cell: `targeting::click` gives *move* to the clicked cell itself (S-0214 claim 11), `orders::issue` applies it, the landing point is fixed and marked at once, and the unit jumps on its next movement update, then phases in for F9's delay. `[General] WarpOut`, the `[General]` keys of F9 (`ChronoTrigger`, `ChronoDistanceFactor`, `ChronoMinimumDelay`, `ChronoRangeMinimum`) and `[AudioVisual] ChronoOutSound` and `ChronoInSound` give the animation, timing and sounds.
 
 Provisional rules of M6b teleport movement: none at present. S-0417 revision 15 answers Q-0697 (claim 10: a tethered teleporting infantry unit reports clear in its jump's arrival update, before the entered-by raise; the code already did this).
@@ -526,7 +526,7 @@ S-0503 (hover and amphibious movement) is built in `glasnost_sim::hover`. Its ga
 - **Seams.** These are named functions with doc comments:
   - the fall (`hover::start_fall`, S-0511 claim 10);
   - the cloaked reveal (`hover::reveal_cloaked`, S-0516);
-  - crate collection (`hover::collect_crate`, S-0520);
+  - crate collection (`hover::collect_crate`, built with S-0520);
   - the chase cut (`hover::chase_cut`, S-0212 claim 20);
   - the stop order (`hover::stop_order`, claim 16: the heading point, T, φ and ρ are kept; *D* and the stored path are kept apart from the cleared order-level destination when *D* = *P*, `HoverState::retained`, and the retry timer is made eligible).
   - S-0312 claim 11's low-water death of a marked vehicle is not built.
@@ -713,7 +713,7 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - The own AI does not see a cloaked enemy it does not sense.
 - **Seams.** These are named functions with doc comments in `cloak/mod.rs`:
   - C4 planting (S-0519) and the special-weapon causes call `machine::uncloak`;
-  - cloaking crates (S-0520) call `machine::grant_own_flag`;
+  - cloaking crates (S-0520, built) call `machine::grant_own_flag`;
   - undeploying (S-0517) calls `disguise::clear`;
   - a house leaving (S-0414) calls `disguise::house_left`;
   - the neutral houses' blink draw (S-0309 claim 25 (g)) is `disguise::neutral_sees_through`;
@@ -833,7 +833,7 @@ S-0524 is built in `glasnost_sim::mp_triggers`, on the trigger runtime of S-0011
 - **Save format 28.** The trigger definitions' new fields, the warhead's flash fields and `TriggerState::mp` are new state, and they are hashed.
 - **Local lane.** `GLASNOST_GAME_DIR=<install> GLASNOST_LANE_SCENE=trigger-coverage cargo test --release -p glasnost-app --test m6b_lane -- --ignored --nocapture` starts every offered map and counts its trigger events and actions as implemented, seamed or outside the subset (`mp_triggers::event_coverage`, `action_coverage`).
 - **Seams.**
-  - Code 108 (crates, S-0520) is recognised and has no effect.
+  - Code 108 (crates) places a crate through `crates::place_trigger` (S-0520).
   - Engineer capture (S-0509), hijacking (S-0312 claim 13), garrisons (S-0508), infiltration (S-0510) and sabotage call nothing yet; their seams are in `mp_triggers`.
   - Teams, computer targeting, change owner, destroy attached objects, explosions, cheering and the waypoint animations stay as S-0011 left them.
 
@@ -914,7 +914,7 @@ S-0502 is built in `glasnost_sim::jump` (state, queries, orders, occupancy marks
 - **Elsewhere.** `combat::check` (S-0310 claim 8: the infantry speed fraction above 0.1 and the jumpjet-turn flag with *moving now*), `combat::range` (S-0307 claim 24: no detour limit for a jumpjet), `infantry` (S-0107: a moving jumpjet asks for *hover* or *fly* by its speed fraction, *stand* becomes *hover* when airborne), `econ::shroud::refresh_sight` and `cloak::machine::cell_movement_completed` at touchdown, `objects` (marks released when a jumpjet leaves the map or goes inside).
 - **Importer.** `JumpjetSpeed`, `JumpjetClimb`, `JumpjetCrash`, `JumpjetHeight`, `JumpjetAccel`, `JumpjetWobbles`, `JumpjetDeviation`, `JumpjetNoWobbles`, `DeployToLand` (type), `[AudioVisual] DeployDir` (`general.economy.deploy_dir`), the six `[JumpjetControls]` values as *ignored* in the coverage table; the stock spellings `JumpJetAccel` and `JumpJetTurnRate` feed nothing; the importer warns for a speed or turn rate of 0 (Q-0977).
 - **Quirks.** `jumpjet_bridge_early_cruise_height`, `jumpjet_lookahead_bridge`, `jumpjet_no_cell_self_destruct`, `jumpjet_step_truncation` and `jumpjet_turn_slowdown_one_sided` are consulted and tested in both settings.
-- **Seams.** Magnetic lift (S-0607), crate pickup at touchdown (S-0520 claim 6, `jump::crate_pickup`), the flying-object registry (Open questions), ion storms (out of scope), the infantry *air-death-end* timing.
+- **Seams.** Magnetic lift (S-0607), the flying-object registry (Open questions), ion storms (out of scope), the infantry *air-death-end* timing.
 - **Own AI.** See *Own AI (M6c: special abilities)*.
 - **Client.** The click is S-0214's (a jumpjet is a free mover). The map view draws the unit at its world height, so the flight shows with no new drawing code. The lane scene `jumpjet` of `crates/app/tests/m6c_lane.rs` finds a non-balloon jumpjet type by its locomotor, orders it by a click to a cell across an obstacle (another reach region of the ground) and writes `local-lane/m6c/jumpjet-before.png`, `jumpjet-flight.png` and `jumpjet-landed.png`; it prints the states and heights by tick.
 
@@ -1032,6 +1032,26 @@ Interim rules waiting for answers:
 | `strike::turn`, `strike::designation` | a changed target is noticed at the designator's turn or its next designation shot | Q-0986 |
 | `bomb::detonate`, `bomb::suicide` | no bomb warhead: the bomb only ends; no demolition warhead: the firer still takes a hit without a warhead | Q-0986 |
 
+
+## Simulation (M6c: crates)
+
+S-0520 is built in `glasnost_sim::crates`; the ledger is [docs/m6-claims/S-0520.md](m6-claims/S-0520.md), the tests are `claims_s0520.rs` and `claims_s0520_effects.rs` (fixture `crate_common`) and, for the importer, `crates/convert/src/sim_crate_tests.rs`. New state: `World::crates` (the crate places by priority 0 … 255 with cell, start tick, lifetime and the trigger mark, and the any-crate mark), the crate rules in `SimRules::crates`, `StartState::bases` (the bases setting kept after the game starts); save format version 42.
+
+- **Placement and expiry (claims 1 to 5).** `crates::place_random` makes at most 1000 attempts, each with the two ranged requests of F5 and the single-cell float or track search (no draw); the first accepted cell (usable area, no overlay) takes the wooden or water overlay (`crates::finish`: `overlays::place_overlay`, the contents in the cell's overlay data, then the lifetime draw of S-0524's formula in the first free place). `place_trigger` (code 108, S-0524 claim 4: one search, no retry, `quirks.trigger_crate_respects_setting`), `place_death` (`combat::death::leave_play` for a destroyed vehicle with `CarriesCrate` or a building with `CrateBeneath`, crates on) and `place_at_start` (S-0412 claim 10's count, in `econ::setup::place_crates`) share it. `crates::update` (tick row 16, after the turn pass) expires the crates whose lifetime ran out, in place order, each replaced by one random placement; with crates off nothing expires unless `quirks.trigger_crate_expiry_while_disabled` lets trigger crates go.
+- **Pickup (claims 6 to 11).** `crates::pickup(w, collector, cell)` is called when a walker (`walk::ask`), a driver or ship (`drive::step_check`) or a hover (`hover::step_check`) commits to a step into the cell, at a jumpjet's touchdown (`jump::crate_pickup`) and at a teleporter's landing cell (`teleport`); it returns whether a ground step is blocked (a unit power-up or a collector killed by the tag raise). Gates: the cell's overlay, the passive country, the crate-trigger overlay (event 49 by `triggers::crate_picked_up`, then the any-crate mark). Then the choice (`choose`: fixed contents, or R(1, total) and F1; a forced base unit), the conversions to money (`convert`), the crate's removal and replacement, the effect and the animation 200 leptons above the floor.
+- **Effects (claims 12 to 25).** Money, unit (the unit-crate type, the forced unit, the harvester rule with `quirks.crate_harvester_list_prefix`, the random goodie vehicle, the nearby search, the money fallback with `quirks.crate_unit_fallback_unit_argument`), heal all (a healing hit of health - strength to every object of the house in the update order), cloak, explosion (`combat::projectile::explosion_anim_dry` picks the dry animation), napalm, darkness and reveal (`econ::shroud::crate_darkness`, `crate_reveal`), armour, firepower and speed (`quirks.crate_bonus_reaches_limbo`), the nuclear grant (`superweapons::charge::one_time_grant`), veteran (F7), gas (nine area damages, no resource reduction; a default GAS warhead is added to the table when the rules name none), resource (`econ::resource::crate_stage`).
+- **Importer.** `[CrateRules]` `CrateRadius` (a value of exactly -1 is dropped), `CrateRegen`, `UnitCrateType`, `WoodCrateImg`, `WaterCrateImg`; `[CombatDamage]` `FlameDamage`; the nineteen `[Powerups]` keys into one table (`convert::sim_econ::crate_import`); `CrateGoodie`, `CrateTrigger`, `CrateBeneath`, `CrateBeneathIsMoney`; the sounds and the campaign-only keys are coverage rows (ignored).
+- **Client.** A placeholder box (`Marker::Crate`) on every crate's cell (the view draws overlays from the map only); the power-up animations come through `Effect::Anim`; the local lane scene `crates` (screenshots `crate-*.png` in `local-lane/m6c/`).
+
+Interim rules waiting for answers:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `convert::sim_econ::crate_import` | the power-up table is built from each key's history; a key absent while the section is given is weight 0 with no animation | Q-0987 |
+| `crates::unit` | the nearby search is the only placement test | Q-0987 |
+| `resource::crate_stage` | the flat run's *F* is the picture count | Q-0987 |
+| `crates::RANDOM` | random contents are stored as 255 | Q-0987 |
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.
@@ -1067,6 +1087,7 @@ Whole-game AI tests (M6c step 2a). The release games `builds_a_navy_on_a_water_m
 - **Chrono weapons (S-0514).** `glasnost_ai::chrono` (a new file; `Special::chrono` is called from `Special::think`): every idle unit with a temporal beam that holds none and is selectable is sent the attack order against the costliest enemy its house sees (explored cells) that it may attack and that can be erased (an erasable type, not protected, in the ground layer), the nearest on equal cost. `Uses::erasures` counts the orders (AI game format 8); the runner prints it as "erasures". Tests: `crates/deterministic/ai/tests/chrono.rs`.
 - **Linked weapons (S-0518).** `glasnost_ai::linked` (a new file; `Special::linked` is called from `Special::think`): a house that can build the prism type and holds at least twice its price orders one while it has fewer than three (on the map or queued), the finished ones being placed by the ordinary place reaction near the base (so within the support reach of each other, which the spiral keeps small); every idle charger (infantry or vehicle with an electric-charge secondary) is sent the attack order at the nearest own overpowerable building within 12 cells that has fewer than three chargers. `Uses::prisms` and `Uses::charges` count the orders (AI game format 9); the runner prints them as "prisms" and "charges". Tests: `crates/deterministic/ai/tests/linked.rs`.
 - **Terror and strikes (S-0519).** `glasnost_ai::terror` (a new file; `Special::terror` is called from `Special::think`): every idle selectable unit is given the order a person would give by its role: a designator (strike size above 0) attacks the costliest seen enemy building it may attack; a bomb planter (primary weapon with a bomb-planting warhead) the costliest seen enemy it may attack (a bombed carrier is illegal by the firing check, so it is passed over); a disarmer an own object that carries a bomb the house sees (`bomb::visible`); a suicide unit the nearest seen enemy it may attack; infantry with explosive charges the nearest seen enemy building the cursor offers sabotage on. `Uses::bombs`, `disarms`, `suicides`, `sabotages` and `strikes` count the orders (AI game format 10); the runner prints them. Tests: `crates/deterministic/ai/tests/terror.rs`.
+- **Crates (S-0520).** `glasnost_ai::crates` (a new file; `Special::crates` is called from `Special::think`): every crate on a cell the house has explored (crate places whose cell holds a crate overlay) that no own unit already runs to is given to the fastest idle selectable ground unit within 30 cells (infantry or vehicle, not a harvester or an engineer; the nearest on equal speed), with a move order to the crate's cell; one unit per crate per think. `Uses::crates` counts the orders (AI game format 11); the runner prints "crates". Tests: `crates/deterministic/ai/tests/crates.rs`.
 - **Spies (S-0510).** Every idle spy is sent to the nearest seen enemy building with an infiltration effect, ranked by what a person wants (stolen technology, a factory flag it lacks, money, power, a superweapon, radar), never one another spy of the house is bound for. A house with no spy and none in its line that sees such a building orders the cheapest spy type its sidebar offers, once, under the same credit reserve as engineers.
 
 ## Map triggers (M5b)
@@ -1246,7 +1267,7 @@ M6c is the last part of M6 (session of 2026-10-16). Baseline: main 2c92746, spec
 | 3.8 | S-0514 Chrono weapons | done (branch) | ledger [docs/m6-claims/S-0514.md](m6-claims/S-0514.md); section *Simulation (M6c: chrono weapons)*; request Q-0984 open with interim rules; save format 39, AI game format 8; goldens regenerated |
 | 3.9 | S-0518 Linked weapons | done (branch) | ledger [docs/m6-claims/S-0518.md](m6-claims/S-0518.md); section *Simulation (M6c: linked weapons)*; request Q-0985 open with interim rules; save format 40, AI game format 9; goldens regenerated |
 | 3.10 | S-0519 Terror and attack animals | done (branch) | ledger [docs/m6-claims/S-0519.md](m6-claims/S-0519.md); section *Simulation (M6c: terror and strikes)*; request Q-0986 open with interim rules; save format 41, AI game format 10; goldens regenerated; lane scene `terror` |
-| 3.11 | S-0520 Crates | open | |
+| 3.11 | S-0520 Crates | done (branch) | ledger [docs/m6-claims/S-0520.md](m6-claims/S-0520.md); section *Simulation (M6c: crates)*; request Q-0987 open with interim rules; save format 42, AI game format 11; goldens regenerated; lane scene `crates` |
 | 4 | Lead visual review 2026-10-15 (7 items), re-shoots in `local-lane/m6c/`, Q-0647 map check | items 1, 3, 4, 5, 7 fixed or explained; items 2 and 6 wait on Q-0950 and Q-0951; Q-0647 map check still open | see *Lead visual review (M6c, row 4)* |
 | 5 | Determinism gate with an AI-vs-AI replay exercising M6c; local lane runs; README Status | open | |
 

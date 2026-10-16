@@ -1591,19 +1591,19 @@ pub struct Quirks {
     // spec: S-0519 claim 13 and Edge cases
     #[serde(default = "on")]
     pub charge_needs_type_flag: bool,
-    /// Armour, firepower and speed crates also boost objects off the map whose last recorded position lies inside the crate area; off: only objects on the map are affected, as for cloak and veteran. Not implemented yet (wave 2).
+    /// Armour, firepower and speed crates also boost objects off the map whose last recorded position lies inside the crate area; off: only objects on the map are affected, as for cloak and veteran.
     // spec: S-0520 claims 19 and 20 and Edge cases
     #[serde(default = "on")]
     pub crate_bonus_reaches_limbo: bool,
-    /// The unit crate's harvester rule tests only the first two entries of the refinery list and of the harvester list; off: every entry of both lists is tested. Not implemented yet (wave 2).
+    /// The unit crate's harvester rule tests only the first two entries of the refinery list and of the harvester list; off: every entry of both lists is tested.
     // spec: S-0520 claim 13 and Edge cases
     #[serde(default = "on")]
     pub crate_harvester_list_prefix: bool,
-    /// A selected crate cell whose overlay a terrain object prevents still occupies its crate place, with its lifetime draw, until expiry; off: the failed overlay placement takes no place or lifetime draw. Not implemented yet (wave 2).
+    /// A selected crate cell whose overlay a terrain object prevents still occupies its crate place, with its lifetime draw, until expiry; off: the failed overlay placement takes no place or lifetime draw. Unreachable in our engine: no terrain object blocks an overlay on a cell the placement search accepted, so both settings act alike.
     // spec: S-0520 claim 3 and Edge cases
     #[serde(default = "on")]
     pub crate_phantom_place: bool,
-    /// A unit crate that cannot place its unit gives money with the unit power-up's argument as the base b; off: with the money power-up's argument, as a money crate would. Not implemented yet (wave 2).
+    /// A unit crate that cannot place its unit gives money with the unit power-up's argument as the base b; off: with the money power-up's argument, as a money crate would.
     // spec: S-0520 claim 13 and Edge cases
     #[serde(default = "on")]
     pub crate_unit_fallback_unit_argument: bool,

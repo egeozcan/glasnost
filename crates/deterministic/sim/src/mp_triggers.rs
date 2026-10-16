@@ -10,8 +10,7 @@
 //! and tag carry-over (claims 10 to 12). Codes 102 (claim 1) and 95 (claim
 //! 3) hand over to [`crate::superweapons`].
 //!
-//! Seams (their owning specs are not built yet): the crate action (code 108,
-//! S-0520), engineer capture (S-0509), vehicle hijacking (the takeover of
+//! Seams (their owning specs are not built yet): engineer capture (S-0509), vehicle hijacking (the takeover of
 //! S-0312 claim 13 belongs to the hijack ability), garrison entry (S-0508),
 //! spy infiltration (S-0510) and sabotage. Each is a named function below
 //! that states the order its owner must keep.
@@ -131,12 +130,13 @@ pub fn action_coverage(code: i32) -> Coverage {
         | 99
         | 102
         | 103
+        | 108
         | 109
         | 129
         | 130
         | 133 => Coverage::Implemented,
         // spec: S-0011 claim 30 (teams, computer targeting, change owner, destroy attached, explosion, cheer, waypoint animations) and S-0524 claim 4 (crates, S-0520)
-        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 108 | 113 | 135 => Coverage::Seam,
+        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 113 | 135 => Coverage::Seam,
         _ => Coverage::Unknown,
     }
 }

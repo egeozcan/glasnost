@@ -27,34 +27,40 @@ use crate::rules::{Kind, OverlayRules};
 use crate::world::{HouseId, ObjectId, Pos, World};
 
 /// The number of crate places (S-0520 Constants, claim 1).
-pub const PLACES: usize = 256;
+pub const PLACES: usize = 256; // spec: S-0520 Constants (crate capacity 256)
 
 /// The number of power-ups (S-0520 Constants).
-pub const POWERUPS: usize = 19;
+pub const POWERUPS: usize = 19; // spec: S-0520 Constants (power-up count 19)
 
 /// The contents value our engine stores for a random crate (S-0520 Terms: any
 /// value above 18 means random contents).
 const RANDOM: u8 = 255; // spec: S-0520 Terms (a value other than 0 … 18 is random contents; our choice 255)
 
+/// The blasts of the explosion power-up (S-0520 Constants).
+const BLASTS: i32 = 5; // spec: S-0520 Constants (explosion blasts 5)
+
+/// The neighbour cells of the gas power-up (S-0520 claim 23).
+const NEIGHBOURS: u8 = 8; // spec: S-0520 claim 23 (the eight neighbours)
+
 /// Placement attempts of one random placement (S-0520 Constants).
 const ATTEMPTS: i32 = 1000; // spec: S-0520 Constants (placement attempts)
 
-const MONEY: usize = 0;
-const UNIT: usize = 1;
-const HEAL: usize = 2;
-const CLOAK: usize = 3;
-const EXPLOSION: usize = 4;
-const NAPALM: usize = 5;
-const SQUAD: usize = 6;
-const DARKNESS: usize = 7;
-const REVEAL: usize = 8;
-const ARMOUR: usize = 9;
-const SPEED: usize = 10;
-const FIREPOWER: usize = 11;
-const NUKE: usize = 12;
-const VETERAN: usize = 14;
-const GAS: usize = 16;
-const RESOURCE: usize = 17;
+const MONEY: usize = 0; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const UNIT: usize = 1; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const HEAL: usize = 2; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const CLOAK: usize = 3; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const EXPLOSION: usize = 4; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const NAPALM: usize = 5; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const SQUAD: usize = 6; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const DARKNESS: usize = 7; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const REVEAL: usize = 8; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const ARMOUR: usize = 9; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const SPEED: usize = 10; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const FIREPOWER: usize = 11; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const NUKE: usize = 12; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const VETERAN: usize = 14; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const GAS: usize = 16; // spec: S-0520 claim 8 (the power-up numbering of the table)
+const RESOURCE: usize = 17; // spec: S-0520 claim 8 (the power-up numbering of the table)
 
 /// A placed crate (S-0520 Terms, *crate places*).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -274,9 +280,8 @@ fn lifetime(w: &mut World) -> i32 {
     let mode = r.mode;
     let c = r.crates.regen;
     let f = |n: i64| F64::from_i64(n, mode);
-    // spec: S-0524 Formulas (L = RZ(450 C), H = RZ(1800 C); T = trunc(RZ(L + RZ(RZ(H − L) × u))); 900 ticks per game minute)
-    let l = f(450).mul(c, mode);
-    let h = f(1800).mul(c, mode);
+    let l = f(450).mul(c, mode); // spec: S-0524 Formulas (L = RZ(450 C); 900 ticks per game minute)
+    let h = f(1800).mul(c, mode); // spec: S-0524 Formulas (H = RZ(1800 C); T = trunc(RZ(L + RZ(RZ(H − L) × u))))
     let u = w.rng.unit(mode);
     l.add(h.sub(l, mode).mul(u, mode), mode).to_i32_common()
 }
@@ -349,11 +354,25 @@ fn finish(w: &mut World, found: Option<CellXY>, contents: u8, trigger: bool) -> 
     true
 }
 
+/// Whether the rules name both crate overlays. A missing one is unsafe
+/// original data: our engine warns and gives every placement no effect, with
+/// no draw (S-0524 Edge cases, S-0520 claim 3).
+fn overlays_named(w: &mut World) -> bool {
+    let r = w.rules_arc();
+    if r.crates.wood.is_some() && r.crates.water_overlay.is_some() {
+        return true;
+    }
+    w.note(
+        "S-0520 claim 3: the rules name no wooden-crate or water-crate overlay: no crate is placed",
+    );
+    false
+}
+
 /// One random placement (claim 3): at most 1000 attempts, each two ranged
 /// requests (F5) and a single-cell search. A placement with no free place
 /// takes no draw.
 pub fn place_random(w: &mut World) -> bool {
-    if free_place(w).is_none() {
+    if free_place(w).is_none() || !overlays_named(w) {
         // spec: S-0520 claim 1 (every place occupied: nothing and no draw)
         return false;
     }
@@ -380,7 +399,7 @@ pub fn place_trigger(w: &mut World, at: CellXY, kind: i32) -> bool {
         // spec: S-0524 Edge cases (quirks.trigger_crate_respects_setting: no effect with crates off)
         return false;
     }
-    if free_place(w).is_none() {
+    if free_place(w).is_none() || !overlays_named(w) {
         // spec: S-0520 claim 1 (capacity: no draw)
         return false;
     }
@@ -396,7 +415,7 @@ pub fn place_trigger(w: &mut World, at: CellXY, kind: i32) -> bool {
 
 /// A crate from a death (claims 5): random contents, or the money power-up.
 pub fn place_death(w: &mut World, at: CellXY, money: bool) -> bool {
-    if free_place(w).is_none() {
+    if free_place(w).is_none() || !overlays_named(w) {
         return false;
     }
     let found = search(w, at);
@@ -889,7 +908,7 @@ fn explosion(w: &mut World, collector: ObjectId, p: Pos, d: i32, half: bool) {
             no_escape: false,
         },
     );
-    for _ in 0..5 {
+    for _ in 0..BLASTS {
         // spec: S-0520 Constants (five blasts) and claim 16 (r = R(0, 512), then the nearby point of S-0312 F2 with one raw draw, no snapping)
         let rr = w.rng.ranged(0, 512, half);
         let b = w.rng.raw();
@@ -1039,7 +1058,7 @@ fn gas(w: &mut World, cell: CellXY, d: i32) {
         return;
     };
     let mut cells = vec![cell];
-    for dir in 0..8u8 {
+    for dir in 0..NEIGHBOURS {
         // spec: S-0520 claim 23 (the eight neighbours in step-direction order 0 through 7)
         cells.push(crate::drive::neighbour(cell, dir));
     }

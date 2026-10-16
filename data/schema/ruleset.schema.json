@@ -671,6 +671,22 @@
           "format": "int32",
           "default": null
         },
+        "crate_beneath": {
+          "description": "`CrateBeneath` (S-0312 claim 20).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "crate_beneath_is_money": {
+          "description": "`CrateBeneathIsMoney` (S-0312 claim 20).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "crushable": {
           "description": "`Crushable`.",
           "type": [
@@ -1282,6 +1298,15 @@
             }
           ]
         },
+        "airstrike_recharge_time": {
+          "description": "`AirstrikeRechargeTime`, ticks (S-0519 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "airstrike_team": {
           "description": "`AirstrikeTeam` (S-0309 claim 24).",
           "type": [
@@ -1289,6 +1314,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "airstrike_team_type": {
+          "description": "`AirstrikeTeamType`, the strike aircraft type (S-0519 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "ammo": {
@@ -1310,6 +1343,15 @@
               "type": "null"
             }
           ]
+        },
+        "bomb_sight": {
+          "description": "`BombSight`, cells (S-0519 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "can_disguise": {
           "description": "`CanDisguise` (S-0516 claims 30 to 34).",
@@ -1502,6 +1544,32 @@
           "description": "`Drainable` (S-0308 row 8).",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "elite_airstrike_recharge_time": {
+          "description": "`EliteAirstrikeRechargeTime`, ticks (S-0519 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "elite_airstrike_team": {
+          "description": "`EliteAirstrikeTeam`, the elite strike size (S-0519 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "elite_airstrike_team_type": {
+          "description": "`EliteAirstrikeTeamType` (S-0519 Import mapping).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null
@@ -3402,6 +3470,28 @@
           "format": "int32",
           "default": null
         },
+        "crate_radius": {
+          "description": "`[CrateRules] CrateRadius`, cells as decimal text (S-0520 Import\nmapping, F3); absent: 640 leptons. The importer drops a value of\nexactly -1 (it keeps the value in force).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "crate_regen": {
+          "description": "`[CrateRules] CrateRegen`, game minutes, a double (S-0520 Import\nmapping); absent: 10.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "crates": {
           "description": "`[MultiplayerDialogSettings] Crates`, a default offered (S-0412 Import mapping); absent: yes.",
           "type": [
@@ -3425,6 +3515,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "flame_damage": {
+          "description": "`[CombatDamage] FlameDamage`, a warhead key (S-0520 claim 17).",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "flash_frame_time": {
@@ -3640,6 +3738,16 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "powerups": {
+          "description": "`[Powerups]`, the nineteen power-ups in table order (S-0520 Import\nmapping); absent: the built-in table.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Powerup"
+          }
         },
         "prerequisite_barracks": {
           "description": "`[General] PrerequisiteBarracks`, the members of the generic group BARRACKS, building type keys (S-0407 claim 8 b); absent: empty.",
@@ -4013,6 +4121,14 @@
           "format": "int32",
           "default": null
         },
+        "unit_crate_type": {
+          "description": "`[CrateRules] UnitCrateType`, a vehicle type key (S-0520 claim 13).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "wall_build_speed_coefficient": {
           "description": "`[General] WallBuildSpeedCoefficient`, *w*, a double (S-0403 claim 7);\nabsent: 0.5.",
           "anyOf": [
@@ -4023,6 +4139,22 @@
               "type": "null"
             }
           ]
+        },
+        "water_crate_img": {
+          "description": "`[CrateRules] WaterCrateImg`, an overlay type key (S-0520 claim 3).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "wood_crate_img": {
+          "description": "`[CrateRules] WoodCrateImg`, an overlay type key (S-0520 claim 3).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false
@@ -4232,6 +4364,17 @@
           "format": "int32",
           "default": null
         },
+        "c4_delay": {
+          "description": "`[CombatDamage] C4Delay`, minutes, a single (S-0519 Import mapping).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "c4_warhead": {
           "description": "`C4Warhead`, the demolition warhead (S-0302 claims 1 and 20).",
           "type": [
@@ -4377,6 +4520,22 @@
           "description": "`CMislWarhead` (combat-damage section), the warhead of rocket set C (S-0506 Import mapping).",
           "type": [
             "string",
+            "null"
+          ],
+          "default": null
+        },
+        "can_detonate_death_bomb": {
+          "description": "`[CombatDamage] CanDetonateDeathBomb` (S-0519 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "can_detonate_time_bomb": {
+          "description": "`[CombatDamage] CanDetonateTimeBomb` (S-0519 Import mapping).",
+          "type": [
+            "boolean",
             "null"
           ],
           "default": null
@@ -5040,6 +5199,41 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "ivan_damage": {
+          "description": "`[CombatDamage] IvanDamage` (S-0519 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ivan_icon_flicker_rate": {
+          "description": "`[CombatDamage] IvanIconFlickerRate`, ticks (S-0519 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ivan_timed_delay": {
+          "description": "`[CombatDamage] IvanTimedDelay`, ticks (S-0519 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ivan_warhead": {
+          "description": "`[CombatDamage] IvanWarhead`, the bomb warhead (S-0519 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "lightning_warhead": {
@@ -6588,6 +6782,14 @@
           ],
           "default": null
         },
+        "crate_trigger": {
+          "description": "`CrateTrigger` (S-0520 claim 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "crushable": {
           "description": "`Crushable`.",
           "type": [
@@ -6754,6 +6956,43 @@
           },
           "maxItems": 3,
           "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "Powerup": {
+      "description": "One entry of the power-up table (S-0520 Terms): weight, animation, water\nflag and argument.",
+      "type": "object",
+      "properties": {
+        "animation": {
+          "description": "The animation type key shown at the pickup.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "argument": {
+          "description": "The argument *A*, a double.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "water": {
+          "description": "Whether the effect works on a water cell.",
+          "type": "boolean",
+          "default": false
+        },
+        "weight": {
+          "description": "The weight of the random choice.",
+          "type": "integer",
+          "format": "int32",
+          "default": 0
         }
       },
       "additionalProperties": false
@@ -7066,12 +7305,12 @@
           "default": true
         },
         "airstrike_empty_strike_stuck": {
-          "description": "A strike start that places no aircraft (an elite strike size of 0 or less, or a first aircraft that cannot be created) still leaves the strike in progress, so no aircraft can ever end it and later designations only redirect it; off: such a start leaves the strike idle, with its strike target and end tick unchanged. Not implemented yet (wave 2).",
+          "description": "A strike start that places no aircraft (an elite strike size of 0 or less, or a first aircraft that cannot be created) still leaves the strike in progress, so no aircraft can ever end it and later designations only redirect it; off: such a start leaves the strike idle, with its strike target and end tick unchanged.",
           "type": "boolean",
           "default": true
         },
         "airstrike_recharge_same_target_only": {
-          "description": "The recharge delay holds back only a repeat designation of the same object with no change of target in between, so a cancelled or redirected idle strike is ready at once for any object; off: an idle strike that has ended before is ready only when t ≥ e + R, whatever its target. Not implemented yet (wave 2).",
+          "description": "The recharge delay holds back only a repeat designation of the same object with no change of target in between, so a cancelled or redirected idle strike is ready at once for any object; off: an idle strike that has ended before is ready only when t ≥ e + R, whatever its target.",
           "type": "boolean",
           "default": true
         },
@@ -7246,7 +7485,7 @@
           "default": true
         },
         "charge_needs_type_flag": {
-          "description": "Only the type's explosive-charges flag plants a charge on arrival, and the veterancy explosive-charges ability plants nothing; off: the veterancy ability also plants, as the type flag does. Not implemented yet (wave 2).",
+          "description": "Only the type's explosive-charges flag plants a charge on arrival, and the veterancy explosive-charges ability plants nothing; off: the veterancy ability also plants, as the type flag does.",
           "type": "boolean",
           "default": true
         },
@@ -7336,7 +7575,7 @@
           "default": true
         },
         "crate_bonus_reaches_limbo": {
-          "description": "Armour, firepower and speed crates also boost objects off the map whose last recorded position lies inside the crate area; off: only objects on the map are affected, as for cloak and veteran. Not implemented yet (wave 2).",
+          "description": "Armour, firepower and speed crates also boost objects off the map whose last recorded position lies inside the crate area; off: only objects on the map are affected, as for cloak and veteran.",
           "type": "boolean",
           "default": true
         },
@@ -7346,17 +7585,17 @@
           "default": true
         },
         "crate_harvester_list_prefix": {
-          "description": "The unit crate's harvester rule tests only the first two entries of the refinery list and of the harvester list; off: every entry of both lists is tested. Not implemented yet (wave 2).",
+          "description": "The unit crate's harvester rule tests only the first two entries of the refinery list and of the harvester list; off: every entry of both lists is tested.",
           "type": "boolean",
           "default": true
         },
         "crate_phantom_place": {
-          "description": "A selected crate cell whose overlay a terrain object prevents still occupies its crate place, with its lifetime draw, until expiry; off: the failed overlay placement takes no place or lifetime draw. Not implemented yet (wave 2).",
+          "description": "A selected crate cell whose overlay a terrain object prevents still occupies its crate place, with its lifetime draw, until expiry; off: the failed overlay placement takes no place or lifetime draw. Unreachable in our engine: no terrain object blocks an overlay on a cell the placement search accepted, so both settings act alike.",
           "type": "boolean",
           "default": true
         },
         "crate_unit_fallback_unit_argument": {
-          "description": "A unit crate that cannot place its unit gives money with the unit power-up's argument as the base b; off: with the money power-up's argument, as a money crate would. Not implemented yet (wave 2).",
+          "description": "A unit crate that cannot place its unit gives money with the unit power-up's argument as the base b; off: with the money power-up's argument, as a money crate would.",
           "type": "boolean",
           "default": true
         },
@@ -10329,6 +10568,14 @@
           ],
           "default": null
         },
+        "crate_goodie": {
+          "description": "`CrateGoodie`: a vehicle type a unit crate may give (S-0520 claim\n13).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "crawls": {
           "description": "Art `Crawls` (S-0107 Import mapping).",
           "type": [
@@ -10466,6 +10713,14 @@
         },
         "distributed_fire": {
           "description": "`DistributedFire`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "doggie": {
+          "description": "`Doggie`, the animal marker: no effect of its own (S-0519 claim 1).",
           "type": [
             "boolean",
             "null"
@@ -11377,6 +11632,14 @@
             "type": "string"
           }
         },
+        "bomb_disarm": {
+          "description": "`BombDisarm`, the disarm warhead (S-0519 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "bright": {
           "description": "`Bright`, the flash permission of the demolition warhead (S-0524\nclaim 6, I2); absent: false.",
           "type": [
@@ -11911,6 +12174,14 @@
         },
         "lobber": {
           "description": "`Lobber` (S-0306 claim 6 a).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "mig_attack_cursor": {
+          "description": "`MigAttackCursor`, the air-strike cursor flag: cursor only (S-0519\nclaim 16, S-0214 row I18).",
           "type": [
             "boolean",
             "null"
