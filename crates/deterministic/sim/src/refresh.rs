@@ -75,8 +75,12 @@ pub fn begin(w: &mut World, id: ObjectId, before: Option<Target>) -> Token {
     };
     if qualifies(w, id, new) {
         if restorable_now(w, id) {
-            // spec: S-0207 claim 27 table row 1 (temporary driving with a suspended predecessor, no movement report, no restoration lock and not seized: the predecessor is restored without enabling either pending state)
+            // spec: S-0207 claim 27 table row 1 (temporary driving with a suspended predecessor, no movement report, no restoration lock and not seized: the predecessor is restored without enabling either pending state; eligibility uses the driving points already present, not the offered destination)
             crate::econ::release::restore(w, id);
+            // spec: S-0207 claim 27 (The restoring assignment's destination: the restored predecessor, not driving movement, receives this assignment's otherwise due point, so a pending earlier teleport can be replaced by the offer; the unchanged-destination rejection was this assignment's, made above)
+            if let Some(t) = w.obj_mut(id).and_then(|o| o.teleport.as_mut()) {
+                t.for_dest = None;
+            }
         } else {
             fallback(w, id);
             token.newly = true;
@@ -120,7 +124,7 @@ fn qualifies(w: &World, id: ObjectId, new: Option<Target>) -> bool {
     if !flagged {
         return false;
     }
-    // spec: S-0207 claim 27 (not immobilized by teleport aftereffects, no magnetic-lift source, not seized) and Q-1110 (the aftereffects are a seam that answers no)
+    // spec: S-0207 claim 27 (no warp-pending immobilization, read whatever the current locomotor; no magnetic-lift source and not seized)
     if immobilized(w, id) || crate::jump::seized(w, id) {
         return false;
     }
@@ -147,11 +151,15 @@ fn qualifies(w: &World, id: ObjectId, new: Option<Target>) -> bool {
     !crate::teleport::is_teleporter(w, id)
 }
 
-/// The teleport aftereffects that immobilize a vehicle (S-0207 claim 27).
-/// The spec does not say which state this names (Q-1110); the seam answers
-/// no.
-fn immobilized(_w: &World, _id: ObjectId) -> bool {
-    false
+/// The warp-pending immobilization of a vehicle (S-0207 Terms and claim
+/// 27, S-0502 Terms): the external-teleport commitment of an accepted
+/// superweapon warp, from acceptance through the leaving wait until the
+/// object leaves its old position. Phasing in (after an own-locomotor jump
+/// or a warp's departure, the arrival hold included), the parasite-related
+/// held countdown and the restoration lock are other states.
+fn immobilized(w: &World, id: ObjectId) -> bool {
+    // spec: S-0207 Terms, Warp-pending immobilization (from the accepted warp, before its leaving stage, through the leaving wait until departure; S-0513 claims 34 and 39 own the stages)
+    crate::superweapons::warp_pending_or_leaving(w, id)
 }
 
 /// Whether restoring the suspended predecessor is possible now (S-0207

@@ -204,6 +204,12 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         drop_destination(w, id);
         return;
     }
+    // spec: S-0207 claim 27 (suppression already pending skips this otherwise due nonempty point application, a restored predecessor's included: the order-level destination stays without a landing point being fixed) and Q-1130 (interim: any teleporting point, after claim 20 a's refusal above)
+    if crate::refresh::skip_point(w, id) {
+        st.for_dest = Some(dest);
+        set_state(w, id, st);
+        return;
+    }
     if o.kind == Kind::Infantry {
         take_infantry_destination(w, id, dest, st);
         return;
@@ -215,7 +221,13 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
             None => return,
         },
     };
-    match landing_point(w, id, dc) {
+    // spec: S-0207 claim 20 (b) (revision 34: warp-pending immobilization, Terms, leaves L unchanged, as a search that gives no cell does)
+    let found = if crate::superweapons::warp_pending_or_leaving(w, id) {
+        None
+    } else {
+        landing_point(w, id, dc)
+    };
+    match found {
         Some(l) => {
             // spec: S-0207 claim 20 (a) (a vehicle's vehicle-present mark, an aircraft's object-present mark, moves at once from the old point's record to L's)
             let (old, old_layer) = aircraft_mark(w, id);
