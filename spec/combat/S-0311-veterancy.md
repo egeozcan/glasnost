@@ -2,11 +2,11 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0660]
 supersedes: []
@@ -65,10 +65,13 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
   a disc-laser shot, and is 0 after a completed whole-building eviction or clearing
   action (S-0508 claim 18; claim 15 here), without an intermediate release/removal ordering
   requirement. This is not a reset on each independent occupant departure or death.
-  Own-house defeat can leave a dead firing choice without changing the numeric index
-  (S-0508 claim 19). Where the index selects a living occupant, its *firing occupant*
-  at a given moment is that occupant, whose weapon the building's next shot uses.
-  Experience selection through a dead or out-of-range choice remains unresolved (claim 15).
+  In the original, own-house defeat can retain a dead occupant place without changing
+  the index, and subsequent use of that place is unsafe (S-0508 claims 19 and 20).
+  Our engine instead removes the place in the death update, preserves survivor order and
+  keeps the index only when it is below the new count, otherwise setting it to 0
+  (S-0508 claim 23; claim 15 here). With occupants remaining, the *firing occupant*
+  is the occupant at that current index, used for weapon and experience selection.
+  An empty list has no firing occupant; trainable-building self-credit is unchanged.
 - **Actual cost.** The cost of a type for a given house: the type's cost multiplied by that
   house's cost factor for the type's kind and by the cost factor of the house's country for that
   kind, truncated (Formulas F1). The production specs own where the two factors come from; this
@@ -227,18 +230,28 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
    after an ordinary launch is credited to the next occupant, whereas after a disc-laser shot it
    is credited to that shot's shooter. With one occupant, that occupant is selected. A hit
    resolved during an ordinary launch before the index changes would name the shooter.
-   No such weapon case is established here. These recipient predictions require the index
-   to select a living occupant. Claim 15 distinguishes retained dead firing choices after
-   own-house defeat and out-of-range choices after individual removal; neither has a safe
-   experience-recipient rule established here.
+   No such weapon case is established here. These original recipient predictions require
+   the index to select an occupant that still exists. A retained dead place has no dependable
+   original recipient result: there is no next-living substitution or dead-place exemption
+   (S-0508 claim 20). An out-of-range index after individual set-up removal is likewise
+   unsafe, not a building-weapon or shooter-credit fallback (claim 15).
+
+   In our engine, death inside removes the place and repairs the index under S-0508 claim 23.
+   This garrison recipient rule uses the remaining occupant at the current repaired index
+   when the destruction occurs, not necessarily the occupant that fired the shot. Removed
+   places receive nothing; an empty list supplies no occupant recipient. The earlier
+   trainable-building self-recipient rule remains unchanged, even when no occupants remain.
    - Backing: `measurable` for the recipient cases and ordinary/disc-laser comparison (X3).
+     Engine post-death recipient selection is `measurable` on our engine (X16 and S-0508 G18),
+     a design rule rather than an oracle prediction. Unsafe original dead-place or out-of-range
+     credit is `unmeasured`: no dependable outcome or unsafe confirming run is proposed.
      Timing of a hit resolved during launch is `unmeasured`: X3 uses hits after launch, and no
      synchronous-hit part is supplied. Carrier aircraft gaining for themselves is `unmeasured`
      here: no carrier-aircraft part is supplied. A missing missile launcher and a case where
      no recipient rule applies are `unmeasured`: X3 supplies neither. The trainable missile's
      gain itself remains `unmeasured` if it is removed before X3 b can sample it.
    - Confidence: high (transport, self and launcher rules and their priority); medium (the
-     garrison current-index rule)
+     original garrison current-index rule); high for the engine safety rule
 
 9. **Which destructions are credited.** A destruction by a hit is credited as S-0302 claim 14 says,
    and only a credited attacker object leads to experience: a kill credited to a house alone gives
@@ -269,6 +282,10 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
    - an assault that clears garrison occupants instead records the surviving assaulter as
      destroyed by each removed occupant (S-0508 claim 14). The occupant receives ordinary
      kill credit and any experience under claims 7, 8 and 10, with the assaulter as victim.
+     Credit and removal proceed from the last occupant to the first: each occupant receives
+     credit before its own removal, and both precede the preceding occupant's credit and
+     removal (S-0508 claim 14). Destruction-tag effects on the surviving assaulter can
+     therefore observe the credited occupants and their retained state in that reverse order.
      Each such credit raises the assaulter's destruction notifications and runs its house's
      loss bookkeeping, without damaging or removing the assaulter or playing its normal
      death animation. The occupants are removed without their own destruction notifications.
@@ -286,7 +303,7 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
    - Backing: `measurable` (scenario X1 for hits; scenario X3, part d, for erasure, parts e and f
      for transport and absorbed passengers; X12 for repeated lethal hits and ordinary expiry,
      S-0514 E6 for direct erasure gain and S-0508 G10 for reversed assault notifications and
-     bookkeeping). Nonzero assault experience or score for hostile occupants is `unmeasured`:
+     bookkeeping; S-0508 G17 for reverse assault credit/removal order). Nonzero assault experience or score for hostile occupants is `unmeasured`:
      G10 has no validated data-only fixture for a locally ordered assaulter with hostile
      occupants. Passengers still inside other destroyed buildings, absorbed passengers that cannot be
      placed, healing/nonlethal follow-up hits and a separately recorded charge planter at expiry
@@ -294,6 +311,7 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
      the follow-up/planter cases unmeasured. No dedicated parts are supplied here
    - Confidence: high (hits, the lack of retained attacker at ordinary expiry, and the credit of
      passengers killed with a transport or inside a building, and erasure gains and cost bases),
+     high (reverse assault credit/removal order),
      medium (repeated lethal-hit credit, reversed assault bookkeeping and absorbed passengers),
      low (healing/nonlethal follow-ups and charge-planter expiry)
 
@@ -389,21 +407,35 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
     the building's occupancy preserves the remaining occupants' relative order and leaves
     the numeric index unchanged, without reducing it modulo the new count. If that index
     still names a living occupant, claim 8 uses that occupant, not necessarily the same
-    individual as before removal. This removal handling is not exclusive to set-up:
-    eviction also enables it. That does not impose intermediate ordering within the
-    whole-building action or establish an independent selective-evacuation order.
+    individual as before removal. Eviction also enables this individual removal handling
+    for occupants that still exist; it does not safely remove or skip an already absent
+    occupant retained as a dead place. Such a place is included in the original's exit
+    search and release attempt, or no-exit removal, without a dependable continuation
+    (S-0508 claim 20). This establishes neither intermediate ordering within the
+    whole-building action nor an independent selective-evacuation order.
 
     Own-house defeat or surrender is a different individual-death case (S-0508 claim 19,
     S-0414 claim 5). It reaches the defeated house's off-map occupants even when the
     building belongs to a surviving house. In a mixed-house garrison it can kill that
     house's subset while the other occupants survive inside. Such deaths retain the
     numeric index without resetting it or reducing it modulo a new count, and do not
-    perform the set-up removal and compaction described above. The original can retain
-    a dead occupant among its firing choices. Neither a dead choice nor an out-of-range
-    choice has a safe experience recipient established here. In particular, S-0308 claim 13's
-    building-weapon fallback does not establish an experience-credit fallback. A safe
-    deterministic continuation needs a project-lead decision, not an inferred reset,
-    modulo reduction or shooter substitution.
+    perform the set-up removal and compaction described above. The original retains the
+    dead place in its count and can subsequently select it. Experience selection through
+    that place has no dependable original result, with no next-living substitution or
+    exemption (S-0508 claim 20). An out-of-range choice after set-up removal also has no
+    safe original recipient established here. S-0308 claim 13's building-weapon fallback
+    does not establish an experience-credit fallback. Trainable-building self-credit is
+    a separate earlier rule, not a dead-place fallback.
+
+    **Our engine's safety departure.** S-0508 claim 23 replaces death-inside retention,
+    without a quirk switch. Any occupant death inside removes its place in the same update.
+    Remaining occupants preserve their relative order and are numbered from 0. For the
+    new integer count n, retain the numeric index k when k < n; otherwise set it to 0,
+    including when n = 0. This is a range repair, not reduction modulo n. Claim 8 uses
+    the remaining occupant at the current repaired index at destruction time. No removed
+    place receives experience, fires or is placed by a later eviction. With no remaining
+    occupants there is no occupant experience recipient; a trainable building still takes
+    its own credit. This is a design rule, not an original survivor-compaction finding.
     - Backing: `measurable` for evacuation and reoccupation (X15), completed assault-clearing
       and additional-entry retention (S-0508 G14), and defeat hits with unchanged numeric
       index in a surviving foreign-owned building (S-0508 G15). Other eviction causes,
@@ -415,9 +447,12 @@ S-0205's notation applies: trunc, RZ₅₃, RZ₂₄, *single* and *double*. In 
       set-up removal is `unmeasured`: no validated data-only selective-removal scenario is
       supplied. Mixed-house selective survival is `unmeasured`: G15 does not establish a
       differently owned entrant fixture. Unsafe subsequent credit is `unmeasured`: no
-      unsafe continuation is proposed as a confirming run.
-    - Confidence: high for whole-building actions and defeat's off-map inclusion; medium
-      for individual set-up removal, mixed-house selective death and the retained dead choice
+      unsafe continuation is proposed as a confirming run. The engine death-removal,
+      range-repair and recipient rule is `measurable` on our engine (X16 and S-0508 G18),
+      not an oracle prediction.
+    - Confidence: high for whole-building actions, defeat's off-map inclusion and the engine
+      safety rule; medium for individual set-up removal, mixed-house selective death and
+      the retained dead choice
 
 ## Formulas
 
@@ -502,6 +537,7 @@ so 112 ticks.
 | rookie or veteran | experience reaches 2 | elite: elite list abilities added, elite weapons used from the next shot |
 | inside an armory | *K* × *D* ticks have passed (F6) | elite (veteran from negative experience), put out |
 | any | vehicle deploys into a building, or building undeploys | the new object has the same experience |
+| garrison occupant in our engine | dies inside | place removed that update, survivor order kept; index retained when below new count, otherwise 0; later occupant credit uses the remaining occupant at that index (claims 8 and 15) |
 
 Ordering: the kill value uses the destroyed object's rank at its destruction, so killing an elite
 counts triple even when the destruction itself also promotes the killer. Several destructions in
@@ -541,6 +577,10 @@ one tick that credit the same recipient add their gains one after another, each 
   original does this without error and our engine reproduces it, with an importer warning. A
   negative map veterancy value gives negative experience (a rookie, and the armory then makes it a
   veteran only), reproduced, with an importer warning.
+- **Death inside a garrison.** S-0508 claim 20's retained dead places have no dependable
+  original experience or eviction continuation. Our engine applies claim 23's same-update
+  removal and range repair without a quirk switch, then selects any surviving occupant
+  recipient under claim 8 here. Trainable-building self-credit is unchanged.
 - **Team-created objects.** The original's computer team system can create objects with
   experience −0.25 or with a veteran or elite rank. That system is out of scope; our AI houses
   create objects only through the rules above.
@@ -840,6 +880,22 @@ intervene. A different first shooter, muzzle, recipient or experience delta fals
 corresponding reset/selection prediction. Use one valid fresh skirmish per run, director
 and mods off. This tests complete evacuation only, not individual removal.
 
+**X16: engine experience selection after death inside (claims 8 and 15).** This is an
+engine-only design check, not an unsafe oracle continuation. Reuse S-0508 G18's fixture,
+settings and recorder, with three distinguishable living occupants U, V, W in that order,
+all at experience 0. In separate fresh runs start with index 1 or 2, then kill V inside.
+Record count, survivor order, index and experience in the death update. Expected: count 2,
+order U, W; index 1 in the first run, 0 in the second (not 1 from modulo reduction).
+Before another launch, resolve one enemy rookie destruction credited to the untrainable
+building. Use invented test costs 100 for both survivors and the victim, ratio 1, cap 2,
+and all cost factors 1. Expected: W alone gains 1 in the first run, U alone gains 1 in the
+second. Repeat with a trainable cost-100 building: the building alone gains 1 in both runs.
+In fresh empty-list variants kill all occupants before that credited destruction: the
+untrainable building supplies no recipient, while the trainable building still gains 1.
+Perform three runs per case. A removed-place award, wrong survivor recipient, incorrect
+index/count/order, or loss of building self-credit falsifies the engine rule. G18 separately
+checks weapon/muzzle selection, eviction of survivors only and abandonment after the last death.
+
 **Coverage outside numbered claims.** Import parsing and warning predictions are inherited from
 the referenced import specs where applicable. Ability-list whitespace, case matching, empty and
 unknown items, replacement and empty/missing retention are `measurable` (X14), confidence high.
@@ -857,7 +913,9 @@ out-of-scope AI policies are design rules, not oracle predictions. X1's wait tes
   index, and own-house defeat can kill occupants independently without index repair.
   An independently ordered selective evacuation is not established. Mixed-house selective
   survival remains without a validated fixture, and the individual set-up removal case
-  does not establish compaction after defeat.
+  does not establish original compaction after defeat. S-0508 claims 20 and 23 distinguish
+  the unsafe original dead-place continuation from the engine's required death removal,
+  range repair and remaining-occupant selection; no lead decision is pending.
 - Which object a destruction that claim 9 does not list credits; erasure and assault are now
   covered, but other destruction paths were not exhaustively traced.
 - Which game-mode setting makes skirmish starting units elite, and whether it can be reached.
@@ -866,27 +924,18 @@ out-of-scope AI policies are design rules, not oracle predictions. X1's wait tes
 
 ## Cross-spec changes to confirm
 
-Joint sign-off must confirm the following companion changes. The current companion drafts
-already agree; the approved text of S-0308 claim 13 and S-0508 claim 18 still requires the
-reset before individual releases or removals. This draft replaces that requirement with the
-completed-action result, not a different required intermediate order.
+S-0508 claims 14, 18, 20 and 23 already supply the reverse assault credit/removal order,
+completed-action reset, unsafe original boundary and engine safety departure used here.
+Earlier reset-before-release correction requests are satisfied. Joint sign-off must confirm
+these remaining companion changes:
 
-- **S-0308 claim 13 and its occupant-index state table:** require index 0 after a completed
-  whole-building eviction or clearing action, without ordering the reset against individual
-  releases or removals. Retain the separate own-house-defeat case of S-0508 claim 19:
-  numeric-index retention does not imply occupant compaction or safe subsequent credit.
-- **S-0508 claim 18:** use the same completed-action reset rule and remove the requirement
-  that reset precede any release or removal. Preserve the distinction from independent
-  occupant death and the backing limits for untested eviction causes and erasure.
-  **S-0508 claim 19** supplies the own-house-defeat exception used by claim 15 here.
-- **S-0313 claim 6 and its muzzle-index state table:** retain the completed-action reset,
-  without intermediate release/removal ordering, and include S-0508 claim 19's defeat
-  exception. Muzzle, weapon and experience selection must share that numeric-index contract.
-  None supplies a safe continuation through a dead choice pending the lead's decision.
-
-## Questions for the project lead
-
-- Choose a safe deterministic experience-recipient policy when the shared garrison index
-  selects a dead occupant after own-house defeat, or is out of range after an individual
-  removal. Coordinate it with weapon and muzzle safety in S-0308 claim 13 and S-0313 claim 6.
-  No reset, modulo repair, shooter credit or building-weapon fallback is inferred here.
+- **S-0308 claim 13 and its occupant-index state table:** preserve the unsafe original
+  dead-place account of S-0508 claim 20, but apply S-0508 claim 23's engine same-update
+  death removal, stable survivor order and index range repair. Use remaining occupants for
+  weapon choice, with no occupant weapon when empty; remove the pending-lead question.
+  Experience follows claim 8 here, including unchanged trainable-building self-credit.
+- **S-0313 claim 6 and its muzzle-index state table:** distinguish original dead-place
+  retention from S-0508 claim 23's engine death removal. Use repaired k and the new count
+  for muzzle selection and successful-shot advancement; remove the pending-lead question
+  and include S-0508 G18's engine check. S-0508 claim 14 supplies reverse assault
+  credit/removal order and list-position animation points, independently of this firing index.
