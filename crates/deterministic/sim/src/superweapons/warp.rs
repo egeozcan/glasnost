@@ -722,8 +722,8 @@ fn placement_accepted(w: &World, id: ObjectId, m: &Member) -> bool {
     {
         let top = w.rules().quirks.top_position_counts_as_centre;
         let p = crate::walk::position_class(
-            m.landing.x.rem_euclid(256),
-            m.landing.y.rem_euclid(256),
+            m.landing.x.rem_euclid(256), // spec: S-0208 claim 2 (the position within its cell, 0 to 255 per axis)
+            m.landing.y.rem_euclid(256), // spec: S-0208 claim 2 (the position within its cell, 0 to 255 per axis)
             top,
         );
         // spec: S-0513 claim 50 and S-0209 claim 4 (infantry share a cell only when the landing position is free: no over-capacity overlap; a mark of an infantry unit already destroyed does not count)
