@@ -16,6 +16,8 @@
 //! - [`deployers`]: deployable units deployed near the enemy and packed up
 //!   again (S-0517).
 //! - [`jumpjets`]: jumpjet units sent over obstacles to reach the enemy (S-0502).
+//! - [`memory`]: the orders a unit did not take, so that the brain tries
+//!   another goal instead of the same click every think (PLAN §4.7).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod brain;
@@ -26,6 +28,7 @@ pub mod fixture;
 pub mod game;
 pub mod jumpjets;
 pub mod linked;
+pub mod memory;
 pub mod radiation;
 pub mod scripted;
 pub mod skirmish;

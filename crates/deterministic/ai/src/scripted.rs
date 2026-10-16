@@ -181,6 +181,21 @@ fn name_of(w: &World, t: TypeRef) -> &str {
     .unwrap_or("")
 }
 
+/// Whether a unit of type `t` that a factory releases stays tethered to the
+/// factory for good, so that the factory never closes again and makes no
+/// further unit: a jumpjet unit, whose factory contact and tether end at no
+/// established event (the spec leaves its clear report open and says there
+/// is no timeout). A person would not keep a factory that makes nothing
+/// after the first such unit, so the brain builds none (interim rule, spec
+/// request Q-1070).
+pub fn jams_factory(w: &World, t: TypeRef) -> bool {
+    // spec: S-0417 claim 10 (Factory contact during jumpjet ascent: not an established clear-report or contact-release rule; no factory-release contact timeout)
+    matches!(t.kind, Kind::Vehicle | Kind::Infantry)
+        && w.rules()
+            .unit(t.kind, t.index)
+            .is_some_and(|u| u.jumpjet_locomotor)
+}
+
 /// The role type `t` plays in the plan, if any (the first that fits).
 pub fn role_of(w: &World, t: TypeRef) -> Option<Role> {
     let roles = [Role::Yard, Role::Power, Role::Refinery]
@@ -458,6 +473,7 @@ impl Script {
         let mut v: Vec<TypeRef> = all_types(w)
             .into_iter()
             .filter(|&t| self.allowed(w, t, role) && tech::buildable(w, self.house, t))
+            .filter(|&t| !jams_factory(w, t))
             .collect();
         v.sort_by_key(|&t| (production::cost_field(w, t), t.kind as u8, t.index));
         v

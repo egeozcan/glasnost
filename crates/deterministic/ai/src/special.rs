@@ -24,6 +24,7 @@ use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
+use crate::memory::Memory;
 use crate::scripted::{self, Script, all_types, dist2};
 use crate::tech_buildings;
 
@@ -84,6 +85,8 @@ pub struct Uses {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Special {
     uses: Uses,
+    /// The orders given and the ones that did not take (`memory`).
+    pub(crate) memory: Memory,
 }
 
 /// The click a person would give `unit` on `target`, as orders, when the
@@ -113,6 +116,8 @@ impl Special {
         let house = script.house;
         let own = script.own(w);
         let home = script.home(w);
+        self.memory.review(w);
+        let start = out.len();
         self.garrison(house, &own, home, w, out);
         self.engineers(script, &own, w, out);
         self.spies(script, &own, w, out);
@@ -123,6 +128,13 @@ impl Special {
         self.linked(script, &own, w, out);
         self.terror(script, &own, w, out);
         self.crates(script, &own, w, out);
+        self.memory.note(w, &out[start..]);
+    }
+
+    /// How many (unit, goal) pairs the brain has given up for now (an order
+    /// the unit did not take, see `memory`).
+    pub fn given_up(&self) -> usize {
+        self.memory.blocked()
     }
 
     /// Counts one deploy order given to a deployable unit (S-0517,
@@ -281,7 +293,11 @@ impl Special {
             let pick = buildings
                 .iter()
                 .copied()
-                .filter(|&b| garrison::may_enter(w, id, b) && free(b, &sent))
+                .filter(|&b| {
+                    garrison::may_enter(w, id, b)
+                        && free(b, &sent)
+                        && self.memory.ok(w, id, Target::Object(b))
+                })
                 .min_by_key(|&b| {
                     (
                         // A civilian garrison building first, then the nearest.
@@ -393,7 +409,11 @@ impl Special {
             };
             let Some(&(b, a)) = targets
                 .iter()
-                .filter(|&&(b, _)| !taken.contains(&b) && Self::en_route(w, house, b) == 0)
+                .filter(|&&(b, _)| {
+                    !taken.contains(&b)
+                        && Self::en_route(w, house, b) == 0
+                        && self.memory.ok(w, id, Target::Object(b))
+                })
                 .min_by_key(|t| rank(t))
             else {
                 continue;
@@ -496,7 +516,11 @@ impl Special {
             let at = w.obj(id).map_or(CellXY::new(0, 0), |o| o.pos.cell());
             let Some((b, _)) = Self::spy_targets(w, house, id)
                 .into_iter()
-                .filter(|&(b, _)| !taken.contains(&b) && Self::en_route(w, house, b) == 0)
+                .filter(|&(b, _)| {
+                    !taken.contains(&b)
+                        && Self::en_route(w, house, b) == 0
+                        && self.memory.ok(w, id, Target::Object(b))
+                })
                 .min_by_key(|&(b, rank)| {
                     (
                         rank,

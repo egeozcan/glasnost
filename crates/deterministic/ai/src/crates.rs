@@ -8,8 +8,10 @@
 //! cells) and gives its orders through `orders::issue`. It draws no random
 //! value. The counter [`Uses::crates`] counts the orders it gave.
 
+use glasnost_map::CellXY;
 use glasnost_sim::econ::shroud;
 use glasnost_sim::orders::Order;
+use glasnost_sim::regions::{self, Reach};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting;
 use glasnost_sim::world::{ObjectId, Target, World};
@@ -19,6 +21,25 @@ use crate::special::Special;
 
 /// How far, in cells, a crate is worth a trip.
 const REACH: i64 = 30; // nocite: tuning of our own opponent
+
+/// Whether unit `id` can walk or drive to `c` by the ground it stands on
+/// (the crate is in the unit's reach region, S-0212 claim 4), as a person
+/// sees from the map: a crate on another island is not worth a click. A
+/// unit outside every region (a factory's exit) or a goal outside every
+/// region is not ruled out.
+fn same_region(w: &World, id: ObjectId, c: CellXY) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let Some(zone) = w.rules().unit(o.kind, o.type_index).map(|u| u.zone) else {
+        return true;
+    };
+    match (
+        regions::reach_in(w, o.pos.cell(), zone),
+        regions::reach_in(w, c, zone),
+    ) {
+        (Reach::Region(a), Reach::Region(b)) => a == b,
+        _ => true,
+    }
+}
 
 impl Special {
     /// Crates (S-0520): each seen crate is given to the fastest idle unit
@@ -58,6 +79,8 @@ impl Special {
                             .unit(o.kind, o.type_index)
                             .is_some_and(|u| !u.harvester && !u.engineer)
                         && dist2(o.pos.cell(), p.cell) <= REACH * REACH
+                        && same_region(w, id, p.cell)
+                        && self.memory.ok(w, id, Target::Cell(p.cell))
                 })
                 .min_by_key(|&id| {
                     let o = w.obj(id).expect("filtered");

@@ -98,6 +98,7 @@ impl Special {
                         .iter()
                         .copied()
                         .filter(|&c| bomb::visible(w, house, c) && scripted::can_attack(w, id, c))
+                        .filter(|&c| self.memory.ok(w, id, Target::Object(c)))
                         .min_by_key(|&c| {
                             (w.obj(c).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)), c)
                         });
@@ -113,6 +114,7 @@ impl Special {
                         .filter(|&&(e, _)| {
                             (!building_only || w.obj(e).is_some_and(|o| o.kind == Kind::Building))
                                 && scripted::can_attack(w, id, e)
+                                && self.memory.ok(w, id, Target::Object(e))
                         })
                         .min_by_key(|&&(e, c)| (-i64::from(actual_cost(w, e)), dist2(c, at), e));
                     if let Some(&(e, _)) = best {
@@ -127,7 +129,10 @@ impl Special {
                 Role::Suicide => {
                     let best = enemies
                         .iter()
-                        .filter(|&&(e, _)| scripted::can_attack(w, id, e))
+                        .filter(|&&(e, _)| {
+                            scripted::can_attack(w, id, e)
+                                && self.memory.ok(w, id, Target::Object(e))
+                        })
                         .min_by_key(|&&(e, c)| (dist2(c, at), e));
                     if let Some(&(e, _)) = best {
                         out.push(attack(id, e));
@@ -137,7 +142,10 @@ impl Special {
                 Role::Charge => {
                     let mut buildings: Vec<(i64, ObjectId)> = enemies
                         .iter()
-                        .filter(|&&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+                        .filter(|&&(e, _)| {
+                            w.obj(e).is_some_and(|o| o.kind == Kind::Building)
+                                && self.memory.ok(w, id, Target::Object(e))
+                        })
                         .map(|&(e, c)| (dist2(c, at), e))
                         .collect();
                     buildings.sort_unstable();

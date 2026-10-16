@@ -720,3 +720,83 @@ fn orders_an_engineer_for_a_tech_building() {
     let orders = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
     assert!(orders.iter().any(want), "{orders:?}");
 }
+
+/// Runs the world on to the next think tick after `ticks` more ticks.
+fn run_to_think(w: &mut World, ticks: i32) {
+    testkit::run(w, ticks);
+    while w.tick % 15 != 0 {
+        testkit::run(w, 1);
+    }
+}
+
+// PLAN §4.7 (memory): an engineer that does not take its order (it stands on the same cell and idle at the next think) is not sent at the same building again every think; the first think orders it once, the next thinks do not, and after a long while it tries again.
+#[test]
+fn does_not_reorder_an_engineer_that_did_not_take_the_order() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = engineer_scene(&g);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+    // The orders are not issued: the engineer stays where it is.
+    run_to_think(&mut w, 1);
+    let again = brain.think(&w);
+    assert!(!garrison_orders(&again, unit, target), "{again:?}");
+    assert_eq!(brain.special_uses().engineers, 1);
+    assert_eq!(brain.given_up(), 1);
+    for _ in 0..5 {
+        run_to_think(&mut w, 1);
+        let more = brain.think(&w);
+        assert!(!garrison_orders(&more, unit, target), "{more:?}");
+    }
+    assert_eq!(brain.special_uses().engineers, 1);
+    // Long after, the world may have changed: it tries once more.
+    run_to_think(&mut w, 5000);
+    let later = brain.think(&w);
+    assert!(garrison_orders(&later, unit, target), "{later:?}");
+    assert_eq!(brain.special_uses().engineers, 2);
+}
+
+// PLAN §4.7 (memory): an engineer that gave up one building is sent at another it can see.
+#[test]
+fn an_engineer_that_gave_up_a_building_goes_for_another() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, target, unit) = engineer_scene(&g);
+    let home = w.obj(unit).unwrap().pos.cell();
+    let other_cell = glasnost_map::CellXY::new(home.x + 3, home.y + 9);
+    let other = testkit::spawn(&mut w, Kind::Building, "CAPT", 1, other_cell, 0);
+    reveal(&mut w, 0, other_cell);
+    run_to_think(&mut w, 1);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    let first = [target, other]
+        .into_iter()
+        .find(|&b| garrison_orders(&orders, unit, b))
+        .expect("it picks one");
+    run_to_think(&mut w, 1);
+    let orders = brain.think(&w);
+    let second = [target, other]
+        .into_iter()
+        .find(|&b| garrison_orders(&orders, unit, b))
+        .expect("it picks the other");
+    assert_ne!(first, second);
+}
+
+// PLAN §4.7 (memory): an engineer that took its order and is on its way leaves no memory.
+#[test]
+fn an_engineer_on_its_way_is_not_given_up() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (mut w, _target, unit) = engineer_scene(&g);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    for o in brain.think(&w) {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    for _ in 0..4 {
+        run_to_think(&mut w, 1);
+        let _ = brain.think(&w);
+        assert_eq!(brain.given_up(), 0);
+    }
+    assert!(w.obj(unit).is_some());
+}

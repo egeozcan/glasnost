@@ -214,9 +214,9 @@ fn a_wave_sends_its_jumpjets_across() {
     );
 }
 
-// S-0502, PLAN §4.7: with no jumpjet unit, a barracks and a seen enemy no walking unit reaches, the house orders one jumpjet unit from its sidebar once.
+// S-0417 claim 10 (a jumpjet's factory contact and tether end at no established event), PLAN §4.7, Q-1070: with no jumpjet unit, a barracks and a seen enemy no walking unit reaches, the house does not order a jumpjet unit from its sidebar (it would stay tethered to its barracks and close it for good), however much it has to spend, and its army builder never picks the type.
 #[test]
-fn orders_a_jumpjet_when_it_has_none() {
+fn orders_no_jumpjet_unit_that_would_jam_its_factory() {
     let mut g = game(5);
     ready(&mut g);
     let (mut w, jet, _) = scene(&g);
@@ -237,8 +237,24 @@ fn orders_a_jumpjet_when_it_has_none() {
         testkit::run(&mut w, 1);
     }
     let idx = w.rules().index_of(Kind::Infantry, "JETI").unwrap();
-    let want = |o: &Order| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == idx);
+    let t = glasnost_sim::econ::TypeRef {
+        kind: Kind::Infantry,
+        index: idx,
+    };
+    assert!(glasnost_ai::scripted::jams_factory(&w, t));
+    assert!(glasnost_sim::econ::tech::buildable(&w, HouseId(0), t));
     let mut brain = Brain::new(&w, &fixture::map_strait(), HouseId(0));
-    let orders = brain.think(&w);
-    assert!(orders.iter().any(want), "{orders:?}");
+    for _ in 0..40 {
+        let orders = brain.think(&w);
+        assert!(
+            !orders.iter().any(
+                |o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == idx)
+            ),
+            "{orders:?}"
+        );
+        for o in orders {
+            glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+        }
+        testkit::run(&mut w, 15);
+    }
 }

@@ -114,6 +114,39 @@ fn sends_a_unit_to_a_seen_crate() {
     assert_eq!(brain.special_uses().crates, 1);
 }
 
+// S-0520, PLAN §4.7 (memory): a unit that did not take the order (it stands where it stood, idle, at the next think) is not sent at the same crate again every think.
+#[test]
+fn does_not_resend_a_unit_that_did_not_take_the_order() {
+    let g = game();
+    let (mut w, unit, c) = scene(&g, true);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert_eq!(moves(&brain.think(&w), c), vec![unit]);
+    // The order is not issued: the unit stays idle on its cell.
+    for _ in 0..5 {
+        testkit::run(&mut w, 15);
+        // Another idle unit may be tried; the one that stood still is not.
+        assert!(!moves(&brain.think(&w), c).contains(&unit));
+    }
+    assert!(brain.given_up() >= 1);
+}
+
+// S-0520, PLAN §4.7 (memory): a unit that runs to the crate is not given up.
+#[test]
+fn a_unit_on_its_way_to_a_crate_is_not_given_up() {
+    let g = game();
+    let (mut w, _, c) = scene(&g, true);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    for o in brain.think(&w) {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    for _ in 0..3 {
+        testkit::run(&mut w, 15);
+        let _ = brain.think(&w);
+        assert_eq!(brain.given_up(), 0);
+    }
+    let _ = c;
+}
+
 // S-0520, PLAN §4.7: it sees only what its house has explored.
 #[test]
 fn ignores_an_unseen_crate() {

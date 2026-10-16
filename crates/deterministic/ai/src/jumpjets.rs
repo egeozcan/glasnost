@@ -77,7 +77,11 @@ impl Special {
             };
             let Some(&(e, _)) = enemies
                 .iter()
-                .filter(|&&(e, c)| across_obstacle(w, at, c) && scripted::can_attack(w, id, e))
+                .filter(|&&(e, c)| {
+                    across_obstacle(w, at, c)
+                        && scripted::can_attack(w, id, e)
+                        && self.memory.ok(w, id, Target::Object(e))
+                })
                 .min_by_key(|&&(e, c)| (dist2(c, at), e))
             else {
                 continue;
@@ -134,6 +138,7 @@ fn cheapest_armed_jumpjet(w: &World, house: glasnost_sim::world::HouseId) -> Opt
                 .is_some_and(|u| u.jumpjet_locomotor && u.primary.is_some() && !u.harvester)
         })
         .filter(|&t| tech::buildable(w, house, t))
+        .filter(|&t| !scripted::jams_factory(w, t))
         .min_by_key(|&t| (production::cost_field(w, t), t.index))
 }
 

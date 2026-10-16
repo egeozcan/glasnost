@@ -89,6 +89,7 @@ impl Special {
                 .copied()
                 .filter(|&b| {
                     linked::overpowerable(w, b)
+                        && self.memory.ok(w, id, Target::Object(b))
                         && w.obj(b).is_some_and(|o| {
                             o.on_map
                                 && o.health > 0
