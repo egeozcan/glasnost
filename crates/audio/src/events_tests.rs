@@ -1692,3 +1692,105 @@ fn building_repaired_sound() {
     a.tick(&w, &[fx], &mut Rng::new(1));
     assert_eq!(heard(&mut a, 0), ["Fixed"]);
 }
+
+fn infiltration(
+    rows: Vec<glasnost_sim::combat::effects::InfiltrationRow>,
+    satellite: bool,
+    infiltrator: u8,
+    victim: u8,
+) -> Effect {
+    Effect::Infiltrated {
+        building: ObjectId(1),
+        infiltrator: Some(HouseId(infiltrator)),
+        victim: Some(HouseId(victim)),
+        rows,
+        satellite,
+        pos: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
+    }
+}
+
+// spec: S-0510 claim 11 (the lines by row and by role: the victim hears the sabotage or theft line, the infiltrator hears building infiltrated and then the row's line, one line for radar and cash; a radar row with an active spy satellite is silent; a house that is neither hears nothing)
+#[test]
+fn infiltration_announcement_lines() {
+    use glasnost_sim::combat::effects::InfiltrationRow as R;
+    let w = world();
+    // The local player (house 0) is the victim of a power infiltration.
+    let mut a = announcing(&w, &[(Announcement::PowerSabotaged, "Pwr")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Power], false, 1, 0)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000), "the victim hears power sabotaged");
+    // The local player is the infiltrator: not the victim's line.
+    let mut a = announcing(&w, &[(Announcement::PowerSabotaged, "Pwr")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Power], false, 0, 1)],
+        &mut Rng::new(1),
+    );
+    assert!(
+        !announced(&mut a, 1000),
+        "the infiltrator does not hear the victim's line"
+    );
+    let mut a = announcing(
+        &w,
+        &[
+            (Announcement::BuildingInfiltrated, "Inf"),
+            (Announcement::EnemyBasePoweredDown, "Down"),
+        ],
+    );
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Power], false, 0, 1)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000), "the infiltrator's lines");
+    // The radar row: one line for the infiltrator, none with a satellite.
+    for (satellite, want) in [(false, true), (true, false)] {
+        let mut a = announcing(&w, &[(Announcement::BuildingInfRadarSabotaged, "Both")]);
+        a.tick(
+            &w,
+            &[infiltration(vec![R::Radar], satellite, 0, 1)],
+            &mut Rng::new(1),
+        );
+        assert_eq!(announced(&mut a, 1000), want, "satellite {satellite}");
+    }
+    // Cash: the victim hears cash stolen; the infiltrator the one line.
+    let mut a = announcing(&w, &[(Announcement::CashStolen, "Cash")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Cash], false, 1, 0)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000));
+    let mut a = announcing(&w, &[(Announcement::BuildingInfCashStolen, "Both")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Cash], false, 0, 1)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000));
+    // Tech rows: technology stolen for the victim.
+    let mut a = announcing(&w, &[(Announcement::TechnologyStolen, "Tech")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::VehicleFactory], false, 1, 0)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000));
+    // The same house on both sides, or neither the local player's: nothing.
+    let mut a = announcing(
+        &w,
+        &[
+            (Announcement::PowerSabotaged, "Pwr"),
+            (Announcement::BuildingInfiltrated, "Inf"),
+        ],
+    );
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Power], false, 1, 1)],
+        &mut Rng::new(1),
+    );
+    assert!(!announced(&mut a, 1000));
+}

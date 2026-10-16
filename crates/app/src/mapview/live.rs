@@ -1139,6 +1139,7 @@ impl Live {
                 | Effect::OverlayCrushed { .. }
                 | Effect::Superweapon { .. }
                 | Effect::Captured { .. }
+                | Effect::Infiltrated { .. }
                 | Effect::Cloak { .. } => continue,
             };
             self.transients.push(Transient {

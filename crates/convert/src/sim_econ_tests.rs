@@ -537,6 +537,33 @@ fn radar_event_zoom_keys() {
     assert_eq!(s.general.economy.radar_event_speed, None);
 }
 
+// spec: S-0510 Import mapping (SpyMoneyStealPercent: a percentage field, kept as written for the single-precision reading; SpyPowerBlackout an integer; a later layer that omits the key keeps the earlier value)
+#[test]
+fn spy_general_keys() {
+    let base = "[General]\nSpyMoneyStealPercent=57%\nSpyPowerBlackout=300\n";
+    let (s, _) = import_with_map(base, "[General]\nFlashFrameTime=7\n");
+    let g = &s.general.economy;
+    assert_eq!(
+        g.spy_money_steal_percent.as_ref().map(|d| d.0.as_str()),
+        Some("57%")
+    );
+    assert_eq!(g.spy_power_blackout, Some(300));
+    let (s, _) = import("[General]\nFlashFrameTime=7\n", "");
+    assert_eq!(s.general.economy.spy_money_steal_percent, None);
+    // spec: S-0510 Edge cases (outside 0 to 1: a warning; 100% and 0% are inside)
+    let warned = |v: &str| {
+        let (_, w) = import(&format!("[General]\nSpyMoneyStealPercent={v}\n"), "");
+        w.iter()
+            .any(|m| format!("{m:?}").contains("SpyMoneyStealPercent"))
+    };
+    assert!(warned("150%"));
+    assert!(warned("-10%"));
+    assert!(warned("2"));
+    assert!(!warned("100%"));
+    assert!(!warned("0"));
+    assert!(!warned("57%"));
+}
+
 // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft, read for unit types; absent: no)
 #[test]
 fn considered_aircraft_flag() {

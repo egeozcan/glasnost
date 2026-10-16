@@ -28,10 +28,15 @@ fn rules() -> Arc<SimRules> {
         .entry("infantry".into())
         .or_default()
         .push("ENGI".into());
+    r.registries
+        .entry("infantry".into())
+        .or_default()
+        .push("SPYU".into());
     r.registries.entry("buildings".into()).or_default().extend([
         "HUT".to_string(),
         "PLAIN".to_string(),
         "CAPT".to_string(),
+        "SPYB".to_string(),
     ]);
     r.sim.infantry.insert(
         "GARRI".into(),
@@ -62,6 +67,31 @@ fn rules() -> Arc<SimRules> {
             ..Default::default()
         },
     );
+    r.sim.infantry.insert(
+        "SPYU".into(),
+        UnitType {
+            strength: Some(100),
+            speed: Some(6),
+            locomotion_class: Some(LocomotionClass::Foot),
+            locomotor: Some(Locomotor::Walk),
+            sight: Some(4),
+            agent: Some(true),
+            infiltrate: Some(true),
+            tech_level: Some(1),
+            cost: Some(100),
+            owner: Some(vec!["Alphaland".into(), "Betaland".into()]),
+            ..Default::default()
+        },
+    );
+    let mut spyb = BuildingType {
+        strength: Some(400),
+        foundation: Some([2, 2]),
+        spyable: Some(true),
+        tech_level: Some(99),
+        ..Default::default()
+    };
+    spyb.econ.power = Some(100);
+    r.sim.buildings.insert("SPYB".into(), spyb);
     r.sim.buildings.insert(
         "CAPT".into(),
         BuildingType {
@@ -397,4 +427,106 @@ fn orders_an_engineer_when_it_has_none() {
         !again.iter().any(want),
         "one in the line already: {again:?}"
     );
+}
+
+// S-0510, PLAN §4.7: an idle spy is sent into a seen enemy building whose infiltration has an effect and that it may enter (S-0214 row I24), and the infiltration happens: the enemy house suffers a blackout.
+#[test]
+fn sends_an_idle_spy_into_a_seen_enemy_building() {
+    let mut g = game(5);
+    ready(&mut g);
+    let mut w = g.world.clone();
+    let home = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+        .map(|o| o.pos.cell())
+        .unwrap();
+    let target = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "SPYB",
+        1,
+        glasnost_map::CellXY::new(home.x + 7, home.y + 7),
+        0,
+    );
+    let unit = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "SPYU",
+        0,
+        glasnost_map::CellXY::new(home.x + 5, home.y + 5),
+        0,
+    );
+    reveal(&mut w, 0, glasnost_map::CellXY::new(home.x + 7, home.y + 7));
+    testkit::run(&mut w, 2);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(garrison_orders(&orders, unit, target), "{orders:?}");
+    assert_eq!(brain.special_uses().spies, 1);
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    for _ in 0..800 {
+        testkit::run(&mut w, 1);
+        if w.obj(unit).is_none() {
+            break;
+        }
+    }
+    assert!(w.obj(unit).is_none(), "the spy was used up");
+    assert_eq!(
+        w.obj(target).unwrap().owner,
+        Some(HouseId(1)),
+        "not captured"
+    );
+}
+
+// S-0510, PLAN §4.7: with no spy, a barracks and a seen enemy building worth infiltrating, the house orders a spy once; and nothing is ordered for a building on a cell it has not explored.
+#[test]
+fn orders_a_spy_when_it_has_none() {
+    let mut g = game(5);
+    ready(&mut g);
+    let mut w = g.world.clone();
+    let home = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(0)) && o.on_map)
+        .map(|o| o.pos.cell())
+        .unwrap();
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "PILL",
+        0,
+        glasnost_map::CellXY::new(home.x + 5, home.y),
+        0,
+    );
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "SPYB",
+        1,
+        glasnost_map::CellXY::new(home.x + 8, home.y + 8),
+        0,
+    );
+    w.houses[0].credits = 5000;
+    let spy = w.rules().index_of(Kind::Infantry, "SPYU").unwrap();
+    let want = |o: &Order| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == spy);
+    testkit::run(&mut w, 20);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    // Unexplored: no spy is ordered.
+    let none = Brain::new(&w, &fixture::map(), HouseId(0)).think(&w);
+    assert!(!none.iter().any(want), "{none:?}");
+    reveal(&mut w, 0, glasnost_map::CellXY::new(home.x + 8, home.y + 8));
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(orders.iter().any(want), "{orders:?}");
 }

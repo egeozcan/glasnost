@@ -81,7 +81,8 @@ pub fn ruleset() -> Ruleset {
         "buildings".into(),
         [
             "HUT", "HUT1", "HUT3", "MIL", "NEG", "ZERO", "PLAIN", "TOWER", "TARGET", "NOCAP",
-            "VLIKE", "HUTB",
+            "VLIKE", "HUTB", "RADARB", "POWERB", "LABB", "SWB", "BANK", "WARF", "BARR", "NAVYB",
+            "AIRF", "RLAB", "PLAB", "BANKF",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -190,6 +191,70 @@ pub fn ruleset() -> Ruleset {
     let mut hutb = building(1, 1);
     hutb.bridge_repair_hut = Some(true);
     s.buildings.insert("HUTB".into(), hutb);
+    // S-0510: one building for each effect row, and combinations for precedence.
+    let b = |f: &dyn Fn(&mut BuildingType)| {
+        let mut x = building(2, 2);
+        f(&mut x);
+        x
+    };
+    s.buildings
+        .insert("RADARB".into(), b(&|x| x.econ.radar = Some(true)));
+    s.buildings
+        .insert("POWERB".into(), b(&|x| x.econ.power = Some(100)));
+    s.buildings.insert(
+        "LABB".into(),
+        b(&|x| x.econ.ai_base_planning_side = Some(1)),
+    );
+    s.buildings.insert(
+        "SWB".into(),
+        b(&|x| x.econ.super_weapon = Some("CURT".into())),
+    );
+    s.buildings
+        .insert("BANK".into(), b(&|x| x.storage = Some(100)));
+    s.buildings
+        .insert("WARF".into(), b(&|x| x.factory = Some("vehicle".into())));
+    s.buildings
+        .insert("BARR".into(), b(&|x| x.factory = Some("infantry".into())));
+    s.buildings.insert(
+        "NAVYB".into(),
+        b(&|x| {
+            x.factory = Some("vehicle".into());
+            x.naval = Some(true);
+        }),
+    );
+    s.buildings
+        .insert("AIRF".into(), b(&|x| x.factory = Some("aircraft".into())));
+    s.buildings.insert(
+        "RLAB".into(),
+        b(&|x| {
+            x.econ.radar = Some(true);
+            x.econ.power = Some(50);
+        }),
+    );
+    s.buildings
+        .insert("PLAB".into(), b(&|x| x.econ.power = Some(50)));
+    s.buildings.insert(
+        "BANKF".into(),
+        b(&|x| {
+            x.storage = Some(100);
+            x.factory = Some("vehicle".into());
+        }),
+    );
+    r.registries
+        .entry("superweapons".into())
+        .or_default()
+        .push("CURT".into());
+    s.superweapons.insert(
+        "CURT".into(),
+        glasnost_rules::sim_econ::SuperweaponType {
+            kind: Some("IronCurtain".into()),
+            action: Some("IronCurtain".into()),
+            recharge_time: Some(d("0.1")),
+            ..Default::default()
+        },
+    );
+    s.general.economy.build_tech = Some(vec!["LABB".into(), "RLAB".into(), "PLAB".into()]);
+    s.general.economy.spy_power_blackout = Some(100);
     let mut engi = walker(100);
     engi.engineer = Some(true);
     s.infantry.insert("ENGI".into(), engi);

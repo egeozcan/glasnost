@@ -474,6 +474,13 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         Int,
         "S-0405",
     ),
+    (
+        "spy_money_steal_percent",
+        GENERAL,
+        "SpyMoneyStealPercent",
+        Dec,
+        "S-0510",
+    ),
     ("refund_percent", GENERAL, "RefundPercent", Dec, "S-0408"),
     ("buildup_time", GENERAL, "BuildupTime", Dec, "S-0108"),
     (
@@ -1692,6 +1699,26 @@ impl Builder<'_> {
             let what = format!("[{}] {k}", show(section));
             if let Some(n) = self.field(state.as_ref(), form, &what) {
                 econ.put(field, n);
+            }
+        }
+        // spec: S-0510 Edge cases (a steal fraction outside 0 to 1 is warned about)
+        let steal = self
+            .i
+            .outcome
+            .globals
+            .get(GENERAL)
+            .and_then(|s| s.get(&b"SpyMoneyStealPercent"[..]))
+            .cloned();
+        if let Some(text) = fold(steal.as_ref(), None, |v, _| decimal_text(v)) {
+            let negative = text.starts_with('-');
+            let above = !is_one_text(&text) && decimal_times_at_least(&text, 1, 1);
+            if negative || above {
+                self.warn_at(
+                    steal.as_ref(),
+                    format!(
+                        "[General] SpyMoneyStealPercent {text} is outside 0 to 1 (S-0510; quirks.spy_theft_unbacked_gain)"
+                    ),
+                );
             }
         }
         // spec: S-0412 claim 1 and Import mapping (Bases: the base rules' value only)

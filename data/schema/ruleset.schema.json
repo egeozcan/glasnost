@@ -756,6 +756,23 @@
           ],
           "default": null
         },
+        "garrison_muzzles": {
+          "description": "Art `MuzzleFlash`*n* for *n* from 0 to the occupant capacity − 1: the\ngarrison muzzle points, pixel shifts (S-0313 claim 6, Import mapping;\na point the art does not give is (0, 0)).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
         "gate": {
           "description": "`Gate`.",
           "type": [
@@ -3850,6 +3867,17 @@
             }
           ]
         },
+        "spy_money_steal_percent": {
+          "description": "`[General] SpyMoneyStealPercent`, the steal fraction *f*, a\npercentage field kept in single precision (S-0510 claim 6, Import\nmapping); absent: 0.5.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "spy_plane_camera_frames": {
           "description": "`[AudioVisual] SpyPlaneCameraFrames`, the spy-plane approach delay in\nticks (S-0501 claim 34); absent: 16.",
           "type": [
@@ -6841,7 +6869,7 @@
           "default": true
         },
         "assaulter_reversed_kill_credit": {
-          "description": "An assault that clears garrison occupants records the surviving assaulter as destroyed by each removed occupant, which gets the kill credit and experience; off: each removed occupant is the victim, with destruction notifications and loss bookkeeping, and the assaulter gets ordinary kill credit and experience. The assaulter survives in both settings. Not implemented yet (wave 2).",
+          "description": "An assault that clears garrison occupants records the surviving assaulter as destroyed by each removed occupant, which gets the kill credit and experience; off: each removed occupant is the victim, with destruction notifications and loss bookkeeping, and the assaulter gets ordinary kill credit and experience. The assaulter survives in both settings.",
           "type": "boolean",
           "default": true
         },
@@ -7381,12 +7409,12 @@
           "default": true
         },
         "engineer_lost_on_uncapturable": {
-          "description": "An engineer entering a building that is neither arrival-friendly nor capturable is used up and changes nothing; off: the entry is refused as in claim 4 and the engineer stays. Not implemented yet (wave 2).",
+          "description": "An engineer entering a building that is neither arrival-friendly nor capturable is used up and changes nothing; off: the entry is refused as in claim 4 and the engineer stays.",
           "type": "boolean",
           "default": true
         },
         "engineer_repairs_during_sale": {
-          "description": "An engineer reaching a damaged arrival-friendly building during its sale repairs it and is used up; off: sale-time entry is refused as in claim 4, regardless of health. Not implemented yet (wave 2).",
+          "description": "An engineer reaching a damaged arrival-friendly building during its sale repairs it and is used up; off: sale-time entry is refused as in claim 4, regardless of health.",
           "type": "boolean",
           "default": true
         },
@@ -7541,17 +7569,17 @@
           "default": true
         },
         "garrison_capacity_equality": {
-          "description": "Garrison entry is refused only when the occupant count equals the capacity, so a negative capacity admits occupants indefinitely; off: entry requires an occupant count below the capacity, so a non-positive capacity admits none. Not implemented yet (wave 2).",
+          "description": "Garrison entry is refused only when the occupant count equals the capacity, so a negative capacity admits occupants indefinitely; off: entry requires an occupant count below the capacity, so a non-positive capacity admits none.",
           "type": "boolean",
           "default": true
         },
         "garrison_exit_skips_corner": {
-          "description": "A garrison's exit search never tries the corner cell (x₀ − 1, y₀ − 1); off: the corner is tried last. Not implemented yet (wave 2).",
+          "description": "A garrison's exit search never tries the corner cell (x₀ − 1, y₀ − 1); off: the corner is tried last.",
           "type": "boolean",
           "default": true
         },
         "garrison_no_exit_removes": {
-          "description": "An eviction without inside fallback and with no qualifying exit cell removes every occupant; off: the eviction does nothing and the occupants stay inside. Not implemented yet (wave 2).",
+          "description": "An eviction without inside fallback and with no qualifying exit cell removes every occupant; off: the eviction does nothing and the occupants stay inside.",
           "type": "boolean",
           "default": true
         },
@@ -7676,7 +7704,7 @@
           "default": true
         },
         "infiltration_single_effect": {
-          "description": "An infiltrated building type that matches several effect rows gives only the first; off: every matching row applies in table order, and E3 requires only tech-lab-list membership. Not implemented yet (wave 2).",
+          "description": "An infiltrated building type that matches several effect rows gives only the first; off: every matching row applies in table order, and E3 requires only tech-lab-list membership.",
           "type": "boolean",
           "default": true
         },
@@ -8531,7 +8559,7 @@
           "default": true
         },
         "spy_theft_unbacked_gain": {
-          "description": "A spy's thief gains the computed amount even when the victim pays less or the amount is negative; off: the amount is clamped to between 0 and the victim's balance. Not implemented yet (wave 2).",
+          "description": "A spy's thief gains the computed amount even when the victim pays less or the amount is negative; off: the amount is clamped to between 0 and the victim's balance.",
           "type": "boolean",
           "default": true
         },
@@ -11535,6 +11563,14 @@
           "description": "`NeverUse` (S-0308 claim 4).",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "occupant_anim": {
+          "description": "`OccupantAnim`, the animation shown where an assault removes an\noccupant (S-0508 claim 14, Import mapping).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null

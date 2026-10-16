@@ -880,6 +880,17 @@ S-0509 is built in `glasnost_sim::structures` (`entry`, `engineer`, `ownership`)
 - **Own AI.** See *Own AI (M6c: special abilities)*.
 - **Client.** The click is S-0214 rows I4 to I7 (already in `targeting::click`: capture, damaging entry and repair building all give the *capture* behaviour order for an engineer, S-0214 table M), with the capture cursor frames. The lane scene `capture` of `crates/app/tests/m6c_lane.rs` sends an engineer into an enemy building and writes `local-lane/m6c/capture-before.png` and `capture-after.png` (the building drawn in the local house's colour).
 
+## Simulation (M6c: spies and infiltration)
+
+S-0510 is built in `glasnost_sim::structures::spy` (the entry dispatcher `structures::entry` hands a spy there after the general entry raise); the ledger is [docs/m6-claims/S-0510.md](m6-claims/S-0510.md), the tests are `claims_s0510.rs`. New state: `House::infiltrated_vehicle_factory` and `infiltrated_infantry_factory` (claim 5); save format version 34; the presentation event `Effect::Infiltrated`.
+
+- **Rows (claims 1 to 4).** `spy::rows` lists the effects E1 to E7 of the building (radar recover, power blackout, stolen tech, superweapon reset, cash theft, vehicle and infantry factory flags); with `quirks.infiltration_single_effect` only the first applies, otherwise all do. The spy is used up (destroyed raise, removal, no kill or score). An allied or own-house building gives no effect.
+- **Theft (claims 6 and 7).** `spy::theft_amount` reads `SpyMoneyStealPercent` through `Rules::spy_steal` in single precision (`Decimal::single_value`, absent 0.5); `quirks.spy_theft_unbacked_gain` decides what an out-of-range fraction does. The importer warns for a fraction outside 0 to 1.
+- **Factory flags (claim 5).** `objects::veteran_at_creation` reads the flags: infantry after a barracks, trainable non-naval vehicles and undeploying buildings after a war factory. `spy::alternate_icon` gives the sidebar the alternate icon (S-0007 claim 25); the client draws it (`game/session.rs`).
+- **Audio.** The infiltration lines and the *infiltrated* radar event are in `glasnost_audio::events` (`infiltrated`, `announce_entry`).
+- **Own AI.** See *Own AI (M6c: special abilities)*.
+- **Client.** The click is S-0214's (the infiltrate cursor, already in `targeting`). The lane scene `infiltrate` of `crates/app/tests/m6c_lane.rs` sends a spy into an enemy radar building and writes `local-lane/m6c/infiltrate-before.png` and `infiltrate-after.png`.
+
 ## Own AI (M5b)
 
 `glasnost_ai::game::Game` runs every game with AI houses: the world plus one `brain::Brain` per AI house of the setup (`HouseSetup.ai` and the player role, glossary *AI house*). In each tick, after the person's orders, every AI house that is not defeated or removed thinks and its orders go through `orders::issue` like a person's; then `tick::step` runs. The brains are saved with the game (`Game::save`, `Game::load`) and hashed with the world (`Game::state_hash`), and a replay holds only the setup and the person's orders: `Game::run_replay` runs the AI again. The AI draws from no random stream.
@@ -904,6 +915,7 @@ Whole-game AI tests and the M6b2 spec revisions (to look at): the release games 
 
 - **Garrisons (S-0508).** Every idle infantry unit of an occupier type that the house can select is sent to the nearest building it may garrison (S-0508 claim 1, the cursor of row I8) on an explored cell within 24 cells, civilian garrison buildings before the house's own, with a free place (occupants plus units already on their way, the orders of the same think included). Numbers are tuning of our own opponent (`nocite`). It keeps at most six occupants in garrisons, and looks for buildings near its home.
 - **Engineers (S-0509).** Every idle engineer is sent to the nearest seen enemy building whose cursor shows capture or damaging entry (S-0214 rows I6 and I7: the enemy's capturable buildings), else to the nearest own building whose cursor shows repair, never to a building another engineer of the house is already bound for. A house with no engineer (on the map, off it or in its line) and no engineer queued that sees a capturable enemy building orders the cheapest engineer type its sidebar offers, once, when it holds at least twice its price in credits and is not selling out.
+- **Spies (S-0510).** Every idle spy is sent to the nearest seen enemy building with an infiltration effect, ranked by what a person wants (stolen technology, a factory flag it lacks, money, power, a superweapon, radar), never one another spy of the house is bound for. A house with no spy and none in its line that sees such a building orders the cheapest spy type its sidebar offers, once, under the same credit reserve as engineers.
 
 ## Map triggers (M5b)
 
@@ -1074,7 +1086,7 @@ M6c is the last part of M6 (session of 2026-10-16). Baseline: main 2c92746, spec
 | 2c | AI transports, hover and amphibious use on maps 2, 3 and 5 | open | |
 | 3.1 | S-0508 Garrisons | done in this stream (not merged yet) | ledger [docs/m6-claims/S-0508.md](m6-claims/S-0508.md); section *Simulation (M6c: garrisons)*; requests Q-0970 to Q-0973 open with interim rules; goldens regenerated (new per-object state); save format 32, AI game format 2 |
 | 3.2 | S-0509 Engineers and capture | done in this stream (not merged yet) | ledger [docs/m6-claims/S-0509.md](m6-claims/S-0509.md); section *Simulation (M6c: engineers and capture)*; save format 33; no new requests (the claims' open points are the spec's own, Open questions); goldens regenerated |
-| 3.3 | S-0510 Spies and infiltration | open | |
+| 3.3 | S-0510 Spies and infiltration | done in this stream (not merged yet) | ledger [docs/m6-claims/S-0510.md](m6-claims/S-0510.md); section *Simulation (M6c: spies and infiltration)*; save format 34; no new requests; goldens regenerated |
 | 3.4 | S-0515 Tech buildings | open | |
 | 3.5 | S-0502 Movement of jumpjets | open | |
 | 3.6 | S-0517 Deployable units | open | |

@@ -1174,13 +1174,20 @@ pub fn object_ends(w: &mut World, id: ObjectId) {
 /// `b`. Infiltration itself belongs to the special-abilities specs, which
 /// call this.
 pub fn infiltrated(w: &mut World, house: HouseId, b: ObjectId) {
+    infiltrated_with(w, house, b, true);
+}
+
+/// [`infiltrated`] with the radar and power exclusions of S-0407 claim 6
+/// applied or not: S-0510's single-effect switch off (`quirks.
+/// infiltration_single_effect`) requires only tech-lab-list membership.
+pub fn infiltrated_with(w: &mut World, house: HouseId, b: ObjectId, exclusions: bool) {
     let Some(o) = w.obj(b) else { return };
     if o.kind != Kind::Building {
         return;
     }
     let f = tt(w, type_of(o)).cloned().unwrap_or_default();
-    // spec: S-0407 claim 6 (a tech-lab building that is not a radar building and has no power output)
-    if f.tech_lab && !f.radar && f.power <= 0 {
+    // spec: S-0407 claim 6 (a tech-lab building that is not a radar building and has no power output; S-0510 Edge cases: with the single-effect switch off only the list membership)
+    if f.tech_lab && (!exclusions || (!f.radar && f.power <= 0)) {
         // spec: S-0407 claim 6 (side 0: the first flag, 1: the second, any other value: the third)
         let flag = match f.side {
             0 => 0,

@@ -142,6 +142,15 @@ pub struct House {
     /// clears it.
     #[serde(default)]
     pub lost_to_capture: bool,
+    /// The infiltrated-vehicle-factory flag (S-0510 claim 5): set when one
+    /// of this house's spies infiltrates another house's vehicle factory
+    /// (naval yards included); clear at the start of a game and never
+    /// cleared.
+    #[serde(default)]
+    pub infiltrated_vehicle_factory: bool,
+    /// The infiltrated-infantry-factory flag (S-0510 claim 5).
+    #[serde(default)]
+    pub infiltrated_infantry_factory: bool,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).

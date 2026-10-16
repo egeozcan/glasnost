@@ -394,6 +394,8 @@ pub fn new_game(
             base: Default::default(),
             computed_edge: 0, // spec: S-0522 claim 5 (the computed edge starts as north, 0)
             lost_to_capture: false, // spec: S-0509 claim 11 (the mark is clear at the start of a game)
+            infiltrated_vehicle_factory: false, // spec: S-0510 Terms (both flags are clear at the start of a game)
+            infiltrated_infantry_factory: false, // spec: S-0510 Terms (both flags are clear at the start of a game)
         });
     }
     for (i, h) in houses.iter_mut().enumerate() {

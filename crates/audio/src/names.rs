@@ -144,6 +144,26 @@ pub enum Announcement {
     BuildingCaptured,
     /// A tech building lost to a capture (S-0701 claim 39).
     TechBuildingLost,
+    /// The victim hears: the radar sabotaged (S-0510 claim 11).
+    RadarSabotaged,
+    /// The infiltrator hears, one line: building infiltrated, radar
+    /// sabotaged (S-0510 claim 11).
+    BuildingInfRadarSabotaged,
+    /// The victim hears: power sabotaged (S-0510 claim 11).
+    PowerSabotaged,
+    /// Building infiltrated (S-0510 claim 11).
+    BuildingInfiltrated,
+    /// The infiltrator hears: enemy base powered down (S-0510 claim 11).
+    EnemyBasePoweredDown,
+    /// The victim hears: technology stolen (S-0510 claim 11).
+    TechnologyStolen,
+    /// The infiltrator hears: new technology acquired (S-0510 claim 11).
+    NewTechnologyAcquired,
+    /// The victim hears: cash stolen (S-0510 claim 11).
+    CashStolen,
+    /// The infiltrator hears, one line: building infiltrated, cash stolen
+    /// (S-0510 claim 11).
+    BuildingInfCashStolen,
 }
 
 impl Announcement {
@@ -175,6 +195,15 @@ impl Announcement {
             Self::StructureAbandoned => "EVA_StructureAbandoned",
             Self::BuildingCaptured => "EVA_BuildingCaptured",
             Self::TechBuildingLost => "EVA_TechBuildingLost",
+            Self::RadarSabotaged => "EVA_RadarSabotaged",
+            Self::BuildingInfRadarSabotaged => "EVA_BuildingInfRadarSabotaged",
+            Self::PowerSabotaged => "EVA_PowerSabotaged",
+            Self::BuildingInfiltrated => "EVA_BuildingInfiltrated",
+            Self::EnemyBasePoweredDown => "EVA_EnemyBasePoweredDown",
+            Self::TechnologyStolen => "EVA_TechnologyStolen",
+            Self::NewTechnologyAcquired => "EVA_NewTechnologyAcquired",
+            Self::CashStolen => "EVA_CashStolen",
+            Self::BuildingInfCashStolen => "EVA_BuildingInfCashStolen",
         }
     }
 }

@@ -41,6 +41,7 @@ type Scene = (&'static str, fn(&mut Lane));
 const SCENES: &[Scene] = &[
     ("garrison", garrison_and_evict),
     ("capture", engineer_captures),
+    ("infiltrate", spy_infiltrates),
 ];
 
 #[test]
@@ -259,6 +260,106 @@ fn engineer_captures(lane: &mut Lane) {
         glasnost_sim::structures::engineer::lost_to_capture(lane.world(), enemy)
     );
     lane.save("capture-after");
+}
+
+/// S-0510: a spy of the local house is sent into an enemy building whose
+/// type has an infiltration effect (found by what `structures::spy::rows`
+/// says, never by name) with the click a person gives (S-0214 row I24); it
+/// walks there, is used up, and the effect shows (a blackout, a theft, a
+/// flag). Prints the effect rows by their own names.
+fn spy_infiltrates(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let man = (0..r.infantry.len())
+        .find(|&i| r.infantry[i].raw.agent.unwrap_or(false) && !r.infantry[i].engineer)
+        .map(|i| r.infantry[i].name.clone());
+    println!("spy type found: {}", man.is_some());
+    let Some(man) = man else { return };
+    let local = lane.local();
+    let Some(enemy) = lane.enemy() else {
+        println!("no enemy house");
+        return;
+    };
+    let before_credits = (
+        lane.world().houses[usize::from(local.0)].credits,
+        lane.world().houses[usize::from(enemy.0)].credits,
+    );
+    let target = lane
+        .world()
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Building && o.on_map && o.owner == Some(enemy))
+        .map(|o| o.id)
+        .filter(|&b| !glasnost_sim::structures::spy::rows(lane.world(), b).is_empty())
+        .min_by_key(|&b| {
+            let rows = glasnost_sim::structures::spy::rows(lane.world(), b);
+            // Money, then power, then anything else: what shows on a screenshot.
+            let first = rows.first().map_or(9, |r| match r {
+                glasnost_sim::combat::effects::InfiltrationRow::Power => 0,
+                glasnost_sim::combat::effects::InfiltrationRow::Cash => 1,
+                _ => 2,
+            });
+            (first, b)
+        });
+    println!(
+        "an enemy building with an infiltration effect found: {}",
+        target.is_some()
+    );
+    // None at the start of a skirmish: the enemy gets a spyable power plant near the local base.
+    let target = target.or_else(|| {
+        let w = lane.world();
+        let r = w.rules();
+        let i = (0..r.buildings.len())
+            .filter(|&i| {
+                r.buildings[i].raw.spyable.unwrap_or(false)
+                    && r.econ.power.buildings.get(i).is_some_and(|p| p.output > 0)
+                    && r.buildings[i].foundation.0 > 0
+            })
+            .min_by_key(|&i| (r.buildings[i].foundation.0 * r.buildings[i].foundation.1, i))?;
+        let (name, size) = (r.buildings[i].name.clone(), r.buildings[i].foundation);
+        let home = lane.home();
+        let at = lane.area(CellXY::new(home.x + 8, home.y + 8), size, 2, |l| {
+            l != land::WATER && l != land::ROCK
+        })?;
+        Some(lane.spawn(Kind::Building, &name, enemy, at))
+    });
+    let Some(b) = target else {
+        println!("no spyable power building type");
+        return;
+    };
+    let rows = glasnost_sim::structures::spy::rows(lane.world(), b);
+    println!("effect rows: {rows:?}");
+    let site = lane.world().obj(b).map(|o| o.pos.cell()).unwrap();
+    let start = lane.open_land(CellXY::new(site.x - 6, site.y));
+    let s = lane.spawn(Kind::Infantry, &man, local, start);
+    lane.look_at(site);
+    lane.ticks(3);
+    lane.save("infiltrate-before");
+    let sent = lane.order(local, s, ClickOn::Object(b));
+    println!("spy at {start:?} sent at {site:?}, {sent} orders");
+    for t in 0..2500 {
+        lane.ticks(1);
+        if lane.world().obj(s).is_none() {
+            println!("spy used up at tick {}", lane.world().tick);
+            break;
+        }
+        if t % 200 == 0 {
+            let p = lane.world().obj(s).map(|o| o.pos.cell());
+            println!("tick {}: spy at {p:?}", lane.world().tick);
+        }
+    }
+    lane.ticks(3);
+    let w = lane.world();
+    println!(
+        "credits (local, enemy) before {before_credits:?}, after ({}, {}); enemy blackout running: {}; \
+         local factory flags (vehicle, infantry): ({}, {})",
+        w.houses[usize::from(local.0)].credits,
+        w.houses[usize::from(enemy.0)].credits,
+        glasnost_sim::econ::power::blackout_running(w, enemy),
+        w.houses[usize::from(local.0)].infiltrated_vehicle_factory,
+        w.houses[usize::from(local.0)].infiltrated_infantry_factory,
+    );
+    lane.save("infiltrate-after");
 }
 
 // ---------------------------------------------------------------------------

@@ -15,10 +15,11 @@
 //! runner.
 
 use glasnost_map::CellXY;
+use glasnost_sim::combat::effects::InfiltrationRow;
 use glasnost_sim::econ::{TypeRef, production, shroud, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::Kind;
-use glasnost_sim::structures::{engineer, garrison};
+use glasnost_sim::structures::{engineer, garrison, spy};
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
@@ -83,6 +84,7 @@ impl Special {
         let home = script.home(w);
         self.garrison(house, &own, home, w, out);
         self.engineers(script, &own, w, out);
+        self.spies(script, &own, w, out);
     }
 
     /// Whether the house's object `b` stands on a cell the house has
@@ -330,6 +332,111 @@ impl Special {
                     .get(o.type_index as usize)
                     .is_some_and(|b| b.raw.capturable.unwrap_or(false))
                 && shroud::explored(w, house, o.pos.cell())
+        })
+    }
+}
+
+impl Special {
+    /// How worth infiltrating a building is to `house`, lower first: the
+    /// first of its effect rows (S-0510 claim 3) ranked by what a person
+    /// wants: stolen technology, a factory flag it does not have yet, the
+    /// victim's money, its power, a superweapon, its radar.
+    fn infiltration_rank(w: &World, house: HouseId, b: ObjectId) -> Option<u8> {
+        let me = w.houses.get(usize::from(house.0))?;
+        let owner = w.obj(b)?.owner?;
+        let credits = w.houses.get(usize::from(owner.0)).map_or(0, |h| h.credits);
+        spy::rows(w, b).first().and_then(|row| match row {
+            InfiltrationRow::Tech => Some(0),
+            InfiltrationRow::VehicleFactory if !me.infiltrated_vehicle_factory => Some(1),
+            InfiltrationRow::InfantryFactory if !me.infiltrated_infantry_factory => Some(1),
+            InfiltrationRow::Cash if credits > 0 => Some(2), // nocite: our opponent's preference order
+            InfiltrationRow::Power => Some(3), // nocite: our opponent's preference order
+            InfiltrationRow::Superweapon => Some(4), // nocite: our opponent's preference order
+            InfiltrationRow::Radar => Some(5), // nocite: our opponent's preference order
+            _ => None,
+        })
+    }
+
+    /// The enemy buildings a spy may enter, as the cursor shows (S-0214 row
+    /// I24: capture) with the rank of what its entry would do.
+    fn spy_targets(w: &World, house: HouseId, unit: ObjectId) -> Vec<(ObjectId, u8)> {
+        let mods = Modifiers::default();
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Building && o.on_map && o.health > 0)
+            .map(|o| o.id)
+            .filter(|&b| Self::seen(w, house, b))
+            .filter_map(|b| {
+                let rank = Self::infiltration_rank(w, house, b)?;
+                (targeting::cursor(w, house, &[unit], ClickOn::Object(b), mods) == Action::Capture)
+                    .then_some((b, rank))
+            })
+            .collect()
+    }
+
+    /// Spies (S-0510): every idle spy is sent to the best seen enemy
+    /// building it may infiltrate, never to one another spy of the house is
+    /// bound for; a house with no spy (on the map, off it or in its line)
+    /// that sees such a building orders one.
+    fn spies(&mut self, script: &Script, own: &[ObjectId], w: &World, out: &mut Vec<Order>) {
+        let house = script.house;
+        let mut taken: Vec<ObjectId> = Vec::new();
+        let mut any = false;
+        for &id in own {
+            if !spy::is_spy(w, id) || engineer::is_engineer(w, id) {
+                continue;
+            }
+            any = true;
+            if !scripted::idle(w, id) || !targeting::selectable(w, id) {
+                continue;
+            }
+            let at = w.obj(id).map_or(CellXY::new(0, 0), |o| o.pos.cell());
+            let Some((b, _)) = Self::spy_targets(w, house, id)
+                .into_iter()
+                .filter(|&(b, _)| !taken.contains(&b) && Self::en_route(w, house, b) == 0)
+                .min_by_key(|&(b, rank)| {
+                    (
+                        rank,
+                        w.obj(b).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)),
+                        b,
+                    )
+                })
+            else {
+                continue;
+            };
+            if let Some(orders) = click_if(w, house, id, b, &[Action::Capture]) {
+                out.extend(orders);
+                taken.push(b);
+                self.uses.spies += 1;
+            }
+        }
+        if !any
+            && let Some(t) =
+                Self::buildable_infantry(w, house, |u| u.raw.agent.unwrap_or(false) && !u.engineer)
+            && !Self::has_or_makes(w, house, |id| spy::is_spy(w, id))
+            && Self::infiltratable_in_sight(w, house)
+        {
+            self.order_unit(script, w, t, out);
+        }
+    }
+
+    /// Whether the house sees an enemy building with a worthwhile
+    /// infiltration effect.
+    fn infiltratable_in_sight(w: &World, house: HouseId) -> bool {
+        let me = &w.houses[usize::from(house.0)];
+        w.objects.values().any(|o| {
+            o.kind == Kind::Building
+                && o.on_map
+                && o.health > 0
+                && o.owner.is_some_and(|h| {
+                    h != house
+                        && !me.allies.contains(&h)
+                        && w.houses
+                            .get(usize::from(h.0))
+                            .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
+                })
+                && shroud::explored(w, house, o.pos.cell())
+                && Self::infiltration_rank(w, house, o.id).is_some()
         })
     }
 }

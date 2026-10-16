@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 
 use glasnost_rules::quirks::Quirks;
 use glasnost_sim::combat::damage::HitResult;
-use glasnost_sim::combat::effects::{Effect, Sound};
+use glasnost_sim::combat::effects::{Effect, InfiltrationRow, Sound};
 use glasnost_sim::combat::veterancy::{self, Rank};
 use glasnost_sim::combat::weapon;
 use glasnost_sim::econ::minimap::{self, Grid, Image, Zoom};
@@ -103,6 +103,7 @@ enum RadarKind {
     UnitRepaired,
     GarrisonAbandoned,
     Captured,
+    Infiltrated,
 }
 
 impl RadarKind {
@@ -121,6 +122,8 @@ impl RadarKind {
             RadarKind::GarrisonAbandoned => (8, 400),
             // spec: S-0701 F7 (captured: no suppression, 100 ticks)
             RadarKind::Captured => (0, 100),
+            // spec: S-0701 F7 (infiltrated: no suppression, 400 ticks)
+            RadarKind::Infiltrated => (0, 400),
         }
     }
 }
@@ -620,6 +623,14 @@ impl Audio {
                 announce,
                 ..
             } => self.captured(w, *of, *old, *new, *pos, *announce),
+            Effect::Infiltrated {
+                infiltrator,
+                victim,
+                rows,
+                satellite,
+                pos,
+                ..
+            } => self.infiltrated(w, *infiltrator, *victim, rows, *satellite, *pos),
             // spec: S-0210 claim 8 (the crushed overlay's crush sound at the crusher)
             // The cloak events are presentation-only (selection, S-0516 claim 26).
             Effect::Cloak { .. } => {}
@@ -674,6 +685,69 @@ impl Audio {
         } else {
             // spec: S-0701 claim 39 (losing such a building as the local player: the tech-building-lost entry)
             self.announce(Announcement::TechBuildingLost);
+        }
+    }
+
+    /// A spy infiltrated a building (S-0510 claim 11): when the local player
+    /// is the infiltrating house or the victim house and the two differ, an
+    /// *infiltrated* radar event is created at the building's cell (that
+    /// kind never suppresses), and the lines of each row follow: the victim
+    /// hears the sabotage or theft line, the infiltrator hears *building
+    /// infiltrated* and then the row's line (one line for radar and cash).
+    fn infiltrated(
+        &mut self,
+        w: &World,
+        infiltrator: Option<HouseId>,
+        victim: Option<HouseId>,
+        rows: &[InfiltrationRow],
+        satellite: bool,
+        pos: Pos,
+    ) {
+        use Announcement as A;
+        let local = self.local;
+        if local.is_none() || infiltrator == victim || (local != infiltrator && local != victim) {
+            return;
+        }
+        let _ = self.radar_event(RadarKind::Infiltrated, cell_of(pos), w.tick);
+        for &row in rows {
+            let lines: &[Announcement] = if local == victim {
+                match row {
+                    // spec: S-0510 claim 11 (row E1, the local player is the victim: radar sabotaged, unless the victim has an active spy satellite)
+                    InfiltrationRow::Radar if satellite => &[],
+                    InfiltrationRow::Radar => &[A::RadarSabotaged],
+                    // spec: S-0510 claim 11 (row E2 victim: power sabotaged)
+                    InfiltrationRow::Power => &[A::PowerSabotaged],
+                    // spec: S-0510 claim 11 (rows E3, E6 and E7 victim: technology stolen)
+                    InfiltrationRow::Tech
+                    | InfiltrationRow::VehicleFactory
+                    | InfiltrationRow::InfantryFactory => &[A::TechnologyStolen],
+                    // spec: S-0510 claim 11 (row E4 victim: building infiltrated)
+                    InfiltrationRow::Superweapon => &[A::BuildingInfiltrated],
+                    // spec: S-0510 claim 11 (row E5 victim: cash stolen)
+                    InfiltrationRow::Cash => &[A::CashStolen],
+                }
+            } else {
+                match row {
+                    // spec: S-0510 claim 11 (row E1, the local player is the infiltrator: building infiltrated, radar sabotaged as one line, unless the victim has an active spy satellite)
+                    InfiltrationRow::Radar if satellite => &[],
+                    InfiltrationRow::Radar => &[A::BuildingInfRadarSabotaged],
+                    // spec: S-0510 claim 11 (row E2 infiltrator: building infiltrated, then enemy base powered down)
+                    InfiltrationRow::Power => &[A::BuildingInfiltrated, A::EnemyBasePoweredDown],
+                    // spec: S-0510 claim 11 (rows E3, E6 and E7 infiltrator: building infiltrated, then new technology acquired)
+                    InfiltrationRow::Tech
+                    | InfiltrationRow::VehicleFactory
+                    | InfiltrationRow::InfantryFactory => {
+                        &[A::BuildingInfiltrated, A::NewTechnologyAcquired]
+                    }
+                    // spec: S-0510 claim 11 (row E4 infiltrator: building infiltrated)
+                    InfiltrationRow::Superweapon => &[A::BuildingInfiltrated],
+                    // spec: S-0510 claim 11 (row E5 infiltrator: building infiltrated, cash stolen as one line)
+                    InfiltrationRow::Cash => &[A::BuildingInfCashStolen],
+                }
+            };
+            for &a in lines {
+                self.announce(a);
+            }
         }
     }
 

@@ -1552,7 +1552,7 @@ impl Builder<'_> {
         );
     }
 
-    fn warn_at(&mut self, state: Option<&KeyState>, message: String) {
+    pub(super) fn warn_at(&mut self, state: Option<&KeyState>, message: String) {
         let (layer, line) = last_set(state);
         self.warn(layer, line, message);
     }
