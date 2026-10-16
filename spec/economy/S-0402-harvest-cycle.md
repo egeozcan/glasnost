@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -482,13 +482,28 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     | # | Situation at a processing of *enter* | Result |
     |---|---|---|
     | 1 | the refinery refuses (it does when it is switched off) and the harvester is not tethered | the harvester breaks off contact and falls back to rest (S-0215, claim 15) |
-    | 2 | it does not stand on the docking cell | its destination is set to the docking cell, again at each such processing (an ordinary move: S-0212 finds the path, and the harvester drives forwards) |
+    | 2 | it does not stand on the docking cell | the docking cell is offered as its destination again at each such processing; ordinary driving uses S-0212's path and moves forwards, subject to the assignment qualification below |
     | 3 | it stands on the docking cell, and its body facing is not exactly 16384 (map east) | it and the refinery become tethered (glossary, *tether link*), and it turns its body on the spot towards 16384 |
     | 4 | it stands on the docking cell, facing exactly 16384, and not moving | it and the refinery are tethered (as in row 3), and the refinery queues *unload* on it, without an immediate start, unless the refinery is being sold; *unload* becomes current by S-0215's start rules (claim 11) |
     | 5 | otherwise (on the docking cell, facing 16384, still moving) | tethered as in row 3; nothing else |
 
     A tethered harvester whose refinery refuses (row 1's refusal while tethered) keeps its contact
     and goes on to the other rows.
+
+    **Repeated destination offers.** Row 2 offers a destination, not an unconditional
+    new movement point. S-0207 claim 27 owns the teleport/dock test: only an otherwise
+    eligible destination assignment reaches it, when the destination changes or pending
+    destination refresh permits an unchanged assignment. An unchanged offer without
+    refresh is ignored before that test, even when contact or cell occupancy has changed.
+    Acquiring contact alone does not trigger the test. For a qualified chrono miner
+    currently using non-teleporting locomotion, that claim determines restoration of a
+    suspended predecessor versus fallback. The non-restorable fallback stops locomotion,
+    clears the current behaviour and queues *enter* without an immediate start. Normally
+    that same assignment installs the order-level cell destination but suppresses its
+    locomotor movement point, consuming point suppression while leaving newly enabled
+    refresh pending. A later otherwise eligible equal offer can therefore test again:
+    there is no once-per-entry limit. This fallback does not itself turn driving into
+    teleporting locomotion.
 
     **Tag notifications.** Ordinary refinery arrival and docking in *enter* add neither an
     entered-by raise on the refinery's tag nor a destroyed-by-anything raise on the
@@ -536,16 +551,20 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     - Backing: `measurable` (scenario H4 parts a and d for one-at-a-time, the power switch and
       low power, part g for the construction state and for being sold, part h for being erased,
       H10 for the docking cell, the approach, the turn, the delays, the start of *unload*
-      and the non-dock-unload contact stall,
+      and the non-dock-unload contact stall, plus
       H14 for the second route, its ordering and draw count; S-0524 claim 14,
-      scenario C16 for the absence of docking tag raises). The selling-state
+      scenario C16 for the absence of docking tag raises). H10's qualified chrono-miner
+      assignment trace is `unmeasured`: no ordinary stock sequence isolating that
+      locomotion state and all predicates is established; H10 supplies conditional
+      diagnostics, not a claim of unreachability. The selling-state
       arrival refusal and its destination-absent scatter case are `unmeasured`:
       H14 proposes timing controls but establishes no reliable overlap before
       the sale independently releases contact and tether.
     - Confidence: medium; high for the docking cell at (3, 1) from the top-left cell; low
       for being erased and for the refinery that is not a dock-unload refinery; high for the
       second route's track-completion event, the absence of facing and stopped tests and its
-      scatter-request options; medium for its ordering and retained state
+      scatter-request options and for repeated-offer assignment qualification and
+      same-assignment point suppression; medium for its ordering and retained state
 
 10a. **A blocked docking cell does not expire the reservation (Q-0371).** Holding
     contact reserves a dock slot, not exclusive occupancy of the docking cell.
@@ -1416,11 +1435,11 @@ and let *f̂* be 8192*q* reduced to the signed facing range −32768 to 32767. T
 > *Y*ₐ = trunc(RZ₅₃(*Y* − RZ₅₃(30 × sinT θ))), and *Z*ₐ = *Z*.
 
 The angle is in radians, the 30 in leptons, and both coordinate conversions truncate
-toward zero. Here sinT and cosT are the table sine and cosine required by S-0205
+toward zero. Let *S*ₜ(θ) and *C*ₜ(θ) denote the table sine and cosine required by S-0205
 claim 6, including the table's negative-angle quirk; they are not exact mathematical
-sines and cosines or library evaluations. Table results are single-precision values
+sines and cosines or library evaluations. Their results are single-precision values
 widened exactly for the double-precision products and sums, which round toward zero.
-The cosine contributes to *X* and the sine to *Y*, not the reverse. Project
+*C*ₜ(θ) contributes to *X* and *S*ₜ(θ) to *Y*, not the reverse. Project
 (*X*ₐ, *Y*ₐ, *Z*ₐ) by S-0101 claim 1 and centre the harvesting image there.
 S-0204 claim 8's `quirks.table_direction` covers this reverse short-angle scale too:
 with it off, replace 16383 by 16384 and *c* by the binary64 value nearest −2π / 65536.
@@ -2105,7 +2124,24 @@ is wrong). *Runs:* 3.
   be unchanged. A no-flag choice or accepted refinery contact, or changed valid-refinery
   docking, falsifies the alternative. Import warns about the no-flag dock-list type
   in either setting. These controls are conformance tests, not oracle measurements.
+- *Conditional chrono-miner trace:* if an ordinary stock sequence establishes a chrono
+  miner with non-teleporting locomotion while contacting the refinery, record every due
+  docking-cell offer with the order-level destination, locomotor destination point,
+  destination-refresh and point-suppression states, suspended predecessor and restoration
+  permission, current and queued behaviours, and the predicates of S-0207 claim 27.
+  Compare an unchanged offer without refresh with a changed or refreshed offer, keeping
+  the other predicates qualified. The former must not run the dock test. For the latter,
+  distinguish restoration from non-restorable fallback. In the usual fallback with a
+  nonempty point otherwise due, the order-level cell destination is installed but its
+  movement point is skipped in that assignment; suppression is consumed and newly enabled
+  refresh remains. A subsequent eligible equal offer may test again. Contact acquisition
+  alone, or changing cell occupancy without an eligible assignment, must not cause a test.
+  A test on the rejected unchanged offer, a movement point installed by the triggering
+  fallback assignment, or a once-per-entry limit falsifies these conditional predictions.
+  If this state cannot be established with stock data, retain it as unmeasured; do not
+  infer that it is unreachable or replace the missing run with altered locomotion data.
 - *Runs:* 2 per approach side and foundation size, 3 without the flag; 1 per engine-only control.
+  For the conditional trace, retain every qualifying offer and its next equal offer.
 
 **H11. The queueing search and the step-off (claims 9, 13).**
 - *Setup:* a human house with one refinery (default queueing shift) and two harvesters, so one
