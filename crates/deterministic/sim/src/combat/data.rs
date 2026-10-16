@@ -639,6 +639,8 @@ pub struct BuildingCombat {
     pub delay_kill: bool,
     /// Leaves rubble.
     pub leave_rubble: bool,
+    /// An overpowerable type (S-0518 Import mapping).
+    pub overpowerable: bool,
     /// Helipad.
     pub helipad: bool,
     /// Artillery flag.
@@ -730,9 +732,26 @@ pub struct RadRules {
     pub site_warhead: Option<WarheadId>,
 }
 
+/// The game-wide prism support settings (S-0518 Import mapping).
+#[derive(Clone, Debug)]
+pub struct PrismRules {
+    /// The prism type: a building type index.
+    pub building: Option<u32>,
+    /// The held support modifier *s*, a whole-number percentage (F4).
+    pub modifier: i32,
+    /// The support cap *N*ₘₐₓ.
+    pub max: i32,
+    /// The support rearm *R*ₛ, ticks.
+    pub rearm: i32,
+    /// The beam duration *L*ₛ, ticks.
+    pub duration: i32,
+}
+
 /// Game-wide combat values.
 #[derive(Clone, Debug)]
 pub struct CombatGeneral {
+    /// The prism support settings (S-0518).
+    pub prism: PrismRules,
     /// The completion animation of an erasure (S-0514 Import mapping).
     pub warp_away: Option<String>,
     /// The sparkle animation of an erased or phasing-in unit (S-0514 claim
@@ -1449,6 +1468,17 @@ pub fn combat_rules(
     // spec: S-0314 Constants (repair rates absent: the double nearest 0.016)
     let rate = |d: &Option<Decimal>| dec(d, mode).unwrap_or_else(|| nearest_double("0.016"));
     let general = CombatGeneral {
+        prism: PrismRules {
+            building: g
+                .prism_type
+                .as_ref()
+                .and_then(|n| names.get(&(Kind::Building, n.clone())).copied()),
+            // spec: S-0518 Import mapping (the engine's starting held modifier is 100; support cap 8, rearm 100, duration 15)
+            modifier: g.prism_support_modifier.unwrap_or(100),
+            max: g.prism_support_max.unwrap_or(8),
+            rearm: g.prism_support_delay.unwrap_or(100),
+            duration: g.prism_support_duration.unwrap_or(15),
+        },
         warp_away: g.warp_away.clone(),
         chrono_sparkle: g.chrono_sparkle.clone(),
         // spec: S-0514 Constants (warp distance default 5 cells) and Import mapping

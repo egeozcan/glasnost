@@ -126,6 +126,10 @@ pub struct LayerQuirks {
     /// from the list plays the first listed mode with its number
     /// (`modes::select`).
     pub mode_number_first_wins: bool,
+    /// `quirks.prism_modifier_reread_scale` (S-0518 claim 16): every layer
+    /// with a general section scales the held support modifier by 100,
+    /// even without the key. Off: a layer without the key leaves it.
+    pub prism_modifier_reread_scale: bool,
     /// `quirks.extra_light_truncation` (S-0104 claim 13): the extra-light
     /// values are stored as ⌊v × 1000⌋, so a value such as 0.57 loses a
     /// unit. Off: v × 1000 rounded to nearest.
@@ -153,6 +157,8 @@ impl Default for LayerQuirks {
             persist_tiberium_overrides: true,
             mission_rules_before_reset: true,
             mode_number_first_wins: true,
+            // spec: S-0518 Edge cases (prism_modifier_reread_scale defaults on)
+            prism_modifier_reread_scale: true,
             // spec: S-0104 Edge cases (extra_light_truncation defaults on)
             extra_light_truncation: true,
         }
@@ -161,7 +167,7 @@ impl Default for LayerQuirks {
 
 impl LayerQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 16] {
+    pub fn named(&self) -> [(&'static str, bool); 17] {
         [
             ("unlisted_reference_unread", self.unlisted_reference_unread),
             ("long_name_duplicates", self.long_name_duplicates),
@@ -196,6 +202,10 @@ impl LayerQuirks {
                 self.mission_rules_before_reset,
             ),
             ("mode_number_first_wins", self.mode_number_first_wins),
+            (
+                "prism_modifier_reread_scale",
+                self.prism_modifier_reread_scale,
+            ),
             ("extra_light_truncation", self.extra_light_truncation),
         ]
     }
@@ -217,6 +227,9 @@ pub enum What {
     /// The value, in thousandths, was truncated on re-read (S-0104 claim
     /// 12).
     Truncated(i64),
+    /// The held support modifier was rescaled by a read of the general
+    /// section (S-0518 claim 16, F4): the new whole-number percentage.
+    Rescaled(i64),
     /// The key is read from the base rules only (S-0006 claim 2).
     Ignored(Vec<u8>),
 }
@@ -385,6 +398,26 @@ const DIFFICULTY_KEYS: [&str; 12] = [
     "DestroyWalls",
     "ContentScan",
 ];
+
+/// The engine's starting held support modifier (S-0518 Import mapping).
+// spec: S-0518 Import mapping (the engine's starting held value is 100)
+const PRISM_MODIFIER_START: i64 = 100;
+
+/// F4 for a given key: trunc(*v* × 100) with *v* the field's decimal value,
+/// one double multiplication rounded toward zero (S-0518 F4).
+fn prism_modifier_scaled(stored: &[u8]) -> Option<i64> {
+    use glasnost_ini::binfloat::{Binary, Format};
+    match value::decimal(stored, glasnost_ini::value::DecimalField::Double) {
+        glasnost_ini::value::Decimal::Value { value, .. } => {
+            // spec: S-0518 F4 (v × 100 in double precision toward zero, truncated to a 32-bit integer)
+            let p = value
+                .convert_rz(Format::Double)
+                .mul_rz(&Binary::from_i64(Format::Double, 100), Format::Double);
+            p.trunc_to_i64().map(|x| i64::from(x as i32))
+        }
+        glasnost_ini::value::Decimal::NoNumber => None,
+    }
+}
 
 /// Barrel keys and the turret keys they take (S-0105 claim 27).
 // spec: S-0105 claim 27, S-0006 Import mapping (barrel recoil values)
@@ -1682,6 +1715,33 @@ impl Run<'_> {
                             what: What::Reset,
                         });
                     }
+                }
+            }
+            // spec: S-0518 claim 16 and F4 (a layer with the general section rescales the held support modifier by 100, whether or not the key is given; quirks.prism_modifier_reread_scale off: only a given key counts)
+            if name.as_slice() == b"General" {
+                let held = keys
+                    .get(&b"PrismSupportModifier"[..])
+                    .and_then(|s| s.derived)
+                    .unwrap_or(PRISM_MODIFIER_START);
+                let given_value = given
+                    .iter()
+                    .find(|(k, _, _)| k.as_slice() == b"PrismSupportModifier")
+                    .map(|(_, v, l)| (v.clone(), *l));
+                let next = match &given_value {
+                    Some((v, _)) => prism_modifier_scaled(v).unwrap_or(held),
+                    None if quirks.prism_modifier_reread_scale => {
+                        i64::from((held as i32).wrapping_mul(100))
+                    }
+                    None => held,
+                };
+                if next != held || given_value.is_some() || quirks.prism_modifier_reread_scale {
+                    let state = keys.entry(b"PrismSupportModifier".to_vec()).or_default();
+                    state.derived = Some(next);
+                    state.history.push(Event {
+                        layer: li,
+                        line: given_value.as_ref().map_or(section.line(), |(_, l)| *l),
+                        what: What::Rescaled(next),
+                    });
                 }
             }
             // spec: S-0104 claims 12 and 13 (extra-light values truncated on re-read)

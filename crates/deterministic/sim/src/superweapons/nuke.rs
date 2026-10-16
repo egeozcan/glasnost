@@ -145,6 +145,7 @@ fn missile(
         nuke_wait: None,
         vehicle_scalable: false,
         airburst_child: false,
+        multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
     };
     w.projectiles.insert(id, pr);
     // spec: S-0306 claim 8 (the projectile enters play; its first turn is in the same tick)

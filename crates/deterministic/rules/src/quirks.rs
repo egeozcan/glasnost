@@ -3504,6 +3504,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "importer (convert::layers::LayerQuirks), S-0215 claim 21",
     ),
     (
+        "prism_modifier_reread_scale",
+        "importer (convert::layers::LayerQuirks), S-0518 claim 16",
+    ),
+    (
         "red_normalisation_divisor",
         "renderer (render::light), S-0104",
     ),

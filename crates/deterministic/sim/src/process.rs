@@ -976,6 +976,9 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             return standard_delay(w, id);
         }
     }
+    // spec: S-0518 claim 15 (an infantry unit whose charging mark is set first runs an automatic range search, without the timer gate)
+    crate::linked::break_off(w, id);
+    let o = w.obj(id).cloned().unwrap_or(o);
     if let Some(t) = o.target {
         let (slot, _) = crate::combat::weapon::would_use(w, id, Some(t));
         // spec: S-0304 claim 2 (the target is dropped, and the attack stopped, at the first check that answers illegal)
@@ -1016,6 +1019,10 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
             return 1;
         }
         // Row 3 (the weeder's rule) is left by S-0402 to a later revision; row 4 is the original's computer players' only.
+    }
+    // spec: S-0518 claim 14 (a charger with no target in guard looks at the cells next to it; when it takes a building the ordinary guard processing does not run; Q-0985: 1 tick)
+    if o.target.is_none() && crate::linked::start_charging(w, id) {
+        return 1;
     }
     if o.target.is_none() && o.kind == Kind::Infantry {
         // spec: S-0215 claim 24 (no target: attempts its idle action, S-0107 claim 14)
@@ -1220,6 +1227,11 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
                 crate::combat::acquire::SearchContext::Area,
             );
             if found.is_some() {
+                return 1;
+            }
+            // spec: S-0518 claim 14 (area guard: after the guard spot and automatic search steps, a charger still without a target looks for a building to charge; Q-0985: 1 tick)
+            if w.obj(id).is_some_and(|x| x.target.is_none()) && crate::linked::start_charging(w, id)
+            {
                 return 1;
             }
             idle(w);

@@ -1688,6 +1688,8 @@ fn building_rules(
         gatherer_destination: b(bt.econ.resource_gatherer) && b(bt.econ.resource_destination),
         delay_kill: b(bt.eligible_for_delay_kill),
         leave_rubble: b(bt.leave_rubble),
+        // spec: S-0518 Import mapping (Overpowerable absent: no)
+        overpowerable: b(bt.overpowerable),
         helipad: b(bt.helipad),
         artillary: b(bt.artillary),
         can_be_occupied: b(bt.can_be_occupied),

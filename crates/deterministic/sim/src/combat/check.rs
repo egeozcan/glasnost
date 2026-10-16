@@ -380,8 +380,8 @@ pub fn check(
     if slot == 0 && gate_closed(w, firer, weapon) {
         return Answer::Rearming;
     }
-    // spec: S-0301 claim 14 (a pending delayed shot: rearming)
-    if c.delayed_shot.is_some() {
+    // spec: S-0301 claim 14 and S-0518 claim 6 (a pending delayed shot, or a supporter's pending beam: rearming)
+    if c.delayed_shot.is_some() || c.support_beam.is_some() {
         return Answer::Rearming;
     }
     // spec: S-0301 claim 9 rank 7 (ammunition 0)

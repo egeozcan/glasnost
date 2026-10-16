@@ -493,6 +493,7 @@ pub fn launch(
         nuke_wait: None,
         vehicle_scalable: o.kind == Kind::Vehicle && p.scalable,
         airburst_child: false,
+        multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
     };
     w.projectiles.insert(id, proj);
     if o.kind == Kind::Vehicle
@@ -1418,7 +1419,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
         let res = detonation_inner(
             w,
             pr.weapon,
-            pr.damage,
+            crate::linked::scaled_damage(pr.damage, pr.multiplier), // spec: S-0518 claim 9 and F1 (the damage supplied to area damage is scaled by the projectile's multiplier)
             point,
             pr.attacker,
             pr.house,
@@ -1443,7 +1444,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
         detonation_inner(
             w,
             pr.weapon,
-            pr.damage,
+            crate::linked::scaled_damage(pr.damage, pr.multiplier), // spec: S-0518 claim 9 and F1 (the damage supplied to area damage is scaled by the projectile's multiplier)
             q,
             pr.attacker,
             pr.house,
@@ -1510,6 +1511,7 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             nuke_wait: None,
             vehicle_scalable: false,
             airburst_child: true,
+            multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
         };
         w.projectiles.insert(id, child);
         w.update.enter(id);
@@ -1567,6 +1569,10 @@ fn detonation_inner(
         return DetonationResult::Missed;
     };
     // spec: S-0514 claim 1 (a temporal warhead's erasing effect replaces ordinary direct and area damage; the other special effects that rank before it are not yet ranked, Q-0984: the parasite, air-strike and electric-charge flags win)
+    // spec: S-0518 claim 11 (an electric-charge detonation registers an infantry firer on the building it hit, whatever the building)
+    if rules.combat.warhead(h).electric_assault {
+        crate::linked::charge_hit(w, attacker, target);
+    }
     let erasing = wh_temporal(&rules, h);
     if erasing {
         crate::temporal::deliver(w, attacker, target);

@@ -1154,6 +1154,7 @@ impl Live {
                 | Effect::Hit { .. }
                 | Effect::OverlayCrushed { .. }
                 | Effect::Superweapon { .. }
+                | Effect::SupportBeam { .. }
                 | Effect::Captured { .. }
                 | Effect::Infiltrated { .. }
                 | Effect::Cloak { .. } => continue,

@@ -264,10 +264,10 @@ pub fn being_drained(w: &World, id: ObjectId) -> bool {
     false
 }
 
-/// *n*<sub>c</sub>, the chargers a building has (S-0405 Terms). Seam.
+/// *n*<sub>c</sub>, the chargers a building has (S-0405 Terms): the
+/// registered chargers of S-0518 claim 12.
 pub fn chargers(w: &World, id: ObjectId) -> i32 {
-    let _ = (w, id);
-    0
+    crate::linked::chargers(w, id)
 }
 
 /// *n*<sub>a</sub>, the passengers an absorbing building holds (S-0312

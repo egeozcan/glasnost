@@ -564,6 +564,8 @@ pub fn target_cleared(w: &mut World, spawner: ObjectId) {
 /// [`settle_clear`] before anything reads the pending or controller
 /// target, so its outcome is the same as an immediate clear.
 pub fn set_own_target(ob: &mut crate::world::Object, t: Option<Target>) {
+    // spec: S-0518 claim 15 (the charging mark clears whenever the unit is given a target or its target changes)
+    ob.combat.charging = false;
     let had = ob.target.is_some();
     ob.target = t;
     if t.is_none() && had {

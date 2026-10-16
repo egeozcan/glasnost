@@ -187,6 +187,7 @@ const BUILDING_COMBAT: &[Row] = &[
         "S-0302",
     ),
     ("leave_rubble", "LeaveRubble", Bool, "S-0312"),
+    ("overpowerable", "Overpowerable", Bool, "S-0518, S-0308"),
     ("helipad", "Helipad", Bool, "S-0312"),
     ("artillary", "Artillary", Bool, "S-0309"),
     ("max_number_occupants", "MaxNumberOccupants", Int, "S-0313"),
@@ -1053,6 +1054,35 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
     ),
     ("hover_brake", GENERAL, "HoverBrake", Dec, "S-0503"),
     ("hover_dampen", GENERAL, "HoverDampen", Dec, "S-0503"),
+    // spec: S-0518 Import mapping (PrismType a building type name; the other prism keys integers; the modifier is read apart, F4)
+    (
+        "prism_type",
+        GENERAL,
+        "PrismType",
+        Ref(Kind::Buildings),
+        "S-0518",
+    ),
+    (
+        "prism_support_max",
+        GENERAL,
+        "PrismSupportMax",
+        Int,
+        "S-0518",
+    ),
+    (
+        "prism_support_delay",
+        GENERAL,
+        "PrismSupportDelay",
+        Int,
+        "S-0518",
+    ),
+    (
+        "prism_support_duration",
+        GENERAL,
+        "PrismSupportDuration",
+        Int,
+        "S-0518",
+    ),
     // spec: S-0514 Import mapping (WarpAway and ChronoSparkle1 animation names; OpenToppedWarpDistance an integer of cells)
     (
         "warp_away",
@@ -1469,6 +1499,12 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     }
     // spec: S-0525 Import mapping (RadColor, a byte triple)
     out.push(("global:Radiation", "RadColor".to_owned(), "S-0525"));
+    // spec: S-0518 Import mapping (the support modifier, read through the layers' F4)
+    out.push((
+        "global:General",
+        "PrismSupportModifier".to_owned(),
+        "S-0518",
+    ));
     let mut keyed = |cats: &[&'static str], keys: &[String], spec: &'static str| {
         for c in cats {
             for k in keys {
@@ -2652,6 +2688,13 @@ impl Builder<'_> {
             }
         }
         self.radiation_import(rec);
+        // spec: S-0518 Import mapping and F4 (the held support modifier after every layer's read)
+        if let Some(d) = self
+            .global(GENERAL, "PrismSupportModifier")
+            .and_then(|s| s.derived)
+        {
+            rec.put("prism_support_modifier", int_node(d as i32));
+        }
         // spec: S-0303 Import mapping, S-0309 Import mapping (HarvesterUnit: a vehicle-type list)
         let harvesters = self.global(GENERAL, "HarvesterUnit");
         if let Some(list) = self.name_list(

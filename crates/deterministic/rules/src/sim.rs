@@ -698,6 +698,25 @@ pub struct General {
     /// established.
     #[serde(default)]
     pub default_spark_system: Option<String>,
+    /// `[General] PrismType`, the building type that supports and is
+    /// supported (S-0518 Import mapping).
+    #[serde(default)]
+    pub prism_type: Option<String>,
+    /// `[General] PrismSupportModifier`: the held whole-number percentage
+    /// after the layers' F4 reads (S-0518 Import mapping, F4).
+    #[serde(default)]
+    pub prism_support_modifier: Option<i32>,
+    /// `[General] PrismSupportMax`, the support cap (S-0518 Import mapping).
+    #[serde(default)]
+    pub prism_support_max: Option<i32>,
+    /// `[General] PrismSupportDelay`, the support rearm in ticks (S-0518
+    /// Import mapping).
+    #[serde(default)]
+    pub prism_support_delay: Option<i32>,
+    /// `[General] PrismSupportDuration`, the beam duration in ticks (S-0518
+    /// Import mapping).
+    #[serde(default)]
+    pub prism_support_duration: Option<i32>,
     /// `[General] WarpAway`, the completion animation (S-0514 Import
     /// mapping).
     #[serde(default)]
@@ -1854,6 +1873,10 @@ pub struct CombatFields {
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BuildingType {
+    /// `Overpowerable`, the type that charging infantry overpower (S-0518
+    /// Import mapping); absent: no.
+    #[serde(default)]
+    pub overpowerable: Option<bool>,
     /// `CloakGenerator` (S-0516 claims 19 and 20).
     #[serde(default)]
     pub cloak_generator: Option<bool>,
