@@ -184,19 +184,19 @@ pub fn visible(w: &World, viewer: HouseId, carrier: ObjectId) -> bool {
     if b.house == Some(viewer) {
         return true;
     }
-    let (Some(c), r) = (w.obj(carrier), w.rules()) else {
-        return false;
-    };
+    let r = w.rules();
+    // spec: S-0519 F2 (the positions are the reference points of S-0204 claim 4)
+    let at = w.reference_point(carrier);
     w.objects.values().any(|d| {
         let s = crate::combat::veterancy::type_combat(w, d.id).map_or(0, |tc| tc.bomb_sight);
         if d.owner != Some(viewer) || !d.on_map || s <= 0 {
             return false;
         }
+        let p = w.reference_point(d.id);
         let sq = |a: i32| i64::from(a) * i64::from(a);
-        // spec: S-0519 F2 (N = Δx² + Δy² + Δz² at the reference points; d = trunc(r(N)), the table root; the detector sees the bomb when d < 256 s)
-        let n = sq(d.pos.x.wrapping_sub(c.pos.x))
-            + sq(d.pos.y.wrapping_sub(c.pos.y))
-            + sq(d.pos.z.wrapping_sub(c.pos.z));
+        // spec: S-0519 F2 (N = Δx² + Δy² + Δz²; d = trunc(r(N)), the table root; the detector sees the bomb when d < 256 s)
+        let n =
+            sq(p.x.wrapping_sub(at.x)) + sq(p.y.wrapping_sub(at.y)) + sq(p.z.wrapping_sub(at.z));
         let dist = root_floor(n as u64, r.quirks.table_root_distance, r.mode) as i64;
         dist < 256 * i64::from(s) // spec: S-0519 Constants (detection scale 256 leptons per cell)
     })

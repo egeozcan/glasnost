@@ -286,6 +286,12 @@ const WEAPON_COMBAT: &[Row] = &[
     ("drain_weapon", "DrainWeapon", Bool, "S-0308"),
     ("fire_while_moving", "FireWhileMoving", Bool, "S-0310"),
     ("suicide", "Suicide", Bool, "S-0312"),
+    (
+        "mig_attack_cursor",
+        "MigAttackCursor",
+        Bool,
+        "S-0519, S-0214",
+    ),
     ("supress", "Supress", Bool, "S-0309"),
     ("fire_once", "FireOnce", Bool, "S-0309"),
     ("reveal_on_fire", "RevealOnFire", Bool, "S-0409"),
@@ -2859,6 +2865,15 @@ impl Builder<'_> {
 
     fn general_warnings(&mut self) {
         let cd = |k: &str| format!("[CombatDamage] {k}");
+        // spec: S-0519 F3 (a timed delay below 6 ticks or a flicker rate of 0: the original divides by zero while drawing the bomb icon; our engine takes the fixed form, a departure)
+        let delay = self.global(COMBAT_DAMAGE, "IvanTimedDelay");
+        self.each_int(delay.as_ref(), |n| (0..6).contains(&n), |v| {
+            format!("[CombatDamage] IvanTimedDelay {v} is below 6: the bomb icon's frame divisor is 0 in the original, which divides by zero while drawing; our engine substitutes 1 (S-0519 F3, a departure)")
+        });
+        let flicker = self.global(COMBAT_DAMAGE, "IvanIconFlickerRate");
+        self.each_int(flicker.as_ref(), |n| n == 0, |v| {
+            format!("[CombatDamage] IvanIconFlickerRate {v} is 0: the original divides by zero while drawing the bomb icon; our engine uses frame bit 0 (S-0519 F3, a departure)")
+        });
         let min = self.global(COMBAT_DAMAGE, "MinDamage");
         // spec: S-0302 Edge cases (the minimum-damage field has no effect; the importer warns when it is given)
         self.each(
@@ -3028,6 +3043,24 @@ impl Builder<'_> {
             rad("RadLevelDelay"),
             rad("RadLightDelay"),
         );
+        // spec: S-0519 Edge cases (a type with a positive strike size and no normal strike aircraft type stops the original at the first start; our engine treats it as no designator, a departure)
+        for kind in [
+            Kind::Infantry,
+            Kind::Vehicles,
+            Kind::Aircraft,
+            Kind::Buildings,
+        ] {
+            for t in outcome.registries.get(&kind).unwrap_or(&empty) {
+                let given = text_of(key(t, "AirstrikeTeamType"))
+                    .is_some_and(|n| !n.is_empty() && !value::is_no_type(&n));
+                if int_of(key(t, "AirstrikeTeam")).unwrap_or(0) > 0 && !given {
+                    self.warn_at(key(t, "AirstrikeTeam"), format!(
+                        "{} has a positive AirstrikeTeam but no AirstrikeTeamType: our engine treats it as no designator (S-0519 Edge cases, a departure)",
+                        show(&t.name)
+                    ));
+                }
+            }
+        }
         for w in weapons {
             let name = format!("weapons {}", show(&w.name));
             let level = int_of(key(w, "RadLevel")).unwrap_or(0);

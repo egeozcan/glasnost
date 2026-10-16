@@ -374,6 +374,7 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("thief", "Thief", Bool),
     ("c4", "C4", Bool),
     ("ivan", "Ivan", Bool),
+    ("doggie", "Doggie", Bool),
     ("deployer", "Deployer", Bool),
     ("deploy_fire", "DeployFire", Bool),
     ("undeploy_delay", "UndeployDelay", Int),
@@ -2274,3 +2275,7 @@ mod temporal_tests;
 #[cfg(test)]
 #[path = "sim_linked_tests.rs"]
 mod linked_tests;
+
+#[cfg(test)]
+#[path = "sim_terror_tests.rs"]
+mod terror_tests;

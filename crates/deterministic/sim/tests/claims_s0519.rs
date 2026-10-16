@@ -33,7 +33,10 @@ fn planted() -> (
 fn planting_records_the_bomb_and_hurts_nobody() {
     let (w, p, v, near, t) = planted();
     let b = w.obj(v).unwrap().combat.bomb.unwrap();
-    assert_eq!((b.planter, b.house, b.planted), (Some(p), Some(HouseId(0)), t));
+    assert_eq!(
+        (b.planter, b.house, b.planted),
+        (Some(p), Some(HouseId(0)), t)
+    );
     assert_eq!((health(&w, v), health(&w, near)), (100_000, 100_000));
 }
 
@@ -45,7 +48,11 @@ fn the_bomb_goes_off_in_the_tick_after_the_delay() {
     run_to(&mut w, t + 51);
     assert_eq!(health(&w, v), 100_000, "nothing in the step of tick t + D");
     testkit::run(&mut w, 1);
-    assert_eq!(health(&w, v), 100_000 - 100, "bomb damage 100 in the step of tick t + D + 1");
+    assert_eq!(
+        health(&w, v),
+        100_000 - 100,
+        "bomb damage 100 in the step of tick t + D + 1"
+    );
     assert!(w.obj(v).unwrap().combat.bomb.is_none());
 }
 
@@ -176,7 +183,11 @@ fn an_off_map_detonation_is_silent() {
 fn the_detonate_order_goes_off_at_once() {
     let (mut w, _, v, _, t) = planted();
     run_to(&mut w, 6);
-    assert!(orders::issue(&mut w, HouseId(1), Order::Detonate { actor: v }));
+    assert!(orders::issue(
+        &mut w,
+        HouseId(1),
+        Order::Detonate { actor: v }
+    ));
     testkit::run(&mut w, 2);
     assert!(w.tick < t + 50, "long before the timer");
     assert_eq!(health(&w, v), 100_000 - 100);
@@ -204,11 +215,17 @@ fn visibility_follows_the_planter_and_detectors() {
     assert!(bomb::visible(&w, HouseId(0), v));
     assert!(!bomb::visible(&w, HouseId(1), v));
     let det = quiet(&mut w, Kind::Vehicle, "DET", 1, at(0, 3));
-    assert!(!bomb::visible(&w, HouseId(1), v), "exactly 3 cells: not inside");
+    assert!(
+        !bomb::visible(&w, HouseId(1), v),
+        "exactly 3 cells: not inside"
+    );
     w.obj_mut(det).unwrap().pos = w.obj(v).unwrap().pos;
     assert!(bomb::visible(&w, HouseId(1), v), "at the carrier: inside");
     w.obj_mut(det).unwrap().on_map = false;
-    assert!(!bomb::visible(&w, HouseId(1), v), "a detector off the map does not count");
+    assert!(
+        !bomb::visible(&w, HouseId(1), v),
+        "a detector off the map does not count"
+    );
 }
 
 // spec: S-0519 claim 11 (T12: a suicide shot kills the firer with no projectile and no rearm; the death weapon hurts the target)
@@ -226,5 +243,9 @@ fn a_suicide_shot_kills_its_firer() {
     assert!(w.projectiles.is_empty(), "no projectile");
     testkit::run(&mut w, 2);
     assert!(w.obj(k).is_none(), "the firer is dead");
-    assert_eq!(health(&w, near), 100_000 - 80, "the death weapon's damage, not the suicide weapon's 5");
+    assert_eq!(
+        health(&w, near),
+        100_000 - 80,
+        "the death weapon's damage, not the suicide weapon's 5"
+    );
 }

@@ -76,15 +76,22 @@ pub fn vehicle(r: &mut Ruleset, name: &str, f: impl FnOnce(&mut UnitType)) {
 /// building).
 pub fn ruleset() -> Ruleset {
     let mut r = testkit::combat_ruleset();
-    r.sim.warheads.insert("IVAN".into(), warhead(|h| h.ivan_bomb = Some(true)));
-    r.sim.warheads.insert("DISARM".into(), warhead(|h| h.bomb_disarm = Some(true)));
-    r.sim.warheads.insert(
-        "BOOM".into(),
-        warhead(|h| h.cell_spread = Some(d("1.5"))),
-    );
+    r.sim
+        .warheads
+        .insert("IVAN".into(), warhead(|h| h.ivan_bomb = Some(true)));
+    r.sim
+        .warheads
+        .insert("DISARM".into(), warhead(|h| h.bomb_disarm = Some(true)));
+    r.sim
+        .warheads
+        .insert("BOOM".into(), warhead(|h| h.cell_spread = Some(d("1.5"))));
     r.sim.warheads.insert("DEMO".into(), warhead(|_| {}));
-    r.sim.weapons.insert("PlantW".into(), weapon(0, "20", "IVAN"));
-    r.sim.weapons.insert("DisarmW".into(), weapon(0, "20", "DISARM"));
+    r.sim
+        .weapons
+        .insert("PlantW".into(), weapon(0, "20", "IVAN"));
+    r.sim
+        .weapons
+        .insert("DisarmW".into(), weapon(0, "20", "DISARM"));
     r.sim.weapons.insert("Boom".into(), weapon(80, "5", "BOOM"));
     let mut suicide = weapon(5, "3", "DEMO");
     suicide.suicide = Some(true);
@@ -134,9 +141,15 @@ pub fn ruleset() -> Ruleset {
     // The air-strike part: the designation warhead, the strike aircraft JET
     // (normal) and JET2 (elite), the designator DESIG (strike of 2 JET,
     // recharge 100; elite 3 JET2, recharge 50).
-    r.sim.warheads.insert("STRIKE".into(), warhead(|h| h.airstrike = Some(true)));
-    r.sim.weapons.insert("Laser".into(), weapon(10, "20", "STRIKE"));
-    r.sim.weapons.insert("JetGun".into(), weapon(10, "6", "DEMO"));
+    r.sim
+        .warheads
+        .insert("STRIKE".into(), warhead(|h| h.airstrike = Some(true)));
+    r.sim
+        .weapons
+        .insert("Laser".into(), weapon(10, "20", "STRIKE"));
+    r.sim
+        .weapons
+        .insert("JetGun".into(), weapon(10, "6", "DEMO"));
     for n in ["JET", "JET2"] {
         let mut u = UnitType {
             strength: Some(200),
@@ -200,7 +213,8 @@ pub fn quiet(w: &mut World, kind: Kind, name: &str, house: u8, c: CellXY) -> Obj
     let tick = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert;
     if let Some(o) = w.obj_mut(id) {
-        o.beh.force(glasnost_sim::rules::Behaviour::Sleep, tick, stale);
+        o.beh
+            .force(glasnost_sim::rules::Behaviour::Sleep, tick, stale);
     }
     id
 }
@@ -226,5 +240,9 @@ pub fn designate(w: &mut World, d: ObjectId, x: ObjectId) {
 
 /// The aircraft linked to the designator's strike.
 pub fn linked(w: &World, d: ObjectId) -> Vec<ObjectId> {
-    w.strike.strikes.get(&d).map(|s| s.aircraft.clone()).unwrap_or_default()
+    w.strike
+        .strikes
+        .get(&d)
+        .map(|s| s.aircraft.clone())
+        .unwrap_or_default()
 }

@@ -1587,7 +1587,7 @@ pub struct Quirks {
     // spec: S-0518 claim 15 and Edge cases
     #[serde(default = "on")]
     pub vehicle_charge_no_break_off: bool,
-    /// Only the type's explosive-charges flag plants a charge on arrival, and the veterancy explosive-charges ability plants nothing; off: the veterancy ability also plants, as the type flag does. Not implemented yet (wave 2).
+    /// Only the type's explosive-charges flag plants a charge on arrival, and the veterancy explosive-charges ability plants nothing; off: the veterancy ability also plants, as the type flag does.
     // spec: S-0519 claim 13 and Edge cases
     #[serde(default = "on")]
     pub charge_needs_type_flag: bool,
@@ -1615,11 +1615,11 @@ pub struct Quirks {
     // spec: S-0525 claim 6 and Edge cases
     #[serde(default = "on")]
     pub radiation_residue: bool,
-    /// A strike start that places no aircraft (an elite strike size of 0 or less, or a first aircraft that cannot be created) still leaves the strike in progress, so no aircraft can ever end it and later designations only redirect it; off: such a start leaves the strike idle, with its strike target and end tick unchanged. Not implemented yet (wave 2).
+    /// A strike start that places no aircraft (an elite strike size of 0 or less, or a first aircraft that cannot be created) still leaves the strike in progress, so no aircraft can ever end it and later designations only redirect it; off: such a start leaves the strike idle, with its strike target and end tick unchanged.
     // spec: S-0519 claim 17 and Edge cases
     #[serde(default = "on")]
     pub airstrike_empty_strike_stuck: bool,
-    /// The recharge delay holds back only a repeat designation of the same object with no change of target in between, so a cancelled or redirected idle strike is ready at once for any object; off: an idle strike that has ended before is ready only when t ≥ e + R, whatever its target. Not implemented yet (wave 2).
+    /// The recharge delay holds back only a repeat designation of the same object with no change of target in between, so a cancelled or redirected idle strike is ready at once for any object; off: an idle strike that has ended before is ready only when t ≥ e + R, whatever its target.
     // spec: S-0519 claim 18
     #[serde(default = "on")]
     pub airstrike_recharge_same_target_only: bool,

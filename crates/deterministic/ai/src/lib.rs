@@ -30,3 +30,4 @@ pub mod scripted;
 pub mod skirmish;
 pub mod special;
 pub mod tech_buildings;
+pub mod terror;

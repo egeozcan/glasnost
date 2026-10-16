@@ -586,9 +586,9 @@ pub struct TypeCombat {
     pub elite_airstrike_team: i32,
     /// The strike aircraft type name, normal and elite (S-0519 Import
     /// mapping: a missing elite type takes the normal type).
-    pub airstrike_team_type: [Option<String>; 2],
+    pub airstrike_team_type: [Option<String>; 2], // spec: S-0519 Terms (normal and elite)
     /// The recharge delay in ticks, normal and elite (S-0519 Import mapping).
-    pub airstrike_recharge: [i32; 2],
+    pub airstrike_recharge: [i32; 2], // spec: S-0519 Terms (normal and elite)
     /// The bomb-sight range in cells (S-0519 Import mapping).
     pub bomb_sight: i32,
     /// Drainable.
@@ -1522,8 +1522,8 @@ pub fn combat_rules(
             warhead: warhead(&g.ivan_warhead),
             // spec: S-0519 Import mapping (IvanDamage absent: 100; IvanTimedDelay 450; IvanIconFlickerRate 8; both permissions no)
             damage: g.ivan_damage.unwrap_or(100),
-            delay: g.ivan_timed_delay.unwrap_or(450),
-            flicker: g.ivan_icon_flicker_rate.unwrap_or(8),
+            delay: g.ivan_timed_delay.unwrap_or(450), // spec: S-0519 Constants (timed delay default 450)
+            flicker: g.ivan_icon_flicker_rate.unwrap_or(8), // spec: S-0519 Constants (flicker rate default 8)
             can_detonate_time_bomb: g.can_detonate_time_bomb.unwrap_or(false),
             // spec: S-0519 Import mapping and F4 (C4Delay absent: the double nearest 0.03, never through single precision; a given value is a single widened)
             c4_delay: g

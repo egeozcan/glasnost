@@ -1403,12 +1403,9 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
         .is_some_and(|h| h.makes_disguise);
     // spec: S-0516 claim 31 (a disguise-flag warhead's projectile does no damage to the target)
     let area = !disguises
-        && !rules
-            .combat
-            .warhead_of(pr.weapon)
-            .is_some_and(|h| {
-                h.parasite || h.airstrike || h.electric_assault || h.ivan_bomb || h.bomb_disarm
-            });
+        && !rules.combat.warhead_of(pr.weapon).is_some_and(|h| {
+            h.parasite || h.airstrike || h.electric_assault || h.ivan_bomb || h.bomb_disarm
+        });
     if disguises {
         // spec: S-0516 claim 31 (detonating on its target, it disguises its firer)
         crate::cloak::disguise::disguise_hit(w, pr.attacker, pr.target);

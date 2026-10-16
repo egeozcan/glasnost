@@ -1384,6 +1384,9 @@ pub struct UnitType {
     /// `Ivan`.
     #[serde(default)]
     pub ivan: Option<bool>,
+    /// `Doggie`, the animal marker: no effect of its own (S-0519 claim 1).
+    #[serde(default)]
+    pub doggie: Option<bool>,
     /// `Deployer`.
     #[serde(default)]
     pub deployer: Option<bool>,
@@ -2363,6 +2366,10 @@ pub struct WeaponType {
     /// `Suicide` (S-0312 Terms).
     #[serde(default)]
     pub suicide: Option<bool>,
+    /// `MigAttackCursor`, the air-strike cursor flag: cursor only (S-0519
+    /// claim 16, S-0214 row I18).
+    #[serde(default)]
+    pub mig_attack_cursor: Option<bool>,
     /// `Supress` (S-0309 claim 14).
     #[serde(default)]
     pub supress: Option<bool>,

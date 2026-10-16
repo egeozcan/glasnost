@@ -121,7 +121,7 @@ fn tile_family(w: &World, c: CellXY, filter: Option<Family>) -> Option<Family> {
 
 /// Seam and entry point: a bridge repair hut demolishes its bridge (S-0511
 /// claim 16). Called when its delayed-kill countdown expires (S-0302
-/// claim 16) and, once planted bombs exist (S-0519), when a timed bomb on
+/// claim 16) and, when a timed bomb (S-0519 claim 5) on
 /// it detonates. No gate applies.
 pub fn demolish(w: &mut World, hut: ObjectId) {
     let Some(c) = hut_cell(w, hut) else { return };

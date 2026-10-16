@@ -700,9 +700,9 @@ pub(crate) fn targeters_drop(w: &mut World, id: ObjectId) {
     // spec: S-0207 claim 20 (e) (every object that has it as its target drops it)
     // spec: S-0215 claim 10 (the target's own jump: an overridden attacker reverts first, then drops the jumper if it is still its target; a restored other target is kept)
     // The one exception, an attacker whose airstrike is aimed at the living target (S-0207 claim 20 (e),
-    // S-0215 claim 10; not an erasing-weapon exception), is a seam: air strikes and their
-    // designators (S-0519 claims 16 to 20, wave 2) are not built, so no airstrike
-    // aiming exists in our engine.
+    // S-0215 claim 10; not an erasing-weapon exception), is a seam: a strike aircraft's
+    // target is the cell of the object (S-0519 claim 17) and only a redirect aims it at the object,
+    // and S-0207's Open questions leave a stock setup that establishes the exception open.
     let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
     for x in ids {
         let Some(ob) = w.obj_mut(x) else { continue };

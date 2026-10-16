@@ -48,6 +48,7 @@ const SCENES: &[Scene] = &[
     ("radiation", radiation_field),
     ("chrono", chrono_erases),
     ("prism", prism_supports),
+    ("terror", terror_attacks),
 ];
 
 #[test]
@@ -916,6 +917,251 @@ fn prism_supports(lane: &mut Lane) {
         lane.world().obj(target).map(|o| o.health)
     );
     lane.save("prism-after");
+}
+
+/// S-0519: a bomb planter plants on an enemy vehicle and the bomb goes off;
+/// a unit with explosive charges sabotages an enemy building; a designator
+/// calls an air strike onto one. Each part is played only when the install
+/// has a type with the needed flag.
+fn terror_attacks(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let planter = (0..r.infantry.len())
+        .find(|&i| {
+            r.unit(Kind::Infantry, i as u32)
+                .is_some_and(|u| u.raw.ivan.unwrap_or(false))
+        })
+        .map(|i| r.infantry[i].name.clone());
+    let charger = (0..r.infantry.len())
+        .find(|&i| {
+            r.unit(Kind::Infantry, i as u32)
+                .is_some_and(|u| u.raw.c4.unwrap_or(false))
+        })
+        .map(|i| r.infantry[i].name.clone());
+    let victim = (0..r.vehicles.len())
+        .find(|&i| {
+            r.unit(Kind::Vehicle, i as u32)
+                .is_some_and(|u| u.combat.slots[0].is_none() && !u.harvester && u.strength > 0)
+        })
+        .map(|i| r.vehicles[i].name.clone());
+    let wall_target = (0..r.buildings.len())
+        .find(|&i| {
+            let b = &r.buildings[i];
+            b.raw.can_c4.unwrap_or(true)
+                && b.raw.foundation.is_none_or(|f| f == [1, 1] || f == [2, 2])
+                && b.strength > 0
+        })
+        .map(|i| r.buildings[i].name.clone());
+    println!(
+        "planter found: {}, charger found: {}, victim found: {}, building found: {}",
+        planter.is_some(),
+        charger.is_some(),
+        victim.is_some(),
+        wall_target.is_some()
+    );
+    let local = lane.local();
+    let enemy = (0..lane.world().houses.len())
+        .map(|i| HouseId(i as u8))
+        .find(|&h| {
+            h != local
+                && lane.world().houses[usize::from(h.0)].role
+                    == glasnost_sim::world::HouseRole::Player
+        })
+        .unwrap_or(local);
+    let home = lane.home();
+    let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    lane.look_at(spot);
+    if let (Some(p), Some(v)) = (planter, victim) {
+        let bomber = lane.spawn(Kind::Infantry, &p, local, CellXY::new(spot.x - 2, spot.y));
+        let target = lane.spawn(Kind::Vehicle, &v, enemy, CellXY::new(spot.x + 2, spot.y));
+        lane.ticks(4);
+        lane.save("terror-before");
+        let sent = lane.order(local, bomber, ClickOn::Object(target));
+        println!("click on the vehicle: {sent} orders");
+        let hp = lane.world().obj(target).map_or(0, |o| o.health);
+        let (mut planted, mut gone) = (None, None);
+        for t in 0..2400 {
+            lane.ticks(1);
+            let has = lane
+                .world()
+                .obj(target)
+                .is_some_and(|o| o.combat.bomb.is_some());
+            if has && planted.is_none() {
+                planted = Some(t);
+                lane.save("terror-bomb");
+            }
+            if planted.is_some() && !has {
+                gone = Some(t);
+                lane.save("terror-boom");
+                break;
+            }
+        }
+        println!(
+            "bomb planted at tick {planted:?}, ended at {gone:?}, target health {hp} -> {:?}",
+            lane.world().obj(target).map(|o| o.health)
+        );
+    }
+    if let (Some(c), Some(b)) = (charger, wall_target.clone()) {
+        let size = lane
+            .world()
+            .rules()
+            .buildings
+            .iter()
+            .find(|x| x.name == b)
+            .map_or((1, 1), |x| x.foundation);
+        let at = lane
+            .area(CellXY::new(spot.x + 6, spot.y + 6), size, 2, |l| {
+                l != land::WATER && l != land::ROCK
+            })
+            .unwrap_or(spot);
+        let building = lane.spawn(Kind::Building, &b, enemy, at);
+        let start = lane.open_land(CellXY::new(at.x - 5, at.y));
+        let sabo = lane.spawn(Kind::Infantry, &c, local, start);
+        lane.ticks(4);
+        let sent = lane.order(local, sabo, ClickOn::Object(building));
+        println!("click on the building: {sent} orders");
+        let (mut planted, mut gone) = (None, None);
+        for t in 0..1800 {
+            lane.ticks(1);
+            if t % 300 == 0 {
+                let o = lane.world().obj(sabo);
+                println!(
+                    "t {t}: charger {:?} at {:?} dest {:?} target {:?}",
+                    o.map(|o| o.beh.current),
+                    o.map(|o| o.pos.cell()),
+                    o.map(|o| o.dest),
+                    o.map(|o| o.target)
+                );
+            }
+            let running = lane
+                .world()
+                .obj(building)
+                .is_some_and(|o| o.combat.charge_planter.is_some());
+            if running && planted.is_none() {
+                planted = Some(t);
+                lane.save("terror-charge");
+            }
+            if lane.world().obj(building).is_none() {
+                gone = Some(t);
+                break;
+            }
+        }
+        println!("charge planted at tick {planted:?}, building gone at {gone:?}");
+    }
+    let rr = lane.world().rules();
+    let designator = (0..rr.infantry.len())
+        .find(|&i| {
+            rr.unit(Kind::Infantry, i as u32)
+                .is_some_and(|u| u.combat.airstrike_team > 0)
+        })
+        .map(|i| (Kind::Infantry, rr.infantry[i].name.clone()))
+        .or_else(|| {
+            (0..rr.vehicles.len())
+                .find(|&i| {
+                    rr.unit(Kind::Vehicle, i as u32)
+                        .is_some_and(|u| u.combat.airstrike_team > 0)
+                })
+                .map(|i| (Kind::Vehicle, rr.vehicles[i].name.clone()))
+        })
+        .or_else(|| {
+            (0..rr.buildings.len())
+                .find(|&i| rr.buildings[i].combat.airstrike_team > 0)
+                .map(|i| (Kind::Building, rr.buildings[i].name.clone()))
+        });
+    println!("designator found: {}", designator.is_some());
+    if let (Some((dk, d)), Some(b)) = (designator, wall_target) {
+        let size = lane
+            .world()
+            .rules()
+            .buildings
+            .iter()
+            .find(|x| x.name == b)
+            .map_or((1, 1), |x| x.foundation);
+        let at = lane
+            .area(CellXY::new(spot.x + 14, spot.y), size, 2, |l| {
+                l != land::WATER && l != land::ROCK
+            })
+            .unwrap_or(spot);
+        let target = lane.spawn(Kind::Building, &b, enemy, at);
+        let start = lane.open_land(CellXY::new(at.x - 5, at.y + 3));
+        let des = lane.spawn(dk, &d, local, start);
+        lane.look_at(at);
+        {
+            let w = lane.world();
+            let (slot, wp) = glasnost_sim::combat::weapon::would_use(
+                w,
+                des,
+                Some(glasnost_sim::world::Target::Object(target)),
+            );
+            let flags = wp.map(|x| {
+                let h = w.rules().combat.warhead_of(x);
+                (h.map(|h| h.airstrike), w.rules().combat.weapon(x).range)
+            });
+            let tc = glasnost_sim::combat::veterancy::type_combat(w, des).unwrap();
+            println!(
+                "slot {slot:?} weapon found {} (airstrike flag, range) {flags:?}; team {} type {:?} designator {}",
+                wp.is_some(),
+                tc.airstrike_team,
+                tc.airstrike_team_type[0].is_some(),
+                glasnost_sim::strike::designator(w, des)
+            );
+        }
+        println!(
+            "cursor over the building: {:?}",
+            targeting::cursor(
+                lane.world(),
+                local,
+                &[des],
+                ClickOn::Object(target),
+                Modifiers::default()
+            )
+        );
+        lane.ticks(4);
+        let sent = lane.order(local, des, ClickOn::Object(target));
+        println!("click with the designator: {sent} orders");
+        let mut called = None;
+        for t in 0..900 {
+            lane.ticks(1);
+            for pr in lane
+                .world()
+                .projectiles
+                .values()
+                .filter(|p| p.attacker == Some(des))
+            {
+                let h = lane.world().rules().combat.warhead_of(pr.weapon);
+                println!(
+                    "t {t}: projectile airstrike {:?} target {:?} attacker is designator {}",
+                    h.map(|h| h.airstrike),
+                    pr.target,
+                    pr.attacker == Some(des)
+                );
+            }
+            if t % 20 == 0 && t < 200 {
+                let o = lane.world().obj(des);
+                let ck = glasnost_sim::combat::check::check(
+                    lane.world(),
+                    des,
+                    Some(glasnost_sim::world::Target::Object(target)),
+                    1,
+                    false,
+                );
+                println!("check slot 1: {ck:?}");
+                println!(
+                    "t {t}: designator {dk:?} {:?} at {:?} target {:?} strike {:?} projectiles {}",
+                    o.map(|o| o.beh.current),
+                    o.map(|o| o.pos.cell()),
+                    o.map(|o| o.target),
+                    lane.world().strike.strikes.len(),
+                    lane.world().projectiles.len()
+                );
+            }
+            if called.is_none() && glasnost_sim::strike::marked(lane.world(), target) {
+                called = Some(t);
+                lane.save("terror-strike");
+            }
+        }
+        println!("strike called at tick {called:?}");
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -85,9 +85,16 @@ fn the_detonate_order_names_the_planters_house() {
         let mut w = world(|r| r.globals.quirks.detonate_in_planter_name = planter_name);
         let (v, _) = bombed(&mut w, Kind::Vehicle, "VICT", at(0, 0));
         run_to(&mut w, 6);
-        assert!(orders::issue(&mut w, HouseId(1), Order::Detonate { actor: v }));
+        assert!(orders::issue(
+            &mut w,
+            HouseId(1),
+            Order::Detonate { actor: v }
+        ));
         let (planter_list, issuer_list) = (w.houses[0].pending.len(), w.houses[1].pending.len());
-        assert_eq!((planter_list, issuer_list), if planter_name { (1, 0) } else { (0, 1) });
+        assert_eq!(
+            (planter_list, issuer_list),
+            if planter_name { (1, 0) } else { (0, 1) }
+        );
         testkit::run(&mut w, 2);
         assert_eq!(health(&w, v), 100_000 - 100);
     }
@@ -132,7 +139,11 @@ fn an_arrival_plants_a_charge() {
     let o = w.obj(b).unwrap();
     assert_eq!(o.combat.delay_kill_until, Some(now + 9));
     assert_eq!(o.combat.charge_planter, Some(s));
-    assert_ne!(w.obj(s).unwrap().dest, Some(Target::Object(b)), "destination cleared (the scatter may set another)");
+    assert_ne!(
+        w.obj(s).unwrap().dest,
+        Some(Target::Object(b)),
+        "destination cleared (the scatter may set another)"
+    );
 }
 
 // spec: S-0519 claim 14 and S-0302 claim 16 (T13 a: the building dies at expiry and the planter is credited)
@@ -158,7 +169,10 @@ fn a_second_charge_is_refused() {
     let second = sabotage(&mut w, "SABO", 0, b);
     assert!(bomb::charge_arrival(&mut w, second));
     let o = w.obj(b).unwrap();
-    assert_eq!((o.combat.delay_kill_until, o.combat.charge_planter), (until, Some(first)));
+    assert_eq!(
+        (o.combat.delay_kill_until, o.combat.charge_planter),
+        (until, Some(first))
+    );
     assert_ne!(w.obj(second).unwrap().dest, Some(Target::Object(b)));
 }
 
@@ -168,7 +182,10 @@ fn a_building_being_sold_refuses_the_charge() {
     let mut w = world(|_| {});
     let b = target_building(&mut w);
     let (tick, stale) = (w.tick, w.rules().quirks.stale_suspended_revert);
-    w.obj_mut(b).unwrap().beh.force(Behaviour::Selling, tick, stale);
+    w.obj_mut(b)
+        .unwrap()
+        .beh
+        .force(Behaviour::Selling, tick, stale);
     let s = sabotage(&mut w, "SABO", 0, b);
     assert!(bomb::charge_arrival(&mut w, s));
     assert!(w.obj(b).unwrap().combat.delay_kill_until.is_none());
@@ -200,7 +217,10 @@ fn the_veterancy_ability_plants_only_with_the_quirk_off() {
         let rz = Rounding::TowardZero;
         w.obj_mut(s).unwrap().combat.experience = F64::from_i64(2, rz).to_f32(rz);
         bomb::charge_arrival(&mut w, s);
-        assert_eq!(w.obj(b).unwrap().combat.delay_kill_until.is_some(), !needs_flag);
+        assert_eq!(
+            w.obj(b).unwrap().combat.delay_kill_until.is_some(),
+            !needs_flag
+        );
     }
 }
 

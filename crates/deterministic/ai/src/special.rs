@@ -66,6 +66,16 @@ pub struct Uses {
     pub prisms: u32,
     /// Chargers sent at an own overpowerable building (S-0518).
     pub charges: u32,
+    /// Bomb planters sent at an enemy (S-0519).
+    pub bombs: u32,
+    /// Disarmers sent at an own bombed object (S-0519).
+    pub disarms: u32,
+    /// Suicide units sent at an enemy (S-0519).
+    pub suicides: u32,
+    /// Infantry with explosive charges sent at an enemy building (S-0519).
+    pub sabotages: u32,
+    /// Air-strike designators sent against an enemy building (S-0519).
+    pub strikes: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -76,7 +86,7 @@ pub struct Special {
 
 /// The click a person would give `unit` on `target`, as orders, when the
 /// cursor over it shows one of `want`.
-fn click_if(
+pub(crate) fn click_if(
     w: &World,
     house: HouseId,
     unit: ObjectId,
@@ -109,6 +119,7 @@ impl Special {
         self.radiation(script, &own, w, out);
         self.chrono(script, &own, w, out);
         self.linked(script, &own, w, out);
+        self.terror(script, &own, w, out);
     }
 
     /// Counts one deploy order given to a deployable unit (S-0517,
@@ -125,6 +136,31 @@ impl Special {
     /// Counts one charger sent at a building (S-0518, `linked`).
     pub(crate) fn count_charge(&mut self) {
         self.uses.charges += 1;
+    }
+
+    /// Counts one bomb planter sent at an enemy (S-0519, `terror`).
+    pub(crate) fn count_bomb(&mut self) {
+        self.uses.bombs += 1;
+    }
+
+    /// Counts one disarmer sent at a bombed object (S-0519, `terror`).
+    pub(crate) fn count_disarm(&mut self) {
+        self.uses.disarms += 1;
+    }
+
+    /// Counts one suicide unit sent at an enemy (S-0519, `terror`).
+    pub(crate) fn count_suicide(&mut self) {
+        self.uses.suicides += 1;
+    }
+
+    /// Counts one unit with charges sent at a building (S-0519, `terror`).
+    pub(crate) fn count_sabotage(&mut self) {
+        self.uses.sabotages += 1;
+    }
+
+    /// Counts one designator sent at a building (S-0519, `terror`).
+    pub(crate) fn count_strike(&mut self) {
+        self.uses.strikes += 1;
     }
 
     /// Counts one erasing unit sent against an enemy (S-0514, `chrono`).

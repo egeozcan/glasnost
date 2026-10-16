@@ -13,7 +13,9 @@ use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use terror_common::*;
 
 /// A designator of house 0 and two enemy buildings of house 1.
-fn scene(tweak: impl FnOnce(&mut glasnost_rules::schema::Ruleset)) -> (World, ObjectId, ObjectId, ObjectId) {
+fn scene(
+    tweak: impl FnOnce(&mut glasnost_rules::schema::Ruleset),
+) -> (World, ObjectId, ObjectId, ObjectId) {
     let mut w = world(tweak);
     let a = quiet(&mut w, Kind::Building, "BLDG", 1, at(0, 0));
     let b = quiet(&mut w, Kind::Building, "BLDG", 1, at(4, 4));
@@ -84,7 +86,10 @@ fn further_shots_at_the_target_add_nothing() {
     strike::designation(&mut w, Some(d), Some(Target::Object(a)));
     assert_eq!(linked(&w, d).len(), 2);
     assert_eq!(w.objects.len(), before.0);
-    assert!(w.rng == before.1, "a not-ready shot takes no draw (claim 21)");
+    assert!(
+        w.rng == before.1,
+        "a not-ready shot takes no draw (claim 21)"
+    );
 }
 
 // spec: S-0519 claim 16 (T16 a, f: a firer that is not a designator calls no strike; a shot at a cell calls none)
@@ -128,9 +133,14 @@ fn a_change_of_target_cancels() {
     assert!(!strike::marked(&w, a));
     for x in linked(&w, d) {
         let o = w.obj(x).unwrap();
-        assert!(o.target.is_none() && o.dest.is_none() || o.dest.is_some(), "no target");
+        assert!(
+            o.target.is_none() && o.dest.is_none() || o.dest.is_some(),
+            "no target"
+        );
         assert!(o.target.is_none());
-        assert!(o.beh.queued == Some(Behaviour::Retreat) || o.beh.current == Some(Behaviour::Retreat));
+        assert!(
+            o.beh.queued == Some(Behaviour::Retreat) || o.beh.current == Some(Behaviour::Retreat)
+        );
     }
 }
 
@@ -240,7 +250,8 @@ fn a_cancel_makes_the_same_object_ready() {
 #[test]
 fn the_recharge_quirk_off_holds_back_any_object() {
     for same_only in [true, false] {
-        let (mut w, d, a, b) = scene(|r| r.globals.quirks.airstrike_recharge_same_target_only = same_only);
+        let (mut w, d, a, b) =
+            scene(|r| r.globals.quirks.airstrike_recharge_same_target_only = same_only);
         designate(&mut w, d, a);
         for x in linked(&w, d) {
             objects::remove(&mut w, x);
@@ -278,7 +289,12 @@ fn an_empty_start_sticks_unless_the_quirk_is_off() {
     for stuck in [true, false] {
         let (mut w, d, a, b) = scene(|r| {
             r.globals.quirks.airstrike_empty_strike_stuck = stuck;
-            r.sim.vehicles.get_mut("DESIG").unwrap().combat.elite_airstrike_team = Some(0);
+            r.sim
+                .vehicles
+                .get_mut("DESIG")
+                .unwrap()
+                .combat
+                .elite_airstrike_team = Some(0);
         });
         promote(&mut w, d);
         designate(&mut w, d, a);
@@ -316,4 +332,27 @@ fn two_strikes_share_a_mark() {
     w.obj_mut(d2).unwrap().target = None;
     testkit::run(&mut w, 1);
     assert!(!strike::marked(&w, a));
+}
+
+// spec: S-0519 Determinism: the state hash survives a save and load with a planted bomb, a charge planter and a strike in progress, and the loaded game goes on alike
+#[test]
+fn terror_state_survives_a_save_and_load() {
+    let (mut w, d, a, b) = scene(|_| {});
+    designate(&mut w, d, a);
+    let p = quiet(&mut w, Kind::Infantry, "BOMBER", 0, at(-5, 5));
+    shoot(&mut w, p, b);
+    w.obj_mut(a).unwrap().combat.charge_planter = Some(p);
+    assert!(w.obj(b).unwrap().combat.bomb.is_some());
+    let bytes = glasnost_sim::save::save(&w);
+    let h = glasnost_sim::save::state_hash(&w);
+    let mut w2 =
+        glasnost_sim::save::load(&bytes, w.rules_arc(), w.catalogue.clone().unwrap()).unwrap();
+    assert_eq!(glasnost_sim::save::state_hash(&w2), h);
+    assert_eq!(w2.strike, w.strike);
+    testkit::run(&mut w, 60);
+    testkit::run(&mut w2, 60);
+    assert_eq!(
+        glasnost_sim::save::state_hash(&w2),
+        glasnost_sim::save::state_hash(&w)
+    );
 }

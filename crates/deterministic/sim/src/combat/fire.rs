@@ -201,7 +201,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         if field != -1 {
             field
         } else {
-            w.rng.ranged(3, 5, half)
+            w.rng.ranged(3, 5, half) // spec: S-0301 claim 4 (R(3, 5))
         }
     } else {
         full_delay(w, firer, &wr)
@@ -311,7 +311,7 @@ pub fn second_weapon_delay(w: &mut World, firer: ObjectId) -> Option<i32> {
         if field != -1 {
             field
         } else {
-            w.rng.ranged(3, 5, half)
+            w.rng.ranged(3, 5, half) // spec: S-0301 claim 4 (R(3, 5))
         }
     } else {
         full_delay(w, firer, &wr)

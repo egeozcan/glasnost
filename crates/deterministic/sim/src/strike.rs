@@ -57,7 +57,11 @@ fn parameters(w: &World, id: ObjectId) -> Option<(i32, Option<String>, i32)> {
     // spec: S-0519 Terms (the elite values apply while the designator's rank is elite)
     let e = usize::from(veterancy::rank(w, id) == Rank::Elite);
     Some((
-        if e == 1 { tc.elite_airstrike_team } else { tc.airstrike_team },
+        if e == 1 {
+            tc.elite_airstrike_team
+        } else {
+            tc.airstrike_team
+        },
         tc.airstrike_team_type[e].clone(),
         tc.airstrike_recharge[e],
     ))
@@ -268,7 +272,10 @@ fn redirect(w: &mut World, d: ObjectId, x: ObjectId) {
         .copied()
         .filter(|&a| w.obj(a).is_some())
         .collect();
-    let first = linked.first().and_then(|&a| w.obj(a)).map(|o| o.combat.ammo);
+    let first = linked
+        .first()
+        .and_then(|&a| w.obj(a))
+        .map(|o| o.combat.ammo);
     // spec: S-0519 claim 19 (aircraft holding unequal ammunition: the strike is cancelled again instead and nothing is redirected)
     if linked
         .iter()
@@ -313,7 +320,11 @@ pub fn leaving(w: &mut World, id: ObjectId) {
     let ds: Vec<ObjectId> = w.strike.strikes.keys().copied().collect();
     for d in ds {
         // spec: S-0519 claim 19 (the marked building destroyed or removed cancels)
-        let marked_gone = w.strike.strikes.get(&d).is_some_and(|s| s.target == Some(id))
+        let marked_gone = w
+            .strike
+            .strikes
+            .get(&d)
+            .is_some_and(|s| s.target == Some(id))
             && w.obj(id).is_some_and(|o| o.kind == Kind::Building);
         if marked_gone {
             cancel(w, d);

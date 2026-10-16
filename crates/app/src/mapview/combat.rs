@@ -288,6 +288,17 @@ pub enum Marker {
         /// Half-width, pixels.
         half: i32,
     },
+    /// A planted bomb the viewer sees (S-0519 claim 10), flickering red and
+    /// white with the stage; our placeholder for the bomb icon.
+    Bomb {
+        /// The icon frame of S-0519 F3, 0 to 11.
+        frame: i32,
+    },
+    /// A demolition charge counting down on a building (S-0519 claim 14,
+    /// the flash): an orange diamond.
+    Charge,
+    /// A building marked by an air strike (S-0519 claim 17): a cyan ring.
+    Marked,
 }
 
 /// Placeholder palette indices (our own colours).
@@ -435,6 +446,39 @@ fn marker_image(m: Marker) -> IndexedImage {
             let r = half.max(4);
             disc(r, (r / 2).max(1), Some(880), ink::GREEN, ink::GREEN)
         }
+        Marker::Bomb { frame } => {
+            // An 11 × 11 disc, red on even frames and white on odd ones, its
+            // centre growing with the frame (the icon's progress).
+            let ink = if frame % 2 == 0 { ink::RED } else { ink::WHITE };
+            let mut px = vec![0u8; 121];
+            for y in 0..11i32 {
+                for x in 0..11i32 {
+                    let (dx, dy) = (x - 5, y - 5);
+                    let r2 = dx * dx + dy * dy;
+                    if r2 <= 25 {
+                        px[(y * 11 + x) as usize] = if r2 <= frame * 25 / 11 {
+                            ink::YELLOW
+                        } else {
+                            ink
+                        };
+                    }
+                }
+            }
+            IndexedImage::new(11, 11, px).expect("sized")
+        }
+        Marker::Charge => {
+            // A 13 × 13 diamond.
+            let mut px = vec![0u8; 169];
+            for y in 0..13i32 {
+                for x in 0..13i32 {
+                    if (x - 6).abs() + (y - 6).abs() <= 6 {
+                        px[(y * 13 + x) as usize] = ink::ORANGE;
+                    }
+                }
+            }
+            IndexedImage::new(13, 13, px).expect("sized")
+        }
+        Marker::Marked => disc(20, 10, Some(880), ink::CYAN, ink::CYAN),
         Marker::Anim => {
             // A 9 × 9 hollow square with a diagonal cross.
             let mut px = vec![0u8; 81];
