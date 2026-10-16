@@ -13,8 +13,12 @@
 //! modelled, so none is ever playing and none delays the harvester), a
 //! second-route arrival report to a building other than a dock-unload
 //! refinery (claim 10; the entry-exchange specs own it), and the chrono
-//! miner's teleporting and its dropped destinations of claim 17 (no teleport
-//! locomotor exists). The slave cycle of claim 14 and the slave groups of
+//! miner's dropped seeking destination of claim 17 (request Q-1130: which
+//! seeking processing "starts seeking"; interim: no destination is dropped,
+//! so a chrono miner with an active teleporting locomotor keeps it like any
+//! harvester). A chrono miner travels by its active locomotion: teleporting
+//! (S-0207 claim 20), or the temporary driving of a factory exit (S-0417
+//! claim 16), which drives its first leg to the ore. The slave cycle of claim 14 and the slave groups of
 //! claims 19 to 25 are `crate::econ::slaves`; the wake-up rule is
 //! [`wake_rule`].
 
