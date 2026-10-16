@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -623,8 +623,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     > λ<sub>e</sub>⁺ = *E*⁺ when λ<sub>e</sub>⁻ = 0, and λ<sub>e</sub>⁻ otherwise,
     > μ = ⌊*n* / 2⌋.
 
-    At a type read, an end field or loop end that the read gives takes precedence over *E*⁺ or
-    λ<sub>e</sub>⁺, and one it does not give is *E*⁺ or λ<sub>e</sub>⁺. At the new-theater refresh,
+    At a type read, an end field or loop end given in the type's own art section takes precedence
+    over *E*⁺ or λ<sub>e</sub>⁺, and one it does not give is *E*⁺ or λ<sub>e</sub>⁺. The
+    image-named art section never supplies either field (S-0007 claim 34). At the new-theater refresh,
     *E*⁺ and λ<sub>e</sub>⁺ stand. A type read that finds no sprite changes only the fields it
     gives. The theater refresh of a type with the theater flag replaces the sprite that is drawn
     (S-0007) but none of these values. A value of −1 counts as a value here, not as 0; it is
@@ -1052,8 +1053,20 @@ advance of the same update. So:
 
 ## Import mapping
 
-All keys are in the animation's art section in the art database (S-0006, claim 8; S-0007). Value
-forms are those of S-0003.
+Except for the two theater flags below, every animation-type key in this table is read
+exclusively from the **own art section**, whose section name is the animation type name,
+at **every type read** (S-0006 claim 8; S-0007 claim 34). An image name that names a different
+art section does not redirect these reads. Neither a previously found sprite, a failed sprite
+lookup, the arctic suffix nor first registration in a later rules layer changes this rule.
+A missing or empty own-section value never falls back to the image-named section: the
+field keeps its specified default, retained value or sprite-derived fill. Claims 2 and 3
+retain their rate sentinels, and claim 25 retains all sprite-derived defaults and refresh rules.
+This applies equally to building slots and independent effects. The theater flags alone
+follow S-0007 claim 2's read-history exception. Game-wide keys below are unchanged.
+Value forms are those of S-0003.
+
+Section selection has high confidence and is `measurable` through S-0007 scenario A25
+(the companion scenario below); it does not assert new measurements of each field's consumer.
 
 | Key | Form | Feeds | Absent |
 |---|---|---|---|
@@ -1091,7 +1104,7 @@ forms are those of S-0003.
 | `Bouncer`, `IsMeteor` | boolean | bouncing type (Terms) | no |
 | `MakeInfantry` | integer | infantry creation at the end (claim 16; S-0611 claims 9 to 11 for selection, placement and retries) | −1 (none) |
 | `IsFlamingGuy` | boolean | burning-walker flag (S-0615 claims 4 to 11) | no |
-| `Theater`, `NewTheater` | boolean | which sprites the type gets (S-0007), and so claim 25 | no |
+| `Theater`, `NewTheater` | boolean | which sprites the type gets (S-0007 claim 14), and so claim 25; section selection follows S-0007 claim 2, not the own-only rule above | initially no; later retention and own/image-section precedence follow S-0007 claim 2 |
 
 A retained start-sound reference also prevents `Report` from being read in a later layer
 that omits `StartSound`; this includes a reference previously supplied by the alias.
@@ -1280,8 +1293,7 @@ building that can cloak), it sets them in the test map's override section, which
   - Runs: 20 animations per run.
   - Expected: every gap is max(3, *D* + 1) with *D* from 30 to 60, the loop start image frame is
     shown during the gap, and the sound plays at creation and after each of the two gaps (three
-    times per animation). The trigger-played run shows the same gaps and image frames, with the
-    sound at creation only and none after either gap. Each pass end consumes exactly the
+    times per animation). The trigger-played run shows the same gaps and image frames, with its start sound only at creation. Each pass end consumes exactly the
     raw values predicted for one ranged draw over [30, 60] updates, with no other playback
     draw; the measured gap is *D* + 1 ticks for that predicted *D*.
   - Falsified if: the stream transition differs from that one draw or the gap differs from
@@ -1639,6 +1651,14 @@ building that can cloak), it sets them in the test map's override section, which
     or lifetime inconsistent with the recorded first update and initial delay.
     Turning off the removal-skip quirk is an engine-only companion test: the minimal
     explosion should then first update in *c*, advance in *c* + 1 and end in *c* + 3.
+
+- **Companion section-selection scenario (Import mapping).** S-0007 scenario A25 supplies
+  the tiny skirmish setup, conflicting own/image-section values, omitted and empty own keys,
+  damaged and normal building slots, independent effects, preceding-sprite/read-count variants,
+  per-field observables, controls and falsifiers. Use the relevant playback or event scenario
+  here as its consumer fixture. Expected: every non-theater property matches its own-section
+  control at every read, never the image-section control; claim 25 still determines
+  sprite-derived limits. A contrary section choice falsifies the Import mapping rule.
 
 - **Companion scenarios (claims 5 and 13 to 17).** S-0611 scenario MU10 tests generic
   infantry-making animations, terminal-only creation and position-choice draws; its MU9
