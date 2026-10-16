@@ -2416,8 +2416,7 @@ fn ac27_deck_rest_marks_deck_only_and_take_off_clears_it_in_the_first_climbing_t
     let goal = bridge(&mut w, 5, 0);
     let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -3, 0);
     click(&mut w, a, ClickOn::Cell(goal));
-    assert!(run_until(&mut w, 800, |w| st(w, a).ground
-        && air::deck_marked(w, a)));
+    assert!(run_until(&mut w, 800, |w| st(w, a).ground && air::deck_marked(w, a)));
     assert_eq!(flags(&w, goal), (0, 1), "deck only, not ground");
     assert_eq!(listed(&w, a), (false, true));
     // A few idle ticks change nothing.
@@ -2462,8 +2461,7 @@ fn ac27_a_resting_deck_aircraft_refuses_only_the_deck_vehicle_through_its_listin
     let a = put(&mut w, Kind::Aircraft, "SCOUT", 0, -3, 0);
     let v = put(&mut w, Kind::Vehicle, "VICTIM", 0, -8, 5);
     click(&mut w, a, ClickOn::Cell(goal));
-    assert!(run_until(&mut w, 800, |w| st(w, a).ground
-        && air::deck_marked(w, a)));
+    assert!(run_until(&mut w, 800, |w| st(w, a).ground && air::deck_marked(w, a)));
     assert_eq!(flags(&w, goal), (0, 1));
     let level = i32::from(w.cells.cell(goal).unwrap().level);
     assert_eq!(

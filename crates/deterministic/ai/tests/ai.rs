@@ -966,4 +966,3 @@ fn fires_a_paradrop_whose_troops_join_the_army() {
         "a paratrooper is sent at the enemy: {orders:?}"
     );
 }
-

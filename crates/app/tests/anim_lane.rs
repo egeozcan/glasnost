@@ -88,7 +88,9 @@ impl Lane {
     /// Starts a skirmish from the menu.
     fn start() -> Option<Lane> {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
-        let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m6b");
+        let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../local-lane")
+            .join(std::env::var("GLASNOST_LANE_OUT").unwrap_or_else(|_| "m6b".into()));
         std::fs::create_dir_all(&out).unwrap();
         let mut c = Client::new();
         c.resize((1280, 800));
@@ -179,8 +181,9 @@ impl Lane {
         .unwrap();
         let (made, art, none, drawn) = self.counts();
         println!(
-            "wrote local-lane/m6b/{name}.png (tick {}): animations created {made}, \
+            "wrote {}/{name}.png (tick {}): animations created {made}, \
              with art {art}, without sprite {none}, drawn now {drawn}",
+            self.dir.display(),
             self.world().tick
         );
     }

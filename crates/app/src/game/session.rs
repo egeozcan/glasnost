@@ -573,6 +573,16 @@ impl Session {
         (CellXY::new(cell.0, cell.1), id)
     }
 
+    /// Debug diagnostic: every drawn item covering the screen point `p`
+    /// (see `Live::trace_point`); empty without a live game.
+    pub fn trace_at(&mut self, p: Point) -> Vec<String> {
+        let (qx, qy) = self.world_point(p);
+        let top = self.view().origin.1;
+        let statics = self.loaded.built.objects.clone();
+        self.with_live(|live, _, scene| live.trace_point(scene, &statics, qx, qy, top))
+            .unwrap_or_default()
+    }
+
     /// The pointer moved.
     pub fn pointer_moved(&mut self, p: Point) {
         self.pointer = Some(p);

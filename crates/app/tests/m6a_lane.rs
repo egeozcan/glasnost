@@ -90,7 +90,9 @@ impl Lane {
     /// Starts a skirmish from the menu.
     fn start() -> Option<Lane> {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
-        let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m6a");
+        let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../local-lane")
+            .join(std::env::var("GLASNOST_LANE_OUT").unwrap_or_else(|_| "m6a".into()));
         std::fs::create_dir_all(&out).unwrap();
         let mut c = Client::new();
         c.resize((1280, 800));
@@ -167,9 +169,82 @@ impl Lane {
         )
         .unwrap();
         println!(
-            "wrote local-lane/m6a/{name}.png (tick {})",
+            "wrote {}/{name}.png (tick {})",
+            self.dir.display(),
             self.world().tick
         );
+        // GLASNOST_TRACE="x,y;x,y": the pixel trace of the saved shot's screen points.
+        // GLASNOST_BLANK="idx,idx": a second shot, "<name>-blank", without those scene items' images.
+        if let Ok(b) = std::env::var("GLASNOST_BLANK") {
+            let s = self.c.session.as_mut().unwrap();
+            let mut saved = Vec::new();
+            for i in b.split(',').filter_map(|v| v.trim().parse::<usize>().ok()) {
+                let Some(it) = s.scene.items.get(i).copied() else {
+                    continue;
+                };
+                let img = &s.scene.images[it.image as usize];
+                let blank = glasnost_fmt::image::IndexedImage::new(
+                    img.width(),
+                    img.height(),
+                    vec![0; (img.width() * img.height()) as usize],
+                )
+                .unwrap();
+                saved.push((
+                    it.image as usize,
+                    std::mem::replace(&mut s.scene.images[it.image as usize], blank),
+                ));
+            }
+            if !saved.is_empty() {
+                let rgba = self.c.frame_rgba();
+                let (w, h) = self.c.size;
+                std::fs::write(
+                    self.dir.join(format!("{name}-blank.png")),
+                    png::png(w as u32, h as u32, &rgba),
+                )
+                .unwrap();
+                let s = self.c.session.as_mut().unwrap();
+                for (i, img) in saved {
+                    s.scene.images[i] = img;
+                }
+            }
+        }
+        // GLASNOST_TRACE_BOX="x0,y0,x1,y1,step": the distinct items over a grid of screen points.
+        if let Ok(b) = std::env::var("GLASNOST_TRACE_BOX") {
+            let n: Vec<i32> = b.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+            if let [x0, y0, x1, y1, step] = n[..] {
+                let mut seen = std::collections::BTreeSet::new();
+                for x in (x0..x1).step_by(step.max(1) as usize) {
+                    for y in (y0..y1).step_by(step.max(1) as usize) {
+                        let s = self.c.session.as_mut().unwrap();
+                        seen.extend(s.trace_at(glasnost_ui::geom::Point::new(x, y)));
+                    }
+                }
+                println!("trace box {name}: {} distinct items", seen.len());
+                for l in seen {
+                    println!("  {l}");
+                }
+            }
+        }
+        if let Ok(points) = std::env::var("GLASNOST_TRACE") {
+            for p in points.split(';') {
+                let Some((x, y)) = p.split_once(',') else {
+                    continue;
+                };
+                let (Ok(x), Ok(y)) = (x.trim().parse::<i32>(), y.trim().parse::<i32>()) else {
+                    continue;
+                };
+                let lines = self
+                    .c
+                    .session
+                    .as_mut()
+                    .unwrap()
+                    .trace_at(glasnost_ui::geom::Point::new(x, y));
+                println!("trace {name} at ({x}, {y}): {} items", lines.len());
+                for l in lines {
+                    println!("  {l}");
+                }
+            }
+        }
     }
 
     fn spawn(&mut self, kind: Kind, name: &str, house: HouseId, at: CellXY) -> ObjectId {
@@ -321,6 +396,27 @@ fn m6a_scenes() {
             }
         }
         println!("rocket seen in flight: {seen}");
+        // The later scenes share this world: take the launcher and its missiles out, so that no
+        // missile flies (lifted high on the screen) through the parasite, aircraft and ship shots.
+        let missiles: Vec<ObjectId> = lane
+            .world()
+            .objects
+            .values()
+            .filter(|o| o.rocket.is_some())
+            .map(|o| o.id)
+            .collect();
+        for m in missiles {
+            glasnost_sim::objects::remove(lane.world_mut(), m);
+        }
+        glasnost_sim::objects::remove(lane.world_mut(), id);
+        println!(
+            "missiles left: {}",
+            lane.world()
+                .objects
+                .values()
+                .filter(|o| o.rocket.is_some())
+                .count()
+        );
     }
 
     // S-0614: a unit with a latching weapon and an enemy vehicle it can latch onto.
@@ -429,6 +525,27 @@ fn m6a_scenes() {
             }
         }
         println!("aircraft fired: {fired}, landed on its pad again: {home}");
+    }
+
+    // The building types named by GLASNOST_RADAR_TYPE (type names given on the command line,
+    // comma-separated, so that no stock name is kept in the source): one shot each, "yuri-radar"
+    // for a single name, else "building-<i>". The lead check of the Yuri radar shot.
+    if let Ok(names) = std::env::var("GLASNOST_RADAR_TYPE") {
+        let list: Vec<&str> = names.split(',').collect();
+        for (i, name) in list.iter().enumerate() {
+            let at = lane.open_land(CellXY::new(target.x - 20, target.y + 12));
+            let id = lane.spawn(Kind::Building, name, local, at);
+            lane.ticks(2);
+            lane.look_at(at);
+            lane.ticks(1);
+            let shot = if list.len() == 1 {
+                "yuri-radar".to_string()
+            } else {
+                format!("building-{i}")
+            };
+            lane.save(&shot);
+            glasnost_sim::objects::remove(lane.world_mut(), id);
+        }
     }
 
     // S-0504: ships on open water, moving, then one sinking.

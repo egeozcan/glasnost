@@ -386,7 +386,11 @@ fn a_destination_left_by_the_processing_survives_the_later_rule() {
     w.obj_mut(t).unwrap().health = i32::MAX / 2;
     testkit::run(&mut w, 1);
     let o = w.obj(a).unwrap();
-    assert_eq!(o.target, Some(Target::Object(t)), "kept at the end of the tick");
+    assert_eq!(
+        o.target,
+        Some(Target::Object(t)),
+        "kept at the end of the tick"
+    );
     assert!(o.dest.is_some(), "the approach destination is held");
 }
 

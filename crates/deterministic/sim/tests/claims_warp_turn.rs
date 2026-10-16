@@ -8,7 +8,9 @@
 mod sw_common;
 
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Decimal, LocomotionClass, Locomotor, ProjectileType, UnitType, WarheadType, WeaponType};
+use glasnost_rules::sim::{
+    Decimal, LocomotionClass, Locomotor, ProjectileType, UnitType, WarheadType, WeaponType,
+};
 use glasnost_sim::cloak::CloakState;
 use glasnost_sim::combat::fire;
 use glasnost_sim::superweapons::warp::Stage;
@@ -124,10 +126,17 @@ fn s0516_claim_42_no_fade_step_through_arrival_effects_and_one_stage_in_the_hold
         );
         updates += 1;
     });
-    assert!(updates > 60, "the exclusion lasted through the leaving wait");
+    assert!(
+        updates > 60,
+        "the exclusion lasted through the leaving wait"
+    );
     // The first hold turn: the countdown has long elapsed, yet only one stage is taken.
     step(&mut w);
-    assert_eq!(w.obj(m).unwrap().cloak.stage, s0 + 1, "at most one stage, no burst");
+    assert_eq!(
+        w.obj(m).unwrap().cloak.stage,
+        s0 + 1,
+        "at most one stage, no burst"
+    );
     // The countdown restarted: the next step is S ticks later, not the next tick.
     step(&mut w);
     assert_eq!(w.obj(m).unwrap().cloak.stage, s0 + 1);
@@ -159,7 +168,11 @@ fn s0516_claim_42_a_hit_and_the_arrival_sensor_reveal_are_not_postponed() {
         step(&mut w);
     }
     assert_eq!(stage(&w, m), Some(Stage::Away));
-    assert_eq!(glasnost_sim::cloak::state(&w, m), CloakState::Cloaked, "no ordinary update ran");
+    assert_eq!(
+        glasnost_sim::cloak::state(&w, m),
+        CloakState::Cloaked,
+        "no ordinary update ran"
+    );
     let r = glasnost_sim::combat::damage::apply(
         &mut w,
         m,
@@ -186,7 +199,11 @@ fn s0516_claim_42_a_hit_and_the_arrival_sensor_reveal_are_not_postponed() {
         assert_eq!((o.cloak.state, o.cloak.stage), (CloakState::Uncloaking, n));
     });
     step(&mut w);
-    assert_eq!(w.obj(m).unwrap().cloak.stage, n - 1, "one stage on the first hold turn");
+    assert_eq!(
+        w.obj(m).unwrap().cloak.stage,
+        n - 1,
+        "one stage on the first hold turn"
+    );
 
     // The arrival sensor reveal beside an enemy sensor happens in the arrival-effects update,
     // before any ordinary fade work.
@@ -205,7 +222,11 @@ fn s0516_claim_42_a_hit_and_the_arrival_sensor_reveal_are_not_postponed() {
         }
     });
     let o = w.obj(m).unwrap();
-    assert_eq!(o.cloak.state, CloakState::Uncloaking, "revealed at the arrival effects");
+    assert_eq!(
+        o.cloak.state,
+        CloakState::Uncloaking,
+        "revealed at the arrival effects"
+    );
     assert_eq!(o.cloak.stage, STAGES - 1, "with no ordinary fade step yet");
 }
 
@@ -226,7 +247,11 @@ fn s0301_claim_11_reload_countdown_elapses_but_no_round_is_granted_before_the_ho
     through_exclusion(&mut w, m, |w, _| {
         let o = w.obj(m).unwrap();
         assert_eq!(o.combat.ammo, 2, "no round granted");
-        assert_eq!(o.combat.reload_left, Some(30 - elapsed), "the countdown keeps elapsing");
+        assert_eq!(
+            o.combat.reload_left,
+            Some(30 - elapsed),
+            "the countdown keeps elapsing"
+        );
         elapsed += 1;
     });
     assert!(30 - elapsed < 0, "it expired during the warp");
@@ -271,14 +296,25 @@ fn s0301_claim_13_firing_frames_stand_still_and_the_rearm_deadline_is_not_extend
     }
     through_exclusion(&mut w, m, |w, _| {
         let o = w.obj(m).unwrap();
-        assert_eq!(o.combat.firing_frame, Some(5), "the counter retains its value");
-        assert_eq!(o.combat.rearm_until, deadline, "the deadline is not extended");
+        assert_eq!(
+            o.combat.firing_frame,
+            Some(5),
+            "the counter retains its value"
+        );
+        assert_eq!(
+            o.combat.rearm_until, deadline,
+            "the deadline is not extended"
+        );
     });
     assert!(w.tick >= deadline, "the rearm countdown elapsed meanwhile");
     step(&mut w);
     assert_eq!(w.obj(m).unwrap().combat.firing_frame, Some(4));
     step(&mut w);
-    assert_eq!(w.obj(m).unwrap().combat.firing_frame, Some(3), "one per turn");
+    assert_eq!(
+        w.obj(m).unwrap().combat.firing_frame,
+        Some(3),
+        "one per turn"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -303,8 +339,15 @@ fn claim51_the_expected_health_bookkeeping_and_the_protection_phases_wait_for_th
     through_exclusion(&mut w, m, |w, _| {
         let o = w.obj(m).unwrap();
         assert_eq!(o.combat.expected_health, -10, "no bookkeeping");
-        assert_eq!(o.sw.protection.unwrap().tint, Tint::BeforeFirstTurn, "no phase processing");
-        assert!(glasnost_sim::superweapons::protected(w, m), "the elapsed duration still counts");
+        assert_eq!(
+            o.sw.protection.unwrap().tint,
+            Tint::BeforeFirstTurn,
+            "no phase processing"
+        );
+        assert!(
+            glasnost_sim::superweapons::protected(w, m),
+            "the elapsed duration still counts"
+        );
     });
     let mut advanced = false;
     let mut phased = false;
@@ -333,7 +376,11 @@ fn claim51_a_queued_depot_entry_is_not_retried_before_the_hold() {
         step(&mut w);
     }
     assert!(w.obj(m).unwrap().sw.warp.is_none());
-    assert_eq!(w.obj(m).unwrap().depot.queued, None, "retried once the ordinary turn is back");
+    assert_eq!(
+        w.obj(m).unwrap().depot.queued,
+        None,
+        "retried once the ordinary turn is back"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -342,9 +389,13 @@ fn claim51_a_queued_depot_entry_is_not_retried_before_the_hold() {
 fn drone_rules() -> Ruleset {
     let mut r = rules();
     let d = |s: &str| Decimal(s.into());
-    r.registries.get_mut("vehicles").unwrap().push("DRONE".into());
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("DRONE".into());
     let s = &mut r.sim;
-    s.projectiles.insert("Hop".into(), ProjectileType::default());
+    s.projectiles
+        .insert("Hop".into(), ProjectileType::default());
     s.weapons.insert(
         "Latch".into(),
         WeaponType {
@@ -397,7 +448,10 @@ fn s0614_claim_18_an_attached_parasite_makes_no_ordinary_step_before_the_hold() 
     let p = spawn(&mut w, "DRONE", BETA, -2, 0);
     w.obj_mut(host).unwrap().sw.held_delay = DELAY;
     // Latch on by the drone's own shot, then run until it has attached.
-    assert!(fire::shot(&mut w, p, 0, Target::Object(host)), "the latching shot was made");
+    assert!(
+        fire::shot(&mut w, p, 0, Target::Object(host)),
+        "the latching shot was made"
+    );
     for _ in 0..50 {
         if glasnost_sim::parasite::host_of(&w, p) == Some(host) {
             break;
@@ -407,13 +461,27 @@ fn s0614_claim_18_an_attached_parasite_makes_no_ordinary_step_before_the_hold() 
     assert_eq!(glasnost_sim::parasite::host_of(&w, p), Some(host));
     // Let a delivery happen so the cadence is established.
     run(&mut w, R + 2);
-    assert!(w.obj(host).unwrap().health < 100_000, "it delivers in ordinary turns");
+    assert!(
+        w.obj(host).unwrap().health < 100_000,
+        "it delivers in ordinary turns"
+    );
     launch(&mut w);
-    assert!(w.obj(host).unwrap().sw.warp.is_some(), "the host joined the warp");
+    assert!(
+        w.obj(host).unwrap().sw.warp.is_some(),
+        "the host joined the warp"
+    );
     let mut h = w.obj(host).unwrap().health;
     through_exclusion(&mut w, host, |w, _| {
-        assert_eq!(w.obj(host).unwrap().health, h, "no delivery in a suppressed turn");
-        assert_eq!(glasnost_sim::parasite::host_of(w, p), Some(host), "still attached");
+        assert_eq!(
+            w.obj(host).unwrap().health,
+            h,
+            "no delivery in a suppressed turn"
+        );
+        assert_eq!(
+            glasnost_sim::parasite::host_of(w, p),
+            Some(host),
+            "still attached"
+        );
         h = w.obj(host).unwrap().health;
     });
     // The first hold turn delivers once (its deadline passed long ago), then the cadence resumes.

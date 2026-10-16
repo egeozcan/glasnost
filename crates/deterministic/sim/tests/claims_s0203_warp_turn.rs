@@ -164,7 +164,10 @@ fn the_firing_frame_counter_is_kept_and_the_rearm_deadline_is_not_postponed() {
     let mut advanced_in_hold = false;
     each_tick(&mut w, a, |w, a, s| {
         let c = &w.obj(a).unwrap().combat;
-        assert_eq!(c.rearm_until, deadline, "the rearm deadline is not postponed");
+        assert_eq!(
+            c.rearm_until, deadline,
+            "the rearm deadline is not postponed"
+        );
         match s {
             Some(Stage::Hold(_)) => advanced_in_hold |= c.firing_frame != Some(4),
             Some(st) => assert_eq!(c.firing_frame, Some(4), "kept in {st:?}"),
@@ -183,7 +186,11 @@ fn a_queued_behaviour_waits_for_the_first_hold_turn() {
     w.obj_mut(c).unwrap().beh.current = Some(Behaviour::Guard);
     w.obj_mut(c).unwrap().beh.queued = Some(Behaviour::Sticky);
     step(&mut w);
-    assert_eq!(w.obj(c).unwrap().beh.queued, None, "control: started at once");
+    assert_eq!(
+        w.obj(c).unwrap().beh.queued,
+        None,
+        "control: started at once"
+    );
     w.obj_mut(a).unwrap().beh.current = Some(Behaviour::Guard);
     warp(&mut w, at(0, 0), at(5, 5));
     w.obj_mut(a).unwrap().beh.queued = Some(Behaviour::Sticky);
@@ -238,7 +245,12 @@ fn the_protection_envelope_waits_for_the_hold_but_its_duration_elapses() {
     );
     let mut rose_in_hold = false;
     each_tick(&mut w, a, |w, a, s| {
-        let p = w.obj(a).unwrap().sw.protection.expect("the duration still runs");
+        let p = w
+            .obj(a)
+            .unwrap()
+            .sw
+            .protection
+            .expect("the duration still runs");
         match s {
             Some(Stage::Hold(_)) => rose_in_hold |= p.tint != Tint::BeforeFirstTurn,
             Some(st) => assert_eq!(p.tint, Tint::BeforeFirstTurn, "no phase in {st:?}"),

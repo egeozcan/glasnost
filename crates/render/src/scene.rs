@@ -327,6 +327,26 @@ impl Scene {
         frame.draw(&d, &self.rows, quirks);
     }
 
+    /// Every item (index into [`Scene::items`], draw order) whose image has a
+    /// non-transparent pixel at world pixel `(x, y)`, shadows included: the
+    /// debug trace of what covers a screen point.
+    pub fn items_at(&self, x: i32, y: i32, top: i32) -> Vec<usize> {
+        let covers = |item: &Item| {
+            item.copies(top).any(|c| {
+                let (l, t, r, b) = self.bounds(&c);
+                if x < l || y < t || x >= r || y >= b {
+                    return false;
+                }
+                self.images[c.image as usize]
+                    .get((x - l) as u32, (y - t) as u32)
+                    .is_some_and(|v| v != 0)
+            })
+        };
+        (0..self.items.len())
+            .filter(|&i| covers(&self.items[i]))
+            .collect()
+    }
+
     /// The topmost item under world pixel `(x, y)` whose image pixel there is
     /// not transparent, among items with an object, searching from the last
     /// drawn, in a view whose top row is world row `top` (which decides the
@@ -405,6 +425,43 @@ mod tests {
         );
         assert_eq!(s.object_at(11, 21, 0, &Filter::default()), Some(7));
         assert_eq!(s.object_at(12, 21, 0, &Filter::default()), None);
+    }
+
+    /// The debug pixel trace lists every item with a non-transparent pixel at a point, in draw
+    /// order, shadows and objectless items included, where `object_at` names only the topmost
+    /// object (a presentation diagnostic: it cites no behaviour).
+    #[test]
+    fn items_at_lists_every_covering_item() {
+        let mut s = Scene::default();
+        let solid = s.add_image(IndexedImage::new(2, 2, vec![1; 4]).unwrap());
+        let hole = s.add_image(IndexedImage::new(2, 2, vec![0, 1, 1, 1]).unwrap());
+        let row = s.add_row([0xFFFF; 256]);
+        let item = |image, x, paint, object| Item {
+            image,
+            x,
+            y: 0,
+            test: DepthTest::Writer,
+            depth: ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias: 0,
+                companion: None,
+            },
+            paint,
+            group: Group::Overlays,
+            provisional: false,
+            object,
+            stack: None,
+        };
+        s.items.push(item(solid, 0, Paint::Row(row), Some(1)));
+        s.items.push(item(solid, 1, Paint::Shadow, Some(2)));
+        s.items.push(item(hole, 0, Paint::Row(row), None));
+        // (0, 0): the solid body and nothing else (the hole's pixel there is transparent).
+        assert_eq!(s.items_at(0, 0, 0), vec![0]);
+        // (1, 0): the body, the shadow and the objectless item; the topmost object ignores shadows.
+        assert_eq!(s.items_at(1, 0, 0), vec![0, 1, 2]);
+        assert_eq!(s.object_at(1, 0, 0, &Filter::default()), Some(1));
+        // Outside every image: nothing.
+        assert!(s.items_at(5, 0, 0).is_empty());
     }
 
     /// spec: S-0109 claim 27 (C = 1 when pᵧ − ⌊h/2⌋ < 0, else ⌊(pᵧ − ⌊h/2⌋) / h⌋ + 2, with pᵧ

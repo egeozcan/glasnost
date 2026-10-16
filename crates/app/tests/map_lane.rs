@@ -214,6 +214,69 @@ fn map_lane() {
                     png::png(*w, *h, mm),
                 )
                 .unwrap();
+                // GLASNOST_MAP_BLANK="idx,idx": a second shot without those scene items' images.
+                if let Ok(b) = std::env::var("GLASNOST_MAP_BLANK") {
+                    let mut scene = loaded.built.scene.clone();
+                    for i in b.split(',').filter_map(|v| v.trim().parse::<usize>().ok()) {
+                        let Some(it) = scene.items.get(i).copied() else {
+                            continue;
+                        };
+                        let img = &scene.images[it.image as usize];
+                        scene.images[it.image as usize] = glasnost_fmt::image::IndexedImage::new(
+                            img.width(),
+                            img.height(),
+                            vec![0; (img.width() * img.height()) as usize],
+                        )
+                        .unwrap();
+                    }
+                    let f = scene.compose(&view, &Filter::default(), &ComposeQuirks::default());
+                    std::fs::write(
+                        out_dir.join(format!("map-{theater}-{n}-blank.png")),
+                        png::png(view.size.0, view.size.1, &f.to_rgba()),
+                    )
+                    .unwrap();
+                }
+                // GLASNOST_MAP_TRACE_BOX="x0,y0,x1,y1,step": the distinct items drawn over a grid of
+                // screen points of this shot (the debug pixel trace).
+                if let Ok(b) = std::env::var("GLASNOST_MAP_TRACE_BOX") {
+                    let nums: Vec<i32> =
+                        b.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+                    if let [x0, y0, x1, y1, step] = nums[..] {
+                        let mut seen = std::collections::BTreeSet::new();
+                        for x in (x0..x1).step_by(step.max(1) as usize) {
+                            for y in (y0..y1).step_by(step.max(1) as usize) {
+                                let s = &loaded.built.scene;
+                                for i in s.items_at(origin.0 + x, origin.1 + y, origin.1) {
+                                    let it = &s.items[i];
+                                    let img = &s.images[it.image as usize];
+                                    let what = it
+                                        .object
+                                        .and_then(|o| loaded.built.objects.get(o as usize))
+                                        .map_or("no object".to_string(), |o| {
+                                            format!(
+                                                "{} {} owner {} cell {:?} ({})",
+                                                o.kind, o.type_name, o.owner, o.cell, o.entry
+                                            )
+                                        });
+                                    seen.insert(format!(
+                                        "item {i} {:?} {:?} {}x{} at ({}, {}) depth {:?}: {what}",
+                                        it.group,
+                                        it.paint,
+                                        img.width(),
+                                        img.height(),
+                                        it.x - origin.0,
+                                        it.y - origin.1,
+                                        it.depth
+                                    ));
+                                }
+                            }
+                        }
+                        println!("trace box map {n}: {} distinct items", seen.len());
+                        for l in seen {
+                            println!("  {l}");
+                        }
+                    }
+                }
                 println!(
                     "wrote {} ({} items, {} problems)",
                     path.display(),

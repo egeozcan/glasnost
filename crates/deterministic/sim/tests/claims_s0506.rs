@@ -2122,3 +2122,21 @@ fn s0309_claim_24_redirect_to_none_requests_clear() {
         assert_eq!(controller(&w, lna).pending, expect, "quirk {on}");
     }
 }
+
+// spec: S-0105 Terms (docked: a spawned aircraft inside its spawner is docked; one that has been launched, or destroyed and not yet replaced, is not; a type without a controller has none) and claim 12 (the drawing's alternative-body state reads it)
+#[test]
+fn any_docked_follows_the_slots() {
+    let r = rules();
+    let mut w = game(&r);
+    let lna = spawn_at(&mut w, "LNA", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    assert_eq!(spawn::any_docked(&w, lna), Some(true));
+    assert_eq!(spawn::any_docked(&w, victim), None);
+    let missile = controller(&w, lna).slots[0].object.unwrap();
+    click_attack(&mut w, lna, victim);
+    assert!(testkit_run_until(&mut w, 200, |w| w
+        .obj(missile)
+        .is_some_and(|o| o.on_map)));
+    // The only slot is launched: none is docked while the missile is out.
+    assert_eq!(spawn::any_docked(&w, lna), Some(false));
+}

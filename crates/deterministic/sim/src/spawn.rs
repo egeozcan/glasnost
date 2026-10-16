@@ -416,6 +416,21 @@ pub fn any_alive(w: &World, spawner: ObjectId) -> bool {
         .is_some_and(|c| c.slots.iter().any(|s| s.state != SlotState::Empty))
 }
 
+/// For a spawner with a spawn controller: whether any of its spawned
+/// aircraft is docked (S-0105 Terms *docked*: inside its spawner, waiting or
+/// reloading; one taking off, attacking, returning, or destroyed and not yet
+/// replaced is not). `None` without a controller. Read-only; the drawing's
+/// alternative-body state (S-0105 claim 12) reads it.
+pub fn any_docked(w: &World, spawner: ObjectId) -> Option<bool> {
+    let c = w.obj(spawner)?.spawn.as_ref()?;
+    // spec: S-0105 Terms (docked: a slot that is docked or reloading in its spawner)
+    Some(
+        c.slots
+            .iter()
+            .any(|s| matches!(s.state, SlotState::Docked | SlotState::Reloading)),
+    )
+}
+
 /// Whether the launching count lies strictly between 0 and the spawn
 /// count, which makes the spawner not movable (S-0506 claim 10, S-0214
 /// Terms *movable*).

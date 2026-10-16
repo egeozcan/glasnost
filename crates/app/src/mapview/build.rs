@@ -2518,6 +2518,7 @@ impl Builder<'_> {
                 continue;
             };
             any = true;
+            // interim: Q-0951 (the playback fields come from the image-name section, S-0007 claim 2)
             let t = slots::read_anim(&self.p.art, &art.image);
             // spec: S-0109 claim 19 (detail field above the player's level: not drawn)
             if !slots::shown_at(&t, self.options.detail.number()) {
@@ -3081,6 +3082,8 @@ impl Builder<'_> {
             // spec: S-0402 claim 5a (shown only while a harvest is loading; no tick has run)
             harvesting: None,
             shadow: None,
+            // spec: S-0105 claim 12 (no tick has run: the spawned aircraft are docked, the main body shows)
+            alternative: false,
         };
         Some(self.mobile(&m))
     }
@@ -3593,8 +3596,20 @@ impl Builder<'_> {
     ) -> Vec<Item> {
         let q = VoxelQuirks::default();
         let (kind, idx) = (m.kind, m.idx);
-        let Some(body_file) = art.voxels.get("body").cloned() else {
+        let Some(main_file) = art.voxels.get("body").cloned() else {
             return Vec::new();
+        };
+        // spec: S-0105 claim 12 (the alternative body replaces the main body while no spawned
+        // aircraft is docked, only for a type with the option and an alternative body file; the
+        // main body otherwise, and the shadow is the main body's, claim 29)
+        let alt_drawn = m.alternative
+            && kind == Kind::Vehicles
+            && rule_bool(self.import, kind, idx, b"NoSpawnAlt", false)
+            && art.voxels.contains_key("alternate_body");
+        let body_file = if alt_drawn {
+            art.voxels["alternate_body"].clone()
+        } else {
+            main_file.clone()
         };
         let art_int = |b: &Self, key: &[u8], d: i32| {
             b.art_value(kind, idx, key)
@@ -3612,6 +3627,7 @@ impl Builder<'_> {
             .and_then(value::boolean)
             .unwrap_or(false);
         let (body_raw, turret_raw, elevation) = (m.body, m.turret, m.elevation);
+        // interim: Q-0950 (a rocket's nose pitch is not drawn; the body takes its heading only)
         let pose = move || voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q);
         let object = m.object;
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
@@ -3637,7 +3653,7 @@ impl Builder<'_> {
         });
         // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground)
         let shadow_key = voxel::shadow_key(voxel::RAMP_FLAT, body_raw);
-        let shadow_file = body_file.clone();
+        let shadow_file = main_file.clone();
         let draw_shadow = move |b: &mut Self, (section, aircraft_like): (usize, bool)| {
             let body = b.voxel_model(&shadow_file)?;
             // spec: S-0105 claim 32 (a shadow never enables depth mode, whatever the type's option)
@@ -3665,9 +3681,9 @@ impl Builder<'_> {
         let mut placed = Vec::new();
         // spec: S-0105 claim 16 (walk counter 0: body frame 0; the simulation keeps no walk counter yet)
         let body_frame = 0;
-        // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state off: claim 12's
-        // alternative body is not drawn, the main body always is)
-        let key = voxel::body_key(voxel::RAMP_FLAT, body_raw, false, body_frame);
+        // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state as drawn:
+        // claim 12's alternative body while no spawned aircraft is docked)
+        let key = voxel::body_key(voxel::RAMP_FLAT, body_raw, alt_drawn, body_frame);
         if let Some(part) = self.cached_part(kind, idx, key, |b| {
             let body = b.voxel_model(&body_file)?;
             let vpl = b.vpl();
@@ -3920,6 +3936,10 @@ pub struct Mobile {
     /// claim 40), when the caller knows the game state; `None` takes the
     /// terrain under it from the map and no bridge deck.
     pub shadow: Option<ShadowAnchor>,
+    /// For a vehicle that carries spawned aircraft: no spawned aircraft is
+    /// docked, so a type with the alternative-body option draws its
+    /// alternative body (S-0105 claim 12). `false` without a game state.
+    pub alternative: bool,
 }
 
 /// The surface anchor of an aircraft's voxel shadow (S-0105 claim 40).

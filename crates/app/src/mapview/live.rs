@@ -1284,6 +1284,8 @@ impl Live {
             // simulation does not model that counter yet, so 0, as for the body's HVA frame.
             harvesting: super::harvesting::of(w, id, 0),
             shadow: (kind == Kind::Aircraft).then(|| shadow_anchor(w, o)),
+            // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
+            alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),
         })
     }
 
@@ -1660,6 +1662,81 @@ impl Live {
         } else {
             self.building_ids.get(&code).copied()
         }
+    }
+
+    /// Debug diagnostic: one line for every drawn item that covers world
+    /// pixel `(x, y)` (`top` is the view's top world row), in draw order:
+    /// the item's place in the scene, group, paint, image size, the object
+    /// it belongs to (kind, type, owner, cell, rocket phase) and the draw
+    /// path that produced it. Presentation only; nothing reads it.
+    pub fn trace_point(
+        &self,
+        scene: &Scene,
+        statics: &[super::build::ObjectInfo],
+        x: i32,
+        y: i32,
+        top: i32,
+    ) -> Vec<String> {
+        use glasnost_render::compose::Paint;
+        scene
+            .items_at(x, y, top)
+            .into_iter()
+            .map(|i| {
+                let it = &scene.items[i];
+                let img = &scene.images[it.image as usize];
+                let paint = match it.paint {
+                    Paint::Shadow => "shadow",
+                    Paint::Row(_) => "row",
+                    Paint::Diamond(_) => "diamond",
+                    Paint::Lit(_) => "lit",
+                    Paint::LitDiamond(_) => "lit-diamond",
+                    Paint::Translucent(..) => "translucent",
+                    #[allow(unreachable_patterns)]
+                    _ => "other",
+                };
+                let what = match it.object {
+                    Some(code) => match self.object_of_code(code).and_then(|id| self.world.obj(id))
+                    {
+                        Some(o) => format!(
+                            "object #{} {:?} {} owner {:?} cell {:?} on_map {} rocket {:?}",
+                            o.id.0,
+                            o.kind,
+                            type_name(&self.rules, o.kind, o.type_index),
+                            o.owner.map(|h| h.0),
+                            o.pos.cell(),
+                            o.on_map,
+                            o.rocket.as_ref().map(|r| r.phase),
+                        ),
+                        None => match statics.get(code as usize) {
+                            Some(s) => format!(
+                                "static {} {} owner {} cell {:?} ({})",
+                                s.kind, s.type_name, s.owner, s.cell, s.entry
+                            ),
+                            None => format!("static object code {code:#x}"),
+                        },
+                    },
+                    None => "no object".to_string(),
+                };
+                let path = match (it.object, it.group, it.paint == Paint::Shadow) {
+                    (_, glasnost_render::scene::Group::Effects, _) => {
+                        "effect or projectile placeholder"
+                    }
+                    (Some(c), _, true) if c & SIM_OBJECT != 0 => "object shadow",
+                    (Some(c), _, false) if c & SIM_OBJECT != 0 => "object body, turret or part",
+                    (Some(_), _, _) => "static building draw (body, slot animation or bib)",
+                    (None, _, _) => "unattached animation or overlay",
+                };
+                format!(
+                    "item {i} {:?} {paint} {}x{} at ({}, {}) depth {:?}: {what}; path: {path}",
+                    it.group,
+                    img.width(),
+                    img.height(),
+                    it.x,
+                    it.y,
+                    it.depth
+                )
+            })
+            .collect()
     }
 
     /// The first house in house order that owns a mobile object on the
