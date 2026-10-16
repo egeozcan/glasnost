@@ -136,7 +136,7 @@ fn layered_with(
         .expect("a table")
 }
 
-// spec: S-0520 claim 28 and S-0006 claim 5 (quirks.override_resets_keys off: an omitted entry retains all four held values; an entry no layer mentions has the fixed default of S-0006's switch-off paragraph, weight 0 and no animation: S-0006 revision 18 states this design default apart from S-0520's built-in start table; revision 20 reverses it)
+// spec: S-0520 claim 28 and S-0006 claim 5 (quirks.override_resets_keys off: an omitted entry retains all four held values, including the built-in startup values when no layer mentions the entry; section presence never substitutes weight 0); S-0006 scenario AB (the imported table of a fixture with a section equals that of a fixture with none for the unmentioned entry)
 #[test]
 fn the_power_up_table_with_the_reset_switch_off() {
     let quirks = crate::layers::LayerQuirks {
@@ -152,8 +152,17 @@ fn the_power_up_table_with_the_reset_switch_off() {
     assert_eq!(a[0].argument.as_ref().map(|d| d.0.as_str()), Some("200"));
     assert_eq!(a[1].weight, 7);
     assert_eq!(
-        a[3].weight, 0,
-        "never mentioned: the switch-off default of S-0006 claim 5"
+        (a[3].weight, a[3].animation.is_none(), a[3].water),
+        (3, true, false),
+        "never mentioned: the built-in startup weight of S-0520 claim 28 (Cloak)"
+    );
+    assert_eq!(a[18].weight, 1, "the last entry keeps its startup weight");
+    // Scenario AB: the same entry in a fixture with no section in the mode.
+    let none = layered_with(LAYER_BASE, "", "", quirks);
+    assert_eq!(
+        (a[3].weight, a[3].animation.clone(), a[3].water),
+        (none[3].weight, none[3].animation.clone(), none[3].water),
+        "section presence changes nothing for an unmentioned entry"
     );
 }
 
@@ -202,10 +211,32 @@ fn the_power_up_table_is_layered() {
     );
 }
 
-// spec: S-0520 claim 28 and Import mapping (the reset's animation is the lookup of NONE); S-0003 claim 14 (`none` names no type, so no animation type can carry that name in a type list: the lookup finds none; Q-1033 asks how CR19's separately defined type of that name arises)
+// spec: S-0520 claim 28 and Import mapping, CR19 reserved-name controls (answers Q-1033); S-0003 claim 14, S-0004 claims 2, 7 and 13 (the reserved no-type name in any ASCII letter case registers no animation through the list or an ordinary reference, and an art section alone creates no type: the reset always gives no animation)
 #[test]
-fn the_reset_animation_lookup_finds_no_type_named_none() {
-    let base = "[Powerups]\nMoney=60,Gold,yes,200\nUnit=30\n[AnimationTypes]\n1=Gold\n2=NONE\n[Gold]\n[NONE]\n";
-    let a = layered(base, "[Powerups]\nUnit=7\n", "");
+fn the_reset_never_gives_an_animation_whatever_is_named_none() {
+    for name in ["NONE", "none", "None", "<none>", "<NONE>"] {
+        let base = format!(
+            "[Powerups]\nMoney=60,Gold,yes,200\nUnit=30\n[AnimationTypes]\n1=Gold\n2={name}\n[Gold]\n[{name}]\n"
+        );
+        let a = layered(&base, "[Powerups]\nUnit=7\n", "");
+        assert_eq!(a[0].animation, None, "{name}");
+        assert_eq!(a[0].weight, 0, "{name}");
+        // An entry that names the reserved name explicitly is no animation either.
+        let b = layered(
+            &format!("[Powerups]\nMoney=60,{name}\n[AnimationTypes]\n1={name}\n[{name}]\n"),
+            "",
+            "",
+        );
+        assert_eq!(b[0].animation, None, "{name} named in an entry");
+    }
+    // An art section alone creates no type either.
+    let a = layered(
+        "[Powerups]\nMoney=60,Gold,yes,200\n[Gold]\n[NONE]\n",
+        "[Powerups]\nUnit=7\n",
+        "",
+    );
     assert_eq!(a[0].animation, None);
+    // Positive control: an ordinary name registered in the list stays.
+    let c = layered(LAYER_BASE, "", "");
+    assert_eq!(c[0].animation.as_deref(), Some("Gold"));
 }

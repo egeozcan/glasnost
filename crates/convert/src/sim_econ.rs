@@ -322,6 +322,11 @@ const AUDIO_VISUAL: &[u8] = b"AudioVisual"; // spec: S-0409 Import mapping (`[Au
 const CRATE_RULES: &[u8] = b"CrateRules"; // spec: S-0412 Import mapping (`[CrateRules]`)
 const POWERUPS: &[u8] = b"Powerups"; // spec: S-0520 Import mapping (`[Powerups]`)
 
+/// The built-in power-up weights at a fresh start, in table order
+/// (S-0520 claim 28, Import mapping).
+// spec: S-0520 Import mapping (weights 50, 20, 1, 3, 5, 5, 20, 1, 1, 10, 10, 10, 1, 3, 1, 1, 1, 1, 1; no animations, water flags off, arguments 0.0)
+const POWERUP_STARTUP_WEIGHTS: [i32; 19] = [50, 20, 1, 3, 5, 5, 20, 1, 1, 10, 10, 10, 1, 3, 1, 1, 1, 1, 1];
+
 /// The power-up keys in table order (S-0520 claim 8, Import mapping).
 pub(crate) const POWERUP_KEYS: [&str; 19] = [
     "Money",
@@ -1767,19 +1772,19 @@ impl Builder<'_> {
             return;
         }
         let mut entries = Vec::new();
-        for key in POWERUP_KEYS {
+        for (index, key) in POWERUP_KEYS.into_iter().enumerate() {
             let state = section.get(key.as_bytes());
-            // spec: S-0520 Import mapping (a key absent while the section exists: weight 0, no animation; the water flag and argument are kept, here the built-in values); S-0006 claim 5 revision 18 (with quirks.override_resets_keys off an entry that no layer mentions has the switch-off startup value, the reset value: weight 0, no animation)
-            let mut weight = 0;
+            // spec: S-0520 claim 28 and Import mapping, S-0006 claim 5 revision 20 (an entry starts at its built-in startup values; a layer holding the section and omitting the key resets weight and animation only with quirks.override_resets_keys on, and the layering records no reset with it off, so an entry no layer mentions keeps its startup weight and no animation whatever the section's presence; the later-game carry-over of claim 10 is not modelled by a single import)
+            let mut weight = POWERUP_STARTUP_WEIGHTS[index];
             let mut anim: Option<String> = None;
             let mut water = false;
             let mut arg: Option<String> = None;
             if let Some(st) = state {
                 for e in &st.history {
                     if matches!(e.what, What::Reset) {
-                        // spec: S-0520 claim 28 and S-0006 claim 5 (a layer that contains the power-up section and omits the key resets its weight to 0 and its animation to the lookup of NONE, which is no animation unless an animation type of that name exists; the water flag and the argument keep the held value; the layering records the reset only with quirks.override_resets_keys on)
+                        // spec: S-0520 claim 28 and S-0006 claim 5 revision 20 (a layer that contains the power-up section and omits the key resets its weight to 0 and its animation to no animation: the reserved name NONE cannot be registered as an animation, so the reset never finds a type; the water flag and the argument keep the held value; the layering records the reset only with quirks.override_resets_keys on)
                         weight = 0;
-                        anim = self.type_key(Kind::Animations, b"NONE");
+                        anim = None;
                         continue;
                     }
                     let What::Set(v) = &e.what else { continue };
