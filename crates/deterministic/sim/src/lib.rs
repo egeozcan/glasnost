@@ -17,6 +17,7 @@ pub mod air;
 pub mod approach;
 pub mod base;
 pub mod behaviour;
+pub mod bomb;
 pub mod bridges;
 pub mod cells;
 pub mod cloak;

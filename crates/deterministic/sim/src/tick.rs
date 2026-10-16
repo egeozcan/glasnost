@@ -168,6 +168,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none() {
         return;
     }
+    // spec: S-0519 claim 4 (a planted bomb is checked in its carrier's own turn, after the behaviour processing; not in a pass of its own)
+    crate::bomb::turn(w, id);
+    if w.obj(id).is_none() {
+        return;
+    }
     // spec: S-0506 claim 2 (a spawner's launch pass, when one is due, in its own turn; claim 24: a vehicle or ship spawner's own firing step comes later in the turn, so its shot waits for the next pass)
     crate::spawn::turn(w, id);
     if w.obj(id).is_none() {

@@ -47,6 +47,10 @@ fn entered_building(w: &World, id: ObjectId) -> Option<(ObjectId, bool)> {
 /// the map (it went inside or was used up), in which case the arrival has
 /// no further effect (S-0208 claim 22).
 pub fn arrival(w: &mut World, id: ObjectId) -> bool {
+    // spec: S-0519 claim 13 (a charge planter in sabotage that reaches its destination building plants a charge or is refused)
+    if crate::bomb::charge_arrival(w, id) {
+        return false;
+    }
     let Some((b, by_destination)) = entered_building(w, id) else {
         return false;
     };

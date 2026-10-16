@@ -698,6 +698,27 @@ pub struct General {
     /// established.
     #[serde(default)]
     pub default_spark_system: Option<String>,
+    /// `[CombatDamage] IvanWarhead`, the bomb warhead (S-0519 Import mapping).
+    #[serde(default)]
+    pub ivan_warhead: Option<String>,
+    /// `[CombatDamage] IvanDamage` (S-0519 Import mapping).
+    #[serde(default)]
+    pub ivan_damage: Option<i32>,
+    /// `[CombatDamage] IvanTimedDelay`, ticks (S-0519 Import mapping).
+    #[serde(default)]
+    pub ivan_timed_delay: Option<i32>,
+    /// `[CombatDamage] IvanIconFlickerRate`, ticks (S-0519 Import mapping).
+    #[serde(default)]
+    pub ivan_icon_flicker_rate: Option<i32>,
+    /// `[CombatDamage] CanDetonateTimeBomb` (S-0519 Import mapping).
+    #[serde(default)]
+    pub can_detonate_time_bomb: Option<bool>,
+    /// `[CombatDamage] CanDetonateDeathBomb` (S-0519 Import mapping).
+    #[serde(default)]
+    pub can_detonate_death_bomb: Option<bool>,
+    /// `[CombatDamage] C4Delay`, minutes, a single (S-0519 Import mapping).
+    #[serde(default)]
+    pub c4_delay: Option<Decimal>,
     /// `[General] PrismType`, the building type that supports and is
     /// supported (S-0518 Import mapping).
     #[serde(default)]
@@ -1831,6 +1852,24 @@ pub struct CombatFields {
     /// `AirstrikeTeam` (S-0309 claim 24).
     #[serde(default)]
     pub airstrike_team: Option<i32>,
+    /// `EliteAirstrikeTeam`, the elite strike size (S-0519 Import mapping).
+    #[serde(default)]
+    pub elite_airstrike_team: Option<i32>,
+    /// `AirstrikeTeamType`, the strike aircraft type (S-0519 Import mapping).
+    #[serde(default)]
+    pub airstrike_team_type: Option<String>,
+    /// `EliteAirstrikeTeamType` (S-0519 Import mapping).
+    #[serde(default)]
+    pub elite_airstrike_team_type: Option<String>,
+    /// `AirstrikeRechargeTime`, ticks (S-0519 Import mapping).
+    #[serde(default)]
+    pub airstrike_recharge_time: Option<i32>,
+    /// `EliteAirstrikeRechargeTime`, ticks (S-0519 Import mapping).
+    #[serde(default)]
+    pub elite_airstrike_recharge_time: Option<i32>,
+    /// `BombSight`, cells (S-0519 Import mapping).
+    #[serde(default)]
+    pub bomb_sight: Option<i32>,
     /// `Drainable` (S-0308 row 8).
     #[serde(default)]
     pub drainable: Option<bool>,
@@ -2455,6 +2494,9 @@ pub struct WarheadType {
     /// `IvanBomb`.
     #[serde(default)]
     pub ivan_bomb: Option<bool>,
+    /// `BombDisarm`, the disarm warhead (S-0519 Import mapping).
+    #[serde(default)]
+    pub bomb_disarm: Option<bool>,
     /// `Sonic`.
     #[serde(default)]
     pub sonic: Option<bool>,

@@ -35,6 +35,12 @@ pub struct CombatState {
     /// A building's pending delayed shot: the tick of its turn (S-0301
     /// claim 14).
     pub delayed_shot: Option<i32>,
+    /// A planted bomb the object carries (S-0519 Terms).
+    #[serde(default)]
+    pub bomb: Option<crate::bomb::Bomb>,
+    /// A building's recorded charge planter (S-0519 claim 14).
+    #[serde(default)]
+    pub charge_planter: Option<ObjectId>,
     /// A prism master's support count *N* (S-0518 Terms).
     #[serde(default)]
     pub support: i32,
@@ -110,6 +116,8 @@ impl CombatState {
             gattling_stage: 0,
             firing_frame: None,
             delayed_shot: None,
+            bomb: None,
+            charge_planter: None,
             support: 0,
             support_beam: None,
             chargers: Vec::new(),

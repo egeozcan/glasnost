@@ -314,7 +314,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         let house = o.owner;
         crate::combat::projectile::detonate_weapon(w, wp, dmg, o.pos, Some(id), house, true);
     }
-    // Step 3 (an attached bomb) needs planted bombs (special-abilities specs).
+    // spec: S-0312 table step 3 and S-0519 claim 5 (an attached bomb goes off once at the carrier's position, or is removed silently off the map; the carrier's death does not set it off a second time)
+    crate::bomb::carrier_killed(w, id);
     match o.kind {
         Kind::Infantry => infantry_death(w, id, hit),
         Kind::Vehicle => {

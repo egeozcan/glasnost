@@ -561,6 +561,7 @@ const WARHEAD_FIELDS: &[(&str, &str, Form)] = &[
     ("wall", "Wall", Bool),
     ("wood", "Wood", Bool),
     ("ivan_bomb", "IvanBomb", Bool),
+    ("bomb_disarm", "BombDisarm", Bool),
     ("sonic", "Sonic", Bool),
     ("fire", "Fire", Bool),
     ("electric_assault", "ElectricAssault", Bool),

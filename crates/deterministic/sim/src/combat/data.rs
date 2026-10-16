@@ -299,6 +299,10 @@ pub struct WarheadRules {
     pub debris_maximums: Vec<i32>,
     /// Airstrike warhead.
     pub airstrike: bool,
+    /// Bomb-planting warhead (S-0519 Import mapping, `IvanBomb`).
+    pub ivan_bomb: bool,
+    /// Disarm warhead (S-0519 Import mapping, `BombDisarm`).
+    pub bomb_disarm: bool,
     /// Locomotor warhead.
     pub is_locomotor: bool,
     /// Registered under the nuclear warhead name (S-0306 claim 25).
@@ -578,6 +582,15 @@ pub struct TypeCombat {
     pub threat_posed: i32,
     /// Airstrike team.
     pub airstrike_team: i32,
+    /// The elite strike size (S-0519 Import mapping: absent, the normal).
+    pub elite_airstrike_team: i32,
+    /// The strike aircraft type name, normal and elite (S-0519 Import
+    /// mapping: a missing elite type takes the normal type).
+    pub airstrike_team_type: [Option<String>; 2],
+    /// The recharge delay in ticks, normal and elite (S-0519 Import mapping).
+    pub airstrike_recharge: [i32; 2],
+    /// The bomb-sight range in cells (S-0519 Import mapping).
+    pub bomb_sight: i32,
     /// Drainable.
     pub drainable: bool,
     /// Muzzle positions by slot, ordinary and elite (S-0313).
@@ -732,6 +745,23 @@ pub struct RadRules {
     pub site_warhead: Option<WarheadId>,
 }
 
+/// The game-wide planted-bomb and charge settings (S-0519 Import mapping).
+#[derive(Clone, Debug)]
+pub struct IvanRules {
+    /// The bomb warhead.
+    pub warhead: Option<WarheadId>,
+    /// The bomb damage, health points.
+    pub damage: i32,
+    /// The timed delay *D*, ticks.
+    pub delay: i32,
+    /// The icon flicker rate *F*, ticks.
+    pub flicker: i32,
+    /// The timed-bomb detonate permission (S-0214 row G3).
+    pub can_detonate_time_bomb: bool,
+    /// The charge delay *c* in minutes, a double (F4).
+    pub c4_delay: F64,
+}
+
 /// The game-wide prism support settings (S-0518 Import mapping).
 #[derive(Clone, Debug)]
 pub struct PrismRules {
@@ -750,6 +780,8 @@ pub struct PrismRules {
 /// Game-wide combat values.
 #[derive(Clone, Debug)]
 pub struct CombatGeneral {
+    /// The planted-bomb and charge settings (S-0519).
+    pub ivan: IvanRules,
     /// The prism support settings (S-0518).
     pub prism: PrismRules,
     /// The completion animation of an erasure (S-0514 Import mapping).
@@ -1069,6 +1101,8 @@ pub fn tables(
                 debris_types: h.debris_types.clone().unwrap_or_default(),
                 debris_maximums: h.debris_maximums.clone().unwrap_or_default(),
                 airstrike: b(h.airstrike),
+                ivan_bomb: b(h.ivan_bomb),
+                bomb_disarm: b(h.bomb_disarm),
                 is_locomotor: b(h.is_locomotor),
                 // spec: S-0306 claim 25 and Import mapping (the nuclear warhead name, compared without regard to case)
                 nuke: n.eq_ignore_ascii_case("NUKE"),
@@ -1338,6 +1372,22 @@ pub fn type_combat(
         // spec: S-0309 Import mapping (ThreatPosed absent: 0)
         threat_posed: c.threat_posed.unwrap_or(0),
         airstrike_team: c.airstrike_team.unwrap_or(0),
+        // spec: S-0519 Import mapping (the elite values default to the normal ones; recharge 0; bomb sight 0)
+        elite_airstrike_team: c
+            .elite_airstrike_team
+            .unwrap_or_else(|| c.airstrike_team.unwrap_or(0)),
+        airstrike_team_type: [
+            c.airstrike_team_type.clone(),
+            c.elite_airstrike_team_type
+                .clone()
+                .or_else(|| c.airstrike_team_type.clone()),
+        ],
+        airstrike_recharge: [
+            c.airstrike_recharge_time.unwrap_or(0),
+            c.elite_airstrike_recharge_time
+                .unwrap_or_else(|| c.airstrike_recharge_time.unwrap_or(0)),
+        ],
+        bomb_sight: c.bomb_sight.unwrap_or(0),
         drainable: b(c.drainable),
         flh,
         elite_flh,
@@ -1468,6 +1518,19 @@ pub fn combat_rules(
     // spec: S-0314 Constants (repair rates absent: the double nearest 0.016)
     let rate = |d: &Option<Decimal>| dec(d, mode).unwrap_or_else(|| nearest_double("0.016"));
     let general = CombatGeneral {
+        ivan: IvanRules {
+            warhead: warhead(&g.ivan_warhead),
+            // spec: S-0519 Import mapping (IvanDamage absent: 100; IvanTimedDelay 450; IvanIconFlickerRate 8; both permissions no)
+            damage: g.ivan_damage.unwrap_or(100),
+            delay: g.ivan_timed_delay.unwrap_or(450),
+            flicker: g.ivan_icon_flicker_rate.unwrap_or(8),
+            can_detonate_time_bomb: g.can_detonate_time_bomb.unwrap_or(false),
+            // spec: S-0519 Import mapping and F4 (C4Delay absent: the double nearest 0.03, never through single precision; a given value is a single widened)
+            c4_delay: g
+                .c4_delay
+                .as_ref()
+                .map_or_else(|| nearest_double("0.03"), |d| d.single_value(mode)),
+        },
         prism: PrismRules {
             building: g
                 .prism_type

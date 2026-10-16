@@ -1406,7 +1406,9 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
         && !rules
             .combat
             .warhead_of(pr.weapon)
-            .is_some_and(|h| h.parasite || h.airstrike || h.electric_assault);
+            .is_some_and(|h| {
+                h.parasite || h.airstrike || h.electric_assault || h.ivan_bomb || h.bomb_disarm
+            });
     if disguises {
         // spec: S-0516 claim 31 (detonating on its target, it disguises its firer)
         crate::cloak::disguise::disguise_hit(w, pr.attacker, pr.target);
@@ -1572,6 +1574,13 @@ fn detonation_inner(
     // spec: S-0518 claim 11 (an electric-charge detonation registers an infantry firer on the building it hit, whatever the building)
     if rules.combat.warhead(h).electric_assault {
         crate::linked::charge_hit(w, attacker, target);
+    }
+    // spec: S-0519 claims 2 and 7 (a bomb-planting warhead plants on its target instead of area damage; a disarm warhead removes the target's bomb; the distance is not tested)
+    if rules.combat.warhead(h).ivan_bomb {
+        crate::bomb::plant(w, attacker, target);
+    }
+    if rules.combat.warhead(h).bomb_disarm {
+        crate::bomb::disarm(w, target);
     }
     let erasing = wh_temporal(&rules, h);
     if erasing {

@@ -415,6 +415,10 @@ pub fn check(
         {
             return Answer::Illegal;
         }
+        // spec: S-0301 claim 9 rank 9 and S-0519 claim 3 (a bomb-planting weapon against a carrier, a disarm weapon against a target with no bomb: illegal)
+        if crate::bomb::illegal_target(w, weapon, tg) {
+            return Answer::Illegal;
+        }
         // spec: S-0301 claim 9 rank 9 and S-0504 claim 5 (a sinking target, among the late target tests: illegal)
         if let Target::Object(x) = tg
             && crate::naval::sinking(w, x)
