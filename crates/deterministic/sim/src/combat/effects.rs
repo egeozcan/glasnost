@@ -110,6 +110,44 @@ pub enum Effect {
         /// What happened.
         event: crate::cloak::machine::CloakEvent,
     },
+    /// A building changed owner (S-0509 claim 12): for the capture and loss
+    /// announcements (S-0701 claim 39), the *captured* radar event and the
+    /// local player's building placement (claim 15). `announce` is whether
+    /// the cause requests an announcement (an engineer capture or a
+    /// vehicle-like takeover do; a trigger and the occupation rules do not).
+    Captured {
+        /// The building.
+        building: ObjectId,
+        /// Its type.
+        of: crate::econ::TypeRef,
+        /// The old owner.
+        old: Option<crate::world::HouseId>,
+        /// The new owner.
+        new: Option<crate::world::HouseId>,
+        /// Where (the building's position).
+        pos: Pos,
+        /// Whether the cause requests an announcement.
+        announce: bool,
+    },
+    /// A spy infiltrated a building (S-0510 claim 11): the announcement
+    /// lines for the infiltrating and the victim house, and the *infiltrated*
+    /// radar event, when the two houses differ.
+    Infiltrated {
+        /// The building.
+        building: ObjectId,
+        /// The infiltrating house (the spy's owner).
+        infiltrator: Option<crate::world::HouseId>,
+        /// The victim house (the building's owner).
+        victim: Option<crate::world::HouseId>,
+        /// The effect rows that applied, in table order (one row unless
+        /// `quirks.infiltration_single_effect` is off).
+        rows: Vec<InfiltrationRow>,
+        /// Whether the victim has an active spy satellite (row E1 then
+        /// makes no radar lines).
+        satellite: bool,
+        /// Where (the building's top-left cell's position).
+        pos: Pos,
+    },
     /// A superweapon presentation event (S-0512 claim 5, S-0513 claim 5).
     Superweapon {
         /// What happened.
@@ -121,6 +159,25 @@ pub enum Effect {
         /// Where, if positional.
         pos: Option<Pos>,
     },
+}
+
+/// The effect rows of S-0510 claim 3 that an infiltration applied.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InfiltrationRow {
+    /// E1: the whole-map re-cover of a radar building's owner.
+    Radar,
+    /// E2: the timed blackout of a power plant's owner.
+    Power,
+    /// E3: the stolen-tech flag of a tech-lab building.
+    Tech,
+    /// E4: the reset of a superweapon building's record.
+    Superweapon,
+    /// E5: the money theft.
+    Cash,
+    /// E6: the infiltrated-vehicle-factory flag.
+    VehicleFactory,
+    /// E7: the infiltrated-infantry-factory flag.
+    InfantryFactory,
 }
 
 /// The sounds of [`Effect::Sound`].
@@ -169,6 +226,19 @@ pub enum Sound {
     RepairBridge,
     /// The game-wide cloak sound (S-0516 claim 15), at the object.
     Cloak,
+    /// The game-wide building-repaired sound (S-0509 claim 5), at the
+    /// repaired building's centre.
+    BuildingRepaired,
+    /// An entry made a building's occupant count 1 (S-0508 claim 6): the
+    /// garrisoned announcement and sound for the entering unit's house, the
+    /// sound at the entering unit's last position; `of` is the building's type.
+    Garrisoned,
+    /// A civilian garrison building returned to the civilian house
+    /// (S-0508 claim 8): the abandoned sound (not positioned, not
+    /// throttled), the *garrison abandoned* radar event at the building's
+    /// top-left cell and, when the event is created, the announcement, for
+    /// the owner that lost the building (`house`).
+    Abandoned,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

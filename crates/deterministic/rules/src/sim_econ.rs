@@ -917,6 +917,11 @@ pub struct EconGeneral {
     /// `[General] SpyPowerBlackout`, *d* in ticks (S-0405 claim 6); absent: 0.
     #[serde(default)]
     pub spy_power_blackout: Option<i32>,
+    /// `[General] SpyMoneyStealPercent`, the steal fraction *f*, a
+    /// percentage field kept in single precision (S-0510 claim 6, Import
+    /// mapping); absent: 0.5.
+    #[serde(default)]
+    pub spy_money_steal_percent: Option<Decimal>,
     /// `[General] BuildupTime`, the build-up time *B* in game minutes, a
     /// double (S-0108 claim 5, F1); absent: the double nearest 0.05.
     #[serde(default)]

@@ -210,6 +210,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             if crate::transport::arrival(w, id) {
                 return true;
             }
+            // spec: S-0508 claim 2 and S-0208 claim 22 (a building entry at the arrival update: a unit that went inside or was used up has no arrival raise)
+            if crate::structures::entry::arrival(w, id) {
+                return true;
+            }
             // spec: S-0208 State and ordering (on the arrival tick, after the placement: claim 17's in-range stop, then claim 16's end-of-walk test)
             approach_stop(w, id);
             // spec: S-0208 claim 22 (the snap to the walking target raises the current cell's entered-by tag, after claim 17's destination clear; every intermediate standing-position arrival raises it)

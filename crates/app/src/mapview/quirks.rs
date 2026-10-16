@@ -132,6 +132,20 @@ pub fn occupiable_hurt(tech_level: i32, damaged: bool, badly: bool, q: &ViewQuir
     if tech_level <= 0 { badly } else { damaged }
 }
 
+/// The image-frame index of an occupiable building outside construction
+/// (S-0108 claim 2): 2·[occupied] + [hurt], so an occupied, hurt building
+/// uses frame 3, a civilian building (tech level −1) included.
+pub fn occupiable_frame(
+    tech_level: i32,
+    damaged: bool,
+    badly: bool,
+    occupied: bool,
+    q: &ViewQuirks,
+) -> i32 {
+    // spec: S-0108 claim 2 (2·[occupied] + [hurt])
+    2 * i32::from(occupied) + i32::from(occupiable_hurt(tech_level, damaged, badly, q))
+}
+
 /// The body frame drawn for body frame `f` of a sprite with `n` image
 /// frames (S-0108 claim 3). The result may be negative; such an index
 /// draws nothing (claim 3, F2). A sprite with no body frame (`n` < 2)
@@ -380,6 +394,17 @@ mod tests {
         assert!(occupiable_hurt(0, true, false, &off()));
         assert!(occupiable_hurt(-1, true, false, &off()));
         assert!(!occupiable_hurt(0, false, false, &off()));
+    }
+
+    /// spec: S-0108 claim 2 (an occupied building uses frame 2, an occupied, hurt one frame 3, a civilian building included)
+    #[test]
+    fn occupied_frames() {
+        let on = ViewQuirks::default();
+        assert_eq!(occupiable_frame(-1, false, false, false, &on), 0);
+        assert_eq!(occupiable_frame(-1, true, true, false, &on), 1);
+        assert_eq!(occupiable_frame(-1, false, false, true, &on), 2);
+        assert_eq!(occupiable_frame(-1, true, true, true, &on), 3);
+        assert_eq!(occupiable_frame(5, true, false, true, &on), 3);
     }
 
     /// spec: S-0108 claim 3 (drawn frame min(f, ⌊N/2⌋ − 1): the last body frame, with its shadow)

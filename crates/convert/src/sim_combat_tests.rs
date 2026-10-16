@@ -826,6 +826,35 @@ fn art_combat_fields() {
     );
 }
 
+/// spec: S-0508 Import mapping (OccupantAnim of a weapon: an animation name, created by reference, none when absent)
+#[test]
+fn occupant_animation_field() {
+    let base = "[Warheads]\n1=Zap\n2=Plain\n[Zap]\nOccupantAnim=ZAPFLASH\n[Plain]\nROF=3\n";
+    let (s, _) = direct(&[base], "", &["Zap", "Plain"], &[], IniQuirks::default());
+    assert_eq!(s.weapons["Zap"].occupant_anim.as_deref(), Some("ZAPFLASH"));
+    assert_eq!(s.weapons["Plain"].occupant_anim, None);
+}
+
+/// spec: S-0508 Import mapping (CanBeOccupied, MaxNumberOccupants, TechLevel, Occupier, Assaulter; OccupantAnim of a weapon), S-0313 Import mapping (MuzzleFlash followed by 0, 1, …: pixel pairs of the building image, one per place of the capacity; an unwritten point is (0, 0))
+#[test]
+fn garrison_fields() {
+    let base = "[InfantryTypes]\n1=Rifleman\n2=Storm\n[BuildingTypes]\n1=Hut\n\
+                [Rifleman]\nOccupier=yes\n[Storm]\nAssaulter=yes\n\
+                [Hut]\nCanBeOccupied=yes\nMaxNumberOccupants=3\nTechLevel=-1\nCanOccupyFire=yes\n";
+    let art = "[Hut]\nMuzzleFlash0=10,20\nMuzzleFlash2=-5,7\n";
+    let (s, _) = sim(base, "", art);
+    assert_eq!(s.infantry["Rifleman"].occupier, Some(true));
+    assert_eq!(s.infantry["Storm"].assaulter, Some(true));
+    let h = &s.buildings["Hut"];
+    assert_eq!(h.can_be_occupied, Some(true));
+    assert_eq!(h.max_number_occupants, Some(3));
+    assert_eq!(h.tech_level, Some(-1));
+    assert_eq!(h.garrison_muzzles, Some(vec![[10, 20], [0, 0], [-5, 7]]));
+    // No MuzzleFlash key: none written.
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.buildings["Hut"].garrison_muzzles, None);
+}
+
 /// spec: S-0301 to S-0314 Import mapping (game-wide combat values, the difficulty rows, the overlay and terrain-object fields), S-0006 claim 5 (difficulty keys reset), the game-wide warnings of S-0301, S-0302, S-0306, S-0309, S-0311, S-0312 and S-0314 Edge cases
 #[test]
 fn game_wide_combat_values() {
@@ -1050,7 +1079,8 @@ fn combat_coverage() {
     );
     assert_eq!(row("art", "PrimaryFireFLH"), (Field, "S-0313".into()));
     assert_eq!(row("art", "Weapon2FLH"), (Field, "S-0313".into()));
-    assert_eq!(row("art", "MuzzleFlash0"), (Unsupported, "S-0313".into()));
+    // spec: S-0313 Import mapping (MuzzleFlash followed by 0, 1, …: the garrison muzzle points, read since M6c)
+    assert_eq!(row("art", "MuzzleFlash0"), (Field, "S-0313".into()));
     // spec: S-0311 F1, S-0314 claim 5 (the building cost field)
     assert_eq!(row("buildings", "Cost"), (Field, "S-0311, S-0314".into()));
     // spec: S-0004 claim 13 (a weapon created by a vehicle's primary field: its section is a weapon's)

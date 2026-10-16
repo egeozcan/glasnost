@@ -45,8 +45,7 @@ use glasnost_render::voxel::{self, VoxelQuirks};
 use glasnost_sim::rules::{Kind as SimKind, SimRules};
 
 use super::quirks::{
-    ViewQuirks, cliff_factor, drawn_body_frame, occupiable_hurt, overlay_depth_lift,
-    sprite_vehicle_facing_part,
+    ViewQuirks, cliff_factor, drawn_body_frame, overlay_depth_lift, sprite_vehicle_facing_part,
 };
 use super::slots;
 use super::unload::{self, Unloading};
@@ -2168,8 +2167,8 @@ impl Builder<'_> {
             let facing = facing_from_value(p.facing);
             // A map-placed building is not unloading when the scene is built.
             let items = self.building_items(
-                i, &art, p.cell, cell.level, &p.owner, condition, facing, object, None, None,
-                ground,
+                i, &art, p.cell, cell.level, &p.owner, condition, false, facing, object, None,
+                None, ground,
             );
             self.built.scene.items.extend(items);
         }
@@ -2191,6 +2190,7 @@ impl Builder<'_> {
         level: i8,
         owner: &[u8],
         condition: (bool, bool),
+        occupied: bool,
         facing: u16,
         object: u32,
         unloading: Option<Unloading>,
@@ -2273,13 +2273,8 @@ impl Builder<'_> {
         } else if occupiable {
             // spec: S-0108 Import mapping (TechLevel absent: 255)
             let tech = rule_int(self.import, Kind::Buildings, i, b"TechLevel", 255);
-            // spec: S-0108 claim 2 (quirks.occupiable_hurt_rule)
-            i32::from(occupiable_hurt(
-                tech,
-                damaged,
-                badly,
-                &ViewQuirks::default(),
-            ))
+            // spec: S-0108 claim 2 (quirks.occupiable_hurt_rule; 2·[occupied] + [hurt])
+            super::quirks::occupiable_frame(tech, damaged, badly, occupied, &ViewQuirks::default())
         } else if gate {
             if damaged {
                 gate_stages.saturating_add(1)
@@ -4209,6 +4204,7 @@ impl Painter {
                 level,
                 &d.owner,
                 condition,
+                d.occupied,
                 d.facing,
                 d.object,
                 d.unloading,
@@ -4260,6 +4256,8 @@ pub struct LiveBuilding {
     pub health: (i32, i32),
     /// Turret facing.
     pub facing: u16,
+    /// It holds at least one garrison occupant (S-0108 Terms, claim 2).
+    pub occupied: bool,
     /// Item object code.
     pub object: u32,
     /// Its unloading state, while it unloads a unit (S-0417 Terms; S-0108

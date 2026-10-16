@@ -66,6 +66,9 @@ pub struct Rules {
     pub powered_unit: Vec<bool>,
     /// The spy blackout length *d* in ticks (claim 6).
     pub spy_blackout: i32,
+    /// The spy's steal fraction *f*, a single widened exactly (S-0510
+    /// claim 6, F1).
+    pub spy_steal: F64,
 }
 
 /// Splits a signed power field into (output, drain) (S-0405 Terms).
@@ -81,7 +84,6 @@ fn split(v: i32) -> (i32, i32) {
 impl Rules {
     /// The power rules of a resolved ruleset.
     pub fn new(r: &Ruleset, mode: Rounding) -> Self {
-        let _ = mode;
         let reg = |k: &str| r.registries.get(k).cloned().unwrap_or_default();
         let vehicles = reg("vehicles");
         let buildings = reg("buildings")
@@ -139,6 +141,17 @@ impl Rules {
             powered_unit,
             // spec: S-0405 Constants (spy blackout length absent: 0)
             spy_blackout: r.sim.general.economy.spy_power_blackout.unwrap_or(0),
+            // spec: S-0510 Import mapping and Constants (SpyMoneyStealPercent: a percentage field of S-0003 claim 7 kept in single precision, a % product narrowed under the rounding mode of S-0205; absent 0.5; a later layer that omits it keeps the earlier value)
+            spy_steal: r
+                .sim
+                .general
+                .economy
+                .spy_money_steal_percent
+                .as_ref()
+                .map_or_else(
+                    || F64::from_i64(1, mode).div(F64::from_i64(2, mode), mode),
+                    |d| d.single_value(mode).to_f32(mode).to_f64(),
+                ),
         }
     }
 }
@@ -265,10 +278,9 @@ pub fn manned(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.econ.building.manned)
 }
 
-/// Occupants who are inside an occupiable building (S-0215). Seam.
+/// Occupants who are inside an occupiable building (S-0215, S-0508).
 pub fn occupants(w: &World, id: ObjectId) -> i32 {
-    let _ = (w, id);
-    0
+    crate::structures::garrison::count(w, id)
 }
 
 // ---------------------------------------------------------------------------

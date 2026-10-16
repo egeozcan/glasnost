@@ -79,6 +79,10 @@ pub fn slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
     if let Some(u) = upgrade_slot_weapon(w, id, i) {
         return Some(u);
     }
+    // spec: S-0308 claim 13 (a garrisoned building whose occupants fire: the weapon of every slot a rule asks about comes from its current occupant, unless an upgrade supplies one)
+    if crate::structures::garrison::fires(w, id) {
+        return occupant_weapon(w, id);
+    }
     // spec: S-0308 claim 2 (elite: the elite slot when it holds a weapon, else the slot; per slot)
     if veterancy::rank(w, id) == Rank::Elite
         && let Some(e) = tc.elite_slots[i]
@@ -86,6 +90,32 @@ pub fn slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
         return Some(e);
     }
     tc.slots[i]
+}
+
+/// The weapon of a garrisoned building's current occupant (S-0308 claim 13):
+/// an elite occupant's elite occupying weapon, else (with
+/// `quirks.elite_occupant_skips_occupy_weapon`) its own slot 0, else the
+/// occupying weapon; any other occupant's occupying weapon, else the weapon
+/// in its own slot 0. `None` when no occupant exists (Q-0970).
+pub fn occupant_weapon(w: &World, building: ObjectId) -> Option<WeaponId> {
+    let occ = crate::structures::garrison::current_occupant(w, building)?;
+    let tc = veterancy::type_combat(w, occ)?;
+    let elite = veterancy::rank(w, occ) == Rank::Elite;
+    if elite {
+        // spec: S-0308 claim 13 (an elite occupant: its type's elite occupying weapon if the type has one)
+        if let Some(e) = tc.elite_occupy_weapon {
+            return Some(e);
+        }
+        // spec: S-0308 claim 13 and Edge cases (quirks.elite_occupant_skips_occupy_weapon: otherwise the weapon in the occupant's own slot 0, claim 2, even when the type has an occupying weapon; off: the occupying weapon)
+        if !w.rules().quirks.elite_occupant_skips_occupy_weapon
+            && let Some(o) = tc.occupy_weapon
+        {
+            return Some(o);
+        }
+        return slot_weapon(w, occ, 0);
+    }
+    // spec: S-0308 claim 13 (any other occupant: its type's occupying weapon if the type has one, otherwise the weapon in its own slot 0)
+    tc.occupy_weapon.or_else(|| slot_weapon(w, occ, 0))
 }
 
 /// A building's weapon-providing upgrade types in provider order (S-0308
@@ -284,7 +314,10 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
     if tc.multi_weapon && !tc.gattling {
         return weapon_number(w, firer);
     }
-    // Row 2 (a garrisoned building) needs occupants, which the structures specs own.
+    // spec: S-0308 table P row 2 (a garrisoned building whose occupants fire: slot 0; a switching type follows row 1 above)
+    if crate::structures::garrison::fires(w, firer) {
+        return 0;
+    }
     let passenger = crate::transport::passenger_weapon_index(w, firer);
     if !q.passenger_weapon_needs_secondary
         && let Some(i) = passenger

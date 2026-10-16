@@ -135,6 +135,9 @@ pub fn destruction_credited(
             Some(l) if trainable(l) => l,
             _ => return,
         }
+    } else if let Some(occupant) = crate::structures::garrison::experience_recipient(w, obj) {
+        // spec: S-0311 claim 8 (an untrainable credited object that is not a missile spawn and is a garrisoned building whose occupants fire gives the experience to its firing occupant at destruction time)
+        occupant
     } else {
         return;
     };

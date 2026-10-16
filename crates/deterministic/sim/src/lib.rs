@@ -52,6 +52,7 @@ pub mod seams;
 pub mod spawn;
 pub mod starting;
 pub mod starts;
+pub mod structures;
 pub mod superweapons;
 pub mod surface;
 pub mod targeting;

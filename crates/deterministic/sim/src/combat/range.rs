@@ -165,8 +165,22 @@ pub fn in_range(
     let m = measured_point(w, t);
     let target_air = matches!(t, Target::Object(x) if airborne_by_height(w, x));
     let air_bonus = super::veterancy::type_combat(w, firer).map_or(0, |tc| tc.air_range_bonus);
-    // spec: S-0307 F1 (R_b = R₀ + a · [target airborne]); garrisons, bunkers and open-topped transports are seams
-    let rr = wrap(i64::from(wr.range) + if target_air { i64::from(air_bonus) } else { 0 });
+    // spec: S-0307 F1 (R_b = R₀ + a · [target airborne]); bunkers and open-topped transports are seams
+    let rr = if crate::structures::garrison::garrisoned(w, firer) {
+        // spec: S-0307 claim 4 (a garrisoned building's range is 256 × (⌊min(W, H) / 2⌋ + G) leptons: the weapon's own range is not used, nor, with quirks.garrison_range_drops_air_bonus, the air bonus)
+        let (fw, fh) = w.obj(firer).map_or((0, 0), |o| o.foundation);
+        let cells = fw.min(fh) / 2 + r.combat.general.occupy_weapon_range;
+        wrap(
+            256 * i64::from(cells)
+                + if target_air && !r.quirks.garrison_range_drops_air_bonus {
+                    i64::from(air_bonus)
+                } else {
+                    0
+                },
+        )
+    } else {
+        wrap(i64::from(wr.range) + if target_air { i64::from(air_bonus) } else { 0 })
+    };
     let proj = r.combat.projectile_of(weapon);
     let (e1, e2) = elevation(w, firer, t, proj.is_some_and(|p| p.elevation));
     let (dx, dy, dz) = (

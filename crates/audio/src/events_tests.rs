@@ -1584,3 +1584,213 @@ fn chrono_sounds() {
     a.tick(&w, &fx, &mut Rng::new(1));
     assert_eq!(heard(&mut a, 0), ["Away", "Back"]);
 }
+
+// spec: S-0508 claim 6; S-0701 claim 28 (structure garrisoned: the garrisoned sound and the announcement for the local player's entering unit, whoever owns the building; nothing for another house's unit)
+#[test]
+fn garrisoned_feedback_is_the_entering_units() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let fx = |h: u8| Effect::Sound {
+        sound: Sound::Garrisoned,
+        of: None,
+        house: Some(HouseId(h)),
+        pos: Some(at),
+    };
+    let mut a = announcing(&w, &[(Announcement::StructureGarrisoned, "Garr")]);
+    let mut n = SoundNames::default();
+    n.set_announcement(Announcement::StructureGarrisoned, "Garr");
+    n.building_garrisoned = Some("GarrSound".into());
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[fx(1)], &mut u);
+    assert!(!announced(&mut a, 1000), "another house's unit: nothing");
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(announced(&mut a, 2000), "the local player's entering unit");
+}
+
+// spec: S-0508 claim 8; S-0701 claim 28 and F7 (structure abandoned: the announcement for the owner that lost the building when it is the local player, only when the garrison abandoned radar event is created: 8 cells, 400 ticks, suppressing)
+#[test]
+fn abandoned_announcement_follows_the_radar_event() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let fx = |h: u8| Effect::Sound {
+        sound: Sound::Abandoned,
+        of: None,
+        house: Some(HouseId(h)),
+        pos: Some(at),
+    };
+    let mut a = announcing(&w, &[(Announcement::StructureAbandoned, "Aband")]);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[fx(1)], &mut u);
+    assert!(!announced(&mut a, 1000), "another house lost it: nothing");
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(announced(&mut a, 2000), "the local player lost it");
+    a.mixer_mut().clear();
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(
+        !announced(&mut a, 3000),
+        "a nearby garrison abandoned event suppresses the announcement"
+    );
+}
+
+// spec: S-0509 claim 12 and S-0701 claim 39 (the capture and loss announcements: eligible when the cause requests one, the local player is the old or new owner and the new owner's country is not passive; an ordinary building uses the captured entry for both)
+#[test]
+fn capture_announcements() {
+    use glasnost_sim::econ::TypeRef;
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let ty = TypeRef {
+        kind: Kind::Vehicle,
+        index: 0,
+    };
+    let fx = |old: u8, new: u8, announce: bool| Effect::Captured {
+        building: ObjectId(1),
+        of: ty,
+        old: Some(HouseId(old)),
+        new: Some(HouseId(new)),
+        pos: at,
+        announce,
+    };
+    let mut a = announcing(&w, &[(Announcement::BuildingCaptured, "Capt")]);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[fx(1, 0, true)], &mut u);
+    assert!(announced(&mut a, 1000), "the local player gained it");
+    a.mixer_mut().clear();
+    a.tick(&w, &[fx(0, 1, true)], &mut u);
+    assert!(
+        announced(&mut a, 2000),
+        "the local player lost it: the same entry for an ordinary building"
+    );
+    a.mixer_mut().clear();
+    a.tick(&w, &[fx(1, 0, false)], &mut u);
+    assert!(
+        !announced(&mut a, 3000),
+        "a cause that requests none: nothing"
+    );
+    a.tick(&w, &[fx(1, 1, true)], &mut u);
+    assert!(
+        !announced(&mut a, 4000),
+        "the local player is neither owner"
+    );
+}
+
+// spec: S-0509 claim 5 (the game-wide building-repaired sound plays at the building's centre, for every player)
+#[test]
+fn building_repaired_sound() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let mut a = audio(&w, &["Fixed"]);
+    let mut n = SoundNames::default();
+    n.building_repaired = Some("Fixed".into());
+    a.set_names(n);
+    let fx = Effect::Sound {
+        sound: Sound::BuildingRepaired,
+        of: None,
+        house: Some(HouseId(1)),
+        pos: Some(at),
+    };
+    a.tick(&w, &[fx], &mut Rng::new(1));
+    assert_eq!(heard(&mut a, 0), ["Fixed"]);
+}
+
+fn infiltration(
+    rows: Vec<glasnost_sim::combat::effects::InfiltrationRow>,
+    satellite: bool,
+    infiltrator: u8,
+    victim: u8,
+) -> Effect {
+    Effect::Infiltrated {
+        building: ObjectId(1),
+        infiltrator: Some(HouseId(infiltrator)),
+        victim: Some(HouseId(victim)),
+        rows,
+        satellite,
+        pos: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
+    }
+}
+
+// spec: S-0510 claim 11 (the lines by row and by role: the victim hears the sabotage or theft line, the infiltrator hears building infiltrated and then the row's line, one line for radar and cash; a radar row with an active spy satellite is silent; a house that is neither hears nothing)
+#[test]
+fn infiltration_announcement_lines() {
+    use glasnost_sim::combat::effects::InfiltrationRow as R;
+    let w = world();
+    // The local player (house 0) is the victim of a power infiltration.
+    let mut a = announcing(&w, &[(Announcement::PowerSabotaged, "Pwr")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Power], false, 1, 0)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000), "the victim hears power sabotaged");
+    // The local player is the infiltrator: not the victim's line.
+    let mut a = announcing(&w, &[(Announcement::PowerSabotaged, "Pwr")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Power], false, 0, 1)],
+        &mut Rng::new(1),
+    );
+    assert!(
+        !announced(&mut a, 1000),
+        "the infiltrator does not hear the victim's line"
+    );
+    let mut a = announcing(
+        &w,
+        &[
+            (Announcement::BuildingInfiltrated, "Inf"),
+            (Announcement::EnemyBasePoweredDown, "Down"),
+        ],
+    );
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Power], false, 0, 1)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000), "the infiltrator's lines");
+    // The radar row: one line for the infiltrator, none with a satellite.
+    for (satellite, want) in [(false, true), (true, false)] {
+        let mut a = announcing(&w, &[(Announcement::BuildingInfRadarSabotaged, "Both")]);
+        a.tick(
+            &w,
+            &[infiltration(vec![R::Radar], satellite, 0, 1)],
+            &mut Rng::new(1),
+        );
+        assert_eq!(announced(&mut a, 1000), want, "satellite {satellite}");
+    }
+    // Cash: the victim hears cash stolen; the infiltrator the one line.
+    let mut a = announcing(&w, &[(Announcement::CashStolen, "Cash")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Cash], false, 1, 0)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000));
+    let mut a = announcing(&w, &[(Announcement::BuildingInfCashStolen, "Both")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Cash], false, 0, 1)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000));
+    // Tech rows: technology stolen for the victim.
+    let mut a = announcing(&w, &[(Announcement::TechnologyStolen, "Tech")]);
+    a.tick(
+        &w,
+        &[infiltration(vec![R::VehicleFactory], false, 1, 0)],
+        &mut Rng::new(1),
+    );
+    assert!(announced(&mut a, 1000));
+    // The same house on both sides, or neither the local player's: nothing.
+    let mut a = announcing(
+        &w,
+        &[
+            (Announcement::PowerSabotaged, "Pwr"),
+            (Announcement::BuildingInfiltrated, "Inf"),
+        ],
+    );
+    a.tick(
+        &w,
+        &[infiltration(vec![R::Power], false, 1, 1)],
+        &mut Rng::new(1),
+    );
+    assert!(!announced(&mut a, 1000));
+}

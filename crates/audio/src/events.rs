@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 
 use glasnost_rules::quirks::Quirks;
 use glasnost_sim::combat::damage::HitResult;
-use glasnost_sim::combat::effects::{Effect, Sound};
+use glasnost_sim::combat::effects::{Effect, InfiltrationRow, Sound};
 use glasnost_sim::combat::veterancy::{self, Rank};
 use glasnost_sim::combat::weapon;
 use glasnost_sim::econ::minimap::{self, Grid, Image, Zoom};
@@ -101,6 +101,9 @@ enum RadarKind {
     UnitLost,
     AllyAttacked,
     UnitRepaired,
+    GarrisonAbandoned,
+    Captured,
+    Infiltrated,
 }
 
 impl RadarKind {
@@ -115,6 +118,12 @@ impl RadarKind {
             RadarKind::AllyAttacked => (8, 600),
             // spec: S-0701 F7 (unit repaired 2, 400)
             RadarKind::UnitRepaired => (2, 400),
+            // spec: S-0701 F7 (garrison abandoned 8, 400, suppresses)
+            RadarKind::GarrisonAbandoned => (8, 400),
+            // spec: S-0701 F7 (captured: no suppression, 100 ticks)
+            RadarKind::Captured => (0, 100),
+            // spec: S-0701 F7 (infiltrated: no suppression, 400 ticks)
+            RadarKind::Infiltrated => (0, 400),
         }
     }
 }
@@ -606,6 +615,22 @@ impl Audio {
                 house,
                 pos,
             } => self.sound(w, *sound, *of, *house, *pos),
+            Effect::Captured {
+                of,
+                old,
+                new,
+                pos,
+                announce,
+                ..
+            } => self.captured(w, *of, *old, *new, *pos, *announce),
+            Effect::Infiltrated {
+                infiltrator,
+                victim,
+                rows,
+                satellite,
+                pos,
+                ..
+            } => self.infiltrated(w, *infiltrator, *victim, rows, *satellite, *pos),
             // spec: S-0210 claim 8 (the crushed overlay's crush sound at the crusher)
             // The cloak events are presentation-only (selection, S-0516 claim 26).
             Effect::Cloak { .. } => {}
@@ -617,6 +642,126 @@ impl Audio {
                     .map(str::to_owned);
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
+        }
+    }
+
+    /// A building changed owner (S-0509 claim 12, S-0701 claim 39): eligible
+    /// when the cause requests an announcement, the local player is the old
+    /// or the new owner and the new owner's country is not passive. A tech
+    /// building (the needs-engineer flag) uses its imported capture
+    /// announcement when the local player gains it (silent without one) and
+    /// the tech-building-lost entry when the local player loses it; any
+    /// other building the ordinary captured entry. A *captured* radar event
+    /// is created at its cell.
+    fn captured(
+        &mut self,
+        w: &World,
+        of: TypeRef,
+        old: Option<HouseId>,
+        new: Option<HouseId>,
+        pos: Pos,
+        announce: bool,
+    ) {
+        let local = self.local;
+        let involved = local.is_some() && (local == old || local == new);
+        if !announce || !involved || new.is_none_or(|h| glasnost_sim::econ::setup::passive(w, h)) {
+            return;
+        }
+        let tech = of.kind == Kind::Building
+            && w.rules()
+                .buildings
+                .get(of.index as usize)
+                // spec: S-0701 claim 39 and S-0405 claim 8 (the needs-engineer flag)
+                .is_some_and(|b| b.raw.needs_engineer.unwrap_or(false));
+        let created = self.radar_event(RadarKind::Captured, cell_of(pos), w.tick);
+        let _ = created;
+        if !tech {
+            // spec: S-0701 claim 39 (a building without the flag: the ordinary building-captured entry for the eligible announcement)
+            self.announce(Announcement::BuildingCaptured);
+        } else if local == new {
+            // spec: S-0701 claim 39 (the imported capture announcement when the new owner is the local player; with none, silent, no fallback to the ordinary entry)
+            let name = self.sounds(of).capture_announcement;
+            self.announce_entry(name.as_deref());
+        } else {
+            // spec: S-0701 claim 39 (losing such a building as the local player: the tech-building-lost entry)
+            self.announce(Announcement::TechBuildingLost);
+        }
+    }
+
+    /// A spy infiltrated a building (S-0510 claim 11): when the local player
+    /// is the infiltrating house or the victim house and the two differ, an
+    /// *infiltrated* radar event is created at the building's cell (that
+    /// kind never suppresses), and the lines of each row follow: the victim
+    /// hears the sabotage or theft line, the infiltrator hears *building
+    /// infiltrated* and then the row's line (one line for radar and cash).
+    fn infiltrated(
+        &mut self,
+        w: &World,
+        infiltrator: Option<HouseId>,
+        victim: Option<HouseId>,
+        rows: &[InfiltrationRow],
+        satellite: bool,
+        pos: Pos,
+    ) {
+        use Announcement as A;
+        let local = self.local;
+        if local.is_none() || infiltrator == victim || (local != infiltrator && local != victim) {
+            return;
+        }
+        let _ = self.radar_event(RadarKind::Infiltrated, cell_of(pos), w.tick);
+        for &row in rows {
+            let lines: &[Announcement] = if local == victim {
+                match row {
+                    // spec: S-0510 claim 11 (row E1, the local player is the victim: radar sabotaged, unless the victim has an active spy satellite)
+                    InfiltrationRow::Radar if satellite => &[],
+                    InfiltrationRow::Radar => &[A::RadarSabotaged],
+                    // spec: S-0510 claim 11 (row E2 victim: power sabotaged)
+                    InfiltrationRow::Power => &[A::PowerSabotaged],
+                    // spec: S-0510 claim 11 (rows E3, E6 and E7 victim: technology stolen)
+                    InfiltrationRow::Tech
+                    | InfiltrationRow::VehicleFactory
+                    | InfiltrationRow::InfantryFactory => &[A::TechnologyStolen],
+                    // spec: S-0510 claim 11 (row E4 victim: building infiltrated)
+                    InfiltrationRow::Superweapon => &[A::BuildingInfiltrated],
+                    // spec: S-0510 claim 11 (row E5 victim: cash stolen)
+                    InfiltrationRow::Cash => &[A::CashStolen],
+                }
+            } else {
+                match row {
+                    // spec: S-0510 claim 11 (row E1, the local player is the infiltrator: building infiltrated, radar sabotaged as one line, unless the victim has an active spy satellite)
+                    InfiltrationRow::Radar if satellite => &[],
+                    InfiltrationRow::Radar => &[A::BuildingInfRadarSabotaged],
+                    // spec: S-0510 claim 11 (row E2 infiltrator: building infiltrated, then enemy base powered down)
+                    InfiltrationRow::Power => &[A::BuildingInfiltrated, A::EnemyBasePoweredDown],
+                    // spec: S-0510 claim 11 (rows E3, E6 and E7 infiltrator: building infiltrated, then new technology acquired)
+                    InfiltrationRow::Tech
+                    | InfiltrationRow::VehicleFactory
+                    | InfiltrationRow::InfantryFactory => {
+                        &[A::BuildingInfiltrated, A::NewTechnologyAcquired]
+                    }
+                    // spec: S-0510 claim 11 (row E4 infiltrator: building infiltrated)
+                    InfiltrationRow::Superweapon => &[A::BuildingInfiltrated],
+                    // spec: S-0510 claim 11 (row E5 infiltrator: building infiltrated, cash stolen as one line)
+                    InfiltrationRow::Cash => &[A::BuildingInfCashStolen],
+                }
+            };
+            for &a in lines {
+                self.announce(a);
+            }
+        }
+    }
+
+    /// Plays the announcement entry `name` for the local player (claim 27).
+    fn announce_entry(&mut self, name: Option<&str>) {
+        let Some(id) = name.and_then(|n| self.speech.resolve(n)) else {
+            return;
+        };
+        if self
+            .announcer
+            .request(&self.speech, id, self.mixer.speaking())
+            == Requested::StopCurrent
+        {
+            self.mixer.stop_speech();
         }
     }
 
@@ -730,6 +875,27 @@ impl Audio {
             // spec: S-0516 claim 15 (the game-wide cloak sound at the object; no type-specific sound)
             Sound::Cloak => {
                 let s = w.rules().cloak.sound.clone();
+                self.play_in(w, s.as_deref(), at);
+            }
+            // spec: S-0508 claim 6 and S-0701 claim 28 (structure garrisoned: the local player's entering unit, regardless of the building's owner; the garrisoned sound at the entering unit's last position)
+            Sound::Garrisoned if house.is_some() && house == self.local => {
+                let s = self.names.building_garrisoned.clone();
+                self.play_in(w, s.as_deref(), at);
+                self.announce(Announcement::StructureGarrisoned);
+            }
+            // spec: S-0508 claim 8 and S-0701 claim 28 (structure abandoned: the owner that lost the building, when it is the local player; the abandoned sound on the screen, unthrottled; the announcement only when F7 creates a garrison abandoned event at the top-left cell)
+            Sound::Abandoned if house.is_some() && house == self.local => {
+                let s = self.names.building_abandoned.clone();
+                self.play_in(w, s.as_deref(), Where::Screen);
+                if let Some(p) = pos
+                    && self.radar_event(RadarKind::GarrisonAbandoned, cell_of(p), w.tick)
+                {
+                    self.announce(Announcement::StructureAbandoned);
+                }
+            }
+            // spec: S-0509 claim 5 (the game-wide building-repaired sound at the building's centre, for every player)
+            Sound::BuildingRepaired => {
+                let s = self.names.building_repaired.clone();
                 self.play_in(w, s.as_deref(), at);
             }
             // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)

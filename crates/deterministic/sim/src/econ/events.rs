@@ -183,6 +183,8 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
     let Some(o) = w.obj(id) else { return };
     match o.kind {
         Kind::Building => {
+            // spec: S-0508 claims 7 to 9 (a civilian garrison building's own turn: forced evacuation, the owner following the first occupant, the return of an abandoned building)
+            crate::structures::garrison::turn(w, id);
             crate::econ::power::building_turn(w, id);
             // spec: S-0402 claim 21 and S-0203 claim 12 (a building master's group update sees that turn's operation-state effects and animation advancement, and comes before its paid repair)
             crate::econ::slaves::group_turn(w, id);

@@ -137,6 +137,20 @@ pub struct House {
     /// 2 south, 3 west; it starts as north.
     #[serde(default)]
     pub computed_edge: u8,
+    /// The lost-to-capture mark (S-0509 claim 11): an engineer has captured
+    /// one of this house's buildings. Nothing else sets it and nothing
+    /// clears it.
+    #[serde(default)]
+    pub lost_to_capture: bool,
+    /// The infiltrated-vehicle-factory flag (S-0510 claim 5): set when one
+    /// of this house's spies infiltrates another house's vehicle factory
+    /// (naval yards included); clear at the start of a game and never
+    /// cleared.
+    #[serde(default)]
+    pub infiltrated_vehicle_factory: bool,
+    /// The infiltrated-infantry-factory flag (S-0510 claim 5).
+    #[serde(default)]
+    pub infiltrated_infantry_factory: bool,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).
@@ -273,6 +287,10 @@ pub struct Object {
     /// Superweapon state: protection, warp, silo launch (S-0513).
     #[serde(default)]
     pub sw: crate::superweapons::ObjSw,
+    /// Garrison state: a building's occupants and shared firing index, an
+    /// occupant's building (S-0508).
+    #[serde(default)]
+    pub structure: crate::structures::StructState,
 }
 
 /// One house in the game setup.

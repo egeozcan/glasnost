@@ -263,6 +263,10 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         tob.combat.expected_health = tob.combat.expected_health.wrapping_sub(e);
     }
     after_shot(w, firer, weapon);
+    if o.kind == Kind::Building {
+        // spec: S-0313 claim 6 and S-0308 claim 13 (after every shot a garrisoned building makes, the shared index becomes (k + 1) mod n; a disc laser shot leaves it)
+        crate::structures::garrison::shot_launched(w, firer, wr.disk_laser);
+    }
     if launched.is_some() {
         // spec: S-0516 claim 39 (a still-disguising vehicle that fires and creates a projectile starts its fake blink)
         crate::cloak::disguise::fired(w, firer, weapon);
@@ -311,8 +315,23 @@ fn full_delay(w: &mut World, firer: ObjectId, wr: &crate::combat::data::WeaponRu
     } else {
         d1
     };
-    // Garrisoned buildings and bunkered vehicles (D₃ to D₅) are seams: no firer is in those situations.
-    d2
+    // spec: S-0301 claim 7 and F1 (D₃ = trunc(D₂ / n) for a garrisoned building, n the occupant count)
+    let d3 = if crate::structures::garrison::garrisoned(w, firer) {
+        glasnost_num::int::div(d2, crate::structures::garrison::count(w, firer))
+    } else {
+        d2
+    };
+    // spec: S-0301 F1 (D₄ = trunc(RZ₅₃(D₃ / m)) for a garrisoned building when m is above 0)
+    let m = rules.combat.general.occupy_rof;
+    let d4 = if crate::structures::garrison::garrisoned(w, firer) && m.gt(F64::ZERO) {
+        F64::from_i64(i64::from(d3), mode)
+            .div(m, mode)
+            .to_i32_common()
+    } else {
+        d3
+    };
+    // Bunkered vehicles (D₅) are a seam: no vehicle is bunkered.
+    d4
 }
 
 /// The rules after a shot: distributed fire (S-0309 claim 20), fire-once

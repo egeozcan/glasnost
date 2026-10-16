@@ -1007,3 +1007,55 @@ fn s0513_claim_33_source_pick_switch_off() {
     source_pick(&mut p, local);
     assert_eq!(p.source_aim(), Some(1));
 }
+
+/// spec: S-0509 claim 15 (when the new owner of a changed building is the local player's house and the building is a construction yard, the local player's building placement in progress is cancelled; another building, another house or no placement does nothing)
+#[test]
+fn a_gained_construction_yard_cancels_the_placement_in_progress() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.click_map(
+        Button::Left,
+        Some(mcv),
+        p.world().obj(mcv).unwrap().pos.cell(),
+        Modifiers::default(),
+    );
+    p.key(KeyCommand::Deploy);
+    step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
+    step_until(&mut p, 50, |p| {
+        !p.world().houses[usize::from(p.local.0)].econ.tech.icons[0].is_empty()
+    });
+    p.tab_click(0);
+    let t = p.world().houses[usize::from(p.local.0)].econ.tech.icons[0][0].t;
+    p.cameo_click(0, Button::Left, false);
+    step_until(&mut p, 4000, |p| icon_ready(p.world(), p.local, t));
+    p.cameo_click(0, Button::Left, false);
+    assert_eq!(p.tool, Tool::Place(t));
+    // The fixture's yard carries no construction-yard flag: set it (S-0214 Terms).
+    let mut rules = (*p.game.world.rules_arc()).clone();
+    let yard = rules.index_of(Kind::Building, "YARD").unwrap() as usize;
+    rules.buildings[yard].raw.construction_yard = Some(true);
+    p.game.world.rules = Some(std::sync::Arc::new(rules));
+    let captured = |p: &Play, kind: &str, new: u8| Effect::Captured {
+        building: ObjectId(1),
+        of: glasnost_sim::econ::TypeRef {
+            kind: Kind::Building,
+            index: p.world().rules().index_of(Kind::Building, kind).unwrap(),
+        },
+        old: None,
+        new: Some(glasnost_sim::world::HouseId(new)),
+        pos: glasnost_sim::world::Pos::default(),
+        announce: true,
+    };
+    // A construction yard gained by another house, or another building gained by the local one: nothing.
+    p.effects = vec![captured(&p, "YARD", 1 - p.local.0)];
+    p.captured_yard_cancels_placement();
+    assert_eq!(p.tool, Tool::Place(t));
+    p.effects = vec![captured(&p, "POWR", p.local.0)];
+    p.captured_yard_cancels_placement();
+    assert_eq!(p.tool, Tool::Place(t));
+    // A construction yard gained by the local house cancels it.
+    p.effects = vec![captured(&p, "YARD", p.local.0)];
+    p.captured_yard_cancels_placement();
+    assert_eq!(p.tool, Tool::Select);
+}

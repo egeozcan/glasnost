@@ -618,14 +618,15 @@ impl Live {
             }
         }
         // The map's gates are drawn with the game's own buildings, so that
-        // their door shows (S-0108 claim 4).
+        // their door shows (S-0108 claim 4); so are its occupiable buildings,
+        // so that their occupied frame shows (S-0108 claim 2).
         let live_gates: BTreeSet<u32> = building_ids
             .iter()
             .filter(|(_, id)| {
                 world
                     .obj(**id)
                     .and_then(|o| rules.buildings.get(o.type_index as usize))
-                    .is_some_and(|b| b.gate)
+                    .is_some_and(|b| b.gate || b.building.can_be_occupied)
             })
             .map(|(code, _)| *code)
             .collect();
@@ -1137,6 +1138,8 @@ impl Live {
                 | Effect::Hit { .. }
                 | Effect::OverlayCrushed { .. }
                 | Effect::Superweapon { .. }
+                | Effect::Captured { .. }
+                | Effect::Infiltrated { .. }
                 | Effect::Cloak { .. } => continue,
             };
             self.transients.push(Transient {
@@ -1401,6 +1404,8 @@ impl Live {
                         owner,
                         health: (o.health, strength),
                         facing: o.turret.value(self.world.tick),
+                        // spec: S-0108 Terms and claim 2 (occupied: at least one occupant)
+                        occupied: !o.structure.occupants.is_empty(),
                         object: sim_code(o.id),
                         unloading: self.unloading_of(o),
                         // spec: S-0108 claim 4 (a gate's door, S-0215 claim 35: its special image only while the current behaviour is open; otherwise the stationary rows)

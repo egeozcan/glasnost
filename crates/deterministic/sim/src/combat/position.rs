@@ -132,6 +132,12 @@ pub fn fire_point(w: &World, firer: ObjectId, slot: usize, k: i32) -> Pos {
         .buildings
         .get(o.type_index as usize)
         .filter(|_| o.kind == Kind::Building);
+    if o.kind == Kind::Building && crate::structures::garrison::garrisoned(w, firer) {
+        // spec: S-0313 claim 6 (a garrisoned building fires from its base point shifted by its muzzle point k, F3, map x and y only; the height is the base point's)
+        let k = crate::structures::garrison::current_index(w, firer).unwrap_or(0);
+        let (dx, dy) = crate::structures::garrison::muzzle_shift(w, firer, k);
+        return Pos::new(base.x + dx, base.y + dy, base.z);
+    }
     if let Some(bt) = b
         && let Some([px, py]) = bt.building.fire_pixel
         && !bt.building.dual_offset

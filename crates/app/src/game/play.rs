@@ -373,6 +373,7 @@ impl Play {
                 self.selection.retain(|&x| x != id);
             }
         }
+        self.captured_yard_cancels_placement();
         self.selection
             .retain(|&id| targeting::selectable_by(&self.game.world, id, local));
         self.outcome = self.game.outcome();
@@ -380,6 +381,23 @@ impl Play {
             let listed: Vec<HouseId> = o.results.iter().map(|r| r.0).collect();
             // spec: S-0414 claims 19 and 23, S-0202 claim 16 (the displayed scores, once, after the simulation has stopped)
             glasnost_sim::econ::stats::finish(&mut self.game.world, &listed);
+        }
+    }
+
+    /// When the new owner of a changed building is the local player's house
+    /// and the building is a construction yard, the local player's building
+    /// placement in progress is cancelled (S-0509 claim 15).
+    fn captured_yard_cancels_placement(&mut self) {
+        // spec: S-0509 claim 15 (the new owner is the local player's house and the building a construction yard: the placement in progress is cancelled)
+        let gained_yard = self.effects.iter().any(|e| {
+            matches!(e, Effect::Captured { of, new, .. }
+                if *new == Some(self.local)
+                    && of.kind == glasnost_sim::rules::Kind::Building
+                    && self.game.world.rules().buildings.get(of.index as usize)
+                        .is_some_and(|b| b.raw.construction_yard.unwrap_or(false)))
+        });
+        if gained_yard && matches!(self.tool, Tool::Place(_)) {
+            self.tool = Tool::Select;
         }
     }
 

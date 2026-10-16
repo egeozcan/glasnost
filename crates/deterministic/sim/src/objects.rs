@@ -150,6 +150,7 @@ pub fn create_converted(
         econ: Default::default(),
         cloak: Default::default(),
         sw: Default::default(),
+        structure: Default::default(),
     };
     w.objects.insert(id, obj);
     veteran_at_creation(w, id);
@@ -159,22 +160,53 @@ pub fn create_converted(
 }
 
 /// Experience at creation (S-0311 claim 11): a veteran when the type is in
-/// its house's country veteran list for its kind. Infiltrated factories are
-/// a seam (the special-abilities specs own infiltration).
+/// its house's country veteran list for its kind, or when the object's own
+/// house has infiltrated a factory of the kind (S-0510 claim 5): its
+/// infantry flag makes a trainable infantry unit a veteran, its vehicle
+/// flag a trainable vehicle that is not naval and a trainable building that
+/// is not naval and undeploys into a vehicle; aircraft are never promoted
+/// by an infiltrated factory.
 fn veteran_at_creation(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let i = match o.kind {
         Kind::Infantry => 0,
         Kind::Vehicle => 1,
         Kind::Aircraft => 2, // spec: S-0311 claim 11 (the country lists for infantry, vehicles and aircraft)
+        Kind::Building => 3, // spec: S-0311 claim 11 (buildings have no country list)
         _ => return,
     };
-    let listed = o
-        .owner
-        .and_then(|h| w.houses.get(usize::from(h.0)))
-        .and_then(|h| w.rules().combat.countries.get(h.country as usize))
-        .is_some_and(|c| c.veteran[i].contains(&o.type_index));
-    if listed {
+    let house = o.owner.and_then(|h| w.houses.get(usize::from(h.0)));
+    let listed = i < 3 // spec: S-0311 claim 11 (only the three country lists)
+        && house
+            .and_then(|h| w.rules().combat.countries.get(h.country as usize))
+            .is_some_and(|c| c.veteran[i].contains(&o.type_index));
+    let trainable = crate::combat::veterancy::type_combat(w, id).is_some_and(|tc| tc.trainable);
+    let (vehicle_flag, infantry_flag) = house.map_or((false, false), |h| {
+        (
+            h.infiltrated_vehicle_factory,
+            h.infiltrated_infantry_factory,
+        )
+    });
+    let infiltrated = match o.kind {
+        // spec: S-0311 claim 11 and S-0510 claim 5 (an infantry unit: the infiltrated-infantry-factory flag of its own house and a trainable type)
+        Kind::Infantry => infantry_flag && trainable,
+        // spec: S-0311 claim 11 and S-0510 claim 5 (a vehicle: the infiltrated-vehicle-factory flag, a trainable type that is not naval)
+        Kind::Vehicle => {
+            vehicle_flag
+                && trainable
+                && !crate::combat::veterancy::type_combat(w, id).is_some_and(|tc| tc.naval)
+        }
+        // spec: S-0311 claim 11 (an infiltrated factory never promotes aircraft)
+        Kind::Aircraft => false,
+        // spec: S-0311 claim 11 (a building: the infiltrated-vehicle-factory flag, a trainable type that is not naval and undeploys into a vehicle)
+        _ => {
+            let b = w.rules().buildings.get(o.type_index as usize);
+            vehicle_flag
+                && trainable
+                && b.is_some_and(|b| !b.naval && b.raw.undeploys_into.is_some())
+        }
+    };
+    if listed || infiltrated {
         let mode = w.rules().mode;
         if let Some(ob) = w.obj_mut(id) {
             // spec: S-0311 claim 11 (created as a veteran: experience 1)
@@ -364,6 +396,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     crate::parasite::leaving(w, id);
     // spec: S-0507 claim 16 (a transport removed with passengers inside: they die without attacker credit; a removed passenger leaves its transport's passenger order)
     crate::transport::removing(w, id);
+    // spec: S-0508 claim 15 (a building that leaves play with occupants still inside removes them with it, without death and without putting them out)
+    crate::structures::garrison::removing(w, id);
     // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)
     crate::econ::slaves::removing(w, id);
     // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)

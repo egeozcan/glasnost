@@ -1945,6 +1945,11 @@ pub struct BuildingType {
     /// `MaxNumberOccupants` (S-0313 claim 6).
     #[serde(default)]
     pub max_number_occupants: Option<i32>,
+    /// Art `MuzzleFlash`*n* for *n* from 0 to the occupant capacity − 1: the
+    /// garrison muzzle points, pixel shifts (S-0313 claim 6, Import mapping;
+    /// a point the art does not give is (0, 0)).
+    #[serde(default)]
+    pub garrison_muzzles: Option<Vec<[i32; 2]>>, // nocite: pixel pairs, our shape
     /// `InfantryGainSelfHeal` (S-0314 claim 10).
     #[serde(default)]
     pub infantry_gain_self_heal: Option<i32>,
@@ -2184,6 +2189,10 @@ pub struct WeaponType {
     /// `LimboLaunch`, the launch-inside flag (S-0614 Terms); absent: no.
     #[serde(default)]
     pub limbo_launch: Option<bool>,
+    /// `OccupantAnim`, the animation shown where an assault removes an
+    /// occupant (S-0508 claim 14, Import mapping).
+    #[serde(default)]
+    pub occupant_anim: Option<String>,
     /// `Anim`, animation names: the per-direction delivery animation
     /// (S-0614 claim 9); absent: empty.
     #[serde(default)]

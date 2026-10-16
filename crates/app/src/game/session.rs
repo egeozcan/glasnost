@@ -55,6 +55,9 @@ pub const RADAR_IMAGE: u32 = 2;
 const CURSOR_SPRITE: u32 = 900;
 /// First sprite id of the sidebar icons.
 const ICON_SPRITES: u32 = 1000;
+/// First sprite id of the alternate sidebar icons (S-0007 claim 25).
+// nocite: our own sprite id, above the main icons'
+const ALT_ICON_SPRITES: u32 = 6000;
 /// The 64-bit FNV-1a hash of a map file: the map's name in replays, so
 /// that no map is named by its title (our own identifier).
 pub fn content_hash(bytes: &[u8]) -> String {
@@ -94,6 +97,10 @@ pub struct Session {
     icons: BTreeMap<hud::Entry, IndexedImage>,
     /// Sprite ids of the registered icons.
     icon_ids: BTreeMap<hud::Entry, u32>,
+    /// Decoded alternate icon frames by type (S-0007 claim 25).
+    alt_icons: BTreeMap<TypeRef, IndexedImage>,
+    /// Sprite ids of the registered alternate icons.
+    alt_icon_ids: BTreeMap<TypeRef, u32>,
     /// The icon palette's RGBA (S-0103 claim 13).
     icon_palette: Option<[u8; 1024]>,
     pointer: Option<Point>,
@@ -173,7 +180,7 @@ impl Session {
             Some(make),
         )
         .await;
-        let icons = read_icons(vfs, &loaded).await;
+        let (icons, alt_icons) = read_icons(vfs, &loaded).await;
         let cursor_art = read_cursor(vfs).await;
         let status_font = status_font::read(vfs).await;
         // spec: S-0103 claim 13 (the dedicated icon palette file, claim 1's conversion)
@@ -258,6 +265,8 @@ impl Session {
             },
             icons,
             icon_ids: BTreeMap::new(),
+            alt_icons,
+            alt_icon_ids: BTreeMap::new(),
             icon_palette,
             pointer: None,
             edge: EdgeScroll::default(),
@@ -527,6 +536,11 @@ impl Session {
         for (next, (t, img)) in (ICON_SPRITES..).zip(&self.icons) {
             if painter.add_sprite(next, 0, img, row) {
                 self.icon_ids.insert(*t, next);
+            }
+        }
+        for (next, (t, img)) in (ALT_ICON_SPRITES..).zip(&self.alt_icons) {
+            if painter.add_sprite(next, 0, img, row) {
+                self.alt_icon_ids.insert(*t, next);
             }
         }
     }
@@ -1014,7 +1028,17 @@ impl Session {
         let name = |t: TypeRef| live::type_name(&rules, t.kind, t.index);
         let ids = &self.icon_ids;
         let icons = &self.icons;
+        let local = self.play.local;
+        let world = &self.play.game.world;
+        let (alt_ids, alt_icons) = (&self.alt_icon_ids, &self.alt_icons);
         let art = |t: hud::Entry| {
+            // spec: S-0007 claim 25 (the alternate icon exactly when the type has one, is trainable and the local house has infiltrated the matching factory; chosen each time the sidebar shows the icon)
+            if let hud::Entry::Type(ty) = t
+                && glasnost_sim::structures::spy::alternate_icon(world, local, ty)
+                && let (Some(&id), Some(img)) = (alt_ids.get(&ty), alt_icons.get(&ty))
+            {
+                return Some((id, 0, img.width() as i32, img.height() as i32));
+            }
             let id = *ids.get(&t)?;
             let img = icons.get(&t)?;
             Some((id, 0, img.width() as i32, img.height() as i32))
@@ -1134,10 +1158,17 @@ async fn icon_frame(vfs: &Vfs, file: &str) -> Option<IndexedImage> {
         .filter(|i| i.width() > 0 && i.height() > 0)
 }
 
-async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<hud::Entry, IndexedImage> {
+async fn read_icons(
+    vfs: &Vfs,
+    loaded: &Loaded,
+) -> (
+    BTreeMap<hud::Entry, IndexedImage>,
+    BTreeMap<TypeRef, IndexedImage>,
+) {
     let mut out = BTreeMap::new();
+    let mut alt = BTreeMap::new();
     let Some(rules) = loaded.rules.as_deref() else {
-        return out;
+        return (out, alt);
     };
     for kind in [
         SimKind::Building,
@@ -1159,6 +1190,17 @@ async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<hud::Entry, IndexedI
             let Some(i) = build::find_type(&loaded.import, ik, &live::name_bytes(&name)) else {
                 continue;
             };
+            // spec: S-0007 claim 25 (the alternate icon: the file the art lookup resolved, frame 0 on its canvas, no placeholder)
+            if let Some(file) = loaded
+                .import
+                .arts
+                .get(&(ik, i))
+                .and_then(|a| a.alt_icon.as_ref())
+                && let Ok(text) = std::str::from_utf8(file)
+                && let Some(img) = icon_frame(vfs, text).await
+            {
+                alt.insert(TypeRef { kind, index }, img);
+            }
             let Some(file) = loaded
                 .import
                 .arts
@@ -1199,7 +1241,7 @@ async fn read_icons(vfs: &Vfs, loaded: &Loaded) -> BTreeMap<hud::Entry, IndexedI
             out.insert(hud::Entry::Superweapon(i as u32), img);
         }
     }
-    out
+    (out, alt)
 }
 
 /// The parts of the battlefield rectangle `m`, showing world pixels from

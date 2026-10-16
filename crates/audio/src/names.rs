@@ -89,6 +89,9 @@ pub struct TypeSounds {
     /// `ChronoOutSound`, falling back to the game-wide one (S-0207 Import
     /// mapping).
     pub chrono_out: Option<String>,
+    /// `CaptureEvaEvent`, the announcement entry of a captured tech
+    /// building (S-0701 claim 39, Import mapping); `None` when unset.
+    pub capture_announcement: Option<String>,
 }
 
 /// Announcement roles of S-0701 claim 28 and the specs it cites.
@@ -132,6 +135,35 @@ pub enum Announcement {
     Promoted,
     /// The local player set a rally point (S-0701 claim 28).
     RallySet,
+    /// An entry made a building's occupant count 1 (S-0508 claim 6).
+    StructureGarrisoned,
+    /// A civilian garrison building returned to the civilian house
+    /// (S-0508 claim 8).
+    StructureAbandoned,
+    /// An ordinary building captured or lost to a capture (S-0701 claim 39).
+    BuildingCaptured,
+    /// A tech building lost to a capture (S-0701 claim 39).
+    TechBuildingLost,
+    /// The victim hears: the radar sabotaged (S-0510 claim 11).
+    RadarSabotaged,
+    /// The infiltrator hears, one line: building infiltrated, radar
+    /// sabotaged (S-0510 claim 11).
+    BuildingInfRadarSabotaged,
+    /// The victim hears: power sabotaged (S-0510 claim 11).
+    PowerSabotaged,
+    /// Building infiltrated (S-0510 claim 11).
+    BuildingInfiltrated,
+    /// The infiltrator hears: enemy base powered down (S-0510 claim 11).
+    EnemyBasePoweredDown,
+    /// The victim hears: technology stolen (S-0510 claim 11).
+    TechnologyStolen,
+    /// The infiltrator hears: new technology acquired (S-0510 claim 11).
+    NewTechnologyAcquired,
+    /// The victim hears: cash stolen (S-0510 claim 11).
+    CashStolen,
+    /// The infiltrator hears, one line: building infiltrated, cash stolen
+    /// (S-0510 claim 11).
+    BuildingInfCashStolen,
 }
 
 impl Announcement {
@@ -159,6 +191,19 @@ impl Announcement {
             Self::Defeat => "EVA_YouHaveLost",
             Self::Promoted => "EVA_UnitPromoted",
             Self::RallySet => "EVA_NewRallyPointEstablished",
+            Self::StructureGarrisoned => "EVA_StructureGarrisoned",
+            Self::StructureAbandoned => "EVA_StructureAbandoned",
+            Self::BuildingCaptured => "EVA_BuildingCaptured",
+            Self::TechBuildingLost => "EVA_TechBuildingLost",
+            Self::RadarSabotaged => "EVA_RadarSabotaged",
+            Self::BuildingInfRadarSabotaged => "EVA_BuildingInfRadarSabotaged",
+            Self::PowerSabotaged => "EVA_PowerSabotaged",
+            Self::BuildingInfiltrated => "EVA_BuildingInfiltrated",
+            Self::EnemyBasePoweredDown => "EVA_EnemyBasePoweredDown",
+            Self::TechnologyStolen => "EVA_TechnologyStolen",
+            Self::NewTechnologyAcquired => "EVA_NewTechnologyAcquired",
+            Self::CashStolen => "EVA_CashStolen",
+            Self::BuildingInfCashStolen => "EVA_BuildingInfCashStolen",
         }
     }
 }
@@ -195,6 +240,12 @@ pub struct SoundNames {
     pub building_damage: Option<String>,
     /// `BuildingDieSound` (S-0701 claims 23 and 37).
     pub building_die: Option<String>,
+    /// `BuildingRepairedSound` (S-0509 claim 5, Import mapping).
+    pub building_repaired: Option<String>,
+    /// `BuildingGarrisonedSound` (S-0508 claim 6, S-0701 claim 28).
+    pub building_garrisoned: Option<String>,
+    /// `BuildingAbandonedSound` (S-0508 claim 8, S-0701 claim 28).
+    pub building_abandoned: Option<String>,
     /// `UpgradeVeteranSound` (S-0701 claim 23).
     pub upgrade_veteran: Option<String>,
     /// `UpgradeEliteSound` (S-0701 claim 23).
@@ -333,6 +384,11 @@ impl SoundNames {
             building_slam: global("BuildingSlam"),
             building_damage: global("BuildingDamageSound"),
             building_die: global("BuildingDieSound"),
+            // spec: S-0508 Import mapping (`[AudioVisual] BuildingGarrisonedSound` and `BuildingAbandonedSound`: sound names, none when absent)
+            building_garrisoned: global("BuildingGarrisonedSound"),
+            // spec: S-0509 Import mapping (`[AudioVisual] BuildingRepairedSound`: a sound name, none: silent)
+            building_repaired: global("BuildingRepairedSound"),
+            building_abandoned: global("BuildingAbandonedSound"),
             upgrade_veteran: global("UpgradeVeteranSound"),
             upgrade_elite: global("UpgradeEliteSound"),
             base_under_attack: global("BaseUnderAttackSound"),
@@ -455,6 +511,8 @@ impl SoundNames {
                             .clone()
                             .or_else(|| g.chrono_in_sound.clone())
                     }),
+                    // spec: S-0701 Import mapping (`CaptureEvaEvent`: an announcement entry name, the first 99 characters; absent or empty: none)
+                    capture_announcement: f("CaptureEvaEvent"),
                     chrono_out: unit.and_then(|u| {
                         u.chrono_out_sound
                             .clone()
