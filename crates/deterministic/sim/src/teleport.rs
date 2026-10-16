@@ -206,7 +206,9 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     };
     // spec: S-0207 claim 27 (Q-1130 table, second row: suppression already pending skips the landing-point fixing of any teleporting vehicle's nonempty destination, whatever its state; the locomotor is not offered the point, so no claim 20 a refusal runs and no earlier landing point, pending jump or reservation changes; the new order-level destination stays and the suppression is consumed)
     // spec: S-0207 claim 20 (a) (a pending suppression is the only exception to the drop and to the fixing of a landing point)
-    if crate::refresh::skip_point(w, id) {
+    // spec: S-0207 Edge cases (quirks.teleport_suppression_keeps_destination; off: Q-1131 interim, the suppression is consumed and the assignment is handled as an ordinary one below)
+    if crate::refresh::skip_point(w, id) && w.rules().quirks.teleport_suppression_keeps_destination
+    {
         st.for_dest = Some(dest);
         set_state(w, id, st);
         return;

@@ -1467,6 +1467,10 @@ pub struct Quirks {
     // spec: S-0509 Edge cases (proposed, pending the lead's sign-off)
     #[serde(default = "on")]
     pub engineer_repairs_during_sale: bool,
+    /// A teleporting vehicle given a destination under pending point suppression keeps it without a landing point and consumes the suppression; off: the assignment consumes the suppression and is handled as an ordinary one (Q-1131 interim).
+    // spec: S-0207 Edge cases (proposed, pending the lead's sign-off; Q-1131)
+    #[serde(default = "on")]
+    pub teleport_suppression_keeps_destination: bool,
     /// A garrison's exit search never tries the corner cell (x₀ − 1, y₀ − 1); off: the corner is tried last.
     // spec: S-0508 Edge cases (claim 10)
     #[serde(default = "on")]
@@ -2188,6 +2192,7 @@ impl Default for Quirks {
             depot_loss_strands_hover: true,
             engineer_lost_on_uncapturable: true,
             engineer_repairs_during_sale: true,
+            teleport_suppression_keeps_destination: true,
             garrison_exit_skips_corner: true,
             garrison_negative_level_exit: true,
             garrison_no_exit_removes: true,
@@ -3181,6 +3186,10 @@ impl Quirks {
             (
                 "engineer_repairs_during_sale",
                 self.engineer_repairs_during_sale,
+            ),
+            (
+                "teleport_suppression_keeps_destination",
+                self.teleport_suppression_keeps_destination,
             ),
             (
                 "garrison_exit_skips_corner",

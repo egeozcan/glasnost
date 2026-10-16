@@ -9189,6 +9189,11 @@
           "type": "boolean",
           "default": true
         },
+        "teleport_suppression_keeps_destination": {
+          "description": "A teleporting vehicle given a destination under pending point suppression keeps it without a landing point and consumes the suppression; off: the assignment consumes the suppression and is handled as an ordinary one (Q-1131 interim).",
+          "type": "boolean",
+          "default": true
+        },
         "teleport_vehicle_ground_reservation": {
           "description": "A teleporting vehicle reserves the ground record of its landing cell even on a high bridge, remembers that point for later clearing and keeps the ground reservation through deck placement, which also marks deck; off: reserve and clear the eventual landing layer only.",
           "type": "boolean",
