@@ -7640,6 +7640,11 @@
           "type": "boolean",
           "default": true
         },
+        "garrison_negative_level_exit": {
+          "description": "A garrison's exit candidate at terrain level −6 or lower qualifies without the later entry tests; off: it gets the ordinary terrain, usable-area and occupancy tests.",
+          "type": "boolean",
+          "default": true
+        },
         "garrison_no_exit_removes": {
           "description": "An eviction without inside fallback and with no qualifying exit cell removes every occupant; off: the eviction does nothing and the occupants stay inside.",
           "type": "boolean",

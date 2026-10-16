@@ -1425,6 +1425,62 @@ fn slot_animations_of_a_placed_building() {
     assert!(slots.iter().all(|i| !i.provisional && i.stack.is_none()));
 }
 
+/// spec: S-0007 claim 34 (an animation's playback and drawing properties come exclusively from its own
+/// art section, even when its image name names another section; there is no per-property fallback to
+/// the image-named section: a conflicting value takes the own one, a missing one its default, never the
+/// image section's); S-0108 claim 12 (a damaged slot variant is a separate animation type sharing the
+/// image with the normal variant); S-0103 Import mapping (ShouldUseCellDrawer defaults to yes)
+#[test]
+fn animation_properties_come_from_the_own_art_section() {
+    // SLOTA names the image section NORM, which has its own conflicting values.
+    let scene = |own: &str| {
+        let rules = format!("{RULES}[Animations]\n0=SLOTA\n");
+        // One [HUTX] section only: which copy of a repeated section a lookup returns is the
+        // original's hash order (S-0002 claim 2).
+        let art = format!(
+            "{}[SLOTA]\nImage=NORM\nLayer=ground\n{own}\
+             [NORM]\nLayer=top\nStart=1\nShadow=yes\nYDrawOffset=9\nTiled=yes\n",
+            ART.replacen("[HUTX]\n", "[HUTX]\nActiveAnim=SLOTA\n", 1)
+        );
+        let mut ctx = context_full(&rules, &art);
+        ctx.0
+            .arts
+            .insert((Kind::Animations, 0), art_of("NORM", "norm.shp"));
+        ctx.2.insert(b"norm.shp", shp((20, 20), 6, (2, 2), (9, 9)));
+        let b = build_in(
+            ctx,
+            b"[Basic]\nNewINIFormat=4\n[Map]\nSize=0,0,10,10\nLocalSize=0,0,10,10\n\
+              [Structures]\n0=Neutral,HUTX,256,6,10,0\n",
+            &low_detail(),
+        )
+        .0;
+        let items: Vec<Item> = b.scene.items[b.scene.cell_pass_len..].to_vec();
+        let pixels: Vec<u8> = items
+            .iter()
+            .map(|i| b.scene.images[i.image as usize].pixels()[0])
+            .collect();
+        (items, pixels)
+    };
+    // A conflicting value: the own section's start frame 3 (pixel 4), no shadow (the own section
+    // has none), not the image section's start frame 1 and shadow.
+    let (items, pixels) = scene("Start=3\n");
+    assert_eq!(items.len(), 1, "no shadow: only the own section decides");
+    assert_eq!(pixels, vec![4]);
+    // An omitted own value: the start frame is the default 0 (pixel 1), never the image section's 1.
+    let (items, pixels) = scene("");
+    assert_eq!(items.len(), 1);
+    assert_eq!(pixels, vec![1]);
+    // The own section's shadow and displacement are used, the image section's are not.
+    let (items, _) = scene("Shadow=yes\nYDrawOffset=3\n");
+    assert_eq!(items.len(), 2, "image and its shadow");
+    let plain = scene("Shadow=yes\n").0;
+    assert_eq!(
+        items[0].y,
+        plain[0].y + 3,
+        "the own section's displacement, not the image section's 9"
+    );
+}
+
 /// spec: S-0109 claim 20 (a translucency field of 25, 50 or 75 gives code 1, 2 or 3, any other
 /// positive value 0); S-0102 claim 32 and F8 (a nonzero code draws the image with the blend, the
 /// shadow keeps the plain halving)

@@ -243,6 +243,32 @@ fn height_above_terrain(w: &World, p: Pos) -> i32 {
     p.z - w.surface_at(p.x, p.y)
 }
 
+/// What the drawing of a rocket missile reads, as single-precision bit
+/// patterns (S-0105 claim 41; read-only, the simulation holds no floats
+/// outside its soft types).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Drawing {
+    /// The current pitch *p*, radians, positive nose up (S-0506 claims 14
+    /// to 18 and 24).
+    pub pitch: u32,
+    /// The selected set's initial pitch fraction *Pᵢ*, quarter turns.
+    pub initial: u32,
+    /// The selected set's final pitch fraction *P𝒇*, quarter turns.
+    pub final_: u32,
+}
+
+/// The drawing inputs of rocket missile `id` (S-0105 claim 41), `None` for
+/// an object that is not a rocket missile.
+pub fn drawing(w: &World, id: ObjectId) -> Option<Drawing> {
+    let rs = w.obj(id)?.rocket.as_ref()?;
+    let set = set_of(w, rs.set);
+    Some(Drawing {
+        pitch: rs.pitch.0,
+        initial: set.pitch_initial.0,
+        final_: set.pitch_final.0,
+    })
+}
+
 /// Places a launched rocket missile (S-0506 claim 7): on the map at
 /// `pos` with `facing`, in the update order, in the rocket-flight mode of
 /// its parameter set. It enters no cell list (claim 23).

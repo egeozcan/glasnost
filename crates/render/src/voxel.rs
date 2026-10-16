@@ -606,6 +606,177 @@ fn barrel_from_turret(t: &Mat34, elevation_raw: u16, quirks: &VoxelQuirks) -> Ma
     t.rotate_y(barrel_pitch(elevation_raw, quirks), quirks)
 }
 
+// ---------------------------------------------------------------------------
+// Aircraft body attitude (claims 41, 42)
+// ---------------------------------------------------------------------------
+
+/// Radians per quarter turn as a double (S-0105 claim 41: *c*).
+#[allow(clippy::approx_constant)] // the spec's decimal, claim 41
+const QUARTER_TURN: f64 = 1.5707963267948966; // spec: S-0105 claim 41 (c = 1.5707963267948966 radians per quarter turn)
+
+/// The reuse class of a rocket body's pitch (S-0105 claim 41), and for a
+/// pitch outside the three eligible classes the table step of its rotation.
+///
+/// Only the first three classes are reused in the original; any other pitch
+/// is drawn fresh. A fresh draw is a function of the pitch's table step
+/// alone (F1), so our image cache keeps it under that step: the pixels are
+/// those of a fresh draw, the retention only bounds the memory of the
+/// scene's images.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RocketPitch {
+    /// Zero pitch.
+    Level,
+    /// A nonzero pitch equal to *pᵢ*.
+    Initial,
+    /// A nonzero pitch, not *pᵢ*, equal to *p𝒇*.
+    Final,
+    /// Any other pitch: the table step *σ* of −*p* (F1).
+    Fresh(u32),
+}
+
+/// The reuse class of the rocket's current single-precision pitch `p` (S-0105
+/// claim 41), given the selected set's single-precision initial and final
+/// pitch fractions in quarter turns.
+pub fn rocket_pitch_class(p: f32, initial: f32, final_: f32, quirks: &VoxelQuirks) -> RocketPitch {
+    // spec: S-0105 claim 41 (pᵢ = RZ₅₃(Pᵢ × c), compared with the current single widened exactly, no tolerance, no narrowing of the product)
+    let p_initial = mul_rz(f64::from(initial), QUARTER_TURN);
+    // spec: S-0105 claim 41 (p𝒇 = RZ₂₄(RZ₅₃(P𝒇 × c)))
+    let p_final = to_f32_rz(mul_rz(f64::from(final_), QUARTER_TURN));
+    classify_rocket_pitch(p, p_initial, p_final, quirks)
+}
+
+/// [`rocket_pitch_class`] with the two endpoint pitches already formed.
+fn classify_rocket_pitch(p: f32, p_initial: f64, p_final: f32, quirks: &VoxelQuirks) -> RocketPitch {
+    // spec: S-0105 claim 41 (zero pitch is eligible for the level class)
+    if p == 0.0 {
+        return RocketPitch::Level;
+    }
+    if f64::from(p) == p_initial {
+        // spec: S-0105 claim 41 (coincident initial and final values favour the initial class)
+        RocketPitch::Initial
+    } else if p == p_final {
+        RocketPitch::Final
+    } else {
+        // spec: S-0105 claim 41 (all other pitches require fresh draws; F1's table step bounds the retention)
+        RocketPitch::Fresh(table_step(-f64::from(p), quirks))
+    }
+}
+
+/// A rocket body's local draw transform *D = Rz(θ_body) · Ry(−p)* (S-0105
+/// claim 41), before the view and the section HVA transforms.
+pub fn rocket_body_local(body_facing: u16, pitch: f32, quirks: &VoxelQuirks) -> Mat34 {
+    // spec: S-0105 claim 41 (Rz(θ_body) with the 32-step body heading, then Ry(−p): the current single-precision pitch negated and used directly, no rounding to pitch facings; positive p raises the nose)
+    Mat34::IDENTITY
+        .rotate_z(body_angle(body_facing), quirks)
+        .rotate_y(-f64::from(pitch), quirks)
+}
+
+/// The pose of a rocket missile's body and its shadow (S-0105 claim 41):
+/// the body *V · Rz(θ_body) · Ry(−p)*, the shadow transform *V · Rz(θ_body)*
+/// on flat ground whatever the pitch. `turret`, `barrel` and `turret_first`
+/// are not used.
+pub fn rocket_body_pose(body_facing: u16, pitch: f32, quirks: &VoxelQuirks) -> VehiclePose {
+    let v = view(quirks);
+    let body = v.then(&rocket_body_local(body_facing, pitch, quirks));
+    // spec: S-0105 claim 41 (shadow: S = R_s · Rz(θ_body), flat ground here, never the pitch)
+    let shadow = v.then(&Mat34::IDENTITY.rotate_z(body_angle(body_facing), quirks));
+    VehiclePose {
+        body,
+        turret: body,
+        barrel: body,
+        shadow,
+        turret_first: false,
+    }
+}
+
+/// The bank state of a flying body (S-0105 claims 26, 42).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Bank {
+    /// No bank.
+    None,
+    /// An unfinished clockwise aiming-facing turn.
+    Clockwise,
+    /// An unfinished counterclockwise aiming-facing turn.
+    Counterclockwise,
+}
+
+/// What a flying body is drawn tilted by (S-0105 claim 42).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FlightAttitude {
+    /// The drawing pitch *α* in radians (positive lowers the nose); 0 when
+    /// none applies.
+    pub alpha: f64,
+    /// The bank *β* in radians; 0 when none applies.
+    pub beta: f64,
+    /// Pitch is present in the image key: the height and speed tests pass
+    /// and the configured angle is nonzero.
+    pub pitched: bool,
+    /// The bank state of the image key; none when the configured angle is 0.
+    pub bank: Bank,
+}
+
+/// The pitch and bank of a non-crashing flying body (S-0105 claim 42).
+///
+/// `height` is the signed height above the current surface in leptons,
+/// `speed` the current speed fraction, `turn` the sign of the unfinished
+/// aiming-facing turn (positive clockwise, 0 none), `pitch_speed` the
+/// threshold, `pitch_angle` and `bank_angle` the configured drawing angles
+/// in radians.
+pub fn flight_attitude(
+    height: i32,
+    speed: f64,
+    turn: i32,
+    pitch_speed: f64,
+    pitch_angle: f64,
+    bank_angle: f64,
+) -> FlightAttitude {
+    // spec: S-0105 claim 42 (at strictly positive height and a speed fraction strictly above the threshold, compared in double precision; otherwise both angles are zero, take-off and landing included)
+    let flying = height > 0 && speed > pitch_speed;
+    // spec: S-0105 claim 42 (the configured angles are narrowed to single precision toward zero for the rotations)
+    let narrow = |x: f64| f64::from(to_f32_rz(x));
+    let alpha = if flying { narrow(pitch_angle) } else { 0.0 };
+    let (beta, bank) = match turn.signum() {
+        // spec: S-0105 claim 42 (the imported bank angle during an unfinished clockwise turn, its negative during a counterclockwise one; a discrete state, and it needs the speed condition)
+        1 if flying => (narrow(bank_angle), Bank::Clockwise),
+        -1 if flying => (-narrow(bank_angle), Bank::Counterclockwise),
+        _ => (0.0, Bank::None),
+    };
+    FlightAttitude {
+        alpha,
+        beta,
+        // spec: S-0105 claim 26 (pitch is present in the key only when the tests pass and the configured angle is nonzero; a zero bank angle has the no-bank state)
+        pitched: flying && pitch_angle != 0.0,
+        bank: if bank_angle == 0.0 { Bank::None } else { bank },
+    }
+}
+
+/// A flying body's local draw transform *D = Rz(θ_flight) · Ry(α) · Rx(β)*
+/// (S-0105 claim 42), before the view and the section HVA transforms.
+pub fn flying_body_local(heading: u16, a: &FlightAttitude, quirks: &VoxelQuirks) -> Mat34 {
+    // spec: S-0105 claim 42 (D = Rz(θ_flight) · Ry(α) · Rx(β) with the 32-step flight drawing heading; no slope tilt)
+    Mat34::IDENTITY
+        .rotate_z(body_angle(heading), quirks)
+        .rotate_y(a.alpha, quirks)
+        .rotate_x(a.beta, quirks)
+}
+
+/// The pose of a flying body and its shadow (S-0105 claim 42): the body
+/// *V · D*, the shadow *V · Rz(θ_flight)* on flat ground, never the pitch or
+/// bank. `heading` is the flight drawing heading: the aiming facing.
+pub fn flying_body_pose(heading: u16, a: &FlightAttitude, quirks: &VoxelQuirks) -> VehiclePose {
+    let v = view(quirks);
+    let body = v.then(&flying_body_local(heading, a, quirks));
+    // spec: S-0105 claim 42 (the shadow uses the slope transform and the 32-step flight drawing heading, never the pitch or bank angles)
+    let shadow = v.then(&Mat34::IDENTITY.rotate_z(body_angle(heading), quirks));
+    VehiclePose {
+        body,
+        turret: body,
+        barrel: body,
+        shadow,
+        turret_first: false,
+    }
+}
+
 /// Draw transforms (view included) of a building's voxel turret and barrel.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BuildingPose {
@@ -2502,6 +2673,29 @@ pub enum ImageKey {
         /// The complete applicable HVA frame.
         frame: u32,
     },
+    /// A rocket missile's body (claims 26, 41): the 32-step body heading, the
+    /// complete HVA frame and the pitch class, instead of a ramp state.
+    RocketBody {
+        /// The 32-step body heading.
+        body: u8,
+        /// The complete applicable HVA frame.
+        frame: u32,
+        /// The pitch class.
+        pitch: RocketPitch,
+    },
+    /// A flying-locomotor body (claims 26, 42): the 32-step flight drawing
+    /// heading, the complete HVA frame, whether speed-dependent pitch is
+    /// present and the bank state, as independent components.
+    FlyingBody {
+        /// The 32-step flight drawing heading.
+        heading: u8,
+        /// The complete applicable HVA frame.
+        frame: u32,
+        /// Pitch is present.
+        pitched: bool,
+        /// The bank state.
+        bank: Bank,
+    },
     /// A turret (claim 26).
     Turret(TurretKey),
     /// A barrel (claims 26, 37).
@@ -2529,6 +2723,29 @@ pub fn body_key(ramp: RampState, body_facing: u16, alt: bool, frame: u32) -> Ima
         body: facing32(body_facing),
         alt,
         frame,
+    }
+}
+
+/// A rocket body's image key (S-0105 claims 26, 41): 32-step body heading,
+/// complete frame and pitch class.
+pub fn rocket_body_key(body_facing: u16, frame: u32, pitch: RocketPitch) -> ImageKey {
+    // spec: S-0105 claim 26 (rocket body key: the 32-step body heading, complete HVA frame and pitch reuse class of claim 41, no ramp state)
+    ImageKey::RocketBody {
+        body: facing32(body_facing),
+        frame,
+        pitch,
+    }
+}
+
+/// A flying body's image key (S-0105 claims 26, 42): 32-step flight
+/// drawing heading, complete frame, pitch presence and bank state.
+pub fn flying_body_key(heading: u16, frame: u32, a: &FlightAttitude) -> ImageKey {
+    // spec: S-0105 claim 26 (flying body key: the 32-step flight drawing heading, complete applicable HVA frame, the presence of speed-dependent pitch and the bank state as independent components; no ramp state)
+    ImageKey::FlyingBody {
+        heading: facing32(heading),
+        frame,
+        pitched: a.pitched,
+        bank: a.bank,
     }
 }
 
@@ -2806,6 +3023,7 @@ impl RecoilCycle {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::approx_constant)] // spec: S-0105 claim 41 and Import mapping: the angles are the spec's decimals
     use super::*;
     use glasnost_fmt::bytes::F32Bits;
     use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
@@ -3173,6 +3391,199 @@ mod tests {
         }
         let p = vehicle_parts(0, raw32(10), 0, ELEVATION_LEVEL, &q());
         assert!(p.turret_first);
+    }
+
+    // --- Aircraft body attitude (claims 41, 42) ---
+
+    /// spec: S-0105 claim 41 (D = Rz(θ_body) · Ry(−p): the single pitch negated and
+    /// used directly; positive p raises the nose in every heading; zero pitch is
+    /// level; no rounding to 32 pitch facings)
+    #[test]
+    fn rocket_pitch_raises_the_nose_and_is_not_quantised() {
+        let nose = |facing: u16, p: f32| rocket_body_local(facing, p, &q()).apply([1.0, 0.0, 0.0]);
+        // Facing 8 is unrotated (east): the nose is +x.
+        assert_eq!(nose(raw32(8), 0.0), [1.0, 0.0, 0.0]);
+        for f in 0..32 {
+            let level = nose(raw32(f), 0.0);
+            let up = nose(raw32(f), 0.5);
+            assert!(up[2] > 0.4, "heading {f}: nose up");
+            assert!((up[0].hypot(up[1]) - 0.8776).abs() < 0.01, "heading {f}");
+            assert_eq!(level[2], 0.0);
+            assert!(nose(raw32(f), -0.5)[2] < -0.4, "negative p lowers the nose");
+        }
+        // Not 32 pitch facings: distinct pitches 0.001 apart in the table give
+        // distinct poses once a table step apart (0.00077 rad).
+        let (a, b) = (nose(raw32(8), 0.5), nose(raw32(8), 0.5015));
+        assert_ne!(a, b);
+        // The matrix is the product of the heading and the table rotation of −p.
+        assert_eq!(
+            rocket_body_local(raw32(11), 0.3, &q()),
+            Mat34::IDENTITY
+                .rotate_z(body_angle(raw32(11)), &q())
+                .rotate_y(-f64::from(0.3f32), &q())
+        );
+    }
+
+    /// spec: S-0105 claim 41 (shadow: V · Rz(θ_body) whatever the pitch; the body
+    /// is V · D)
+    #[test]
+    fn rocket_shadow_is_not_pitched() {
+        let level = rocket_body_pose(raw32(5), 0.0, &q());
+        let up = rocket_body_pose(raw32(5), 0.7, &q());
+        assert_eq!(level.shadow, up.shadow);
+        assert_eq!(level.shadow, vehicle_parts(raw32(5), 0, 0, ELEVATION_LEVEL, &q()).body);
+        assert_ne!(level.body, up.body);
+        assert_eq!(level.body, level.shadow, "level: the body is the heading alone");
+    }
+
+    /// spec: S-0105 claim 41 (reuse classes: zero is level; nonzero equality with
+    /// pᵢ = RZ₅₃(Pᵢ × c), compared with the single widened exactly and without
+    /// narrowing the product, is initial; otherwise equality with
+    /// p𝒇 = RZ₂₄(RZ₅₃(P𝒇 × c)) is final; every other pitch is fresh; coincident
+    /// values favour initial except zero)
+    #[test]
+    fn rocket_pitch_classes() {
+        let quirks = q();
+        let (pi, pf) = (0.25f32, 0.75f32);
+        // The initial comparison does not narrow: a single-precision product that
+        // differs from the double one is not initial.
+        let p_i = mul_rz(f64::from(pi), QUARTER_TURN);
+        let narrowed = to_f32_rz(p_i);
+        assert_ne!(f64::from(narrowed), p_i, "the double product is not a single");
+        assert_eq!(
+            rocket_pitch_class(narrowed, pi, pf, &quirks),
+            RocketPitch::Fresh(table_step(-f64::from(narrowed), &quirks))
+        );
+        // The final value is the narrowed one.
+        let p_f = to_f32_rz(mul_rz(f64::from(pf), QUARTER_TURN));
+        assert_eq!(rocket_pitch_class(p_f, pi, pf, &quirks), RocketPitch::Final);
+        // A pitch equal to the double product widened is initial (here the product
+        // is formed by hand, as a stock fraction's rarely is a single).
+        let p1 = 0.7853982f32;
+        assert_eq!(
+            classify_rocket_pitch(p1, f64::from(p1), 9.0, &quirks),
+            RocketPitch::Initial
+        );
+        // Coincident initial and final values: initial.
+        assert_eq!(
+            classify_rocket_pitch(p1, f64::from(p1), p1, &quirks),
+            RocketPitch::Initial
+        );
+        // Zero is level, even with an initial of 0 or a final of 0 (coincident values).
+        assert_eq!(classify_rocket_pitch(0.0, 0.0, 0.0, &quirks), RocketPitch::Level);
+        assert_eq!(rocket_pitch_class(-0.0, pi, pf, &quirks), RocketPitch::Level);
+        // Any other pitch is fresh, keyed by its table step.
+        assert!(matches!(
+            rocket_pitch_class(0.123, pi, pf, &quirks),
+            RocketPitch::Fresh(_)
+        ));
+        assert_ne!(
+            rocket_pitch_class(0.1, pi, pf, &quirks),
+            rocket_pitch_class(0.2, pi, pf, &quirks)
+        );
+    }
+
+    /// spec: S-0105 claims 26, 41 (the rocket body's key has the heading, the
+    /// frame and the pitch class)
+    #[test]
+    fn rocket_body_keys() {
+        let k = |f, frame, c| rocket_body_key(f, frame, c);
+        assert_ne!(k(0, 0, RocketPitch::Level), k(0, 0, RocketPitch::Initial));
+        assert_ne!(k(0, 0, RocketPitch::Level), k(2048, 0, RocketPitch::Level));
+        assert_ne!(k(0, 0, RocketPitch::Level), k(0, 1, RocketPitch::Level));
+        // Within one 32-step heading bucket the key is unchanged.
+        assert_eq!(k(0, 0, RocketPitch::Level), k(500, 0, RocketPitch::Level));
+        assert_ne!(
+            k(0, 0, RocketPitch::Level),
+            body_key(RAMP_FLAT, 0, false, 0),
+            "not a vehicle body key"
+        );
+    }
+
+    /// spec: S-0105 claim 42 (pitch and bank need strictly positive height and a speed
+    /// fraction strictly above the threshold; bank is a discrete state of an unfinished
+    /// turn; a zero configured angle has the no-pitch or no-bank state)
+    #[test]
+    fn flight_attitude_tests() {
+        let (pa, ba) = (0.3490658503988659, 0.5235987755982988);
+        let at = |h, s, turn| flight_attitude(h, s, turn, 0.25, pa, ba);
+        // Level at nonpositive height or speed at or below the threshold.
+        for (h, s) in [(0, 1.0), (-5, 1.0), (100, 0.25), (100, 0.0)] {
+            let a = at(h, s, 1);
+            assert_eq!((a.alpha, a.beta, a.pitched, a.bank), (0.0, 0.0, false, Bank::None));
+        }
+        // Just above the threshold: the configured pitch.
+        let a = at(1, 0.2500001, 0);
+        assert_eq!(a.alpha, f64::from(to_f32_rz(pa)));
+        assert!(a.pitched && a.bank == Bank::None && a.beta == 0.0);
+        // Bank by the turn direction, a discrete state.
+        let cw = at(100, 1.0, 1);
+        let ccw = at(100, 1.0, -1);
+        assert_eq!((cw.bank, ccw.bank), (Bank::Clockwise, Bank::Counterclockwise));
+        assert_eq!(cw.beta, f64::from(to_f32_rz(ba)));
+        assert_eq!(ccw.beta, -cw.beta);
+        assert_eq!(at(100, 1.0, 40).beta, cw.beta, "not proportional to anything");
+        // Zero configured pitch: no pitch state but the bank remains.
+        let z = flight_attitude(100, 1.0, 1, 0.25, 0.0, ba);
+        assert!(!z.pitched && z.alpha == 0.0 && z.bank == Bank::Clockwise);
+        // Zero configured bank: no bank state, the pitch remains.
+        let z = flight_attitude(100, 1.0, 1, 0.25, pa, 0.0);
+        assert!(z.pitched && z.bank == Bank::None && z.beta == 0.0);
+    }
+
+    /// spec: S-0105 claim 42 (D = Rz(θ_flight) · Ry(α) · Rx(β); positive α lowers the
+    /// nose, a positive bank raises the +y side; the shadow is the heading alone)
+    #[test]
+    fn flying_pose() {
+        let none = FlightAttitude {
+            alpha: 0.0,
+            beta: 0.0,
+            pitched: false,
+            bank: Bank::None,
+        };
+        let a = flight_attitude(100, 1.0, 1, 0.25, 0.3490658503988659, 0.5235987755982988);
+        let d = flying_body_local(raw32(8), &a, &q());
+        assert!(d.apply([1.0, 0.0, 0.0])[2] < -0.3, "positive α lowers the nose");
+        assert!(d.apply([0.0, 1.0, 0.0])[2] > 0.3, "a positive bank raises +y");
+        assert_eq!(
+            d,
+            Mat34::IDENTITY
+                .rotate_z(body_angle(raw32(8)), &q())
+                .rotate_y(a.alpha, &q())
+                .rotate_x(a.beta, &q())
+        );
+        let level = flying_body_pose(raw32(5), &none, &q());
+        let tilted = flying_body_pose(raw32(5), &a, &q());
+        assert_eq!(level.shadow, tilted.shadow, "never the pitch or bank");
+        assert_eq!(level.body, level.shadow);
+        assert_ne!(level.body, tilted.body);
+        // The flight drawing heading is the one given, not a body facing.
+        assert_ne!(
+            flying_body_pose(raw32(5), &none, &q()).body,
+            flying_body_pose(raw32(6), &none, &q()).body
+        );
+    }
+
+    /// spec: S-0105 claims 26, 42 (the flying body's key: the 32-step flight drawing
+    /// heading, the frame, pitch presence and bank state as independent components)
+    #[test]
+    fn flying_body_keys() {
+        let a = |h, s, t| flight_attitude(h, s, t, 0.25, 0.35, 0.52);
+        let key = |h, frame, at: &FlightAttitude| flying_body_key(h, frame, at);
+        let (level, pitched, cw, ccw) = (a(0, 1.0, 0), a(10, 1.0, 0), a(10, 1.0, 1), a(10, 1.0, -1));
+        let ks = [
+            key(0, 0, &level),
+            key(0, 0, &pitched),
+            key(0, 0, &cw),
+            key(0, 0, &ccw),
+            key(2048, 0, &level),
+            key(0, 1, &level),
+        ];
+        let distinct: std::collections::BTreeSet<_> = ks.iter().collect();
+        assert_eq!(distinct.len(), ks.len());
+        assert_eq!(key(0, 0, &level), key(500, 0, &level));
+        // The flying shadow's key is the heading alone (claim 42): the vehicle shadow key.
+        assert_eq!(shadow_key(RAMP_FLAT, raw32(3)), shadow_key(RAMP_FLAT, raw32(3) + 100));
     }
 
     // --- F9 ---

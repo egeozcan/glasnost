@@ -262,6 +262,19 @@ pub fn find_type(import: &Import, kind: Kind, name: &[u8]) -> Option<usize> {
         .position(|t| value::type_name_eq(&t.name, name))
 }
 
+/// An animation type's own art section: the section named by its type name
+/// (S-0007 Terms and claim 34). Its playback and drawing properties come
+/// from this section alone, whatever section its image name names.
+pub fn anim_own_section(import: &Import, idx: usize) -> &[u8] {
+    // spec: S-0007 claim 34 (own art section = section named by the animation's type name)
+    import
+        .outcome
+        .registries
+        .get(&Kind::Animations)
+        .and_then(|r| r.get(idx))
+        .map_or(&[][..], |t| &t.name)
+}
+
 /// A rules key of a type, as layered.
 fn rule<'a>(import: &'a Import, kind: Kind, idx: usize, key: &[u8]) -> Option<&'a [u8]> {
     import
@@ -285,6 +298,58 @@ pub(crate) fn rule_int(import: &Import, kind: Kind, idx: usize, key: &[u8], defa
     rule(import, kind, idx, key)
         .and_then(value::integer)
         .unwrap_or(default)
+}
+
+/// A real-valued key of a type (S-0003 claim 6: a decimal is a single, widened
+/// exactly), `None` when absent or without a number.
+fn rule_real(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<f64> {
+    match value::decimal(rule(import, kind, idx, key)?, value::DecimalField::Double) {
+        value::Decimal::Value { value, .. } => value.to_exact_decimal().parse().ok(),
+        value::Decimal::NoNumber => None,
+    }
+}
+
+/// The drawing pitch angle of a flying type when the rules give none,
+/// radians (S-0105 Import mapping: `PitchAngle` 20 degrees).
+// spec: S-0105 Import mapping (PitchAngle: 20 degrees, engine initial value 0.3490658503988659 radians)
+#[allow(clippy::approx_constant)] // the spec's decimal
+const PITCH_ANGLE_DEFAULT: f64 = 0.3490658503988659;
+/// The bank angle of a flying type when the rules give none, radians.
+// spec: S-0105 Import mapping (RollAngle: 30 degrees, engine initial value 0.5235987755982988 radians)
+#[allow(clippy::approx_constant)] // the spec's decimal
+const ROLL_ANGLE_DEFAULT: f64 = 0.5235987755982988;
+/// The speed fraction a flying body must exceed to pitch and bank.
+// spec: S-0105 Import mapping (PitchSpeed: 0.25)
+const PITCH_SPEED_DEFAULT: f64 = 0.25;
+
+/// A type's drawing angle in radians (S-0105 Import mapping): the degrees
+/// multiplied by the binary64 π/180, rounded toward zero; −1 keeps the value
+/// in force (the default here).
+fn rule_angle(import: &Import, kind: Kind, idx: usize, key: &[u8], default: f64) -> f64 {
+    match rule_real(import, kind, idx, key) {
+        // spec: S-0105 Import mapping (PitchAngle, RollAngle: −1 keeps the value in force)
+        Some(d) if d != -1.0 => {
+            glasnost_render::rz::mul_rz(d, std::f64::consts::PI / 180.0) // spec: S-0105 Import mapping (degrees times binary64 π/180, toward zero)
+        }
+        _ => default,
+    }
+}
+
+/// How a body is posed (S-0105 claims 3, 41, 42), formed from its
+/// [`Attitude`] and the type's drawing angles.
+#[derive(Clone, Copy)]
+enum Tilt {
+    /// The body's heading alone.
+    Plain,
+    /// A rocket missile (claim 41).
+    Rocket {
+        /// The current pitch.
+        pitch: f32,
+        /// Its reuse class.
+        class: voxel::RocketPitch,
+    },
+    /// A flying-locomotor body (claim 42).
+    Flying(voxel::FlightAttitude),
 }
 
 fn derived(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<i64> {
@@ -2513,8 +2578,8 @@ impl Builder<'_> {
                 continue;
             };
             any = true;
-            // interim: Q-0951 (the playback fields come from the image-name section, S-0007 claim 2)
-            let t = slots::read_anim(&self.p.art, &art.image);
+            // spec: S-0007 claim 34 (the playback and drawing fields come from the animation's own art section, whatever section its image name names)
+            let t = slots::read_anim(&self.p.art, anim_own_section(self.import, a));
             // spec: S-0109 claim 19 (detail field above the player's level: not drawn)
             if !slots::shown_at(&t, self.options.detail.number()) {
                 continue;
@@ -2672,7 +2737,8 @@ impl Builder<'_> {
     fn live_anim(&mut self, a: &AnimDraw) -> Option<(slots::Layer, i64, Vec<Item>)> {
         let art = self.import.arts.get(&(Kind::Animations, a.idx)).cloned()?;
         let sprite = art.sprite.clone()?;
-        let t = slots::read_anim(&self.p.art, &art.image);
+        // spec: S-0007 claim 34 (the animation's own art section)
+        let t = slots::read_anim(&self.p.art, anim_own_section(self.import, a.idx));
         // spec: S-0109 claim 19 (detail field above the player's level: not drawn, still updated)
         if !slots::shown_at(&t, self.options.detail.number()) {
             return None;
@@ -3079,6 +3145,7 @@ impl Builder<'_> {
             shadow: None,
             // spec: S-0105 claim 12 (no tick has run: the spawned aircraft are docked, the main body shows)
             alternative: false,
+            attitude: Attitude::None,
         };
         Some(self.mobile(&m))
     }
@@ -3578,6 +3645,52 @@ impl Builder<'_> {
         part
     }
 
+    /// How a body is posed: its heading alone, a rocket's nose pitch or a
+    /// flying body's pitch and bank (S-0105 claims 41, 42).
+    fn tilt(&self, m: &Mobile, q: &VoxelQuirks) -> Tilt {
+        match m.attitude {
+            Attitude::None => Tilt::Plain,
+            Attitude::Rocket {
+                pitch,
+                initial,
+                final_,
+            } => {
+                let pitch = f32::from_bits(pitch);
+                let class = voxel::rocket_pitch_class(
+                    pitch,
+                    f32::from_bits(initial),
+                    f32::from_bits(final_),
+                    q,
+                );
+                Tilt::Rocket { pitch, class }
+            }
+            Attitude::Flying {
+                height,
+                speed,
+                turn,
+                crashing,
+            } => {
+                let (kind, idx) = (m.kind, m.idx);
+                let pitch_angle =
+                    rule_angle(self.import, kind, idx, b"PitchAngle", PITCH_ANGLE_DEFAULT);
+                let bank_angle =
+                    rule_angle(self.import, kind, idx, b"RollAngle", ROLL_ANGLE_DEFAULT);
+                let pitch_speed = rule_real(self.import, kind, idx, b"PitchSpeed")
+                    .unwrap_or(PITCH_SPEED_DEFAULT);
+                // spec: S-0105 claim 42 (a crashing body keeps S-0312's attitude rules, not built here: drawn level)
+                let height = if crashing { 0 } else { height };
+                Tilt::Flying(voxel::flight_attitude(
+                    height,
+                    f64::from_bits(speed),
+                    turn,
+                    pitch_speed,
+                    pitch_angle,
+                    bank_angle,
+                ))
+            }
+        }
+    }
+
     /// A vehicle's or aircraft's voxel body, turret, barrel and shadow
     /// (S-0105 claims 3 to 11, 16, 29 to 31; S-0102 claims 13, 18).
     fn vehicle_voxels(
@@ -3622,8 +3735,20 @@ impl Builder<'_> {
             .and_then(value::boolean)
             .unwrap_or(false);
         let (body_raw, turret_raw, elevation) = (m.body, m.turret, m.elevation);
-        // interim: Q-0950 (a rocket's nose pitch is not drawn; the body takes its heading only)
-        let pose = move || voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q);
+        let tilt = self.tilt(m, &q);
+        // spec: S-0105 Terms and claim 3 (flight drawing heading: a flying-locomotor aircraft's body and shadow take its aiming facing, a rocket and every other body its body facing)
+        let heading = if matches!(tilt, Tilt::Flying(_)) {
+            turret_raw
+        } else {
+            body_raw
+        };
+        let pose = move || match tilt {
+            Tilt::Plain => voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q),
+            // spec: S-0105 claim 41 (V · Rz(θ_body) · Ry(−p), the shadow unpitched)
+            Tilt::Rocket { pitch, .. } => voxel::rocket_body_pose(body_raw, pitch, &q),
+            // spec: S-0105 claim 42 (V · Rz(θ_flight) · Ry(α) · Rx(β), the shadow the heading alone)
+            Tilt::Flying(a) => voxel::flying_body_pose(heading, &a, &q),
+        };
         let object = m.object;
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
         // position at the terrain surface height there, 60 pixels higher over a qualifying high
@@ -3646,8 +3771,8 @@ impl Builder<'_> {
             let aircraft_like = rule_bool(self.import, kind, idx, b"ConsideredAircraft", false);
             (section, aircraft_like)
         });
-        // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground)
-        let shadow_key = voxel::shadow_key(voxel::RAMP_FLAT, body_raw);
+        // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground), claims 41 and 42 (the 32-step flight drawing heading for a flying-locomotor aircraft, no pitch or bank class)
+        let shadow_key = voxel::shadow_key(voxel::RAMP_FLAT, heading);
         let shadow_file = main_file.clone();
         let draw_shadow = move |b: &mut Self, (section, aircraft_like): (usize, bool)| {
             let body = b.voxel_model(&shadow_file)?;
@@ -3678,7 +3803,12 @@ impl Builder<'_> {
         let body_frame = 0;
         // spec: S-0105 claim 26 (body key; flat ground, the alternative-model state as drawn:
         // claim 12's alternative body while no spawned aircraft is docked)
-        let key = voxel::body_key(voxel::RAMP_FLAT, body_raw, alt_drawn, body_frame);
+        // spec: S-0105 claims 26, 41, 42 (a rocket body's key: heading, frame and pitch class; a flying body's: flight drawing heading, frame, pitch presence and bank state; neither has a ramp state)
+        let key = match tilt {
+            Tilt::Plain => voxel::body_key(voxel::RAMP_FLAT, body_raw, alt_drawn, body_frame),
+            Tilt::Rocket { class, .. } => voxel::rocket_body_key(body_raw, body_frame, class),
+            Tilt::Flying(a) => voxel::flying_body_key(heading, body_frame, &a),
+        };
         if let Some(part) = self.cached_part(kind, idx, key, |b| {
             let body = b.voxel_model(&body_file)?;
             let vpl = b.vpl();
@@ -3935,6 +4065,39 @@ pub struct Mobile {
     /// docked, so a type with the alternative-body option draws its
     /// alternative body (S-0105 claim 12). `false` without a game state.
     pub alternative: bool,
+    /// For an aircraft: how its body is tilted (S-0105 claims 41, 42).
+    pub attitude: Attitude,
+}
+
+/// How an aircraft body is drawn tilted, read from the game state (S-0105
+/// claims 41 and 42). Single and double precision values travel as bit
+/// patterns.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Attitude {
+    /// Heading only: a vehicle, or an aircraft without a game state.
+    #[default]
+    None,
+    /// A rocket missile: nose pitch and heading (claim 41).
+    Rocket {
+        /// The current pitch *p* (S-0506), radians, single-precision bits.
+        pitch: u32,
+        /// The selected set's initial pitch fraction, single-precision bits.
+        initial: u32,
+        /// The selected set's final pitch fraction, single-precision bits.
+        final_: u32,
+    },
+    /// A flying-locomotor aircraft: the inputs of its pitch and bank
+    /// (claim 42). Its heading is its aiming facing, `Mobile::turret`.
+    Flying {
+        /// The signed height above the current surface (claim 40), leptons.
+        height: i32,
+        /// The current speed fraction, double-precision bits.
+        speed: u64,
+        /// The sign of the unfinished aiming-facing turn: positive clockwise.
+        turn: i32,
+        /// Crashing (S-0312): drawn level here, the crash attitude is not built.
+        crashing: bool,
+    },
 }
 
 /// The surface anchor of an aircraft's voxel shadow (S-0105 claim 40).
@@ -4141,7 +4304,8 @@ impl Painter {
     /// count of its sprite (0 without one), for playback (S-0109 F2).
     pub fn anim_type(&self, inputs: &Inputs, idx: usize) -> Option<(slots::AnimType, i32)> {
         let art = inputs.import.arts.get(&(Kind::Animations, idx))?;
-        let t = slots::read_anim(&self.art, &art.image);
+        // spec: S-0007 claim 34 (the animation's own art section)
+        let t = slots::read_anim(&self.art, anim_own_section(inputs.import, idx));
         let n = art
             .sprite
             .as_ref()

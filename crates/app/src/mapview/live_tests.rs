@@ -15,7 +15,8 @@ use glasnost_sim::world::{HouseId, ObjectId, Target};
 use glasnost_sim::{save, testkit};
 
 use super::build::{
-    InfantryFrame, Inputs, LiveBuilding, Mobile, Options, ShadowAnchor, build_parts, infantry_frame,
+    Attitude, InfantryFrame, Inputs, LiveBuilding, Mobile, Options, ShadowAnchor, build_parts,
+    infantry_frame,
 };
 use super::live::{Entrant, GroundLayer, Live, Pacer, period_ms, sim_code};
 use super::tests::{RULES, context, context_with, scene_map_text, shp};
@@ -201,6 +202,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         harvesting: None,
         shadow: None,
         alternative: false,
+        attitude: Attitude::None,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -263,6 +265,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         harvesting,
         shadow: None,
         alternative: false,
+        attitude: Attitude::None,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1434,6 +1437,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         harvesting: None,
         shadow: None,
         alternative: false,
+        attitude: Attitude::None,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1466,6 +1470,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         let m = Mobile {
             shadow: Some(anchor),
             alternative: false,
+            attitude: Attitude::None,
             ..jet(1500)
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
@@ -1620,6 +1625,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             harvesting: None,
             shadow: None,
             alternative,
+            attitude: Attitude::None,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -1641,4 +1647,157 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
     assert_eq!(draw(false, true, true).0, main_body);
     // The option without an alternative body file: the main body.
     assert_eq!(draw(true, false, true).0, main_body);
+}
+
+/// S-0105 claims 41 and 42 (Q-0950): a rocket's body is drawn with its current nose pitch, an image is
+/// reused only inside its pitch class and heading, a flying-locomotor aircraft's body and shadow take its
+/// aiming facing and its pitch and bank follow height, speed and an unfinished turn. The shadow is never
+/// pitched or banked.
+#[test]
+fn aircraft_attitude_is_drawn() {
+    use glasnost_convert::art::TypeArt;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let rules = format!(
+        "{RULES}[AircraftTypes]\n1=JETX\n[JETX]\nPitchAngle=40\nRollAngle=-1\nPitchSpeed=0.5\n"
+    );
+    let (mut import, catalogue, mut assets) = context_with(&rules);
+    import.arts.insert(
+        (Kind::Aircraft, 0),
+        TypeArt {
+            voxels: [("body".to_string(), b"jetx.vxl".to_vec())].into(),
+            ..Default::default()
+        },
+    );
+    assets.insert(
+        b"jetx.vxl",
+        VxlWriter {
+            model: &synthetic_model(),
+        }
+        .write(),
+    );
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene: Scene = built.scene;
+    let craft = |body, turret, attitude| Mobile {
+        kind: Kind::Aircraft,
+        idx: 0,
+        owner: b"Neutral".to_vec(),
+        pos: (3 * 256 + 128, 3 * 256 + 128, 1500),
+        body,
+        turret,
+        elevation: 0,
+        infantry: None,
+        object: sim_code(ObjectId(5)),
+        harvesting: None,
+        shadow: None,
+        alternative: false,
+        attitude,
+    };
+    // The body and shadow images drawn: their scene image numbers.
+    let mut images = |m: Mobile| {
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        let items = &entries[0].items;
+        let id = |shadow: bool| {
+            items
+                .iter()
+                .find(|i| (i.paint == Paint::Shadow) == shadow)
+                .map(|i| i.image)
+        };
+        (id(false), id(true))
+    };
+    let rocket = |pitch: f32| Attitude::Rocket {
+        pitch: pitch.to_bits(),
+        initial: 0.25f32.to_bits(),
+        final_: 0.75f32.to_bits(),
+    };
+    // Claim 41: a pitched body differs from the level one, whose image is the heading alone.
+    let (level, level_shadow) = images(craft(16384, 16384, rocket(0.0)));
+    let (plain, plain_shadow) = images(craft(16384, 16384, Attitude::None));
+    assert!(level.is_some() && level_shadow.is_some());
+    assert_eq!(level_shadow, plain_shadow);
+    let _ = plain;
+    let (up, up_shadow) = images(craft(16384, 16384, rocket(0.7)));
+    assert_ne!(level, up, "the nose pitch is drawn");
+    assert_eq!(level_shadow, up_shadow, "the shadow is not pitched");
+    // Reuse: the same pitch class and heading reuse the image; another pitch does not; the
+    // 32-step heading bucket decides the heading.
+    assert_eq!(up, images(craft(16384, 16384, rocket(0.7))).0);
+    assert_eq!(up, images(craft(16384 + 300, 16384, rocket(0.7))).0);
+    assert_ne!(up, images(craft(16384, 16384, rocket(0.9))).0);
+    assert_ne!(up, images(craft(20480, 16384, rocket(0.7))).0, "another heading");
+    // Claim 42: heading is the aiming facing (turret), not the body facing.
+    let flying = |height, speed: f64, turn| Attitude::Flying {
+        height,
+        speed: speed.to_bits(),
+        turn,
+        crashing: false,
+    };
+    let (base, base_shadow) = images(craft(16384, 20480, flying(0, 1.0, 0)));
+    assert_eq!(
+        base,
+        images(craft(24576, 20480, flying(0, 1.0, 0))).0,
+        "the body facing plays no part"
+    );
+    assert_ne!(
+        base,
+        images(craft(16384, 24576, flying(0, 1.0, 0))).0,
+        "the aiming facing is the heading"
+    );
+    assert_eq!(
+        base_shadow,
+        images(craft(24576, 20480, flying(0, 1.0, 0))).1
+    );
+    // Pitch needs strictly positive height and a speed fraction above PitchSpeed (0.5 here).
+    let pitched = images(craft(16384, 20480, flying(10, 0.75, 0))).0;
+    assert_ne!(pitched, base, "pitched in the air at speed");
+    assert_eq!(
+        images(craft(16384, 20480, flying(0, 0.75, 0))).0,
+        base,
+        "on the ground"
+    );
+    assert_eq!(
+        images(craft(16384, 20480, flying(10, 0.5, 0))).0,
+        base,
+        "at the threshold"
+    );
+    // Bank: a turn banks (RollAngle -1 keeps the default of 30 degrees), the sign by direction,
+    // and it also needs the speed condition.
+    let cw = images(craft(16384, 20480, flying(10, 0.75, 1))).0;
+    let ccw = images(craft(16384, 20480, flying(10, 0.75, -1))).0;
+    assert_ne!(cw, pitched);
+    assert_ne!(cw, ccw);
+    assert_eq!(images(craft(16384, 20480, flying(10, 0.4, 1))).0, base);
+    // The shadow stays the heading's whatever the tilt.
+    assert_eq!(
+        images(craft(16384, 20480, flying(10, 0.75, 1))).1,
+        base_shadow
+    );
+    // A crashing body is drawn level.
+    let crash = Attitude::Flying {
+        height: 10,
+        speed: 0.75f64.to_bits(),
+        turn: 1,
+        crashing: true,
+    };
+    assert_eq!(images(craft(16384, 20480, crash)).0, base);
 }

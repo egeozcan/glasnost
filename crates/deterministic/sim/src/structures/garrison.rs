@@ -88,30 +88,17 @@ pub fn capacity(w: &World, b: ObjectId) -> i32 {
 }
 
 /// The occupants of a building in order, the first first (S-0508 Terms).
-/// An identifier that names no object is an occupant killed inside by its
-/// own house's defeat (claim 19, Q-0970).
+/// A place whose occupant dies inside is removed in the same update
+/// (claim 23), so every identifier names an occupant.
 pub fn occupants(w: &World, b: ObjectId) -> Vec<ObjectId> {
     w.obj(b)
         .map_or_else(Vec::new, |o| o.structure.occupants.clone())
 }
 
-/// The occupant count, killed occupants that kept their places included
-/// (claim 19, Q-0970).
+/// The occupant count (claim 23: the count after any death removal).
 pub fn count(w: &World, b: ObjectId) -> i32 {
     w.obj(b).map_or(0, |o| {
         i32::try_from(o.structure.occupants.len()).unwrap_or(i32::MAX)
-    })
-}
-
-/// The occupants that exist, in order.
-pub fn living(w: &World, b: ObjectId) -> Vec<ObjectId> {
-    w.obj(b).map_or_else(Vec::new, |o| {
-        o.structure
-            .occupants
-            .iter()
-            .copied()
-            .filter(|&x| w.obj(x).is_some())
-            .collect()
     })
 }
 
@@ -287,7 +274,7 @@ pub fn turn(w: &mut World, b: ObjectId) {
     let civilian = civilian_house(w);
     // spec: S-0508 claim 7 (occupied and belonging to the civilian house: the owner becomes the first occupant's house)
     if count(w, b) > 0 && civilian.is_some() && owner == civilian {
-        let first = living(w, b)
+        let first = occupants(w, b)
             .first()
             .and_then(|&x| w.obj(x))
             .and_then(|x| x.owner);
@@ -303,7 +290,7 @@ pub fn turn(w: &mut World, b: ObjectId) {
         }
         return;
     }
-    // spec: S-0508 claim 8 (no occupants and not belonging to the civilian house: the owner becomes the civilian house; Q-0971: with no civilian house the owner is left unchanged and nothing is announced)
+    // spec: S-0508 claim 8 (no occupants and not belonging to the civilian house: the owner becomes the civilian house) and claim 24 (engine design rule: with no civilian house claims 8 and 9 change no owner, at every turn, with no abandoned sound, radar event or announcement; claim 9's evacuation above still applied)
     if count(w, b) == 0
         && let Some(c) = civilian
         && owner != Some(c)
@@ -369,23 +356,49 @@ pub fn inside_cell(top_left: CellXY, foundation: (i32, i32)) -> CellXY {
     CellXY::new(top_left.x + foundation.0 - 1, top_left.y + foundation.1 - 1)
 }
 
+/// The terrain level at or below which the exit check is *clear* without
+/// the later tests.
+// spec: S-0508 Constants (highest terrain level receiving the exit-check bypass −6)
+const EXIT_BYPASS_LEVEL: i32 = -6;
+
 /// Whether a ring cell qualifies for the first occupant (claim 10): the
-/// infantry entry outcome there is *clear*, judged with the initial
-/// reference level −1.
+/// infantry entry check of S-0208 claim 19 answers *clear*, with the initial
+/// reference level −1 and no connecting-step height restriction. There is no
+/// independent legal-cell or usable-area gate: a candidate with no map cell
+/// is read as the stand-in blank cell (S-0009 claim 44) and meets the same
+/// check.
 fn qualifies(w: &World, first: ObjectId, c: CellXY) -> bool {
-    // spec: S-0508 claim 10 and Q-0972 (interim: a cell with no cell on the map never qualifies)
-    if w.cells.cell(c).is_none() {
+    // spec: S-0508 claim 10 (a candidate with no map cell reads as the stand-in cell: level 0, flat, clear land, no overlay, no objects, S-0009 claim 44)
+    let cell = w.cells.cell(c);
+    let level = cell.map_or(0, |x| i32::from(x.level));
+    // spec: S-0508 claim 10 and Edge cases (the reference-level bypass of S-0208 claim 19: terrain level −6 or lower is clear before the usable-area and occupancy tests; quirks.garrison_negative_level_exit)
+    if w.rules().quirks.garrison_negative_level_exit && level <= EXIT_BYPASS_LEVEL {
+        return true;
+    }
+    // spec: S-0508 claim 10 (an ordinary occupant entered from inside the usable area and keeps that status inside the building: S-0209 claim 4's rejection of a cell outside the usable area applies, whether or not the cell is on the map)
+    if inside_usable_area(w, first) && !w.cells.usable(c) {
         return false;
     }
+    if cell.is_none() {
+        // spec: S-0508 claim 10 (a stand-in cell has no overlay and no objects: the entry check there is clear for an occupant exempt from the outside-area rejection)
+        return true;
+    }
+    // spec: S-0508 claim 10 (S-0209's infantry entry outcome at the initial reference level −1)
     occupancy::infantry_outcome(w, first, c, EXIT_REFERENCE_LEVEL) == Outcome::Clear
+}
+
+/// Whether the occupant was inside the usable area when it went inside: its
+/// retained position is in a usable cell (claim 10).
+fn inside_usable_area(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| w.cells.usable(o.pos.cell()))
 }
 
 /// The exit cell of an eviction (claim 10): the qualifying ring cell of the
 /// highest rank, judged for the first occupant alone.
 pub fn exit_cell(w: &World, b: ObjectId) -> Option<CellXY> {
     let o = w.obj(b)?;
-    // spec: S-0508 claim 10 (only the first occupant's view of a cell matters; Q-0970: a killed first occupant is passed over for the first one that exists)
-    let first = living(w, b).first().copied()?;
+    // spec: S-0508 claim 10 (only the first occupant's view of a cell matters)
+    let first = occupants(w, b).first().copied()?;
     let skips = w.rules().quirks.garrison_exit_skips_corner;
     exit_ring(o.pos.cell(), o.foundation, skips)
         .into_iter()
@@ -419,8 +432,10 @@ pub fn evict(w: &mut World, b: ObjectId, opts: Evict) -> bool {
     let list = occupants(w, b);
     // spec: S-0508 claim 11 (the occupants are put on the map in that one cell, from the last occupant to the first, within the same tick)
     for &id in list.iter().rev() {
-        if w.obj(id).is_none() {
-            // spec: S-0508 claim 19 and Q-0970 (a killed occupant's place is passed over)
+        let Some(ob) = w.obj(id) else { continue };
+        if ob.on_map {
+            // spec: S-0508 claim 11 and 22 (an occupant that cannot be placed, here one already marked on the map, is removed, not destroyed)
+            crate::objects::remove(w, id);
             continue;
         }
         put_out(w, b, id, exit, opts);
@@ -431,7 +446,7 @@ pub fn evict(w: &mut World, b: ObjectId, opts: Evict) -> bool {
 
 /// Puts one occupant on the map at the exit cell's centre (claim 11).
 fn put_out(w: &mut World, b: ObjectId, id: ObjectId, c: CellXY, opts: Evict) {
-    // spec: S-0508 claim 11 (the cell's centre on its terrain surface, standing-position occupancy ignored, no random draw; Q-0972: the placement does not fail while the occupant exists)
+    // spec: S-0508 claim 11 (the cell's centre on its terrain surface, standing-position occupancy ignored, no random draw) and claim 22 (a living occupant off the map is placed: no second entry test, no terrain, capacity or usable-area refusal)
     let (x, y) = (256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (the centre of a cell)
     let pos = Pos::new(x, y, w.surface_at(x, y));
     if let Some(ob) = w.obj_mut(id) {
@@ -549,9 +564,8 @@ fn assault(w: &mut World, unit: ObjectId, b: ObjectId) {
     let anim = occupant_animation(w, unit);
     let reversed = w.rules().quirks.assaulter_reversed_kill_credit;
     let list = occupants(w, b);
-    let n = list.len();
     let base = w.obj(b).map(|o| (o.pos, o.foundation));
-    // Q-0973 (interim): occupants are removed and credited from the last to the first; the occupant at list position i shows its animation at muzzle point i
+    // spec: S-0508 claim 14 (every occupant is removed during the attempt from the last list position to position 0; each one's animation and credit precede its removal and those of the preceding position; the animation at the muzzle point i of the list position, not the firing index)
     for (i, &id) in list.iter().enumerate().rev() {
         if w.obj(id).is_none() {
             continue;
@@ -559,8 +573,11 @@ fn assault(w: &mut World, unit: ObjectId, b: ObjectId) {
         if let Some(name) = anim.as_deref()
             && let Some((pos, f)) = base
         {
-            let at = muzzle_position(w, b, i, n, pos, f);
-            effects::anim(w, name, at);
+            // spec: S-0508 claim 14 (supported point numbers 0 through 9; a position beyond has no supported animation point, Q-0990 interim: no animation)
+            if i < ASSAULT_POINTS {
+                let at = muzzle_position(w, b, i, pos, f);
+                effects::anim(w, name, at);
+            }
         }
         let hit = Hit {
             amount: 0,
@@ -605,19 +622,37 @@ fn occupant_animation(w: &World, unit: ObjectId) -> Option<String> {
     w.rules().combat.weapon(wp).occupant_anim.clone()
 }
 
+/// The number of muzzle points an assault supports.
+// spec: S-0508 Constants (supported assault muzzle points 10, numbered 0 through 9; not a modulus)
+const ASSAULT_POINTS: usize = 10;
+
 /// The position of garrison muzzle point `k` of building `b` for an
-/// animation (S-0313 Terms: the *k*-th pixel shift of the type's list of
-/// garrison muzzle points), wrapping over `n` places.
-fn muzzle_position(w: &World, b: ObjectId, k: usize, n: usize, pos: Pos, f: (i32, i32)) -> Pos {
-    let _ = (f, n);
-    let (dx, dy) = muzzle_shift(w, b, k);
+/// assault animation (S-0313 Terms: the *k*-th pixel shift of the type's
+/// list of garrison muzzle points).
+fn muzzle_position(w: &World, b: ObjectId, k: usize, pos: Pos, f: (i32, i32)) -> Pos {
+    let _ = f;
+    let (dx, dy) = assault_shift(w, b, k);
     let c = pos.cell();
     // spec: S-0313 Terms (a building's base point: the top corner of its foundation at its world height)
     Pos::new(256 * c.x + dx, 256 * c.y + dy, pos.z)
 }
 
-/// The pixel shift of garrison muzzle point `k`, in leptons (S-0313 claim 6,
-/// F3): a point that the art does not give is (0, 0).
+/// The pixel shift of garrison muzzle point `k` for an assault animation,
+/// in leptons (S-0508 claim 14): no wrapping by the number of configured
+/// points, a point the art does not give keeps its default (0, 0).
+pub fn assault_shift(w: &World, b: ObjectId, k: usize) -> (i32, i32) {
+    let Some(t) = brules(w, b) else {
+        return (0, 0);
+    };
+    // spec: S-0508 claim 14 and Import mapping (missing points retain their imported default (0, 0); no wrap to point 0)
+    let Some(&[px, py]) = t.building.garrison_muzzles.get(k) else {
+        return (0, 0);
+    };
+    point_shift(w, px, py)
+}
+
+/// The pixel shift of garrison muzzle point `k` in leptons for a firing
+/// shot (S-0313 claim 6, F3): a point that the art does not give is (0, 0).
 pub fn muzzle_shift(w: &World, b: ObjectId, k: usize) -> (i32, i32) {
     let Some(t) = brules(w, b) else {
         return (0, 0);
@@ -628,6 +663,10 @@ pub fn muzzle_shift(w: &World, b: ObjectId, k: usize) -> (i32, i32) {
     }
     // spec: S-0313 Edge cases (more muzzle points than ten: our engine uses every point up to the maximum occupant count); the index wraps over the points read
     let [px, py] = pts[k % pts.len()];
+    point_shift(w, px, py)
+}
+
+fn point_shift(w: &World, px: i32, py: i32) -> (i32, i32) {
     // spec: S-0313 claim 6 (a point given as (65535, 65535) is (0, 0))
     if px == MUZZLE_ABSENT && py == MUZZLE_ABSENT {
         return (0, 0);
@@ -650,6 +689,17 @@ pub fn erased(w: &mut World, b: ObjectId) {
 /// A building leaves play while it still holds occupants (S-0508 claim 15
 /// as a last resort): they are removed with it.
 pub fn removing(w: &mut World, b: ObjectId) {
+    // spec: S-0508 claim 23 (engine design rule: an occupant that dies or is removed inside has its place removed in the same update; the others keep their order and are numbered from 0; the index is kept when below the new count, else 0, no modulo)
+    if let Some(home) = w.obj(b).and_then(|o| o.structure.inside) {
+        if let Some(h) = w.obj_mut(home) {
+            h.structure.occupants.retain(|&x| x != b);
+            let n = u32::try_from(h.structure.occupants.len()).unwrap_or(u32::MAX);
+            if h.structure.index >= n {
+                h.structure.index = 0;
+            }
+        }
+        return;
+    }
     if w.obj(b).is_none_or(|o| o.structure.occupants.is_empty()) {
         return;
     }
@@ -660,18 +710,17 @@ pub fn removing(w: &mut World, b: ObjectId) {
 // Firing from inside (S-0308 claim 13, S-0313 claim 6, S-0311 claim 8)
 
 /// The index of the occupant whose turn it is (S-0308 claim 13): the shared
-/// index, moved on to the next occupant that exists when it names a killed
-/// one (Q-0970). `None` when no occupant exists.
+/// index, which names a place in the list (S-0508 claim 23 keeps it below
+/// the count). `None` when the building has no occupant.
 pub fn current_index(w: &World, b: ObjectId) -> Option<usize> {
     let o = w.obj(b)?;
     let n = o.structure.occupants.len();
     if n == 0 {
         return None;
     }
-    let start = o.structure.index as usize % n;
-    (0..n)
-        .map(|d| (start + d) % n)
-        .find(|&i| w.obj(o.structure.occupants[i]).is_some())
+    // spec: S-0508 claim 23 (a range check, not a reduction modulo the count: an index at or above the count is 0)
+    let k = o.structure.index as usize;
+    Some(if k < n { k } else { 0 })
 }
 
 /// The current occupant (S-0308 claim 13): the occupant at the shared
@@ -700,8 +749,8 @@ pub fn shot_launched(w: &mut World, b: ObjectId, disc_laser: bool) {
 /// garrisoned building (S-0311 claim 8): the occupant the shared index
 /// selects at destruction time (`quirks.occupant_experience_next_in_turn`;
 /// off: the occupant that made the last shot), whatever its trainable flag
-/// (`quirks.occupant_experience_untrained`; off: a trainable one only). A
-/// killed occupant is nobody (Q-0970).
+/// (`quirks.occupant_experience_untrained`; off: a trainable one only). The
+/// occupants are the remaining ones at the repaired index (S-0508 claim 23).
 pub fn experience_recipient(w: &World, b: ObjectId) -> Option<ObjectId> {
     if !fires(w, b) {
         return None;

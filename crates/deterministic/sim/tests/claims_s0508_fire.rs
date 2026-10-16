@@ -1,7 +1,7 @@
 //! Claim tests of what a garrisoned building does (the occupant claims of
 //! S-0308, S-0313, S-0301, S-0302, S-0307, S-0311 and S-0215 that S-0508
 //! fills in), the map's eviction and hunt actions (S-0011, S-0508 claim 13)
-//! and the interim rules of Q-0970, on synthetic rules.
+//! and the death-inside rule of claim 23, on synthetic rules.
 
 mod structures_common;
 
@@ -410,27 +410,36 @@ fn claim_13_house_wide_hunt_action() {
     }
 }
 
-// spec: S-0508 claim 19 and Q-0970 (a killed occupant keeps its place and counts; a shot whose index names it uses the next living occupant's weapon; an eviction skips it)
+
+fn kill_inside(w: &mut World, id: ObjectId) {
+    let hit = damage::Hit {
+        amount: 10_000,
+        warhead: w.rules().combat.general.c4_warhead,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: true,
+        no_escape: false,
+    };
+    glasnost_sim::combat::death::kill(w, id, &hit);
+}
+
+// spec: S-0508 claim 23 (engine design rule, G18, answers Q-0970; S-0308 claim 13, S-0313 claim 6, S-0301 claim 7, S-0311 claim 8): occupants U, V, W in entry order, index 1, V dies inside: the order is U, W, the count 2, the index 1, W's weapon fires from muzzle 1 on the next ordinary shot and the successful shot advances the index to 0
 #[test]
-fn q0970_dead_occupant_interim() {
+fn claim_23_death_inside_the_firing_choices() {
     let r = rules_with(|_| {});
     let (mut w, b, us, cart) = fixture(&r, &["GARRI", "BEAMER", "GARRI"], 2);
-    // Alpha's occupants (all three) belong to Alpha; kill the middle one by defeat of its house is
-    // house-wide, so kill it by hand: remove the object, keeping the place.
-    glasnost_sim::objects::remove(&mut w, us[1]);
-    assert_eq!(
-        garrison::count(&w, b),
-        3,
-        "the place and the count are kept"
-    );
     w.obj_mut(b).unwrap().structure.index = 1;
+    kill_inside(&mut w, us[1]);
+    assert_eq!(garrison::occupants(&w, b), vec![us[0], us[2]]);
+    assert_eq!(garrison::count(&w, b), 2, "the count after removal");
+    assert_eq!(w.obj(b).unwrap().structure.index, 1);
     let beam = weapon_named(&w, "Beam");
-    assert_ne!(
-        weapon::slot_weapon(&w, b, 0),
-        Some(beam),
-        "the next living occupant's weapon"
-    );
+    let occ = weapon_named(&w, "OccGun");
+    assert_ne!(weapon::slot_weapon(&w, b, 0), Some(beam));
+    assert_eq!(weapon::slot_weapon(&w, b, 0), Some(occ), "W's weapon");
     assert_eq!(garrison::current_occupant(&w, b), Some(us[2]));
+    w.effects.clear();
     assert!(glasnost_sim::combat::fire::shot(
         &mut w,
         b,
@@ -440,8 +449,45 @@ fn q0970_dead_occupant_interim() {
     assert_eq!(
         w.obj(b).unwrap().structure.index,
         0,
-        "advanced from the living occupant's place"
+        "advanced from W's place by the new count"
     );
     assert!(garrison::evict(&mut w, b, Evict::PLAIN));
     assert!(on_map(&w, us[0]) && on_map(&w, us[2]));
+}
+
+// spec: S-0508 claim 23 and S-0311 claim 8 (a credited destruction after a death inside gives the experience to the occupant the repaired index names; with no occupant left there is no occupant recipient)
+#[test]
+fn claim_23_experience_follows_the_repaired_index() {
+    let r = rules_with(|_| {});
+    let (mut w, b, us, cart) = fixture(&r, &["GARRI", "GARRI", "GARRI"], 2);
+    w.obj_mut(b).unwrap().structure.index = 1;
+    kill_inside(&mut w, us[1]);
+    let gained = |w: &World, u: ObjectId| {
+        w.obj(u)
+            .unwrap()
+            .combat
+            .experience
+            .to_f64()
+            .gt(glasnost_num::F64::ZERO)
+    };
+    veterancy::destruction_credited(&mut w, cart, Some(b), Some(A));
+    assert!(gained(&w, us[2]), "W, the occupant at the repaired index");
+    assert!(!gained(&w, us[0]));
+    // All of them dead: nobody receives it.
+    kill_inside(&mut w, us[0]);
+    kill_inside(&mut w, us[2]);
+    assert_eq!(garrison::experience_recipient(&w, b), None);
+    assert_eq!(garrison::count(&w, b), 0);
+}
+
+// spec: S-0508 claim 23 and S-0301 claim 7 (the delay quotient uses the count after removal)
+#[test]
+fn claim_23_the_delay_uses_the_count_after_removal() {
+    // Multiplier 1, rate 10: three occupants give 3 to 4, two give 5 to 6, one gives 10 to 12.
+    let r = rules_with(|r| r.sim.general.occupy_rof_multiplier = Some(d("1")));
+    let (mut w, b, us, cart) = fixture(&r, &["GARRI", "GARRI", "GARRI"], 2);
+    kill_inside(&mut w, us[1]);
+    glasnost_sim::combat::fire::shot(&mut w, b, 0, Target::Object(cart));
+    let delay = w.obj(b).unwrap().combat.rearm_delay;
+    assert!((5..=6).contains(&delay), "two occupants: delay {delay}");
 }

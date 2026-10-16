@@ -1107,6 +1107,28 @@ fn animation_fields() {
     );
 }
 
+/// spec: S-0007 claim 34 (an animation's playback and drawing properties come exclusively from its own art section, even when its image name names another section; a missing or empty own property does not inherit the image-named section's value)
+#[test]
+fn animation_properties_are_the_own_sections() {
+    let base = "[Animations]\n0=DAMAGED\n1=OMITS\n";
+    let art = "[DAMAGED]\nImage=SHARED\nStart=3\nRate=450\nShadow=no\n\
+               [OMITS]\nImage=SHARED\nStart=\n\
+               [SHARED]\nStart=7\nRate=9\nShadow=yes\nNormalized=yes\nIsMeteor=yes\nNumParticles=4\nRandomRate=5,6\n";
+    let (s, _) = sim(base, "", art);
+    let damaged = &s.animations["DAMAGED"];
+    assert_eq!(damaged.start, Some(3), "the own start field");
+    assert_eq!(damaged.rate, Some(450));
+    assert_eq!(damaged.shadow, Some(false));
+    assert_eq!(damaged.normalized, None);
+    assert_eq!(damaged.is_meteor, None);
+    assert_eq!(damaged.num_particles, None);
+    assert_eq!(damaged.random_rate, None);
+    let omits = &s.animations["OMITS"];
+    assert_eq!(omits.start, None, "an empty own value: the default, never 7");
+    assert_eq!(omits.rate, None);
+    assert_eq!(omits.shadow, None);
+}
+
 /// spec: S-0202 Import mapping and claim 15 (a particle type's BehavesLike, case-insensitive, unrecognised giving none; MaxEC kept over an empty later value, zero warning unless railgun; ColorList from the last section read only; StartColor1 and StartColor2 byte triples keeping the held components)
 #[test]
 fn particle_fields() {
