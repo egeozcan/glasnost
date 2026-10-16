@@ -166,3 +166,45 @@ fn the_fall_back_release_shares_the_once_per_tick_limit() {
     process::fall_back(&mut w, a, false);
     assert!(!temporal::holds(&w, a, v), "the first one releases");
 }
+
+// spec: S-0518 claim 11 (revision 4) and S-0514 claim 20: a selected charge effect registers an infantry firer on a building it hit and suppresses the lower rows (parasite attachment, erasure, locomotor replacement, designation) and ordinary damage; one that cannot register (a vehicle target, or a firer that is not infantry) still suppresses them and does not fall through
+#[test]
+fn charging_registers_and_suppresses_the_lower_rows_without_falling_through() {
+    type Lower = (&'static str, fn(&mut WarheadType));
+    let rows: [Lower; 4] = [
+        ("parasite", |w| w.parasite = Some(true)),
+        ("erasure", |w| w.temporal = Some(true)),
+        ("locomotor", |w| w.is_locomotor = Some(true)),
+        ("designation", |w| w.airstrike = Some(true)),
+    ];
+    for (name, lower) in rows {
+        // An infantry firer and a building: it is registered, nothing else happens.
+        let (mut w, a, _) = flagged(false, |h| {
+            h.electric_assault = Some(true);
+            lower(h);
+        });
+        let tower = spawn(&mut w, Kind::Building, "TOWER", 1, at(6, 6));
+        let before = health(&w, tower);
+        erase(&mut w, a, tower);
+        assert_eq!(glasnost_sim::linked::chargers(&w, tower), 1, "{name}");
+        assert!(!locked(&w, tower), "{name}: no erasure");
+        assert_eq!(health(&w, tower), before, "{name}: no ordinary damage");
+        // A vehicle target: no registration, no lower effect, no damage.
+        let (mut w, a, v) = flagged(false, |h| {
+            h.electric_assault = Some(true);
+            lower(h);
+        });
+        erase(&mut w, a, v);
+        assert!(!locked(&w, v), "{name}: no erasure of a vehicle");
+        assert_eq!(health(&w, v), 100, "{name}: nothing falls through");
+    }
+}
+
+// spec: S-0614 claim 1 (revision 8, scenario P14) and S-0514 claim 20: parasite attachment, once selected, suppresses temporal erasure and ordinary damage even when the firer carries no parasite; takeover, bomb planting and charging outrank it (their effects, not an attachment, and no erasure)
+#[test]
+fn selected_attachment_suppresses_erasure() {
+    let (mut w, a, v) = flagged(true, |h| h.parasite = Some(true));
+    erase(&mut w, a, v);
+    assert!(!locked(&w, v), "no erasure under a selected attachment");
+    assert_eq!(health(&w, v), 100, "no ordinary damage");
+}

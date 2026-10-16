@@ -1769,7 +1769,7 @@ impl Builder<'_> {
         let mut entries = Vec::new();
         for key in POWERUP_KEYS {
             let state = section.get(key.as_bytes());
-            // spec: S-0520 Import mapping (a key absent while the section exists: weight 0, no animation; the water flag and argument are kept, here the built-in values)
+            // spec: S-0520 Import mapping (a key absent while the section exists: weight 0, no animation; the water flag and argument are kept, here the built-in values); S-0006 claim 5 revision 18 (with quirks.override_resets_keys off an entry that no layer mentions has the switch-off startup value, the reset value: weight 0, no animation)
             let mut weight = 0;
             let mut anim: Option<String> = None;
             let mut water = false;

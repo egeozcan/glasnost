@@ -142,3 +142,70 @@ fn the_break_off_search_takes_no_draw_and_keeps_the_target_when_empty() {
     assert_eq!(o.target, Some(Target::Object(enemy)));
     assert!(!o.combat.charging);
 }
+
+// spec: S-0309 claim 4 (revision 19, scenario A17 part c), S-0518 claim 15 and S-0215 claim 23: the break-off search is not limited by the passive-acquire setting (claim 2) nor by the opportunity gate (claim 3): with both off, the replacement and the mark clearing still occur
+#[test]
+fn the_break_off_ignores_passive_acquisition_and_the_opportunity_gate() {
+    let mut w = world(|r| {
+        let c = r.sim.infantry.get_mut("CHARGER").unwrap();
+        c.combat.can_passive_aquire = Some(false);
+        c.opportunity_fire = Some(false);
+    });
+    spawn(&mut w, Kind::Building, "COIL", 0, at(1, 0));
+    let u = spawn(&mut w, Kind::Infantry, "CHARGER", 0, at(0, 0));
+    assert!(linked::start_charging(&mut w, u));
+    let enemy = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(4, 0));
+    linked::break_off(&mut w, u);
+    let o = w.obj(u).unwrap();
+    assert_eq!(o.target, Some(Target::Object(enemy)));
+    assert!(!o.combat.charging, "the mark clears");
+}
+
+// spec: S-0309 claim 4 (revision 19, scenario A17 part c) and claim 5: the no-auto-fire restriction of a human-owned charger still applies to the break-off search: no result, and both the held building and the mark stay
+#[test]
+fn the_no_auto_fire_restriction_still_limits_the_break_off() {
+    let mut w = world(|r| {
+        r.sim
+            .infantry
+            .get_mut("CHARGER")
+            .unwrap()
+            .combat
+            .no_auto_fire = Some(true);
+    });
+    w.houses[0].role = glasnost_sim::world::HouseRole::Player;
+    let coil = spawn(&mut w, Kind::Building, "COIL", 0, at(1, 0));
+    let u = spawn(&mut w, Kind::Infantry, "CHARGER", 0, at(0, 0));
+    assert!(linked::start_charging(&mut w, u));
+    spawn(&mut w, Kind::Vehicle, "VICT", 1, at(4, 0));
+    linked::break_off(&mut w, u);
+    let o = w.obj(u).unwrap();
+    assert_eq!(o.target, Some(Target::Object(coil)));
+    assert!(o.combat.charging);
+}
+
+// spec: S-0309 claim 4 (revision 19, scenario A17 part c), S-0518 claim 15 and S-0215 claim 23: a nonempty result that is the same object as the held building is accepted: the target stays, the mark clears, so a later enemy does not trigger the special search
+#[test]
+fn a_result_equal_to_the_held_building_clears_the_mark() {
+    let mut w = world(|_| {});
+    let u = spawn(&mut w, Kind::Infantry, "CHARGER", 0, at(0, 0));
+    // The held object is made the sole eligible result of the search (the
+    // identity rule does not depend on the held object being a building).
+    let held = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(4, 0));
+    {
+        let o = w.obj_mut(u).unwrap();
+        o.target = Some(Target::Object(held));
+        o.combat.charging = true;
+    }
+    linked::break_off(&mut w, u);
+    let o = w.obj(u).unwrap();
+    assert_eq!(o.target, Some(Target::Object(held)), "the same object");
+    assert!(!o.combat.charging, "the mark clears");
+    let later = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(3, 0));
+    linked::break_off(&mut w, u);
+    let o = w.obj(u).unwrap();
+    assert_ne!(
+        o.target,
+        Some(Target::Object(later)),
+        "a later enemy does not trigger the special search"
+    );
+}

@@ -1692,7 +1692,8 @@ impl Builder<'_> {
                         None => own_sprite.clone().map(|s| (s, usize::from(d))),
                     }
                 }
-                OverlayRow::Crate => own_sprite.clone().map(|s| (s, 0)),
+                // spec: S-0112 claim 1 row 6 (a crate: the data value, or 0 with quirks.crate_data_value_ignored on)
+                OverlayRow::Crate => own_sprite.clone().map(|s| (s, q.crate_body_frame(d))),
                 OverlayRow::Wall | OverlayRow::Vein | OverlayRow::Other => {
                     own_sprite.clone().map(|s| (s, usize::from(d)))
                 }
@@ -1757,7 +1758,8 @@ impl Builder<'_> {
             let shadow: Option<(Vec<u8>, usize)> = if flags.crate_ {
                 own_sprite.map(|s| {
                     let n = self.sprite_frames(&s).unwrap_or(0);
-                    (s, n / 2)
+                    // spec: S-0112 claim 8 precedence 1 (N/2, or the data value + N/2 with quirks.crate_data_value_ignored off)
+                    (s, q.crate_shadow_frame(d, n))
                 })
             } else if flags.rubble {
                 None

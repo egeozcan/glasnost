@@ -1654,3 +1654,53 @@ fn s0513_claim_34_warp_releases_a_naval_parasite_with_suppression() {
     assert_eq!(parasite::host_of(&w, squid), None);
     assert_eq!(ps(&w, squid).suppressed_until, Some(t + 500));
 }
+
+/// Runs until the parasite's projectile has ended.
+fn shoot_to_end(w: &mut World, p: ObjectId) {
+    for _ in 0..200 {
+        if ps(w, p).carrier.is_none() {
+            return;
+        }
+        testkit::run(w, 1);
+    }
+    panic!("the projectile never ended");
+}
+
+// spec: S-0614 claims 1, 3 and 4 (revision 8, scenario P14) and S-0514 claim 20: attachment is the selected special hit only when no higher row (takeover, bomb planting, charging) is enabled; the firing-time departure and the latch block still happen, the higher row suppresses attachment and the ordinary damage (Q-1032 is open for what becomes of the carried parasite: not asserted)
+#[test]
+fn p14_a_higher_row_suppresses_attachment() {
+    type Higher = (&'static str, fn(&mut WarheadType));
+    let rows: [Higher; 3] = [
+        ("takeover", |h| h.mind_control = Some(true)),
+        ("bomb planting", |h| h.ivan_bomb = Some(true)),
+        ("charging", |h| h.electric_assault = Some(true)),
+    ];
+    for (name, set) in rows {
+        let mut r = ruleset();
+        set(r.sim.warheads.get_mut("Grip").unwrap());
+        let mut w = game_of(&r);
+        let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+        let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+        let t = w.tick;
+        let h0 = health(&w, host);
+        assert!(fire::shot(&mut w, p, 0, Target::Object(host)));
+        assert!(!w.obj(p).unwrap().on_map, "{name}: it left the map");
+        assert_eq!(ps(&w, host).latch_block_until, Some(t + 20), "{name}");
+        shoot_to_end(&mut w, p);
+        assert_eq!(parasite::host_of(&w, p), None, "{name}: no attachment");
+        assert_eq!(health(&w, host), h0, "{name}: no ordinary damage");
+    }
+}
+
+// spec: S-0614 claim 3 (revision 8, scenario P14) and S-0514 claim 20: with attachment selected, enabling temporal erasure as well changes nothing: the parasite attaches
+#[test]
+fn p14_selected_attachment_outranks_erasure() {
+    let mut r = ruleset();
+    r.sim.warheads.get_mut("Grip").unwrap().temporal = Some(true);
+    let mut w = game_of(&r);
+    let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+    let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+    assert!(fire::shot(&mut w, p, 0, Target::Object(host)));
+    shoot_to_end(&mut w, p);
+    assert_eq!(parasite::host_of(&w, p), Some(host));
+}

@@ -348,6 +348,31 @@ fn claim_5_defeat() {
     assert!(!victory::ended(&w), "two hostile contenders remain");
 }
 
+// spec: S-0414 claim 5 (revision 14, permanent-control rows): an object whose owner changed for good, with no controlling unit, is hit when its current owner is defeated and not hit when its former owner is; no pre-domination owner is remembered
+#[test]
+fn claim_5_permanent_control_follows_the_current_owner() {
+    use glasnost_sim::structures::ownership::{self, Cause};
+    let alive = |w: &World, x: ObjectId| w.obj(x).is_some_and(|o| o.health > 0 && o.on_map);
+    // The former owner (Beta) is defeated: the building Alpha holds survives.
+    let mut w = scene(false).build();
+    let [_, b, _] = armed(&mut w);
+    let hut = spawn(&mut w, Kind::Building, "INSB", 1, 8, 8);
+    ownership::change(&mut w, hut, Some(A), Cause::Capture);
+    kill(&mut w, b);
+    common::run(&mut w, 2);
+    assert!(defeated(&w, B));
+    assert!(alive(&w, hut), "not hit with the former owner's defeat");
+    // The current owner (Alpha) is defeated: the building is hit.
+    let mut w = scene(false).build();
+    let [a, _, _] = armed(&mut w);
+    let hut = spawn(&mut w, Kind::Building, "INSB", 1, 8, 8);
+    ownership::change(&mut w, hut, Some(A), Cause::Capture);
+    kill(&mut w, a);
+    common::run(&mut w, 2);
+    assert!(defeated(&w, A));
+    assert!(!alive(&w, hut), "hit with the current owner's defeat");
+}
+
 // spec: S-0414 claim 6 (the end test after a defeat: allied victory; one-way alliances do not end it; a person's defeat does not end the game while its allies fight)
 #[test]
 fn claim_6_end_test() {

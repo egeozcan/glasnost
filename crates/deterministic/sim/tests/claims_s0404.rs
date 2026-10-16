@@ -1822,3 +1822,40 @@ fn claim_6_cancelled_spawner_takes_its_slots() {
     production::cancel(&mut w, HouseId(0), tank, false);
     assert_eq!(slots(&w), 0);
 }
+
+// spec: S-0404 claim 7 (revision 18, scenario P7 acquisition-order runs): acquisition order ranks a captured or transferred building after every building the new owner already held, whatever the creation order; losing and reacquiring gives a new, later rank; an unchanged-owner assignment is no reacquisition; acquisitions in one tick rank by the order their events take effect, not by object number
+#[test]
+fn claim_7_acquisition_order_of_the_releasing_building() {
+    use glasnost_sim::structures::ownership::{self, Cause};
+    let mut w = game(&ruleset());
+    let tank = t(&w, Kind::Vehicle, "TANK");
+    let cap = |w: &mut glasnost_sim::world::World, b, h: u8| {
+        ownership::change(w, b, Some(HouseId(h)), Cause::Capture);
+    };
+    let rel = |w: &glasnost_sim::world::World| production::releasing_building(w, HouseId(0), tank);
+    // A is created before B; B is acquired first (placed for house 0), A is captured later: A releases.
+    let a = building(&mut w, "WARFACT", 1, -6, 0);
+    let b = building(&mut w, "WARFACT", 0, 4, 0);
+    assert_eq!(rel(&w), Some(b));
+    cap(&mut w, a, 0);
+    assert_eq!(rel(&w), Some(a), "the captured building ranks last");
+    // B is transferred away and reacquired while A stays owned: B releases.
+    cap(&mut w, b, 1);
+    assert_eq!(rel(&w), Some(a));
+    cap(&mut w, b, 0);
+    assert_eq!(rel(&w), Some(b), "reacquiring gives a later rank");
+    // An unchanged-owner assignment is no reacquisition: B still.
+    cap(&mut w, a, 0);
+    assert_eq!(rel(&w), Some(b));
+    // Both acquired in one tick, in the reverse of their creation order: the last event releases.
+    cap(&mut w, b, 1);
+    cap(&mut w, a, 1);
+    cap(&mut w, b, 0);
+    cap(&mut w, a, 0);
+    assert_eq!(rel(&w), Some(a));
+    cap(&mut w, a, 1);
+    cap(&mut w, b, 1);
+    cap(&mut w, a, 0);
+    cap(&mut w, b, 0);
+    assert_eq!(rel(&w), Some(b), "event order, not object number");
+}

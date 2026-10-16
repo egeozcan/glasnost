@@ -294,3 +294,24 @@ fn crate_state_survives_a_save_and_load() {
     assert_eq!(glasnost_sim::save::state_hash(&w2), h);
     assert_eq!(w2.crates, w.crates);
 }
+
+// spec: S-0524 claim 4 (revision 9, scenario C4): the number slot exactly 20 stores the random value 255; every other input stores its reduction modulo 256 as the overlay data value, even when that reduction is 20 (276 stores 20, not 255); 19 stays 19, 21 stays 21, 255 stays 255, 256 stores 0 and -1 stores 255; stored values 19 to 255 pick randomly at pickup
+#[test]
+fn trigger_crates_store_the_exact_reduction_of_the_number_slot() {
+    for (slot, want) in [
+        (19, 19u8),
+        (20, 255),
+        (21, 21),
+        (255, 255),
+        (256, 0),
+        (276, 20),
+        (-1, 255),
+        (5, 5),
+        (18, 18),
+    ] {
+        let mut w = world_with(false, |_| {});
+        let c = at(2, 2);
+        assert!(crates::place_trigger(&mut w, c, slot), "slot {slot}");
+        assert_eq!(w.cells.cell(c).unwrap().overlay_data, want, "slot {slot}");
+    }
+}

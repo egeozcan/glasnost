@@ -136,7 +136,7 @@ fn layered_with(
         .expect("a table")
 }
 
-// spec: S-0520 claim 28 and S-0006 claim 5 (quirks.override_resets_keys off: an omitted entry retains all four held values; an entry no layer mentions has the fixed default of S-0006's switch-off paragraph, weight 0 and no animation: Q-1034 asks whether S-0520's built-in table applies instead)
+// spec: S-0520 claim 28 and S-0006 claim 5 (quirks.override_resets_keys off: an omitted entry retains all four held values; an entry no layer mentions has the fixed default of S-0006's switch-off paragraph, weight 0 and no animation: S-0006 revision 18 states this design default apart from S-0520's built-in start table; revision 20 reverses it)
 #[test]
 fn the_power_up_table_with_the_reset_switch_off() {
     let quirks = crate::layers::LayerQuirks {
@@ -151,7 +151,10 @@ fn the_power_up_table_with_the_reset_switch_off() {
     );
     assert_eq!(a[0].argument.as_ref().map(|d| d.0.as_str()), Some("200"));
     assert_eq!(a[1].weight, 7);
-    assert_eq!(a[3].weight, 0, "never mentioned (Q-1034)");
+    assert_eq!(
+        a[3].weight, 0,
+        "never mentioned: the switch-off default of S-0006 claim 5"
+    );
 }
 
 const LAYER_BASE: &str =
