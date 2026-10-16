@@ -1,9 +1,9 @@
 ---
 id: Q-1131
 title: The proposed switch for a teleporting vehicle's suppressed assignment, and what its off position does with the suppression
-status: open
+status: answered
 related: [S-0207, S-0215, S-0514]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need

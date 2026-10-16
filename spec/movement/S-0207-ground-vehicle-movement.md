@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 36
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-17
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131]
 supersedes: []
 ---
 
@@ -2410,14 +2410,16 @@ its new destination from that tick.
   cell in whatever behaviour it has, so after arriving it does what that behaviour does with no
   destination (S-0215). Original behaviour, no switch.
 - **A teleporting vehicle keeps a destination without a landing point under pending suppression**
-  (claim 27, Q-1130). Original behaviour, selected by `quirks.teleport_suppression_keeps_destination`
-  (proposed name; default: the original behaviour). The state arises from a pending suppression at
-  an assignment to a teleporting vehicle in any state (claim 27, Q-1130 table, second row), so it
-  is not limited to disabled, held, erased or phasing-in vehicles. Off (proposed alternative): the
-  suppressed assignment is handled by claim 20 (a) as an ordinary one, with the destination dropped
-  in those four states and a landing point fixed in the others. No ordinary or scripted play is
-  known to reach the state (claim 27, reachability). The destination stays and no jump follows until
-  a later effective assignment. Whether the switch exists, and its default, are for the project lead (Q1).
+  (claim 27, Q-1130, answering Q-1131). Original behaviour, with no quirk switch, by lead decision
+  on Q-1131. The rule is stated as the claim: the state arises from a pending suppression at an
+  assignment to a teleporting vehicle in any state (claim 27, Q-1130 table, second row), so it is not
+  limited to disabled, held, erased or phasing-in vehicles. The destination stays, no landing point
+  is fixed, the suppression is consumed and no jump follows until a later effective assignment. The
+  reason there is no switch: no ordinary or scripted play is known to reach the state (claim 27,
+  reachability), so a switch would select between two behaviours nobody can observe. Consequently
+  the exceptions that S-0215 claim 2 and S-0514 claim 17 make for a vehicle under pending
+  suppression (the destination is kept while erased or in the leaving stage) apply
+  unconditionally; there is no alternative position in which they are removed.
 
 ## Import mapping
 
