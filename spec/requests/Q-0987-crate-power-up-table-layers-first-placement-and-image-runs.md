@@ -1,9 +1,9 @@
 ---
 id: Q-0987
 title: The power-up table across rules layers, the first placement test of a unit crate, the picture count of an image run, and the stored value of random contents
-status: open
+status: answered
 related: [S-0520, S-0006, S-0003, S-0112, S-0212, S-0401]
-answered-by: []
+answered-by: [S-0520]
 ---
 
 ## Need

@@ -54,7 +54,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 17 | approved | — |
 | [S-0307](combat/S-0307-range.md) | Weapon range test | combat | 15 | approved | — |
 | [S-0412](simulation/S-0412-skirmish-setup-rules.md) | Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings) | simulation | 13 | approved | — |
-| [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 2 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 13 | approved | — |
 | [S-0303](combat/S-0303-area-damage.md) | Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects) | combat | 16 | approved | — |
 | [S-0605](structures/S-0605-infantry-absorber.md) | Infantry absorber (who may enter an absorbing building, entry, holding, release) | structures | 1 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 5 | approved | — |
 | [S-0518](combat/S-0518-linked-weapons.md) | Linked weapons (prism support beams, charging of overpowerable buildings) | combat | 3 | approved | — |
 | [S-0519](combat/S-0519-terror-attack-animals.md) | Terror and attack animals | combat | 3 | approved | — |
+| [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 3 | approved | — |
