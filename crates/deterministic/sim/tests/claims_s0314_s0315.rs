@@ -466,6 +466,7 @@ fn claims_9_and_10_leaving_stage_skips_healing() {
         redirected: false,
         fell_back: false,
         refused: false,
+        entry_ok: false,
     });
     let g = gains(&mut w, &[held, free], 46);
     // The control gains 1 at multiples of 14 (self-healing) and 4 at multiples of 15 (house-wide).
