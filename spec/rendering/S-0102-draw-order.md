@@ -2,7 +2,7 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -95,6 +95,7 @@ screen rows.
 | standing-pose state | A per-unit on/off state of a vehicle drawn as a sprite. It chooses between the rows of claim 22's image-frame table. It is on when the vehicle is created, turns off when the vehicle starts a movement step and on again when the step ends (claim 22). |
 | overlay shadow level *ℓ*<sub>s</sub> | The height level of the cell that holds an overlay, without the 4 levels that a bridge deck adds to *ℓ* (claim 13). It sets the depth bias of the overlay's shadow image frame. |
 | game-wide tree strength | A game-wide integer, in health points, that a terrain type takes as its strength when no rules layer gives the type a strength (claim 23, Import mapping). |
+| absent-pixel-data frame | An image frame for which the shape-file format declares no pixel data, independently of its declared rectangle. This is not a rectangle with zero width or height, nor a readable image filled with zero-valued samples. The byte encoding belongs to the shape-file format, not this rendering spec. |
 
 ## Behaviour
 
@@ -704,7 +705,8 @@ screen rows.
       frame plus ⌊*N*/2⌋, has the bias of claim 13 and lies under that combined image: unlike
       claim 28, the shadow never darkens the vehicle's own body or turret pixels.
     - Backing: `measurable`: the facing part and the walking and standing rows D29 (a), the
-      standing-pose state at placement and after a move D29 (f); the turret
+      standing-pose state at placement and after a move D29 (f); stationary idle
+      stepping D29 (g); the turret
       path D29 (c) (the turret flag set through the override section); facing counts other than 8
       D29 (d) and the dying row and death counter D29 (e), both with a named loose copy of the art
       file. `unmeasured` for the firing row: which shots start the firing counter is not settled
@@ -896,7 +898,7 @@ screen rows.
     round to the imported facing count, with halves going clockwise. This includes counts 2 and 4,
     not a rounded rotation applied after choosing the coarse facing. Disguise and unsupported
     counts still give part 0. This is our engine's alternative, not behaviour of the original
-    (Q-0050 part 2); revision 5 already defined it.
+    (Q-0050 part 2).
     - Backing: `unmeasured`, because the original has no such alternative to observe; engine test
       D37 checks the definition. The original's rule is claim 22, tested by D29.
     - Confidence: high, as the definition of the alternative
@@ -969,11 +971,11 @@ screen rows.
     supply enough readable pixel data for the whole canvas to isolate the empty
     rectangle's drawing result.
 
-    With positive canvas width and height, image frame 0 whose pixel-data position
-    is 0 makes the original fail during loading, even when its stored rectangle is
-    non-empty and otherwise valid. The skirmish never reaches play: there is no
-    eligible-body drawing or body depth-writing result to observe in that game.
-    Adding unused payload bytes does not make a zero pixel-data position usable.
+    With positive canvas width and height, an absent-pixel-data frame 0 makes the
+    original fail during loading, even when its declared rectangle is non-empty
+    and otherwise valid. The skirmish never reaches play: there is no eligible-body
+    drawing or body depth-writing result to observe in that game. Adding unused
+    image bytes without supplying the frame's missing pixel data does not repair it.
 
     A truncated or non-shape file has no uniform original outcome. The original does
     not reliably reject such input before using its contents; it can fail during
@@ -988,21 +990,25 @@ screen rows.
     an empty companion or with a full-coverage zero-valued companion; those produce
     different pictures. A valid, decodable empty frame rectangle is not failed input:
     retain its empty coverage, with no body pixels or body depth writes and no warning
-    solely for being empty. For this shared companion specifically, a non-empty
-    frame rectangle with pixel-data position 0 counts as failed input, even if a
-    general shape-file decoder accepts it as a frame with no pixels: warn and use
-    the no-companion upright fallback, not empty coverage. This is not a change to
-    decoding other sprites. Widths of 8 cells or more and opening/closing gates already
+    solely for being empty. For this shared companion specifically, an
+    absent-pixel-data frame with a non-empty declared rectangle counts as failed
+    input, even if a general shape-file decoder accepts it as a frame with no
+    pixels: warn and use the no-companion upright fallback, not empty coverage.
+    This is not a change to decoding other sprites. Widths of 8 cells or more and opening/closing gates already
     use no companion under F5 and are unchanged. Remembered bodies use the same recovery
     as live bodies; separate building parts retain their own rules. There is no quirk
     switch for this bad-data departure.
-    - Backing: `measurable` (D42 for missing-file and specified zero-frame/empty-frame
-      cases, including the zero pixel-data position; engine fixtures for safe recovery). The absence of a uniform outcome over
-      all malformed files is `unmeasured`: arbitrary invalid bytes and unrelated runtime
-      state cannot be exhaustively observed; D42 records selected examples only.
+    - Backing: `measurable` (D42 for missing-file, positive-canvas zero-frame,
+      absent-pixel-data and readable empty-rectangle cases; engine fixtures for safe
+      recovery). Degenerate-canvas loading is `unmeasured`: avoiding one loading
+      failure does not establish that play is reached, so D42 records those outcomes
+      exploratorily and tests empty coverage only if play is reached. The absence of
+      a uniform outcome over all malformed files is `unmeasured`: arbitrary invalid
+      bytes and unrelated runtime state cannot be exhaustively observed; D42 records
+      selected examples only.
     - Confidence: high for missing-file failure, positive-canvas zero-frame failure,
-      positive-canvas zero pixel-data position failure, empty coverage and the defined departure; medium for degenerate-canvas loading
-      and the unspecified malformed-input outcomes
+      positive-canvas absent-pixel-data failure, empty coverage and the defined departure,
+      medium for degenerate-canvas loading and the unspecified malformed-input outcomes
 
 ### Protection colours
 
@@ -1436,11 +1442,18 @@ companions use plain upright depth, while a valid empty rectangle retains empty 
 
 ## Import mapping
 
+Every row whose source is **art, animation** uses the animation type's own art section
+(section = animation type name), exclusively, at every type read. There is no fallback to
+the image-named section when an own-section property is missing or empty (S-0007 claim 34).
+The defaults below are initial defaults; later omission retains the held value. This applies
+to building slot animations and independent effects alike. Section selection is covered by
+S-0007 claim 34's confidence and scenario A25; palette precedence remains S-0103 claim 8.
+
 | Source | Key | Feeds | Parse | Default when absent |
 |---|---|---|---|---|
 | rules, `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | curtain and force-shield mask selectors in claim 34 | zero-based integer positions, not colour-definition names | 0 each; later omission retains the selector, S-0513 Import mapping |
 | rules, `[ColorAdd]` | entries in section order | claim 34's RGB byte triples, packed by F9 | three bytes, S-0003 colour triples; entry names do not select positions | initially 16 black triples; layer retention/clearing is S-0006 claim 2 |
-| art, animation | `ShouldUseCellDrawer`, `UseNormalLight` | building-palette/stored-brightness choice and fixed neutral brightness override in claim 34 | booleans; full palette precedence is S-0103 claim 8 | no each |
+| art, animation | `ShouldUseCellDrawer`, `UseNormalLight` | building-palette/stored-brightness choice and fixed neutral brightness override in claim 34 | booleans; full palette precedence is S-0103 claim 8 | yes; no |
 | none | none | building-animation mark in claim 34 | runtime property assigned to building slot animations, not an attachment or a new imported colour flag | ordinary animations do not inherit it merely by attachment |
 | rules, `[JumpjetControls]` | `CruiseHeight` | global cruise height: air/top threshold for objects without own movement rules | integer, leptons | 400, until a rules layer first gives the key in the session; after that a game-wide key keeps the value an earlier game of the session gave it (S-0006, claim 10) |
 | rules, unit type | `JumpjetHeight` | jumpjet cruise height of that type (air/top threshold); raised to 208 if smaller | integer, leptons | 500 |
@@ -1452,7 +1465,7 @@ companions use plain upright depth, while a valid empty rectangle retains empty 
 | rules, building type | the key for the searchlight flag; no stock type sets it | the building has a building light effect, created when the building is placed (claim 3); used by D19 (e) | boolean | no |
 | art, building image | `NormalZAdjust` | building's normal depth adjustment (body in the cell pass) | integer, depth units | 0 |
 | art, building image | `ZShapePointMove` | sampling displacement (*mₓ*, *mᵧ*) in F5; positive values move coverage left/up; omitted for live construction/selling | two integers, pixels | 0, 0 |
-| game data file | `BUILDNGZ.SHA`, image frame 0 | shared companion for eligible building bodies (claims 31 and 33, F5); neither a per-building image selector nor a palette | shape file; frame rectangle and byte samples, decoded by F5; a valid empty rectangle retains empty coverage; non-empty frame 0 with pixel-data position 0 is failed companion input, not empty coverage | missing/unreadable file, zero frames, undecodable frame 0 or non-empty frame 0 with pixel-data position 0: warn and use no companion, plain upright F2 with the existing bias and depth writes (claim 33) |
+| game data file | `BUILDNGZ.SHA`, image frame 0 | shared companion for eligible building bodies (claims 31 and 33, F5); neither a per-building image selector nor a palette | shape file; frame rectangle and byte samples, interpreted by F5; a valid readable empty rectangle retains empty coverage; an absent-pixel-data frame with a non-empty rectangle is failed companion input, not empty coverage | missing/unreadable file, zero frames, undecodable frame 0 or absent-pixel-data frame 0 with a non-empty rectangle: warn and use no companion, plain upright F2 with the existing bias and depth writes (claim 33) |
 | art, building image | `Foundation` | width/height and last-cell displacement in F5 | foundation form of S-0108 claim 8 | S-0108 claim 8 |
 | art, building image | `SpecialZOverlay`, `SpecialZOverlayZAdjust` | an image and an adjustment that are read but have no known effect on drawing: no drawing of this image was found | image name; integer (no unit stated, since no effect is known) | none; 0 |
 | art, building image | `BibShape` | the building's bib | image name | none (no bib) |
@@ -2115,6 +2128,18 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     from the expected image frames (image frame *d* while turning would show a state turned off before the
     turn).
 
+  - (g) Idle stepping. Keep the vehicle stationary and not firing, on the same open
+    cell. Use a named art fixture with at least four distinguishable walking frames,
+    no firing frames and one facing. In separate runs set its idle rate to 0, 3 and
+    5 ticks through the map override. Record displayed frames with tick numbers for
+    60 ticks after placement. Expected: rate 0 keeps the standing image, whereas
+    each positive rate selects the walking row and advances its walk counter by one
+    precisely on tick numbers divisible by that rate, wrapping by the walking frame
+    count. Compare successive frames rather than assuming an initial counter value.
+    An advance at any other tick, a missing advance on a multiple, or a non-walking
+    row at a positive idle rate falsifies the corresponding rule. Remove named art
+    after the test.
+
 - **D30, darkening (claim 26).** Setup: a flat map at level 0 with the test lighting of S-0104 and a
   display path that presents a 5-6-5 surface (S-0103, *Reading a pixel*). An infantry unit stands
   still on bare ground. Procedure: capture the ground pixels inside its shadow's outline; move the
@@ -2380,25 +2405,27 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     Expected: loading fails before play. Reaching play falsifies that claim.
   - Supply a valid zero-frame shape file, first with canvas 16 × 16 pixels, then with
     canvas 0 × 16 and 16 × 0 pixels. Expected: the positive-canvas case fails while
-    loading; degenerate-canvas cases can reach play and show no eligible body pixels.
-    A successfully drawn body in a degenerate case, or play reached in the positive
-    case, falsifies the corresponding prediction.
+    loading; reaching play falsifies that prediction. Degenerate-canvas loading is
+    exploratory: record whether play is reached, without predicting success. If it
+    is reached, expect no eligible body pixels or body-induced probe occlusion.
+    Either would falsify empty coverage. A loading failure in a degenerate case
+    says nothing about the conditional drawing result.
   - Supply image frame 0 with rectangle 0 × 16, then 16 × 0 pixels, using an
-    uncompressed test file with canvas 16 × 16 and a nonzero pixel-data position
-    followed by 256 readable zero bytes. Expected: play is reached, body pixels and
+    uncompressed test file with canvas 16 × 16 and readable pixel data containing
+    256 zero-valued samples. Expected: play is reached, body pixels and
     body depth writes are absent, while separately enabled parts retain their rules.
     A visible body or body-induced probe occlusion falsifies empty coverage. Separately
     omit the pixel payload: loading failure does not falsify the drawing-only result.
-  - Supply a one-frame file with canvas and frame rectangle both 16 × 16 pixels,
-    pixel-data position 0, and no payload. Repeat with 256 unused bytes appended,
-    leaving the position 0. Expected in both: loading fails before play, independently
-    of body eligibility. Reaching play falsifies this prediction; if it does, record
-    body pixels and probe occlusion rather than assuming omission or upright depth.
+  - Supply a one-frame file with canvas and declared frame rectangle both
+    16 × 16 pixels, using an absent-pixel-data frame. Repeat with 256 unused
+    image bytes added, without changing that frame's absent-data classification.
+    Expected in both: loading fails before play, independently of body eligibility.
+    Reaching play falsifies this prediction; if it does, record body pixels and probe occlusion rather than assuming omission or upright depth.
   - Try a header-only truncated one-frame file and a non-shape file of named fixed
     bytes. Record each outcome, without generalising it to all malformed input.
     No uniform crash, omission or upright-fallback outcome is predicted for this pair.
   - Replay all variants on our engine and in its map-view scene fixture. Missing,
-    zero-frame, truncated, non-shape and non-empty zero pixel-data position inputs
+    zero-frame, truncated, non-shape and non-empty absent-pixel-data inputs
     must warn and draw the narrow body
     with its unchanged bias and plain upright F2, writing depth. Valid empty frame
     rectangles must draw no body and write no body depth, with no empty-only warning.
@@ -2487,7 +2514,7 @@ rows were not a substitute. No part remains open between these two specs.
 
 Q-0520 is fully answered by claim 33, the shared-file Import mapping and D42.
 Claims 31 and 33 already distinguished readable empty coverage from failed input,
-but had not explicitly classified a non-empty frame with pixel-data position 0.
+but had not explicitly classified an absent-pixel-data frame with a non-empty rectangle.
 It fails original loading on a positive canvas; our engine warns and draws the
 eligible body with no companion and plain upright depth. No requested part remains open.
 
