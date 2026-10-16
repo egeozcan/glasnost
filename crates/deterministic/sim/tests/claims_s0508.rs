@@ -729,6 +729,7 @@ fn claim_14_reversed_kill_credit() {
 fn assault_animations(n: usize, points: Vec<[i32; 2]>, index: u32) -> (Vec<(i32, i32)>, World, ObjectId) {
     let mut r = ruleset();
     r.sim.buildings.get_mut("HUT").unwrap().garrison_muzzles = Some(points);
+    r.sim.buildings.get_mut("HUT").unwrap().max_number_occupants = Some(21);
     r.sim.weapons.get_mut("Rifle").unwrap().occupant_anim = Some("OCCA".into());
     let mut w = game_on(&r, Default::default());
     let b = civ_hut(&mut w, "HUT", 0, 0);
@@ -775,6 +776,41 @@ fn claim_14_animation_points_follow_the_list_position() {
     assert_eq!(anims, vec![expect(&w, b, 0)]);
     // The three points are distinguishable.
     assert_ne!(expect(&w, b, 0), expect(&w, b, 1));
+}
+
+// spec: S-0508 claim 25 and S-0313 claim 6 (engine design rule, answers Q-0990; G19): an occupant removed at list position i >= 10 shows its animation at point i mod 10; counts 10, 11, 12 and 21 give positions 10, 11 and 20 the points 0, 1 and 0; positions 0 through 9 use their own numbers; independent of the configured-point count and the firing index; a missing point is the default pair (0, 0)
+#[test]
+fn claim_25_positions_ten_and_later_use_the_remainder() {
+    let points: Vec<[i32; 2]> = (0..10).map(|k| [3 + 7 * k, 5 + 11 * k]).collect();
+    let b0 = at(0, 0);
+    for index in [0, 4] {
+        for n in [10usize, 11, 12, 21] {
+            let (anims, w, b) = assault_animations(n, points.clone(), index);
+            assert_eq!(anims.len(), n, "one animation per occupant");
+            // Created from the last list position down to position 0.
+            for (created, pos) in anims.iter().enumerate() {
+                let i = n - 1 - created;
+                let (dx, dy) = garrison::assault_shift(&w, b, i % 10);
+                assert_eq!(*pos, (256 * b0.x + dx, 256 * b0.y + dy), "position {i} of {n}");
+            }
+            assert_eq!(garrison::count(&w, b), 0);
+            assert_eq!(w.obj(b).unwrap().structure.index, 0);
+        }
+    }
+    // Positions 10, 11 and 20 use points 0, 1 and 0: pairs distinguish them.
+    let (anims, w, b) = assault_animations(21, points.clone(), 0);
+    let at_point = |k: usize| {
+        let (dx, dy) = garrison::assault_shift(&w, b, k);
+        (256 * b0.x + dx, 256 * b0.y + dy)
+    };
+    assert_ne!(at_point(0), at_point(1));
+    assert_eq!(anims[21 - 1 - 10], at_point(0));
+    assert_eq!(anims[21 - 1 - 11], at_point(1));
+    assert_eq!(anims[21 - 1 - 20], at_point(0));
+    // Point 0 omitted and point 1 set: position 10 is the default pair, not another point.
+    let (anims, w, b) = assault_animations(12, vec![[0, 0], [9, 13]], 0);
+    let _ = w;
+    assert_eq!(anims[12 - 1 - 10], (256 * b0.x, 256 * b0.y));
 }
 
 // spec: S-0508 claim 14 and Import mapping (no wrapping by the number of configured points: a point the art does not give keeps the default (0, 0), not point 0)

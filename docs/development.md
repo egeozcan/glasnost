@@ -862,11 +862,7 @@ S-0508 (revision 7) is built in `glasnost_sim::structures` (`garrison`, `entry`,
 - **Client.** The click is S-0214 row I8 (already in `targeting::click`, with the capture cursor). The live view draws the map's occupiable buildings with the game's own buildings (`mapview::live`, `live_gates`), and the body frame of an occupiable building is 2·[occupied] + [hurt] (S-0108 claim 2, `quirks::occupiable_frame`). The lane scene `garrison` (`crates/app/tests/m6c_lane.rs`) sends three occupiers into a map-placed building, puts them out with a deploy order and writes `local-lane/m6c/garrison-empty.png`, `garrison-occupied.png` and `garrison-evicted.png`.
 - **Own AI.** See *Own AI (M6c: special abilities)* below.
 
-Provisional rules of the garrisons, each tied to a request (Q-0970 to Q-0973 are answered by S-0508 revision 7 and their interim rules are gone):
-
-| Where | Interim rule | Request |
-|---|---|---|
-| `garrison::assault` | a removed occupant at list position 10 or later (a building with a capacity above 10, user data only) shows no animation; it is still credited and removed in reverse list order | Q-0990 |
+There are no provisional rules of the garrisons left: Q-0970 to Q-0973 are answered by S-0508 revision 7, and Q-0990 (assault animation at list position 10 or later) by revision 8's claim 25, engine design rule with no quirk switch: `garrison::assault` shows the animation of list position *i* at muzzle point *i* mod 10, whatever the number of configured points, the occupant count or the firing index (S-0313 claim 6 points to it).
 
 ## Simulation (M6c: engineers and capture)
 
