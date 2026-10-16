@@ -773,7 +773,7 @@ fn immune_deployed(w: &mut World, id: ObjectId) -> i32 {
     // spec: S-0215 claim 31 (R = trunc(W / 3), integer division by the radiation threshold divisor 3; W the secondary slot's radiation level)
     let level = crate::combat::weapon::slot_weapon(w, id, 1)
         .map_or(0, |wp| w.rules().combat.weapon(wp).rad_level);
-    let threshold = level / 3;
+    let threshold = level / 3; // spec: S-0215 claim 31 (R = trunc(W / 3), the radiation threshold divisor)
     // spec: S-0215 claim 31 and S-0525 claim 7 (only a field centred on the unit's cell counts, by its current integer field level)
     let suppressed = crate::radiation::centre_field_level(w, cell).is_some_and(|l| l >= threshold);
     let target = Target::Cell(cell);

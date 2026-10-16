@@ -29,9 +29,9 @@ pub struct FieldLight {
     /// The intensity drop of one light step, Δ*I* (F2).
     pub step: i32,
     /// The tint at the field's making or latest top-up, ‰ per channel.
-    pub tint_start: [i32; 3],
+    pub tint_start: [i32; 3], // spec: S-0525 F7 (three tint channels)
     /// The current tint, ‰ per channel.
-    pub tint: [i32; 3],
+    pub tint: [i32; 3], // spec: S-0525 F7 (three tint channels)
 }
 
 /// One radiation field (S-0525 Terms).
@@ -75,7 +75,7 @@ pub struct LightSource {
     /// The intensity, ‰.
     pub intensity: i32,
     /// The tint, ‰ per channel.
-    pub tint: [i32; 3],
+    pub tint: [i32; 3], // spec: S-0525 F7 (three tint channels)
 }
 
 /// All radiation of a game.
@@ -137,7 +137,7 @@ fn square(w: &World, centre: CellXY, s: i32) -> Vec<CellXY> {
         return Vec::new();
     }
     let fp = w.cells.footprint();
-    let lim = fp.width.saturating_add(fp.height).saturating_add(2);
+    let lim = fp.width.saturating_add(fp.height).saturating_add(2); // spec: S-0525 F1 (distance in the plane: 256 leptons per cell)
     let lo = |v: i32| v.saturating_sub(s).max(0);
     let hi = |v: i32| v.saturating_add(s).min(lim);
     let mut out = Vec::new();
@@ -167,7 +167,7 @@ fn contribution(w: &World, centre: CellXY, reach: i32, level: i32, c: CellXY) ->
     let dx = i64::from(c.x) - i64::from(centre.x);
     let dy = i64::from(c.y) - i64::from(centre.y);
     let dz = i64::from(ground(w, c)) - i64::from(ground(w, centre));
-    let n = (dx * 256).pow(2) + (dy * 256).pow(2) + dz.pow(2);
+    let n = (dx * 256).pow(2) + (dy * 256).pow(2) + dz.pow(2); // spec: S-0525 F1 (reach R = 256 s + 128)
     // spec: S-0525 F1 (d = ⌊√ₜ(n)⌋, the table square root of S-0204 F1)
     let d = root_floor(n as u64, r.quirks.table_root_distance, mode) as i64;
     let big_r = i64::from(reach);
@@ -229,9 +229,9 @@ fn make_light(w: &World, level: i32, duration: i32) -> FieldLight {
     if w.theater == Theater::Snow {
         // spec: S-0525 claim 15 (on a snow-theater map the red and blue channels are −128 before the conversion)
         colour[0] = -128;
-        colour[2] = -128;
+        colour[2] = -128; // spec: S-0525 F1 (squared lepton differences)
     }
-    let mut tint = [0; 3];
+    let mut tint = [0; 3]; // spec: S-0525 claim 15 (snow: red and blue −128)
     for (t, k) in tint.iter_mut().zip(colour) {
         // spec: S-0525 F7 (q_c = trunc(1000 × κ_c / 255), toward zero)
         let q = 1000 * k / 255;

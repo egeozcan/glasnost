@@ -722,7 +722,7 @@ pub struct RadRules {
     /// The tint factor *k*<sub>T</sub> (F7).
     pub tint_factor: F64,
     /// The radiation colour (F7).
-    pub colour: [i32; 3],
+    pub colour: [i32; 3], // spec: S-0525 Import mapping (RadColor: a byte triple)
     /// The radiation-site warhead (claim 10).
     pub site_warhead: Option<WarheadId>,
 }

@@ -728,7 +728,7 @@ pub struct General {
     pub rad_tint_factor: Option<Decimal>,
     /// `[Radiation] RadColor`, a byte triple (S-0525 Import mapping, F7).
     #[serde(default)]
-    pub rad_color: Option<[i32; 3]>,
+    pub rad_color: Option<[i32; 3]>, // spec: S-0525 Import mapping (RadColor: a byte triple)
     /// `[Radiation] RadSiteWarhead`, a warhead name (S-0525 Import mapping,
     /// claim 10).
     #[serde(default)]
