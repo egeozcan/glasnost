@@ -2,11 +2,11 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031]
 supersedes: []
@@ -70,7 +70,7 @@ Pointers, not repeated here:
 From the glossary and other specs:
 - *jumpjet type*, *jumpjet*, *jumpjet cruise height*, *movement heading*, *body facing*
 - *balloon-hover type* (S-0310 Terms) and *jumpjet-turn flag* (S-0310 claim 8)
-- *locomotor*, *speed fraction*, *destination*, *target*
+- *locomotor*, *speed fraction*, *destination*, *target*, *landing point* (S-0207 claim 20)
 - *height above the surface*, *height above the terrain*, *world height*, *high bridge*,
   *bridge deck*, *land type*
 - *occupancy record*, *entry outcome*, standing position (S-0209)
@@ -883,7 +883,8 @@ New terms:
       does not consume it. Refresh newly enabled by the dock fallback can remain after
       that very assignment, unless another effective assignment consumes it.
       Point suppression is separate: it skips the next otherwise due nonempty movement
-      point, including the triggering assignment's own point. Thus the usual qualified
+      point, including the triggering assignment's own point. It also covers a teleporting
+      locomotor's landing point (S-0207 claim 27). Thus the usual qualified
       fallback installs the order-level cell destination without its movement point,
       consumes suppression and leaves refresh pending. A qualifying equal assignment
       can reach the dock test again, with no once-per-entry limit. An empty clear stops
