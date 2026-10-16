@@ -54,6 +54,10 @@ pub struct Uses {
     /// Jumpjet units sent against an enemy a walking unit cannot reach
     /// (S-0502).
     pub jumps: u32,
+    /// Deploy orders given to deployable units (S-0517): in-place vehicles
+    /// deployed and packed up, deploy-fire vehicles and firing infantry
+    /// deployed.
+    pub deploys: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -93,6 +97,13 @@ impl Special {
         self.engineers(script, &own, w, out);
         self.spies(script, &own, w, out);
         self.jumpjets(script, &own, w, out);
+        self.deployers(script, &own, w, out);
+    }
+
+    /// Counts one deploy order given to a deployable unit (S-0517,
+    /// `deployers`).
+    pub(crate) fn count_deploy(&mut self) {
+        self.uses.deploys += 1;
     }
 
     /// Counts one order given to a jumpjet unit (S-0502, `jumpjets`).

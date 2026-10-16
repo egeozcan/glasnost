@@ -17,6 +17,7 @@ pub mod deploy;
 pub mod events;
 pub mod harvest;
 pub mod houses;
+pub mod inplace;
 pub mod minimap;
 pub mod placement;
 pub mod power;
@@ -52,6 +53,12 @@ pub fn assign_destination(
     id: ObjectId,
     dest: Option<crate::world::Target>,
 ) {
+    // spec: S-0517 claim 9 (a deployed vehicle or one in transition cannot receive a destination: any destination given to it is replaced by none)
+    let dest = if inplace::blocks_destination(w, id) {
+        None
+    } else {
+        dest
+    };
     let Some(o) = w.obj_mut(id) else { return };
     let before = o.dest;
     o.dest = dest;

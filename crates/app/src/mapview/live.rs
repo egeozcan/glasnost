@@ -756,7 +756,12 @@ impl Live {
             .world
             .objects
             .values()
-            .map(|o| (o.kind, o.type_index))
+            .flat_map(|o| {
+                // The deployed image type is drawn in place of its vehicle (S-0517 claim 12).
+                let image = glasnost_sim::econ::inplace::deployed_image(&self.world, o.id)
+                    .map(|i| (o.kind, i));
+                std::iter::once((o.kind, o.type_index)).chain(image)
+            })
             .filter(|k| !self.types.contains_key(k))
             .collect();
         for (kind, index) in missing {
@@ -894,7 +899,7 @@ impl Live {
         let name: Option<Vec<u8>> = self.move_flash.clone();
         // spec: S-0109 claim 5 (created after the turn pass: first update in the next tick)
         let next = self.world.tick;
-        let drawn = name.is_some_and(|n| self.create_anim(&n, at, next, None));
+        let drawn = name.is_some_and(|n| self.create_anim(&n, at, next, None, false));
         if !drawn && self.debug_markers {
             self.transients.push(Transient {
                 kind: TransientKind::Anim,
@@ -915,6 +920,7 @@ impl Live {
         pos: glasnost_sim::world::Pos,
         first_update: i32,
         drawn: Option<i32>,
+        reverse: bool,
     ) -> bool {
         let speed = self.world.game_speed;
         let mut env = AnimEnv {
@@ -923,7 +929,11 @@ impl Live {
             rng: &mut self.cosmetic,
             speed,
         };
-        let (entry, play) = env.lookup(name);
+        let (entry, mut play) = env.lookup(name);
+        if reverse {
+            // spec: S-0517 claim 6 (the deploying presentation of an undeploy plays in reverse, S-0109 claim 8)
+            play.reverse = true;
+        }
         let player = Player::new(
             name,
             play,
@@ -971,7 +981,7 @@ impl Live {
         };
         self.counts.anims += 1;
         let serial = self.anim_serial;
-        self.create_anim(&name_bytes(&name), pos, now, drawn);
+        self.create_anim(&name_bytes(&name), pos, now, drawn, false);
         if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
             a.owner = Some(trooper);
             // spec: S-0109 claim 22 (an attached animation is in the ground render layer, S-0102)
@@ -1030,7 +1040,7 @@ impl Live {
                 if let (Some(name), Some(pos)) = (name, pos) {
                     let serial = self.anim_serial;
                     self.counts.anims += 1;
-                    self.create_anim(&name_bytes(&name), pos, now, None);
+                    self.create_anim(&name_bytes(&name), pos, now, None, false);
                     self.source_marker = Some(serial);
                 }
             }
@@ -1097,11 +1107,17 @@ impl Live {
             {
                 self.attach_parachute(*trooper, *pos, now, *delay);
             }
-            if let Effect::Anim { name, pos, delay } = e {
+            if let Effect::Anim {
+                name,
+                pos,
+                delay,
+                reverse,
+            } = e
+            {
                 self.counts.anims += 1;
                 // spec: S-0109 claims 5 and 29 (created before or during the turn pass: first update
                 // in the creation tick; the lost update of claim 29 needs playback in the simulation)
-                if self.create_anim(&name_bytes(name), *pos, now, *delay) {
+                if self.create_anim(&name_bytes(name), *pos, now, *delay, *reverse) {
                     art_cells.insert(pos.cell());
                 } else if self.debug_markers {
                     self.transients.push(Transient {
@@ -1233,8 +1249,14 @@ impl Live {
         if !o.kind.is_mobile() || !o.on_map {
             return None;
         }
+        // spec: S-0517 claim 12 (while a vehicle is in transition its own body is not drawn: the deploying presentation stands in for it)
+        if glasnost_sim::econ::inplace::body_hidden(w, id) {
+            return None;
+        }
         let kind = import_kind(o.kind)?;
-        let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
+        // spec: S-0517 claim 12 (while deployed, the image of the deployed image type when the type names one; the vehicle keeps its own type for every rule)
+        let drawn_type = glasnost_sim::econ::inplace::deployed_image(w, id).unwrap_or(o.type_index);
+        let idx = (*self.types.get(&(o.kind, drawn_type))?)?;
         let owner = o
             .owner
             .and_then(|h| w.houses.get(usize::from(h.0)))

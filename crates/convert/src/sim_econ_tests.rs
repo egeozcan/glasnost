@@ -622,6 +622,30 @@ fn jumpjet_type_keys() {
     );
 }
 
+// spec: S-0517 Import mapping (DeployingAnim names an animation type, UnloadingClass a vehicle type, DeployTime is read and affects no vehicle; the presentation's Rate, Start, End and Shadow keys)
+#[test]
+fn deployable_unit_keys() {
+    let base = "[VehicleTypes]\n0=MCV\n1=IMG\n[Animations]\n0=PACK\n[MCV]\nDeployingAnim=PACK\nUnloadingClass=IMG\nDeployTime=.02\nDeploysInto=\n[IMG]\n";
+    let art = "[PACK]\nRate=450\nStart=2\nEnd=7\nShadow=yes\n";
+    let (s, _) = import(base, art);
+    let v = &s.vehicles["MCV"];
+    assert_eq!(v.deploying_anim.as_deref(), Some("PACK"));
+    assert_eq!(v.unloading_class.as_deref(), Some("IMG"));
+    assert!(v.deploy_time.is_some());
+    let a = &s.animations["PACK"];
+    assert_eq!(
+        (a.rate, a.start, a.end, a.shadow),
+        (Some(450), Some(2), Some(7), Some(true))
+    );
+    // Absent keys: none.
+    let (s, _) = import("[VehicleTypes]\n0=MCV\n[MCV]\nStrength=5\n", "");
+    let v = &s.vehicles["MCV"];
+    assert_eq!(
+        (v.deploying_anim.clone(), v.unloading_class.clone()),
+        (None, None)
+    );
+}
+
 // spec: S-0502 Import mapping ([AudioVisual] DeployDir: an integer 8-step direction, absent: none given; the six [JumpjetControls] values are read and ignored)
 #[test]
 fn deploy_direction_and_jumpjet_controls() {

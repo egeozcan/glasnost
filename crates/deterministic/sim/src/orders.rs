@@ -356,7 +356,10 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 ob.dest = None;
                 ob.beh.queue(Some(Behaviour::Unload));
                 // spec: S-0415 claim 2 (each deploy order begins a new deploy: its first attempt is still to come)
+                // The in-place form (S-0517) is a state of the vehicle, not of the order: a deploy order to a deployed vehicle packs it up (claim 3).
+                let form = ob.econ.deploy.form;
                 ob.econ.deploy = crate::econ::deploy::DeployState::default();
+                ob.econ.deploy.form = form;
             }
         }
         Order::GuardSpot { actor, spot } => {

@@ -25,6 +25,9 @@ pub struct DeployState {
     pub turning: bool,
     /// The turn was abandoned by a destination (S-0415 claim 5).
     pub abandoned: bool,
+    /// The form of an in-place deploying vehicle (S-0517 Terms).
+    #[serde(default)]
+    pub form: super::inplace::Form,
 }
 
 /// The building type a vehicle type deploys into (S-0415 Import mapping).
@@ -169,6 +172,9 @@ pub enum UnloadRule {
     /// A deploy attempt (rank 4): the standard delay of S-0215 claim 6
     /// follows.
     Deploy,
+    /// A step of the in-place cycle (S-0517 claims 3 to 8, rank 5), with
+    /// the delay it chose.
+    InPlace(i32),
 }
 
 /// The deploy-fire base delay (S-0517 F3).
@@ -187,10 +193,13 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> Option<UnloadRule> {
     // spec: S-0415 claim 1 rank 2 (deploy fire without the simple-deployer flag)
     if u.combat.deploy_fire && !u.simple_deployer {
         let half = r.quirks.ranged_draw_half_span;
-        // The shot itself (slot 0 at its own cell, through the firing check) is S-0517 claim 2's seam.
-        w.note(
-            "S-0517 claim 2: a deploy-fire vehicle's shot at its own cell is not implemented yet; only its processing delay is",
-        );
+        // spec: S-0517 claim 2 (it uses its own cell as the target and submits the weapon in slot 0, whatever the deploy weapon index, to the firing check with its range test; on can fire it fires that weapon at its own cell)
+        let own = Target::Cell(o.pos.cell());
+        if crate::combat::check::check(w, id, Some(own), 0, true)
+            == crate::combat::check::Answer::CanFire
+        {
+            crate::combat::fire::shot(w, id, 0, own);
+        }
         // spec: S-0415 claim 1 and S-0517 claim 2, F3 (delay 14 + u, u one ranged draw over 0 … 2 from the scenario stream, taken even when the shot is refused; an exact integer sum; unload stays current)
         let u = w.rng.ranged(0, 2, half);
         return Some(UnloadRule::DeployFire(DEPLOY_FIRE_DELAY + u));
@@ -200,9 +209,15 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> Option<UnloadRule> {
         return None;
     }
     // spec: S-0415 claim 1 rank 4 (a type that deploys into a building)
-    let b = deploys_into(w, o.kind, o.type_index)?;
-    let _ = attempt(w, id, b);
-    Some(UnloadRule::Deploy)
+    if let Some(b) = deploys_into(w, o.kind, o.type_index) {
+        let _ = attempt(w, id, b);
+        return Some(UnloadRule::Deploy);
+    }
+    // spec: S-0517 claim 1 (the in-place cycle comes after every rule of S-0415 claim 1: a vehicle of a type for which any rule above applies never deploys in place)
+    if u.simple_deployer && o.kind == Kind::Vehicle {
+        return Some(UnloadRule::InPlace(crate::econ::inplace::process(w, id)));
+    }
+    None
 }
 
 /// What one deploy attempt came to (S-0415 claims 2 to 6), for the slave

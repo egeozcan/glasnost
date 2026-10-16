@@ -340,6 +340,10 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("jumpjet_no_wobbles", "JumpjetNoWobbles", Bool),
     // spec: S-0502 Import mapping and S-0517 Import mapping (DeployToLand: a boolean)
     ("deploy_to_land", "DeployToLand", Bool),
+    // spec: S-0517 Import mapping (DeployingAnim: an animation type name; UnloadingClass: a vehicle type name; DeployTime: a decimal in game minutes, read with no effect)
+    ("deploying_anim", "DeployingAnim", Ref(Kind::Animations)),
+    ("unloading_class", "UnloadingClass", Ref(Kind::Vehicles)),
+    ("deploy_time", "DeployTime", Dec),
     ("turret", "Turret", Bool),
     ("turret_spins", "TurretSpins", Bool),
     ("crusher", "Crusher", Bool),
@@ -1820,7 +1824,14 @@ impl Builder<'_> {
         {
             rec.put("rate", int_node(r));
         }
+        // spec: S-0109 Import mapping (Start and End: integers, kept as written; the sim reads E from the sprite when End is absent or −1)
+        for (field, key) in [("start", "Start"), ("end", "End")] {
+            if let Some(v) = sec.value(key.as_bytes()).and_then(value::integer) {
+                rec.put(field, int_node(v));
+            }
+        }
         for (field, key) in [
+            ("shadow", "Shadow"),
             ("normalized", "Normalized"),
             ("bouncer", "Bouncer"),
             ("is_meteor", "IsMeteor"),

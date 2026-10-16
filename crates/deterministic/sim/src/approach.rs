@@ -55,11 +55,11 @@ pub fn in_range(w: &World, id: ObjectId, t: Target) -> bool {
 }
 
 /// Whether a deploy-to-fire vehicle stands on a cell where its deploy test
-/// fails (S-0215 claim 37 f2, S-0301's must-deploy answer). The deploy test
-/// of S-0301 is not implemented yet, so no vehicle is in that case.
+/// fails (S-0215 claim 37 f2, S-0301's must-deploy answer): S-0517 claim
+/// 14's cell test.
 fn deploy_to_fire_refused(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    // spec: S-0517 claim 14 (the approach of a deploy-to-fire vehicle whose own cell fails uses the same test)
+    crate::econ::inplace::is_deploy_to_fire(w, id) && !crate::econ::inplace::deploy_test(w, id)
 }
 
 /// The approach-position search of S-0307 claims 15 to 24, started with the

@@ -83,6 +83,10 @@ pub fn ready(w: &World, id: ObjectId) -> bool {
             if crate::econ::release::holds_back(w, id) {
                 return false;
             }
+            // spec: S-0517 claim 8 (a vehicle deploying or undeploying is not ready to change)
+            if !crate::econ::inplace::ready(w, id) {
+                return false;
+            }
             !(moving(w, id) && !below && !excused)
         }
         Kind::Building => o.beh.ready_mark,
@@ -432,6 +436,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Terrain {
         return;
     }
+    if kind == Kind::Vehicle {
+        // spec: S-0517 claim 9 (a destination written by any rule while the vehicle is deployed or in transition is replaced by none)
+        crate::econ::inplace::enforce(w, id);
+    }
     if kind == Kind::Building {
         door_update(w, id);
     }
@@ -625,6 +633,8 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             match crate::econ::deploy::process_unload(w, id) {
                 Some(crate::econ::deploy::UnloadRule::DeployFire(d)) => d,
                 Some(crate::econ::deploy::UnloadRule::Deploy) => standard_delay(w, id),
+                // spec: S-0517 claims 3 to 8 (the in-place cycle: 1 tick in a transition or landing for deploy, otherwise guard started and 450 ticks, no draw)
+                Some(crate::econ::deploy::UnloadRule::InPlace(d)) => d,
                 None => {
                     w.note(
                     "S-0215: the processing of unload is not implemented yet; it waits as a behaviour without a processing rule",
@@ -729,11 +739,59 @@ fn deployer_rule(w: &mut World, id: ObjectId) -> Option<i32> {
             u.raw.deploy_fire.unwrap_or(false) && !u.raw.immune_to_radiation.unwrap_or(false)
         });
     if fires {
-        // spec: S-0215 claim 31 row 2 (deploys to fire, not immune to radiation: the deployed-firing rule, M4; the standard delay)
+        // spec: S-0215 claim 31 row 2 (deploys to fire, not immune to radiation: the deployed-firing rule, S-0517 claim 16; the standard delay)
+        deployed_firing(w, id);
         return Some(standard_delay(w, id));
     }
     // The radiation rows need weapon radiation levels (combat); a type that does not deploy to fire follows claims 24 and 26.
     None
+}
+
+/// The deployed-firing rule (S-0517 claim 16) of a deployed infantry unit:
+/// its target stays when it is within the range of the weapon selected with
+/// no target supplied; otherwise an S-0309 range search centred on its own
+/// position runs without waiting for the targeting timer, and a found target
+/// replaces an out-of-range one; with none found an out-of-range target is
+/// dropped and a unit left targetless falls back to rest unless its current
+/// behaviour is *guard* or its type is a jumpjet type. It never moves the
+/// unit.
+fn deployed_firing(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0517 claim 16 (the weapon selected with no target supplied, S-0308 claims 3 and 8: the deploy weapon of a deployed deploy-fire type)
+    let (_, weapon) = crate::combat::weapon::would_use(w, id, None);
+    let had = o.target;
+    let in_range =
+        had.is_some_and(|t| crate::combat::range::in_range(w, id, weapon, Some(t), None));
+    // spec: S-0517 claim 16 (a target within the weapon's range under S-0307: no targeting change)
+    if in_range {
+        return;
+    }
+    if had.is_some()
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0517 claim 16 (an out-of-range target is replaced by what the search finds, or dropped when it finds none)
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+    // spec: S-0517 claim 16 (an S-0309 range search centred on its own position, without waiting for its targeting timer)
+    let _ = crate::combat::acquire::search(
+        w,
+        id,
+        crate::combat::acquire::SearchKind::Range,
+        crate::combat::acquire::SearchContext::PerTick,
+    );
+    let Some(o) = w.obj(id) else { return };
+    if o.target.is_some() {
+        return;
+    }
+    let jumpjet = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.jumpjet);
+    // spec: S-0517 claim 16 (a unit left targetless falls back to rest under S-0215 unless its current behaviour is guard or its type is a jumpjet type)
+    if o.beh.current != Some(Behaviour::Guard) && !jumpjet {
+        fall_back(w, id, false);
+    }
 }
 
 /// The last row of S-0215 claim 31 for an undeployed unit: the auto-deploy
@@ -821,6 +879,10 @@ fn process_unload_infantry(w: &mut World, id: ObjectId) -> i32 {
 
 /// Move (S-0215 claim 22).
 fn process_move(w: &mut World, id: ObjectId) -> i32 {
+    // spec: S-0517 claim 10 (move processed for a vehicle that is deployed or in transition: guard becomes its queued behaviour, 1 tick)
+    if let Some(d) = crate::econ::inplace::move_fallback(w, id) {
+        return d;
+    }
     let Some(o) = w.obj(id).cloned() else {
         return NO_RULE_DELAY;
     };
@@ -856,7 +918,8 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             .and_then(|s| s.seq)
             .is_some_and(Seq::is_deploy);
         if deployed && o.target.is_some() {
-            // spec: S-0215 claim 23 (deployed infantry: its deployed-firing rule, the standard delay not halved)
+            // spec: S-0215 claim 23 (deployed infantry: its deployed-firing rule, S-0517 claim 16, the standard delay not halved)
+            deployed_firing(w, id);
             return standard_delay(w, id);
         }
     }

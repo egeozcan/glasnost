@@ -219,6 +219,12 @@ pub struct UnitRules {
     /// The landing-first flag, `DeployToLand` (S-0502 Import mapping,
     /// S-0517 Terms).
     pub deploy_to_land: bool,
+    /// The deploying presentation's animation type name (S-0517 Import
+    /// mapping, `DeployingAnim`).
+    pub deploying_anim: Option<String>,
+    /// The deployed image type's name (S-0517 Import mapping,
+    /// `UnloadingClass`); a name matching no vehicle type draws nothing.
+    pub unloading_class: Option<String>,
     /// Veteran and elite ability names.
     pub abilities: (Vec<String>, Vec<String>),
     /// Passengers: the capacity of a transport (S-0507 Terms).
@@ -517,6 +523,12 @@ pub struct AnimRules {
     pub rate: Option<i32>,
     /// The game-speed normalisation flag (S-0109 claim 4).
     pub normalized: bool,
+    /// The start field *a* (S-0109 Import mapping, absent 0).
+    pub start: i32,
+    /// The end field as written; `None` when absent (S-0109 Import mapping).
+    pub end: Option<i32>,
+    /// The shadow-type flag (S-0109 Import mapping).
+    pub shadow: bool,
     /// The particles its middle event requests: the particle type's draw
     /// fields and the count (S-0109 claim 14, S-0202 claim 15); `None` for
     /// no particle type.
@@ -1311,6 +1323,10 @@ impl SimRules {
                     // spec: S-0109 Import mapping (Rate absent: delay 1; Normalized absent: no)
                     rate: a.rate,
                     normalized: a.normalized.unwrap_or(false),
+                    // spec: S-0109 Import mapping (Start absent: 0; End absent: the sprite's E_s; Shadow absent: no)
+                    start: a.start.unwrap_or(0),
+                    end: a.end,
+                    shadow: a.shadow.unwrap_or(false),
                     particles: a.spawns_particle.as_ref().map(|p| {
                         let t = s.particles.get(p).cloned().unwrap_or_default();
                         let behaves = t.behaves_like.as_deref();
@@ -1545,6 +1561,9 @@ fn unit_rules(
         jump: JumpFields::from_type(&u, mode, q.turn_rate_negative_wrap),
         // spec: S-0502 Import mapping (DeployToLand absent: no)
         deploy_to_land: b(u.deploy_to_land),
+        // spec: S-0517 Import mapping (DeployingAnim absent: none; UnloadingClass absent: none, a name matching no vehicle type is none)
+        deploying_anim: u.deploying_anim.clone(),
+        unloading_class: u.unloading_class.clone(),
         abilities: (u.veteran_abilities.clone(), u.elite_abilities.clone()),
         // spec: S-0507 Import mapping (Passengers absent: 0, not a transport)
         passengers: u.passengers.unwrap_or(0),

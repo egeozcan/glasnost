@@ -235,6 +235,22 @@ pub fn crashing(w: &World, id: ObjectId) -> bool {
         .is_some_and(|j| matches!(j.phase, Phase::Crashing | Phase::Crashed) || j.crash_started)
 }
 
+/// Whether a deploy-to-land vehicle holds a landing request (S-0517 claim 5,
+/// S-0502 claim 13).
+pub fn landing_requested(w: &World, id: ObjectId) -> bool {
+    st(w, id).is_some_and(|j| j.landing_request)
+}
+
+/// Requests landing for deploy (S-0517 claim 5): a hovering deploy-to-land
+/// vehicle then descends by S-0502 claim 13's fourth row, and holds a move
+/// order so that its updates run.
+pub fn request_landing(w: &mut World, id: ObjectId) {
+    upd(w, id, |j| {
+        j.landing_request = true;
+        j.moving = true;
+    });
+}
+
 /// Whether the unit is held by magnetic lift (*seized*, S-0607 Terms).
 /// Seam: magnetic lift is not built, so no unit is ever seized.
 pub fn seized(w: &World, id: ObjectId) -> bool {

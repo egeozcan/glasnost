@@ -381,6 +381,17 @@ pub struct AnimationType {
     /// absent: no.
     #[serde(default)]
     pub normalized: Option<bool>,
+    /// `Start`, the initial image frame *a* (S-0109 Import mapping; S-0517
+    /// F1 reads the presentation's start, end and delay).
+    #[serde(default)]
+    pub start: Option<i32>,
+    /// `End`, the end field *E* as written (S-0109 Import mapping: absent
+    /// or −1 take the sprite's value).
+    #[serde(default)]
+    pub end: Option<i32>,
+    /// `Shadow`, the shadow-type flag (S-0109 Import mapping); absent: no.
+    #[serde(default)]
+    pub shadow: Option<bool>,
 }
 
 /// A particle type's fields that its creation draws read (S-0202 claim 15
@@ -1171,6 +1182,18 @@ pub struct UnitType {
     /// vehicle (S-0502 Import mapping, S-0517 Import mapping).
     #[serde(default)]
     pub deploy_to_land: Option<bool>,
+    /// `DeployingAnim`, the deploying presentation: an animation type name
+    /// (S-0517 Import mapping, claims 4, 6 and 12).
+    #[serde(default)]
+    pub deploying_anim: Option<String>,
+    /// `UnloadingClass`, the deployed image type: a vehicle type name
+    /// (S-0517 Import mapping, claim 12).
+    #[serde(default)]
+    pub unloading_class: Option<String>,
+    /// `DeployTime`, game minutes: read, with no effect on any vehicle
+    /// (S-0517 claim 15).
+    #[serde(default)]
+    pub deploy_time: Option<Decimal>,
     /// `Turret`.
     #[serde(default)]
     pub turret: Option<bool>,

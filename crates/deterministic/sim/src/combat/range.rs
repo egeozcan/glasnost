@@ -540,6 +540,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
         e(cell, c_deck, t_cell, t_deck).is_some_and(|x| x <= cheb(cell, t_cell) + 8) // spec: S-0307 claim 16 (8 cells)
             || e(a_cell, a_deck, cell, c_deck).is_some_and(|x| x <= cheb(a_cell, cell) + 8) // spec: S-0307 claim 16 (8 cells)
     };
+    let deploy_to_fire_actor = o.kind == Kind::Vehicle && u.vehicle.deploy_to_fire;
     let alternatives: &[(i32, i32)] = if q.approach_alternative_walk {
         &ALTERNATIVES
     } else {
@@ -583,6 +584,10 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
             } else {
                 Pos::centre(cell, height(w, cell, false))
             };
+            // spec: S-0517 claim 14 (in the approach search of a deploy-to-fire vehicle a primary cell is considered only when it passes the deploy-to-fire cell test, and a skipped primary never anchors the failure outcome)
+            if deploy_to_fire_actor && !crate::econ::inplace::deploy_test_cell(w, cell) {
+                continue;
+            }
             if !ranged(w, point) {
                 continue;
             }

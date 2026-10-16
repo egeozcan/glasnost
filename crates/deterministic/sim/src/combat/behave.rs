@@ -45,9 +45,11 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
     crate::cloak::machine::firing_answer(w, id, slot, t, answer);
     match answer {
         Answer::CanFire => {
-            if u.vehicle.deploy_to_fire {
-                // spec: S-0310 claim 9 and S-0517 claim 13 (a deploy-to-fire type queues *unload* instead of firing, without starting it immediately)
-                w.note("S-0310 claim 9: deploy-to-fire vehicles do not queue unload yet (S-0517 claim 13)");
+            if crate::econ::inplace::queues_unload(w, id) {
+                // spec: S-0310 claim 9 and S-0517 claim 13 (a deploy-to-fire type queues *unload* instead of firing, without starting it immediately; a deployed one with quirks.deploy_to_fire_repacks off fires normally)
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.beh.queue(Some(Behaviour::Unload));
+                }
             } else {
                 // spec: S-0310 claim 9 (any other vehicle fires; a visceroid's animation stage is presentation)
                 crate::combat::fire::shot(w, id, slot, t);
@@ -55,7 +57,11 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
             false
         }
         Answer::NotFacing => {
-            if u.vehicle.deploy_to_fire {
+            if crate::econ::inplace::queues_unload(w, id) {
+                // spec: S-0310 claim 9 and S-0517 claim 13 (not facing: it queues *unload* without starting it immediately, and none of the three facing replies applies)
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.beh.queue(Some(Behaviour::Unload));
+                }
                 return false;
             }
             if u.turret {
