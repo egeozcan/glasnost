@@ -290,7 +290,7 @@ fn claim_25_zero_speed_and_zero_turn_rate() {
         let p = Pos::new(target.x + 100, target.y, 0);
         go(w, u, at(0, 0));
         jump::start_in_flight(w, u, Phase::Cruising, 500);
-        js(w, u).dest = Some(Pos::new(p.x + 0, p.y, 0));
+        js(w, u).dest = Some(Pos::new(p.x, p.y, 0));
         step(w);
         vm.push(j(w, u).vm);
     }
