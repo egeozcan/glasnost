@@ -18,9 +18,10 @@
 //!   next wave's goal, across water when they cannot walk there, loading
 //!   and unloading with the clicks a person gives;
 //! - **superweapons** (S-0512, S-0513): once the harvesters are kept, it
-//!   builds the cheapest building it can that gives a superweapon, when it
-//!   has none, before going on with the tech climb; every tick, a ready
-//!   missile or storm superweapon (as the sidebar shows it) is fired with
+//!   builds, one after the other, the cheapest building it can that gives a
+//!   kind of superweapon it has no building for yet (every Allied and Soviet
+//!   kind the tech tree offers), before going on with the tech climb; every
+//!   tick, a ready missile or storm superweapon (as the sidebar shows it) is fired with
 //!   the order a person gives, at the seen enemy cell with the most seen
 //!   enemies around it and none of the house's own objects; a ready
 //!   paradrop (S-0522) is fired at a free usable land cell near home, and
@@ -29,8 +30,7 @@
 //!   on its buildings with seen enemies at them, a spy plane at the enemy
 //!   base, and the teleport takes a group of its armed vehicles (first
 //!   stage) to a free block next to the enemy base (second stage), each with
-//!   the order a person gives (it builds only for the missile and storm
-//!   kinds, not for these);
+//!   the order a person gives;
 //! - **selling out**: a house with no income for a long while and too few
 //!   credits for an army unit sells its buildings one by one for their
 //!   refunds and builds army units with them, and builds no more buildings;
@@ -180,32 +180,53 @@ impl Brain {
         out
     }
 
-    /// Whether the brain fires superweapon type `i`: the missile and storm
-    /// kinds, aimed at enemies.
-    fn aimed(w: &World, i: u32) -> bool {
+    /// The kind of superweapon type `i` when the brain fires it: every kind
+    /// of the Allied and Soviet sides (the nuclear strike, the weather
+    /// storm, the iron curtain, the teleport's two stages, the paradrops, the
+    /// spy plane and the force shield). The Yuri kinds are not built
+    /// (S-0610, S-0611, S-0612) and give none.
+    fn fired_kind(w: &World, i: u32) -> Option<glasnost_sim::superweapons::SwKind> {
         use glasnost_sim::superweapons::SwKind;
-        w.rules()
-            .superweapons
-            .types
-            .get(i as usize)
-            .is_some_and(|t| matches!(t.kind, Some(SwKind::Missile | SwKind::Storm)))
+        let k = w.rules().superweapons.types.get(i as usize)?.kind?;
+        matches!(
+            k,
+            SwKind::Missile
+                | SwKind::Storm
+                | SwKind::IronCurtain
+                | SwKind::Chrono
+                | SwKind::ChronoWarp
+                | SwKind::Paradrop
+                | SwKind::AmerParadrop
+                | SwKind::SpyPlane
+                | SwKind::ForceShield
+        )
+        .then_some(k)
     }
 
-    /// Whether building type `b` gives a superweapon the brain fires
-    /// (S-0512 Terms: a first or second superweapon field).
-    fn gives_superweapon(w: &World, b: u32) -> bool {
+    /// The kinds that building type `b` gives and the brain fires (S-0512
+    /// Terms: its first and second superweapon fields), in field order.
+    fn giving_kinds(w: &World, b: u32) -> Vec<glasnost_sim::superweapons::SwKind> {
         w.rules()
             .superweapons
             .building_sw
             .get(b as usize)
-            .is_some_and(|f| f.iter().flatten().any(|&i| Self::aimed(w, i)))
+            .map(|f| {
+                f.iter()
+                    .flatten()
+                    .filter_map(|&i| Self::fired_kind(w, i))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Builds the cheapest building the house can build and place now that
-    /// gives a superweapon it fires, when it has none, keeps its harvesters and is
-    /// not selling out. It comes before the tech climb (it replaces a climb
-    /// building this think ordered) but after a building the plan places
-    /// or a power plant, refinery or factory it wants.
+    /// gives a kind of superweapon it fires and has no building for yet,
+    /// once it keeps its harvesters and is not selling out: so in time one
+    /// building of every kind its side's tech tree offers (the kinds come
+    /// from the rules' superweapon types that the buildings name, no
+    /// building is named here). It comes before the tech climb (it replaces
+    /// a climb building this think ordered) but after a building the plan
+    /// places or a power plant, refinery or factory it wants.
     fn build_superweapon(&self, w: &World, out: &mut Vec<Order>) {
         let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
         if self.script.selling() || !self.script.harvesters_kept(w) || out.iter().any(|o| {
@@ -214,17 +235,21 @@ impl Brain {
         }) {
             return;
         }
-        let has = self.script.own(w).into_iter().any(|id| {
-            w.obj(id).is_some_and(|o| {
-                o.kind == Kind::Building && Self::gives_superweapon(w, o.type_index)
-            })
-        });
-        if has {
-            return;
-        }
+        let owned: std::collections::BTreeSet<_> = self
+            .script
+            .own(w)
+            .into_iter()
+            .filter_map(|id| w.obj(id).filter(|o| o.kind == Kind::Building))
+            .flat_map(|o| Self::giving_kinds(w, o.type_index))
+            .collect();
         let t = all_types(w)
             .into_iter()
-            .filter(|t| t.kind == Kind::Building && Self::gives_superweapon(w, t.index))
+            .filter(|t| t.kind == Kind::Building)
+            .filter(|t| {
+                Self::giving_kinds(w, t.index)
+                    .iter()
+                    .any(|k| !owned.contains(k))
+            })
             .filter(|&t| tech::buildable(w, self.house(), t))
             .filter(|&t| self.script.place_cell(w, t).is_some())
             .min_by_key(|&t| (production::cost_field(w, t), t.index));
