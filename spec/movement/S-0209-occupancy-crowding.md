@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 36
+revision: 37
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -534,7 +534,22 @@ rank* and *elite weapon*), *n*
      full cell (claim 2), for the record table of claim 4 (part 4d), and for the clearing rule above. When the
      terrain object is removed, the same positions are cleared, and the infantry house is left as
      it is.
-   - *Other objects.* An ordinary landed aircraft sets the object-present flag of its cell.
+   - *Other objects.* An ordinary landed aircraft sets the object-present flag. S-0501
+     claim 44 owns its ordinary marking and departure: rest on terrain marks ground,
+     while rest on a high-bridge deck marks only deck, not both records. At each marking
+     or clearing event, deck is used when a high bridge is present and actual world
+     height is at least terrain surface height plus 416 leptons; otherwise ground is
+     used. These are signed integer comparisons in leptons, with no rounding. Neither
+     listing nor the aircraft's own deck mark substitutes for this surface test.
+     Normal deck take-off clears the deck flag in the first climbing movement tick,
+     without transferring it to ground when the aircraft's own deck mark clears.
+     Accepting a take-off destination alone does not release it. By the end of that
+     climbing tick the aircraft is absent from both occupant lists (claim 13).
+     These results assume initially clear records and no other flag writer; the flags
+     are not counts of objects. This ordinary-flight pointer has high confidence for
+     marking and clearing, medium confidence for the combined take-off consequence,
+     and `measurable` backing (S-0501 scenario AC27, occupancy variant). It does not
+     govern the separate teleport reservations below.
      A rocket missile using rocket-flight movement sets no object-present flag, even during
      pause, tilt or raise at its launch point (S-0506 claim 23). This exception has high
      confidence and `measurable` backing (S-0506 scenario R17). Which other kinds set the
@@ -966,6 +981,20 @@ rank* and *elite weapon*), *n*
    listed there (claim 4, last consequence), and through a stale or forgotten infantry house (Edge
    cases) in a cell that holds only allied infantry that counts as moving. Scenario C26 uses the
    first.
+
+   **Ordinary aircraft on a bridge deck.** The object-present flag alone gives no
+   vehicle entry refusal on either cell layer: the record table above does not test it.
+   On a high bridge over level traversable ground, an ordinary allied aircraft resting
+   on deck without a destination is listed only on deck (claim 13). With no other
+   obstacle or exceptional occupant relation, a vehicle approaching below gets *clear*,
+   while one approaching on deck gets *stationary friendly* from the listed aircraft
+   under row VP20, not from its object-present flag. After ordinary take-off removes
+   that listing, deck entry is *clear* with every other condition unchanged. Enemy
+   aircraft and moving or special-relation cases retain their occupant-table outcomes.
+   S-0501 claim 44 owns this ordinary-flight consequence; teleport reservations are
+   separate below, and landing or placement tests keep their own surface rules.
+   - Backing: `measurable` (S-0501 scenario AC27, occupancy and vehicle variants)
+   - Confidence: high for flag exclusion; medium for the combined bridge entry consequences
 
    **Aircraft reservation consequence.** An otherwise empty ground layer beneath a
    teleporting aircraft's bridge landing has only its retained object-present flag.
