@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 48
+revision: 49
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -533,12 +533,23 @@ Terms used by this spec:
    once. An actor normally has one turn per tick; when S-0203 (claim 11) gives it a second turn
    in the same tick, that second turn processes again only if the delay chosen in its first turn
    was 0 or less (or a behaviour start, claim 3, has set the timer to "expired now" since).
+   For an ordinary vehicle turn, due behaviour processing sees the destination state before
+   that turn's locomotion changes it. Final-track completion itself neither expires nor
+   restarts the processing timer and causes no extra processing. Arrival exchanges and
+   behaviour starts remain separate effects governed by their own rules. In particular,
+   for the uninterrupted field arrival of S-0402 claim 3b, let *T* be the final track's
+   completion tick. A due seeking processing in tick *T* + 1 still sees the order-level
+   cell destination, remains seeking and chooses the ordinary standard delay of *harvest*
+   (claim 6), including its one delay draw. Locomotion removes that destination later in
+   the turn (S-0207 claim 26). S-0402 claim 3b gives the resulting loading-start timing.
+
    Due behaviour processing precedes an attached parasite's same-turn delivery or grappling
    event and its hold renewal (S-0614 claim 18). A hit mark or a newly renewed hold from that
    event does not undo the behaviour processing or shots it already made, including an
    aircraft's attack-run shots. This does not place all firing before the parasite:
    S-0614 claim 18 distinguishes the later separate firing of infantry and vehicles.
-   - Backing: `measurable` (scenarios B1 and B18; S-0514 E11 part a for landed-aircraft erasure,
+   - Backing: `measurable` (scenarios B1 and B18; S-0402 claim 3b, scenario H27 for
+     processing before locomotion and the unchanged arrival timer; S-0514 E11 part a for landed-aircraft erasure,
      S-0614 scenario P12 for parasite ordering). The warp design contract is `measurable`
      in our engine (S-0513 scenario SW23 part f); the original's unresolved continuation
      remains `unmeasured` as S-0513 claim 48 states (SW23 parts a to e, incomplete per-kind
@@ -548,7 +559,8 @@ Terms used by this spec:
      own those effects, and no isolated fixture is established here.
    - Confidence: high (alive, health, timer, parasite ordering and the engine design contract),
      medium (the tunnel, erasing and leaving-stage exclusions, including landed-aircraft erasure,
-     and locomotor phase-in not excluding processing); low (the second-turn case and
+     and locomotor phase-in not excluding processing, and the composed field-arrival timing); low
+     (the second-turn case and
      matching the original's unresolved superweapon-warp continuation)
 
 3. **A behaviour start is processed at once, unless the processing that caused it chooses later.**
