@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -39,7 +39,8 @@ Pointers, not repeated here:
 - **Range and firing.** Range against or from a jumpjet: S-0307 claims 18 and 24. The
   firing-check refusals that use claim 20's *moving now*: S-0310 claims 7 and 8. The rank of a
   locomotor's own refusal: S-0301 claim 9 (rank 16).
-- **Factory exit.** The factory roof a new jumpjet lifts off from: S-0417 claim 10.
+- **Factory exit.** Release destinations: S-0417 claims 5 and 10. The ascent clear report,
+  factory contact and tether release, and subsequent destination effects: S-0417 claim 15.
 - **Death and impact.** What a killed jumpjet does when it starts to crash, and what happens on
   impact: S-0312 claims 15 and 16. This spec supplies only the crash motion (claim 18).
 - **Sinking.** Once claim 19 sets a vehicle sinking, its sinking descent and removal are
@@ -267,8 +268,22 @@ New terms:
        - the maximum speed becomes *S*
        - the movement heading starts turning towards the destination.
 
-       Factory contact at this threshold has no additional established observable effect here
-       (Open questions; S-0417 claim 10 owns factory contact).
+       **Factory release.** S-0417 claim 15 owns the ascent clear report. An infantry
+       unit or vehicle using jumpjet locomotion, with either the jumpjet-type or balloon-hover
+       flag and still in contact with a vehicle factory or a building with a barracks door
+       kind, reports on its first qualifying ascending update. Both contact and tether end
+       in that unit update. The strict integer window is trunc(*h*<sub>t</sub> / *q*) < *h*
+       < *h*<sub>t</sub>, evaluated after physics, where *q* = 2 only for a balloon-hover
+       vehicle and 4 otherwise. Both equalities are excluded; balloon-hover infantry uses 4.
+       No foundation departure, cell crossing, cruise, destination arrival or touchdown is
+       required. Saved-guard-spot reassignment or destination discard and scatter follow
+       S-0417 claim 15, not its claim 8's vehicle-arrival handling. Destination discard
+       alone leaves the movement point and commitment intact; it is not claim 24's effective
+       clear. An accepted scatter can replace the destination.
+       The report does not require a rally point, but unsolicited take-off of resting
+       no-rally infantry remains unestablished. A physics step directly to or beyond the
+       target skips the original's window; no original ascent-completion report is
+       established for that case.
      - If the jumpjet is already over its destination cell and is not of a balloon-hover type,
        its target height becomes its current *r* and it enters *cruising*. Away from a bridge,
        a jumpjet whose accepted movement point remains in its own cell therefore stops its
@@ -280,8 +295,19 @@ New terms:
      - if another jumpjet holds the hover slot of its cell, it takes a neighbour step
        (claim 21) and enters *cruising*
      - otherwise it claims the slot and enters *hovering*.
-   - Backing: `measurable` (scenario J2)
-   - Confidence: high (thresholds and transitions)
+   - **Safety departure (design).** A released unit satisfying the same type and factory
+     contact conditions that reaches or passes the target height without a qualifying
+     report gives that report in the reaching update, with the same link and destination
+     effects. This prevents a skipped window from holding the factory indefinitely.
+     There is no quirk switch.
+   - Backing: `measurable` (scenario J2) for thresholds and transitions. The factory
+     report inherits S-0417 claim 15's `measurable` backing (U14), including its
+     `unmeasured` limitations for balloon-hover infantry, non-balloon jumpjet vehicles,
+     missing type flags, skipped-window aftermath and unsolicited no-rally take-off:
+     no stock release fixture establishing those cases is settled there. The fallback
+     is design, not an observation of the original (J26).
+   - Confidence: high (thresholds, transitions and report predicates); medium for combined
+     factory-release consequences, inherited from S-0417 claim 15.
 
 ### Height, wobble and ground reference
 
@@ -704,6 +730,8 @@ New terms:
     and commitment survive. Without a commitment claim 17 does nothing. Behaviour
     changes alone are not destination clears: S-0213 claims 8 and 10 and S-0215
     claims 13 to 15 and 22 own which orders or processing outcomes assign an empty destination.
+    The factory ascent report's direct destination discard is not such an assignment
+    (claim 7; S-0417 claim 15).
 
     **Redundant assignments.** Not every repeated request to assign an empty destination
     is an effective clear. An ordinary jumpjet vehicle ignores an unchanged order-level
@@ -1605,14 +1633,27 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   so a qualifying rejection retains the nonempty destination and point. If no stock
   deployable balloon-hover type establishes it, that deploy subcase remains diagnostic.
 
+- **J26 Skipped factory-report window, engine test.** Named engine test data, not an
+  original-game measurement: release a qualifying jumpjet in factory contact and make
+  its first rising physics step reach or pass the target height, without an earlier
+  qualifying report. Record flight state, post-physics height, target height, both links,
+  saved guard spot, order-level destination and movement commitment. Expect claim 7's
+  design fallback in that reaching update, with S-0417 claim 15's destination effects.
+  Either link surviving the update, delayed reporting until arrival or touchdown, or a
+  destination effect inconsistent with that claim falsifies the design rule. Repeat
+  with and without a saved rally. Original skipped-window aftermath remains diagnostic
+  under U14; no safe original fallback or stock fixture is asserted.
+
 ## Open questions
 
 - **Flying-object registration.** From take-off until it lands or crashes, a jumpjet is entered
   in a registry of flying objects. Which searches read that registry (for example, targeting by
   air defences) is not established here.
-- **The factory-contact event.** The internal event that a climbing jumpjet raises while in
-  contact with a factory building (claim 7), and the one raised at the end of a crash (claim 18),
-  are not traced to an effect.
+- **The crash-end event.** The event raised at the end of a crash (claim 18) remains
+  untraced here. The separate ascent factory-contact interaction is resolved by claim 7
+  and S-0417 claim 15. Its original skipped-window aftermath and unsolicited no-rally
+  infantry take-off retain that claim's limitations; claim 7 supplies the decided
+  skipped-window safety fallback, not an observed original release event.
 - **Original exceptional outcomes.** J15 and J17 retain the unmeasured original idle-crash
   aftermath and off-map failed-adjustment diagnostic. Claims 3 and 24 supply deterministic
   safety departures, not a promise that the original recovers safely.
