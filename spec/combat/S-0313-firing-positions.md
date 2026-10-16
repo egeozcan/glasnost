@@ -2,11 +2,11 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0601, Q-0670]
 supersedes: []
@@ -168,21 +168,38 @@ S-0202: R(*a*, *b*). In addition:
    No reachable shot or kill credited to the building during the action is established that
    distinguishes intermediate index values; no such intermediate reading has a specified
    result. Evacuation's release choices and assault's occupant-animation positions do not
-   use this firing index. Assault's reversed kill credit names the individual occupant,
+   use this firing index. For assault, occupant list position *i*, counted from 0, uses muzzle
+   point *i* without wrapping by the number of configured points (S-0508 claim 14). Supported
+   assault point numbers are 0 through 9; a missing point keeps its imported default. No safe
+   original animation position is specified for position 10 or later.
+   Assault's reversed kill credit names the individual occupant,
    not a firing occupant selected through the building (S-0508 claims 10, 11 and 14,
    and S-0311 claim 9). These effects therefore impose no reset-before-release requirement.
    S-0311 claim 15 describes the limited individual set-up removal case that retains the
-   numeric index without reducing it modulo the remaining count. Separately, defeat or
-   surrender of an occupant's own house can kill it inside a building belonging to a surviving
-   house (S-0508 claim 19). Only the defeated house's occupants are hit, so differently owned
-   occupants can survive in a mixed-house garrison. These deaths retain the numeric index,
-   without resetting it or reducing it modulo a new count; they do not imply compaction or
-   renumbering of surviving occupants. The original can retain a dead occupant among its
-   firing choices. Safe subsequent firing, muzzle selection and experience selection through
-   that dead choice, or an out-of-range choice after individual removal, remain unspecified
-   pending a coordinated project-lead decision. Numeric-index retention alone does not
-   establish a safe continuation.
-   The same index picks which occupant's weapon fires (S-0308 claim 13). A muzzle point that
+   numeric index without reducing it modulo the remaining count in the original. Separately,
+   defeat or surrender of an occupant's own house can kill it inside a building belonging to
+   a surviving house (S-0508 claim 19). Only the defeated house's occupants are hit, so
+   differently owned occupants can survive in a mixed-house garrison.
+
+   **Original retained places.** These deaths retain both the numeric index and the occupant
+   places: *n* still includes dead places, without compaction, renumbering or index repair
+   (S-0508 claim 20). The original supplies no next-living substitution. The numeric muzzle
+   calculation still selects point *k* independently of occupant health, but does not guarantee
+   a safe launch, successful-shot advancement or experience selection through a dead choice.
+   These unsafe continuations have no dependable original result specified here.
+
+   **Engine safety departure.** S-0508 claim 23 replaces that retention, without a quirk switch.
+   Any occupant death inside removes its place in the same update, retaining the survivors'
+   relative order and numbering them from 0. With *n* the new count, retain numeric *k* when
+   *k* < *n*; otherwise set it to 0, including when *n* = 0. This is an integer range check,
+   not reduction modulo *n*. With *n* > 0, the repaired index selects both the surviving
+   occupant's weapon (S-0308 claim 13) and muzzle point. A successful non-disc-laser shot
+   advances that index by (*k* + 1) mod *n*, using the post-removal count; disc laser shots
+   still leave it unchanged. No shot uses a removed place. With *n* = 0 there is no occupant
+   weapon or garrison muzzle selection, and civilian abandonment follows S-0508 claim 8,
+   subject to S-0508 claim 24. Experience selection remains S-0311 claim 8's rule among the
+   remaining occupants, not a new muzzle-selection fallback.
+   A muzzle point that
    the art data does not give, or gives as (65535, 65535), is (0, 0).
    - Backing: `measurable` (scenario P5) for the cycle, completed-action reset, reoccupation,
      additional entry and muzzle shifts. Intermediate reset timing is `unmeasured`: no
@@ -195,7 +212,10 @@ S-0202: R(*a*, *b*). In addition:
      defeat variant). Mixed-house selective survival is `unmeasured`: no validated fixture
      supplies differently owned entrants. Safe continuation through a dead firing choice is
      `unmeasured`: no safe result is established or unsafe confirming attack proposed.
-   - Confidence: high (the cycle, action reset, additional entry and defeat's off-map hits),
+     Engine death removal, repaired-index muzzle selection and post-removal advancement are
+     `measurable` on our engine (P5's engine-only variant and S-0508 claim 23); these are design
+     requirements, not predictions for the original.
+   - Confidence: high (the cycle, action reset, additional entry, engine safety rule and defeat's off-map hits),
      medium (the shift arithmetic, F3, limited set-up removal and defeat index retention)
 
 7. **Buildings with a primary fire pixel shift.** A building that is not garrisoned and whose type
@@ -326,7 +346,8 @@ by *B* with truncation toward zero; the direction sum wraps modulo 8 with no fur
 | garrisoned building, muzzle index *k* | a disc laser shot is launched | *k* unchanged |
 | garrisoned building | a whole-building eviction or clearing action completes | *k* = 0; reoccupation starts at muzzle 0 |
 | garrisoned building | an additional occupant enters (S-0508 claim 18) | *k* unchanged |
-| garrisoned building belonging to a surviving house | an occupant's own house is defeated or surrenders (S-0508 claim 19) | that house's occupants receive killing hits; numeric *k* unchanged, without modulo repair or inferred compaction; safe later firing remains open |
+| original garrisoned building belonging to a surviving house | an occupant's own house is defeated or surrenders (S-0508 claims 19 and 20) | killing hits retain dead places in *n* and numeric *k* unchanged; no safe later launch is promised |
+| garrisoned building in our engine | any occupant dies inside (S-0508 claim 23) | remove its place in the same update, retain survivor order; keep *k* when less than new *n*, otherwise set 0; later muzzle selection and advancement use repaired *k* and new *n* |
 | spray-attack firer, burst counter 0 | a shot | *s* ← R(0, 7), one draw before the projectile's draws (S-0301 claim 18) |
 | spray-attack firer, burst counter above 0 | a shot | *s* ← (*s* + trunc(8 / *B*)) mod 8, no draw |
 
@@ -513,8 +534,14 @@ the user, not a request to alter the game.
   In the clearing variant also record assault credit and occupant-animation positions.
   Expected: credit names the occupants under S-0508 claim 14, not an occupant selected by
   the building's pre-action firing index. Their animation positions are not selected by that
-  index; exact occupant-to-position correspondence is not predicted here. Credit selected
-  through the building's firing index would falsify this distinction. No shot or credited
+  index: for three occupants the animation points are 2, 1, 0 in reverse list order
+  (S-0508 claim 14). Repeat with one and two occupants, expecting points 0 and 1, 0.
+  Named test art gives points 0, 1 and 2 distinct small pixel pairs. Repeat with point 2
+  omitted: position 2 uses the absent default (0, 0), not point 0's configured nonzero pair.
+  Compare integer positions using F3; record event-time credit/removal as in S-0508 claim 14's
+  scenario G17 if available. A point selected through the building's firing index, wrapping
+  by configured-point count, or credit selected through the firing index falsifies this
+  distinction. Stay within the supported assault point numbers. No shot or credited
   destruction is artificially inserted between removals: no validated ordinary-input fixture
   reaches such an intermediate reading (Q-0670).
 - Defeat variant: in a named `firing-index-defeat.map`, add a third isolated living contender.
@@ -528,8 +555,21 @@ the user, not a request to alter the game.
   index remains 1. Exclusion of the hits, eviction solely from the occupants' defeat, or an
   index reset falsifies that part. Repeat three fresh games; void a run with an intervening
   shot or whole-building action. This tests S-0508 claim 19's numeric retention, not a safe
-  later muzzle or a validated mixed-house selective-survival fixture. Do not resume attacks
-  through the dead choices as a confirming test.
+  later muzzle or a validated mixed-house selective-survival fixture. Also record retained
+  occupant count: the original still has three places, including the dead ones (S-0508 claim 20).
+  A count decrement falsifies original retention. Do not resume attacks through the dead
+  choices as a confirming test.
+- Engine-only death-removal variant: use the same defeat fixture on our engine, expecting count
+  0 and index 0 in the death update and no occupant shot thereafter. Also use S-0508 claim 23's
+  scenario G18 with identified occupants U, V, W in entry order. At index 1 kill V inside:
+  expect order U, W, count 2, index 1, then W's weapon at muzzle 1 on its next successful
+  non-disc-laser shot, advancing the index to 0. Start separately at index 2 and kill V,
+  then repeat with W killed instead: expect index 0, not modulo reduction to 1. Record death
+  tick, count, survivor order, index, shooter and integer launch position; compare F3.
+  Repeat each case in three fresh runs. Retained dead places, reordered survivors, a different
+  repair, a removed-place shot, or advancement using the old count falsifies this engine rule.
+  These deterministic engine fixtures are not an original mixed-house setup or a proposal to
+  continue unsafe original firing.
 - Data variant: named test art supplies distinct muzzle pixel pairs, including a missing entry,
   the not-given pair from Constants, and positive and negative unequal components. Expected:
   missing and not-given entries use (0, 0); others give exactly F3 at unchanged world height.
@@ -621,9 +661,6 @@ the user, not a request to alter the game.
 
 ## Open questions
 
-- Safe firing, muzzle selection and experience selection after an occupant's own-house defeat
-  leaves a dead firing choice need a coordinated project-lead decision (claim 6). Numeric-index
-  retention is established; it does not specify a safe continuation.
 - The fire point of a building whose barrel is a voxel model follows the barrel's elevation
   (claim 8); its rule is not yet worked out.
 - For infantry and aircraft, *D* is the locomotor's body transform; whether any of their
