@@ -2,11 +2,11 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 6
-sources-class: [decomp]
+revision: 7
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0620, Q-0621, Q-0622, Q-0623]
 supersedes: []
@@ -390,7 +390,19 @@ addition:
     deliveries and grappling events occur at the host's place in the update order (S-0203 claim 3).
     Both kinds of self-healing (S-0314 claims 9 and 10), due behaviour processing (S-0215 claim 2)
     and the host's ordinary locomotion update precede the parasite event. Two parasites therefore
-    act in host order, not their own order.
+    act in host order, not their own order. This ordering applies to turns that reach the
+    ordinary attached-parasite step, not to every warp update.
+
+    For vehicles, teleporter infantry and landed aircraft undergoing a superweapon warp,
+    S-0513 claim 51's engine-design contract suppresses the ordinary attached-parasite step
+    from the first pending update through arrival effects, inclusive. No delivery or grappling
+    advancement occurs through that step in those turns. During arrival hold, ordinary step
+    eligibility returns after the hold-end test, whether the hold continues or expires, with
+    no catch-up burst of skipped steps. Elapsed-tick countdowns still keep their clocks.
+    Immediate event-driven releases are not suppressed: S-0513 claim 34's naval release at
+    launch remains distinct from claim 12's unresolved drone release at departure. This is
+    an engine-design rule, not a finding that the original suppresses every such step:
+    original per-stage continuation remains unresolved under S-0513 claim 52.
 
     A hold first renewed by that event cannot prevent movement already taken in that turn.
     Movement in the next turn sees the timer then remaining, subject to claim 8's exceptions.
@@ -407,8 +419,12 @@ addition:
     This claim does not reorder a shot or release caused immediately by another event.
     - Backing: `measurable` (P12; P6 for movement before the off-water check),
       `unmeasured` for a hit mark's effect on behaviour: the host cannot retaliate against
-      its own parasite (claim 17), and no other isolating behavioural response is established
-    - Confidence: high
+      its own parasite (claim 17), and no other isolating behavioural response is established.
+      Warp exclusion and resumption: `measurable` in our engine (P12 warp part).
+      original per-stage continuation remains `unmeasured` (S-0513 claim 52's incomplete
+      per-kind continuation evidence, with observations proposed in its SW23 part g)
+    - Confidence: high for ordinary ordering and the engine-design contract; low for matching
+      the original's unresolved warp-stage continuation
 
 19. **Re-selection after release.** A locally owned parasite with the imported re-select flag
     that was selected when it fired is selected again after a successful release by claim 13 or 15.
@@ -895,6 +911,18 @@ For every part, a result different from its stated expectation falsifies that pa
   The recorder logs per-turn health, movement, shots, targets and stream state. Opposite ordering
   falsifies the corresponding part. P6's zero-hold off-water run expects release on the turn movement first
   reaches dry terrain, not one turn later.
+
+  **Warp part (engine-design check, not a stock-game expectation).** With a surviving
+  attachment and an otherwise-due parasite step, record each pending, leaving, departure,
+  retry, placement and arrival-effects update of an eligible host, following S-0513
+  claim 51 and its SW23 part f. Record health, deliveries, grappling phase, countdown
+  deadlines and explicit release events separately. Expected: no ordinary parasite step
+  through arrival effects; during arrival hold and its expiry, ordinary eligibility only
+  after the hold-end test, with elapsed countdown time retained and no catch-up burst.
+  An ordinary delivery or phase advance during exclusion, or a deferred burst, falsifies
+  the contract. A launch or departure release is not an ordinary step and does not falsify
+  it. Original-game observations follow S-0513 claim 52 and SW23 part g without predicting
+  this design result or promising that a drone attachment survives departure.
 - **P13, air threshold (claims 13, 15 and 22; Q-0623).** Named P4 map variants provide
   latchable jumpjet-infantry, hover-vehicle and ordinary aircraft hosts. Release with nonlethal
   sonic hits on ground, on a high-bridge deck and during ascent or descent. Record map presence,
@@ -910,9 +938,6 @@ For every part, a result different from its stated expectation falsifies that pa
 
 ## Open questions
 
-- S-0315's Terms and claim 7 still describe a non-naval parasite's superweapon-departure
-  release as expected. They need to follow claim 12's unresolved outcome instead; the ordinary
-  teleport jump must not be assumed for that path.
 - Whether creating the spark effect, the delivery animation, the wakes or the splash animations draws
   from the scenario random stream besides the draws listed in claims 9 and 10.
 - A weapon with the parasite flag on its warhead but without the launch-inside flag.
