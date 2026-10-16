@@ -2,7 +2,7 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -123,8 +123,11 @@ screen rows.
 3. **Layer of each object kind.** An object's layer is determined by its kind and state as in the
    table under *State and ordering*. In short: vehicles, infantry and buildings on the ground are in
    the ground layer; aircraft and units with flying movement are in the top layer while in the air (an
-   aircraft with rocket movement is in the air layer); units with jumpjet movement are in the air
-   layer below their jumpjet cruise height and in the top layer at or above it; projectiles are in the air
+   aircraft with rocket movement is in the air layer); units with jumpjet movement evaluate to
+   ground when their height above the surface is below 208 leptons or their bridge-adjusted height
+   is zero. Otherwise they evaluate to air below their jumpjet cruise height and top at or above it,
+   using bridge-adjusted height for that comparison. Crashing alone does not suppress the bridge
+   adjustment. The exact two-height rule is under *State and ordering*. Projectiles are in the air
    layer unless their image is marked flat (then surface); animations attached to an object are in the
    ground layer, other animations use their type's layer (default air); particles, voxel animations,
    wave effects and building light effects are in the air layer; particle systems in the ground
@@ -134,7 +137,7 @@ screen rows.
      - walking, driving, hovering, ship, mech and teleport movement: D2, D3, D14, D19 (d).
      - flying movement, in the air and on the ground: D2, D5, D12, D14.
      - jumpjet movement, all three rows, and the jumpjet cruise height with its minimum and default:
-       D2, D12, D18.
+       D2, D12, D18; the exact two-height predicate also uses D12 (b).
      - rocket movement: D19 (a).
      - buildings on the ground: D4.
      - projectiles: D2 (b).
@@ -162,8 +165,10 @@ screen rows.
        drawing would then belong to which, is not settled (Open questions), so no expected picture
        can be stated.
    - Confidence: high for the table, except: the tunnel rows (low: tunnelling units may in practice
-     stay in the ground list, see Open questions); the jumpjet bridge rule, the jumpjet cruise
-     height minimum and the cruise height being also the hover height (medium); the veinhole monster (medium: it is in no layer, and no drawing of it in
+     stay in the ground list, see Open questions); the jumpjet cruise
+     height minimum and the cruise height being also the hover height (medium). The exact
+     jumpjet two-height predicate and the distinction between falling and crashing are high
+     confidence; the original's in-flight re-evaluation moments remain unresolved; the veinhole monster (medium: it is in no layer, and no drawing of it in
      a drawn frame was found); building light effects (medium)
 4. **When an object changes layer.** An object's layer is evaluated, and the object put into that
    layer's list, when it is placed on the map, when an animation is attached to an owner object, and
@@ -1325,9 +1330,9 @@ single-layout correction, not the original's stray bits from combining layouts.
 | vehicle or infantry, walking / driving / hovering / ship / mech / teleport movement | always | ground |
 | aircraft or unit with flying movement | height above the terrain > 0 | top |
 | aircraft or unit with flying movement | on the ground | ground |
-| unit with jumpjet movement | on the ground, or in the air at height 0 | ground |
-| unit with jumpjet movement | in the air, height ≥ its jumpjet cruise height | top |
-| unit with jumpjet movement | in the air, height below it | air |
+| unit with jumpjet movement | *r* < 208 leptons or *r*′ = 0 leptons (defined below) | ground |
+| unit with jumpjet movement | *r* ≥ 208 leptons, *r*′ ≠ 0 and *r*′ ≥ its jumpjet cruise height | top |
+| unit with jumpjet movement | *r* ≥ 208 leptons, *r*′ ≠ 0 and *r*′ below its jumpjet cruise height | air |
 | unit with rocket or drop-pod movement | always | air |
 | unit with tunnel movement | while digging underground | underground |
 | unit with tunnel movement | otherwise | ground |
@@ -1342,19 +1347,25 @@ single-layout correction, not the original's stray bits from combining layouts.
 | particle system | always | ground |
 | veinhole monster | never in any layer; no step of a drawn frame was found to paint it | — |
 
-Heights in this table are heights above the terrain (glossary), in leptons. A unit's jumpjet cruise
-height is its type's configured value, raised to 208 leptons if smaller (absent-key default 500); it
-is also the height at which a unit with jumpjet movement hovers.
+Heights in this table are heights above the terrain (glossary), in leptons, except for the two
+jumpjet heights defined below. A unit's jumpjet cruise height is its type's configured value,
+raised to 208 leptons if smaller (absent-key default 500); it is also the height at which a unit
+with jumpjet movement hovers.
 
-**A unit with jumpjet movement over a high bridge's cell.** The table's comparisons for such a unit
-use its effective
-height *h*′, where *h* is its height above the terrain (over a high bridge's cell, the ground under
-the deck). Both are in leptons; the arithmetic is exact on integers.
+**Two heights for jumpjet movement.** Let *r* be the unit's height above the surface: above the
+deck when its on-deck state is set, otherwise above the terrain. Its bridge-adjusted height *r*′
+is defined by exact signed integer arithmetic, in leptons:
 
-> *h*′ = *h* − 416 if the unit is over a high bridge's cell, is not itself on the bridge, is not
-> falling, and *h* ≥ 416 (the deck height); otherwise *h*′ = *h*.
+> *r*′ = *r* − 416 only over a high-bridge cell, with on-deck state unset, *r* ≥ 416 leptons
+> and no bridge/parachute falling state; otherwise *r*′ = *r*.
 
-So above a deck its layer follows its height above the deck.
+The ground-layer test uses the raw *r* < 208 leptons **or** *r*′ = 0 leptons, not *r*′ < 208.
+Thus flat-land heights 1, 50 and 100 leptons evaluate to ground, while 208 and 250 do not.
+Over a high bridge with on-deck state unset and no falling state, *r* = 416 evaluates to ground,
+but 417 and 516 do not. Only the air/top comparison uses *r*′ against the cruise height.
+The bridge/parachute falling state is distinct from the jumpjet's crashing and crashed states:
+starting a crash does not itself set it, so crashing alone does not suppress the subtraction
+(S-0502 claim 4). These comparisons entail no rounding.
 
 **Ground-layer order maintenance:**
 
@@ -1681,14 +1692,27 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   second jumpjet, of a type whose cruise height is set high through the override section, still
   climbing (air layer) where its image overlaps the first jumpjet's. Observable: per drawn frame,
   which image is on top where they overlap, and whether the first jumpjet is climbing or hovering.
-  Expected: while climbing, the first jumpjet is in the air layer: it covers the ground vehicle and
-  is covered by the aircraft. Hovering at cruise height it is in the top layer, ordered against the
+  Expected: at an evaluation during climbing with height at least 208 leptons and below cruise
+  height, the first jumpjet evaluates to the air layer: it covers the ground vehicle and is covered
+  by the aircraft. Hovering at cruise height it is in the top layer, ordered against the
   aircraft by insertion order (claim 7), and drawn over the climbing second jumpjet. Falsified if
   the climbing jumpjet is drawn over the flying aircraft, or if the hovering jumpjet is covered by
   the climbing second jumpjet. If instead the first jumpjet stays under the ground vehicle throughout
   its climb, its layer is evaluated only at lift-off, at height 0, where it evaluates to ground. That
   answers the open question on layer re-evaluation in flight, and claims 3 and 4 then get a new
   revision.
+  **(b) Exact height predicate.** Use the stock-data ascent, descent and crash recorder of
+  S-0502 claim 4's J3 scenario on flat land and over a high bridge, with director and mods off
+  at game speed index 2. Record surface height, on-deck state, bridge/parachute falling state
+  separately from crash state, and the evaluated layer at each actual placement. Expect ground
+  exactly when *r* < 208 leptons or *r*′ = 0 leptons. A positive low flat-land height evaluating
+  non-ground, bridge height 417 evaluating ground solely because its adjusted height is 1, or
+  crash state alone suppressing the subtraction falsifies claim 3. If stock traces miss a boundary,
+  test it with engine scene fixtures: flat-land heights 100, 208 and 250 and bridge heights 100,
+  416, 417 and 516 leptons, on-deck state unset, at cruise heights 208 and 500 leptons. Expected
+  ground results are respectively yes/no/no and yes/yes/no/no, independent of cruise height.
+  Repeat 416 over the bridge with crashing alone (ground) and independently falling (non-ground).
+  Fixture results test the specified predicate, not the unresolved original re-evaluation moments.
 - **D13, effects and status extras (claim 2).** Setup: a flat map; a selected, damaged vehicle
   standing still (the *target vehicle*) and an aircraft that repeatedly flies across it. Each part
   adds one effect so that it overlaps both the target vehicle's health bar and the aircraft's path.
