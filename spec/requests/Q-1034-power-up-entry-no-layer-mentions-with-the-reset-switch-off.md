@@ -1,9 +1,9 @@
 ---
 id: Q-1034
 title: The held value of a power-up entry that no layer mentions when the reset-on-override switch is off
-status: open
+status: answered
 related: [S-0006, S-0520]
-answered-by: []
+answered-by: [S-0006]
 ---
 
 ## Need
