@@ -43,9 +43,9 @@ fn stop(w: &mut World, id: ObjectId) {
 #[test]
 fn claim_4_a_listing_survives_into_cruise_and_is_not_transferred() {
     let mut w = game();
-    let u = put(&mut w, "JJ", Kind::Infantry, 0, 0, 0);
+    let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
     let cell = pos(&w, u).cell();
-    go(&mut w, u, cell);
+    go_here_entering(&mut w, u); // the accepted point stays in the ascent cell (claim 16: an entering vehicle keeps the exact point)
     assert!(until(&mut w, 200, |w| phase(w, u) == Phase::Cruising));
     assert!(
         height(&w, u) < 208,
@@ -223,6 +223,7 @@ fn claim_24_stop_in_each_flight_state() {
     w.obj_mut(u).unwrap().target = Some(Target::Object(e));
     jump::start_in_flight(&mut w, u, Phase::Hovering, 500);
     js(&mut w, u).moving = true;
+    js(&mut w, u).dest = Some(Pos::centre(at(0, 0), 0)); // the hover over its cell, as after a completed flight
     stop(&mut w, u);
     assert!(j(&w, u).moving, "it keeps its movement commitment");
     assert_eq!(phase(&w, u), Phase::Hovering, "at application");

@@ -25,10 +25,10 @@ fn claim_7_bridge_early_cruise_height() {
         let mut w = game();
         quirk(&mut w, |q| q.jumpjet_bridge_early_cruise_height = on);
         let c = at(0, 0);
-        let u = put(&mut w, "JJTALL", Kind::Infantry, 0, 0, 0);
+        let u = put(&mut w, "JVTALL", Kind::Vehicle, 0, 0, 0);
         let i = w.cells.idx(c).unwrap();
         w.cells.deck[i] = true;
-        go(&mut w, u, c);
+        go_here_entering(&mut w, u);
         let mut early = None;
         for _ in 0..400 {
             step(&mut w);

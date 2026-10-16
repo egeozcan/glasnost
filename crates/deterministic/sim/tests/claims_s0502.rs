@@ -191,13 +191,14 @@ fn claim_7_ascending_thresholds() {
     }
 }
 
-// spec: S-0502 claim 7 and scenario J2 (ordered to its own cell: past the quarter it stops its climb at its present height and cruises, away from a bridge; a balloon-hover vehicle continues to H)
+// spec: S-0502 claim 7 and scenario J2 (revision 6: when the accepted movement point is in the ascent cell, past the quarter it stops its climb at its present height and cruises, away from a bridge; a balloon-hover vehicle continues to H)
 #[test]
 fn claim_7_own_cell_early_cruise() {
     let mut w = game();
-    let u = put(&mut w, "JJ", Kind::Infantry, 0, 0, 0);
+    // An entering vehicle keeps the exact ordered point (claim 16), so its accepted point is in its own cell.
+    let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
     let b = put(&mut w, "BALLOON", Kind::Vehicle, 0, 4, 0);
-    go(&mut w, u, at(0, 0));
+    go_here_entering(&mut w, u);
     go(&mut w, b, at(4, 0));
     let mut early = None;
     for _ in 0..140 {

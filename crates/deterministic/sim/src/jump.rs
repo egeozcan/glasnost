@@ -246,13 +246,21 @@ pub fn landing_requested(w: &World, id: ObjectId) -> bool {
 }
 
 /// Requests landing for deploy (S-0517 claim 5): a hovering deploy-to-land
-/// vehicle then descends by S-0502 claim 13's fourth row, and holds a move
-/// order so that its updates run.
+/// vehicle then descends by S-0502 claim 13's fourth row. The request creates
+/// no movement commitment and does not wake an idle hover: only a unit that
+/// is *moving* takes the update (S-0502 claim 3).
 pub fn request_landing(w: &mut World, id: ObjectId) {
-    upd(w, id, |j| {
-        j.landing_request = true;
-        j.moving = true;
-    });
+    // spec: S-0517 claim 5 and S-0502 claims 3 and 24 (revision 7: without a movement commitment the clear cannot create one or wake idle hover; a landing request alone does not bypass claim 3's update eligibility)
+    upd(w, id, |j| j.landing_request = true);
+}
+
+/// The deploy order's clear of the order-level destination (S-0213 claim 10,
+/// S-0502 claim 24): the order has already emptied the object's destination.
+/// For a jumpjet this is an effective clear like a stop order's, except that
+/// an unchanged vehicle assignment is suppressed.
+pub fn destination_cleared(w: &mut World, id: ObjectId) {
+    // spec: S-0502 claim 24 and S-0213 claim 10 (the deploy order's destination clear has the stop order's consequences whenever a movement commitment is retained; a suppressed unchanged vehicle assignment keeps the preceding point and commitment)
+    stop_ordered(w, id);
 }
 
 /// Whether the unit is held by magnetic lift (*seized*, S-0607 Terms).
@@ -579,29 +587,32 @@ fn settle(w: &mut World, id: ObjectId, layer: Layer) {
     crate::load::recalc_cells(w, &[cell]);
 }
 
-/// The height below which a jumpjet's new position is listed (claim 4): on
-/// flat land a positive height below 208 leptons qualifies, 208 or more does not.
-// spec: S-0502 claim 4 (positive heights below 208 leptons list, 208 or above do not; integer comparisons; Q-1010 asks how this follows S-0102 claim 3's layer table)
+/// The height below which a jumpjet's new position is listed (claim 4): a
+/// height above the surface of less than 208 leptons.
+// spec: S-0502 claim 4 (the listing test is r < 208 leptons, an exact integer comparison; the type's cruise height does not change it)
 const LISTING_HEIGHT: i32 = 208;
 
 /// Whether the jumpjet's position qualifies for ground-layer placement
-/// (claim 4): the effective height, S-0102 claim 3's *h*′, is below
-/// [`LISTING_HEIGHT`].
-fn placement_qualifies(w: &World, id: ObjectId) -> bool {
+/// (claim 4; Q-1010 is answered by revision 6): with *r* its height above
+/// the surface (above the deck when the on-deck state is set) and *r*′ the
+/// bridge-adjusted height, a new listing qualifies exactly when *r* < 208
+/// leptons or *r*′ = 0. The 208 test reads *r*, not *r*′.
+pub fn placement_qualifies(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let on_deck = st(w, id).is_some_and(|j| j.on_deck);
-    let h = height_above(w, id);
-    // spec: S-0102 claim 3 (h′ = h − 416 when the unit is over a high-bridge cell, is not on the bridge, is not falling and h ≥ 416; otherwise h′ = h)
-    let eff = if w.high_bridge(o.pos.cell())
+    let r = height_above(w, id);
+    // spec: S-0502 claim 4 and S-0102 claim 3 (r′ = r − 416 only over a high-bridge cell, with the on-deck state unset, r ≥ 416 and no bridge/parachute falling state, otherwise r′ = r; starting a crash does not set the falling state)
+    let adjusted = if w.high_bridge(o.pos.cell())
         && !on_deck
         && !crate::fall::falling(w, id)
-        && h >= BRIDGE_HEIGHT
+        && r >= BRIDGE_HEIGHT
     {
-        h - BRIDGE_HEIGHT
+        r - BRIDGE_HEIGHT
     } else {
-        h
+        r
     };
-    eff < LISTING_HEIGHT
+    // spec: S-0502 claim 4 (exactly when r < 208 leptons or r′ = 0 leptons; the 208-lepton comparison uses r, not r′)
+    r < LISTING_HEIGHT || adjusted == 0
 }
 
 // ---------------------------------------------------------------------------
@@ -706,14 +717,40 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     {
         return;
     }
+    if let Some(t) = dest
+        && own_cell_filtered(w, id, t)
+    {
+        // spec: S-0502 claim 23 and S-0213 claim 21 (outside an ion storm, a jumpjet-type infantry unit ignores a nonempty destination assignment whose cell equals its current cell, before any movement-point search, also while grounded; the order's other effects stand; the locomotor keeps its preceding order and point)
+        return;
+    }
     upd(w, id, |j| j.order = dest);
     match dest {
         Some(t) => order_point(w, id, t),
         None => {
-            // spec: S-0502 claims 16, 17 and 24 (an order-level destination that becomes empty is not claim 16's direct no-point instruction: for a jumpjet with a movement commitment it invokes claim 17's reroute, which assigns a replacement movement point; with none, claim 17 does nothing; Q-1012 interim: every such clear, not only the stop order)
+            // spec: S-0502 claims 16, 17 and 24 (an effective order-level destination clear is not claim 16's direct no-point instruction: for a jumpjet with a movement commitment, whatever caused the clear, it invokes claim 17's reroute, which assigns a replacement movement point; with none, claim 17 does nothing; Q-1012 answered by revision 6)
             stop_with(w, id, false);
         }
     }
+}
+
+/// The own-cell filter of S-0502 claim 23: a jumpjet-type infantry unit
+/// ignores a nonempty destination assignment whose cell is its current cell.
+/// There is no ion storm in our engine, so the exception for one never
+/// applies.
+pub fn own_cell_filtered(w: &World, id: ObjectId, t: Target) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind != Kind::Infantry {
+        return false;
+    }
+    // spec: S-0502 Import mapping (the filter concerns the imported JumpJet flag of the type, not merely the jumpjet locomotor)
+    if !w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.jumpjet)
+    {
+        return false;
+    }
+    point_of(w, t).cell() == o.pos.cell()
 }
 
 /// A direct instruction giving the locomotor no point (claim 16, *No point*):
@@ -753,13 +790,8 @@ fn order_point(w: &mut World, id: ObjectId, t: Target) {
     } else {
         Use::MoveVehicle
     };
-    // spec: S-0502 claim 23 says claim 16's search does not lift a grounded unit's own occupancy, while claim 7 and scenario J2 give the own-cell order's early cruise, which needs the own cell to qualify; Q-1011 interim: the unit's own mark is lifted for the search, as before
-    let own = st(w, id).and_then(|j| j.mark);
-    lift_mark(w, id);
+    // spec: S-0502 claim 23 (Q-1011 answered by revision 6: claim 16's search does not lift a grounded unit's own occupancy; a nonempty searched record rejects the cell even when its only mark is the ordered unit's, S-0212 claim 25)
     let cell = search(w, id, p.cell(), use_);
-    if own.is_some() {
-        lay_mark(w, id);
-    }
     let found = cell.and_then(|c| {
         let z = point_of(w, Target::Cell(c)).z;
         if exact {
@@ -860,6 +892,10 @@ pub fn stop(w: &mut World, id: ObjectId) {
 /// nothing. It is not claim 16's direct instruction giving no point.
 pub fn stop_ordered(w: &mut World, id: ObjectId) {
     if !is_jumpjet(w, id) {
+        return;
+    }
+    // spec: S-0502 claim 24 and S-0213 claims 8 and 21 (a redundant assignment is not an effective clear: an ordinary jumpjet vehicle ignores an unchanged order-level destination, empty-to-empty included, so no reroute happens and the preceding movement point and commitment survive; the destination-refresh state and the balloon-hover substitution have no stated activation, Q-1031)
+    if vehicle(w, id) && st(w, id).is_some_and(|j| j.order.is_none()) {
         return;
     }
     // The order-level destination is empty, so the locomotor has nothing new to take from it.

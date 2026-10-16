@@ -384,6 +384,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 ob.econ.deploy = crate::econ::deploy::DeployState::default();
                 ob.econ.deploy.form = form;
             }
+            // spec: S-0213 claim 10 and S-0502 claim 24 (the deploy order's destination clear reroutes a jumpjet that retains a movement commitment, as the stop order's does; a suppressed unchanged vehicle assignment keeps the preceding point and commitment)
+            crate::jump::destination_cleared(w, actor);
         }
         Order::GuardSpot { actor, spot } => {
             // spec: S-0213 claim 20 (needs only a live actor; sets its guard spot)
