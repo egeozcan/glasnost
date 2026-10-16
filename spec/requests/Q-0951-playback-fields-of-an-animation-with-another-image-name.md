@@ -1,9 +1,9 @@
 ---
 id: Q-0951
 title: Which art section gives an animation's playback fields when its image name differs from its type name
-status: open
+status: answered
 related: [S-0007, S-0108, S-0109]
-answered-by: []
+answered-by: [S-0007]
 ---
 
 ## Need

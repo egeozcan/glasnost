@@ -2,13 +2,13 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: [Q-0008, Q-0083]
+requests: [Q-0008, Q-0083, Q-0951]
 supersedes: []
 ---
 
@@ -40,7 +40,8 @@ rules*, *engine constant*, *game*, *game-mode file*, *local player*, *loose file
   drawn (claim 27).
 - **Share source, shared part.** For a voxel animation: the type, named in its rules section, whose
   model part it shows instead of a model of its own, and that part (claim 30).
-- **Art section.** The section of the art database named by a type's image name.
+- **Art section.** The section of the art database named by a type's image name. For an animation,
+  this selects art-file lookup settings, not its playback or drawing properties (claim 34).
 - **Own art section.** For an animation only: the section of the art database named by the
   animation's type name. It is the art section too when the image name equals the type name.
 - **Sprite file.** A shape file (public "SHP" format) holding the image frames of an object.
@@ -123,7 +124,8 @@ This spec covers skirmish only. Network games and campaigns are out of scope.
 2. **Art section; animation flags.** All art settings of a type (the theater flag, the new-theater
    flag, the voxel flag, the line-trail settings, building art settings, the icon names) are read from
    its art section, keeping the earlier value where the art section does not set them, except where
-   claims 9, 11, 22 and 25 say otherwise. Several types
+   claims 9, 11, 22, 25 and 34 say otherwise. Animation playback and drawing settings use the
+   own art section, not this general rule (claim 34). Several types
    can share one art section. For **animations**, the theater flag and the new-theater flag also
    depend on the own art section, and on whether the animation's previous type read in the same
    game found its sprite file (claim 14):
@@ -222,7 +224,8 @@ This spec covers skirmish only. Network games and campaigns are out of scope.
    suffixed name is cut to 24 bytes. The suffixed name then serves as the image name for every
    purpose: the type's own sprite (claim 5), the sidebar icons (claims 22 and 25), and the art
    settings that other specs read from the art section, which come from the art section named by
-   the suffixed name. For these non-projectile types, the exception is the theater, new-theater, voxel and line-trail
+   the suffixed name. Animation playback and drawing properties remain in the own art section
+   (claim 34), irrespective of the suffix. For these non-projectile types, the exception is the theater, new-theater, voxel and line-trail
    settings *of the read that adds the suffix*: they come from the art section of the name as it
    was before that read added the A. A building's convert-to-overlay reference and a sprite
    aircraft's trailer settings use the suffixed art section in that same read (claim 33,
@@ -738,6 +741,34 @@ This spec covers skirmish only. Network games and campaigns are out of scope.
       already registered overlays do not disappear when the reference changes.
     - Confidence: high
 
+34. **Animation playback and drawing section.** An animation's playback and drawing properties
+    listed in the animation table under Import mapping come exclusively from its **own art
+    section**, even when its image name names a different section. There is no per-property
+    fallback to the image-named art section. This includes the start, end and loop fields, rates,
+    playback direction, shadow and drawing profile, vertical displacement, sort/depth adjustments,
+    detail and translucency,
+    follow-up and damage, speed normalisation, render layer, palette selection, drawing with an
+    attached building and neutral-light override. The same section rule applies to the sounds and
+    start/middle/end-event settings listed there.
+    - The rule holds at **every type read** of the game, whether or not the preceding read found
+      a sprite. It also holds for a type first read in a later rules layer. Neither the loaded
+      sprite nor the arctic suffix changes which section supplies these properties. The two
+      theater flags alone use claim 2's special table; the image, translucent-sprite and arctic
+      settings already use the own section under claims 1, 9 and 23.
+    - A missing or empty property in the own section does not inherit the image-named section's
+      value. Its default, retention or sprite-derived fill is the consuming spec's rule:
+      S-0109 claims 2, 3 and 25 distinguish rates and sprite-derived playback limits. In
+      particular, exclusive own-section selection does not make those derived limits independent
+      of the sprite that was found.
+    - A damaged building slot animation therefore uses the damaged animation type's own start
+      field while sharing its image file with the normal variant. An independent effect animation
+      uses exactly the same section rule. Selection of the damaged variant and continuation when
+      an existing slot is replaced remain S-0108 claims 10–12 and its Terms, not new
+      image-indirection rules.
+    - Backing: `measurable` (A25, conflicting and omitted own-section properties, building-slot
+      and independent-effect controls, and preceding-sprite/read-count variants).
+    - Confidence: high
+
 ## Formulas
 
 All name quantities are byte strings: there is no arithmetic, so no rounding rule applies and no
@@ -1044,7 +1075,46 @@ gives, with the parse forms, defaults and later-read rules of the rules-database
 | `Theater`, `NewTheater` | boolean | theater and new-theater flags, by claim 2's table | no |
 
 The art section (section = image name) gives `Theater` and `NewTheater` as in the art-database
-table, by claim 2's table.
+table, by claim 2's table. It also gives the general image-named `Voxel` and line-trail settings
+of claim 2, not the animation playback or drawing fields below.
+
+**Animation playback and drawing section selection (claim 34).** Every row below uses the own
+art section (section = animation type name), without image-section fallback, at every type read.
+Forms follow S-0003. Defaults are first-read defaults; later omission retains the held value
+unless the cited consumer specifies a sentinel or sprite-derived fill. This table owns section
+selection, not the consumer's timing, drawing or event semantics.
+
+| Keys | Parse | Feeds / owning claim | Default when absent |
+|---|---|---|---|
+| `Start`, `LoopStart`, `LoopCount` | integers | playback ranges and passes, S-0109 claims 1, 6, 7 | 0 each |
+| `End`, `LoopEnd` | integers | playback limits, S-0109 claim 25 | sprite-derived values and sentinel handling of that claim; never values from the image-named section |
+| `Rate` | integer | stage delay, S-0109 claim 2 | 1 tick delay; −1 retains held delay |
+| `RandomRate` | two integers | random delay, S-0109 claim 3 | no random rate; −1 retains that endpoint |
+| `RandomLoopDelay` | two integers, updates | loop delays, S-0109 claim 11 | 0,0 |
+| `Reverse`, `PingPong`, `Shadow`, `Tiled`, `Flat`, `Normalized`, `Translucent`, `DoubleThick` | booleans | playback/drawing, S-0109 claims 4, 8–10, 20, 21, 26, 27 | no each |
+| `YDrawOffset` | integer pixels | vertical displacement, S-0109 claim 26 | 0 |
+| `DetailLevel`, `TranslucencyDetailLevel`, `Translucency` | integers | detail and translucency, S-0109 claims 19, 20 | 0 each |
+| `Next` | animation type name | follow-up, S-0109 claim 15 | none |
+| `Damage` | decimal | animation damage, S-0109 claim 17 | 0 |
+| `Layer` | render-layer name | unattached animation layer, S-0102 claim 3 | air |
+| `YSortAdjust` | integer leptons | animation sort adjustment, S-0102 claim 17 | 0 |
+| `ZAdjust` | integer depth units | animation depth adjustment, S-0102 claim 17 | 0 |
+| `AltPalette`, `IsVeins`, `UseNormalLight` | booleans | palette and brightness, S-0103 claim 8 | no each |
+| `ShouldUseCellDrawer` | boolean | drawing with a building, S-0103 claim 8 | yes |
+| `ShouldFogRemove` | boolean | fog removal, S-0109 claim 24 | yes |
+| `StartSound`, `Report`, `StopSound` | sound-entry name | start/end sounds, S-0109 claim 13 | no sound initially; retention and alias precedence as in S-0109 Import mapping |
+| `TiberiumChainReaction`, `Scorch`, `Crater`, `ForceBigCraters`, `Bouncer`, `IsMeteor`, `IsFlamingGuy` | booleans | event and special-playback settings, S-0109 claims 13, 14, 17 and Terms | no each |
+| `SpawnsParticle` | particle-type name | middle-event particles, S-0109 claim 14 | none |
+| `NumParticles` | integer | particle count, S-0109 claim 14 | 0 |
+| `MakeInfantry` | integer | end-event infantry creation, S-0109 claim 16 | −1, none |
+
+Game-wide rows in S-0109's Import mapping remain in their named rules/settings sections, not
+in either animation art section. The `Theater` and `NewTheater` rows there remain subject to
+claim 2, not claim 34. Drawing and event defaults are owned by their consuming specs; only the
+source-section distinction is added here. Joint hand-off must make S-0109's section wording and
+S-0102/S-0103's animation rows explicit about claim 34. S-0102's combined boolean row currently
+says `ShouldUseCellDrawer` defaults to no; it must say yes, matching S-0103 claim 8 and the row
+above. `UseNormalLight` still defaults to no.
 
 Projectiles, voxel animations and superweapons, rules database, the type's own section:
 
@@ -1601,6 +1671,43 @@ theater flag or the new-theater flag is.
     is omitted, a trail after explicit clearing, or an incorrect retained period falsifies.
   - Building section selection and byte limits: run S-0004 K2 and K7. Their marked overlay
     artwork distinguishes the image-named, suffixed and type-name sections and the 24-byte cut.
+
+- **A25 — own animation properties with shared image art (claim 34).**
+  - Setup: common skirmish setup and explicitly named test data. On a tiny temperate map,
+    use a test building with normal and damaged slot variants, plus an independent test effect
+    animation placed away from it. List all test animations in the base rules. Each own section
+    names a different image section, and the archive supplies a compatible sprite with visibly
+    distinguishable image frames. Use game speed 2, director off, other mods off. First hold the
+    building in its damaged condition before creating its slot, so slot replacement continuity
+    does not obscure the creation frame. A separate normal-condition control uses the normal
+    variant. Keep the effects and building in view.
+  - Procedure: vary one property at a time in the animation section-selection table. Give the own
+    section a value A and the image section a distinguishable value B; then omit the own value
+    while leaving B present; then repeat with an empty own value. Keep all other consumer inputs
+    equal. Use the consuming spec's playback, drawing or event setup to expose that property's
+    effect, with controls that explicitly put A, B and the absent-key default in the own section.
+    For example use distinct start frames, different positive stage delays, separated vertical
+    displacements, different visible layers, and a lit building for palette/light comparisons.
+    For shadow and playback-limit tests keep sprite size equal between all candidate files.
+    Record tick-labelled video, initial image frame, advance/pass/end ticks, drawing placement,
+    palette/brightness and event outputs as applicable. No new recorder or harness change is
+    required; screenshots and scripted input suffice for the visible fields.
+  - Expected: the conflicting-values case always matches the A control. Omission and empty values
+    match the absent-key control, never the B control, including a missing own start field giving
+    image frame 0 rather than the image section's start field. The damaged slot uses its own
+    frame range from the shared sprite, and independent effects obey the same selection rule.
+    Existing consumer rules still determine sprite-derived limits and event timing.
+  - Read-history variants: repeat with A9's present/missing un-substituted sprite conditions and
+    valid substituted refresh sprite, in three-read and four-read games (the latter with the
+    named empty language rules file). Give the candidate sprite files equal frame counts and
+    matching frame labels, so the theater-flag differences do not change the property observable.
+    Also register a test animation first in the map's animation list for a one-read control.
+    Expected: every visible property still matches the own-section control, irrespective of
+    previous-sprite success or read count. Omitted properties still match their absent controls.
+  - Runs/tool: one fresh-session run per property, variant and matching control; manual or
+    scripted inputs with tick-labelled capture. For an event property use the consuming spec's
+    scenario and its recorder when needed. Any B-control result, or a read-history change not
+    explained by that consumer's sprite-derived rules, falsifies claim 34.
 
 ## Open questions
 
