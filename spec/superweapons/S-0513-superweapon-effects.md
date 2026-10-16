@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871]
 supersedes: []
 ---
 
@@ -1081,7 +1081,7 @@ presentation and swept-layer rules below also apply where those specs cite them.
       explicitly marked world-point and final-fate rows, for the incomplete trace above
     - Confidence: high for the confirmed rows; low for the marked gaps
 
-50. **Exceptional landing contract (engine design, Q-0850).** This is our engine's
+50. **Exceptional landing contract (engine design, Q-0850, Q-0871).** This is our engine's
     deterministic rule where claim 49 leaves the original's world point and fate
     unmeasured. It is not a reproduction claim and has no quirk switch.
 
@@ -1106,9 +1106,24 @@ presentation and swept-layer rules below also apply where those specs cite them.
     effects and explicit survival or death tests of claims 38 and 39 on the next update.
     A fallback therefore promises neither survival nor immediate death.
 
-    Placement failure by itself never deletes a member. It leaves the member alive in
-    the landing-retry stage with its landing point, owner and passengers retained; retry
-    resumes on the next update. There is no retry cap or timeout death. A member can
+    **Placement acceptance.** A passed check is not a reservation. Placement refuses an
+    illegal cell, a newly blocking building or terrain object, any newly present protected
+    object, insufficient capacity for the member on the selected layer, or terrain or deck
+    changes since the passed check that make that landing no longer enterable. Current
+    occupants are not killed, displaced or ignored by the placement attempt. Infantry may
+    share a cell only when their landing position and the cell's capacity permit it
+    (S-0209 claims 4 and 5); incompatible vehicles or aircraft refuse sharing. Multiple
+    placements in one tick see the occupancy left by earlier placements in the turn order
+    of S-0203 claim 3. No over-capacity overlap is allowed. Unchanged landing terrain that
+    already implied an explicit arrival death or sinking under claim 38 retains that fate:
+    this safety validation is not a new refusal of every inherently fatal destination.
+
+    Placement failure by itself never deletes a member. It leaves the member alive and
+    off-map in the landing-retry stage with its landing point, owner and passengers retained.
+    On the next update it repeats the full landing check of claim 37, not merely placement:
+    protected-object death, occupant hits, redirection and held-delay updates apply normally.
+    A newly passed check again schedules placement for the following update. The failed
+    placement itself applies no landing-check hits and makes no redirect or random draw. There is no retry cap or timeout death. A member can
     remain awaiting placement indefinitely when no place exists. Report the first fallback
     and the first placement failure per member and warp in a player-visible diagnostic,
     without random draws or game-rule effects. An awaiting member remains tracked as
@@ -1120,7 +1135,7 @@ presentation and swept-layer rules below also apply where those specs cite them.
       placement evidence)
     - Confidence: high for the design contract, low for matching the original's unresolved cases
 
-51. **Warp turn contract (engine design, Q-0851).** For vehicles, teleporter infantry
+51. **Warp turn contract (engine design, Q-0851, Q-0870).** For vehicles, teleporter infantry
     and landed aircraft, use the following deterministic continuation rule. This fills
     claim 48's evidence gaps; it is not a claim about the original and has no quirk switch.
     Each listed permission applies only to an otherwise eligible operation; it does not
@@ -1140,7 +1155,14 @@ presentation and swept-layer rules below also apply where those specs cite them.
     None resumes when the warp ends. Target and current destination are dropped by the
     leaving-stage rule of claim 48; this design adds no earlier target clearing. From
     the first pending update through arrival effects, no ordinary work in the five
-    columns occurs before or after the warp work that turn. The leaving row agrees
+    columns occurs before or after the warp work that turn. This exclusion also covers
+    the per-tick behaviour start (S-0215 claim 11), ordinary cloak update (S-0516 claim 42),
+    ammunition reload update and firing-frame advancement (S-0301 claims 11 and 13),
+    attached parasite step (S-0614 claim 18), the member's own economy and power work,
+    depot queued-entry retry, expected-health turn bookkeeping, and protection-brightness
+    phase processing. In short, the warp update is the whole member turn before arrival
+    hold, with the intrinsic exceptions below; it is not merely five disabled operations.
+    No deferred ordinary updates are replayed in a burst on entering hold. The leaving row agrees
     with the confirmed exclusion, rather than replacing it. The hold row follows the
     request's conservative continuation default: hold expiry is tested first, then
     ordinary opportunities occur under their own eligibility rules. It does not grant
@@ -1153,6 +1175,14 @@ presentation and swept-layer rules below also apply where those specs cite them.
     and placement succeed without interruption. The conditional target searches and
     sensor update intrinsic to the warp (claim 39), elapsed protection duration,
     placement and arrival-fate tests are not ordinary work suppressed by this table.
+    Elapsed-tick countdowns retain their clocks: skipping reload work prevents granting
+    ammunition or restarting its countdown, not the passage of its elapsed time. Likewise
+    it prevents firing-frame advancement, not the passage of time on a shot cooldown.
+    During arrival hold all the additional ordinary operations listed above regain their
+    ordinary eligibility after the hold-end test. Independent house updates, other objects'
+    updates, immediate damage and explicit event-driven effects are not skipped. In
+    particular launch/departure parasite releases and arrival sensor transfer still happen.
+    skipping expected-health turn bookkeeping does not cancel actual damage or death.
     These restrictions are not a missed turn under S-0203 claim 10. S-0203 claim 4,
     S-0215 claim 2 and S-0314 claims 9 and 10 must distinguish this engine contract
     from claim 48's original-side uncertainty.
@@ -1160,6 +1190,33 @@ presentation and swept-layer rules below also apply where those specs cite them.
       continuation and immediate route clearing remain `unmeasured` under claim 48
       (SW23 parts a to e, incomplete per-kind continuation evidence)
     - Confidence: high for the design contract, low for matching the original's unresolved rows
+
+52. **Additional original-side warp questions (Q-0870, Q-0871).** Claims 48 and 51
+    already distinguish the five ordinary operations from the engine scheduling choice.
+    S-0215 claim 2 excludes the per-tick start while leaving, but does not establish its
+    continuation at every other warp boundary. S-0516 claim 42 and S-0614 claim 18 fix
+    ordinary within-turn order, not eligibility during every warp stage.
+
+    | Question about the original | Finding and remaining gap | Backing and confidence |
+    |---|---|---|
+    | Per-tick behaviour start | Leaving-stage exclusion is already S-0215 claim 2. Pending, departure, retries, placement, effects and hold continuation remain unsettled | Leaving exclusion: measurable, SW23(b), high. Other boundaries: unmeasured, SW23(g), low |
+    | Ordinary cloak update | A warp update alone does not establish whether this later ordinary opportunity is reached, separately for each kind and stage | Unmeasured, SW23(g), low |
+    | Reload and firing-frame updates | Time passing on a countdown does not prove ammunition grants or firing-frame advancement. Their per-stage continuation remains unsettled | Unmeasured, SW23(g), low |
+    | Attached parasite step | A surviving attachment's ordinary step is distinct from claim 34's settled naval release and claim 39's unresolved drone departure release. Per-stage steps remain unsettled | Unmeasured, SW23(g), low |
+    | Member economy and power work | Ordinary shared work includes conditional economic effects, but that does not establish that every warp boundary reaches it | Unmeasured, SW23(g), low |
+    | Depot retry and expected-health turn bookkeeping | Neither continuation across these boundaries nor an independently visible bookkeeping consequence is established here | Unmeasured, SW23(g), low |
+    | Placement one update after a passed check | Placement does not repeat claim 37's conflict sweep or redirect search at that boundary. This does not establish that every underlying placement accepts, nor its fate when occupied, newly impassable or full | No repeated sweep: measurable, SW24(d), high. Acceptance and fate: unmeasured, SW24(d), low |
+    | Retry after such a placement refusal | Whether each refusal exists and whether it rechecks or repeats placement remains unsettled; no original retained-member retry is promised | Unmeasured, SW24(d), low |
+
+    These unmeasured entries reflect incomplete per-kind continuation and placement-acceptance
+    evidence, not a claim that the original is nondeterministic. Claims 50 and 51 answer
+    every engine decision in these requests as design rules, not guessed original behaviour.
+    In particular our placement validation and full next-update landing retry are safety
+    choices; the absence of a repeated original conflict sweep is not evidence for them.
+    - Backing: `measurable` for the confirmed boundaries above; `unmeasured` for the
+      explicitly marked gaps and expected-health bookkeeping without an isolated observable
+    - Confidence: high for the confirmed boundaries and design/original distinction,
+      low for the marked gaps
 
 ## Formulas
 
@@ -1423,8 +1480,8 @@ can reliably force its effect-creation failure through ordinary input.
 | aircraft type `PDPLANE` | fixed type name | paradrop plane (S-0522) | name | none: nothing sent |
 | aircraft type `SPYP` | fixed type name | spy plane type (claim 43) | name | none: nothing sent |
 | `[General]` | `AllyParaDropInf`, `AllyParaDropNum` | spy plane count (claim 43) | creating infantry-reference list and independent integer-count list, S-0522 claim 2; compare resolved compact lengths, not text-token counts | empty: no plane |
-| No data key | no imported field | exceptional landing cell, point, placement failure and survival contract (claims 49 and 50) | integer cell pair and integer world coordinates, leptons; engine design uses cell (0, 0), ordinary landing tests and retained-member retries; not imported from rules or map data | fixed design rule of claim 50, not an absent-key value or a quirk |
-| No data key | no imported field | warp continuation, update count and launch route clearing (claims 48 and 51) | engine design stage permissions and immediate path, queued-destination and driving-step clearing; no parser or data override | fixed design rule of claim 51, not an absent-key value or a quirk |
+| No data key | no imported field | exceptional landing cell, point, placement acceptance, failure and survival contract (claims 49, 50 and 52; Q-0871) | integer cell pair and integer world coordinates, leptons; engine design uses cell (0, 0), current occupancy/capacity and changed-terrain validation, retained-member failure and full next-update landing recheck; no parser or data override | fixed design rule of claim 50, not an absent-key value or a quirk |
+| No data key | no imported field | whole-member-turn exclusion, per-tick behaviour start, cloak, reload, firing frames, parasite, economy, power, depot retry, expected-health bookkeeping, update count and launch route clearing (claims 48, 51 and 52; Q-0870) | engine design stage permissions, elapsed-clock distinction and immediate path, queued-destination and driving-step clearing; no parser or data override | fixed design rule of claim 51, not an absent-key value or a quirk |
 | spy type's primary weapon | `Damage` | camera radius (claim 44) | integer, cells | 0 |
 | spy type's primary weapon | `Range` | camera gate (claim 44) | cells times 256, truncated | 0 |
 | `[AudioVisual]` | `SpyPlaneCamera` | camera sound | sound name | none |
@@ -1906,6 +1963,21 @@ is not under test.
   Compare the same witnesses in (a) to (e) against the original: a heal, due action,
   movement, shot or turret turn in a suppressed row, retained route or multiple warp
   advances in a tick distinguishes the original from the design rule.
+  (g) Extend the same stock runs to each additional operation in claim 52, separately at
+  every row of claim 51. Record current/queued behaviour and readiness, cloak stage and
+  visibility, ammunition and reload deadline, firing stage and shot cooldown, parasite
+  deliveries/hold renewals, member-attributable credits and power changes, depot contact
+  and expected-health values. Compare a due event with an otherwise matched nonwarping
+  control; use the permitted read-only recorder with tick labels, video and credit/power
+  displays. Stock fixtures that cannot isolate a field are inconclusive. The original's
+  expected continuation is explicitly unmeasured: a queued behaviour becoming current,
+  fade advancement, ammunition grant, firing-stage advance, parasite delivery or economic
+  effect in any suppressed row distinguishes it from claim 51. Countdown expiry alone does
+  not. Bookkeeping without an observable consequence remains unmeasured. In the engine-only
+  part (f), directly arrange each otherwise eligible additional operation at each boundary:
+  expect none before hold, normal eligibility after its hold-end test, clocks still elapsing,
+  no catch-up burst, and independent damage/house updates unaffected. Any contrary effect
+  falsifies the design contract. This tests all three member kinds where applicable.
 - **SW24 — exceptional warp cells (claim 49).** Use the common skirmish settings and
   three runs of each part. (a) Source block in the interior and destination centre on a
   legal map edge: place a normal vehicle, organic infantry and an infected naval host
@@ -1939,6 +2011,24 @@ is not under test.
   an unassigned landing point, or a timeout death falsifies the design. For the original
   runs (a) and (b), a non-stand-in landing point, another within-cell displacement, or
   disappearance without an explicit death distinguishes the original from this rule.
+  (d) Extend the stock runs with a cell free at its successful landing check but receiving
+  a building, terrain obstruction, protected occupant or capacity-filling unit before the
+  next update. Separately change deck availability in that interval. Use stock objects,
+  director and mods off, fixed game speed and three repetitions per obtainable case, with
+  scripted ordinary orders and the permitted read-only recorder; inability to time the
+  one-update interval makes that run inconclusive. Record landing point, occupants,
+  capacity, warp stage, health, passenger counts and subsequent redirects every tick.
+  Expected confirmed portion: placement does not repeat the landing conflict sweep or
+  redirect search. Acceptance, death and any retry route remain unmeasured alternatives:
+  distinguish overlap, explicit death, retained retry with a fresh check, and repeated
+  placement without a check. Engine-only part (c) must deterministically construct every
+  race, including an illegal point, newly unenterable terrain, full infantry positions and
+  two members competing for capacity in one tick. Expect placement refusal with no victim
+  hit, no overlap or loss, then the full claim 37 check next tick; a new protected occupant
+  kills at that check, while an ordinary blocker redirects. Clear the blocker and verify
+  a passed recheck and placement still occupy separate updates. Also retain an unchanged
+  inherently fatal water destination as a control for claim 38. Any overlap, silent deletion,
+  placement-only retry or suppression of that control's explicit fate falsifies the design.
 - **SW25 — bolt header height (F4).** Extend SW8(c) with two images having equal stored
   rectangles but unequal canvas heights, then equal canvas heights but unequal rectangles.
   Expected: cloud world height follows canvas height alone. Use a named damaging cloud
@@ -1995,6 +2085,11 @@ for these two kinds.
   claims 48 and 49, not these missing answers. Engine-only SW23(f) and SW24(c) validate
   the chosen contracts without pretending to measure the original. Front-matter inclusion
   answers the requests' demand for a deterministic rule, not closure of the factual gaps.
+- Q-0870 and Q-0871 have complete engine contracts in claims 50 and 51, with original-side
+  findings and remaining gaps in claim 52. Original per-stage continuation of the additional
+  turn work remains unmeasured (SW23g), as do placement acceptance/fate in the one-update
+  race and any refusal's retry route (SW24d). A source-side placement without a repeated
+  conflict sweep does not establish safe capacity handling. No oracle result is claimed.
 - Q-0732: rate/frame-count timing is claim 46, using S-0109 claims 2 to 5 and 25; Q-0733
   was already answered by claim 29's first-protected-turn rule, now explicit about skipped
   phases. Q-0734 is claim 22 and Import mapping, Q-0735 is claim 47, Q-0739 is F4,

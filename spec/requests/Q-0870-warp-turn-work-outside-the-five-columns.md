@@ -1,9 +1,9 @@
 ---
 id: Q-0870
 title: What a warp member does in the turn parts that S-0513 claim 51 does not list, and the per-tick behaviour start
-status: open
+status: answered
 related: [S-0513, S-0203, S-0215, S-0516]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

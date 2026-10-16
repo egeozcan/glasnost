@@ -1,9 +1,9 @@
 ---
 id: Q-0871
 title: Which placements of a warp member count as failing in S-0513 claim 50
-status: open
+status: answered
 related: [S-0513, S-0009, S-0209]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
