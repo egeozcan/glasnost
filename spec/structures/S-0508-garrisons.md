@@ -2,13 +2,13 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971]
+requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971, Q-0990]
 supersedes: []
 ---
 
@@ -307,7 +307,8 @@ Neighbouring specs own the rest:
     in the occupant list, not the shared firing index of claim 18. There is no wrapping by the
     number of configured points: supported point numbers are 0 through 9. Missing points retain
     their imported defaults. An occupant at position 10 or later has no supported
-    animation point and no specified safe original result; this is not wrapping to point 0.
+    animation point and no specified safe original result; this is not original wrapping to point 0.
+    Claim 25 supplies our engine's safety departure for those positions.
     The assaulter does not go inside: it has its destination cleared and scatters as in
     claim 4. The building, now empty, follows claim 8 at its next turn when it is a civilian
     garrison building.
@@ -519,6 +520,22 @@ Neighbouring specs own the rest:
       not an oracle prediction. The original unsafe path remains `unmeasured` under claim 21.
     - Confidence: high
 
+25. **Engine design rule: assault animation beyond point 9 (Q-0990).** For an occupant
+    removed by assault at list position i ≥ 10, our engine shows its occupant animation at
+    muzzle point j = i mod 10. This is exact non-negative integer remainder, with j in 0
+    through 9 and no rounding. The selected point is looked up and projected exactly as
+    claim 14 looks up point i for positions 0 through 9, including the imported default
+    for a missing point. The modulus is always 10, not the number of configured points
+    or the occupant count; the shared firing index does not participate.
+
+    This is an engine design rule, a safety departure rather than original behaviour,
+    with no quirk switch. Claim 14's reverse credit/removal order is unchanged, including
+    animation and credit before each removal. Positions 0 through 9 are unchanged.
+    - Backing: `measurable` on our engine (G19); this is a design-rule check, not an
+      oracle prediction. The original result at positions 10 or later remains `unmeasured`:
+      no safe outcome is established and no unsafe confirming run is proposed.
+    - Confidence: high
+
 ## Formulas
 
 > Exit ring size = 2 × (W + H) + 4 cells. Ranked distinct candidates = 2 × (W + H) + 3 cells
@@ -541,7 +558,7 @@ rejection condition, not a requirement that an accepted building have positive h
 | Facing of a put-out occupant | 0 | facing unit | claim 11 |
 | Reference level of the exit-cell check | −1 | height level | claim 10 |
 | Absent occupant capacity | 0 | occupants | Import mapping |
-| Supported assault muzzle points | 10 | points, numbered 0 through 9 | claim 14; not a modulus |
+| Supported assault muzzle points | 10 | points, numbered 0 through 9 | claim 14; also the engine-only remainder divisor in claim 25 |
 | Highest terrain level receiving the exit-check bypass | −6 | height level | claim 10; integer comparison |
 
 ## State and ordering
@@ -607,6 +624,8 @@ Ordering as observed:
   owner retention in our engine, without a quirk switch.
 - **Death inside.** Claim 20 describes the original's unsafe retained places. Claim 23 requires
   same-update removal and index range repair in our engine, without a quirk switch.
+- **Assault beyond point 9.** Claim 14 leaves the unsafe original result unmeasured.
+  Claim 25 requires point i mod 10 in our engine, with no quirk switch.
 - **Both type marks.** An infantry type marked both occupier and assaulter is an occupier only: it
   never assaults.
 
@@ -626,7 +645,8 @@ Ordering as observed:
 | `BuildingAbandonedSound` (rules, `[AudioVisual]`) | abandoned sound (claim 8); stock data does not set it | sound name | none: no sound |
 | `[EVA_StructureGarrisoned]`, `[EVA_StructureAbandoned]` (EVA file) | the two announcements | as S-0701 | as S-0701 |
 | `OccupantAnim` (rules, weapon) | assault animation (claim 14); also drawing of occupant fire | animation name | none |
-| `MuzzleFlash`*n* (art, building image), n from 0 through 9 | pixel pair for assault animation of list position n (claim 14); no point-count modulus or firing-index selection | two integers in pixels, as S-0313 | (0, 0), as S-0313 |
+| `MuzzleFlash`*n* (art, building image), n from 0 through 9 | pixel pair for assault animation of list position n (claim 14); our engine also uses point i mod 10 for list position i ≥ 10 (claim 25), never the configured-point count or firing index | two integers in pixels, as S-0313 | (0, 0), as S-0313 |
+| No user-data field | assault animation safety selection beyond point 9 (claim 25) | exact non-negative integer remainder modulo 10 | engine design rule always applies; no quirk setting |
 | No user-data field | shared occupant/muzzle index and action reset (claims 18 and 19) | runtime integer, not imported | initially 0 (S-0313 claim 6) |
 | No additional user-data field | defeat hits on occupants (claim 19) | event rule, not imported | S-0414 claim 5 and S-0303 Import mapping own the defeat hit and its warhead |
 | No user-data field | original retained dead places (claim 20), replaced in our engine by death removal and index range repair (claim 23) | runtime integer count and index, not imported | engine design rule always applies; no quirk setting |
@@ -1011,6 +1031,28 @@ Repeat three fresh runs per case. A retained dead place, changed survivor order,
 index, removed-place shot/award/placement, or incorrect abandonment falsifies the departure.
 No unsafe original firing, credit or eviction continuation is proposed as a control.
 
+**G19. Assault animation safety departure (claim 25, our engine only).** Use G10's named
+assault fixture on our engine at game-speed index 2, with its isolated bystander, director
+and mods disabled except named test data. In `garrison-assault-large.map`, give the building
+an invented occupant capacity of 21 and enter identified occupiers individually. Use G17's
+named test-art file with distinguishable pixel pairs for all ten points and a visible
+occupant animation. Test counts 10, 11, 12 and 21 in three fresh games each. Transfer only
+building ownership as in G10 and assault through normal input. Record list identities,
+animation creation positions, credit notifications, removals and completed-action firing
+index, using event-time records rather than just tick-end video.
+
+Expected: positions 10, 11 and 20 use points 0, 1 and 0 respectively, projected as in claim 14.
+Positions 0 through 9 still use their own numbers. Repeat the 12-occupant case with point 0
+omitted while point 1 remains nonzero: position 10 uses the absent default pair (0, 0),
+not another configured point. Repeat with different starting firing indices prepared by
+ordinary shots, stopping fire before assault: these do not change animation positions.
+Credit and removal remain in descending list-position order with each animation and credit
+before that occupant's removal, and index 0 after completion. No animation at position 10,
+a different selected point, dependence on configured-point count or firing index, or changed
+credit/removal order falsifies the relevant rule. These are engine-only checks; do not run
+positions 10 or later in the original as a purported safe control. G17 remains the supported-
+point original comparison.
+
 ## Open questions
 
 - Q-0660's original index questions are answered by claims 18 and 19; the corresponding
@@ -1025,8 +1067,9 @@ No unsafe original firing, credit or eviction continuation is proposed as a cont
   rejection through the entry check, and no normal centre-placement crowding or terrain failure.
   Exception-state and off-map qualification observations retain their stated unmeasured limits.
 - Q-0973 is answered by claim 14: reverse list-order removal/credit and point i for position i,
-  without a point-count modulus or participation by the firing index. Assaults exceeding the
-  ten supported point numbers need a safety policy, not invented wrapping.
+  without a configured-point-count modulus or participation by the firing index for supported
+  original positions. Q-0990 is answered by claim 25's engine-only point i mod 10 for positions
+  10 or later. The unsafe original result stays unmeasured; no lead decision is pending.
 - Whether any skirmish cause other than map action code 6 and the original's computer player
   sends the house-wide hunt order of claim 13.
 
@@ -1053,14 +1096,10 @@ The remaining coordination is:
   experience, an empty list has no occupant recipient, and trainable-building self-credit
   is unchanged. Remove the pending-lead question. Claim 9 also needs claim 14's reverse-list
   assault credit/removal order.
-- **S-0313 claim 6 and its assault measurement:** use claim 14's point i for list position i,
-  without wrapping by configured points or using the firing index. G17 replaces the previously
-  unresolved animation correspondence.
+- **S-0313 claim 6 and its assault measurement:** retain claim 14's original point i for
+  supported positions 0 through 9 and unmeasured unsafe original result for positions 10 or
+  later. Add claim 25's engine design rule: position i ≥ 10 uses point i mod 10 with the same
+  lookup, projection and missing-point default, independent of configured-point count and
+  firing index. Credit/removal order is unchanged; include G19's engine-only check.
 - **S-0209 claim 4:** cross-reference claims 10 and 22 for this exit-search use. Do not add a
   blanket missing-cell refusal or a later-occupant terrain test to garrison release.
-
-## Questions for the project lead
-
-- For assaults with more than ten occupants, select a safe animation policy beyond point 9.
-  The original supplies no point-count wrapping rule. This is separate from ordinary supported
-  assault order and point selection (claim 14).

@@ -1,9 +1,9 @@
 ---
 id: Q-0990
 title: Animation of an assault's removed occupant at list position 10 or later
-status: open
+status: answered
 related: [S-0508, S-0313]
-answered-by: []
+answered-by: [S-0508]
 ---
 
 ## Need
