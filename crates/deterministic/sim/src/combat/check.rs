@@ -178,12 +178,8 @@ fn vehicle_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
 /// hand-over (S-0308 claim 6) can also supply one; gunner transports are
 /// not built, so no beam comes from it yet.
 pub fn has_temporal_beam(w: &World, id: ObjectId) -> bool {
-    let r = w.rules();
-    // spec: S-0514 Terms and S-0310 claim 7 (a primary weapon whose warhead is temporal supplies a beam at creation)
-    type_combat(w, id)
-        .and_then(|tc| tc.slots[0])
-        .and_then(|p| r.combat.weapon(p).warhead)
-        .is_some_and(|h| r.combat.warhead(h).temporal)
+    // spec: S-0514 Terms and S-0310 claim 7 (a primary weapon whose warhead is temporal supplies a beam at creation; a gunner vehicle carries its first passenger's)
+    crate::temporal::has_beam(w, id)
 }
 
 /// Whether an infantry unit is "moving" for a weapon (S-0310 claim 8).
@@ -337,6 +333,13 @@ pub fn check(
     if crate::teleport::phasing_in(w, firer) {
         return Answer::Rearming;
     }
+    // spec: S-0301 claim 9 rank 4 and S-0514 claim 19 (a firer that already holds this very target with a temporal weapon: rearming)
+    if let Some(Target::Object(x)) = target
+        && r.combat.warhead_of(weapon).is_some_and(|h| h.temporal)
+        && crate::temporal::holds(w, firer, x)
+    {
+        return Answer::Rearming;
+    }
     // spec: S-0301 claim 9 rank 4 and S-0614 claim 8 (a spawner weapon of a held mobile firer: impossible, whatever its organic type)
     if crate::parasite::held_spawner(w, firer, weapon) {
         return Answer::Impossible;
@@ -377,8 +380,8 @@ pub fn check(
     if slot == 0 && gate_closed(w, firer, weapon) {
         return Answer::Rearming;
     }
-    // spec: S-0301 claim 14 (a pending delayed shot: rearming)
-    if c.delayed_shot.is_some() {
+    // spec: S-0301 claim 14 and S-0518 claim 6 (a pending delayed shot, or a supporter's pending beam: rearming)
+    if c.delayed_shot.is_some() || c.support_beam.is_some() {
         return Answer::Rearming;
     }
     // spec: S-0301 claim 9 rank 7 (ammunition 0)
@@ -410,6 +413,10 @@ pub fn check(
             && crate::parasite::latching(w, weapon)
             && crate::parasite::shot_illegal(w, firer, x)
         {
+            return Answer::Illegal;
+        }
+        // spec: S-0301 claim 9 rank 9 and S-0519 claim 3 (a bomb-planting weapon against a carrier, a disarm weapon against a target with no bomb: illegal)
+        if crate::bomb::illegal_target(w, weapon, tg) {
             return Answer::Illegal;
         }
         // spec: S-0301 claim 9 rank 9 and S-0504 claim 5 (a sinking target, among the late target tests: illegal)

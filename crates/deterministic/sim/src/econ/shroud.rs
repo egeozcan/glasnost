@@ -1477,6 +1477,19 @@ fn whole_map(w: &mut World, h: HouseId, reveal: bool, sat: bool) {
     }
 }
 
+/// The crate's reveal (S-0520 claim 18): the whole map for the collecting
+/// house, S-0409 claim 15's result.
+pub fn crate_reveal(w: &mut World, h: HouseId) {
+    let sat = spy_satellite_active(w, h);
+    whole_map(w, h, true, sat);
+}
+
+/// The crate's darkness (S-0520 claim 18): the whole map re-covered for the
+/// collecting house, S-0409 claim 15's result.
+pub fn crate_darkness(w: &mut World, h: HouseId) {
+    whole_map(w, h, false, false);
+}
+
 /// The whole-map re-cover of a house when a spy of any other house, allies
 /// included, infiltrates one of its radar buildings (claim 15: alliance is
 /// not tested for the effect; entry and its effect selection are S-0510's):

@@ -634,6 +634,8 @@ impl Audio {
             // spec: S-0210 claim 8 (the crushed overlay's crush sound at the crusher)
             // The cloak events are presentation-only (selection, S-0516 claim 26).
             Effect::Cloak { .. } => {}
+            // spec: S-0518 claim 6 (the support beam is drawing only: no sound)
+            Effect::SupportBeam { .. } => {}
             Effect::Superweapon { event, sw, pos, .. } => self.superweapon(w, *event, *sw, *pos),
             Effect::OverlayCrushed { overlay, pos } => {
                 let s = self

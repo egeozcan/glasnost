@@ -43,6 +43,7 @@ const LEVEL: i32 = 104; // spec: S-0011 Constants (height level: 104 leptons)
 
 // Event codes (S-0011 I3).
 const ENTERED_BY: i32 = 1; // spec: S-0011 I3 (1: entered-by)
+const CRATE_PICKED_UP: i32 = 49; // spec: S-0520 claim 7 (event 49: a crate is picked up)
 const ANY_EVENT: i32 = 8; // spec: S-0011 I3 (8: any event)
 const ELAPSED: i32 = 13; // spec: S-0011 I3 (13: elapsed time)
 const VAR_SET: i32 = 36; // spec: S-0011 I3 (36: variable set)
@@ -637,6 +638,24 @@ pub fn building_entered(w: &mut World, building: ObjectId, by: ObjectId) {
     );
 }
 
+/// The crate-pickup raise (S-0520 claim 7, event 49): the collector's tag,
+/// with the collector as causing object.
+pub fn crate_picked_up(w: &mut World, collector: ObjectId) {
+    let Some(&tag) = w.triggers.objects.get(&collector) else {
+        return;
+    };
+    // spec: S-0520 claim 7 (event 49, the collector as causing object)
+    raise(
+        w,
+        tag,
+        Raise {
+            code: Some(CRATE_PICKED_UP),
+            causer: Some(collector),
+            carrier: Some(Carrier::Object(collector)),
+        },
+    );
+}
+
 /// The destroyed-by-anything raise of an object that leaves play (S-0011
 /// claim 19; S-0511 claim 17), with the object as causing object.
 pub fn destroyed_by_anything(w: &mut World, id: ObjectId) {
@@ -750,7 +769,7 @@ fn judge(w: &World, inst: &Instance, e: &glasnost_map::triggers::Event, r: &Rais
         return match e.code {
             ENTERED_BY => entered_by(w, e.value, r.causer),
             // spec: S-0011 claims 19 and 20 (satisfied in every such raise)
-            DESTROYED_BY | BRIDGE_DESTROYED => true,
+            DESTROYED_BY | BRIDGE_DESTROYED | CRATE_PICKED_UP => true,
             // Code-matched events outside the subset are never raised by this engine.
             _ => false,
         };
@@ -856,7 +875,7 @@ fn type_event(w: &World, e: &glasnost_map::triggers::Event) -> bool {
 }
 
 /// The cell of a waypoint parameter (S-0011 claim 33), or none.
-fn waypoint_cell(w: &mut World, wp: i32) -> Option<CellXY> {
+pub(crate) fn waypoint_cell(w: &mut World, wp: i32) -> Option<CellXY> {
     if wp < 0 {
         // spec: S-0011 claim 33 (a waypoint parameter that decodes to −1: no effect, a departure)
         w.note("S-0011 claim 33: an action's waypoint parameter names no letter; no effect");
@@ -996,7 +1015,7 @@ fn action(
             w.note("S-0011 claim 30: a trigger action hands over to a topic not built yet (teams, computer targeting); no effect");
         }
         // spec: S-0524 claim 4 (108 create a crate at a waypoint: crates, S-0520, are a seam)
-        108 => crate::mp_triggers::crate_seam(w, a),
+        108 => crate::mp_triggers::create_crate(w, a),
         // spec: S-0524 claim 5 and I1 (63 demolition blast: the number slot as waypoint number)
         63 => crate::mp_triggers::demolition_blast(w, a.number),
         // spec: S-0524 claim 6 and I1 (66 large light flash: the number slot as waypoint number)

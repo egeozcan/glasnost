@@ -116,6 +116,11 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     let Some(o) = w.obj(firer).cloned() else {
         return false;
     };
+    if rules.combat.weapon(weapon).suicide {
+        // spec: S-0519 claim 11 (a suicide shot creates no projectile, plays no report, starts no rearm countdown and uses no ammunition: the firer takes one hit of its type's strength instead)
+        crate::bomb::suicide(w, firer);
+        return true;
+    }
     // spec: S-0301 claim 13 (a shot made in the tick the counter equals the sync frame is a sync shot, whether or not the countdown runs)
     let was_sync = crate::combat::check::sync_tick(w, firer, slot, weapon);
     // spec: S-0501 claim 20 and S-0522 claim 11 (a shot of an aircraft that carries passengers is a drop attempt, exactly as S-0522 claim 9, with no projectile and no ordinary shot effects: no delay and no delay draw, no burst-counter advance, no weapon report, muzzle animation or spray draw, no projectile; a refused drop leaves the rearm countdown unchanged, a successful one expires it now; the ammunition and pass counter changes are the attempt's; it is not a void shot under S-0301 claim 15)
@@ -196,7 +201,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         if field != -1 {
             field
         } else {
-            w.rng.ranged(3, 5, half)
+            w.rng.ranged(3, 5, half) // spec: S-0301 claim 4 (R(3, 5))
         }
     } else {
         full_delay(w, firer, &wr)
@@ -278,6 +283,41 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         crate::parasite::fired(w, firer, carrier, target);
     }
     true
+}
+
+/// The delay a shot of the firer's second weapon would give (S-0301 claims
+/// 1 to 8, for S-0519 claim 13's rearm), with the draws that shot takes;
+/// `None` without a second weapon.
+pub fn second_weapon_delay(w: &mut World, firer: ObjectId) -> Option<i32> {
+    let weapon = crate::combat::weapon::slot_weapon(w, firer, 1)?;
+    let rules = w.rules_arc();
+    let half = rules.quirks.ranged_draw_half_span;
+    let o = w.obj(firer)?.clone();
+    let wr = rules.combat.weapon(weapon).clone();
+    let j = o.combat.burst + 1;
+    let berserk = o.combat.berserk_until.is_some_and(|u| w.tick < u);
+    let d = if wr.effect() {
+        // spec: S-0301 claim 5 (an effect weapon: its bare rate, no draw)
+        wr.rof
+    } else if j < wr.burst {
+        // spec: S-0301 claim 4 (the in-burst delay of a vehicle's field, else R(3, 5))
+        let field = if o.kind == Kind::Vehicle && (1..=4).contains(&j) {
+            rules
+                .unit(o.kind, o.type_index)
+                .map_or(-1, |u| u.vehicle.burst_delay[(j - 1) as usize])
+        } else {
+            -1
+        };
+        if field != -1 {
+            field
+        } else {
+            w.rng.ranged(3, 5, half) // spec: S-0301 claim 4 (R(3, 5))
+        }
+    } else {
+        full_delay(w, firer, &wr)
+    };
+    // spec: S-0301 claim 8 (a berserk firer halves the delay, truncated)
+    Some(if berserk && !wr.disk_laser { d / 2 } else { d })
 }
 
 /// The full delay of S-0301 F1, with its draw R(0, 2).

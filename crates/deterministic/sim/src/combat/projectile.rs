@@ -492,6 +492,8 @@ pub fn launch(
         fire_point,
         nuke_wait: None,
         vehicle_scalable: o.kind == Kind::Vehicle && p.scalable,
+        airburst_child: false,
+        multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
     };
     w.projectiles.insert(id, proj);
     if o.kind == Kind::Vehicle
@@ -1387,8 +1389,6 @@ fn detonation_point(
 /// effects (S-0303 claims 21 and 22).
 fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, _after_wait: bool) {
     let rules = w.rules_arc();
-    // spec: S-0513 claim 12 and S-0525 claim 1 (a weapon with a positive radiation level leaves radiation at the detonation cell; seam)
-    crate::superweapons::nuke::radiation_seam(w, pr.weapon, point.cell());
     let half = rules.quirks.ranged_draw_half_span;
     let wr = rules.combat.weapon(pr.weapon).clone();
     // spec: S-0303 claim 2, S-0306 claim 21 and S-0614 claim 1 (a parasite-flag warhead's projectile makes no area hits; its animation and debris stay)
@@ -1403,25 +1403,29 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
         .is_some_and(|h| h.makes_disguise);
     // spec: S-0516 claim 31 (a disguise-flag warhead's projectile does no damage to the target)
     let area = !disguises
-        && !rules
-            .combat
-            .warhead_of(pr.weapon)
-            .is_some_and(|h| h.parasite || h.airstrike || h.electric_assault);
+        && !rules.combat.warhead_of(pr.weapon).is_some_and(|h| {
+            h.parasite || h.airstrike || h.electric_assault || h.ivan_bomb || h.bomb_disarm
+        });
     if disguises {
         // spec: S-0516 claim 31 (detonating on its target, it disguises its firer)
         crate::cloak::disguise::disguise_hit(w, pr.attacker, pr.target);
     }
     if p.airburst {
+        // spec: S-0525 claim 1 (the airburst projectile's own detonation leaves radiation with its own weapon; its nine children carry no weapon and leave none)
+        if !pr.airburst_child {
+            crate::radiation::detonation(w, pr.weapon, point.cell());
+        }
         let res = detonation_inner(
             w,
             pr.weapon,
-            pr.damage,
+            crate::linked::scaled_damage(pr.damage, pr.multiplier), // spec: S-0518 claim 9 and F1 (the damage supplied to area damage is scaled by the projectile's multiplier)
             point,
             pr.attacker,
             pr.house,
             pr.pos,
             p.inviso,
             area,
+            pr.target,
         );
         let _ = res;
         if let Some(aw) = p.airburst_weapon {
@@ -1432,16 +1436,21 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     // spec: S-0306 Edge cases (a cluster count of 0 or less: no detonation, no draw)
     let mut q = point;
     for _ in 0..p.cluster.max(0) {
+        // spec: S-0525 claim 1 (each detonation of a projectile with a cluster count above 1 leaves radiation at its own point; a child of an airburst leaves none)
+        if !pr.airburst_child {
+            crate::radiation::detonation(w, pr.weapon, q.cell());
+        }
         detonation_inner(
             w,
             pr.weapon,
-            pr.damage,
+            crate::linked::scaled_damage(pr.damage, pr.multiplier), // spec: S-0518 claim 9 and F1 (the damage supplied to area damage is scaled by the projectile's multiplier)
             q,
             pr.attacker,
             pr.house,
             pr.pos,
             p.inviso,
             area,
+            pr.target,
         );
         // spec: S-0306 claim 21 (after every detonation: R(256, 512), then one raw value for the nearby point)
         let lambda = w.rng.ranged(256, 512, half);
@@ -1500,6 +1509,8 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             fire_point: cc,
             nuke_wait: None,
             vehicle_scalable: false,
+            airburst_child: true,
+            multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
         };
         w.projectiles.insert(id, child);
         w.update.enter(id);
@@ -1522,7 +1533,7 @@ pub fn projectile_detonation(
     invisible: bool,
 ) -> DetonationResult {
     detonation_inner(
-        w, weapon, damage, point, attacker, house, q, invisible, true,
+        w, weapon, damage, point, attacker, house, q, invisible, true, None,
     )
 }
 
@@ -1541,6 +1552,7 @@ fn detonation_inner(
     q: Pos,
     invisible: bool,
     area: bool,
+    target: Option<Target>,
 ) -> DetonationResult {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
@@ -1555,6 +1567,27 @@ fn detonation_inner(
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
         return DetonationResult::Missed;
     };
+    // spec: S-0514 claim 1 (a temporal warhead's erasing effect replaces ordinary direct and area damage; the other special effects that rank before it are not yet ranked, Q-0984: the parasite, air-strike and electric-charge flags win)
+    // spec: S-0518 claim 11 (an electric-charge detonation registers an infantry firer on the building it hit, whatever the building)
+    if rules.combat.warhead(h).electric_assault {
+        crate::linked::charge_hit(w, attacker, target);
+    }
+    // spec: S-0519 claims 2 and 7 (a bomb-planting warhead plants on its target instead of area damage; a disarm warhead removes the target's bomb; the distance is not tested)
+    if rules.combat.warhead(h).ivan_bomb {
+        crate::bomb::plant(w, attacker, target);
+    }
+    // spec: S-0519 claim 16 (an air-strike warhead calls or redirects the strike instead of area damage; a shot at a cell, a destroyed firer or a non-designator calls none)
+    if rules.combat.warhead(h).airstrike {
+        crate::strike::designation(w, attacker, target);
+    }
+    if rules.combat.warhead(h).bomb_disarm {
+        crate::bomb::disarm(w, target);
+    }
+    let erasing = wh_temporal(&rules, h);
+    if erasing {
+        crate::temporal::deliver(w, attacker, target);
+    }
+    let area = area && !erasing;
     let res = if area {
         area::detonate(
             w,
@@ -1609,6 +1642,13 @@ fn detonation_inner(
     res
 }
 
+/// Whether a warhead's special effect is temporal erasure: the flag, with
+/// no parasite, air-strike or electric-charge flag (Q-0984).
+fn wh_temporal(rules: &crate::rules::SimRules, h: WarheadId) -> bool {
+    let wh = rules.combat.warhead(h);
+    wh.temporal && !(wh.parasite || wh.airstrike || wh.electric_assault)
+}
+
 /// The explosion animation of S-0303 F5 (with the electromagnetic case's
 /// draw when it applies).
 pub(crate) fn explosion_anim(
@@ -1617,6 +1657,23 @@ pub(crate) fn explosion_anim(
     d: i32,
     q: Pos,
     hit: bool,
+) -> Option<String> {
+    explosion_anim_with(w, h, d, q, hit, false)
+}
+
+/// [`explosion_anim`] chosen as if the land type were not water, so the
+/// splash case is never selected (S-0520 claim 16).
+pub(crate) fn explosion_anim_dry(w: &mut World, h: WarheadId, d: i32, q: Pos) -> Option<String> {
+    explosion_anim_with(w, h, d, q, false, true)
+}
+
+fn explosion_anim_with(
+    w: &mut World,
+    h: WarheadId,
+    d: i32,
+    q: Pos,
+    hit: bool,
+    dry: bool,
 ) -> Option<String> {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
@@ -1644,7 +1701,7 @@ pub(crate) fn explosion_anim(
     if hit && naval_first {
         land = None;
     }
-    let water = land == Some(glasnost_map::terrain::land::WATER);
+    let water = !dry && land == Some(glasnost_map::terrain::land::WATER);
     // spec: S-0303 F5 (splash: water, conventional, no bridge, q_z < terrain + 208)
     if water && wh.conventional && !w.high_bridge(qc) && q.z < terrain + 208 {
         let ns = g.splash_list.len() as i32;
@@ -1705,6 +1762,8 @@ pub fn detonate_weapon(
         .combat
         .projectile_of(weapon)
         .is_some_and(|p| p.inviso);
+    // spec: S-0525 claim 1 (a death weapon's detonation leaves radiation at the dying object's position)
+    crate::radiation::detonation(w, weapon, at.cell());
     projectile_detonation(w, weapon, damage, at, source, house, q, inviso);
 }
 

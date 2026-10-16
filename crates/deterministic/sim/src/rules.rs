@@ -416,6 +416,8 @@ pub struct OverlayRules {
     pub rubble: bool,
     /// Crate flag.
     pub crate_: bool,
+    /// Crate-trigger flag (S-0520 claim 7).
+    pub crate_trigger: bool,
     /// Damage-stage count D.
     pub damage_levels: i32,
     /// Strength S.
@@ -933,6 +935,8 @@ pub struct SimRules {
     pub wake: Option<String>,
     /// The ruleset's `sim_rules_hash`.
     pub hash: String,
+    /// The crate rules (S-0520).
+    pub crates: crate::crates::CrateRules,
     /// The combat rules (M4).
     pub combat: crate::combat::data::CombatRules,
     /// The rules of the M5a topics (economy, production, structures,
@@ -1192,7 +1196,8 @@ impl SimRules {
             .collect();
         // spec: S-0306 Constants (gravity absent: 3 leptons per tick²)
         let gravity = g.gravity.unwrap_or(3);
-        let (weapons_c, projectiles_c, warheads_c, weapon_index) = crate::combat::data::tables(
+        // spec: S-0520 Edge cases (the gas warhead is the one registered under the fixed name; when the rules name none, a warhead with every field at its absent-key default is created)
+        let (weapons_c, projectiles_c, mut warheads_c, weapon_index) = crate::combat::data::tables(
             &s.weapons,
             &s.projectiles,
             &s.warheads,
@@ -1200,6 +1205,20 @@ impl SimRules {
             quirks.negative_range_fields,
             mode,
         );
+        if !s.warheads.keys().any(|k| k.eq_ignore_ascii_case("GAS")) {
+            // The default warhead goes last, so no other warhead's index moves.
+            let one: BTreeMap<String, rs::WarheadType> =
+                [("GAS".to_owned(), Default::default())].into();
+            let (_, _, mut added, _) = crate::combat::data::tables(
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &one,
+                gravity,
+                quirks.negative_range_fields,
+                mode,
+            );
+            warheads_c.append(&mut added);
+        }
         // spec: S-0309 Import mapping (the game-wide default coefficients; engine default 0)
         let coefficient_defaults: [F64; 5] = g
             .coefficient_defaults
@@ -1248,7 +1267,7 @@ impl SimRules {
                 )
             })
             .collect();
-        let overlays = registry("overlays")
+        let overlays: Vec<OverlayRules> = registry("overlays")
             .iter()
             .map(|n| overlay_rules(n, s.overlays.get(n).cloned().unwrap_or_default()))
             .collect();
@@ -1360,10 +1379,12 @@ impl SimRules {
             &country_names,
             mode,
         );
+        let crates = crate::crates::CrateRules::new(r, &names, &overlays, &combat, mode);
         let econ = crate::econ::EconRules::new(r, mode);
         let missiles = crate::spawn::MissileRules::new(s, &names, &combat.warheads, mode);
         let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, mode);
         Self {
+            crates,
             superweapons,
             missiles,
             air: crate::air::AirRules::new(r, mode),
@@ -1645,6 +1666,8 @@ fn unit_combat(
     c.mobile_fire = u.mobile_fire.unwrap_or(true);
     c.immune = u.immune.unwrap_or(false);
     c.immune_radiation = u.immune_to_radiation.unwrap_or(false);
+    // spec: S-0514 Import mapping (Warpable absent: yes)
+    c.warpable = u.warpable.unwrap_or(true);
     c
 }
 
@@ -1672,6 +1695,8 @@ fn building_rules(
     combat.immune = bt.immune.unwrap_or(false);
     // spec: S-0302 Import mapping (ImmuneToRadiation absent: no)
     combat.immune_radiation = bt.immune_to_radiation.unwrap_or(false);
+    // spec: S-0514 Import mapping (Warpable absent: yes)
+    combat.warpable = bt.warpable.unwrap_or(true);
     // spec: S-0610 claim 1 (both psychic immunities absent from every layer: yes for building types)
     combat.immune_psionic_weapons = bt.combat.immune_to_psionic_weapons.unwrap_or(true);
     combat.immune_psionics = bt.combat.immune_to_psionics.unwrap_or(true);
@@ -1684,6 +1709,8 @@ fn building_rules(
         gatherer_destination: b(bt.econ.resource_gatherer) && b(bt.econ.resource_destination),
         delay_kill: b(bt.eligible_for_delay_kill),
         leave_rubble: b(bt.leave_rubble),
+        // spec: S-0518 Import mapping (Overpowerable absent: no)
+        overpowerable: b(bt.overpowerable),
         helipad: b(bt.helipad),
         artillary: b(bt.artillary),
         can_be_occupied: b(bt.can_be_occupied),
@@ -1769,6 +1796,7 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
         rock: o.rock.unwrap_or(false),
         rubble: o.rubble.unwrap_or(false),
         crate_: o.crate_.unwrap_or(false),
+        crate_trigger: o.crate_trigger.unwrap_or(false),
         // spec: S-0210 claim 13 (damage-stage count absent: 1)
         damage_levels: o.damage_levels.unwrap_or(1),
         // spec: S-0210 claim 13 (wall strength absent: 1)

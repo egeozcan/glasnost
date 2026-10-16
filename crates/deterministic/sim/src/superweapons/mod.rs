@@ -11,9 +11,8 @@
 //! [`crate::paradrop`]).
 //!
 //! Seams to specs that are not built (each named where it is used):
-//! - S-0525 (radiation fields): [`nuke::radiation_seam`];
-//! - S-0514 (chrono weapons; units that cannot be teleported): the erasing
-//!   half of [`being_erased`] and [`warp::chrono_seam`];
+//! - S-0514 (chrono weapons): built in `crate::temporal`; [`being_erased`]
+//!   reads its locks. Units that cannot be teleported: [`warp::chrono_seam`];
 //! - S-0610, S-0611 and S-0612 (psychic reveal, genetic mutation, psychic
 //!   domination): [`launch::yuri_seam`];
 //! - S-0510 (spy infiltration resetting the first superweapon):
@@ -854,12 +853,12 @@ pub fn protection_kind(w: &World, id: ObjectId) -> Option<ProtectKind> {
 }
 
 /// Whether an object is being erased (glossary; S-0513 claim 39: a warp
-/// member in its leaving stage). The chrono weapons' temporal beam is
-/// S-0514's, not built: that half is a seam.
+/// member in its leaving stage) or by a temporal beam (S-0514).
 pub fn being_erased(w: &World, id: ObjectId) -> bool {
-    w.obj(id)
-        .and_then(|o| o.sw.warp.as_ref())
-        .is_some_and(|m| m.leaving())
+    crate::temporal::erased(w, id)
+        || w.obj(id)
+            .and_then(|o| o.sw.warp.as_ref())
+            .is_some_and(|m| m.leaving())
 }
 
 /// Whether an object has a warp pending or is in its leaving stage (S-0513

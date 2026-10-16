@@ -374,6 +374,7 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("thief", "Thief", Bool),
     ("c4", "C4", Bool),
     ("ivan", "Ivan", Bool),
+    ("doggie", "Doggie", Bool),
     ("deployer", "Deployer", Bool),
     ("deploy_fire", "DeployFire", Bool),
     ("undeploy_delay", "UndeployDelay", Int),
@@ -413,6 +414,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("legal_target", "LegalTarget", Bool),
     ("bombable", "Bombable", Bool),
     ("immune_to_radiation", "ImmuneToRadiation", Bool),
+    // spec: S-0514 Import mapping (Warpable: a boolean; absent: yes)
+    ("warpable", "Warpable", Bool),
     ("balloon_hover", "BalloonHover", Bool),
     ("spray_attack", "SprayAttack", Bool),
     ("tilts_when_crushes", "TiltsWhenCrushes", Bool),
@@ -485,6 +488,8 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("produce_cash_amount", "ProduceCashAmount", Int),
     ("produce_cash_delay", "ProduceCashDelay", Int),
     ("immune_to_radiation", "ImmuneToRadiation", Bool),
+    // spec: S-0514 Import mapping (Warpable: a boolean; absent: yes)
+    ("warpable", "Warpable", Bool),
     ("storage", "Storage", Int),
     ("spyable", "Spyable", Bool),
     ("can_c4", "CanC4", Bool),
@@ -517,6 +522,7 @@ const OVERLAY_FIELDS: &[(&str, &str, Form)] = &[
     ("rock", "IsARock", Bool),
     ("rubble", "IsRubble", Bool),
     ("crate", "Crate", Bool),
+    ("crate_trigger", "CrateTrigger", Bool),
     ("strength", "Strength", Int),
     ("armor", "Armor", Text),
     // spec: S-0202 Import mapping (IsVeins, the veins flag)
@@ -557,6 +563,7 @@ const WARHEAD_FIELDS: &[(&str, &str, Form)] = &[
     ("wall", "Wall", Bool),
     ("wood", "Wood", Bool),
     ("ivan_bomb", "IvanBomb", Bool),
+    ("bomb_disarm", "BombDisarm", Bool),
     ("sonic", "Sonic", Bool),
     ("fire", "Fire", Bool),
     ("electric_assault", "ElectricAssault", Bool),
@@ -2257,3 +2264,23 @@ mod hover_tests;
 #[cfg(test)]
 #[path = "sim_transport_tests.rs"]
 mod transport_tests;
+
+#[cfg(test)]
+#[path = "sim_radiation_tests.rs"]
+mod radiation_tests;
+
+#[cfg(test)]
+#[path = "sim_temporal_tests.rs"]
+mod temporal_tests;
+
+#[cfg(test)]
+#[path = "sim_linked_tests.rs"]
+mod linked_tests;
+
+#[cfg(test)]
+#[path = "sim_terror_tests.rs"]
+mod terror_tests;
+
+#[cfg(test)]
+#[path = "sim_crate_tests.rs"]
+mod crate_tests;

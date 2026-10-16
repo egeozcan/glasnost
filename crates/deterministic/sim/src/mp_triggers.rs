@@ -10,8 +10,7 @@
 //! and tag carry-over (claims 10 to 12). Codes 102 (claim 1) and 95 (claim
 //! 3) hand over to [`crate::superweapons`].
 //!
-//! Seams (their owning specs are not built yet): the crate action (code 108,
-//! S-0520), engineer capture (S-0509), vehicle hijacking (the takeover of
+//! Seams (their owning specs are not built yet): engineer capture (S-0509), vehicle hijacking (the takeover of
 //! S-0312 claim 13 belongs to the hijack ability), garrison entry (S-0508),
 //! spy infiltration (S-0510) and sabotage. Each is a named function below
 //! that states the order its owner must keep.
@@ -131,12 +130,13 @@ pub fn action_coverage(code: i32) -> Coverage {
         | 99
         | 102
         | 103
+        | 108
         | 109
         | 129
         | 130
         | 133 => Coverage::Implemented,
         // spec: S-0011 claim 30 (teams, computer targeting, change owner, destroy attached, explosion, cheer, waypoint animations) and S-0524 claim 4 (crates, S-0520)
-        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 108 | 113 | 135 => Coverage::Seam,
+        4 | 5 | 7 | 8 | 14 | 32 | 41 | 42 | 80 | 113 | 135 => Coverage::Seam,
         _ => Coverage::Unknown,
     }
 }
@@ -781,16 +781,11 @@ pub fn retaining_entry_seam(
     effect(w);
 }
 
-/// Seam: create a crate at a waypoint (code 108, S-0524 claim 4). Crates
-/// (S-0520: the crate places, overlays, lifetime, expiry and power-ups) are
-/// not built, so the action is recognised and has no effect. When they are:
-/// S-0212 claim 25's single-cell search at the waypoint-slot cell (float
-/// class on water, track otherwise, normal zone), the 256-place capacity,
-/// the overlay and usable-area gates, the overlay image by water, the
-/// lifetime draw of Formulas, the number slot's kind (20 random; otherwise
-/// reduced modulo 256, 0 … 18 fixed, 19 … 255 random), and the switches
-/// `quirks.trigger_crate_respects_setting` and
-/// `quirks.trigger_crate_expiry_while_disabled`.
-pub fn crate_seam(w: &mut World, _a: &glasnost_map::triggers::Action) {
-    w.note("S-0524 claim 4: the create-crate action hands over to crates (S-0520), not built yet; no effect");
+/// Create a crate at a waypoint (code 108, S-0524 claim 4): S-0520's
+/// trigger placement at the waypoint-slot cell with the number slot's kind.
+pub fn create_crate(w: &mut World, a: &glasnost_map::triggers::Action) {
+    // spec: S-0524 claim 4 (the waypoint slot's cell; the number slot as the crate kind)
+    if let Some(c) = crate::triggers::waypoint_cell(w, a.waypoint) {
+        crate::crates::place_trigger(w, c, a.number);
+    }
 }

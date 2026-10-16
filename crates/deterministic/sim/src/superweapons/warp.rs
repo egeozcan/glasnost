@@ -111,10 +111,10 @@ pub fn phasing(w: &World, id: ObjectId) -> bool {
     member(w, id).is_some_and(|m| m.phasing())
 }
 
-/// Seam: S-0514's chrono weapons and the types that cannot be teleported.
-/// An object that S-0514 keeps out of the warp group (one being erased by
-/// a chrono weapon, or of a type that cannot be teleported) would be left
-/// in place; no such weapon or type exists in our engine yet.
+/// Seam: the types that cannot be teleported. An object being erased by a
+/// chrono weapon (S-0514) is already left in place through
+/// `econ::power::being_erased`; no spec names a type that cannot be
+/// teleported, so none is kept out here.
 pub fn chrono_seam(w: &World, id: ObjectId) -> bool {
     let _ = (w, id);
     false

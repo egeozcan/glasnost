@@ -706,6 +706,9 @@ fn killing_hit(
         let now = w.tick;
         let again = o.combat.delay_kill_until.is_some();
         if let Some(ob) = w.obj_mut(id) {
+            if !again {
+                ob.combat.charge_planter = None;
+            }
             ob.health = 1;
             let until = now.wrapping_add(k);
             ob.combat.delay_kill_until = Some(match ob.combat.delay_kill_until {
@@ -778,17 +781,23 @@ pub fn delay_kill_expiry_turn(w: &mut World, id: ObjectId) {
         // spec: S-0302 claim 16 (a bridge repair hut clears the countdown and the recorded planter, with no expiry hit, and demolishes its bridge)
         if let Some(ob) = w.obj_mut(id) {
             ob.combat.delay_kill_until = None;
+            ob.combat.charge_planter = None;
         }
         // spec: S-0511 claim 16 (the hut demolishes its bridge; no gate applies)
         crate::bridges::hut::demolish(w, id);
         return;
     }
     // spec: S-0302 claim 16 and claim 1's table (whole current health, distance 0, the demolition warhead, ignoring defences, no no-escape marker, no attacking house; the attacker is a recorded charge planter, and none is ever recorded in our engine)
+    // spec: S-0519 claim 14 and S-0302 claim 16 (the expiry hit's attacker is the recorded charge planter while it exists)
+    let planter = o.combat.charge_planter.filter(|&p| w.obj(p).is_some());
+    if let Some(ob) = w.obj_mut(id) {
+        ob.combat.charge_planter = None;
+    }
     let hit = Hit {
         amount: o.health,
         warhead: rules.combat.general.c4_warhead,
         distance: 0,
-        attacker: None,
+        attacker: planter,
         house: None,
         ignore_defences: true,
         no_escape: false,

@@ -678,7 +678,8 @@ const MUZZLE_ABSENT: i32 = 65535;
 
 /// Erasure completes on a building (claim 15): its occupants are removed
 /// with it, without death and without being put out. Called by the erasure
-/// topic (S-0514, not built) when the erasure of a building completes.
+/// topic (`temporal::complete`, S-0514) when the erasure of a building
+/// completes.
 pub fn erased(w: &mut World, b: ObjectId) {
     // spec: S-0508 claim 15 (a completed erasure removes the occupants: no death, none put out)
     remove_all(w, b);

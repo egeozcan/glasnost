@@ -1,12 +1,12 @@
 //! The tick pipeline (S-0203): the parts of a tick in their fixed places.
 //!
-//! The parts that are not built yet (planted-bomb maintenance, S-0519, the
+//! The parts that are not built yet (the
 //! weather storm, chrono flashes, diving aircraft, teams, disc lasers,
 //! pulses, blast rings and crates) are empty seams in their places
 //! of S-0203 claim 1, so that their draws land where the original takes them
 //! once they are written. Resource growth (row 9), the production lines (row
 //! 6) and the houses (row 7) run the M5a topics (`crate::econ`). Radiation
-//! maintenance (row 13) takes no draws and is not built yet.
+//! maintenance (row 13, `crate::radiation`) takes no draws.
 
 use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
@@ -27,15 +27,17 @@ pub fn step(w: &mut World) {
     crate::triggers::poll(w);
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
     crate::econ::resource::part(w);
-    // Row 2 (planted-bomb maintenance, S-0519 claim 10; no draws) is not built: an empty seam. Timed
-    // bombs detonate in their carrier's turn in row 5 (S-0203 claim 1, S-0519 claim 4), not here.
+    // Row 2 (planted-bomb maintenance, S-0519 claim 10; no draws) is presentation only (visibility, icon,
+    // sound): nothing of it is state. Timed bombs detonate in their carrier's turn in row 5 (S-0203 claim 1,
+    // S-0519 claim 4), not here.
     // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted-bomb maintenance (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
     crate::spawn::kamikaze_orders(w);
     // Rows 10, 11 and 12 have no topic yet: empty seams.
     // spec: S-0203 claim 1 row 3 (the weather storm's own update and bolt strikes, after rows 10 to 12 and before row 14 and the turn pass; S-0513 claims 14 to 19)
     crate::superweapons::storm::update(w);
-    // Rows 14 (and row 4) have no topic yet: empty seams. Row 13 (radiation
-    // maintenance) takes no draws (S-0203 row 13) and is not built yet.
+    // spec: S-0203 claim 1 row 13 and S-0525 claims 5, 6 and 11 (radiation maintenance: after the storm, before the turn pass; the most recently created field first; no draws)
+    crate::radiation::maintenance(w);
+    // Rows 14 (and row 4) have no topic yet: empty seams.
     // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
     // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)
     crate::econ::shroud::regrowth(w);
@@ -43,7 +45,9 @@ pub fn step(w: &mut World) {
     crate::econ::shroud::sweep(w);
     turn_pass(w);
     // spec: S-0203 claim 1 (after the turn pass: rows 15, 16, 6, 7, then the orders, row 8)
-    // Rows 15 and 16 (blast rings, crate respawns): empty seams.
+    // Row 15 (blast rings): an empty seam.
+    // spec: S-0203 claim 1 row 16 and S-0520 claim 4 (crate expiry and replacement, after the turn pass and before the production lines)
+    crate::crates::update(w);
     // spec: S-0203 claim 8 and row 6 (the production lines see the whole turn pass)
     crate::econ::production::part(w);
     // spec: S-0203 claim 8 and row 7 (the houses, in house order, after the production lines)
@@ -144,13 +148,33 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn) and claim 19 (a sinking vehicle still self-heals; health does not end sinking)
     crate::combat::heal::turn(w, id);
+    // spec: S-0525 claims 9 and 11 (the radiation hit, in the object's own turn after its self-healing; a kill ends the turn as S-0312 says)
+    crate::radiation::hit_turn(w, id);
     let sinking = crate::naval::sinking(w, id);
     // spec: S-0511 claim 10 (a dropped object falls on each of its own updates; the fall and any landing hit precede that turn's due behaviour processing, ordinary locomotion advance and firing check)
     let fell = crate::fall::falling(w, id) && crate::fall::turn(w, id);
     if w.obj(id).is_none_or(crate::combat::damage::dead) {
         return;
     }
-    process::turn(w, id);
+    // spec: S-0514 claims 14, 17 and 18 (an attached attacker lets go on arriving in a new cell; a target being erased takes its erasure update and sparkle in its own turn and skips ordinary movement, turning, firing and behaviour; a building skips behaviour processing and firing; a phasing-in unit sparkles)
+    crate::temporal::holder_turn(w, id);
+    crate::temporal::phasing_sparkle(w, id);
+    if crate::temporal::turn(w, id) {
+        return;
+    }
+    if w.obj(id).is_none() {
+        return;
+    }
+    if !crate::temporal::building_erased(w, id) {
+        process::turn(w, id);
+    }
+    if w.obj(id).is_none() {
+        return;
+    }
+    // spec: S-0519 claim 4 (a planted bomb is checked in its carrier's own turn, after the behaviour processing; not in a pass of its own)
+    crate::bomb::turn(w, id);
+    // spec: S-0519 claim 19 (a designator's change of target cancels its strike: looked at in its own turn)
+    crate::strike::turn(w, id);
     if w.obj(id).is_none() {
         return;
     }
@@ -166,7 +190,13 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         // spec: S-0513 claims 8 and 13 (a silo's accepted launch leaves on its next update)
         crate::superweapons::nuke::silo_turn(w, id);
-        crate::combat::behave::delayed_shot_turn(w, id);
+        if !crate::temporal::building_erased(w, id) {
+            crate::combat::behave::delayed_shot_turn(w, id);
+            // spec: S-0518 claim 6 (a recruited supporter's beam comes in its own turn)
+            crate::linked::supporter_turn(w, id);
+        }
+        // spec: S-0518 claims 12 and 13 (a building's charger list and overpowered state, in its own turn)
+        crate::linked::building_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);
         // spec: S-0501 claim 26 (a pad's service step, in the pad's own turn)

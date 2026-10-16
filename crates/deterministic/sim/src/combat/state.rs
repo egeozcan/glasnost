@@ -35,6 +35,29 @@ pub struct CombatState {
     /// A building's pending delayed shot: the tick of its turn (S-0301
     /// claim 14).
     pub delayed_shot: Option<i32>,
+    /// A planted bomb the object carries (S-0519 Terms).
+    #[serde(default)]
+    pub bomb: Option<crate::bomb::Bomb>,
+    /// A building's recorded charge planter (S-0519 claim 14).
+    #[serde(default)]
+    pub charge_planter: Option<ObjectId>,
+    /// A prism master's support count *N* (S-0518 Terms).
+    #[serde(default)]
+    pub support: i32,
+    /// A prism supporter's pending beam: the tick it comes and the master's
+    /// fire point at recruitment (S-0518 claim 6).
+    #[serde(default)]
+    pub support_beam: Option<(i32, Pos)>,
+    /// An overpowerable building's registered chargers (S-0518 Terms).
+    #[serde(default)]
+    pub chargers: Vec<ObjectId>,
+    /// Whether an overpowerable building is overpowered (S-0518 claim 13).
+    #[serde(default)]
+    pub overpowered: bool,
+    /// The charging mark of a unit charging a building by itself (S-0518
+    /// claim 14).
+    #[serde(default)]
+    pub charging: bool,
     /// Radial fire segment index of the next shot (S-0306 claim 7).
     pub radial_index: i32,
     /// Spray shift number s (S-0313 claim 9).
@@ -93,6 +116,13 @@ impl CombatState {
             gattling_stage: 0,
             firing_frame: None,
             delayed_shot: None,
+            bomb: None,
+            charge_planter: None,
+            support: 0,
+            support_beam: None,
+            chargers: Vec::new(),
+            overpowered: false,
+            charging: false,
             radial_index: 0,
             spray_shift: 0,
             firepower_mult: one,
@@ -188,7 +218,22 @@ pub struct Projectile {
     pub fire_point: Pos,
     /// Waiting for the nuclear fireball until this tick (S-0306 claim 25).
     pub nuke_wait: Option<i32>,
+    /// The damage multiplier *M* in 1/256 (S-0518 claim 9): 256 unless a
+    /// supported prism shot made it larger.
+    #[serde(default = "unscaled")]
+    pub multiplier: i32,
     /// Fired by a vehicle from a scalable type: counted in *N* of S-0306
     /// claim 16.
     pub vehicle_scalable: bool,
+    /// One of the nine children of an airburst projectile, which carry no
+    /// weapon of their own and leave no radiation (S-0525 claim 1).
+    #[serde(default)]
+    pub airburst_child: bool,
+}
+
+/// The unscaled damage multiplier of a projectile, ×1 in 1/256 (S-0518
+/// claim 9).
+// spec: S-0518 Constants (unscaled damage multiplier 256)
+fn unscaled() -> i32 {
+    256
 }

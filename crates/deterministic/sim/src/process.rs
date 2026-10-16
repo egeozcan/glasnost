@@ -164,6 +164,8 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
     if !o.kind.is_mobile() {
         return;
     }
+    // spec: S-0514 claim 14 (an attached attacker lets go on entering idle behaviour: falling back to rest)
+    crate::temporal::let_go(w, id);
     // spec: S-0501 claim 18 and table T2 (the first three rows come before the common effects)
     if crate::air::fall_back_early(w, id) {
         return;
@@ -743,8 +745,59 @@ fn deployer_rule(w: &mut World, id: ObjectId) -> Option<i32> {
         deployed_firing(w, id);
         return Some(standard_delay(w, id));
     }
-    // The radiation rows need weapon radiation levels (combat); a type that does not deploy to fire follows claims 24 and 26.
+    let immune_fires = w
+        .obj(id)
+        .and_then(|o| w.rules().unit(o.kind, o.type_index))
+        .is_some_and(|u| {
+            u.raw.deploy_fire.unwrap_or(false) && u.raw.immune_to_radiation.unwrap_or(false)
+        });
+    if immune_fires {
+        // spec: S-0215 claim 31 rows 3 to 5 (deploys to fire, immune to radiation)
+        return Some(immune_deployed(w, id));
+    }
+    // A type that does not deploy to fire follows claims 24 and 26.
     None
+}
+
+/// The radiation-immune deployed rows of S-0215 claim 31: a unit on the
+/// centre cell of a field whose current field level is at least
+/// *R* = trunc(*W* / 3), with *W* the radiation level of its secondary
+/// weapon (S-0525 claim 7), does nothing; otherwise it fires at its own
+/// cell when the firing rules let it (the standing row), starting its
+/// deployed-fire sequence; a refused shot only drops the target. The delay
+/// is the sequence's frame count for a shot and *D*<sub>r</sub> + *U*(10, 20)
+/// for the other two rows.
+fn immune_deployed(w: &mut World, id: ObjectId) -> i32 {
+    use crate::combat::check::{Answer, check};
+    let Some(cell) = w.obj(id).map(|o| o.pos.cell()) else {
+        return 0;
+    };
+    // spec: S-0215 claim 31 (R = trunc(W / 3), integer division by the radiation threshold divisor 3; W the secondary slot's radiation level)
+    let level = crate::combat::weapon::slot_weapon(w, id, 1)
+        .map_or(0, |wp| w.rules().combat.weapon(wp).rad_level);
+    let threshold = level / 3; // spec: S-0215 claim 31 (R = trunc(W / 3), the radiation threshold divisor)
+    // spec: S-0215 claim 31 and S-0525 claim 7 (only a field centred on the unit's cell counts, by its current integer field level)
+    let suppressed = crate::radiation::centre_field_level(w, cell).is_some_and(|l| l >= threshold);
+    let target = Target::Cell(cell);
+    if !suppressed && check(w, id, Some(target), 1, true) == Answer::CanFire {
+        // spec: S-0215 claim 31 (fires at its own cell, drops the target, starts its deployed-fire sequence; Q-0983: the shot is made at once)
+        crate::combat::fire::shot(w, id, 1, target);
+        if let Some(ob) = w.obj_mut(id) {
+            crate::spawn::clear_own_target(ob);
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        }
+        infantry::request(w, id, Seq::DeployedFire, false);
+        return frame_count(w, id, Seq::DeployedFire);
+    }
+    if !suppressed && let Some(ob) = w.obj_mut(id) {
+        // spec: S-0215 claim 31 (the firing rules refuse: it drops the target)
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let dr = rate_delay(w, id);
+    // spec: S-0215 claim 31 (D_r + U(10, 20))
+    dr.wrapping_add(w.rng.ranged(10, 20, half))
 }
 
 /// The deployed-firing rule (S-0517 claim 16) of a deployed infantry unit:
@@ -923,6 +976,9 @@ fn process_attack(w: &mut World, id: ObjectId) -> i32 {
             return standard_delay(w, id);
         }
     }
+    // spec: S-0518 claim 15 (an infantry unit whose charging mark is set first runs an automatic range search, without the timer gate)
+    crate::linked::break_off(w, id);
+    let o = w.obj(id).cloned().unwrap_or(o);
     if let Some(t) = o.target {
         let (slot, _) = crate::combat::weapon::would_use(w, id, Some(t));
         // spec: S-0304 claim 2 (the target is dropped, and the attack stopped, at the first check that answers illegal)
@@ -963,6 +1019,10 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
             return 1;
         }
         // Row 3 (the weeder's rule) is left by S-0402 to a later revision; row 4 is the original's computer players' only.
+    }
+    // spec: S-0518 claim 14 (a charger with no target in guard looks at the cells next to it; when it takes a building the ordinary guard processing does not run; Q-0985: 1 tick)
+    if o.target.is_none() && crate::linked::start_charging(w, id) {
+        return 1;
     }
     if o.target.is_none() && o.kind == Kind::Infantry {
         // spec: S-0215 claim 24 (no target: attempts its idle action, S-0107 claim 14)
@@ -1167,6 +1227,11 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
                 crate::combat::acquire::SearchContext::Area,
             );
             if found.is_some() {
+                return 1;
+            }
+            // spec: S-0518 claim 14 (area guard: after the guard spot and automatic search steps, a charger still without a target looks for a building to charge; Q-0985: 1 tick)
+            if w.obj(id).is_some_and(|x| x.target.is_none()) && crate::linked::start_charging(w, id)
+            {
                 return 1;
             }
             idle(w);

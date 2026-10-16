@@ -19,11 +19,16 @@
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod brain;
+pub mod chrono;
+pub mod crates;
 pub mod deployers;
 pub mod fixture;
 pub mod game;
 pub mod jumpjets;
+pub mod linked;
+pub mod radiation;
 pub mod scripted;
 pub mod skirmish;
 pub mod special;
 pub mod tech_buildings;
+pub mod terror;

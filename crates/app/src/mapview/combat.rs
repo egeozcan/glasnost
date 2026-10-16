@@ -281,6 +281,27 @@ pub enum Marker {
     /// An animation whose type has no sprite was created here (the
     /// viewer's debug layer).
     Anim,
+    /// The reach of a radiation field (S-0525): a green ring of this
+    /// half-width in pixels. Our placeholder for the field's light, which
+    /// the view does not draw (it never relights the map).
+    Field {
+        /// Half-width, pixels.
+        half: i32,
+    },
+    /// A planted bomb the viewer sees (S-0519 claim 10), flickering red and
+    /// white with the stage; our placeholder for the bomb icon.
+    Bomb {
+        /// The icon frame of S-0519 F3, 0 to 11.
+        frame: i32,
+    },
+    /// A demolition charge counting down on a building (S-0519 claim 14,
+    /// the flash): an orange diamond.
+    Charge,
+    /// A building marked by an air strike (S-0519 claim 17): a cyan ring.
+    Marked,
+    /// A crate on the map (S-0520): a yellow box, our placeholder for the
+    /// crate overlay's picture, which the view draws only from the map.
+    Crate,
 }
 
 /// Placeholder palette indices (our own colours).
@@ -423,6 +444,62 @@ fn marker_image(m: Marker) -> IndexedImage {
                 disc(r, ry, Some(inner), fill, ink::RED)
             }
         }
+        Marker::Field { half } => {
+            // A ring twice as wide as high (S-0101 F1's ground projection).
+            let r = half.max(4);
+            disc(r, (r / 2).max(1), Some(880), ink::GREEN, ink::GREEN)
+        }
+        Marker::Bomb { frame } => {
+            // An 11 × 11 disc, red on even frames and white on odd ones, its
+            // centre growing with the frame (the icon's progress).
+            let ink = if frame % 2 == 0 { ink::RED } else { ink::WHITE };
+            let mut px = vec![0u8; 121];
+            for y in 0..11i32 {
+                for x in 0..11i32 {
+                    let (dx, dy) = (x - 5, y - 5);
+                    let r2 = dx * dx + dy * dy;
+                    if r2 <= 25 {
+                        px[(y * 11 + x) as usize] = if r2 <= frame * 25 / 11 {
+                            ink::YELLOW
+                        } else {
+                            ink
+                        };
+                    }
+                }
+            }
+            IndexedImage::new(11, 11, px).expect("sized")
+        }
+        Marker::Charge => {
+            // A 13 × 13 diamond.
+            let mut px = vec![0u8; 169];
+            for y in 0..13i32 {
+                for x in 0..13i32 {
+                    if (x - 6).abs() + (y - 6).abs() <= 6 {
+                        px[(y * 13 + x) as usize] = ink::ORANGE;
+                    }
+                }
+            }
+            IndexedImage::new(13, 13, px).expect("sized")
+        }
+        Marker::Marked => disc(20, 10, Some(880), ink::CYAN, ink::CYAN),
+        Marker::Crate => {
+            // A 13 × 11 box with an outline and a cross.
+            let mut px = vec![0u8; 143];
+            for y in 0..11usize {
+                for x in 0..13usize {
+                    let edge = x == 0 || y == 0 || x == 12 || y == 10;
+                    let cross = x == 6 || y == 5;
+                    px[y * 13 + x] = if edge {
+                        ink::ORANGE
+                    } else if cross {
+                        ink::WHITE
+                    } else {
+                        ink::YELLOW
+                    };
+                }
+            }
+            IndexedImage::new(13, 11, px).expect("sized")
+        }
         Marker::Anim => {
             // A 9 × 9 hollow square with a diagonal cross.
             let mut px = vec![0u8; 81];
@@ -465,6 +542,9 @@ pub enum TransientKind {
     Burst(i32),
     /// An animation.
     Anim,
+    /// A point of a prism support beam, shown for this many ticks (S-0518
+    /// claim 6; our placeholder: a row of marks along the beam).
+    Beam(i32),
 }
 
 impl Transient {
@@ -481,6 +561,7 @@ impl Transient {
                 stage: age * BURST_STAGES / BURST_TICKS,
             }),
             TransientKind::Anim => (age < ANIM_TICKS).then_some(Marker::Anim),
+            TransientKind::Beam(life) => (age < life).then_some(Marker::Muzzle),
         }
     }
 }

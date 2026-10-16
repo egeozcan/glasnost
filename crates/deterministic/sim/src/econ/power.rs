@@ -252,8 +252,8 @@ pub fn under_pulse(w: &World, id: ObjectId) -> bool {
 }
 
 /// Being erased (glossary): a superweapon warp member in its leaving stage
-/// (S-0513 claim 39). The chrono weapons' erasure (S-0514) is a seam
-/// inside [`crate::superweapons::being_erased`].
+/// (S-0513 claim 39) or an object a temporal beam is attached to (S-0514),
+/// both read by [`crate::superweapons::being_erased`].
 pub fn being_erased(w: &World, id: ObjectId) -> bool {
     crate::superweapons::being_erased(w, id)
 }
@@ -264,10 +264,10 @@ pub fn being_drained(w: &World, id: ObjectId) -> bool {
     false
 }
 
-/// *n*<sub>c</sub>, the chargers a building has (S-0405 Terms). Seam.
+/// *n*<sub>c</sub>, the chargers a building has (S-0405 Terms): the
+/// registered chargers of S-0518 claim 12.
 pub fn chargers(w: &World, id: ObjectId) -> i32 {
-    let _ = (w, id);
-    0
+    crate::linked::chargers(w, id)
 }
 
 /// *n*<sub>a</sub>, the passengers an absorbing building holds (S-0312

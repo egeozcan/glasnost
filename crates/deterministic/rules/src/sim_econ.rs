@@ -827,6 +827,25 @@ pub struct SwGeneral {
     pub chute_sound: Option<String>,
 }
 
+/// One entry of the power-up table (S-0520 Terms): weight, animation, water
+/// flag and argument.
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Powerup {
+    /// The weight of the random choice.
+    #[serde(default)]
+    pub weight: i32,
+    /// The animation type key shown at the pickup.
+    #[serde(default)]
+    pub animation: Option<String>,
+    /// Whether the effect works on a water cell.
+    #[serde(default)]
+    pub water: bool,
+    /// The argument *A*, a double.
+    #[serde(default)]
+    pub argument: Option<Decimal>,
+}
+
 /// Game-wide economy values (written into `general.economy`), from the
 /// sections `[General]`, `[AI]`, `[AudioVisual]`, `[CombatDamage]`,
 /// `[CrateRules]` and `[MultiplayerDialogSettings]` of the rules.
@@ -1061,6 +1080,31 @@ pub struct EconGeneral {
     /// `[CrateRules] CrateMaximum` (S-0412 claim 10); absent: 255.
     #[serde(default)]
     pub crate_maximum: Option<i32>,
+    /// `[CrateRules] CrateRadius`, cells as decimal text (S-0520 Import
+    /// mapping, F3); absent: 640 leptons. The importer drops a value of
+    /// exactly -1 (it keeps the value in force).
+    #[serde(default)]
+    pub crate_radius: Option<Decimal>,
+    /// `[CrateRules] CrateRegen`, game minutes, a double (S-0520 Import
+    /// mapping); absent: 10.
+    #[serde(default)]
+    pub crate_regen: Option<Decimal>,
+    /// `[CrateRules] UnitCrateType`, a vehicle type key (S-0520 claim 13).
+    #[serde(default)]
+    pub unit_crate_type: Option<String>,
+    /// `[CrateRules] WoodCrateImg`, an overlay type key (S-0520 claim 3).
+    #[serde(default)]
+    pub wood_crate_img: Option<String>,
+    /// `[CrateRules] WaterCrateImg`, an overlay type key (S-0520 claim 3).
+    #[serde(default)]
+    pub water_crate_img: Option<String>,
+    /// `[CombatDamage] FlameDamage`, a warhead key (S-0520 claim 17).
+    #[serde(default)]
+    pub flame_damage: Option<String>,
+    /// `[Powerups]`, the nineteen power-ups in table order (S-0520 Import
+    /// mapping); absent: the built-in table.
+    #[serde(default)]
+    pub powerups: Option<Vec<Powerup>>,
     /// `[MultiplayerDialogSettings] Money`, the default credits setting
     /// offered (S-0412 Import mapping); absent: 10000.
     #[serde(default)]

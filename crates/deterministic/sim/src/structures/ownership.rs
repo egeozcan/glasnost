@@ -56,7 +56,8 @@ pub fn change(w: &mut World, b: ObjectId, new: Option<HouseId>, cause: Cause) {
     };
     let pos = o.pos;
     let spawner = o.spawn.is_some();
-    // spec: S-0509 claim 13 (a planted timed bomb is disarmed without a detonation, except on a garrisonable type; planted bombs belong to S-0519, which is not built: no building carries one)
+    // spec: S-0509 claim 13 and S-0519 claim 7 (a planted timed bomb is disarmed without a detonation, except on a garrisonable type)
+    crate::bomb::building_owner_changed(w, b);
     // spec: S-0509 claim 14 (the objects in contact with the building are asked whether they move: staying ones near the docking point change owner with it, every other one is told to leave)
     contacts(w, b, new);
     if let Some(ob) = w.obj_mut(b) {

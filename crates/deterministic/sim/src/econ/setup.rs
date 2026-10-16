@@ -142,9 +142,11 @@ pub struct StartState {
     /// The colour fields that hold a lobby colour slot, by country (S-0413
     /// claim 5).
     pub colour_field: BTreeMap<u32, u8>,
-    /// The crates game start places (S-0412 claim 10); the placing is a
-    /// seam of the crate rules.
+    /// The crates game start places (S-0412 claim 10).
     pub crates: i32,
+    /// The bases setting of the game (S-0009 claim 45; S-0520 claim 13).
+    #[serde(default)]
+    pub bases: bool,
 }
 
 /// The setup rules (S-0412 Import mapping).
@@ -277,6 +279,12 @@ pub fn superweapons_allowed(w: &World) -> bool {
         .settings
         .superweapons
         .unwrap_or(rules(w).superweapons)
+}
+
+/// The bases setting of this game (S-0412 Import mapping, S-0520 claims 9
+/// and 13).
+pub fn bases(w: &World) -> bool {
+    w.econ.start.bases
 }
 
 /// The crate setting (S-0412 claim 10).
@@ -650,8 +658,8 @@ fn live(w: &World) -> Vec<HouseId> {
         .collect()
 }
 
-/// S-0412 claim 10: the number of crates game start places. The placing,
-/// with its draws (S-0520 claims 2 and 3, wave 2), is not built: a seam.
+/// S-0412 claim 10: the number of crates game start places, and their
+/// placing with its draws (S-0520 claims 2 and 3).
 fn place_crates(w: &mut World) {
     if !crates(w) {
         // spec: S-0412 claim 10 (crate setting off: no crate at game start)
@@ -678,7 +686,8 @@ fn place_crates(w: &mut World) {
     let n = r.crate_min.max(h).min(r.crate_max);
     // spec: S-0412 Formulas (no crate when n ≤ 0)
     w.econ.start.crates = n.max(0);
-    // S-0412 claim 10: where each crate goes and its draws belong to the crate rules (no spec yet); none is placed.
+    // spec: S-0520 claim 2 (each game-start crate is one random placement, in order, one complete draw group after the other)
+    crate::crates::place_at_start(w, n.max(0));
 }
 
 /// S-0412 claim 3: the extra credits of a house that is neither

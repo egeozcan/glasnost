@@ -391,7 +391,23 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
     {
         return 1;
     }
-    // Rows 10 to 12 (overpowered buildings, overpowerable targets, kamikaze aircraft) need states the structures and aircraft specs own.
+    // spec: S-0308 table P row 10 (the firer is an overpowered building, S-0518 claim 13: 1)
+    if w.obj(firer).is_some_and(|o| o.combat.overpowered) {
+        return 1;
+    }
+    // spec: S-0308 table P row 11 (an allied building target of an overpowerable type and an electric-charge secondary: 1)
+    if let Target::Object(x) = t
+        && target_building
+        && sec_h.is_some_and(|h| h.electric_assault)
+        && w.allied(
+            w.obj(firer).and_then(|o| o.owner),
+            w.obj(x).and_then(|o| o.owner),
+        )
+        && crate::linked::overpowerable(w, x)
+    {
+        return 1;
+    }
+    // Row 12 (kamikaze aircraft) needs the aircraft specs.
     if let Target::Cell(c) = t
         && tc.land_targeting == 2
     {

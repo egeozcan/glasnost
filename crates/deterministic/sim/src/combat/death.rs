@@ -169,7 +169,7 @@ fn exploding(w: &World, id: ObjectId) -> bool {
 /// (S-0302 claim 1), actors that overrode against it revert (S-0215 claim
 /// 10), and objects targeting it lose it; projectiles aimed at it target
 /// its cell (S-0306 claim 17).
-fn mark_killed(w: &mut World, id: ObjectId) {
+pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     if let Some(ob) = w.obj_mut(id) {
         ob.combat.killed = true;
@@ -224,6 +224,8 @@ fn mark_killed(w: &mut World, id: ObjectId) {
 /// second row) and an aircraft killed on the ground (S-0312 claim 15)
 /// among others.
 pub fn leave_play(w: &mut World, id: ObjectId) {
+    // spec: S-0312 claims 14 and 20 and S-0520 claim 5 (a destroyed crate-carrying vehicle or a building with a crate beneath leaves a crate)
+    crate::crates::death_crate(w, id);
     // spec: S-0312 claims 12 and 15 and S-0507 claim 16 (remaining passengers die at removal, without attacker credit)
     crate::transport::remove_passengers(w, id);
     crate::objects::remove(w, id);
@@ -314,7 +316,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
         let house = o.owner;
         crate::combat::projectile::detonate_weapon(w, wp, dmg, o.pos, Some(id), house, true);
     }
-    // Step 3 (an attached bomb) needs planted bombs (special-abilities specs).
+    // spec: S-0312 table step 3 and S-0519 claim 5 (an attached bomb goes off once at the carrier's position, or is removed silently off the map; the carrier's death does not set it off a second time)
+    crate::bomb::carrier_killed(w, id);
     match o.kind {
         Kind::Infantry => infantry_death(w, id, hit),
         Kind::Vehicle => {

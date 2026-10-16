@@ -307,6 +307,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
             return sam_attack(w, id);
         }
         let Some(t) = o.target else {
+            // spec: S-0518 claim 10 (a prism master's attack processed with no target resets its support count)
+            crate::linked::reset_count(w, id);
             // spec: S-0215 claim 32 (no target: queues guard and starts it at once, 1 tick)
             if let Some(ob) = w.obj_mut(id) {
                 ob.beh
@@ -360,7 +362,12 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
                     // spec: S-0215 claim 32 and S-0301 claim 14 (a failed upgrade weapon gate: no firing attempt and no delayed shot, with the original quirk setting; target, attack and ready mark kept, 1 tick)
                     return 1;
                 }
-                if gate == Some(true) {
+                if gate.is_none() && crate::linked::master_path(w, id) {
+                    // spec: S-0518 claims 1 to 7 (a prism master recruits one supporter per processing, and when it finds none, or the count has reached the cap, starts its own delayed shot, slot 0)
+                    if !crate::linked::recruit(w, id) {
+                        crate::linked::start_shot(w, id);
+                    }
+                } else if gate == Some(true) {
                     // spec: S-0215 claim 32 and S-0301 claims 9 and 14 (a passing gate: a primary attempt, then a secondary attempt with no firing check of its own, whatever rearm the primary began; immediately, also for an animation-delayed building, and starting no delayed shot)
                     // spec: S-0301 claim 9 (a secondary slot that resolves to no weapon: the attempt does nothing, `fire::shot` returns before any change or draw)
                     crate::combat::fire::shot(w, id, 0, t);
@@ -382,6 +389,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
                 2 // spec: S-0215 claim 32 (not facing or rearming: 2 ticks)
             }
             Answer::Illegal | Answer::Impossible | Answer::OutOfAmmo | Answer::OutOfRange => {
+                // spec: S-0518 claim 10 (a prism master whose attack drops the target resets its support count)
+                crate::linked::reset_count(w, id);
                 if let Some(ob) = w.obj_mut(id) {
                     crate::spawn::clear_own_target(ob);
                     ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
@@ -541,6 +550,11 @@ pub fn delayed_shot_turn(w: &mut World, id: ObjectId) {
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.combat.delayed_shot = None;
+    }
+    if crate::linked::master_path(w, id) {
+        // spec: S-0518 claims 7 to 10 (a prism master's shot: slot 0, the support multiplier, the count)
+        crate::linked::master_shot(w, id);
+        return;
     }
     let Some(t) = o.target else { return };
     let slot = choose_slot(w, id, Some(t));

@@ -804,8 +804,13 @@ fn step_check(w: &mut World, id: ObjectId, repeated: bool) -> Choice {
     };
     let here = o.pos.cell();
     let cell = drive::neighbour(here, d);
-    // spec: S-0503 claim 5 (a crate in that cell is collected when the cell is chosen, before the check)
-    collect_crate(w, id, cell);
+    // spec: S-0503 claim 5 and S-0520 claim 6 (a crate in that cell is collected when the cell is chosen, before the check; a successful unit crate blocks the step and clears its movement target)
+    if collect_crate(w, id, cell) {
+        if let Some(ob) = w.obj_mut(id) {
+            ob.path.steps.clear();
+        }
+        return Choice::NoPoint;
+    }
     let reference = occupancy::reference_level(w, id);
     // spec: S-0503 claim 12 (the step check: the entry outcome of S-0209, without S-0209 claim 5f's driving substitutions)
     let outcome = path::step_outcome(w, id, here, cell, reference);
@@ -1343,11 +1348,10 @@ fn reveal_cloaked(w: &mut World, id: ObjectId, c: CellXY) {
     crate::cloak::machine::blocked_reveal(w, c);
 }
 
-/// Seam: a crate in the chosen cell is collected (S-0503 claim 5, S-0520).
-/// Crates are not built yet.
-fn collect_crate(w: &mut World, id: ObjectId, c: CellXY) {
-    // spec: S-0520 (crates), not built: a seam
-    let _ = (w, id, c);
+/// A crate in the chosen cell is collected (S-0503 claim 5, S-0520 claim 6);
+/// whether a unit crate blocks the step.
+fn collect_crate(w: &mut World, id: ObjectId, c: CellXY) -> bool {
+    crate::crates::pickup(w, id, c)
 }
 
 /// Seam: the chase cut of S-0212 claim 20 for a vehicle or infantry

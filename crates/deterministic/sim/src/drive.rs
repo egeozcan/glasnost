@@ -667,7 +667,13 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     let here = o.pos.cell();
     let first = neighbour(here, d);
     match checked_outcome(w, id, u, here, first) {
-        Outcome::Clear => {}
+        Outcome::Clear => {
+            // spec: S-0520 claim 6 (a driving or ship mover collects the crate of the cell it commits to, before it arrives; a successful unit crate blocks the step and clears its movement target)
+            if crate::crates::pickup(w, id, first) {
+                discard_path(w, id);
+                return false;
+            }
+        }
         Outcome::ClosedFriendlyGate => {
             // spec: S-0207 claim 15 table T4 (closed friendly gate: it tells the gate to open and waits)
             if let Some(gate) = process::closed_friendly_gate(w, id, first) {

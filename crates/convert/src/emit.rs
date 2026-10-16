@@ -80,6 +80,7 @@ impl Emitter<'_> {
                 v.as_ref().map_or_else(|| "(none: the engine default)".to_owned(), |v| format!("{:?}", show(v)))
             ),
             What::Truncated(t) => format!("re-read without the key: truncated to {t} thousandths (S-0104 claim 12)"),
+            What::Rescaled(t) => format!("read of the general section: the held support modifier becomes {t} (S-0518 claim 16, F4)"),
             What::Ignored(v) => format!("{:?} ignored: read from the base rules only (S-0006 claim 2)", show(v)),
         };
         Origin {

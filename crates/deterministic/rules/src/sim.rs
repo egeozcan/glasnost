@@ -698,6 +698,93 @@ pub struct General {
     /// established.
     #[serde(default)]
     pub default_spark_system: Option<String>,
+    /// `[CombatDamage] IvanWarhead`, the bomb warhead (S-0519 Import mapping).
+    #[serde(default)]
+    pub ivan_warhead: Option<String>,
+    /// `[CombatDamage] IvanDamage` (S-0519 Import mapping).
+    #[serde(default)]
+    pub ivan_damage: Option<i32>,
+    /// `[CombatDamage] IvanTimedDelay`, ticks (S-0519 Import mapping).
+    #[serde(default)]
+    pub ivan_timed_delay: Option<i32>,
+    /// `[CombatDamage] IvanIconFlickerRate`, ticks (S-0519 Import mapping).
+    #[serde(default)]
+    pub ivan_icon_flicker_rate: Option<i32>,
+    /// `[CombatDamage] CanDetonateTimeBomb` (S-0519 Import mapping).
+    #[serde(default)]
+    pub can_detonate_time_bomb: Option<bool>,
+    /// `[CombatDamage] CanDetonateDeathBomb` (S-0519 Import mapping).
+    #[serde(default)]
+    pub can_detonate_death_bomb: Option<bool>,
+    /// `[CombatDamage] C4Delay`, minutes, a single (S-0519 Import mapping).
+    #[serde(default)]
+    pub c4_delay: Option<Decimal>,
+    /// `[General] PrismType`, the building type that supports and is
+    /// supported (S-0518 Import mapping).
+    #[serde(default)]
+    pub prism_type: Option<String>,
+    /// `[General] PrismSupportModifier`: the held whole-number percentage
+    /// after the layers' F4 reads (S-0518 Import mapping, F4).
+    #[serde(default)]
+    pub prism_support_modifier: Option<i32>,
+    /// `[General] PrismSupportMax`, the support cap (S-0518 Import mapping).
+    #[serde(default)]
+    pub prism_support_max: Option<i32>,
+    /// `[General] PrismSupportDelay`, the support rearm in ticks (S-0518
+    /// Import mapping).
+    #[serde(default)]
+    pub prism_support_delay: Option<i32>,
+    /// `[General] PrismSupportDuration`, the beam duration in ticks (S-0518
+    /// Import mapping).
+    #[serde(default)]
+    pub prism_support_duration: Option<i32>,
+    /// `[General] WarpAway`, the completion animation (S-0514 Import
+    /// mapping).
+    #[serde(default)]
+    pub warp_away: Option<String>,
+    /// `[General] ChronoSparkle1`, the sparkle animation (S-0514 Import
+    /// mapping).
+    #[serde(default)]
+    pub chrono_sparkle: Option<String>,
+    /// `[CombatDamage] OpenToppedWarpDistance`, cells (S-0514 Import
+    /// mapping).
+    #[serde(default)]
+    pub open_topped_warp_distance: Option<i32>,
+    /// `[Radiation] RadDurationMultiple`, the duration multiple *M*
+    /// (S-0525 Import mapping, F2).
+    #[serde(default)]
+    pub rad_duration_multiple: Option<i32>,
+    /// `[Radiation] RadApplicationDelay`, the application delay *A* in ticks
+    /// (S-0525 Import mapping, claim 9).
+    #[serde(default)]
+    pub rad_application_delay: Option<i32>,
+    /// `[Radiation] RadLevelMax`, the level cap (S-0525 Import mapping, F6).
+    #[serde(default)]
+    pub rad_level_max: Option<i32>,
+    /// `[Radiation] RadLevelDelay`, the level delay in ticks (S-0525 Import
+    /// mapping, claim 5).
+    #[serde(default)]
+    pub rad_level_delay: Option<i32>,
+    /// `[Radiation] RadLightDelay`, the light delay in ticks (S-0525 Import
+    /// mapping, claim 14).
+    #[serde(default)]
+    pub rad_light_delay: Option<i32>,
+    /// `[Radiation] RadLevelFactor`, a double (S-0525 Import mapping, F6).
+    #[serde(default)]
+    pub rad_level_factor: Option<Decimal>,
+    /// `[Radiation] RadLightFactor`, a double (S-0525 Import mapping, F7).
+    #[serde(default)]
+    pub rad_light_factor: Option<Decimal>,
+    /// `[Radiation] RadTintFactor`, a double (S-0525 Import mapping, F7).
+    #[serde(default)]
+    pub rad_tint_factor: Option<Decimal>,
+    /// `[Radiation] RadColor`, a byte triple (S-0525 Import mapping, F7).
+    #[serde(default)]
+    pub rad_color: Option<[i32; 3]>, // spec: S-0525 Import mapping (RadColor: a byte triple)
+    /// `[Radiation] RadSiteWarhead`, a warhead name (S-0525 Import mapping,
+    /// claim 10).
+    #[serde(default)]
+    pub rad_site_warhead: Option<String>,
     /// `[General] WeaponNullifyAnim` (S-0303 claim 15).
     #[serde(default)]
     pub weapon_nullify_anim: Option<String>,
@@ -1297,6 +1384,9 @@ pub struct UnitType {
     /// `Ivan`.
     #[serde(default)]
     pub ivan: Option<bool>,
+    /// `Doggie`, the animal marker: no effect of its own (S-0519 claim 1).
+    #[serde(default)]
+    pub doggie: Option<bool>,
     /// `Deployer`.
     #[serde(default)]
     pub deployer: Option<bool>,
@@ -1386,6 +1476,10 @@ pub struct UnitType {
     /// `ImmuneToRadiation`.
     #[serde(default)]
     pub immune_to_radiation: Option<bool>,
+    /// `Warpable`, the erasable-target flag (S-0514 Import mapping); absent:
+    /// yes.
+    #[serde(default)]
+    pub warpable: Option<bool>,
     /// `BalloonHover`.
     #[serde(default)]
     pub balloon_hover: Option<bool>,
@@ -1542,6 +1636,10 @@ pub struct UnitType {
     /// `CarriesCrate` (S-0312 claim 14).
     #[serde(default)]
     pub carries_crate: Option<bool>,
+    /// `CrateGoodie`: a vehicle type a unit crate may give (S-0520 claim
+    /// 13).
+    #[serde(default)]
+    pub crate_goodie: Option<bool>,
     /// `Crashable` (S-0312 claims 12, 15).
     #[serde(default)]
     pub crashable: Option<bool>,
@@ -1761,6 +1859,24 @@ pub struct CombatFields {
     /// `AirstrikeTeam` (S-0309 claim 24).
     #[serde(default)]
     pub airstrike_team: Option<i32>,
+    /// `EliteAirstrikeTeam`, the elite strike size (S-0519 Import mapping).
+    #[serde(default)]
+    pub elite_airstrike_team: Option<i32>,
+    /// `AirstrikeTeamType`, the strike aircraft type (S-0519 Import mapping).
+    #[serde(default)]
+    pub airstrike_team_type: Option<String>,
+    /// `EliteAirstrikeTeamType` (S-0519 Import mapping).
+    #[serde(default)]
+    pub elite_airstrike_team_type: Option<String>,
+    /// `AirstrikeRechargeTime`, ticks (S-0519 Import mapping).
+    #[serde(default)]
+    pub airstrike_recharge_time: Option<i32>,
+    /// `EliteAirstrikeRechargeTime`, ticks (S-0519 Import mapping).
+    #[serde(default)]
+    pub elite_airstrike_recharge_time: Option<i32>,
+    /// `BombSight`, cells (S-0519 Import mapping).
+    #[serde(default)]
+    pub bomb_sight: Option<i32>,
     /// `Drainable` (S-0308 row 8).
     #[serde(default)]
     pub drainable: Option<bool>,
@@ -1803,6 +1919,10 @@ pub struct CombatFields {
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BuildingType {
+    /// `Overpowerable`, the type that charging infantry overpower (S-0518
+    /// Import mapping); absent: no.
+    #[serde(default)]
+    pub overpowerable: Option<bool>,
     /// `CloakGenerator` (S-0516 claims 19 and 20).
     #[serde(default)]
     pub cloak_generator: Option<bool>,
@@ -1911,6 +2031,10 @@ pub struct BuildingType {
     /// `ImmuneToRadiation` (S-0302 claim 8).
     #[serde(default)]
     pub immune_to_radiation: Option<bool>,
+    /// `Warpable`, the erasable-target flag (S-0514 Import mapping); absent:
+    /// yes.
+    #[serde(default)]
+    pub warpable: Option<bool>,
     /// `NeedsEngineer` (S-0309 claim 25 part e, Import mapping).
     #[serde(default)]
     pub needs_engineer: Option<bool>,
@@ -2002,6 +2126,12 @@ pub struct BuildingType {
     /// `EligibleForDelayKill` (S-0302 claim 16).
     #[serde(default)]
     pub eligible_for_delay_kill: Option<bool>,
+    /// `CrateBeneath` (S-0312 claim 20).
+    #[serde(default)]
+    pub crate_beneath: Option<bool>,
+    /// `CrateBeneathIsMoney` (S-0312 claim 20).
+    #[serde(default)]
+    pub crate_beneath_is_money: Option<bool>,
     /// `LeaveRubble` (S-0312 claim 20).
     #[serde(default)]
     pub leave_rubble: Option<bool>,
@@ -2087,6 +2217,9 @@ pub struct OverlayType {
     /// `Crate`.
     #[serde(default, rename = "crate")]
     pub crate_: Option<bool>,
+    /// `CrateTrigger` (S-0520 claim 7).
+    #[serde(default)]
+    pub crate_trigger: Option<bool>,
     /// `DamageLevels` of the overlay type's image section in the art data
     /// (S-0210 claim 13).
     #[serde(default)]
@@ -2246,6 +2379,10 @@ pub struct WeaponType {
     /// `Suicide` (S-0312 Terms).
     #[serde(default)]
     pub suicide: Option<bool>,
+    /// `MigAttackCursor`, the air-strike cursor flag: cursor only (S-0519
+    /// claim 16, S-0214 row I18).
+    #[serde(default)]
+    pub mig_attack_cursor: Option<bool>,
     /// `Supress` (S-0309 claim 14).
     #[serde(default)]
     pub supress: Option<bool>,
@@ -2377,6 +2514,9 @@ pub struct WarheadType {
     /// `IvanBomb`.
     #[serde(default)]
     pub ivan_bomb: Option<bool>,
+    /// `BombDisarm`, the disarm warhead (S-0519 Import mapping).
+    #[serde(default)]
+    pub bomb_disarm: Option<bool>,
     /// `Sonic`.
     #[serde(default)]
     pub sonic: Option<bool>,

@@ -398,6 +398,14 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
+    // spec: S-0519 claims 7 and 8 (a removed carrier loses its bomb silently; a bomb whose planter leaves forgets it)
+    crate::bomb::removed(w, id);
+    // spec: S-0519 claims 19 and 20 (a strike aircraft leaving play is unlinked, a designator ends its strike, a marked building cancels)
+    crate::strike::leaving(w, id);
+    // spec: S-0518 claim 12 (a charger that leaves play leaves every charger list at once)
+    crate::linked::leaving(w, id);
+    // spec: S-0514 claims 12 and 14 (a removed target invalidates all attached beams and its attackers idle; a removed attacker's beam lets go)
+    crate::temporal::leaving(w, id);
     // spec: S-0614 claim 15 (a host removed while a parasite is attached releases it at once)
     crate::parasite::leaving(w, id);
     // spec: S-0502 claims 4, 7, 13, 14 and 18 (a jumpjet leaving the map releases its marks, its landing reservation and its hover slot)

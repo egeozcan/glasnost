@@ -52,7 +52,7 @@ fn self_cloak(w: &World, id: ObjectId) -> bool {
 }
 
 /// The disable tests (S-0516 Terms): EMP-disabled, paralysed or warping.
-/// Paralysis (S-0214) and the chrono warp (S-0514) are seams.
+/// Paralysis (S-0214) is a seam; being erased is S-0514's.
 fn disabled(w: &World, id: ObjectId) -> bool {
     // spec: S-0516 Terms (EMP-disabled, paralysed, warping: being erased or a chrono warp)
     crate::econ::power::under_pulse(w, id) || crate::econ::power::being_erased(w, id)

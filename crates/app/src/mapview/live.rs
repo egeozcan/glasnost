@@ -1164,6 +1164,21 @@ impl Live {
         self.follow_owners();
         self.update_anims(now);
         for e in effects {
+            if let Effect::SupportBeam {
+                from, to, duration, ..
+            } = e
+            {
+                // S-0518 claim 6: a support beam, drawn as nine marks from the supporter to the master for its duration.
+                let (a, b) = (at(from), at(to));
+                for i in 0..=8 {
+                    self.transients.push(Transient {
+                        kind: TransientKind::Beam(duration.max(1)),
+                        at: (a.0 + (b.0 - a.0) * i / 8, a.1 + (b.1 - a.1) * i / 8),
+                        born: now,
+                    });
+                }
+                continue;
+            }
             let (kind, pos) = match e {
                 Effect::Shot { from, .. } => {
                     self.counts.shots += 1;
@@ -1187,6 +1202,7 @@ impl Live {
                 | Effect::Hit { .. }
                 | Effect::OverlayCrushed { .. }
                 | Effect::Superweapon { .. }
+                | Effect::SupportBeam { .. }
                 | Effect::Captured { .. }
                 | Effect::Infiltrated { .. }
                 | Effect::Cloak { .. } => continue,
@@ -1598,6 +1614,58 @@ impl Live {
             };
             // spec: S-0101 F1, F2 (the projected point of the position with its height)
             let at = project_lifted(p.pos.x, p.pos.y, p.pos.z);
+            let item = self.cache.marker_item(scene, m, at);
+            scene.items.push(item);
+        }
+        // S-0525: the reach of every radiation field, as a ring (our placeholder for the field's light).
+        for f in &self.world.radiation.fields {
+            if f.spread < 0 {
+                continue;
+            }
+            let p = glasnost_sim::world::Pos::centre(f.centre, 0);
+            let z = self.world.surface_at(p.x, p.y);
+            let m = Marker::Field {
+                half: combat::burst_half_width(f.reach),
+            };
+            let item = self
+                .cache
+                .marker_item(scene, m, project_lifted(p.x, p.y, z));
+            scene.items.push(item);
+        }
+        // S-0520: every crate on the map, a box on its cell (our placeholder).
+        for place in self.world.crates.places.values() {
+            let p = glasnost_sim::world::Pos::centre(place.cell, 0);
+            let z = self.world.surface_at(p.x, p.y);
+            let item =
+                self.cache
+                    .marker_item(scene, Marker::Crate, project_lifted(p.x, p.y, z + 40));
+            scene.items.push(item);
+        }
+        // S-0519: planted bombs the viewer sees, charges counting down and buildings marked by a strike (our placeholders).
+        let viewer = self.viewer;
+        let mut extra: Vec<(Marker, (i32, i32))> = Vec::new();
+        for o in self.world.objects.values().filter(|o| o.on_map) {
+            let z = self.world.surface_at(o.pos.x, o.pos.y);
+            let at = project_lifted(o.pos.x, o.pos.y, z + 200);
+            if let Some(b) = o.combat.bomb
+                && viewer.is_none_or(|v| glasnost_sim::bomb::visible(&self.world, v, o.id))
+            {
+                let g = &self.rules.combat.general.ivan;
+                let q = (g.delay / 6).max(1); // spec: S-0519 F3 (q = floor(D / 6); 0 becomes 1)
+                let big_f = g.flicker.max(1);
+                let n = self.world.tick;
+                let bit = i32::from(n.rem_euclid(2 * big_f) >= big_f);
+                let frame = (2 * ((n - b.planted) / q) + bit).clamp(0, 11); // spec: S-0519 F3 (frame = min(11, 2 floor((n - t) / q) + b))
+                extra.push((Marker::Bomb { frame }, at));
+            }
+            if o.combat.charge_planter.is_some() && o.combat.delay_kill_until.is_some() {
+                extra.push((Marker::Charge, at));
+            }
+            if glasnost_sim::strike::marked(&self.world, o.id) {
+                extra.push((Marker::Marked, project_lifted(o.pos.x, o.pos.y, z)));
+            }
+        }
+        for (m, at) in extra {
             let item = self.cache.marker_item(scene, m, at);
             scene.items.push(item);
         }

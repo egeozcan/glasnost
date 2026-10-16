@@ -449,10 +449,18 @@ pub fn new_game(
         jump_slots: Default::default(),
         cloak: Default::default(),
         sw: Default::default(),
+        radiation: Default::default(),
+        temporal: Default::default(),
+        strike: Default::default(),
+        crates: Default::default(),
         spawned: Default::default(),
         triggers: Default::default(),
         econ: crate::econ::WorldEcon {
             settings: setup.skirmish.clone(),
+            start: crate::econ::setup::StartState {
+                bases: setup.bases,
+                ..Default::default()
+            },
             ..Default::default()
         },
         effects: Vec::new(),

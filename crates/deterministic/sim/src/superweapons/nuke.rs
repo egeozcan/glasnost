@@ -5,10 +5,10 @@
 //! a missile-maker warhead, `combat::projectile` hands it to [`burst`],
 //! which creates the falling missile. A one-time record creates the
 //! falling missile at once ([`one_time`]). The nuclear detonation itself
-//! is S-0306 claim 25's.
-//!
-//! Seam: radiation fields (S-0525) are not built; [`radiation_seam`] is
-//! called with the hand-off of claim 12.
+//! is S-0306 claim 25's. The payload leaves radiation at its detonation
+//! cell like any radiation-weapon detonation (S-0513 claim 12, S-0525
+//! claim 1): `combat::projectile` hands every detonation to
+//! `crate::radiation`.
 
 use glasnost_map::CellXY;
 use glasnost_num::F64;
@@ -144,6 +144,8 @@ fn missile(
         fire_point: pos,
         nuke_wait: None,
         vehicle_scalable: false,
+        airburst_child: false,
+        multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
     };
     w.projectiles.insert(id, pr);
     // spec: S-0306 claim 8 (the projectile enters play; its first turn is in the same tick)
@@ -334,18 +336,4 @@ pub fn waypoint(w: &mut World, cell: CellXY) {
         s.mul(m, mode),
     ];
     missile(w, payload, None, None, p, vel, cell, WAYPOINT_SPEED);
-}
-
-/// Seam (S-0525 radiation fields, not built): a detonation of a weapon with
-/// a positive radiation level leaves radiation at the detonation cell
-/// with that level and the warhead's cell spread truncated to whole cells
-/// (claim 12).
-pub fn radiation_seam(w: &mut World, weapon: WeaponId, cell: CellXY) {
-    let level = w.rules().combat.weapon(weapon).rad_level;
-    if level <= 0 {
-        // spec: S-0525 Import mapping (0 or less leaves no radiation)
-        return;
-    }
-    let _ = cell;
-    w.note("S-0513 claim 12: radiation fields (S-0525) are not built; the radiation hand-off does nothing");
 }

@@ -122,6 +122,11 @@ pub enum Order {
         /// The other house.
         house: HouseId,
     },
+    /// Detonate (S-0213 claim 11): a planted bomb the actor carries goes off.
+    Detonate {
+        /// The actor.
+        actor: ObjectId,
+    },
     /// A superweapon fire order (S-0213 orders table; S-0512 claim 8,
     /// S-0513 claim 2): the type by its position in the superweapon type
     /// list, and the target cell.
@@ -146,7 +151,8 @@ impl Order {
             | Order::Repair { actor }
             | Order::PowerOff { actor }
             | Order::PowerOn { actor }
-            | Order::Primary { actor } => Some(actor),
+            | Order::Primary { actor }
+            | Order::Detonate { actor } => Some(actor),
             Order::Cheer
             | Order::Build { .. }
             | Order::Hold { .. }
@@ -179,6 +185,15 @@ pub fn blocked(w: &World) -> bool {
 /// Issues an order in a house's name during the current tick. Returns
 /// whether it was taken (S-0213 claims 1 and 2).
 pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
+    // spec: S-0213 claim 11 and quirks.detonate_in_planter_name (the detonate order is issued in the name of the planter's house; off: in the issuing house's name)
+    let house = match order {
+        Order::Detonate { actor } if w.rules().quirks.detonate_in_planter_name => w
+            .obj(actor)
+            .and_then(|o| o.combat.bomb)
+            .and_then(|b| b.house)
+            .unwrap_or(house),
+        _ => house,
+    };
     // spec: S-0213 claim 1 (an order block refuses input)
     if blocked(w) {
         return false;
@@ -251,6 +266,12 @@ fn target_ok(w: &World, t: Option<Target>) -> bool {
 fn apply_other(w: &mut World, house: HouseId, o: &Order) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     match *o {
+        Order::Detonate { actor } => {
+            // spec: S-0213 claim 11 (if the actor exists and carries a planted bomb, it is resolved at once: no other check is made)
+            if w.obj(actor).is_some_and(|x| x.combat.bomb.is_some()) {
+                crate::bomb::detonate_order(w, actor);
+            }
+        }
         Order::Stop { actor } => {
             // spec: S-0213 claim 8 (live, on the map and not tethered; construction and tunnels do not arise yet)
             if !live_on_map(w, actor) || crate::econ::tethered(w, actor) {

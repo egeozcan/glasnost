@@ -394,6 +394,18 @@ pub struct World {
     /// Superweapon records, the storm and its clouds (S-0512, S-0513).
     #[serde(default)]
     pub sw: crate::superweapons::SwWorld,
+    /// Temporal beams and erasures (S-0514).
+    #[serde(default)]
+    pub temporal: crate::temporal::TemporalWorld,
+    /// Crate places and the any-crate mark (S-0520).
+    #[serde(default)]
+    pub crates: crate::crates::CrateWorld,
+    /// Air-strike designators' strikes (S-0519 claims 16 to 21).
+    #[serde(default)]
+    pub strike: crate::strike::StrikeWorld,
+    /// Radiation fields and cell radiation (S-0525).
+    #[serde(default)]
+    pub radiation: crate::radiation::RadWorld,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.

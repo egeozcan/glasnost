@@ -111,7 +111,33 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
     ("special_threat_value", "SpecialThreatValue", Dec, "S-0309"),
     ("insignificant", "Insignificant", Bool, "S-0309"),
     ("threat_posed", "ThreatPosed", Int, "S-0309"),
-    ("airstrike_team", "AirstrikeTeam", Int, "S-0309"),
+    ("airstrike_team", "AirstrikeTeam", Int, "S-0309, S-0519"),
+    ("elite_airstrike_team", "EliteAirstrikeTeam", Int, "S-0519"),
+    (
+        "airstrike_team_type",
+        "AirstrikeTeamType",
+        Ref(Kind::Aircraft),
+        "S-0519",
+    ),
+    (
+        "elite_airstrike_team_type",
+        "EliteAirstrikeTeamType",
+        Ref(Kind::Aircraft),
+        "S-0519",
+    ),
+    (
+        "airstrike_recharge_time",
+        "AirstrikeRechargeTime",
+        Int,
+        "S-0519",
+    ),
+    (
+        "elite_airstrike_recharge_time",
+        "EliteAirstrikeRechargeTime",
+        Int,
+        "S-0519",
+    ),
+    ("bomb_sight", "BombSight", Int, "S-0519"),
     ("drainable", "Drainable", Bool, "S-0308"),
     ("spawns", "Spawns", Ref(Kind::Aircraft), "S-0506"),
     ("spawns_number", "SpawnsNumber", Int, "S-0506"),
@@ -132,6 +158,7 @@ pub(super) const UNIT_COMBAT: &[Row] = &[
     ("deploy_fire_weapon", "DeployFireWeapon", Int, "S-0308"),
     ("crewed", "Crewed", Bool, "S-0312"),
     ("carries_crate", "CarriesCrate", Bool, "S-0312"),
+    ("crate_goodie", "CrateGoodie", Bool, "S-0520"),
     ("crashable", "Crashable", Bool, "S-0312"),
     ("weight", "Weight", Dec, "S-0312"),
     (
@@ -171,6 +198,13 @@ const INFANTRY_COMBAT: &[Row] = &[
 
 /// Combat fields of building types (`BuildingType`).
 const BUILDING_COMBAT: &[Row] = &[
+    ("crate_beneath", "CrateBeneath", Bool, "S-0312"),
+    (
+        "crate_beneath_is_money",
+        "CrateBeneathIsMoney",
+        Bool,
+        "S-0312",
+    ),
     ("cloak_generator", "CloakGenerator", Bool, "S-0516"),
     ("cloak_radius_in_cells", "CloakRadiusInCells", Int, "S-0516"),
     ("sensor_array", "SensorArray", Bool, "S-0516"),
@@ -187,6 +221,7 @@ const BUILDING_COMBAT: &[Row] = &[
         "S-0302",
     ),
     ("leave_rubble", "LeaveRubble", Bool, "S-0312"),
+    ("overpowerable", "Overpowerable", Bool, "S-0518, S-0308"),
     ("helipad", "Helipad", Bool, "S-0312"),
     ("artillary", "Artillary", Bool, "S-0309"),
     ("max_number_occupants", "MaxNumberOccupants", Int, "S-0313"),
@@ -259,6 +294,12 @@ const WEAPON_COMBAT: &[Row] = &[
     ("drain_weapon", "DrainWeapon", Bool, "S-0308"),
     ("fire_while_moving", "FireWhileMoving", Bool, "S-0310"),
     ("suicide", "Suicide", Bool, "S-0312"),
+    (
+        "mig_attack_cursor",
+        "MigAttackCursor",
+        Bool,
+        "S-0519, S-0214",
+    ),
     ("supress", "Supress", Bool, "S-0309"),
     ("fire_once", "FireOnce", Bool, "S-0309"),
     ("reveal_on_fire", "RevealOnFire", Bool, "S-0409"),
@@ -375,6 +416,8 @@ const ELEVATION_MODEL: &[u8] = b"ElevationModel"; // spec: S-0307 Import mapping
 /// The AI intelligence levels section.
 const IQ: &[u8] = b"IQ"; // spec: S-0314 Import mapping (`[IQ]`)
 const AI: &[u8] = b"AI"; // spec: S-0314 Import mapping (`[AI]`)
+/// The radiation settings section.
+const RADIATION: &[u8] = b"Radiation"; // spec: S-0525 Import mapping (`[Radiation]`)
 
 /// Game-wide combat fields: our name, section, key, form, spec.
 const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
@@ -1051,6 +1094,135 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
     ),
     ("hover_brake", GENERAL, "HoverBrake", Dec, "S-0503"),
     ("hover_dampen", GENERAL, "HoverDampen", Dec, "S-0503"),
+    // spec: S-0519 Import mapping (the bomb and charge settings of the combat-damage section)
+    (
+        "ivan_warhead",
+        COMBAT_DAMAGE,
+        "IvanWarhead",
+        Ref(Kind::Warheads),
+        "S-0519",
+    ),
+    ("ivan_damage", COMBAT_DAMAGE, "IvanDamage", Int, "S-0519"),
+    (
+        "ivan_timed_delay",
+        COMBAT_DAMAGE,
+        "IvanTimedDelay",
+        Int,
+        "S-0519",
+    ),
+    (
+        "ivan_icon_flicker_rate",
+        COMBAT_DAMAGE,
+        "IvanIconFlickerRate",
+        Int,
+        "S-0519",
+    ),
+    (
+        "can_detonate_time_bomb",
+        COMBAT_DAMAGE,
+        "CanDetonateTimeBomb",
+        Bool,
+        "S-0519, S-0214",
+    ),
+    (
+        "can_detonate_death_bomb",
+        COMBAT_DAMAGE,
+        "CanDetonateDeathBomb",
+        Bool,
+        "S-0519",
+    ),
+    ("c4_delay", COMBAT_DAMAGE, "C4Delay", Dec, "S-0519"),
+    // spec: S-0518 Import mapping (PrismType a building type name; the other prism keys integers; the modifier is read apart, F4)
+    (
+        "prism_type",
+        GENERAL,
+        "PrismType",
+        Ref(Kind::Buildings),
+        "S-0518",
+    ),
+    (
+        "prism_support_max",
+        GENERAL,
+        "PrismSupportMax",
+        Int,
+        "S-0518",
+    ),
+    (
+        "prism_support_delay",
+        GENERAL,
+        "PrismSupportDelay",
+        Int,
+        "S-0518",
+    ),
+    (
+        "prism_support_duration",
+        GENERAL,
+        "PrismSupportDuration",
+        Int,
+        "S-0518",
+    ),
+    // spec: S-0514 Import mapping (WarpAway and ChronoSparkle1 animation names; OpenToppedWarpDistance an integer of cells)
+    (
+        "warp_away",
+        GENERAL,
+        "WarpAway",
+        Ref(Kind::Animations),
+        "S-0514",
+    ),
+    (
+        "chrono_sparkle",
+        GENERAL,
+        "ChronoSparkle1",
+        Ref(Kind::Animations),
+        "S-0514",
+    ),
+    (
+        "open_topped_warp_distance",
+        COMBAT_DAMAGE,
+        "OpenToppedWarpDistance",
+        Int,
+        "S-0514",
+    ),
+    // spec: S-0525 Import mapping ([Radiation]: integers, three decimals held as doubles, the warhead name; RadColor is read apart)
+    (
+        "rad_duration_multiple",
+        RADIATION,
+        "RadDurationMultiple",
+        Int,
+        "S-0525",
+    ),
+    (
+        "rad_application_delay",
+        RADIATION,
+        "RadApplicationDelay",
+        Int,
+        "S-0525",
+    ),
+    ("rad_level_max", RADIATION, "RadLevelMax", Int, "S-0525"),
+    ("rad_level_delay", RADIATION, "RadLevelDelay", Int, "S-0525"),
+    ("rad_light_delay", RADIATION, "RadLightDelay", Int, "S-0525"),
+    (
+        "rad_level_factor",
+        RADIATION,
+        "RadLevelFactor",
+        Dec,
+        "S-0525",
+    ),
+    (
+        "rad_light_factor",
+        RADIATION,
+        "RadLightFactor",
+        Dec,
+        "S-0525",
+    ),
+    ("rad_tint_factor", RADIATION, "RadTintFactor", Dec, "S-0525"),
+    (
+        "rad_site_warhead",
+        RADIATION,
+        "RadSiteWarhead",
+        Ref(Kind::Warheads),
+        "S-0525",
+    ),
 ];
 
 /// The crew types of `[General]` and our field names (S-0312 Import
@@ -1398,10 +1570,19 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
             s if s == WALL_MODEL => "global:WallModel",
             s if s == ELEVATION_MODEL => "global:ElevationModel",
             s if s == IQ => "global:IQ",
+            s if s == RADIATION => "global:Radiation",
             _ => "global:General",
         };
         out.push((cat, (*k).to_owned(), *spec));
     }
+    // spec: S-0525 Import mapping (RadColor, a byte triple)
+    out.push(("global:Radiation", "RadColor".to_owned(), "S-0525"));
+    // spec: S-0518 Import mapping (the support modifier, read through the layers' F4)
+    out.push((
+        "global:General",
+        "PrismSupportModifier".to_owned(),
+        "S-0518",
+    ));
     let mut keyed = |cats: &[&'static str], keys: &[String], spec: &'static str| {
         for c in cats {
             for k in keys {
@@ -2584,6 +2765,14 @@ impl Builder<'_> {
                 ));
             }
         }
+        self.radiation_import(rec);
+        // spec: S-0518 Import mapping and F4 (the held support modifier after every layer's read)
+        if let Some(d) = self
+            .global(GENERAL, "PrismSupportModifier")
+            .and_then(|s| s.derived)
+        {
+            rec.put("prism_support_modifier", int_node(d as i32));
+        }
         // spec: S-0303 Import mapping, S-0309 Import mapping (HarvesterUnit: a vehicle-type list)
         let harvesters = self.global(GENERAL, "HarvesterUnit");
         if let Some(list) = self.name_list(
@@ -2636,8 +2825,63 @@ impl Builder<'_> {
         self.general_warnings();
     }
 
+    /// The radiation colour and the warnings of the `[Radiation]` settings
+    /// (S-0525 Import mapping, claim 16 and Edge cases).
+    fn radiation_import(&mut self, rec: &mut Rec) {
+        let colour = self.global(RADIATION, "RadColor");
+        let mut rgb = [0u8; 3]; // spec: S-0525 Import mapping (RadColor absent: the value in force, (0, 0, 0) at a fresh start)
+        let mut given = false;
+        if let Some(st) = &colour {
+            for e in &st.history {
+                let What::Set(v) = &e.what else { continue };
+                // spec: S-0525 Import mapping (RadColor: a byte triple, S-0003 C7; unread components keep the value in force)
+                let (next, unread) = value::byte_triple(v, rgb);
+                rgb = next;
+                given = true;
+                if unread {
+                    self.warn(e.layer, e.line, format!(
+                        "[Radiation] RadColor {:?} has unreadable components; they keep the value in force (S-0003 claim 11, a departure)",
+                        show(v)
+                    ));
+                }
+            }
+        }
+        if given {
+            Self::put_tuple(rec, "rad_color", rgb.map(i32::from));
+        }
+        for k in ["RadApplicationDelay", "RadLevelDelay", "RadLightDelay"] {
+            let state = self.global(RADIATION, k);
+            // spec: S-0525 claim 16 (an application, level or light delay of 0 or less: the original stops or acts oddly; the importer warns and our engine takes the safe results)
+            self.each_int(state.as_ref(), |n| n <= 0, |v| {
+                format!("[Radiation] {k} {v} is 0 or below: the original stops at the first use for 0 (a program error); our engine takes the safe results of S-0525 claim 16 (a departure)")
+            });
+        }
+        let multiple = self.global(RADIATION, "RadDurationMultiple");
+        // spec: S-0525 claim 16 (a duration multiple of 0 or less: a field ends at its first update)
+        self.each_int(multiple.as_ref(), |n| n <= 0, |v| {
+            format!("[Radiation] RadDurationMultiple {v} is 0 or below: a radiation field ends at its first update (S-0525 claim 16)")
+        });
+        let site = self.global(RADIATION, "RadSiteWarhead");
+        let site_given = site
+            .as_ref()
+            .is_some_and(|s| s.history.iter().any(|e| matches!(e.what, What::Set(_))));
+        if !site_given {
+            // spec: S-0525 Edge cases (radiation-site warhead absent: the original's behaviour is unknown; our engine makes fields deal no hits, and the importer warns)
+            self.warn(0, 0, "[Radiation] RadSiteWarhead is given by no rules layer: radiation fields deal no hits (S-0525 Edge cases, a departure)".to_owned());
+        }
+    }
+
     fn general_warnings(&mut self) {
         let cd = |k: &str| format!("[CombatDamage] {k}");
+        // spec: S-0519 F3 (a timed delay below 6 ticks or a flicker rate of 0: the original divides by zero while drawing the bomb icon; our engine takes the fixed form, a departure)
+        let delay = self.global(COMBAT_DAMAGE, "IvanTimedDelay");
+        self.each_int(delay.as_ref(), |n| (0..6).contains(&n), |v| {
+            format!("[CombatDamage] IvanTimedDelay {v} is below 6: the bomb icon's frame divisor is 0 in the original, which divides by zero while drawing; our engine substitutes 1 (S-0519 F3, a departure)")
+        });
+        let flicker = self.global(COMBAT_DAMAGE, "IvanIconFlickerRate");
+        self.each_int(flicker.as_ref(), |n| n == 0, |v| {
+            format!("[CombatDamage] IvanIconFlickerRate {v} is 0: the original divides by zero while drawing the bomb icon; our engine uses frame bit 0 (S-0519 F3, a departure)")
+        });
         let min = self.global(COMBAT_DAMAGE, "MinDamage");
         // spec: S-0302 Edge cases (the minimum-damage field has no effect; the importer warns when it is given)
         self.each(
@@ -2801,8 +3045,47 @@ impl Builder<'_> {
         let outcome = self.i.outcome;
         let empty = Vec::new();
         let weapons = outcome.registries.get(&Kind::Weapons).unwrap_or(&empty);
+        let rad = |k: &str| int_of(self.global(RADIATION, k).as_ref()).unwrap_or(0);
+        let (m, d_level, d_light) = (
+            rad("RadDurationMultiple"),
+            rad("RadLevelDelay"),
+            rad("RadLightDelay"),
+        );
+        // spec: S-0519 Edge cases (a type with a positive strike size and no normal strike aircraft type stops the original at the first start; our engine treats it as no designator, a departure)
+        for kind in [
+            Kind::Infantry,
+            Kind::Vehicles,
+            Kind::Aircraft,
+            Kind::Buildings,
+        ] {
+            for t in outcome.registries.get(&kind).unwrap_or(&empty) {
+                let given = text_of(key(t, "AirstrikeTeamType"))
+                    .is_some_and(|n| !n.is_empty() && !value::is_no_type(&n));
+                if int_of(key(t, "AirstrikeTeam")).unwrap_or(0) > 0 && !given {
+                    self.warn_at(key(t, "AirstrikeTeam"), format!(
+                        "{} has a positive AirstrikeTeam but no AirstrikeTeamType: our engine treats it as no designator (S-0519 Edge cases, a departure)",
+                        show(&t.name)
+                    ));
+                }
+            }
+        }
         for w in weapons {
             let name = format!("weapons {}", show(&w.name));
+            let level = int_of(key(w, "RadLevel")).unwrap_or(0);
+            if level > 0 && m > 0 {
+                // spec: S-0525 Edge cases and claim 16 (a field duration with zero light steps, or zero level steps: the importer warns)
+                let n = level.wrapping_mul(m);
+                if d_light > 0 && n / d_light == 0 {
+                    self.warn_at(key(w, "RadLevel"), format!(
+                        "{name} has radiation level {level}: its field lasts {n} ticks, shorter than the light delay {d_light}, so the original stops when the field is made; our engine keeps the light as made (S-0525 claim 16, a departure)"
+                    ));
+                }
+                if d_level > 0 && n / d_level == 0 {
+                    self.warn_at(key(w, "RadLevel"), format!(
+                        "{name} has radiation level {level}: its field has no level step, so its radiation never decays and adding to it removes nothing (S-0525 claims 5 and 6)"
+                    ));
+                }
+            }
             let warhead =
                 text_of(key(w, "Warhead")).filter(|n| !n.is_empty() && !value::is_no_type(n));
             let Some(h) = warhead

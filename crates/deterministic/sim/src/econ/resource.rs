@@ -615,6 +615,40 @@ fn new_resource_cell(w: &mut World, c: CellXY, t: usize, a: u8) {
     cell_changed(w, c);
 }
 
+/// One stage increase of tiberium `t` at a cell by a crate (S-0520 claim
+/// 24): a germinable cell becomes a new resource cell at stage 1, a cell
+/// already holding `t` gains one stage when claim 7's growth-step conditions
+/// hold (and is offered to the spread list, with no new growth entry); a
+/// run of at most one picture changes nothing, and the stage stays below the
+/// picture count.
+pub fn crate_stage(w: &mut World, c: CellXY, t: usize) {
+    let Some(tib) = w.rules().econ.resource.tiberiums.get(t).cloned() else {
+        return;
+    };
+    let Some([_, flat, _]) = tib.run else { return };
+    // spec: S-0520 claim 24 (an image run with at most one picture: the increase changes nothing)
+    if flat <= 1 {
+        return;
+    }
+    if germinable(w, c) {
+        // spec: S-0520 claim 24 (a germinable cell becomes a new resource cell of t at stage 1, with S-0401 claim 11's draws)
+        new_resource_cell(w, c, t, 1);
+        return;
+    }
+    let Some((tt, d)) = resource_at(w, c) else {
+        return;
+    };
+    let flat_cell = w.cells.cell(c).is_some_and(|x| x.slope == 0);
+    let grows = !w.econ.resources.growth_off && eligible(tib.growth_fraction);
+    // spec: S-0520 claim 24 (an existing cell of t gains one stage only when S-0401 claim 7's growth-step conditions hold; the stage stays below the run's picture count)
+    if tt == t && grows && flat_cell && d < TOP_STAGE && i32::from(d) + 1 < flat {
+        if let Some(cell) = w.cells.grid.get_mut(c) {
+            cell.overlay_data = d + 1;
+        }
+        offer_spread(w, t, c);
+    }
+}
+
 /// A spread step from `from` with tiberium `t` (S-0401 claims 9 and 15):
 /// one ranged draw U(0, 7), then the first germinable neighbour from that
 /// direction becomes a new resource cell at stage 3.

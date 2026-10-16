@@ -320,6 +320,30 @@ const GENERAL: &[u8] = b"General"; // spec: S-0004 Import mapping (the general s
 const AI: &[u8] = b"AI"; // spec: S-0407 Import mapping (`[AI]`)
 const AUDIO_VISUAL: &[u8] = b"AudioVisual"; // spec: S-0409 Import mapping (`[AudioVisual]`)
 const CRATE_RULES: &[u8] = b"CrateRules"; // spec: S-0412 Import mapping (`[CrateRules]`)
+const POWERUPS: &[u8] = b"Powerups"; // spec: S-0520 Import mapping (`[Powerups]`)
+
+/// The power-up keys in table order (S-0520 claim 8, Import mapping).
+const POWERUP_KEYS: [&str; 19] = [
+    "Money",
+    "Unit",
+    "HealBase",
+    "Cloak",
+    "Explosion",
+    "Napalm",
+    "Squad",
+    "Darkness",
+    "Reveal",
+    "Armor",
+    "Speed",
+    "Firepower",
+    "ICBM",
+    "Invulnerability",
+    "Veteran",
+    "IonStorm",
+    "Gas",
+    "Tiberium",
+    "Pod",
+];
 const DIALOG: &[u8] = b"MultiplayerDialogSettings"; // spec: S-0412 Import mapping (`[MultiplayerDialogSettings]`)
 
 /// Game-wide economy values: our field, the section, the key, the form and
@@ -649,6 +673,41 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
         "C4Warhead",
         Ref(Kind::Warheads),
         "S-0414",
+    ),
+    (
+        "crate_regen",
+        CRATE_RULES,
+        "CrateRegen",
+        Dec,
+        "S-0520, S-0524",
+    ),
+    (
+        "unit_crate_type",
+        CRATE_RULES,
+        "UnitCrateType",
+        Ref(Kind::Vehicles),
+        "S-0520",
+    ),
+    (
+        "wood_crate_img",
+        CRATE_RULES,
+        "WoodCrateImg",
+        Ref(Kind::Overlays),
+        "S-0520",
+    ),
+    (
+        "water_crate_img",
+        CRATE_RULES,
+        "WaterCrateImg",
+        Ref(Kind::Overlays),
+        "S-0520",
+    ),
+    (
+        "flame_damage",
+        COMBAT_DAMAGE,
+        "FlameDamage",
+        Ref(Kind::Warheads),
+        "S-0520",
     ),
     ("crate_minimum", CRATE_RULES, "CrateMinimum", Int, "S-0412"),
     ("crate_maximum", CRATE_RULES, "CrateMaximum", Int, "S-0412"),
@@ -1680,6 +1739,76 @@ impl Builder<'_> {
     }
 
     /// The game-wide economy values (`general.economy`).
+    /// The crate radius and the power-up table (S-0520 Import mapping, F3).
+    fn crate_import(&mut self, econ: &mut Rec) {
+        let globals = &self.i.outcome.globals;
+        let radius = globals
+            .get(CRATE_RULES)
+            .and_then(|s| s.get(&b"CrateRadius"[..]))
+            .cloned();
+        // spec: S-0520 F3 (a read value of exactly -1 keeps the value in force: it takes no part)
+        let text = fold(radius.as_ref(), None, |v, _| {
+            let t = decimal_text(v)?;
+            let one = glasnost_num::decimal::parse(
+                &t,
+                glasnost_num::decimal::Field::Decimal,
+                glasnost_num::Rounding::Nearest,
+            )
+            .ok()?;
+            (one != glasnost_num::F64::from_i64(-1, glasnost_num::Rounding::Nearest)).then_some(t)
+        });
+        if let Some(t) = text {
+            econ.put("crate_radius", jsonc::string(t));
+        }
+        let Some(section) = globals.get(POWERUPS).cloned() else {
+            return;
+        };
+        if section.is_empty() {
+            return;
+        }
+        let mut entries = Vec::new();
+        for key in POWERUP_KEYS {
+            let state = section.get(key.as_bytes());
+            // spec: S-0520 Import mapping (a key absent while the section exists: weight 0, no animation; the water flag and argument are kept, here the built-in values)
+            let mut weight = 0;
+            let mut anim: Option<String> = None;
+            let mut water = false;
+            let mut arg: Option<String> = None;
+            if let Some(st) = state {
+                for e in &st.history {
+                    let What::Set(v) = &e.what else { continue };
+                    let items: Vec<&[u8]> =
+                        v.split(|&b| b == b',').map(|s| s.trim_ascii()).collect();
+                    // spec: S-0520 Import mapping (the list: weight, animation, water flag, argument; a missing or unreadable token keeps the value in force)
+                    if let Some(n) = items.first().and_then(|t| value::integer(t)) {
+                        weight = n;
+                    }
+                    if let Some(t) = items.get(1) {
+                        anim = self.ref_name(Kind::Animations, t);
+                    }
+                    if let Some(b) = items.get(2).and_then(|t| value::boolean(t)) {
+                        water = b;
+                    }
+                    if let Some(t) = items.get(3).and_then(|t| decimal_text(t)) {
+                        arg = Some(t);
+                    }
+                }
+            }
+            let mut obj = vec![
+                ("weight".to_owned(), jsonc::integer(i128::from(weight))),
+                ("water".to_owned(), jsonc::boolean(water)),
+            ];
+            if let Some(a) = anim {
+                obj.push(("animation".to_owned(), jsonc::string(a)));
+            }
+            if let Some(a) = arg {
+                obj.push(("argument".to_owned(), jsonc::string(a)));
+            }
+            entries.push(jsonc::object(obj));
+        }
+        econ.put("powerups", jsonc::array(entries));
+    }
+
     pub(super) fn general_econ(&mut self, rec: &mut Rec) {
         let mut econ = Rec::default();
         let globals = &self.i.outcome.globals;
@@ -1702,6 +1831,7 @@ impl Builder<'_> {
                 econ.put(field, n);
             }
         }
+        self.crate_import(&mut econ);
         // spec: S-0510 Edge cases (a steal fraction outside 0 to 1 is warned about)
         let steal = self
             .i

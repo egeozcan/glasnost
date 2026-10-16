@@ -479,7 +479,7 @@ pub(crate) fn queue(w: &mut World, id: ObjectId, b: Behaviour) {
     }
 }
 
-fn forget(w: &mut World, id: ObjectId) {
+pub(crate) fn forget(w: &mut World, id: ObjectId) {
     if let Some(o) = w.obj_mut(id) {
         crate::spawn::clear_own_target(o);
         o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
@@ -2453,17 +2453,19 @@ pub fn fall_back_early(w: &mut World, id: ObjectId) -> bool {
         }
         return true;
     }
-    // spec: S-0501 T2 row 2 (retreat, the paradrop and spy-plane behaviours, not a strike aircraft: unchanged; no aircraft is linked to a strike in our engine, S-0519 claims 17 and 20)
-    if matches!(
-        o.beh.current,
-        Some(
-            Behaviour::Retreat
-                | Behaviour::ParadropApproach
-                | Behaviour::ParadropOverfly
-                | Behaviour::SpyPlaneApproach
-                | Behaviour::SpyPlaneOverfly
+    // spec: S-0501 T2 row 2 and S-0519 claim 19 (retreat, the paradrop and spy-plane behaviours, not a strike aircraft: unchanged; a strike aircraft in retreat is not exempt from falling back)
+    if !crate::strike::linked(w, id)
+        && matches!(
+            o.beh.current,
+            Some(
+                Behaviour::Retreat
+                    | Behaviour::ParadropApproach
+                    | Behaviour::ParadropOverfly
+                    | Behaviour::SpyPlaneApproach
+                    | Behaviour::SpyPlaneOverfly
+            )
         )
-    ) {
+    {
         return true;
     }
     // spec: S-0501 T2 row 3 (a queued paradrop or spy-plane approach starts now)
@@ -3290,9 +3292,13 @@ fn run_end(w: &mut World, id: ObjectId) {
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
-    // spec: S-0501 claim 17 (a strike aircraft with ammunition retreats; no aircraft is linked to a strike in our engine, S-0519 claims 17 and 20; every other aircraft falls back to rest)
+    // spec: S-0501 claim 17 (a strike aircraft with ammunition retreats; every other aircraft falls back to rest)
     set_stage(w, id, Stage::Start);
-    fall_back(w, id);
+    if ammo && crate::strike::linked(w, id) {
+        queue(w, id, Behaviour::Retreat);
+    } else {
+        fall_back(w, id);
+    }
 }
 
 // ---------------------------------------------------------------------------

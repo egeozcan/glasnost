@@ -299,6 +299,10 @@ pub struct WarheadRules {
     pub debris_maximums: Vec<i32>,
     /// Airstrike warhead.
     pub airstrike: bool,
+    /// Bomb-planting warhead (S-0519 Import mapping, `IvanBomb`).
+    pub ivan_bomb: bool,
+    /// Disarm warhead (S-0519 Import mapping, `BombDisarm`).
+    pub bomb_disarm: bool,
     /// Locomotor warhead.
     pub is_locomotor: bool,
     /// Registered under the nuclear warhead name (S-0306 claim 25).
@@ -519,6 +523,9 @@ pub struct TypeCombat {
     pub type_immune: bool,
     /// Immune to radiation.
     pub immune_radiation: bool,
+    /// May be erased by a temporal weapon (S-0514 Import mapping,
+    /// `Warpable`).
+    pub warpable: bool,
     /// Immune to psionic weapons.
     pub immune_psionic_weapons: bool,
     /// Immune to poison.
@@ -575,6 +582,15 @@ pub struct TypeCombat {
     pub threat_posed: i32,
     /// Airstrike team.
     pub airstrike_team: i32,
+    /// The elite strike size (S-0519 Import mapping: absent, the normal).
+    pub elite_airstrike_team: i32,
+    /// The strike aircraft type name, normal and elite (S-0519 Import
+    /// mapping: a missing elite type takes the normal type).
+    pub airstrike_team_type: [Option<String>; 2], // spec: S-0519 Terms (normal and elite)
+    /// The recharge delay in ticks, normal and elite (S-0519 Import mapping).
+    pub airstrike_recharge: [i32; 2], // spec: S-0519 Terms (normal and elite)
+    /// The bomb-sight range in cells (S-0519 Import mapping).
+    pub bomb_sight: i32,
     /// Drainable.
     pub drainable: bool,
     /// Muzzle positions by slot, ordinary and elite (S-0313).
@@ -636,6 +652,8 @@ pub struct BuildingCombat {
     pub delay_kill: bool,
     /// Leaves rubble.
     pub leave_rubble: bool,
+    /// An overpowerable type (S-0518 Import mapping).
+    pub overpowerable: bool,
     /// Helipad.
     pub helipad: bool,
     /// Artillery flag.
@@ -702,9 +720,79 @@ pub struct CountryCombat {
     pub veteran: [Vec<u32>; 3], // spec: S-0311 claim 11 (three country veteran lists)
 }
 
+/// The game-wide radiation settings (S-0525 Import mapping).
+#[derive(Clone, Debug)]
+pub struct RadRules {
+    /// The duration multiple *M* (F2).
+    pub duration_multiple: i32,
+    /// The application delay *A*, ticks (claim 9).
+    pub application_delay: i32,
+    /// The level cap *C*<sub>max</sub> (F6).
+    pub level_max: i32,
+    /// The level delay *D*<sub>L</sub>, ticks (claim 5).
+    pub level_delay: i32,
+    /// The light delay *D*<sub>I</sub>, ticks (claim 14).
+    pub light_delay: i32,
+    /// The level factor *k*<sub>L</sub> (F6).
+    pub level_factor: F64,
+    /// The light factor *k*<sub>I</sub> (F7).
+    pub light_factor: F64,
+    /// The tint factor *k*<sub>T</sub> (F7).
+    pub tint_factor: F64,
+    /// The radiation colour (F7).
+    pub colour: [i32; 3], // spec: S-0525 Import mapping (RadColor: a byte triple)
+    /// The radiation-site warhead (claim 10).
+    pub site_warhead: Option<WarheadId>,
+}
+
+/// The game-wide planted-bomb and charge settings (S-0519 Import mapping).
+#[derive(Clone, Debug)]
+pub struct IvanRules {
+    /// The bomb warhead.
+    pub warhead: Option<WarheadId>,
+    /// The bomb damage, health points.
+    pub damage: i32,
+    /// The timed delay *D*, ticks.
+    pub delay: i32,
+    /// The icon flicker rate *F*, ticks.
+    pub flicker: i32,
+    /// The timed-bomb detonate permission (S-0214 row G3).
+    pub can_detonate_time_bomb: bool,
+    /// The charge delay *c* in minutes, a double (F4).
+    pub c4_delay: F64,
+}
+
+/// The game-wide prism support settings (S-0518 Import mapping).
+#[derive(Clone, Debug)]
+pub struct PrismRules {
+    /// The prism type: a building type index.
+    pub building: Option<u32>,
+    /// The held support modifier *s*, a whole-number percentage (F4).
+    pub modifier: i32,
+    /// The support cap *N*ₘₐₓ.
+    pub max: i32,
+    /// The support rearm *R*ₛ, ticks.
+    pub rearm: i32,
+    /// The beam duration *L*ₛ, ticks.
+    pub duration: i32,
+}
+
 /// Game-wide combat values.
 #[derive(Clone, Debug)]
 pub struct CombatGeneral {
+    /// The planted-bomb and charge settings (S-0519).
+    pub ivan: IvanRules,
+    /// The prism support settings (S-0518).
+    pub prism: PrismRules,
+    /// The completion animation of an erasure (S-0514 Import mapping).
+    pub warp_away: Option<String>,
+    /// The sparkle animation of an erased or phasing-in unit (S-0514 claim
+    /// 18).
+    pub chrono_sparkle: Option<String>,
+    /// The open-topped warp distance *W*, cells (S-0514 F4).
+    pub warp_distance: i32,
+    /// The radiation settings (S-0525).
+    pub radiation: RadRules,
     /// Maximum damage.
     pub max_damage: i32,
     /// Occupy and bunker rate-of-fire factors m, b (singles, widened).
@@ -1013,6 +1101,8 @@ pub fn tables(
                 debris_types: h.debris_types.clone().unwrap_or_default(),
                 debris_maximums: h.debris_maximums.clone().unwrap_or_default(),
                 airstrike: b(h.airstrike),
+                ivan_bomb: b(h.ivan_bomb),
+                bomb_disarm: b(h.bomb_disarm),
                 is_locomotor: b(h.is_locomotor),
                 // spec: S-0306 claim 25 and Import mapping (the nuclear warhead name, compared without regard to case)
                 nuke: n.eq_ignore_ascii_case("NUKE"),
@@ -1236,6 +1326,7 @@ pub fn type_combat(
         immune: false,
         type_immune: b(c.type_immune),
         immune_radiation: false,
+        warpable: true, // spec: S-0514 Import mapping (Warpable absent: yes)
         // spec: S-0610 claim 1 (both psychic immunities absent: no here; building types take yes in `building_rules`)
         immune_psionic_weapons: b(c.immune_to_psionic_weapons),
         immune_poison: b(c.immune_to_poison),
@@ -1281,6 +1372,22 @@ pub fn type_combat(
         // spec: S-0309 Import mapping (ThreatPosed absent: 0)
         threat_posed: c.threat_posed.unwrap_or(0),
         airstrike_team: c.airstrike_team.unwrap_or(0),
+        // spec: S-0519 Import mapping (the elite values default to the normal ones; recharge 0; bomb sight 0)
+        elite_airstrike_team: c
+            .elite_airstrike_team
+            .unwrap_or_else(|| c.airstrike_team.unwrap_or(0)),
+        airstrike_team_type: [
+            c.airstrike_team_type.clone(),
+            c.elite_airstrike_team_type
+                .clone()
+                .or_else(|| c.airstrike_team_type.clone()),
+        ],
+        airstrike_recharge: [
+            c.airstrike_recharge_time.unwrap_or(0),
+            c.elite_airstrike_recharge_time
+                .unwrap_or_else(|| c.airstrike_recharge_time.unwrap_or(0)),
+        ],
+        bomb_sight: c.bomb_sight.unwrap_or(0),
         drainable: b(c.drainable),
         flh,
         elite_flh,
@@ -1411,6 +1518,47 @@ pub fn combat_rules(
     // spec: S-0314 Constants (repair rates absent: the double nearest 0.016)
     let rate = |d: &Option<Decimal>| dec(d, mode).unwrap_or_else(|| nearest_double("0.016"));
     let general = CombatGeneral {
+        ivan: IvanRules {
+            warhead: warhead(&g.ivan_warhead),
+            // spec: S-0519 Import mapping (IvanDamage absent: 100; IvanTimedDelay 450; IvanIconFlickerRate 8; both permissions no)
+            damage: g.ivan_damage.unwrap_or(100),
+            delay: g.ivan_timed_delay.unwrap_or(450), // spec: S-0519 Constants (timed delay default 450)
+            flicker: g.ivan_icon_flicker_rate.unwrap_or(8), // spec: S-0519 Constants (flicker rate default 8)
+            can_detonate_time_bomb: g.can_detonate_time_bomb.unwrap_or(false),
+            // spec: S-0519 Import mapping and F4 (C4Delay absent: the double nearest 0.03, never through single precision; a given value is a single widened)
+            c4_delay: g
+                .c4_delay
+                .as_ref()
+                .map_or_else(|| nearest_double("0.03"), |d| d.single_value(mode)),
+        },
+        prism: PrismRules {
+            building: g
+                .prism_type
+                .as_ref()
+                .and_then(|n| names.get(&(Kind::Building, n.clone())).copied()),
+            // spec: S-0518 Import mapping (the engine's starting held modifier is 100; support cap 8, rearm 100, duration 15)
+            modifier: g.prism_support_modifier.unwrap_or(100), // spec: S-0518 Import mapping (starting held modifier 100)
+            max: g.prism_support_max.unwrap_or(8), // spec: S-0518 Import mapping (support cap 8)
+            rearm: g.prism_support_delay.unwrap_or(100), // spec: S-0518 Import mapping (support rearm 100)
+            duration: g.prism_support_duration.unwrap_or(15), // spec: S-0518 Import mapping (beam duration 15)
+        },
+        warp_away: g.warp_away.clone(),
+        chrono_sparkle: g.chrono_sparkle.clone(),
+        // spec: S-0514 Constants (warp distance default 5 cells) and Import mapping
+        warp_distance: g.open_topped_warp_distance.unwrap_or(5),
+        // spec: S-0525 Import mapping (every [Radiation] value absent: the value in force, 0 or none at a fresh start)
+        radiation: RadRules {
+            duration_multiple: g.rad_duration_multiple.unwrap_or(0),
+            application_delay: g.rad_application_delay.unwrap_or(0),
+            level_max: g.rad_level_max.unwrap_or(0),
+            level_delay: g.rad_level_delay.unwrap_or(0),
+            light_delay: g.rad_light_delay.unwrap_or(0),
+            level_factor: dec(&g.rad_level_factor, mode).unwrap_or(F64::ZERO),
+            light_factor: dec(&g.rad_light_factor, mode).unwrap_or(F64::ZERO),
+            tint_factor: dec(&g.rad_tint_factor, mode).unwrap_or(F64::ZERO),
+            colour: g.rad_color.unwrap_or([0, 0, 0]),
+            site_warhead: warhead(&g.rad_site_warhead),
+        },
         // spec: S-0302 Constants (maximum damage absent: 1000)
         max_damage: g.max_damage.unwrap_or(1000),
         // spec: S-0301 Constants (occupy and bunker factors absent: 1.0, singles)

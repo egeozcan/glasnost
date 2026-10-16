@@ -499,7 +499,8 @@ fn melee_held(_w: &World, _id: ObjectId) -> bool {
 }
 
 /// Being erased (S-0214 Terms): a superweapon warp member in its leaving
-/// stage (S-0513 claim 39); the erasing weapons are S-0514's seam.
+/// stage (S-0513 claim 39) or an object a temporal beam is attached to
+/// (S-0514).
 fn being_erased(w: &World, id: ObjectId) -> bool {
     crate::econ::power::being_erased(w, id)
 }
@@ -583,11 +584,10 @@ fn phasing_in(w: &World, id: ObjectId) -> bool {
     crate::teleport::phasing_in(w, id)
 }
 
-/// Carries a planted bomb (S-0213 Terms; for row I2 one visible to the acting
-/// player, S-0519 claim 10). Seam: planted bombs
-/// (S-0519, wave 2) are not built.
-fn planted_bomb(_w: &World, _id: ObjectId) -> bool {
-    false
+/// Carries a planted bomb that the acting house sees (row I2, S-0519 claim
+/// 10).
+fn planted_bomb(w: &World, house: HouseId, id: ObjectId) -> bool {
+    crate::bomb::visible(w, house, id)
 }
 
 /// Disabled (S-0214 Terms): paralysed, or a vehicle playing its death
@@ -857,7 +857,7 @@ fn generic(
         };
     }
     // spec: S-0214 table G row G3 (the only selected own object, clicked on itself, carrying a bomb it may set off)
-    if t == actor && only && is_own && planted_bomb(w, actor) {
+    if t == actor && only && is_own && crate::bomb::detonable(w, actor) {
         return Action::Detonate;
     }
     // spec: S-0214 table G row G4 (force-select, own actor, not a loaner)
@@ -956,7 +956,7 @@ fn infantry_on(
         return Action::ToggleSelect;
     }
     // spec: S-0214 table I row I2 (an engineer over a target carrying a planted bomb visible to the acting player, S-0519 claim 10: disarm bomb; bomb visibility is part of the planted-bomb seam)
-    if eng && planted_bomb(w, t) {
+    if eng && planted_bomb(w, house, t) {
         return Action::DisarmBomb;
     }
     // spec: S-0214 table I row I3 (a bridge repair hut: repair building when S-0511 claim 21's cursor test reports a destroyed bridge, else no-repair)
@@ -1975,6 +1975,8 @@ pub fn order(
         // spec: S-0214 table M part 3 (buildings)
         return match (a, on) {
             (Action::Attack, _) => behaviour(Behaviour::Attack, Some(target), None),
+            // spec: S-0213 claim 11 (a detonate action on an own building that carries a bomb)
+            (Action::Detonate, _) => Some(Order::Detonate { actor: id }),
             // spec: S-0214 table M part 3 (deploy: a primary order if the building is factory-marked; the unload orders of gap generators, absorbing buildings and garrisons are not modelled)
             (Action::Deploy, _) if factory_marked(w, id) => Some(Order::Primary { actor: id }),
             (Action::Move, _) | (Action::Harvest, ClickOn::Cell(_)) if rally_capable(w, id) => {
@@ -2052,6 +2054,8 @@ pub fn order(
         Action::Attack | Action::Bomb | Action::Demolish | Action::Airstrike if fire => {
             behaviour(Behaviour::Attack, Some(target), None)
         }
+        // spec: S-0213 claim 11 (the detonate action gives the detonate order)
+        Action::Detonate => Some(Order::Detonate { actor: id }),
         Action::Enter if mv => behaviour(Behaviour::Enter, None, Some(target)),
         Action::Capture if mv => behaviour(Behaviour::Capture, None, Some(target)),
         Action::Recycle if mv => behaviour(Behaviour::Eaten, None, Some(target)),

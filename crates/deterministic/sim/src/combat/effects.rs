@@ -151,6 +151,19 @@ pub enum Effect {
         /// Where (the building's top-left cell's position).
         pos: Pos,
     },
+    /// A prism support beam is drawn (S-0518 claim 6): from the supporter's
+    /// fire point to the master's at recruitment, for `duration` ticks, in
+    /// the house's laser colour; drawing only.
+    SupportBeam {
+        /// The supporter's fire point.
+        from: Pos,
+        /// The master's fire point at recruitment.
+        to: Pos,
+        /// How long it lasts, ticks.
+        duration: i32,
+        /// The supporter's house.
+        house: Option<crate::world::HouseId>,
+    },
     /// A superweapon presentation event (S-0512 claim 5, S-0513 claim 5).
     Superweapon {
         /// What happened.
