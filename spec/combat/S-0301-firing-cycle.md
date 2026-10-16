@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -46,6 +46,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   that shot's *delay* (claims 2 to 8 and 10), and it is *running* until that many ticks have passed. While it
   runs, the firer may not fire any of its weapons, except for the sync shot of claim 13 and
   the unchecked shots of claim 9. One countdown serves all weapons of a firer.
+  Charge arrival also replaces it without a shot (claim 19).
   S-0215's *rearm time remaining* is the number of ticks still to run.
 - **Rate-of-fire field** *R*. The imported weapon field that sets the base delay between shots, in
   ticks (Import mapping).
@@ -134,11 +135,13 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    *D* ticks pass from one shot to the next at the least. With *D* ≤ 0 the countdown is over at once. How often a firer attempts to fire (for a vehicle, once in
    each of its turns) belongs to S-0215 and to claim 9 here. A firer that has never fired, including
    one created during play, has no running countdown: it can fire as soon as it has a target. The
-   countdown is not changed by switching weapons or targets. Counting is in ticks: game speed does
+   countdown is not changed by switching weapons or targets. Charge arrival replaces it without
+   a shot under claim 19, including when a countdown already runs. Counting is in ticks: game speed does
    not change *D*, and `quirks.speed_normalised_delays` does not apply to any delay of this spec.
    A carrying aircraft's drop attempt instead leaves the countdown unchanged on refusal and
    expires it immediately on success; it sets no ordinary shot delay (S-0522 claim 11).
-   - Backing: `measurable` (scenario F1; S-0522 scenario P7 for drop attempts)
+   - Backing: `measurable` (scenario F1, S-0522 scenario P7 for drop attempts,
+     scenario F18 for charge arrival)
    - Confidence: high
 
 2. **Which delay a shot gets.** Four kinds of delay exist: the 1-tick delay of a building with
@@ -158,7 +161,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    An effect weapon with a burst count of 2 or more takes its bare rate after every shot of
    the burst and never draws R(3, 5). Only the full delay takes the factors of claims 3, 6 and 7,
    and the berserk halving of claim 8 applies to whichever kind was chosen. The burst counter
-   advances in every case (claim 4).
+   advances in every case (claim 4). These are shot delays; the non-shot delay at charge
+   arrival instead uses claim 19's conditions and the unchanged burst counter.
 
    Creating the emitter or trail is taken to always succeed. A creation that fails because the host
    machine runs out of memory, which can happen in the original, is not modelled and has no
@@ -210,7 +214,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
 4. **Bursts.** A weapon with burst count *B* fires bursts of *B* shots. A shot made while the
    firer's burst counter is *k* is the *j*-th shot of its burst, *j* = *k* + 1, and leaves the
-   counter at *j* mod *B*, so the counter is 0 again after the last shot of a burst. The delay
+   counter at *j* mod *B*, so the counter is 0 again after the last shot of a burst.
+   Charge arrival is not a shot: it queries a delay using *k* itself, without advancing or
+   wrapping the counter (claim 19). The delay
    after the shot depends on *j*:
 
    | Burst position | Delay after the shot |
@@ -655,6 +661,30 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     - Confidence: high (one delay draw per shot, or none); medium (its place between the projectile's and the animation's
       draws)
 
+19. **Charge arrival queries a delay without firing.** At the sabotage arrival of S-0519
+    claim 13, whether the charge is planted or refused, the infantry walker's rearm countdown
+    is replaced by the arrival delay for its second weapon. This is not a shot: it uses the
+    current burst counter *k*, not *k* + 1, and neither advances nor wraps it. It uses no
+    ammunition and creates no weapon effect. The first applicable row determines the delay:
+
+    | Condition | Arrival delay, integer ticks | Scenario-stream delay draws |
+    |---|---|---|
+    | no second weapon | 1 | none |
+    | second weapon is sonic, or is a spark-particle, fire-particle or railgun weapon with an effect of its kind already alive on the walker | its rate-of-fire field *R*, unchanged | none |
+    | *k* < the second weapon's burst count *B* | R(3, 5) | one ranged draw |
+    | otherwise | *D*₅ of Formula F1, with the second weapon's rate-of-fire field and the applicable factors of claims 3, 6 and 7 | one R(0, 2) |
+
+    Thus a fresh walker with *k* = 0 takes the short draw even for a single-shot second
+    weapon, unless an earlier row applies. Unlike a successful particle shot (claims 2 and 5),
+    arrival does not create an effect that would make that weapon eligible for the bare rate.
+    No vehicle burst-delay field applies to this infantry walker. Berserk halving (claim 8)
+    applies to none of the rows. The full-delay row retains Formula F1's floating-point
+    domains, rounding and truncations, but stops at *D*₅. Any delay draw precedes the subsequent
+    arrival scatter's draws. Separate target clearing still resets *k* under claim 4.
+    S-0519 claim 13 owns the arrival conditions and remaining effects.
+    - Backing: `measurable` (scenario F18; S-0519 scenario T13)
+    - Confidence: high
+
 ## Formulas
 
 **F1. Full delay** (claims 2, 6, 7, 8). *R* is the rate-of-fire field (integer, ticks), *h* the
@@ -727,6 +757,7 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 |---|---|---|
 | ready (no countdown running), or countdown running in claim 13's sync tick | an attempt passes the firing check and makes a shot | the shot is the *j*-th of its burst, *j* = *k* + 1; the countdown runs for the shot's delay *D*, of the kind that claim 2's order gives for *j*, with the factors of claims 3, 6 and 7 where that kind takes them and the halving of claim 8 where it applies; the burst counter is *j* mod *B* |
 | ready | an attempt passes the firing check with a draining weapon | a drain attempt replaces the ordinary shot (claim 9; S-0608 claim 1); no countdown start, burst advance, ammunition use or ordinary-shot draws; target clearing still resets the burst counter |
+| infantry walker, any rearm state | charge arrival under S-0519 claim 13 | countdown replaced by claim 19's non-shot delay; burst counter and ammunition unchanged by the query |
 | carrying aircraft with a first passenger | firing reaches a drop attempt | no ordinary shot, burst advance, delay draw, spray draw, report or muzzle animation; refusal retains countdown and ammunition, success expires countdown and spends one round immediately; run spending remains separate (S-0522 claim 11) |
 | ready | an attempt passes the firing check, but its projectile cannot be put on the map (a void shot, claim 15) | nothing changes |
 | ready, animation-delayed non-SAM building on the ordinary path | its attack behaviour gets *can fire*, outside an active upgrade gate | the delayed shot becomes pending (claim 14); no shot is made yet |
@@ -845,7 +876,7 @@ value below −1 (Edge cases).
 
 ## Measurement scenarios
 
-Scenario labels F1 to F16 are separate from the formulas F1 to F6; the text says "scenario" or
+Scenario labels F1 to F18 are separate from the formulas F1 to F6; the text says "scenario" or
 "Formula" each time. All scenarios use stock data unless a named test rules file is listed, under the measurement setup
 (glossary), a small purpose-made skirmish map, one game speed (any; claim 1 says it does not matter),
 and the random-state recorder where draws matter. Unless a scenario states otherwise, each distinct
@@ -1273,6 +1304,28 @@ is absent (the control).
 - Falsified by any extra shot or state/draw change attributable to the empty secondary,
   an immediate-pair fixture becoming delayed, or a failed original gate starting a delay.
   Record unreachable fixtures as inconclusive rather than inferred confirmations.
+
+**F18. Non-shot charge-arrival delay (claim 19).**
+- Setup and procedure: use S-0519 scenario T13's named test map and override variants,
+  speed index 2, director and other mods off, a bystander computer player kept outside the
+  observed area under the glossary's void rule. Run each variant three times. Compare
+  successful, protected and duplicate-countdown arrivals with an ordinary second weapon,
+  first at *k* = 0 with burst count 1, then with a retained *k* at least its burst count.
+  Include its missing-weapon, sonic and particle-effect absent/alive controls. Void a
+  retained-counter trial if target clearing resets *k* before arrival.
+- Observable: arrival tick, rearm time remaining immediately after arrival, burst counter,
+  ammunition and random-stream draws, followed by the scatter draws. Do not infer the
+  delay solely from the next shot, since other firing gates can postpone it.
+- Expected: claim 19's table, unchanged burst counter and ammunition, at most one delay
+  draw before scatter. In particular, ordinary *k* = 0 with burst count 1 gives R(3, 5),
+  not R(0, 2). A missing particle effect does not grant the bare rate.
+- Berserk comparison: repeat a reachable arrival while the walker is berserk, with named
+  test data keeping it berserk through arrival and a delay distinguishable from its halved
+  value. Expect the unchanged table result, not half. If normal orders and stock
+  berserk application cannot establish such an arrival, record that variant inconclusive.
+  Do not force the state by writing to the game.
+- Falsified by a counter advance or wrap caused by the query, a different delay or delay
+  draw, a draw after rather than before scatter, or berserk halving at a reached arrival.
 
 ## Open questions
 
