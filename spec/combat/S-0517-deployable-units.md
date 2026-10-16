@@ -2,7 +2,7 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -35,7 +35,7 @@ Other specs own the following, and this spec only points to them:
 - radiation creation and top-ups from a deployed infantry unit's own-cell shot (S-0525 claims
   1 to 4; S-0215 claim 31 owns when it fires),
 - jumpjet hovering before a deploy request, landing and interrupted descent (S-0502 claims 13,
-  15 and 16),
+  15, 16 and 24),
 - whether deployed infantry can be crushed (S-0107).
 
 Skirmish only. Network games and campaigns are out of scope.
@@ -145,13 +145,27 @@ Skirmish only. Network games and campaigns are out of scope.
 5. **Landing first.** A deploy step that finds the vehicle above the ground does one of two things:
    - for a type that is not landing-first, nothing. The processing then returns to *guard* (claim
      3), so the order is dropped,
-   - for a landing-first type, it requests landing for deploy. Without that request, an idle
-     jumpjet of this type keeps hovering (S-0502 claim 13). Landing checks, descent and touchdown
-     follow S-0502 claim 15. Each processing before touchdown is another deploy step that finds
-     it still airborne. At touchdown the landing request ends. The next processing then takes
-     the deploy step of claim 4.
-   - Backing: `measurable` (P1 b and V)
-   - Confidence: high (the outcomes); medium (that the descent is the locomotor's ordinary one)
+   - for a landing-first type, it requests landing for deploy. Without that request, a hovering
+     jumpjet of this type keeps hovering (S-0502 claim 13).
+
+   The deploy order's destination clear follows S-0502 claim 24. With a movement commitment,
+   an effective clear reroutes and retains the replacement movement point and commitment.
+   A suppressed empty-to-empty vehicle assignment instead retains the preceding point and
+   commitment; it does not reroute. An equal horizontal point permits descent when the landing
+   request is present; a different point first causes cruise to that point. Descent and
+   touchdown use the point then retained, not an absent point.
+
+   Without a movement commitment, the clear cannot create one or wake idle hover. A landing
+   request alone does not bypass S-0502 claim 3's update eligibility. Landing checks, descent
+   and touchdown otherwise follow S-0502 claim 15. Each processing before touchdown is another
+   deploy step that finds it still airborne. At touchdown the landing request ends. The next
+   processing then takes the deploy step of claim 4.
+   - Backing: `measurable` (P1 b and V; S-0502 J22 for effective versus suppressed clears and
+     retained touchdown points). Uncommitted idle-hover deployment remains `unmeasured`:
+     no ordinary stock order sequence establishing that starting state is settled, as
+     qualified in S-0502 claim 24. Its refresh-state and balloon-hover exceptions inherit
+     that claim's backing limitations.
+   - Confidence: high (the deploy step); medium (landing motion and point retention)
 
 6. **The undeploy step.** When it starts, the undeploy step removes a disguise the vehicle wears.
 
@@ -423,7 +437,7 @@ occurs for a stalled zero-delay transition with its quirk on.
 |---|---|---|
 | mobile, on the ground | processing | no presentation: deployed; *guard* queued and started, 450 ticks. With presentation: deploying, presentation starts, 1 tick |
 | mobile, airborne, not landing-first | processing | nothing; *guard* queued and started, 450 ticks |
-| mobile, airborne, landing-first | processing | landing for deploy, 1 tick |
+| mobile, airborne, landing-first | processing | landing request set, 1 tick; flight follows the retained point and update eligibility of claim 5 |
 | landing for deploy | processing, still airborne | stays landing, 1 tick |
 | landing for deploy | touchdown | mobile on the ground; the next processing takes the ground row |
 | landing for deploy | destination given (move, approach) | landing ends, vehicle climbs; *guard* queued if *unload* is current |
@@ -591,6 +605,14 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
     no draw chooses a completion tick. Ambiguous intervals are inconclusive. Request a
     read-only tick/image/state recorder and scripted input through the measurement bench.
     no state writes or installed engine changes are proposed.
+  - (R) Repeat hovering deployment with the effective-clear and suppressed empty-to-empty
+    starting states of S-0502 J22. Record order-level destination, movement commitment,
+    retained movement point, flight state and touchdown position. Expected: an effective clear
+    reroutes; a suppressed assignment preserves the preceding point and commitment. Descent
+    uses the retained point; a different horizontal point causes cruise first. An erased point,
+    reroute after a verified suppressed assignment, or descent at a different point falsifies
+    claim 5. Follow J22's diagnostic-only treatment of uncommitted idle hover and refresh-state
+    activation; do not create those states by writing into the game.
   - (Z) Give the presentation a zero rate and an end field of 5 stages. Deploy, wait 500 ticks,
     then destroy the vehicle. Also destroy a vehicle during ordinary deploy, undeploy and
     landing in separate runs; observe that the cycle and its presentation end.
@@ -609,7 +631,9 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
     every processing's request cadence (claim 12),
   - (V) grounded without a presentation: immediate deploy and undeploy at their first processings.
     Airborne without the landing-first flag: no deploy and return to *guard*. Landing descent
-    matches ordinary landing. Presentation variants follow F1/F2 regardless of initial frame.
+    matches ordinary landing once descent starts; claim 5 permits cruise to a retained point
+    first and does not promise to wake uncommitted idle hover. Presentation variants follow
+    F1/F2 regardless of initial frame.
     No deployed image type: the vehicle keeps its own image. A landing-first type with no
     presentation becomes mobile without the undeploy itself assigning a destination; record
     its later height without a prediction,
