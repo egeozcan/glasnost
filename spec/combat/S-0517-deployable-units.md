@@ -2,7 +2,7 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -163,11 +163,15 @@ Skirmish only. Network games and campaigns are out of scope.
 
    When a landing-first vehicle completes an animated undeploy, it is given a destination from
    a nearby-cell search centred on its position (S-0212 claim 25), allowing its locomotor to take
-   off again. The destination is not guaranteed to be its current cell. An immediate undeploy
-   without a presentation does not assign this destination. Its subsequent height is open.
+   off again. This initial search uses the animated-undeploy settings of S-0502 claim 23:
+   the type's own locomotion class, with winged counted as track, and its own movement zone,
+   not simplified. It is distinct from the subsequent hover-class, flying-zone destination
+   adjustment of S-0502 claims 16 and 23. The destination is not guaranteed to be its current
+   cell. An immediate undeploy without a presentation does not assign this destination.
+   Its subsequent height is open.
    - Backing: `measurable` (P1 c and V) for the state change, destination assignment and lift-off.
-     Disguise removal is `measurable` (P8 b). The exact nearby-cell search eligibility is an
-     open question, not a specified rule; P1 establishes assignment, not those settings.
+     Disguise removal is `measurable` (P8 b). Search settings inherit S-0502 claim 23's
+     `measurable` backing (J16); P1 establishes assignment, not those settings.
    - Confidence: high (state changes), medium (takeoff and removing the disguise)
 
 7. **Exact completion and the two clocks.** With a vehicle update on every tick and an
@@ -871,8 +875,9 @@ same map, recorder and five-seed repeats as P1. Each variant is a separate newly
   P3 (d) records ordinary queueing and stop; no setup for a forced replacement is established.
 - Whether any situation forces a behaviour on a vehicle in transition (S-0215 claim 9), which would
   leave it stuck (Edge cases).
-- The exact nearby-cell eligibility settings used for animated landing-first undeploy (claim 6),
-  and its subsequent height when there is no presentation and hence no assigned destination.
+- The subsequent height after immediate landing-first undeploy, when there is no presentation
+  and hence no assigned destination (claim 6). Animated-undeploy search settings are specified
+  by S-0502 claim 23.
 - Approved S-0415 claim 1 already specifies the slot-0 weapon and the 14 + *u* tick delay, matching claim 2 here; no cross-spec change is indicated by this point.
 - Approved S-0516 claim 34 already specifies disguise loss when the undeploy step starts, matching claim 6 here; no cross-spec change is indicated by this point.
 - The rest of the approach search of a deploy-to-fire vehicle whose own cell fails (S-0307, Open
