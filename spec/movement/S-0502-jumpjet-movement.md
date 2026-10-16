@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -143,6 +143,10 @@ New terms:
   cell, made before it touches down (claim 15). Glossary candidate.
 - **Neighbour step.** The jumpjet's move to a randomly chosen neighbouring cell when the hover
   slot it wants is taken (claim 21). Glossary candidate.
+- **Warp-pending immobilization.** S-0207's external-teleport commitment, from
+  acceptance through the leaving wait until departure from the old position, not the
+  arrival hold. It is distinct from phasing in and the parasite-related held countdown
+  (S-0207 claim 27).
 - **Teleport-capable flag.** The imported type flag used by claim 27's dock handling.
   It does not itself mean that the current locomotor is teleporting.
 - **Deploy-to-land vehicle.** A vehicle whose type has both the simple-deployer flag and the
@@ -857,13 +861,20 @@ New terms:
       attempts do not independently trigger it. An unchanged offer without refresh
       does not reach it even if contact or occupancy has changed. A building destination
       is not the required cell destination. The type must have the teleport-capable flag,
-      and the vehicle must not be
-      immobilized by teleport aftereffects, must have no magnetic-lift source and must
-      not be seized, and their dock contact must be a building permitting dock unloading.
-      The requested destination must be a cell with no ground-layer vehicle, and their
-      current locomotor must not be teleporting.
+      and the vehicle must have no warp-pending immobilization, no magnetic-lift source
+      and must not be seized. Its dock contact must be a building permitting dock unloading.
+      The requested destination must be a cell with no ground-layer vehicle, and its
+      current locomotor must not be teleporting. The immobilization predicate applies
+      independently of the current locomotor: it does not mean phasing in, the held
+      countdown or a cooldown before another jump. An ordinary own-locomotor jump or
+      factory exit does not create it (S-0207 claim 27).
       If a suspended locomotor can finish and restore its predecessor, that restoration
-      does not enable refresh. Otherwise movement is stopped, current behaviour is
+      enables neither refresh nor point suppression. That same assignment's otherwise
+      due point goes to the restored predecessor, not to the former temporary locomotor,
+      subject to already-pending point suppression and the restored locomotor's ordinary
+      destination refusals (S-0207 claims 20 and 27). Eligibility uses the temporary
+      locomotor's preceding movement state, not the point offered by this assignment.
+      Otherwise movement is stopped, current behaviour is
       cleared, *enter* is queued without an immediate start, and both destination refresh
       and suppression of one nonempty movement-point application become pending.
       S-0207 claim 27 defines restoration eligibility, including temporary driving.
@@ -885,9 +896,12 @@ New terms:
       be inferred from flight state, retained commitment, an empty destination or a
       landing request.
     - Backing: `measurable` (J24) for placement and ordinary-order nonactivation.
-      The later teleport/dock activation and a retained refresh state on a jumpjet are
-      `unmeasured` here: no stock jumpjet sequence establishing those type properties
-      and docking conditions is settled. J24 includes a diagnostic for that limitation.
+      The later teleport/dock activation, same-assignment point routing after restoration,
+      and a retained refresh state on a jumpjet are `unmeasured` here: no stock jumpjet
+      sequence establishing those type properties and docking conditions is settled.
+      Nor is an immobilized, non-teleporting dock fixture established. J24 includes
+      conditional diagnostics for these limitations; S-0207 claim 27 owns the shared
+      immobilization predicate and its separate backing.
     - Confidence: high for activation and consumption predicates; medium for ordinary
       stock reachability beyond placement.
 
@@ -1591,11 +1605,17 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   actual assignments separately from orders and type-specific fallback exceptions.
   Diagnostic only, following S-0207 claim 27: record a teleport-capable vehicle's
   effective destination assignments, contact already held, offered destination kind,
-  ground-layer vehicle presence, restoration permission, both pending states and each
+  ground-layer vehicle presence, warp-pending immobilization separately from phasing
+  in and held, current locomotor, restoration permission, both pending states and each
   nonempty point application within the assignment. Distinguish unchanged rejected
   offers from effective ones. Only assignments satisfying every gate qualify:
-  restoration enables neither state; fallback normally skips that assignment's point
-  and leaves refresh, not suppression, pending. A later refreshed equal assignment can
+  warp-pending immobilization disqualifies the assignment independently of current
+  locomotor. Restoration enables neither pending state and routes the same assignment's
+  otherwise due point to the restored predecessor, subject to already-pending suppression
+  and ordinary destination refusal. A point applied to the temporary locomotor first,
+  or eligibility decided using the newly offered point, falsifies this contract.
+  Fallback normally skips that assignment's point and leaves refresh, not suppression,
+  pending. A later refreshed equal assignment can
   qualify again. Changed contact or occupancy alone must not retest a suppressed equal
   offer. Retesting on contact alone, delayed point suppression, loss of newly enabled
   refresh without another effective assignment, or a once-per-entry limit falsifies
