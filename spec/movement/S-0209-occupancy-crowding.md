@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 38
+revision: 39
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -93,7 +93,8 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
   These are its cell layers. Every object in a cell belongs to one of them: an object on a bridge
   deck to the deck layer, every other object to the ground layer. Claim 15 gives when an ordinary
   walker changes this membership; target reservation uses a separate surface choice. This classification does not
-  mean every object is listed there: claim 13 excludes aircraft in flight from both lists. It is
+  mean every object is listed there: claim 13 excludes ordinary aircraft at positive listing
+  height and gives jumpjets their separate flight-state listing rules. It is
   neither a rules layer nor a render layer.
 
   *The cell layer that counts* for a neighbouring cell that is asked about depends on a *reference
@@ -527,6 +528,19 @@ rank* and *elite weapon*), *n*
      a stationary dropped unit therefore leaves no phantom deck mark after repair.
      This pointer inherits S-0511 claim 9's medium confidence and `measurable` backing
      (its scenarios B3, turn-order and marks variant, and B6).
+   - *Jumpjets.* S-0502 claim 4 owns actual-position marking during jumpjet flight,
+     separately from claim 13's listing, S-0502 claim 15's landing reservation and
+     S-0502 claim 21's hover slot. Grounded, ascending, descending, crashing and
+     crashed physics can supply ordinary kind-specific marks when the resulting
+     placement qualifies for ground-render-layer listing. A vehicle can therefore mark
+     during low positive-height ascent or descent and near crash end. The first rise
+     clears the preceding occupancy and ends its on-deck state, but does not forbid
+     later low-flight marking. Descent can supply both an actual-position mark and a
+     landing reservation. Hovering and cruising physics create neither a new listing
+     nor a new actual-position mark; do not infer a blanket erasure of retained
+     low-flight placement from this absence of new marks. These are pointers with
+     S-0502 claim 4's high confidence for placement eligibility, medium confidence for
+     kind-specific marking consequences and `measurable` backing (S-0502 scenario J3).
    - *Buildings.* A building sets the building-present flag of its foundation cells.
    - *Terrain objects.* A terrain object marks the side positions that its type's side-position
      pattern (Terms) gives, in the ground layer of its cell. It never sets the infantry house, and it
@@ -1293,6 +1307,32 @@ rank* and *elite weapon*), *n*
     backing (S-0506 scenario R17). A render layer is not a cell layer.
     Consequently an aircraft passing over an otherwise empty foundation cell does not block
     building placement through S-0406 claim 3 (b)'s aircraft-list test; a landed aircraft does.
+
+    Jumpjets do not use the ordinary aircraft's positive-listing-height exclusion.
+    S-0502 claim 4 owns their separate flight-state rule: grounded, ascending,
+    descending, crashing and crashed physics removes the previous listing and permits
+    listing at the new position only when its evaluated render layer is ground
+    (S-0102 claim 3). Its on-deck state chooses deck listing; otherwise listing is
+    ground. On flat land without bridges, positive heights below 208 leptons can
+    therefore list, whereas heights of 208 leptons or more cannot. These are integer
+    comparisons without rounding. Bridge cases use S-0102 claim 3's full layer rule,
+    not a blanket terrain-relative threshold. Hovering and cruising create no new
+    listing and do not transfer an existing listing on a cell crossing.
+
+    S-0502 claim 22 owns the clearance consequence. Its look-ahead reads actual
+    ground-layer listings, not reservations or hover slots, with no self-exclusion:
+    a listed jumpjet supplies the 85-lepton allowance even to itself. Deck-only
+    listing supplies none. Ordinary high hover has no listing left from ascent and
+    no automatic self allowance. A low own-cell ascent-to-cruise transition can
+    instead retain its previous ground listing until removal, even when subsequent
+    flight crosses into another cell. That retained listing counts wherever
+    look-ahead uses it; direct-reference intervals do not use the allowance.
+    These pointers have high confidence for placement eligibility and the clearance
+    predicate, medium confidence for exceptional retained-listing history, and
+    `measurable` backing (S-0502 scenarios J3 and J18) for ordinary placement and
+    clearance. Retained low-flight listing persistence remains `unmeasured` pending
+    J18's diagnostic, because its history has not been isolated from reservations
+    in an observation.
 
     This order is observable in four ways: which object a blocked walker attacks (claim 9), which
     occupant decides when an override meets a *blocked* (claim 4), the order of the random draws
