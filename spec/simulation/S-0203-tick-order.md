@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -377,15 +377,27 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    supplies our deterministic rule for vehicles, teleporter infantry and landed aircraft.
    A living member receives one warp update per tick throughout pending, leaving,
    landing retries, placement awaiting effects and arrival hold, including while off-map.
-   From the first pending update through arrival effects, ordinary self-healing,
-   behaviour processing, movement, firing and turret turning are suppressed both before
-   and after warp work. In arrival hold, including its expiry turn, the hold-end test
-   precedes those ordinary opportunities, each still subject to its own eligibility.
+   From the first pending update through arrival effects, the warp update is the whole
+   member turn, apart from the intrinsic exceptions below. Ordinary work is suppressed
+   both before and after it: self-healing, the per-tick behaviour start and behaviour
+   processing, movement, firing, turret turning, ordinary cloak updates, ammunition
+   reload updates and firing-frame advancement, attached parasite steps, the member's
+   economy and power work, depot queued-entry retries, expected-health turn bookkeeping
+   and protection-brightness phase processing. In arrival hold, including its expiry
+   turn, the hold-end test precedes all these ordinary opportunities, each still subject
+   to its own eligibility. No deferred ordinary updates are replayed in a catch-up burst.
    Launch immediately clears the old path, queued destinations and driving step; none
    resumes after the warp. Target and current destination retain claim 48's leaving-stage
    clearing rather than an added launch-time clearing. Intrinsic warp target searches,
    sensor updates, elapsed protection duration, placement and arrival-fate tests are not
-   suppressed ordinary work. These restrictions are not missed turns under claim 10
+   suppressed ordinary work. Elapsed-tick clocks keep running: suppressed reload work
+   grants no ammunition and restarts no countdown, but its elapsed time still passes.
+   Skipping firing-frame advancement likewise does not freeze a shot cooldown.
+   Independent house updates, other objects' updates, immediate damage and explicit
+   event-driven effects remain eligible. In particular, launch/departure parasite
+   releases and arrival sensor transfer still occur; skipping expected-health turn
+   bookkeeping does not cancel actual damage or death.
+   These restrictions are not missed turns under claim 10
    and create no separate global tick part. The update count makes S-0513 claim 39's
    timeline applicable in our engine for uninterrupted successful landing and placement.
    It does not settle the original's per-kind update count or continuation gaps above.
@@ -861,8 +873,10 @@ with vehicles, infantry and landed aircraft recorded separately. Departure, plac
 arrival, hold-expiry continuation and the number of warp updates within a turn are
 exploratory original-side observations in parts a to e, not promised oracle outcomes.
 Part f separately tests S-0513 claim 51's engine contract: one warp update per tick,
-immediate route clearing, suppressed ordinary work through arrival effects, and ordinary
-eligibility after the hold-end test. A contrary event falsifies the engine contract,
+immediate route clearing, the whole-ordinary-turn exclusion through arrival effects,
+preserved intrinsic warp effects and elapsed clocks, and ordinary eligibility after the
+hold-end test without catch-up updates. This includes the additional operations in claim 4,
+not only healing, behaviour, movement, firing and turret turning. A contrary event falsifies the engine contract,
 not claim 48's explicitly unresolved original-side continuation.
 
 **Shared kamikaze boundary (claim 1, row 17).** S-0506 scenario R21 supplies the setup,
