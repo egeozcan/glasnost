@@ -45,7 +45,9 @@ pub fn step(w: &mut World) {
     crate::econ::shroud::sweep(w);
     turn_pass(w);
     // spec: S-0203 claim 1 (after the turn pass: rows 15, 16, 6, 7, then the orders, row 8)
-    // Rows 15 and 16 (blast rings, crate respawns): empty seams.
+    // Row 15 (blast rings): an empty seam.
+    // spec: S-0203 claim 1 row 16 and S-0520 claim 4 (crate expiry and replacement, after the turn pass and before the production lines)
+    crate::crates::update(w);
     // spec: S-0203 claim 8 and row 6 (the production lines see the whole turn pass)
     crate::econ::production::part(w);
     // spec: S-0203 claim 8 and row 7 (the houses, in house order, after the production lines)

@@ -326,7 +326,7 @@ pub fn contender(w: &World, h: HouseId) -> bool {
 // ---------------------------------------------------------------------------
 // The counts (claim 4)
 
-fn flags(w: &World, kind: Kind, t: u32) -> (bool, bool) {
+pub(crate) fn flags(w: &World, kind: Kind, t: u32) -> (bool, bool) {
     rules(w)
         .flags
         .get(&(kind, t))
@@ -443,7 +443,7 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
 }
 
 /// *B*: the house's counted buildings in existence (Terms; claim 4).
-fn counted_buildings(w: &World, h: HouseId) -> i32 {
+pub(crate) fn counted_buildings(w: &World, h: HouseId) -> i32 {
     let r = rules(w);
     w.objects
         .values()

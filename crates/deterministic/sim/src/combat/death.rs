@@ -224,6 +224,8 @@ pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
 /// second row) and an aircraft killed on the ground (S-0312 claim 15)
 /// among others.
 pub fn leave_play(w: &mut World, id: ObjectId) {
+    // spec: S-0312 claims 14 and 20 and S-0520 claim 5 (a destroyed crate-carrying vehicle or a building with a crate beneath leaves a crate)
+    crate::crates::death_crate(w, id);
     // spec: S-0312 claims 12 and 15 and S-0507 claim 16 (remaining passengers die at removal, without attacker credit)
     crate::transport::remove_passengers(w, id);
     crate::objects::remove(w, id);

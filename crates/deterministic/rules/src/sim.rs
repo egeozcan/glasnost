@@ -1636,6 +1636,10 @@ pub struct UnitType {
     /// `CarriesCrate` (S-0312 claim 14).
     #[serde(default)]
     pub carries_crate: Option<bool>,
+    /// `CrateGoodie`: a vehicle type a unit crate may give (S-0520 claim
+    /// 13).
+    #[serde(default)]
+    pub crate_goodie: Option<bool>,
     /// `Crashable` (S-0312 claims 12, 15).
     #[serde(default)]
     pub crashable: Option<bool>,
@@ -2122,6 +2126,12 @@ pub struct BuildingType {
     /// `EligibleForDelayKill` (S-0302 claim 16).
     #[serde(default)]
     pub eligible_for_delay_kill: Option<bool>,
+    /// `CrateBeneath` (S-0312 claim 20).
+    #[serde(default)]
+    pub crate_beneath: Option<bool>,
+    /// `CrateBeneathIsMoney` (S-0312 claim 20).
+    #[serde(default)]
+    pub crate_beneath_is_money: Option<bool>,
     /// `LeaveRubble` (S-0312 claim 20).
     #[serde(default)]
     pub leave_rubble: Option<bool>,
@@ -2207,6 +2217,9 @@ pub struct OverlayType {
     /// `Crate`.
     #[serde(default, rename = "crate")]
     pub crate_: Option<bool>,
+    /// `CrateTrigger` (S-0520 claim 7).
+    #[serde(default)]
+    pub crate_trigger: Option<bool>,
     /// `DamageLevels` of the overlay type's image section in the art data
     /// (S-0210 claim 13).
     #[serde(default)]

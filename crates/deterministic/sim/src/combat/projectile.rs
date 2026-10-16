@@ -1658,6 +1658,23 @@ pub(crate) fn explosion_anim(
     q: Pos,
     hit: bool,
 ) -> Option<String> {
+    explosion_anim_with(w, h, d, q, hit, false)
+}
+
+/// [`explosion_anim`] chosen as if the land type were not water, so the
+/// splash case is never selected (S-0520 claim 16).
+pub(crate) fn explosion_anim_dry(w: &mut World, h: WarheadId, d: i32, q: Pos) -> Option<String> {
+    explosion_anim_with(w, h, d, q, false, true)
+}
+
+fn explosion_anim_with(
+    w: &mut World,
+    h: WarheadId,
+    d: i32,
+    q: Pos,
+    hit: bool,
+    dry: bool,
+) -> Option<String> {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     let g = &rules.combat.general;
@@ -1684,7 +1701,7 @@ pub(crate) fn explosion_anim(
     if hit && naval_first {
         land = None;
     }
-    let water = land == Some(glasnost_map::terrain::land::WATER);
+    let water = !dry && land == Some(glasnost_map::terrain::land::WATER);
     // spec: S-0303 F5 (splash: water, conventional, no bridge, q_z < terrain + 208)
     if water && wh.conventional && !w.high_bridge(qc) && q.z < terrain + 208 {
         let ns = g.splash_list.len() as i32;

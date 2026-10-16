@@ -24,6 +24,7 @@ pub mod cloak;
 pub mod combat;
 pub mod consts;
 pub mod corridor;
+pub mod crates;
 pub mod crush;
 pub mod depot;
 pub mod drive;

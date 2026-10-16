@@ -664,12 +664,13 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     crate::cloak::machine::cell_movement_completed(w, id);
     // spec: S-0207 claim 22 and S-0208 claim 22 (the arrival update in the jump tick raises the landing cell's entered-by tag, after position, height, listing and a vehicle's arrival effects, before crate collection, destination removal and the landing warp animation; no raise for the cells between)
     crate::objects::arrival_raise(w, id);
+    // spec: S-0207 claim 20 (e) and S-0520 claim 6 (crate collection at L after the arrival update, before the destination is removed; the landing is never undone)
+    crate::crates::pickup(w, id, l.cell());
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; its behaviour falls back to rest, S-0215 claim 13)
         ob.dest = None;
         ob.path.steps.clear();
     }
-    // Crate collection at L (S-0207 claim 20 e, S-0520 claims 7 to 11) is a seam: crates are not built (S-0520).
     // spec: S-0207 claim 20 (e) and (i) (a second warp animation at L, with its creation draws after the old point's in the jump tick)
     if let Some(warp) = r.warp_out.clone() {
         crate::combat::effects::anim(w, &warp, Pos::new(l.x, l.y, z));

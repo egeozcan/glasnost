@@ -416,6 +416,8 @@ pub struct OverlayRules {
     pub rubble: bool,
     /// Crate flag.
     pub crate_: bool,
+    /// Crate-trigger flag (S-0520 claim 7).
+    pub crate_trigger: bool,
     /// Damage-stage count D.
     pub damage_levels: i32,
     /// Strength S.
@@ -933,6 +935,8 @@ pub struct SimRules {
     pub wake: Option<String>,
     /// The ruleset's `sim_rules_hash`.
     pub hash: String,
+    /// The crate rules (S-0520).
+    pub crates: crate::crates::CrateRules,
     /// The combat rules (M4).
     pub combat: crate::combat::data::CombatRules,
     /// The rules of the M5a topics (economy, production, structures,
@@ -1192,10 +1196,15 @@ impl SimRules {
             .collect();
         // spec: S-0306 Constants (gravity absent: 3 leptons per tick²)
         let gravity = g.gravity.unwrap_or(3);
+        // spec: S-0520 Edge cases (the gas warhead is the one registered under the fixed name; when the rules name none, a warhead with every field at its absent-key default is created)
+        let mut warhead_map = s.warheads.clone();
+        if !warhead_map.keys().any(|k| k.eq_ignore_ascii_case("GAS")) {
+            warhead_map.insert("GAS".to_owned(), Default::default());
+        }
         let (weapons_c, projectiles_c, warheads_c, weapon_index) = crate::combat::data::tables(
             &s.weapons,
             &s.projectiles,
-            &s.warheads,
+            &warhead_map,
             gravity,
             quirks.negative_range_fields,
             mode,
@@ -1248,7 +1257,7 @@ impl SimRules {
                 )
             })
             .collect();
-        let overlays = registry("overlays")
+        let overlays: Vec<OverlayRules> = registry("overlays")
             .iter()
             .map(|n| overlay_rules(n, s.overlays.get(n).cloned().unwrap_or_default()))
             .collect();
@@ -1360,10 +1369,12 @@ impl SimRules {
             &country_names,
             mode,
         );
+        let crates = crate::crates::CrateRules::new(r, &names, &overlays, &combat, mode);
         let econ = crate::econ::EconRules::new(r, mode);
         let missiles = crate::spawn::MissileRules::new(s, &names, &combat.warheads, mode);
         let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, mode);
         Self {
+            crates,
             superweapons,
             missiles,
             air: crate::air::AirRules::new(r, mode),
@@ -1399,7 +1410,7 @@ impl SimRules {
             terrain,
             weapons: s.weapons.clone(),
             projectiles: s.projectiles.clone(),
-            warheads: s.warheads.clone(),
+            warheads: warhead_map,
             names,
             hash: hash.to_owned(),
         }
@@ -1775,6 +1786,7 @@ fn overlay_rules(name: &str, o: rs::OverlayType) -> OverlayRules {
         rock: o.rock.unwrap_or(false),
         rubble: o.rubble.unwrap_or(false),
         crate_: o.crate_.unwrap_or(false),
+        crate_trigger: o.crate_trigger.unwrap_or(false),
         // spec: S-0210 claim 13 (damage-stage count absent: 1)
         damage_levels: o.damage_levels.unwrap_or(1),
         // spec: S-0210 claim 13 (wall strength absent: 1)

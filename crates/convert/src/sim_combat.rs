@@ -158,6 +158,7 @@ pub(super) const UNIT_COMBAT: &[Row] = &[
     ("deploy_fire_weapon", "DeployFireWeapon", Int, "S-0308"),
     ("crewed", "Crewed", Bool, "S-0312"),
     ("carries_crate", "CarriesCrate", Bool, "S-0312"),
+    ("crate_goodie", "CrateGoodie", Bool, "S-0520"),
     ("crashable", "Crashable", Bool, "S-0312"),
     ("weight", "Weight", Dec, "S-0312"),
     (
@@ -197,6 +198,13 @@ const INFANTRY_COMBAT: &[Row] = &[
 
 /// Combat fields of building types (`BuildingType`).
 const BUILDING_COMBAT: &[Row] = &[
+    ("crate_beneath", "CrateBeneath", Bool, "S-0312"),
+    (
+        "crate_beneath_is_money",
+        "CrateBeneathIsMoney",
+        Bool,
+        "S-0312",
+    ),
     ("cloak_generator", "CloakGenerator", Bool, "S-0516"),
     ("cloak_radius_in_cells", "CloakRadiusInCells", Int, "S-0516"),
     ("sensor_array", "SensorArray", Bool, "S-0516"),

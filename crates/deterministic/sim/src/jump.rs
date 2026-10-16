@@ -259,9 +259,12 @@ pub fn seized(w: &World, id: ObjectId) -> bool {
 }
 
 /// A crate in the landing cell is picked up at touchdown (S-0520 claim 6,
-/// S-0502 claim 15). Seam: crates are not built.
+/// S-0502 claim 15); the landing is never undone, so a block means nothing.
 pub fn crate_pickup(w: &mut World, id: ObjectId) {
-    let _ = (w, id);
+    let Some(c) = w.obj(id).map(|o| o.pos.cell()) else {
+        return;
+    };
+    crate::crates::pickup(w, id, c);
 }
 
 fn balloon(w: &World, id: ObjectId) -> bool {

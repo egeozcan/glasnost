@@ -522,6 +522,7 @@ const OVERLAY_FIELDS: &[(&str, &str, Form)] = &[
     ("rock", "IsARock", Bool),
     ("rubble", "IsRubble", Bool),
     ("crate", "Crate", Bool),
+    ("crate_trigger", "CrateTrigger", Bool),
     ("strength", "Strength", Int),
     ("armor", "Armor", Text),
     // spec: S-0202 Import mapping (IsVeins, the veins flag)

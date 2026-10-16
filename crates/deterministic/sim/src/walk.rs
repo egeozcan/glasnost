@@ -491,6 +491,13 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
     let outcome = path::step_outcome(w, id, here, next, reference);
     match outcome {
         Outcome::Clear => {
+            // spec: S-0520 claim 6 (a walking mover collects the crate of the cell it commits to, before it arrives; a successful unit crate blocks the step and clears its movement target)
+            if crate::crates::pickup(w, id, next) {
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.path.steps.clear();
+                }
+                return;
+            }
             // spec: S-0209 claim 6 (clear: choose the walking target on the asking tick)
             if !choose_target(w, id, d, next) {
                 // spec: S-0209 claim 6 (a clear cell with no free position: stop for this tick)
