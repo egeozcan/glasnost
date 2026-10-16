@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 52
+revision: 53
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1038,9 +1038,24 @@ Terms used by this spec:
     processing outcomes of claim 22, regardless of the caller. A committed jumpjet
     reroutes and retains its replacement movement point while its order-level destination
     becomes empty; this is not a direct instruction to move to an absent point. A
-    behaviour change alone is not a destination clear. An unchanged vehicle destination
-    assignment suppressed under S-0502 claim 24 does not reroute or erase the retained
-    movement point. That claim owns the no-commitment outcome and assignment exceptions.
+    behaviour change alone is not a destination clear. Infantry of a jumpjet type has no
+    unchanged-destination suppression: even an empty-to-empty assignment reroutes while
+    a movement commitment remains, including when behaviour processing makes that
+    assignment. Each effective assignment can repeat the eligible standing-position draw
+    (S-0502 claim 24). An unchanged vehicle destination assignment suppressed under
+    S-0502 claims 24 and 27 does not reroute or erase the retained movement point.
+
+    A balloon-hover vehicle can instead reject a requested clear under S-0502 claim 28,
+    including one requested by behaviour processing. The rejection retains the nonempty
+    order-level destination, movement point, commitment and landing reservation, with no
+    reroute or movement-position draw; it does not substitute another destination. Unless
+    its current behaviour, or queued behaviour when no current behaviour exists, is already
+    *attack*, the rejection forces *attack*, clearing the queued behaviour and applying
+    claim 9's behaviour-start effects. A force within processing still has claim 3c's delay
+    outcome. These assignment rules qualify every destination-clearing outcome below:
+    the requested clear is not a guarantee that the destination becomes empty or that
+    the preceding behaviour remains current. S-0502 claims 24, 27 and 28 own the
+    no-commitment outcome, refresh conditions and rejection predicates.
 
     **Spawners' own targets.** Target changes made by these orders, and by the fall-back and
     behaviour rules in this spec, obey S-0506 claim 25. With its quirk at the original setting,
@@ -1060,8 +1075,10 @@ Terms used by this spec:
     - Backing: `measurable` (scenario B3; S-0519 scenario T18 for immediate strike cancellation,
       scenario B14, case b, for the two attack-move orders that
       input creates; S-0506 scenario R19 for actual own-target changes and pending cancellation,
-      and S-0502 claim 24's scenarios J19 and J22 for effective jumpjet destination clears,
-      inheriting that claim's unmeasured limits for assignment exceptions). Attack-move orders with no established input path (neither target nor
+      and S-0502 claim 24's scenarios J19, J22 and J23 for effective jumpjet destination
+      clears and repeated infantry assignments, claim 27's J24 for vehicle refresh, and
+      claim 28's J25 for balloon-hover retention and its possible *attack* start, inheriting
+      those claims' unmeasured limits for combined-type and refresh fixtures). Attack-move orders with no established input path (neither target nor
       destination, or a building) are `unmeasured` here: the measurement setup cannot issue them.
       Translation after loss of eligibility is also `unmeasured` here; S-0213 claim 6 owns that
       case and the translation's backing. The stop order's exemption for
