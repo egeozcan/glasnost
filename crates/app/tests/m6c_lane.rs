@@ -44,6 +44,7 @@ const SCENES: &[Scene] = &[
     ("infiltrate", spy_infiltrates),
     ("tech", engineer_takes_tech_building),
     ("jumpjet", jumpjet_flies),
+    ("jumpjet-factory", jumpjet_leaves_its_factory),
     ("deploy", unit_deploys),
     ("radiation", radiation_field),
     ("chrono", chrono_erases),
@@ -584,6 +585,106 @@ fn jumpjet_flies(lane: &mut Lane) {
     }
     lane.ticks(3);
     lane.save("jumpjet-landed");
+}
+
+/// S-0417 claim 15: a jumpjet unit (infantry from a barracks with a door
+/// kind, else a vehicle from a war factory) released from its factory rises;
+/// the factory contact and the tether end in the ascending update whose
+/// height first lies inside the window. Screens: at the release, in the
+/// climb, and 20 ticks after the report.
+fn jumpjet_leaves_its_factory(lane: &mut Lane) {
+    use glasnost_sim::econ::release;
+    use glasnost_sim::rules::FactoryKind;
+    let w = lane.world();
+    let r = w.rules();
+    // A jumpjet unit (infantry first) and the smallest factory of its kind; a barracks needs a door kind.
+    let jumper = [Kind::Infantry, Kind::Vehicle].into_iter().find_map(|k| {
+        let n = if k == Kind::Infantry {
+            r.infantry.len()
+        } else {
+            r.vehicles.len()
+        };
+        (0..n as u32)
+            .find(|&i| {
+                r.unit(k, i).is_some_and(|u| {
+                    u.jumpjet_locomotor
+                        && !u.raw.balloon_hover.unwrap_or(false)
+                        && !u.simple_deployer
+                })
+            })
+            .map(|i| (k, i))
+    });
+    let factory = jumper.and_then(|(k, _)| {
+        let want = if k == Kind::Infantry {
+            FactoryKind::Infantry
+        } else {
+            FactoryKind::Vehicle
+        };
+        (0..r.buildings.len())
+            .filter(|&b| {
+                let x = &r.buildings[b].raw.econ;
+                r.buildings[b].factory == Some(want)
+                    && (want == FactoryKind::Vehicle
+                        || x.door_first == Some(true)
+                        || x.door_second == Some(true)
+                        || x.door_third == Some(true))
+            })
+            .min_by_key(|&b| (r.buildings[b].foundation.0 * r.buildings[b].foundation.1, b))
+            .map(|b| (r.buildings[b].name.clone(), r.buildings[b].foundation))
+    });
+    println!(
+        "jumpjet unit found: {:?}, its factory found: {}",
+        jumper.map(|j| j.0),
+        factory.is_some()
+    );
+    let (Some((bname, (fw, fh))), Some((jk, ji))) = (factory, jumper) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let Some(tl) = lane.area(CellXY::new(home.x + 4, home.y + 4), (fw, fh), 2, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("no room for the barracks");
+        return;
+    };
+    let k = lane.spawn(Kind::Building, &bname, local, tl);
+    lane.ticks(2);
+    let u = glasnost_sim::objects::create(lane.world_mut(), jk, ji, Some(local));
+    let out = release::release(lane.world_mut(), k, u);
+    println!("released: {out:?}");
+    let c = lane.world().obj(k).map_or(tl, |o| o.pos.cell());
+    lane.look_at(c);
+    lane.ticks(1);
+    lane.save("jumpjet-factory-release");
+    let mut climbing_shot = false;
+    let mut reported = None;
+    for _ in 0..600 {
+        lane.ticks(1);
+        let w = lane.world();
+        let Some(o) = w.obj(u) else { break };
+        let h = w.height_above_surface(u);
+        if !climbing_shot && h > 0 && o.contact.is_some() {
+            lane.save("jumpjet-factory-climb");
+            climbing_shot = true;
+            continue;
+        }
+        if reported.is_none() && o.contact.is_none() {
+            reported = Some((w.tick, h, release::tethered(w, u)));
+            println!(
+                "contact ended at tick {} at height {h}, still tethered: {}",
+                w.tick,
+                release::tethered(w, u)
+            );
+            lane.ticks(20);
+            lane.save("jumpjet-factory-away");
+            break;
+        }
+    }
+    println!(
+        "climb shot: {climbing_shot}, contact ended: {}",
+        reported.is_some()
+    );
 }
 
 /// S-0517: a vehicle that deploys in place is sent the click a person gives
