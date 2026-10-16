@@ -3,7 +3,7 @@ id: Q-1110
 title: What "immobilized by teleport aftereffects" names, and when restoration inside a dock assignment takes the offered destination
 status: answered
 related: [S-0207, S-0417, S-0502, S-0402]
-answered-by: [S-0207]
+answered-by: [S-0207, S-0417]
 ---
 
 ## Need

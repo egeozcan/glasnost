@@ -2,13 +2,13 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070]
+requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070, Q-1110]
 supersedes: []
 ---
 
@@ -39,7 +39,10 @@ select its destination. S-0215 claim 11 records that factory release and unloadi
 neither set nor clear the ready mark, with start consequences owned by claim 2 here. Its claim 13
 and S-0207 claim 21 jointly own restoration and retained teleporting state after
 claim 5's temporary drive. The decided apron off-state rules remain in Edge cases. Confirm
-these companion passages at sign-off. No further change to them is requested by this revision.
+these companion passages at sign-off. Q-1110 question 3 is answered by claim 16. For this hand-off, S-0207 claims 25
+and 27 must cite its factory-exit lifecycle, and S-0402 claim 17 must qualify
+teleporting travel by the active locomotion, including the first factory-built
+chrono miner's driving leg. Q-1110 questions 1 and 2 belong to S-0207 claim 27.
 
 ## Terms
 
@@ -175,10 +178,13 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
    seized. The driving report is false only when there is no locomotor destination point
    and no heading point horizontally different from u's actual position. Completing T1
    alone is therefore insufficient: a retained locomotor destination point still prevents
-   restoration. Restoration alone enables neither the destination-refresh state nor the
+   restoration. Claim 16 specifies the subsequent replacement and clearing events.
+   This is not a promise of an automatic restoration at the apron. Restoration alone enables neither the destination-refresh state nor the
    one-application point suppression of S-0207 claim 27. S-0207 claim 21
-   owns the suspended teleporting state and its occupancy consequences: destinations accepted
-   while driving use driving movement, not the suspended teleporting movement, and restoration
+   owns the suspended teleporting state and its occupancy consequences: destination
+   assignments completed while driving use driving movement, not the suspended teleporting
+   movement. A qualified docking assignment that itself restores the predecessor instead
+   supplies its point to the restored locomotion (S-0207 claim 27). Restoration
    alone neither resets that state nor moves an occupancy mark. Those rules inherit that claim's
    backing and confidence, including its unmeasured pre-existing pending-jump and phasing-in
    cases. If that temporary replacement cannot be established, successful exit is not promised
@@ -603,6 +609,50 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
       no foundation test and destination effects; decided safety fallback); medium
       (combined normal-release consequences and the first eligible factory processing).
 
+16. **Lifetime of temporary driving after a factory exit (Q-1110 question 3).**
+    Finishing T1 with no order-level destination does not clear the exit locomotor
+    destination point. Neither the clear report, loss of contact and tether, nor
+    queueing *harvest* is a stop or a restoration event. There is no separate
+    factory-exit timeout that clears this point. The later movement and restoration
+    consequences are as follows, subject to the ordinary order-acceptance rules:
+
+    | Event after the exit | Movement and restoration consequence |
+    |---|---|
+    | Claim 8 supplies a rally or an accepted scatter supplies a destination | Its movement point replaces the exit point in the active driving locomotion. It is not a teleporting leg |
+    | A factory-built chrono miner starts seeking and finds ore in a different cell | The ore destination replaces the exit point. The miner drives its first leg to that ore with its temporary driving locomotion, retaining the suspended teleporting locomotion |
+    | A later driving track completes at its order-level goal with the height condition of S-0207 claim 25 met | The replacement locomotor destination point clears by that claim, before the cell-arrival report. This is a later goal's completion, not retroactive clearing at the apron |
+    | The ordinary cell-goal cleanup, an effective destination removal that stops locomotion, or another accepted stop applies | The driving destination point clears under S-0207 claims 25 and 26 |
+    | A subsequent fall-back to rest finds all claim 5 restoration predicates satisfied | The suspended locomotion is restored under S-0215 claim 13. Restoration is not implied merely by arriving at the first ore cell or starting loading |
+    | A qualified refinery docking-cell assignment occurs | S-0207 claim 27 owns restoration within that assignment or its fallback stop and refreshed reassignment; this is a separate route to restoration, not a required prior fall-back to rest |
+
+    The seeking exception that drops an initial destination for teleporting movement
+    (S-0402 claim 17) tests the active locomotion. It does not drop that destination
+    for a miner still using temporary driving, even though the type is teleport-capable.
+    The run-away reply's *harvest* start therefore does not restore the miner before
+    its first field leg. A refinery's free unit is a different release path
+    (S-0402 claim 18), not evidence that a vehicle-factory exit skips this driving leg.
+
+    **No follow-up goal.** There is no unconditional guarantee that every conceivable
+    exit is followed by restoration. If no later instruction replaces or stops the
+    retained point, it continues to prevent restoration, indefinitely while that
+    condition persists. An unchanged empty-to-empty destination offer without refresh
+    is rejected under S-0207 claim 27 and is not such a stop. Merely attempting to fall
+    back to rest does not bypass claim 5's movement-report test. This is the original
+    conditional retention, not an instruction to keep a normal miner permanently
+    driving after its later stopping or qualified docking events. Claim 8 normally
+    supplies a follow-up destination or queues harvest; the latter can remain without
+    a field destination when no field is found. No ordinary stock factory-produced
+    non-harvesting teleporting vehicle is established here, so the non-harvester rows
+    are conditional rules, not a claimed stock release fixture.
+    - Backing: `measurable` (U15 for the first field leg, replacement, clearing and
+      subsequent restoration). Isolated retention with every subsequent stop and
+      destination replacement excluded is `unmeasured` until U15's no-field control
+      establishes that interval; no finite observation proves perpetual retention.
+      No stock non-harvester teleporting release fixture is established for that branch.
+    - Confidence: high (point lifetime, active-locomotion test, harvest queue not a
+      restoration event); medium (composed first-field-leg and subsequent restoration
+      consequences).
+
 ## Formulas
 
 - **F1. Standard delay:** *D* = *D*r + *U*(0, 2) ticks. *D*r is S-0215 F1 in full, including
@@ -760,6 +810,9 @@ relative actor update orders; confidence medium.
 | `ExitCoord` | rules, building type | integer triple in leptons, release point | (0, 0, 0) (S-0404) |
 | `Locomotor` | rules, vehicle type | locomotor identifier, exit mode | S-0207 |
 | `Accelerates` | rules, vehicle type | boolean speed-update choice | S-0207 |
+| `Harvester`, `Weeder` | rules, vehicle type | booleans selecting claim 8's harvest reply and claim 16's field-leg case | form and defaults owned by S-0402 |
+| `Teleporter` | rules, vehicle type | boolean teleport-capable type flag, distinct from the active locomotion used by claim 16 | form and default owned by S-0402 |
+| No data key | runtime exit movement and order destinations | claim 16's replacement, clearing and restoration events | no factory-exit restoration timeout |
 | `JumpJet`, `Teleporter` | rules, infantry type | boolean exceptions to initial exit destination | S-0208 and S-0402 |
 | `Locomotor` | rules, infantry type | locomotor identifier, parsed as S-0207 claim 14; actual teleporting locomotion supplies claim 10's jump update, distinct from the boolean destination exception | S-0207 claim 14 |
 | No data key | runtime factory contact and tether | claim 10's teleport arrival report, claim 15's jumpjet ascent report and resting retention, not an imported delay | no release-contact timeout |
@@ -896,11 +949,15 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   Separate restoration itself from the other effects of falling back to rest.
   Repeat with a scripted move order during temporary driving, scoring
   only runs where it is accepted then. After restoration and fall-back finish, give a new
-  distant clear-cell move order. Expect destinations accepted while driving to leave the
-  suspended teleporting landing point and reservation unchanged; occupancy follows S-0209's
+  distant clear-cell move order. Expect assignments completed entirely in driving
+  locomotion to leave the suspended teleporting landing point and reservation unchanged.
+  Occupancy follows S-0209's
   driving rules. Restoration alone neither resets teleporting state nor moves a mark. A newly
   taken destination after restoration fixes a landing point and jumps under S-0207 claim 20.
-  A changed suspended landing point or teleport reservation due to a driving destination, a
+  A qualified docking assignment that restores within the assignment also applies its
+  point to the restored locomotion under S-0207 claim 27, not to driving first.
+  A changed suspended landing point or teleport reservation due to an assignment
+  completed entirely in driving locomotion, a
   state reset or occupancy action due solely to restoration, or driving rather than teleporting
   for that post-restoration order falsifies the corresponding rule (S-0207 D23). Record any
   factory-supplied destination before temporary driving starts: do not presume an empty
@@ -1074,6 +1131,41 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   rules. A surviving link, a report delayed until cruise, destination arrival or touchdown,
   or different destination effects falsifies the design rule. S-0502 J26 tests the same
   departure; do not score this variant as evidence about the original.
+
+- **U15, temporary driving lifecycle (Q-1110 question 3).** Use the shared stock
+  skirmish setup and three recorded seeds. Produce a chrono miner from a ground
+  vehicle factory with no rally, a reachable ore field several cells away, and an
+  available refinery. Do not issue orders before its first loading. Record each
+  destination assignment, order-level destination, locomotor destination and heading
+  points, current and queued behaviour, harvest phase, active and suspended locomotion,
+  movement report, restoration permission, position, contact and tether. Distinguish
+  exit-track completion, run-away harvest queue/start, first ore assignment, final field
+  track, first loading and each subsequent restoration attempt. Expect the exit point
+  retained at the no-order track completion, harvest queue without restoration, an ore
+  point replacing it in driving locomotion, and driving to the first field. Expect
+  clearing on qualifying field-track completion, not a mandatory restoration there.
+  Continue through a refinery return and docking: score the qualified assignments
+  against S-0207 claim 27, not a factory-exit timer. In a separate run, after the first
+  ore arrival give an accepted ordinary move to a distant clear cell. Let it complete
+  and fall back to rest with no lock or seizure. Expect the point cleared and the
+  suspended locomotion restored at the eligible fallback; the next accepted distant
+  move then uses teleporting locomotion. Falsifiers: exit completion or harvest queue
+  alone unconditionally clearing/restoring, a first-field teleport without an
+  intervening restoration event, retention despite a qualifying stop, or failure to
+  restore at an eligible fallback. A different outcome caused by a refused order or
+  missing restoration predicate does not score those exclusions.
+
+  **No-field control.** Repeat on a map with no resource field and no rally. Observe
+  300 ticks after the clear report, without new orders, logging all assignments and
+  stops, including idle factory scatter requests. Score retention only during intervals
+  without an effective stop or replacement. Expect no factory timer to clear the exit
+  point; a clear attributable solely to elapsed exit time falsifies that exclusion.
+  Record whether the miner remains on driving locomotion, and which later event first
+  clears or replaces the point. Then give an accepted clear-cell move and let its
+  completion and fallback exercise restoration as above. This control does not assume
+  that no unrelated event can supply a destination, nor prove infinite retention from
+  a finite trace. Non-harvesting teleporting factory releases remain untested without
+  an ordinary stock-produced type.
 
 ## Open questions
 
