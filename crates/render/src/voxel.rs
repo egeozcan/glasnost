@@ -611,6 +611,7 @@ fn barrel_from_turret(t: &Mat34, elevation_raw: u16, quirks: &VoxelQuirks) -> Ma
 // ---------------------------------------------------------------------------
 
 /// Radians per quarter turn as a double (S-0105 claim 41: *c*).
+#[allow(clippy::approx_constant)] // the spec's decimal, claim 41
 const QUARTER_TURN: f64 = 1.5707963267948966; // spec: S-0105 claim 41 (c = 1.5707963267948966 radians per quarter turn)
 
 /// The reuse class of a rocket body's pitch (S-0105 claim 41), and for a
@@ -3022,6 +3023,7 @@ impl RecoilCycle {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::approx_constant)] // spec: S-0105 claim 41 and Import mapping: the angles are the spec's decimals
     use super::*;
     use glasnost_fmt::bytes::F32Bits;
     use glasnost_fmt::vxl::{VxlWriter, synthetic_model};

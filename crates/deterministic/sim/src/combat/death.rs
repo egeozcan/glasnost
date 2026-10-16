@@ -281,7 +281,7 @@ pub fn destruction_raises(w: &mut World, id: ObjectId, hit: &Hit) {
 pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     let Some(o) = w.obj(id).cloned() else { return };
     if o.structure.inside.is_some() {
-        // spec: S-0508 claim 19 (an occupant killed inside a building by its own house's defeat: individual killing hits, no eviction, no index repair; like a passenger it shows no death effects)
+        // spec: S-0508 claim 19 (an occupant killed inside a building by its own house's defeat: individual killing hits, no eviction; our engine then removes the place and repairs the index under claim 23, `garrison::removing`; like a passenger it shows no death effects)
         passenger_death(w, id, hit);
         return;
     }

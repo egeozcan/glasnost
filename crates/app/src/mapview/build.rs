@@ -312,9 +312,11 @@ fn rule_real(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<f64>
 /// The drawing pitch angle of a flying type when the rules give none,
 /// radians (S-0105 Import mapping: `PitchAngle` 20 degrees).
 // spec: S-0105 Import mapping (PitchAngle: 20 degrees, engine initial value 0.3490658503988659 radians)
+#[allow(clippy::approx_constant)] // the spec's decimal
 const PITCH_ANGLE_DEFAULT: f64 = 0.3490658503988659;
 /// The bank angle of a flying type when the rules give none, radians.
 // spec: S-0105 Import mapping (RollAngle: 30 degrees, engine initial value 0.5235987755982988 radians)
+#[allow(clippy::approx_constant)] // the spec's decimal
 const ROLL_ANGLE_DEFAULT: f64 = 0.5235987755982988;
 /// The speed fraction a flying body must exceed to pitch and bank.
 // spec: S-0105 Import mapping (PitchSpeed: 0.25)
