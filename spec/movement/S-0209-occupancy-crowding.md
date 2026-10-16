@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 39
+revision: 40
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -532,7 +532,8 @@ rank* and *elite weapon*), *n*
      separately from claim 13's listing, S-0502 claim 15's landing reservation and
      S-0502 claim 21's hover slot. Grounded, ascending, descending, crashing and
      crashed physics can supply ordinary kind-specific marks when the resulting
-     placement qualifies for ground-render-layer listing. A vehicle can therefore mark
+     placement qualifies for claim 13's exact jumpjet listing predicate, including its
+     separate surface-height and adjusted-zero tests over high bridges. A vehicle can therefore mark
      during low positive-height ascent or descent and near crash end. The first rise
      clears the preceding occupancy and ends its on-deck state, but does not forbid
      later low-flight marking. Descent can supply both an actual-position mark and a
@@ -1313,11 +1314,20 @@ rank* and *elite weapon*), *n*
     descending, crashing and crashed physics removes the previous listing and permits
     listing at the new position only when its evaluated render layer is ground
     (S-0102 claim 3). Its on-deck state chooses deck listing; otherwise listing is
-    ground. On flat land without bridges, positive heights below 208 leptons can
-    therefore list, whereas heights of 208 leptons or more cannot. These are integer
-    comparisons without rounding. Bridge cases use S-0102 claim 3's full layer rule,
-    not a blanket terrain-relative threshold. Hovering and cruising create no new
-    listing and do not transfer an existing listing on a cell crossing.
+    ground. Let *r* be its signed integer height above the surface in leptons:
+    above terrain unless its on-deck state is set, then above the deck. Let
+    *r*′ = *r* − 416 leptons only over a high-bridge cell, with on-deck state unset,
+    *r* ≥ 416 leptons and no bridge/parachute falling state; otherwise *r*′ = *r*.
+    New listing qualifies exactly when *r* < 208 leptons or *r*′ = 0 leptons.
+    The 208-lepton comparison uses *r*, not *r*′; all arithmetic is exact integer
+    arithmetic without rounding. The type's cruise height does not change this test.
+    Without on-deck state, a non-falling jumpjet at 416 leptons above terrain over a
+    high bridge qualifies, but at 417 or 500 leptons it does not, despite clearance
+    above the deck being below 208 leptons. Starting a jumpjet crash does not itself
+    set the independent bridge/parachute falling state. Actual-position occupancy
+    marks still follow claim 1's kind-specific rules; they are not landing reservations
+    or hover slots. Hovering and cruising create no new listing and do not transfer
+    an existing listing on a cell crossing.
 
     S-0502 claim 22 owns the clearance consequence. Its look-ahead reads actual
     ground-layer listings, not reservations or hover slots, with no self-exclusion:
@@ -3297,6 +3307,12 @@ approved text at paired hand-off, rather than treating the earlier approved summ
 - Retain S-0207 claim 15 and S-0212 claim 22's immediate fresh search and same-tick
   repeated check. Jump-time target loss and reversion stay owned by S-0207 claim 20 e
   and S-0215 claim 10; reservation layers do not change that contract.
+
+S-0102 claim 3 and its layer table must use S-0502 claim 4's same two-height
+predicate: ground when surface height *r* < 208 leptons or adjusted height *r*′ = 0
+leptons, not when *r*′ < 208 leptons. Its bridge rule must distinguish on-deck
+surface height and the independent bridge/parachute falling state from crashing.
+Hand off that correction with this spec.
 
 ## Questions for the project lead
 
