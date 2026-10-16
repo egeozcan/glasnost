@@ -84,4 +84,4 @@ In ordinary play, suppression pending before a teleporting assignment is not rea
 
 ## Save format and goldens
 
-No state field changed. The save format stays 45 and the AI game format stays 13. `cargo test --release -p glasnost-sim-gate -- --include-ignored` passes against the existing goldens. The behaviour changes touch only warp members, pending suppression and restoring dock assignments, and none of these occurs in the gate games.
+No state field changed. The save format stays 45 and the AI game format stays 13. `cargo test --release -p glasnost-sim-gate -- --include-ignored` passes against the goldens of the base (669f002). The behaviour changes touch only warp members, pending suppression and restoring dock assignments, and none of these occurs in those gate games. The `duel-m6c` scenario merged on main after the base was not run here.
