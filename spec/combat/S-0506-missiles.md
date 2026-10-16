@@ -2,11 +2,11 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645]
 supersedes: []
@@ -323,6 +323,8 @@ above the terrain*.
     of S-0303 claim 6, before the end of its tilt or raise. Claim 23 separately excludes it from
     cell scans even then. Registration, sector crossings and the alternative global hit order
     follow S-0303 claim 11; these do not change the tracking start defined here.
+    Body appearance throughout every phase follows S-0105 claim 41: the body shows its
+    current pitch, and the shadow ignores that pitch. Flight phases do not override drawing.
     - Backing: `measurable` (scenario R10)
     - Confidence: high
 
@@ -351,6 +353,11 @@ above the terrain*.
       never enters descent.
     - **Descent:** the pitch turns towards the line-of-sight angle to the aim point by at most the
       set's turn rate per tick (Formulas F7).
+    - **Drawing boundary.** S-0105 claim 41 owns current-pitch body drawing, without rounding
+      pitch to 32 facings, and its exact level/initial/final image-reuse eligibility classes.
+      Intermediate pitches are drawn fresh; these classes do not quantise flight pitch.
+      That claim also owns the pitch-independent shadow. Pitch evolution and movement remain
+      governed by this spec's formulas.
     - Backing: `measurable` (scenario R10) for the flight paths in its tested distance range.
       Selected raw-angle contributions are `measurable` only where R20 obtains an update
       distinguishing the exact entries of S-0204 claim 13 from the facing surrogate of
