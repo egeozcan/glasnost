@@ -380,8 +380,9 @@ fn claim_22_a_retained_listing_counts_for_its_owner() {
     js(&mut w, u).listed = Some((cell, Layer::Ground));
     step(&mut w);
     assert!(
-        height(&w, u) >= free,
-        "the allowance never lowers the reference"
+        height(&w, u) > free,
+        "the listed unit raises its own ground reference by the 85-lepton allowance: {} against {free}",
+        height(&w, u)
     );
     assert!(
         w.cells.list(cell, Layer::Ground).contains(&u),
@@ -391,3 +392,19 @@ fn claim_22_a_retained_listing_counts_for_its_owner() {
 
 #[allow(dead_code)]
 fn unused(_: Target) {}
+
+// spec: S-0502 claim 4 and S-0511 claim 9 (a listing that another rule moved, as a bridge collapse moves a deck listing to the ground, does not outlive the next placement removal of the jumpjet)
+#[test]
+fn claim_4_a_moved_listing_is_not_left_behind() {
+    let mut w = game();
+    let u = put(&mut w, "JJ", Kind::Infantry, 0, 0, 0);
+    let cell = pos(&w, u).cell();
+    // The tracked listing is stale: the unit is really in the ground list.
+    js(&mut w, u).listed = Some((cell, Layer::Deck));
+    go(&mut w, u, at(8, 0));
+    assert!(until(&mut w, 200, |w| height(w, u) >= 208));
+    for c in [cell, pos(&w, u).cell()] {
+        assert!(!w.cells.list(c, Layer::Ground).contains(&u));
+        assert!(!w.cells.list(c, Layer::Deck).contains(&u));
+    }
+}

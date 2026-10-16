@@ -36,4 +36,6 @@ before and after, and where it lands.
 Interim rule: every clear of the order-level destination of a moving jumpjet (a hovering one that
 holds a move order included) is claim 17's reroute with the claim 23 search settings; the order-level
 destination stays empty and the locomotor holds the replacement point. A jumpjet that is not moving
-does nothing. Noted in `docs/development.md` (section *Simulation (M6c: jumpjets)*).
+does nothing. The consequences are those of claim 17: the failure to find a cell destroys the unit
+under `quirks.jumpjet_no_cell_self_destruct` (default on), and an infantry unit's replacement point takes
+the standing choice's ranged draw over 0 to 3 (S-0502 claim 23). Noted in `docs/development.md` (section *Simulation (M6c: jumpjets)*).

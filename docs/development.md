@@ -919,7 +919,7 @@ Provisional rules of the jumpjets, each tied to a request (Q-0975 to Q-0981 are 
 |---|---|---|
 | `jump::placement_qualifies` | a position is listed and marked when its effective height (S-0102 claim 3's *h*′) is below 208 leptons, whatever the type's cruise height; a crashing jumpjet is not "falling" for *h*′ | Q-1010 |
 | `jump::order_point` | the unit's own mark is lifted for the duration of the claim 16 search, so that an order to its own cell finds that cell (scenario J2), against claim 23's sentence that the search does not lift a grounded unit's own occupancy | Q-1011 |
-| `jump::take_destination` | every clear of the order-level destination of a moving jumpjet is claim 17's reroute (the deploy order included), not only the stop order | Q-1012 |
+| `jump::take_destination` | every clear of the order-level destination of a moving jumpjet is claim 17's reroute (the deploy order included), not only the stop order; so a clear can also destroy the unit when no cell is found (`quirks.jumpjet_no_cell_self_destruct` on) and an infantry unit's reroute takes the standing choice's draw over 0 to 3 | Q-1012 |
 
 ## Simulation (M6c: deployable units)
 

@@ -528,13 +528,12 @@ fn unlist(w: &mut World, id: ObjectId) {
         .obj_mut(id)
         .and_then(|o| o.jump.as_mut())
         .and_then(|j| j.listed.take());
-    match listed {
-        Some((c, l)) => w.cells.leave(c, l, id),
-        None => {
-            if let Some(c) = w.obj(id).map(|o| o.pos.cell()) {
-                w.cells.leave_both(c, id);
-            }
-        }
+    if let Some((c, l)) = listed {
+        w.cells.leave(c, l, id);
+    }
+    // Another rule can have moved the listing without telling the jumpjet (a bridge collapse moves a deck listing to the ground, S-0511 claim 9): the cell of its position is cleared in both layers as well.
+    if let Some(c) = w.obj(id).map(|o| o.pos.cell()) {
+        w.cells.leave_both(c, id);
     }
 }
 
