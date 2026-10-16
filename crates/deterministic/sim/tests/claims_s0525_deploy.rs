@@ -140,3 +140,40 @@ fn a_centre_field_at_or_above_the_threshold_withholds_the_shot() {
     assert!(p.iter().all(|x| x.1 >= 10), "no shot: {p:?}");
     assert_eq!(w.radiation.fields.len(), 1, "no top-up either");
 }
+
+// spec: S-0215 claim 31 (revision 51, answers Q-0983) and S-0525 claims 1 and 4: the own-cell shot is made in the processing that decides to fire, with no wait for any fire frame of the deployed-fire sequence; the own-cell target is gone at the end of that processing and the field centred there exists in the same tick; the next processing comes after the sequence's frame count
+#[test]
+fn the_own_cell_shot_is_made_in_the_deciding_processing() {
+    let mut w = world();
+    let i = ready_unit(&mut w);
+    let cell = w.obj(i).unwrap().pos.cell();
+    assert_eq!(radiation::centre_field_level(&w, cell), None);
+    let mut prev = w.obj(i).unwrap().beh.last;
+    let mut shot = None;
+    for _ in 0..600 {
+        step(&mut w);
+        let last = w.obj(i).unwrap().beh.last;
+        if last != prev {
+            prev = last;
+            if last.is_some_and(|l| l.1 == 2) {
+                shot = last;
+                break;
+            }
+        }
+    }
+    let (tick, delay) = shot.expect("a processing that fires");
+    assert_eq!(delay, 2, "the frame count of the deployed-fire sequence");
+    assert_eq!(
+        tick + 1,
+        w.tick,
+        "found in the step that made it (the world tick has moved on)"
+    );
+    assert!(
+        radiation::centre_field_level(&w, cell).is_some(),
+        "the field exists in the tick of the shot"
+    );
+    assert!(
+        w.obj(i).unwrap().target.is_none(),
+        "the own-cell target is dropped in the same processing"
+    );
+}
