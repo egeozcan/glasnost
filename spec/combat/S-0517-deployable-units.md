@@ -2,7 +2,7 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -148,12 +148,18 @@ Skirmish only. Network games and campaigns are out of scope.
    - for a landing-first type, it requests landing for deploy. Without that request, a hovering
      jumpjet of this type keeps hovering (S-0502 claim 13).
 
-   The deploy order's destination clear follows S-0502 claim 24. With a movement commitment,
-   an effective clear reroutes and retains the replacement movement point and commitment.
-   A suppressed empty-to-empty vehicle assignment instead retains the preceding point and
-   commitment; it does not reroute. An equal horizontal point permits descent when the landing
-   request is present; a different point first causes cruise to that point. Descent and
-   touchdown use the point then retained, not an absent point.
+   The deploy order requests one destination clear before clearing its target and queuing
+   *unload*. Destination handling follows S-0502 claims 24, 27 and 28. With a movement
+   commitment, an effective clear reroutes and retains the replacement movement point and
+   commitment. A suppressed empty-to-empty vehicle assignment instead retains the preceding
+   point and commitment; it does not reroute. A qualifying balloon-hover rejection retains
+   even a nonempty order-level destination, together with its preceding movement point,
+   commitment and landing reservation. That rejection can make *attack* current before
+   *unload* is queued (S-0502 claim 28). Deploy neither enables destination refresh nor
+   retries the clear after target clearing: it can end with no target but a nonempty
+   destination. An equal horizontal point permits descent when the landing request is
+   present; a different point first causes cruise to that point. Descent and touchdown
+   use the point then retained, not an absent point.
 
    Without a movement commitment, the clear cannot create one or wake idle hover. A landing
    request alone does not bypass S-0502 claim 3's update eligibility. Landing checks, descent
@@ -161,10 +167,12 @@ Skirmish only. Network games and campaigns are out of scope.
    deploy step that finds it still airborne. At touchdown the landing request ends. The next
    processing then takes the deploy step of claim 4.
    - Backing: `measurable` (P1 b and V; S-0502 J22 for effective versus suppressed clears and
-     retained touchdown points). Uncommitted idle-hover deployment remains `unmeasured`:
-     no ordinary stock order sequence establishing that starting state is settled, as
-     qualified in S-0502 claim 24. Its refresh-state and balloon-hover exceptions inherit
-     that claim's backing limitations.
+     retained touchdown points; J24 for deploy not enabling refresh; J25 for balloon-hover
+     retention). Uncommitted idle-hover deployment remains `unmeasured`: no ordinary stock
+     order sequence establishing that starting state is settled, as qualified in S-0502
+     claim 24. Retained refresh and a stock deployable balloon-hover fixture inherit the
+     `unmeasured` limitations of S-0502 claims 27 and 28 respectively; P1 R treats them as
+     diagnostics, not established stock fixtures.
    - Confidence: high (the deploy step); medium (landing motion and point retention)
 
 6. **The undeploy step.** When it starts, the undeploy step removes a disguise the vehicle wears.
@@ -611,8 +619,17 @@ P3 and P4), *deploy-fire-test* (P2), *deploy-to-fire-test* (P5), *vehicle-cycle-
     reroutes; a suppressed assignment preserves the preceding point and commitment. Descent
     uses the retained point; a different horizontal point causes cruise first. An erased point,
     reroute after a verified suppressed assignment, or descent at a different point falsifies
-    claim 5. Follow J22's diagnostic-only treatment of uncommitted idle hover and refresh-state
-    activation; do not create those states by writing into the game.
+    claim 5. Also follow S-0502 J24 for refresh nonactivation and J25 for qualifying
+    balloon-hover retention: record the target and current/queued behaviours around the
+    deploy order's single clear. Expected, if an ordinary stock deployable balloon-hover
+    fixture is established: rejection preserves the nonempty destination, point, commitment
+    and reservation, can make *attack* current, then target clearing leaves that destination
+    intact while *unload* is queued. No second clear or deploy-enabled refresh occurs.
+    A reroute on a qualifying rejection, a retry after target clearing, or refresh newly
+    enabled by deploy falsifies the respective claim. Without that stock fixture the
+    balloon-hover deploy case is diagnostic only. Follow J22's diagnostic-only treatment
+    of uncommitted idle hover and J24's retained-refresh limitation; do not create those
+    states by writing into the game.
   - (Z) Give the presentation a zero rate and an end field of 5 stages. Deploy, wait 500 ticks,
     then destroy the vehicle. Also destroy a vehicle during ordinary deploy, undeploy and
     landing in separate runs; observe that the cycle and its presentation end.
