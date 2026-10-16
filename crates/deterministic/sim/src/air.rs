@@ -557,12 +557,7 @@ pub fn removal_marks(w: &World, id: ObjectId) -> Option<Vec<(CellXY, Layer)>> {
         return None;
     }
     let layer = mark_layer(w, id);
-    Some(
-        st(w, id)
-            .mark
-            .map(|c| vec![(c, layer)])
-            .unwrap_or_default(),
-    )
+    Some(st(w, id).mark.map(|c| vec![(c, layer)]).unwrap_or_default())
 }
 
 /// The occupancy record that carries an ordinary aircraft's object-present

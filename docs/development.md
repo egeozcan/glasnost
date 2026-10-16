@@ -1043,10 +1043,33 @@ M6c is the last part of M6 (session of 2026-10-16). Baseline: main 2c92746, spec
 | 3.9 | S-0518 Linked weapons | open | |
 | 3.10 | S-0519 Terror and attack animals | open | |
 | 3.11 | S-0520 Crates | open | |
-| 4 | Lead visual review 2026-10-15 (7 items), re-shoots in `local-lane/m6c/`, Q-0647 map check | open | |
+| 4 | Lead visual review 2026-10-15 (7 items), re-shoots in `local-lane/m6c/`, Q-0647 map check | items 1, 3, 4, 5, 7 fixed or explained; items 2 and 6 wait on Q-0950 and Q-0951; Q-0647 map check still open | see *Lead visual review (M6c, row 4)* |
 | 5 | Determinism gate with an AI-vs-AI replay exercising M6c; local lane runs; README Status | open | |
 
 Request numbers: stream A (AI) files Q-0900 to Q-0949, stream B (visual) Q-0950 to Q-0969, the spec track Q-0970 to Q-0999 and above.
+
+Lead check (no code change): many stock coastal maps set naval-yard tech levels in their own map rules section. Layered per S-0006, the original offers no such yard on those maps either, so map 0 stays the naval lane map for local-lane runs.
+
+### Lead visual review (M6c, row 4)
+
+The debug pixel trace answers "what is drawn here". `Scene::items_at` lists every item with a non-transparent pixel at a world pixel; `Live::trace_point` and `Session::trace_at` print, for each, its scene place, group, paint, image size, the object (kind, type, owner, cell, rocket phase; for a map-placed object its table entry) and the draw path (object body or part, object shadow, effect or projectile placeholder, static draw). The lanes use it: `GLASNOST_TRACE="x,y;x,y"` and `GLASNOST_TRACE_BOX="x0,y0,x1,y1,step"` (screen points of each saved shot) in `m6a_lane`, `GLASNOST_BLANK="item,item"` there for a second shot without those items' images (`<name>-blank.png`), and `GLASNOST_MAP_TRACE_BOX` and `GLASNOST_MAP_BLANK` in `map_lane`. `GLASNOST_LANE_OUT=<folder>` names the folder under `local-lane/` for `m6a_lane` and `anim_lane`; `GLASNOST_RADAR_TYPE=<type,type>` makes `m6a_lane` shoot those building types (a single name: `yuri-radar.png`). The shots below are in `local-lane/m6c/` (git-ignored).
+
+| Item | What it was | Fix | New shot |
+|---|---|---|---|
+| 1. two V3 rockets overlapping | One missile object (the trace lists one rocket and one launcher body). The launcher's own voxel body holds a loaded rocket, and the viewer always drew the main body: the alternative-body rule of S-0105 claim 12 (the type's no-spawn alternative body while none of its spawned aircraft is docked) was not drawn. | `Mobile::alternative` from `spawn::any_docked` (new, read-only: a slot that is docked or reloading, S-0105 Terms); `vehicle_voxels` draws the alternative body for a type with the option and an alternative body file, keyed apart in the cache, the shadow still the main body's (claim 29). Tests `alternative_body_replaces_the_main_body_without_a_docked_spawn` (app) and `any_docked_follows_the_slots` (sim). | `m6c/v3-rocket-in-flight-2.png` (and `-1`, `-3`), `m6c/v3-rocket-anims.png` |
+| 2. rocket facing and pitch | The heading is right (the 32-step body facing of S-0105 claim 3, nose along the flight direction on the ground plane). What is missing is the nose pitch: a climbing rocket is drawn level while it moves up the screen. No spec says how the pitch *p* of S-0506 shows in the drawn body (S-0105 and S-0106 leave it open). | none: **Q-0950**. Interim rule: the 32-step heading only, no pitch image. | `m6c/v3-rocket-in-flight-3.png` (unchanged by design) |
+| 3. lone rocket on the grass | The rocket the V3 scene had launched, still flying (cruise, drawn high on the screen) while the lane went on to the parasite scene in the same world. The drawing is right; the lane left a live missile behind. | `m6a_lane`: after the V3 shots the launcher and its missiles are removed from the world. | `m6c/drone-inside-vehicle.png` |
+| 4. rocket-like sprite on the airpad | The same flying rocket in cruise, seen through the pad view; not a docked aircraft (the trace shows the pad body, its bib and the jet, each with its own images). | as item 3 | `m6c/aircraft-and-pad.png`, `aircraft-on-pad.png`, `aircraft-attacking.png` |
+| 5. dots on the grass in `ship-sinking.png` | Static overlay objects of the gem ore type (many small coloured crystals), placed by the map: correct art, not an effect. The magenta squares on the ships are gone (M6b animation playback). | none | `m6c/ship-sinking.png`, `m6c/ship-sinking-anims.png` |
+| 6. doubled tesla coil and reactor cluster, DESERT-24 | One building drawn as a body plus one slot animation (the trace lists two items per building at one place). The coil and the reactors are damaged, so the body shows its damaged frame and the slot plays the damaged variant, a separate animation type whose own art section sets the image key and its own start field. We read the playback fields from the image-name section (S-0007 claim 2), which has no start field, so the damaged variant starts at the normal frame 0 and draws the normal pictures over the damaged body. Reading the own section instead (a local experiment, reverted) removes the doubling. | none: **Q-0951**. Interim rule: playback fields from the image-name section (S-0007 claim 2 read literally), so damaged coils and reactors still show a doubled image on maps that place them damaged. | `m6c/all-owners/map-DESERT-24.png`, `m6c/skirmish-view/map-DESERT-24.png` (unchanged by design), `m6c/experiment-own-section-playback-DESERT-24.png` (the experiment, not reproducible from this tree) |
+| 7. `yuri-radar.png` "this is the barracks?" | The old shot shows the head-shaped building, which is the Yuri barracks, not the radar. The Yuri radar (the type whose UI name is the Yuri radar) is a tower with an antenna and its top is drawn. The label was wrong. | caption only: the old file is the Yuri barracks; the radar is `m6c/yuri-radar.png`, the barracks `m6c/yuri-barracks.png`. | `m6c/yuri-radar.png`, `m6c/yuri-barracks.png` |
+
+Interim rows (viewer only, no simulation state):
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `mapview::build::vehicle_voxels` (rocket and aircraft bodies) | drawn at the 32-step body facing, level; no pitch image | Q-0950 |
+| `mapview::slots::read_anim` callers (`slot_animations`, `anim_items`, live animations) | an animation's playback and drawing fields come from the art section named by its image name (S-0007 claim 2); the own art section supplies only what S-0007 claims 1, 3 and 23 and the claim 2 table give it | Q-0951 |
 
 ## Tests
 

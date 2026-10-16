@@ -10,7 +10,7 @@ mod sw_common;
 use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
 use glasnost_sim::superweapons::warp::Stage;
-use glasnost_sim::superweapons::{Protection, ProtectKind, Tint};
+use glasnost_sim::superweapons::{ProtectKind, Protection, Tint};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{ObjectId, World};
 use sw_common::*;
@@ -91,11 +91,18 @@ fn claim50_a_newly_blocking_building_refuses_the_placement_and_the_member_surviv
     assert_eq!(landing_cell(&w, m), at(5, 5));
     let b = spawn(&mut w, "AUXB", BETA, 5, 5);
     step(&mut w);
-    assert_eq!(stage(&w, m), Some(Stage::Blocked), "back in the landing retry");
+    assert_eq!(
+        stage(&w, m),
+        Some(Stage::Blocked),
+        "back in the landing retry"
+    );
     assert!(refused(&w, m));
     let o = w.obj(m).unwrap();
     assert!(!o.on_map && o.health > 0 && o.owner == Some(ALPHA));
-    assert!(w.obj(b).unwrap().health > 0, "the failed placement hits nothing");
+    assert!(
+        w.obj(b).unwrap().health > 0,
+        "the failed placement hits nothing"
+    );
     // The full check runs again: the building blocks it and the redirect search moves the landing.
     step(&mut w);
     let new = landing_cell(&w, m);
@@ -123,13 +130,20 @@ fn claim50_a_newly_present_protected_object_refuses_the_placement_and_the_next_c
     step(&mut w);
     assert_eq!(stage(&w, m), Some(Stage::Blocked));
     assert!(refused(&w, m));
-    assert!(w.obj(m).unwrap().health > 0, "no hit from the failed placement");
+    assert!(
+        w.obj(m).unwrap().health > 0,
+        "no hit from the failed placement"
+    );
     step(&mut w);
     assert!(
         w.obj(m).is_none_or(|o| o.health <= 0),
         "the full check of the next update kills the member"
     );
-    assert_eq!(w.obj(p).unwrap().health, hp, "the protected object is unharmed");
+    assert_eq!(
+        w.obj(p).unwrap().health,
+        hp,
+        "the protected object is unharmed"
+    );
 }
 
 #[test]
@@ -144,7 +158,11 @@ fn claim50_a_vehicle_that_arrived_first_is_not_displaced_by_the_placement() {
     assert_eq!(stage(&w, m), Some(Stage::Blocked));
     assert!(refused(&w, m));
     assert_eq!(w.obj(v).unwrap().health, h, "the occupant was not hit");
-    assert!(w.cells.list(at(5, 5), glasnost_sim::world::Layer::Ground).contains(&v));
+    assert!(
+        w.cells
+            .list(at(5, 5), glasnost_sim::world::Layer::Ground)
+            .contains(&v)
+    );
     assert!(!w.obj(m).unwrap().on_map);
     // The full check of the next update kills the occupant and passes; the placement follows.
     step(&mut w);
@@ -179,7 +197,11 @@ fn claim50_two_members_competing_for_one_cell_never_overlap() {
         .iter()
         .filter(|&&x| stage(&w, x) == Some(Stage::Blocked) && refused(&w, x))
         .count();
-    assert_eq!((placed, waiting), (1, 1), "one is placed, the other refused");
+    assert_eq!(
+        (placed, waiting),
+        (1, 1),
+        "one is placed, the other refused"
+    );
     let listed = w
         .cells
         .list(land.cell(), glasnost_sim::world::Layer::Ground)
@@ -212,9 +234,11 @@ fn claim50_an_infantry_unit_shares_only_a_free_standing_position() {
         }
         // Re-mark the walker's standing position at its new point.
         let q = glasnost_sim::objects::occ_quirks(&w);
-        w.cells.clear_infantry(at(5, 5), glasnost_sim::world::Layer::Ground, o, q);
+        w.cells
+            .clear_infantry(at(5, 5), glasnost_sim::world::Layer::Ground, o, q);
         let p = w.obj(o).unwrap().pos;
-        let class = glasnost_sim::walk::position_class(p.x.rem_euclid(256), p.y.rem_euclid(256), true);
+        let class =
+            glasnost_sim::walk::position_class(p.x.rem_euclid(256), p.y.rem_euclid(256), true);
         w.cells
             .mark_infantry(at(5, 5), glasnost_sim::world::Layer::Ground, class, o, BETA);
         let h = w.obj(o).unwrap().health;
@@ -230,11 +254,16 @@ fn claim50_an_infantry_unit_shares_only_a_free_standing_position() {
             assert_eq!(w.obj(o).unwrap().health, h);
             // Once the other unit leaves the position, the member is placed.
             let q = glasnost_sim::objects::occ_quirks(&w);
-            w.cells.clear_infantry(at(5, 5), glasnost_sim::world::Layer::Ground, o, q);
+            w.cells
+                .clear_infantry(at(5, 5), glasnost_sim::world::Layer::Ground, o, q);
             run(&mut w, 5);
             assert!(w.obj(m).unwrap().on_map, "placed once the position is free");
         } else {
-            assert_eq!(st, Some(Stage::Placed), "a different standing position is shared");
+            assert_eq!(
+                st,
+                Some(Stage::Placed),
+                "a different standing position is shared"
+            );
             assert!(w.obj(m).unwrap().on_map);
             assert_eq!(w.obj(o).unwrap().health, h);
         }
@@ -266,7 +295,11 @@ fn claim50_a_terrain_change_since_the_check_refuses_once_and_unchanged_fatal_ter
     to_away(&mut w, m);
     wet(&mut w, at(5, 5));
     step(&mut w);
-    assert_eq!(stage(&w, m), Some(Stage::Blocked), "the change refused the placement");
+    assert_eq!(
+        stage(&w, m),
+        Some(Stage::Blocked),
+        "the change refused the placement"
+    );
     assert!(refused(&w, m));
     assert!(w.obj(m).unwrap().health > 0 && !w.obj(m).unwrap().on_map);
     for _ in 0..4 {
@@ -275,7 +308,10 @@ fn claim50_a_terrain_change_since_the_check_refuses_once_and_unchanged_fatal_ter
     let sank = w
         .obj(m)
         .is_none_or(|o| o.health <= 0 || glasnost_sim::naval::sinking(&w, m));
-    assert!(sank, "then the vessel-less vehicle meets claim 38 on the water");
+    assert!(
+        sank,
+        "then the vessel-less vehicle meets claim 38 on the water"
+    );
     // Control: water from the start. The check passes with the fatal terrain, the placement is not
     // refused, and the explicit fate follows.
     let mut w = game(&rules());
@@ -283,7 +319,11 @@ fn claim50_a_terrain_change_since_the_check_refuses_once_and_unchanged_fatal_ter
     wet(&mut w, at(5, 5));
     to_away(&mut w, m);
     step(&mut w);
-    assert_eq!(stage(&w, m), Some(Stage::Placed), "unchanged fatal terrain is not a refusal");
+    assert_eq!(
+        stage(&w, m),
+        Some(Stage::Placed),
+        "unchanged fatal terrain is not a refusal"
+    );
     assert!(!refused(&w, m));
     for _ in 0..3 {
         step(&mut w);

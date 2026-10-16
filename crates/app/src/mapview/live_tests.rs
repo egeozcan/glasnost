@@ -200,6 +200,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         object,
         harvesting: None,
         shadow: None,
+        alternative: false,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -261,6 +262,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         object: sim_code(ObjectId(9)),
         harvesting,
         shadow: None,
+        alternative: false,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1428,6 +1430,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         object: sim_code(ObjectId(5)),
         harvesting: None,
         shadow: None,
+        alternative: false,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1459,6 +1462,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
     let mut shadow_y = |anchor| {
         let m = Mobile {
             shadow: Some(anchor),
+            alternative: false,
             ..jet(1500)
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
@@ -1544,4 +1548,94 @@ fn aircraft_shadow_anchor_bridge_qualification() {
     // A destroyed deck (no mark) cannot qualify.
     w.cells.deck[i] = false;
     assert!(!anchor(&mut w, 1500, false).deck);
+}
+
+/// spec: S-0105 claim 12 (a vehicle type with the alternative-body option draws its alternative
+/// body, not its main body, while no spawned aircraft is docked; a type without the option never
+/// does, and a type without an alternative body file draws the main body; the shadow stays the
+/// main body's, claim 29)
+#[test]
+fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
+    use glasnost_fmt::bytes::F32Bits;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let draw = |option: bool, alt_file: bool, alternative: bool| {
+        let rules = if option {
+            format!("{RULES}[CARX]\nNoSpawnAlt=yes\n")
+        } else {
+            RULES.to_string()
+        };
+        let (mut import, catalogue, mut assets) = context_with(&rules);
+        let art = import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
+        art.voxels.insert("body".into(), b"main.vxl".to_vec());
+        let mut main = synthetic_model();
+        main.limbs[0].max[0] = F32Bits::new(30.0);
+        assets.insert(b"main.vxl", VxlWriter { model: &main }.write());
+        if alt_file {
+            art.voxels
+                .insert("alternate_body".into(), b"alt.vxl".to_vec());
+            assets.insert(
+                b"alt.vxl",
+                VxlWriter {
+                    model: &synthetic_model(),
+                }
+                .write(),
+            );
+        }
+        let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+        let map = decode(
+            &doc,
+            &DecodeContext {
+                catalogue: Some(&catalogue),
+                ..Default::default()
+            },
+        )
+        .map;
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (built, mut painter) = build_parts(&inputs, true);
+        let mut scene = built.scene;
+        let car = Mobile {
+            kind: Kind::Vehicles,
+            idx: 0,
+            owner: b"Neutral".to_vec(),
+            pos: (2 * 256 + 128, 3 * 256 + 128, 0),
+            body: 8192,
+            turret: 8192,
+            elevation: 0,
+            infantry: None,
+            object: sim_code(ObjectId(9)),
+            harvesting: None,
+            shadow: None,
+            alternative,
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
+        let size = |shadow: bool| {
+            let i = entries[0]
+                .items
+                .iter()
+                .find(|i| (i.paint == Paint::Shadow) == shadow)
+                .expect("an item");
+            let img = &scene.images[i.image as usize];
+            (img.width(), img.height())
+        };
+        (size(false), size(true))
+    };
+    let (main_body, main_shadow) = draw(true, true, false);
+    let (alt_body, alt_shadow) = draw(true, true, true);
+    assert_ne!(main_body, alt_body, "the alternative body is another model");
+    assert_eq!(main_shadow, alt_shadow, "the shadow is the main body's");
+    // No option: the main body whatever the docked state.
+    assert_eq!(draw(false, true, true).0, main_body);
+    // The option without an alternative body file: the main body.
+    assert_eq!(draw(true, false, true).0, main_body);
 }
