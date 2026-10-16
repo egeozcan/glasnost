@@ -783,7 +783,7 @@ impl Script {
             // Per axis: beyond the side the goal lies on, the middle when the goal is level with the building (and beyond the far side with no goal).
             let toward = |lo: i32, n: i32, g: Option<i32>| match g {
                 Some(g) if g < lo => lo - 1 - RALLY_AHEAD,
-                Some(g) if g < lo + n => lo + n / 2,
+                Some(g) if g < lo + n => lo + n / 2, // nocite: the middle cell of the foundation side
                 _ => lo + n + RALLY_AHEAD,
             };
             let at = CellXY::new(
