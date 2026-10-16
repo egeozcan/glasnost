@@ -8,8 +8,8 @@ mod sw_common;
 use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
 use glasnost_sim::superweapons::warp::Stage;
-use glasnost_sim::world::{ObjectId, Pos, Target, World};
 use glasnost_sim::testkit;
+use glasnost_sim::world::{ObjectId, Pos, Target, World};
 use sw_common::*;
 
 /// The rules' teleport delay in these tests.
@@ -212,7 +212,11 @@ fn claim50_a_legal_redirect_after_the_fallback_places_and_arrives_on_separate_up
     let placed = at_stage(|s| matches!(s, Stage::Placed)).expect("placed");
     let hold = at_stage(|s| matches!(s, Stage::Hold(_))).expect("effects done");
     assert_eq!(placed, away + 1, "placement on the update after the check");
-    assert_eq!(hold, placed + 1, "arrival effects on the update after placement");
+    assert_eq!(
+        hold,
+        placed + 1,
+        "arrival effects on the update after placement"
+    );
     let o = w.obj(a).unwrap();
     assert!(o.on_map && o.health > 0);
     assert!(w.cells.cell(o.pos.cell()).is_some());
@@ -235,14 +239,21 @@ fn claim50_a_refused_placement_keeps_the_member_in_the_retry_and_tries_again() {
     let m = w.obj(a).unwrap().sw.warp.clone().unwrap();
     assert_eq!(m.stage, Stage::Blocked, "back in the landing retry");
     assert!(m.refused);
-    assert_eq!(m.landing, Pos::new(128, 128, 0), "its landing point is retained");
+    assert_eq!(
+        m.landing,
+        Pos::new(128, 128, 0),
+        "its landing point is retained"
+    );
     let o = w.obj(a).unwrap();
     assert!(!o.on_map && o.health > 0);
     assert_eq!(o.owner, Some(ALPHA));
     assert_eq!(warp_notes(&w), 1);
     run_through(&mut w, tl + 200);
     let o = w.obj(a).expect("the retries delete nothing");
-    assert!(o.health > 0 && o.on_map, "the retry found a legal cell and placed it");
+    assert!(
+        o.health > 0 && o.on_map,
+        "the retry found a legal cell and placed it"
+    );
     assert_eq!(stage(&w, a), None);
     assert_eq!(warp_notes(&w), 1, "the refusal is reported once");
 }
@@ -283,10 +294,17 @@ fn claim51_no_self_healing_before_the_hold_and_healing_in_it() {
         }
     }
     assert!(hold_ticks >= 2, "the hold lasts several turns");
-    assert_eq!(hold_gain, hold_ticks, "one point per hold turn, the expiry turn included");
+    assert_eq!(
+        hold_gain, hold_ticks,
+        "one point per hold turn, the expiry turn included"
+    );
     let h = w.obj(a).unwrap().health;
     step(&mut w);
-    assert_eq!(w.obj(a).unwrap().health, h + 1, "healing goes on after the warp");
+    assert_eq!(
+        w.obj(a).unwrap().health,
+        h + 1,
+        "healing goes on after the warp"
+    );
 }
 
 #[test]
@@ -361,11 +379,18 @@ fn claim51_no_behaviour_firing_or_turret_before_the_hold() {
                 let o = w.obj(a).unwrap();
                 assert_eq!(w.obj(enemy).unwrap().health, e0, "no shot in {st:?}");
                 assert!(o.target.is_none(), "no behaviour processing in {st:?}");
-                assert_eq!(o.turret.value(w.tick), turret0, "no turret turning in {st:?}");
+                assert_eq!(
+                    o.turret.value(w.tick),
+                    turret0,
+                    "no turret turning in {st:?}"
+                );
             }
         }
     }
-    assert!(processed_in_hold, "the hold permits ordinary behaviour processing");
+    assert!(
+        processed_in_hold,
+        "the hold permits ordinary behaviour processing"
+    );
     // Firing follows under its own eligibility once phasing in ends.
     let mut shot = false;
     for _ in 0..80 {
@@ -412,7 +437,10 @@ fn claim51_launch_clears_the_path_the_queue_and_the_driving_step_at_once() {
         if o.sw.warp.is_none() {
             continue; // outside the 3 x 3 block of the launch
         }
-        assert!(o.queued_dests.is_empty(), "queued destinations cleared at launch");
+        assert!(
+            o.queued_dests.is_empty(),
+            "queued destinations cleared at launch"
+        );
         assert!(o.path.steps.is_empty());
         assert!(
             o.drive
@@ -421,7 +449,9 @@ fn claim51_launch_clears_the_path_the_queue_and_the_driving_step_at_once() {
             "driving step cleared"
         );
         assert!(
-            o.walk.as_ref().is_none_or(|k| k.target.is_none() && !k.fraction),
+            o.walk
+                .as_ref()
+                .is_none_or(|k| k.target.is_none() && !k.fraction),
             "walking step cleared"
         );
         assert!(

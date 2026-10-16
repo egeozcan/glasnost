@@ -1520,7 +1520,10 @@ fn aircraft_shadow_anchor_bridge_qualification() {
     // The neighbour is no high-bridge cell: terrain, at any height.
     assert!(!anchor(&mut w, 1500, false).deck);
     w.cells.deck[j] = true;
-    assert!(!anchor(&mut w, 415, false).deck, "a = 415 is below the deck");
+    assert!(
+        !anchor(&mut w, 415, false).deck,
+        "a = 415 is below the deck"
+    );
     assert!(anchor(&mut w, 416, false).deck, "a = 416 qualifies");
     assert_eq!(anchor(&mut w, 416, false).ground, ground);
     // Marked on the deck, b = 416: a = z - 416 >= 0.

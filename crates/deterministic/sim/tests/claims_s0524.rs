@@ -1539,7 +1539,12 @@ fn restored_construction(mut r: Ruleset, frames: Option<i32>) -> Restored {
         t.econ.buildup = frames.map(|_| true);
         t.econ.buildup_frames = frames;
     }
-    let mut w = game(&r, triggers(vec![], 0), &[], &[("Alpha", "TOWER", at(0, 0))]);
+    let mut w = game(
+        &r,
+        triggers(vec![], 0),
+        &[],
+        &[("Alpha", "TOWER", at(0, 0))],
+    );
     // Past the first ticks, so that no start-up pass is mixed in.
     run(&mut w, 6);
     let old = buildings(&w, "TOWER")[0];
@@ -1558,7 +1563,9 @@ fn restored_construction(mut r: Ruleset, frames: Option<i32>) -> Restored {
         let t = w.tick;
         step(&mut w);
         let o = w.obj(new).unwrap();
-        if out.current.is_none() && o.beh.current == Some(glasnost_sim::rules::Behaviour::Construction) {
+        if out.current.is_none()
+            && o.beh.current == Some(glasnost_sim::rules::Behaviour::Construction)
+        {
             out.current = Some(t);
         }
         out.first = out.first.or(o.econ.construction.first);
@@ -1588,8 +1595,13 @@ fn claim15_restored_multi_stage_range_runs_twice_and_hands_over_by_f6() {
 #[test]
 fn claim15_restored_zero_delay_range_sets_the_mark_at_its_first_eligible_turn() {
     let k = restored_construction(ruleset(), None);
-    assert!(!k.mark_at_entry, "the mark is clear at entry, missing art included");
-    let u = k.current.expect("the first eligible building turn starts construction");
+    assert!(
+        !k.mark_at_entry,
+        "the mark is clear at entry, missing art included"
+    );
+    let u = k
+        .current
+        .expect("the first eligible building turn starts construction");
     assert!(u >= k.entry, "{k:?}");
     assert_eq!(k.first, Some(u + 1), "C = U + 1");
     assert_eq!(k.handover, Some(u + 2), "H = U + 2");
@@ -1602,7 +1614,9 @@ fn claim15_restored_replacement_follows_the_placed_buildup_twice_switch() {
     r.globals.quirks.placed_buildup_twice = false;
     let k = restored_construction(r, Some(10));
     assert!(k.mark_at_entry, "off: the mark is set at entry");
-    let u = k.current.expect("construction becomes current at the first turn");
+    let u = k
+        .current
+        .expect("construction becomes current at the first turn");
     assert_eq!(k.first, Some(u + 1), "C = U + 1");
     assert_eq!(k.handover, Some(u + 1 + 36), "H follows F6");
 }
@@ -1613,8 +1627,14 @@ fn claim15_restored_single_stage_range_never_completes() {
     for frames in [3, 1] {
         let k = restored_construction(ruleset(), Some(frames));
         assert!(!k.mark_at_entry);
-        assert_eq!(k.current, None, "frames {frames}: the range reports no ready mark");
-        assert_eq!(k.handover, None, "frames {frames}: construction never completes");
+        assert_eq!(
+            k.current, None,
+            "frames {frames}: the range reports no ready mark"
+        );
+        assert_eq!(
+            k.handover, None,
+            "frames {frames}: construction never completes"
+        );
     }
 }
 
@@ -1622,7 +1642,12 @@ fn claim15_restored_single_stage_range_never_completes() {
 #[test]
 fn claim15_healing_an_existing_building_does_not_restart_construction() {
     let r = ruleset();
-    let mut w = game(&r, triggers(vec![], 0), &[], &[("Alpha", "TOWER", at(0, 0))]);
+    let mut w = game(
+        &r,
+        triggers(vec![], 0),
+        &[],
+        &[("Alpha", "TOWER", at(0, 0))],
+    );
     run(&mut w, 10);
     let b = buildings(&w, "TOWER")[0];
     hit(&mut w, b, 300);

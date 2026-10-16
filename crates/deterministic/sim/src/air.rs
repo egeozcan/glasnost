@@ -296,7 +296,12 @@ fn deck_reference(w: &World, id: ObjectId) -> bool {
 /// surface, plus 416 leptons when the deck is the reference.
 fn base(w: &World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id) else { return 0 };
-    w.surface_at(o.pos.x, o.pos.y) + if deck_reference(w, id) { DECK_ALLOWANCE } else { 0 }
+    w.surface_at(o.pos.x, o.pos.y)
+        + if deck_reference(w, id) {
+            DECK_ALLOWANCE
+        } else {
+            0
+        }
 }
 
 /// The height *h* above the terrain (S-0501 Terms): the signed world height
@@ -314,7 +319,11 @@ pub fn listing_height(w: &World, id: ObjectId) -> i32 {
     w.obj(id).map_or(0, |o| {
         o.pos.z
             - w.surface_at(o.pos.x, o.pos.y)
-            - if deck_marked(w, id) { DECK_ALLOWANCE } else { 0 }
+            - if deck_marked(w, id) {
+                DECK_ALLOWANCE
+            } else {
+                0
+            }
     })
 }
 
@@ -1198,8 +1207,8 @@ fn touchdown(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     let surface = w.surface_at(o.pos.x, o.pos.y);
     // spec: S-0501 claim 43 (landing finishes on a high-bridge cell while the world height is at least the terrain surface height plus 416 leptons: the deck mark is set before settling at landing height; an already marked aircraft keeps it)
-    let marked = deck_marked(w, id)
-        || (w.high_bridge(o.pos.cell()) && o.pos.z - surface >= DECK_ALLOWANCE);
+    let marked =
+        deck_marked(w, id) || (w.high_bridge(o.pos.cell()) && o.pos.z - surface >= DECK_ALLOWANCE);
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.z = surface + if marked { DECK_ALLOWANCE } else { 0 };
     }

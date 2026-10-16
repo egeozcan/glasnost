@@ -2136,8 +2136,12 @@ fn bridge(w: &mut World, dx: i32, dy: i32) -> glasnost_map::CellXY {
 fn listed(w: &World, id: ObjectId) -> (bool, bool) {
     let c = w.obj(id).unwrap().pos.cell();
     (
-        w.cells.list(c, glasnost_sim::world::Layer::Ground).contains(&id),
-        w.cells.list(c, glasnost_sim::world::Layer::Deck).contains(&id),
+        w.cells
+            .list(c, glasnost_sim::world::Layer::Ground)
+            .contains(&id),
+        w.cells
+            .list(c, glasnost_sim::world::Layer::Deck)
+            .contains(&id),
     )
 }
 
@@ -2159,21 +2163,33 @@ fn ac27_flying_across_a_bridge_never_marks() {
     for _ in 0..400 {
         step(&mut w);
         let o = w.obj(a).unwrap();
-        assert!(!air::deck_marked(&w, a), "no mark in flight: {}", describe(&w, a));
+        assert!(
+            !air::deck_marked(&w, a),
+            "no mark in flight: {}",
+            describe(&w, a)
+        );
         if above_terrain(&w, a) > 0 {
-            assert_eq!(listed(&w, a), (false, false), "a positive listing height lists nowhere");
+            assert_eq!(
+                listed(&w, a),
+                (false, false),
+                "a positive listing height lists nowhere"
+            );
         }
         if o.pos.cell() == bridge_cell {
             over += 1;
             // At cruise height (500 >= 416) the deck is the temporary reference: h is 416 lower.
-            deck_reference |= above_terrain(&w, a) >= 416 && air::height(&w, a) == above_terrain(&w, a) - 416;
+            deck_reference |=
+                above_terrain(&w, a) >= 416 && air::height(&w, a) == above_terrain(&w, a) - 416;
         }
         if air::on_ground(&w, a) && o.pos.cell() == goal {
             break;
         }
     }
     assert!(over > 0, "it crossed the bridge cell");
-    assert!(deck_reference, "the deck was the temporary altitude reference above the bridge");
+    assert!(
+        deck_reference,
+        "the deck was the temporary altitude reference above the bridge"
+    );
     assert!(!air::deck_marked(&w, a));
 }
 
@@ -2198,13 +2214,24 @@ fn ac27_landing_on_a_bridge_sets_the_mark_and_lists_on_deck() {
             break;
         }
     }
-    assert!(marked_at.is_some(), "the descent set the mark: {}", describe(&w, a));
+    assert!(
+        marked_at.is_some(),
+        "the descent set the mark: {}",
+        describe(&w, a)
+    );
     assert!(st(&w, a).ground, "settled: {}", describe(&w, a));
     assert_eq!(w.obj(a).unwrap().pos.cell(), goal);
     assert_eq!(above_terrain(&w, a), 416, "at deck height");
     assert_eq!(air::listing_height(&w, a), 0);
-    assert!(air::on_ground(&w, a), "height 0 and the ground render layer");
-    assert_eq!(w.obj(a).unwrap().layer, glasnost_sim::world::Layer::Ground, "no separate bridge render layer");
+    assert!(
+        air::on_ground(&w, a),
+        "height 0 and the ground render layer"
+    );
+    assert_eq!(
+        w.obj(a).unwrap().layer,
+        glasnost_sim::world::Layer::Ground,
+        "no separate bridge render layer"
+    );
     assert_eq!(listed(&w, a), (false, true), "deck list only");
     assert!(air::deck_marked(&w, a));
     // The shadow's b (S-0105 Terms) is read from the same mark: a = z - H - 416 = 0.
@@ -2230,12 +2257,24 @@ fn ac27_taking_off_from_the_deck_clears_the_mark_in_the_first_climbing_tick() {
             // Cleared in the climbing tick: the aircraft is above deck height, listed nowhere.
             assert!(!st(&w, a).ground);
             assert!(above_terrain(&w, a) > 416, "{}", describe(&w, a));
-            assert_eq!(listed(&w, a), (false, false), "no listing once the listing height is positive");
+            assert_eq!(
+                listed(&w, a),
+                (false, false),
+                "no listing once the listing height is positive"
+            );
             break;
         }
-        assert_eq!(air::height(&w, a), 0, "the mark holds while it has not climbed");
+        assert_eq!(
+            air::height(&w, a),
+            0,
+            "the mark holds while it has not climbed"
+        );
     }
-    assert!(cleared, "the first climbing tick cleared the mark: {}", describe(&w, a));
+    assert!(
+        cleared,
+        "the first climbing tick cleared the mark: {}",
+        describe(&w, a)
+    );
 }
 
 // spec: S-0501 claim 43 (a touchdown refused under claim 7 clears the mark as take-off restarts) and claim 7 (a refused cell: it rises by 10 leptons and starts to take off again)
@@ -2254,12 +2293,22 @@ fn ac27_a_refused_touchdown_clears_the_mark() {
         let s = st(&w, a);
         if s.taking_off && !s.ground && above_terrain(&w, a) == 426 {
             refused = true;
-            assert!(!air::deck_marked(&w, a), "the refused touchdown cleared the mark");
+            assert!(
+                !air::deck_marked(&w, a),
+                "the refused touchdown cleared the mark"
+            );
             break;
         }
-        assert!(!(s.ground && w.obj(a).unwrap().pos.cell() == goal), "never lands on the occupied cell");
+        assert!(
+            !(s.ground && w.obj(a).unwrap().pos.cell() == goal),
+            "never lands on the occupied cell"
+        );
     }
-    assert!(refused, "the touchdown on the deck was refused: {}", describe(&w, a));
+    assert!(
+        refused,
+        "the touchdown on the deck was refused: {}",
+        describe(&w, a)
+    );
 }
 
 // spec: S-0501 claim 43 (horizontal flight or hovering alone, without one of these altitude or landing transitions, leaves the mark unchanged: a previously marked aircraft does not lose it merely because it is above the deck or crosses a cell boundary; a positive-height aircraft may retain a mark when it is not climbing, so the render layer alone cannot recover it); S-0209 claim 13 (a positive listing height lists nowhere, the mark notwithstanding)
@@ -2290,8 +2339,16 @@ fn ac27_a_marked_aircraft_at_the_held_height_keeps_its_mark_across_cells() {
     for _ in 0..40 {
         step(&mut w);
     }
-    assert_ne!(w.obj(a).unwrap().pos.cell(), start, "it crossed cell boundaries");
-    assert!(air::deck_marked(&w, a), "the mark is unchanged by horizontal flight: {}", describe(&w, a));
+    assert_ne!(
+        w.obj(a).unwrap().pos.cell(),
+        start,
+        "it crossed cell boundaries"
+    );
+    assert!(
+        air::deck_marked(&w, a),
+        "the mark is unchanged by horizontal flight: {}",
+        describe(&w, a)
+    );
     assert_eq!(above_terrain(&w, a), 516);
     assert_eq!(listed(&w, a), (false, false));
 }
@@ -2314,5 +2371,9 @@ fn s0209_claim_13_ordinary_flight_is_listed_only_at_height_zero() {
             break;
         }
     }
-    assert!(flew && landed, "took off and landed again: {}", describe(&w, a));
+    assert!(
+        flew && landed,
+        "took off and landed again: {}",
+        describe(&w, a)
+    );
 }
