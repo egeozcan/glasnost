@@ -451,6 +451,7 @@ pub fn new_game(
         sw: Default::default(),
         radiation: Default::default(),
         temporal: Default::default(),
+        strike: Default::default(),
         spawned: Default::default(),
         triggers: Default::default(),
         econ: crate::econ::WorldEcon {

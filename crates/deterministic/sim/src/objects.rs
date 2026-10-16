@@ -400,6 +400,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     };
     // spec: S-0519 claims 7 and 8 (a removed carrier loses its bomb silently; a bomb whose planter leaves forgets it)
     crate::bomb::removed(w, id);
+    // spec: S-0519 claims 19 and 20 (a strike aircraft leaving play is unlinked, a designator ends its strike, a marked building cancels)
+    crate::strike::leaving(w, id);
     // spec: S-0518 claim 12 (a charger that leaves play leaves every charger list at once)
     crate::linked::leaving(w, id);
     // spec: S-0514 claims 12 and 14 (a removed target invalidates all attached beams and its attackers idle; a removed attacker's beam lets go)

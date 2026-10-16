@@ -1579,6 +1579,10 @@ fn detonation_inner(
     if rules.combat.warhead(h).ivan_bomb {
         crate::bomb::plant(w, attacker, target);
     }
+    // spec: S-0519 claim 16 (an air-strike warhead calls or redirects the strike instead of area damage; a shot at a cell, a destroyed firer or a non-designator calls none)
+    if rules.combat.warhead(h).airstrike {
+        crate::strike::designation(w, attacker, target);
+    }
     if rules.combat.warhead(h).bomb_disarm {
         crate::bomb::disarm(w, target);
     }

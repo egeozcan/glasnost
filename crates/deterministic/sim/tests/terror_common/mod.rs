@@ -131,6 +131,34 @@ pub fn ruleset() -> Ruleset {
             ..Default::default()
         },
     );
+    // The air-strike part: the designation warhead, the strike aircraft JET
+    // (normal) and JET2 (elite), the designator DESIG (strike of 2 JET,
+    // recharge 100; elite 3 JET2, recharge 50).
+    r.sim.warheads.insert("STRIKE".into(), warhead(|h| h.airstrike = Some(true)));
+    r.sim.weapons.insert("Laser".into(), weapon(10, "20", "STRIKE"));
+    r.sim.weapons.insert("JetGun".into(), weapon(10, "6", "DEMO"));
+    for n in ["JET", "JET2"] {
+        let mut u = UnitType {
+            strength: Some(200),
+            speed: Some(30),
+            rot: Some(12),
+            locomotor: Some(glasnost_rules::sim::Locomotor::Fly),
+            primary: Some("JetGun".into()),
+            ..Default::default()
+        };
+        u.combat.ammo = Some(2);
+        register(&mut r, "aircraft", n);
+        r.sim.aircraft.insert(n.into(), u);
+    }
+    vehicle(&mut r, "DESIG", |t| {
+        t.primary = Some("Laser".into());
+        t.combat.airstrike_team = Some(2);
+        t.combat.elite_airstrike_team = Some(3);
+        t.combat.airstrike_team_type = Some("JET".into());
+        t.combat.elite_airstrike_team_type = Some("JET2".into());
+        t.combat.airstrike_recharge_time = Some(100);
+        t.combat.elite_airstrike_recharge_time = Some(50);
+    });
     let g = &mut r.sim.general;
     g.ivan_warhead = Some("BOOM".into());
     g.ivan_damage = Some(100);
@@ -185,4 +213,18 @@ pub fn shoot(w: &mut World, firer: ObjectId, target: ObjectId) -> bool {
         testkit::run(w, 1);
     }
     made
+}
+
+/// Sets the designator's target (the order a player would give) and fires
+/// one designation shot at the object, running until it has detonated.
+pub fn designate(w: &mut World, d: ObjectId, x: ObjectId) {
+    if let Some(o) = w.obj_mut(d) {
+        o.target = Some(Target::Object(x));
+    }
+    shoot(w, d, x);
+}
+
+/// The aircraft linked to the designator's strike.
+pub fn linked(w: &World, d: ObjectId) -> Vec<ObjectId> {
+    w.strike.strikes.get(&d).map(|s| s.aircraft.clone()).unwrap_or_default()
 }

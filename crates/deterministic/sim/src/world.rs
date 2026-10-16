@@ -397,6 +397,9 @@ pub struct World {
     /// Temporal beams and erasures (S-0514).
     #[serde(default)]
     pub temporal: crate::temporal::TemporalWorld,
+    /// Air-strike designators' strikes (S-0519 claims 16 to 21).
+    #[serde(default)]
+    pub strike: crate::strike::StrikeWorld,
     /// Radiation fields and cell radiation (S-0525).
     #[serde(default)]
     pub radiation: crate::radiation::RadWorld,

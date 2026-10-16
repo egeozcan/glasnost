@@ -170,6 +170,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0519 claim 4 (a planted bomb is checked in its carrier's own turn, after the behaviour processing; not in a pass of its own)
     crate::bomb::turn(w, id);
+    // spec: S-0519 claim 19 (a designator's change of target cancels its strike: looked at in its own turn)
+    crate::strike::turn(w, id);
     if w.obj(id).is_none() {
         return;
     }
