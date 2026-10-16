@@ -123,7 +123,7 @@ struct Game {
     /// could build at some sampled tick and the ones it had a new object
     /// of (not a starting unit), by [`unit_class`] (PLAN 4.7: the own AI
     /// builds every unit class its side can build).
-    offered: [BTreeMap<(&'static str, u8, u32), (i32, bool)>; PLAYERS],
+    offered: [BTreeMap<(&'static str, u8, u32), (i32, bool, Option<Role>)>; PLAYERS],
     made: [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
     /// Counts-only state of a game that is not over at the end (the own
     /// AI's games): per house its objects by kind, the resource left on the
@@ -189,16 +189,20 @@ async fn run_async(
         let rules = Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash));
         let tiles = Arc::new(tiles);
         let pairs: Vec<Option<(i32, i32)>> = if players == Players::AiSides {
-            // `GLASNOST_AI_SIDES=a,b` plays only that pair of sides.
+            // `GLASNOST_AI_SIDES=a,b` plays only that pair of sides; `a,a`
+            // plays the first two open countries of side a.
             let want: Option<(i32, i32)> = std::env::var("GLASNOST_AI_SIDES").ok().and_then(|v| {
                 let (a, b) = v.split_once(',')?;
                 Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
             });
-            side_pairs(&rules)
-                .into_iter()
-                .filter(|p| want.is_none_or(|w| w == *p))
-                .map(Some)
-                .collect()
+            match want {
+                Some((a, b)) if a == b => vec![Some((a, a))],
+                _ => side_pairs(&rules)
+                    .into_iter()
+                    .filter(|p| want.is_none_or(|w| w == *p))
+                    .map(Some)
+                    .collect(),
+            }
         } else {
             vec![None]
         };
@@ -351,6 +355,14 @@ fn play(
         }
     }
     let chosen = match g.sides {
+        Some((a, b)) if a == b => countries(rules)
+            .into_iter()
+            .filter(|(i, _)| {
+                rules.econ.tech.country_side.get(*i as usize) == Some(&Some(a))
+            })
+            .map(|(_, n)| n)
+            .take(PLAYERS)
+            .collect(),
         Some((a, b)) => {
             let by_side = side_countries(rules);
             vec![by_side[&a].clone(), by_side[&b].clone()]
@@ -1157,7 +1169,7 @@ fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
 fn classes(
     w: &World,
     starting: &BTreeSet<u32>,
-    offered: &mut [BTreeMap<(&'static str, u8, u32), (i32, bool)>; PLAYERS],
+    offered: &mut [BTreeMap<(&'static str, u8, u32), (i32, bool, Option<Role>)>; PLAYERS],
     made: &mut [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
 ) {
     let units = |t: &glasnost_sim::econ::TypeRef| {
@@ -1173,6 +1185,7 @@ fn classes(
                             w.rules()
                                 .unit(t.kind, t.index)
                                 .is_some_and(|u| u.primary.is_some()),
+                            role_of(w, t),
                         ));
                 }
             }
@@ -1409,10 +1422,10 @@ fn report(
                 let left: Vec<String> = g.offered[h]
                     .iter()
                     .filter(|(t, _)| !g.made[h].contains(t))
-                    .map(|(&(c, k, _), &(first, armed))| {
+                    .map(|(&(c, k, _), &(first, armed, role))| {
                         let kind = kinds.into_iter().find(|&x| x as u8 == k);
                         format!(
-                            "{:?} {c} {} from tick {first}",
+                            "{:?} {c} {} (AI role {role:?}) from tick {first}",
                             kind.unwrap_or(Kind::Infantry),
                             if armed { "armed" } else { "unarmed" }
                         )
