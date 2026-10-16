@@ -130,7 +130,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 53 | approved | — |
 | [S-0006](rules-import/S-0006-rules-layering.md) | Rules layering | rules-import | 20 | approved | — |
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 36 | approved | — |
-| [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 31 | approved | — |
 | [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 6 | approved | — |
 | [S-0517](combat/S-0517-deployable-units.md) | Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing) | combat | 8 | approved | — |
 | [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 5 | approved | — |
+| [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 32 | approved | — |

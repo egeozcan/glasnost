@@ -1,9 +1,9 @@
 ---
 id: Q-1090
 title: When the teleport-capable dock fallback of S-0207 claim 27 is tested, and whether placement's idle setup assigns a destination
-status: open
+status: answered
 related: [S-0207, S-0502, S-0417, S-0402]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need
