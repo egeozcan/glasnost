@@ -479,7 +479,7 @@ fn claim_2_unmanned_pays_nothing_until_it_changes_owner() {
     change(&mut w, b, A);
     assert!(power::manned(&w, b));
     let v = payments(&mut w, A, 1001);
-    assert_eq!(v.len(), 1000 / 50 + 0, "a payment every D - 1 ticks");
+    assert_eq!(v.len(), 1000 / 50, "a payment every D - 1 ticks");
     assert_eq!(v[0].0, t0 + 50);
 }
 
