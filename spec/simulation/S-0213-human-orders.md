@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 35
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -440,7 +440,7 @@ Terms).
 
    | The actor | Effect of the stop order |
    |---|---|
-   | Any actor | Its target and destination both become nothing, and it breaks off any contact. Its behaviour is unchanged, except as the harvester row and the jumpjet reroute below say |
+   | Any actor | Its target and destination both become nothing, and it breaks off any contact. Its behaviour is unchanged, except as the harvester row, balloon-hover retention (claim 21) and jumpjet reroute below say |
    | A mobile actor | It has no queued destinations left (claim 5: how they arise is S-0215's) and stops following any planned route. With its order-level destination gone it comes to rest as the movement specs describe, including the hovering vehicle's retained movement destination and the jumpjet reroute below (this spec does not claim that it halts within the same tick) |
    | An actor with spawned aircraft (such as a carrier) | Its spawned aircraft are called off their target |
    | An open-topped transport | Its passengers lose their targets too |
@@ -470,8 +470,20 @@ Terms).
    *moving*). Its order-level destination becomes empty, but its separate movement
    point can be replaced and movement can continue. An unchanged vehicle assignment
    can be suppressed instead (claim 21); then no reroute occurs and the preceding
-   movement point and commitment survive. This is not S-0502 claim 16's direct
-   no-point instruction to the locomotor.
+   movement point and commitment survive. Infantry has no such equality suppression:
+   an empty-to-empty assignment reroutes again while a commitment remains.
+   This is not S-0502 claim 16's direct no-point instruction to the locomotor.
+
+   Stop requests destination clearing while the target is still present. For a
+   balloon-hover type it also requests clearing after the target is gone. Under
+   S-0502 claim 28, a balloon-hover vehicle can therefore retain its destination at
+   the first request, but not at the second: stop ends with an empty destination.
+   If the first clear was rejected, the second is effective and reroutes with a
+   commitment; if the first was effective, the second unchanged empty assignment is
+   suppressed. A first rejection can nevertheless leave *attack* current after stop.
+   For balloon-hover infantry, neither assignment has vehicle equality suppression:
+   both can reroute if the commitment survives. The rule is per effective assignment,
+   not one reroute per stop order.
 
    | Flight state at stop | Successful reroute outcome |
    |---|---|
@@ -488,7 +500,11 @@ Terms).
    this order's target clearing. Stop therefore promises neither an immediate halt nor
    completion at the old movement point. These outcomes inherit S-0502 claim 24's
    `measurable` backing (Scenario J19) and high confidence for stop dispatch and flight-state
-   outcomes; the no-cell destruction retains claim 17's medium confidence and Scenario J11.
+   outcomes; repeated infantry clears inherit claim 24's Scenario J23 backing.
+   Balloon-hover stop retention, retry and resulting behaviour inherit claim 28's
+   high confidence and Scenario J25 backing. The combined balloon-hover infantry
+   fixture remains `unmeasured` as in J23. The no-cell destruction retains claim 17's
+   medium confidence and Scenario J11.
 
    The slave-recall row applies only to vehicles: a stop order to a deployed slave-miner
    building does not itself recall its slaves (Scenario O4 part ii b).
@@ -534,16 +550,26 @@ Terms).
 10. **Deploy order.** The actor must be live, on the map, not tethered, not an aircraft, not
     paralysed, not under construction or being sold, and not in the unidentified state of Open
     questions (our engine's interim rule: claim 8). An actor that stands on a cell occupied by a building whose type is a vehicle
-    factory ignores the order. Otherwise the actor breaks off any contact, its target and
-    destination become nothing and the behaviour *unload* becomes its queued behaviour. What
+    factory ignores the order. Otherwise the actor breaks off any contact, its target
+    becomes nothing, it requests an empty destination and the behaviour *unload* becomes
+    its queued behaviour. The destination becomes empty except for the balloon-hover
+    retention below. What
     *unload* does depends on the type: deploying into a building, deploying in place, letting
     passengers or garrison occupants out. These consequences belong to S-0215,
     S-0517 claims 1 to 8 (in-place vehicle deploying and deploy-fire vehicles), and the
     special-abilities specs.
 
-    For a jumpjet, the destination clear has S-0502 claim 24's movement consequences,
-    just as an effective stop clear does (claim 8), whenever it retains a movement
-    commitment. Deploy therefore need not erase its movement point or halt its flight:
+    Deploy makes only one destination-clear request, while the target is still present.
+    It does not make stop's post-target-clear retry. A balloon-hover vehicle satisfying
+    claim 21's retention predicate therefore keeps its nonempty destination, movement
+    point, landing reservation and commitment despite ending with no target. Retention
+    can make *attack* current before *unload* becomes queued (S-0502 claim 28).
+    Deploy does not itself enable destination refresh (S-0502 claim 27).
+
+    For a jumpjet, an effective destination clear has S-0502 claim 24's movement
+    consequences, just as an effective stop clear does (claim 8), whenever it retains a
+    movement commitment. Infantry has no vehicle equality suppression, so an
+    empty-to-empty deploy assignment is effective too. Deploy therefore need not erase its movement point or halt its flight:
     a successful reroute supplies a replacement point, with the flight-state outcomes
     in claim 8's table. A suppressed unchanged vehicle assignment instead retains the
     preceding point and commitment (claim 21). For a landing-first vehicle hovering
@@ -552,10 +578,12 @@ Terms).
     the retained point. With no commitment, the clear does not create one, and the
     landing request alone does not wake idle hover. These are S-0502 claims 13 and 24's
     consequences, not an extra deploy movement instruction.
-    - Backing for the jumpjet consequences: `measurable` (S-0502 Scenario J22),
-      confidence: high for effective-clear dispatch, medium for exceptional aftermath.
-      The uncommitted idle-hover starting case remains `unmeasured`, as in that claim:
-      no ordinary stock order sequence establishing it is settled.
+    - Backing for the jumpjet consequences: `measurable` (S-0502 Scenarios J22 to J24),
+      confidence: high for effective-clear dispatch and refresh nonactivation, medium
+      for exceptional aftermath. The uncommitted idle-hover starting case remains
+      `unmeasured`, as in claim 24: no ordinary stock order sequence establishing it is
+      settled. Balloon-hover deploy retention has high-confidence predicates but an
+      `unmeasured` stock deployable fixture (S-0502 claim 28, J25 diagnostic).
     - Backing: `measurable` (Scenario O6) for the vehicle-factory cell and for the unit that
       deploys in the way its type says (which shows that *unload* was queued and took effect). That
       the actor also breaks off contact and loses its target and destination is `unmeasured`: the
@@ -822,7 +850,7 @@ Terms).
     a different destination and clearing a destination make no such request. Equality means
     the same cell or the same object, not different objects occupying the same cell.
     The following are the destination requests made by the orders of this spec.
-    the jumpjet filters below can suppress a destination assignment without cancelling
+    The jumpjet filters below can suppress a destination assignment without cancelling
     the order's other effects.
 
     | Order | Destination request at application, after its checks pass |
@@ -832,22 +860,48 @@ Terms).
     | Area guard to a mobile actor | The order's target as destination and guard spot, even when it is the actor's own cell (table T3, part e) |
     | Enter or capture | The order's destination, normally the object to enter or capture (table T3, part f; S-0214 table M). A duplicate enter ignored by table T3 part a makes no assignment |
     | Ordinary attack on an object | Target becomes the object, destination becomes nothing (table T3, part f). Being out of range does not make the order itself assign a chase destination |
-    | Stop or deploy | Destination becomes nothing (claims 8 and 10); this cannot request destination-driven get-up |
+    | Stop | Requests an empty destination while the target remains; balloon-hover types also request it after target clearing (claim 8). The final destination is empty; neither request can cause destination-driven get-up |
+    | Deploy | Requests an empty destination once, before target clearing; qualifying balloon-hover retention can preserve a nonempty destination (claim 10). No destination-driven get-up |
     | Scatter | Claim 9 sends a request, not a move order. Only a destination assignment made by an accepted request is subject to the equality rule (S-0208 claims 11 to 13) |
     | Queued move or route point | Recording a future point is not destination assignment. When following it assigns a destination, S-0107's same rule applies; route following is distinct from a plain behaviour order (claims 16 and 17; S-0215 claims 13 and 14) |
 
-    **Destination filters and clears for jumpjets.** S-0502 claims 23 and 24 qualify these
+    **Destination filters and clears for jumpjets.** S-0502 claims 23, 24, 27 and 28 qualify these
     requests, including table T3 parts (e) and (f):
     - Outside an ion storm, jumpjet-type infantry ignore a nonempty destination assignment
       whose cell equals their current cell, before any movement-point search. This is a
       test of the type's jumpjet flag, not merely its locomotor. It applies while grounded
       too: an ordinary own-cell order does not promise take-off, an assignment or get-up.
       It does not prevent the order's separate target, behaviour or guard-spot effects.
+    - Infantry has no vehicle unchanged-destination suppression. Subject to the own-cell
+      filter and ordinary legality, repeating a nonempty destination elsewhere, whether
+      the same cell or the same object, repeats movement-point adjustment and its
+      eligible standing-position draw over 0 to 3 (S-0502 claims 16, 23 and 24).
+      Search failure and pre-draw refusals still apply; a draw is not unconditional.
+      Repeating an empty destination is an effective clear and reroutes with a commitment.
     - An ordinary jumpjet vehicle ignores an unchanged order-level destination, including
-      empty-to-empty, unless its destination-refresh state requires reassignment
-      (S-0502 Terms). A balloon-hover vehicle can first substitute its retained destination
-      while it still has a target. A suppressed assignment neither reroutes nor erases
-      the movement point nor consumes an infantry standing-position draw.
+      empty-to-empty, unless destination refresh requires reassignment (S-0502 claim 27).
+      Refresh starts absent, is temporarily enabled during placement's initial idle setup
+      and is cleared when that setup ends. Its only later activation is claim 27's
+      qualified teleport-capable vehicle/unloading-dock fallback, not successful
+      restoration of suspended locomotion. Stop, deploy, move, behaviour changes,
+      flight state, commitment and landing requests do not independently enable it.
+      An otherwise eligible assignment consumes pending refresh even when changed or
+      when point adjustment fails; a rejected balloon-hover clear does not consume it.
+    - A balloon-hover vehicle rejects an empty assignment when it has both a nonempty
+      destination and a target, and either the destination is that target object, the
+      destination is a cell whose first ground-layer listed object is the target, or
+      the horizontal target direction is within 16384 facing units of its current
+      turret facing (S-0502 claim 28). The angular comparison uses the absolute signed
+      wrapped difference in −32768 to 32767 facing units, inclusive at 16384, with
+      integer arithmetic and no rounding. It uses turret facing even without a turret,
+      not movement heading. Rejection retains the destination, movement point,
+      commitment and reservation, without search or movement-position draw. If the
+      current behaviour, or queued behaviour when none is current, is not *attack*,
+      *attack* becomes current and queued behaviour is cleared. This rejection precedes
+      equality suppression even with refresh pending; it is retention, not substitution.
+      An empty destination, absent target or nonempty requested destination cannot
+      trigger it. Claims 8 and 10 distinguish stop's retry from deploy's single request.
+      A suppressed unchanged assignment likewise neither reroutes nor erases the point.
     - Every effective destination clear reroutes a committed jumpjet under S-0502 claims
       17 and 24, whether caused by stop, deploy or behaviour-order application. The
       order-level destination is empty after rerouting, but the replacement movement
@@ -855,12 +909,15 @@ Terms).
       Without a commitment, the clear has no locomotor effect. Claim 8 gives the
       successful reroute's flight-state consequences; failure has S-0502 claim 17's outcome.
 
-    These filters and clear outcomes inherit S-0502 claims 23 and 24's backing and
-    confidence: `measurable` (J2 and J16 for own-cell infantry rejection; J19 and J22
-    for effective clears and ordinary vehicle suppression), high for the filters and
-    effective-clear dispatch. Destination-refresh activation and balloon-hover target
-    substitution remain `unmeasured` under J22's diagnostic: normal landing-first
-    vehicle runs do not isolate them. Exceptional aftermath retains medium confidence.
+    These filters and clear outcomes inherit S-0502 claims 23, 24, 27 and 28's backing
+    and confidence: `measurable` (J2 and J16 for own-cell infantry rejection; J19 and J22
+    for effective clears and ordinary vehicle suppression, J23 for infantry reassignment,
+    J24 for placement refresh and ordinary-order nonactivation; J25 for ordinary
+    balloon-hover move/attack/stop retention and retry). Confidence is high for the
+    predicates and dispatch. The later qualified teleport/dock refresh on a jumpjet,
+    combined balloon-hover infantry and stock deployable balloon-hover fixtures remain
+    `unmeasured` with those scenarios' diagnostic limitations. Exceptional aftermath
+    retains medium confidence.
 
     A qualifying reassignment at order application requests get-up at that boundary, before
     any movement in the next tick (claim 1), not at locomotor start. Merely moving to the cell
@@ -1382,7 +1439,7 @@ at the pending-order limit, and route-mode guard. Record cue requests separately
 applied: a cue is not proof that an order passed its application checks.
 
 The jumpjet destination assignments (claims 8, 10 and 21) are tested by S-0502 Scenarios
-J2, J16, J19 and J22, with their setup and recorder requirements. In particular, compare
+J2, J16, J19 and J22 to J25, with their setup and recorder requirements. In particular, compare
 deploy with a nonempty order-level destination against deploy after stop has emptied it
 while retaining a movement commitment. The effective clear reroutes and preserves the
 replacement movement point; an ordinary suppressed empty-to-empty vehicle assignment
@@ -1393,6 +1450,19 @@ falsifies the distinction. For jumpjet-type infantry outside an ion storm, J2/J1
 own-cell order must be rejected before point adjustment, including while grounded.
 Starting ascent solely from that assignment falsifies the filter. These are companion
 scenarios, not measurements already performed here.
+For J23, compare repeated nonempty infantry assignments elsewhere and repeated empty
+assignments before touchdown: each accepted reassignment repeats adjustment, including
+its eligible standing-position draw, and each committed clear reroutes. Suppression
+solely because the infantry destination is unchanged falsifies claim 21. J24 checks
+that ordinary orders do not enable refresh and that placement's temporary refresh ends.
+For J25, establish a balloon-hover vehicle's move destination, then attack a legal target
+within the retention bound. Record destination, target, current and queued behaviour,
+movement point, reservation and random stream at each attempted clear. A qualifying
+attack clear retains movement without a draw; stop must still end with an empty
+destination through its post-target-clear retry. Final retention after stop falsifies
+claim 8. Deploy has no retry and can retain the nonempty destination; that subcase is
+diagnostic until a stock deployable balloon-hover fixture exists. Record the same fixture
+limitations as S-0502 rather than injecting state or claiming measurements have run.
 
 **Scenario O1: tick boundary (claims 1 and 14).**
 - *Setup:* two identical vehicles of the human player, side by side and selected together, facing
