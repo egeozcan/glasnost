@@ -1,9 +1,9 @@
 ---
 id: Q-1033
 title: How an animation type named NONE can exist for the power-up reset lookup
-status: open
+status: answered
 related: [S-0520, S-0003, S-0004, S-0006]
-answered-by: []
+answered-by: [S-0520]
 ---
 
 ## Need
