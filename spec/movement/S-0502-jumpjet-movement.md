@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -818,23 +818,38 @@ New terms:
     Successful placement into play temporarily enables it during initial idle-behaviour
     setup and clears it when that setup finishes. Any otherwise eligible destination
     assignment during that interval is reapplied even when unchanged. This includes
-    an empty-to-empty clear, although without a movement commitment that clear cannot
-    start flight or reroute.
-    - A later activation belongs to teleport-capable vehicles attempting entry at an
-      unloading dock: their type must have the teleport-capable flag, they must not be
+    the normal initial idle fallback's empty-to-empty clear for a fresh ordinary vehicle
+    without a destination. This is an effective locomotion stop under claim 24, consuming
+    refresh but not enabling point suppression. Without a movement commitment it cannot
+    start flight or reroute. Type-specific fallback exceptions remain S-0215 claims 13
+    and 14's rules, not an unconditional clear at every re-placement.
+    - S-0207 claim 27 owns the later dock test, evaluated at each otherwise eligible
+      destination assignment after unchanged-destination rejection, using the offered
+      destination and the contact already held then. First contact, arrival and entry
+      attempts do not independently trigger it. An unchanged offer without refresh
+      does not reach it even if contact or occupancy has changed. A building destination
+      is not the required cell destination. The type must have the teleport-capable flag,
+      and the vehicle must not be
       immobilized by teleport aftereffects, must have no magnetic-lift source and must
       not be seized, and their dock contact must be a building permitting dock unloading.
       The requested destination must be a cell with no ground-layer vehicle, and their
       current locomotor must not be teleporting.
       If a suspended locomotor can finish and restore its predecessor, that restoration
       does not enable refresh. Otherwise movement is stopped, current behaviour is
-      cleared, *enter* is queued, and both destination refresh and suppression of one
-      subsequent movement-point application become pending.
-    - Once pending, refresh makes the next otherwise eligible unchanged assignment
-      effective and is consumed by that assignment. A changed assignment consumes it
-      too, even if the resulting movement-point adjustment fails. Claim 28's rejected
-      clear does not consume it. The one-application suppression named above is separate
-      from refresh; the resulting teleport/dock movement is outside this spec's scope.
+      cleared, *enter* is queued without an immediate start, and both destination refresh
+      and suppression of one nonempty movement-point application become pending.
+      S-0207 claim 27 defines restoration eligibility, including temporary driving.
+    - An effective changed or refreshed unchanged assignment consumes refresh already
+      pending, even if its movement-point adjustment fails. Claim 28's rejected clear
+      does not consume it. Refresh newly enabled by the dock fallback can remain after
+      that very assignment, unless another effective assignment consumes it.
+      Point suppression is separate: it skips the next otherwise due nonempty movement
+      point, including the triggering assignment's own point. Thus the usual qualified
+      fallback installs the order-level cell destination without its movement point,
+      consumes suppression and leaves refresh pending. A qualifying equal assignment
+      can reach the dock test again, with no once-per-entry limit. An empty clear stops
+      locomotion but does not consume nonempty-point suppression. The resulting
+      teleport/dock movement remains S-0207 claim 27's scope.
     - Apart from initial placement and that qualified teleport/dock case, stop, deploy,
       move and behaviour changes do not enable refresh. Initial placement can reach its
       temporary interval in ordinary play; the later dock case requires the independent
@@ -1540,18 +1555,27 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
 - **J24 Refresh lifetime (Q-1031).** Common setup, stock jumpjet vehicle, read-only
   assignment recorder. Record initial placement and idle-behaviour setup, then stop,
   repeated stop, move, repeated move and deploy where the stock type permits it.
-  Expected: refresh is temporary during placement, absent afterwards and not enabled
-  by these ordinary orders. An otherwise eligible equal assignment during that interval
-  is effective and consumes refresh; a subsequent unrefreshed equal assignment is
-  suppressed. If no equal assignment occurs in stock placement, record that limit:
-  do not claim the consumption observation was made. A flag remaining after placement
-  or an ordinary order newly enabling it falsifies claim 27. Diagnostic only: record a
-  teleport-capable vehicle entering an unloading dock, its contact, destination cell,
-  locomotor restoration and pending states. Qualify only runs satisfying every gate in
-  claim 27; restoration must not enable refresh, while the fallback stop must. A
-  contrary state transition falsifies that predicate. No stock jumpjet fixture for
-  that later activation is asserted; named data combining the properties is not a
-  stock-play reachability measurement. Extend recorder support only with user approval.
+  Expected: a fresh ordinary jumpjet without a destination receives an effective
+  empty-to-empty clear during initial idle fallback. It consumes refresh, enables no
+  point suppression and gains no flight without commitment. Refresh is absent after
+  setup and not newly enabled by the ordinary orders. An omitted initial clear,
+  persistence after setup or ordinary-order activation falsifies claim 27. Record
+  actual assignments separately from orders and type-specific fallback exceptions.
+  Diagnostic only, following S-0207 claim 27: record a teleport-capable vehicle's
+  effective destination assignments, contact already held, offered destination kind,
+  ground-layer vehicle presence, restoration permission, both pending states and each
+  nonempty point application within the assignment. Distinguish unchanged rejected
+  offers from effective ones. Only assignments satisfying every gate qualify:
+  restoration enables neither state; fallback normally skips that assignment's point
+  and leaves refresh, not suppression, pending. A later refreshed equal assignment can
+  qualify again. Changed contact or occupancy alone must not retest a suppressed equal
+  offer. Retesting on contact alone, delayed point suppression, loss of newly enabled
+  refresh without another effective assignment, or a once-per-entry limit falsifies
+  the contract. Record an empty-clear control separately: it does not consume pending
+  nonempty-point suppression. No stock jumpjet fixture for later activation is asserted.
+  A run missing those conditions is inconclusive, not evidence that the states can be
+  omitted. Named data combining the properties is not a stock-play reachability
+  measurement. Extend recorder support only with user approval.
 - **J25 Balloon-hover clear retention (Q-1031).** Common setup, stock balloon-hover
   vehicle with a legal target, 20 exact seeds. Move towards a distant cell, then attack
   a legal target while the recorded turret facing is within claim 28's angular bound
