@@ -1,9 +1,9 @@
 ---
 id: Q-0983
 title: When the own-cell shot of a radiation-immune deployed infantry unit is made
-status: open
+status: answered
 related: [S-0215, S-0525, S-0107]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need

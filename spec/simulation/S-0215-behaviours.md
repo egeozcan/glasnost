@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 50
+revision: 51
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983]
 supersedes: []
 ---
 
@@ -105,6 +105,12 @@ not installation history or the first nonempty position. S-0301 claims 9 and 14 
 the empty-secondary effects and delayed-shot rules; S-0406 claim 12 supplies position/count
 precedence, with weapon resolution owned by S-0308 claim 12. Previously claim 32 already
 supplied the predicate and attempt order, but left these combinations unsettled.
+Q-0983 is answered in full by claim 31: the immune deployer's own-cell secondary shot
+is made during the deciding processing, without a fire-frame wait, and the own-cell
+target is dropped in that processing after the shot. Previously the table already gave
+the shot, target removal and sequence delay, but did not distinguish this immediate
+shot from S-0107 claim 11's ordinary fire-frame shot. S-0525 claims 1 and 4 already
+own radiation creation and top-up at detonation, not the decision to shoot.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -2088,9 +2094,28 @@ apply in our engine to the actors of every player house.
     | deployed | its type's undeploy delay is 0 or more | starts its *undeploy* sequence | frame count of that sequence |
     | deployed | undeploy delay negative, its type deploys to fire and is not immune to radiation | runs its deployed-firing rule (S-0517 claim 16) | standard delay |
     | deployed | undeploy delay negative, deploys to fire, immune to radiation, and its cell has radiation of level at least *R* | nothing | *D*<sub>r</sub> + *U*(10, 20) |
-    | deployed | undeploy delay negative, deploys to fire, immune to radiation, its cell has no radiation or a level below *R*, and the firing rules let it fire at its own cell | fires at its own cell, drops the target, starts its *deployed-fire* sequence | frame count of that sequence |
+    | deployed | undeploy delay negative, deploys to fire, immune to radiation, its cell has no radiation or a level below *R*, and the firing rules let it fire at its own cell | fires its secondary weapon at its own cell during this processing, drops the target in this processing after the shot, starts its *deployed-fire* sequence | frame count of that sequence |
     | deployed | the same, but the firing rules do not let it fire | drops the target | *D*<sub>r</sub> + *U*(10, 20) |
     | undeployed | **original only:** computer-controlled owner, type deploys to fire, not immune to radiation, undeploy delay negative, no destination, no guard spot or standing on the guard spot's cell, and the ticks since the start tick exceed the auto-deploy delay *A* for the owner's difficulty index | if it is moving, it is told to stop; otherwise it starts its *deploy* sequence | standard delay if moving; else frame count of the *deploy* sequence |
+
+    **Own-cell shot timing (Q-0983).** The successful radiation-immune row makes the shot
+    on the tick of the processing that decides to fire, not on a later sequence fire frame.
+    No fire-frame field applies to this shot: neither a frame of the *deployed-fire* kind
+    nor a standing, prone or secondary-weapon fire frame delays it. The secondary weapon
+    is used even for a type with the spray-attack flag. The own cell is the target for
+    the firing check and this immediate shot only. The processing clears that target
+    after firing and before starting *deployed-fire*; it does not retain it until an
+    animation frame. The sequence is presentation of the shot already made, not a
+    second pending shot under S-0107 claim 11. Its integer frame count is used unchanged
+    as ticks until the next processing, not as a shot-release delay (Terms).
+    The refusal row likewise clears the temporarily assigned own-cell target in the
+    deciding processing. A later independently acquired target follows its usual rules.
+
+    Radiation creation or top-up follows the shot's detonation under S-0525 claims 1
+    and 4. For an own-cell shot that detonates immediately, the field therefore exists
+    or is topped up on this processing's tick; it does not wait for *deployed-fire* to
+    reach any fire frame. This does not replace projectile travel or detonation rules
+    for other imported weapons.
 
     In the radiation rows, “its cell has radiation of level at least *R*” means that the unit's
     cell is the centre cell of a field whose current integer field level is at least *R*
@@ -2125,11 +2150,14 @@ apply in our engine to the actors of every player house.
     house's difficulty index since that behaviour started; our AI can get the same with a deploy order.
     - Backing: `measurable` (scenario B12, case b, for the first row and its delay; scenario B19
       for the other rows, with case d for the radiation-immune unit that the firing rules do not
-      let fire).
+      let fire; case e for immediate shot timing, independence from fire frames,
+      target removal and same-tick radiation from immediate detonation).
       `unmeasured`: the original's *A* when the list has no entry for the owner's difficulty index,
       because an unspecified value cannot be confirmed by any result (as in claim 36, part b). Our
       engine's result for that case is a design rule and needs no backing.
-    - Confidence: high (the first row and the auto-deploy row's delays); medium (the radiation rows
+    - Confidence: high (the first row and the auto-deploy row's delays, the immediate
+      secondary shot, absence of a fire-frame wait and same-processing target removal),
+      medium (the radiation rows
       and the auto-deploy conditions, and that a missing entry gives no defined *A* in the original)
 
 32. **Buildings in guard and attack.** A building processes *guard*, *sticky* and *area guard* by the
@@ -3443,6 +3471,8 @@ absent key keeps the value the earlier layers left).
 | `Power` | building type section | claim 32: the building drains power when the value is negative (the power rules belong to the structures topic) | integer |
 | `ImmuneToRadiation` | type section | claim 31 | boolean |
 | `RadLevel` | weapon section | *W* of claim 31 (of the secondary weapon) | integer |
+| No data key | not applicable | claim 31's immediate secondary shot and same-processing own-cell target removal (Q-0983) | fixed behaviour, no absent-key default; no fire-frame field controls this shot |
+| `DeployedFire` | art sequence section | claim 31's post-shot sequence and its frame-count processing delay | sequence entry, parsing and absent-entry behaviour owned by S-0107 claim 1 and its Import mapping; does not schedule this shot |
 | `AreaFire` | weapon section | claim 30 (of the deploy weapon, Terms) | boolean |
 | `Burst` | weapon section | upgrade weapon gate's burst-count comparisons (claim 32) | integer shots; engine default 1, owned by S-0301 claim 4 |
 | `IsAnimDelayedFire`, `DelayedFireDelay` | art, building image section | ordinary animation-delayed firing, bypassed by an active passing upgrade gate (claim 32; S-0301 claim 14) | boolean, default no; integer ticks, default 0 |
@@ -4223,6 +4253,23 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   Falsified by a deploy before the list delay, a deploy that follows the entry of another index
   (for example the easy computer's unit deploying after the first entry), other intervals, or a
   draw outside 10 to 20. Runs: three per computer entry in case a, 100 intervals each in cases b to d.
+  (e) Timing control for Q-0983: on a small clear flat skirmish map, deploy a stock
+  radiation-immune infantry unit that deploys to fire, with negative undeploy delay,
+  on a cell without a centred field. Keep enemies out of its acquisition range and
+  hold game speed fixed, with director and mods off. Use the measurement setup's
+  read-only recorder and tick-aligned capture to record the deciding processing tick,
+  shot, target before and after processing, sequence start and field creation or top-up.
+  Expected: the secondary shot occurs in that processing, the own-cell target is absent
+  at its end, and immediate detonation creates or tops up radiation on that same tick.
+  Repeat as a separately named data-only test with standing, prone and secondary
+  fire-frame fields all later than frame zero, then change those fields without
+  changing the deployed-fire frame count. Expected: the shot remains immediate and
+  the next processing delay remains that frame count in ticks. No second shot from
+  this presentation sequence is expected without a new firing decision or target.
+  A shot postponed to any fire frame, target retained until that frame, or a delay
+  changed solely by those fields falsifies the claim. Tool: proposed read-only
+  tick recorder plus scripted deploy input, 800×600 capture; no harness change is
+  performed here. Runs: three stock and three per named-data variant.
 - **B20 (claim 20).** Skirmish: a computer-controlled house with armed units in *guard* near its
   base and not in a team. An enemy attacks a base building out of those units' own range. With
   stock rules, record which units the computer sends to defend; then with a named test file that
