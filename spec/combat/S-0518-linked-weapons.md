@@ -2,7 +2,7 @@
 id: S-0518
 title: Linked weapons (prism support beams, charging of overpowerable buildings)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -193,9 +193,11 @@ claims (Open questions).
 ### Charging of overpowerable buildings
 
 11. **The charge shot.** A detonation that selects the electric-charge effect skips ordinary
-    area damage at any target. Special detonation effects are mutually exclusive: mind control
-    takes precedence as specified in S-0601 claim 5, and demolition charge planting also takes
-    precedence over electric charging if the same warhead enables them too. It does not suppress effects shared
+    area damage at any target. S-0514 claim 20 owns the complete special-effect selection and
+    precedence: mind control and demolition charge planting outrank electric charging, which
+    outranks parasite attachment and temporal erasure. A selected charge effect that cannot
+    register a charger still suppresses all lower-priority effects and ordinary damage; it does
+    not fall through to another effect. It does not suppress effects shared
     by detonations, including radiation creation before effect selection and the later
     detonation animation, debris and flash where configured. If the projectile's target is a
     building and its firer is an infantry unit, the electric-charge effect puts the firer on
@@ -557,6 +559,12 @@ For every case, a different recorded result from the stated expectation falsifie
   Add configured charge-warhead debris/flash and a charge weapon's radiation field: expect
   those common effects despite the ordinary-area-damage bypass. Combine electric charge with
   mind control or charge planting separately: expect the higher-priority effect, not registration.
+  Separately combine charging with parasite attachment or temporal erasure, using firers capable
+  of the lower-priority effect: expect registration only on a building hit by infantry. Then
+  deliver the same mixed-effect shots to a non-building, or from a non-infantry firer: expect
+  no registration, parasite attachment, erasure or ordinary damage. Confirm delivery with a
+  delayed projectile if ordinary firing legality otherwise prevents the test. A lower-priority
+  effect or ordinary damage after failed charging falsifies claim 11's no-fallthrough rule.
 
 ## Open questions
 
