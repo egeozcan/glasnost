@@ -1,9 +1,9 @@
 ---
 id: Q-0982
 title: Which of the two ticks an in-place deploy or undeploy completes on
-status: open
+status: answered
 related: [S-0517, S-0109]
-answered-by: []
+answered-by: [S-0517]
 ---
 
 ## Need
