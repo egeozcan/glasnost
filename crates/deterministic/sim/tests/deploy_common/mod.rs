@@ -2,7 +2,7 @@
 //! vehicles that deploy in place, a deploy-fire vehicle, deploy-to-fire
 //! vehicles, a deployed infantry type and invented deploying presentations.
 //! Every name and number is invented; no game data.
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 #[path = "../jump_common/mod.rs"]
 mod jump_common;

@@ -184,6 +184,15 @@
           ],
           "default": null
         },
+        "end": {
+          "description": "`End`, the end field *E* as written (S-0109 Import mapping: absent\nor −1 take the sprite's value).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "frame_count": {
           "description": "The image-frame count *F* of the type's current (drawn) sprite\n(S-0513 claim 46, not twice the middle frame); absent when the import\nhad no such sprite.",
           "type": [
@@ -258,12 +267,29 @@
           ],
           "default": null
         },
+        "shadow": {
+          "description": "`Shadow`, the shadow-type flag (S-0109 Import mapping); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "spawns_particle": {
           "description": "`SpawnsParticle`: the particle type the middle event requests, by\ntype name (S-0109 claim 14, S-0202 claim 15).",
           "type": [
             "string",
             "null"
           ],
+          "default": null
+        },
+        "start": {
+          "description": "`Start`, the initial image frame *a* (S-0109 Import mapping; S-0517\nF1 reads the presentation's start, end and delay).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "tiberium_chain_reaction": {
@@ -10194,6 +10220,17 @@
           "format": "int32",
           "default": null
         },
+        "deploy_time": {
+          "description": "`DeployTime`, game minutes: read, with no effect on any vehicle\n(S-0517 claim 15).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "deploy_to_fire": {
           "description": "`DeployToFire` (S-0310 claim 9).",
           "type": [
@@ -10222,6 +10259,14 @@
           "description": "`Deployer`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "deploying_anim": {
+          "description": "`DeployingAnim`, the deploying presentation: an animation type name\n(S-0517 Import mapping, claims 4, 6 and 12).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null
@@ -11024,6 +11069,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "unloading_class": {
+          "description": "`UnloadingClass`, the deployed image type: a vehicle type name\n(S-0517 Import mapping, claim 12).",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "vehicle_thief": {

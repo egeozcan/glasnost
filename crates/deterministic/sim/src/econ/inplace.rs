@@ -116,7 +116,7 @@ pub fn deployed_image(w: &World, id: ObjectId) -> Option<u32> {
 // The presentation (F1, F2)
 
 /// The deploying presentation of the vehicle's type (claims 4 and 6).
-fn presentation<'a>(w: &'a World, id: ObjectId) -> Option<&'a AnimRules> {
+fn presentation(w: &World, id: ObjectId) -> Option<&AnimRules> {
     let name = unit_of(w, id)?.deploying_anim.as_deref()?;
     w.rules().animation(name)
 }

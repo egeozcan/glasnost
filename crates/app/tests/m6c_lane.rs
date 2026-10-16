@@ -44,6 +44,7 @@ const SCENES: &[Scene] = &[
     ("infiltrate", spy_infiltrates),
     ("tech", engineer_takes_tech_building),
     ("jumpjet", jumpjet_flies),
+    ("deploy", unit_deploys),
 ];
 
 #[test]
@@ -578,6 +579,101 @@ fn jumpjet_flies(lane: &mut Lane) {
     }
     lane.ticks(3);
     lane.save("jumpjet-landed");
+}
+
+/// S-0517: a vehicle that deploys in place is sent the click a person gives
+/// on it (S-0214); it is drawn with its deploying presentation while it
+/// changes (its own body hidden), with the deployed image when its type
+/// names one, and a second click packs it up again.
+fn unit_deploys(lane: &mut Lane) {
+    use glasnost_sim::econ::inplace::{self, Form};
+    let w = lane.world();
+    let r = w.rules();
+    let pick = |animated: bool| {
+        (0..r.vehicles.len()).find_map(|i| {
+            r.unit(Kind::Vehicle, i as u32)
+                .filter(|u| {
+                    u.simple_deployer
+                        && u.passengers == 0
+                        && !u.harvester
+                        && u.deploying_anim.is_some() == animated
+                        && !u.raw.deploys_into.as_deref().is_some_and(|d| !d.is_empty())
+                })
+                .map(|u| (u.name.clone(), u.jumpjet_locomotor))
+        })
+    };
+    let found = pick(true).or_else(|| pick(false));
+    let count = |f: &dyn Fn(&glasnost_sim::rules::UnitRules) -> bool| {
+        (0..r.vehicles.len())
+            .filter(|&i| r.unit(Kind::Vehicle, i as u32).is_some_and(f))
+            .count()
+    };
+    println!(
+        "vehicle types {}: simple deployers {}, with a deploying animation {}, deploying into a building {}",
+        r.vehicles.len(),
+        count(&|u| u.simple_deployer),
+        count(&|u| u.deploying_anim.is_some()),
+        count(&|u| u.raw.deploys_into.is_some())
+    );
+    println!("in-place deploying vehicle type found: {}", found.is_some());
+    let Some((name, flier)) = found else { return };
+    println!("a jumpjet type (landing first): {flier}");
+    let local = lane.local();
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 3, home.y + 3));
+    let unit = lane.spawn(Kind::Vehicle, &name, local, at);
+    lane.look_at(at);
+    lane.ticks(4);
+    lane.save("deploy-before");
+    let sent = lane.order(local, unit, ClickOn::Object(unit));
+    println!("click on the unit: {sent} orders");
+    if sent == 0 {
+        glasnost_sim::orders::issue(
+            lane.world_mut(),
+            local,
+            glasnost_sim::orders::Order::Deploy { actor: unit },
+        );
+    }
+    let mut shot = false;
+    for _ in 0..600 {
+        lane.ticks(1);
+        let f = inplace::form(lane.world(), unit);
+        if matches!(f, Form::Deploying { .. }) && !shot {
+            lane.ticks(2);
+            lane.save("deploy-transition");
+            shot = true;
+        }
+        if f == Form::Deployed {
+            break;
+        }
+    }
+    println!(
+        "form {:?}, body hidden {}, deployed image {:?}, behaviour {:?}",
+        inplace::form(lane.world(), unit),
+        inplace::body_hidden(lane.world(), unit),
+        inplace::deployed_image(lane.world(), unit),
+        lane.world().obj(unit).map(|o| o.beh.current)
+    );
+    lane.ticks(6);
+    lane.save("deploy-deployed");
+    let again = lane.order(local, unit, ClickOn::Object(unit));
+    println!("second click: {again} orders");
+    if again == 0 {
+        glasnost_sim::orders::issue(
+            lane.world_mut(),
+            local,
+            glasnost_sim::orders::Order::Deploy { actor: unit },
+        );
+    }
+    for _ in 0..600 {
+        lane.ticks(1);
+        if inplace::form(lane.world(), unit) == Form::Mobile {
+            break;
+        }
+    }
+    lane.ticks(6);
+    println!("form after: {:?}", inplace::form(lane.world(), unit));
+    lane.save("deploy-packed");
 }
 
 // ---------------------------------------------------------------------------
