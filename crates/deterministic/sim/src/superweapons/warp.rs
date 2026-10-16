@@ -7,9 +7,9 @@
 //! other part of its turn (S-0513 claim 48, confirmed); for the other stages
 //! before its arrival hold, whether it takes the rest of its turn is
 //! unmeasured in the original; our engine's rule (S-0513 claim 51, engine
-//! design) is that none of the five kinds of ordinary work runs there, so the
-//! warp update is the whole turn there (Q-0870 interim: the other parts of the
-//! turn, the cloak update, reload timers and so on, are left out as before).
+//! design, with S-0203 claim 4 revision 32) is that the warp update is the
+//! whole member turn there, apart from the intrinsic exceptions and the
+//! elapsed reload clock (`combat::fire::reload_elapsed`).
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;

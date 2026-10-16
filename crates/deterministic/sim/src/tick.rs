@@ -86,16 +86,16 @@ fn object_turn(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     // A building in a delayed-kill countdown is killed but alive (S-0302 claim 16): it takes its whole turn.
     let dead = crate::combat::damage::dead(o);
-    // spec: S-0309 claim 15 (the expected remaining health changes in the object's own turn)
-    crate::combat::acquire::expected_health_turn(w, id);
     let Some(o) = w.obj(id) else { return };
     let kind = o.kind;
     if let Some(ob) = w.obj_mut(id) {
         ob.last_turn = t;
     }
-    // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
-    crate::superweapons::protect::tint_turn(w, id);
     if dead {
+        // spec: S-0309 claim 15 (the expected remaining health changes in the object's own turn)
+        crate::combat::acquire::expected_health_turn(w, id);
+        // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
+        crate::superweapons::protect::tint_turn(w, id);
         if kind == Kind::Building {
             // spec: S-0312 claim 21 (a building awaiting removal: the general part of its turn, then its removal)
             process::turn(w, id);
@@ -122,10 +122,17 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::death::infantry_death_turn(w, id);
         return;
     }
-    // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claims 48 and 51 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; engine design for the other stages before the arrival hold: no ordinary healing, behaviour, movement, firing or turret turning, and (Q-0870 interim) nothing else of the turn either, so the warp update is the whole turn; no ordering of the warp after the protection tint is implied, and ours puts it after)
+    // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claims 48 and 51 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; engine design for the other stages before the arrival hold: no ordinary healing, behaviour, movement, firing or turret turning, and S-0203 claim 4 revision 32: the warp update is the whole member turn, with the intrinsic exceptions)
     if crate::superweapons::warp::turn(w, id) {
+        // spec: S-0203 claim 4 and S-0301 claim 11 (the reload countdown's elapsed time still passes in an excluded warp turn; no grant, no restart)
+        crate::combat::fire::reload_elapsed(w, id);
         return;
     }
+    // spec: S-0203 claim 4 (expected-health bookkeeping and protection-brightness phase processing are ordinary work: suppressed through arrival effects, eligible in the hold after its hold-end test, with no catch-up)
+    // spec: S-0309 claim 15 (the expected remaining health changes in the object's own turn)
+    crate::combat::acquire::expected_health_turn(w, id);
+    // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
+    crate::superweapons::protect::tint_turn(w, id);
     // spec: S-0504 claim 4 (a sinking vessel's own update first descends, and may leave play at once)
     if crate::naval::sinking_turn(w, id) {
         return;

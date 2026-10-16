@@ -375,3 +375,32 @@ fn per_tick_approach_follows_the_per_tick_search() {
     };
     assert!(c.x < at(2, 0).x, "{c:?}");
 }
+
+// spec: S-0215 claim 37 (a2) (revision 48: a processing's approach does not exempt its resulting state from the later rule; if the processing left a destination the later rule does not apply, so the destination and the target are still held at the end of that tick; the claim specifies the resulting state, not a count of internal evaluations)
+#[test]
+fn a_destination_left_by_the_processing_survives_the_later_rule() {
+    let r = rules(None, None);
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let (a, t) = duel(&mut w, 0, 10, Behaviour::Attack);
+    w.obj_mut(a).unwrap().health = i32::MAX / 2;
+    w.obj_mut(t).unwrap().health = i32::MAX / 2;
+    testkit::run(&mut w, 1);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, Some(Target::Object(t)), "kept at the end of the tick");
+    assert!(o.dest.is_some(), "the approach destination is held");
+}
+
+// spec: S-0215 claim 37 (a2) (revision 48: with no destination and an in-range target the unchanged state imposes no requirement to repeat an indistinguishable evaluation; the end state is target kept and no destination, and the claim requires no evaluation count)
+#[test]
+fn an_unchanged_in_range_state_keeps_the_target_and_takes_no_destination() {
+    let r = rules(None, None);
+    let mut w = testkit::game_with(&r, SIZE, 3);
+    let (a, t) = duel(&mut w, 0, 3, Behaviour::Attack);
+    w.obj_mut(t).unwrap().health = i32::MAX / 2;
+    for _ in 0..3 {
+        testkit::run(&mut w, 1);
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.target, Some(Target::Object(t)));
+        assert_eq!(o.dest, None);
+    }
+}

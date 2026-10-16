@@ -869,8 +869,27 @@ fn set_disabled(w: &mut World, h: HouseId, unit: u32, disabled: bool) {
         .map(|o| o.id)
         .collect();
     for id in ids {
+        let was = unit_disabled(w, id);
         apply_disabled(w, id, disabled);
+        if was != disabled {
+            // spec: S-0215 claim 9 (the guard reset applies to an actor that is deactivated or reactivated; B45 f: owner unchanged, guard current at once, queue empty, target, destination and guard spot clear, timer expired now, the suspended slot kept)
+            guard_reset(w, id);
+        }
     }
+}
+
+/// The guard reset (S-0215 claim 9, Terms): *guard* is forced, and the
+/// target, the destination and the guard spot are cleared.
+fn guard_reset(w: &mut World, id: ObjectId) {
+    let t = w.tick;
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    if let Some(ob) = w.obj_mut(id) {
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        ob.guard_spot = None;
+        ob.beh.force(crate::rules::Behaviour::Guard, t, stale);
+    }
+    super::assign_destination(w, id, None);
 }
 
 /// Sets a vehicle's disabled flag. A hovering vehicle is switched off when

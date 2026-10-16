@@ -380,6 +380,21 @@ pub fn reload_turn(w: &mut World, id: ObjectId) {
     }
 }
 
+/// The reload countdown's elapsed time in a warp turn that excludes the
+/// ordinary reload work (S-0203 claim 4, S-0301 claim 11): the countdown
+/// advances one, nothing is granted and nothing is restarted. Not the
+/// moving-vehicle freeze.
+pub fn reload_elapsed(w: &mut World, id: ObjectId) {
+    let Some(ob) = w.obj_mut(id) else { return };
+    if ob.kind != Kind::Vehicle {
+        return;
+    }
+    // spec: S-0301 claim 11 (warp exclusion: elapsed time on an existing countdown still passes; a never-started countdown stays unstarted)
+    if let Some(left) = ob.combat.reload_left.as_mut() {
+        *left -= 1;
+    }
+}
+
 /// A vehicle's firing-frame counter in its turn (S-0301 claim 13).
 pub fn firing_frame_turn(w: &mut World, id: ObjectId) {
     let Some(ob) = w.obj_mut(id) else { return };

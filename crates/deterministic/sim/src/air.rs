@@ -556,16 +556,32 @@ pub fn removal_marks(w: &World, id: ObjectId) -> Option<Vec<(CellXY, Layer)>> {
     if !is_aircraft(w, id) {
         return None;
     }
+    let layer = mark_layer(w, id);
     Some(
         st(w, id)
             .mark
-            .map(|c| vec![(c, Layer::Ground)])
+            .map(|c| vec![(c, layer)])
             .unwrap_or_default(),
     )
 }
 
+/// The occupancy record that carries an ordinary aircraft's object-present
+/// flag at a marking or clearing event.
+fn mark_layer(w: &World, id: ObjectId) -> Layer {
+    // spec: S-0209 claim 1 (other objects) and S-0501 claim 44 (deck when a high bridge is present and the actual world height is at least the terrain surface height plus 416 leptons, signed integer leptons; otherwise ground; neither the listing nor the aircraft's own deck mark substitutes for this test)
+    let Some(o) = w.obj(id) else {
+        return Layer::Ground;
+    };
+    if w.high_bridge(o.pos.cell()) && o.pos.z - w.surface_at(o.pos.x, o.pos.y) >= DECK_ALLOWANCE {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    }
+}
+
 /// Clears an aircraft's object-present mark (going inside a carrier).
 pub fn clear_mark(w: &mut World, id: ObjectId) {
+    let layer = mark_layer(w, id);
     let Some(c) = w
         .obj_mut(id)
         .and_then(|o| o.air.as_mut())
@@ -573,12 +589,11 @@ pub fn clear_mark(w: &mut World, id: ObjectId) {
     else {
         return;
     };
-    if let Some(rec) = w.cells.occ_mut(c, Layer::Ground) {
+    if let Some(rec) = w.cells.occ_mut(c, layer) {
         rec.others = rec.others.saturating_sub(1);
     }
 }
 
-// Q-0872 interim: the object-present flag of a deck-marked aircraft at rest stays in the ground record of its cell.
 fn set_mark(w: &mut World, id: ObjectId) {
     let Some(c) = w.obj(id).map(|o| o.pos.cell()) else {
         return;
@@ -586,8 +601,9 @@ fn set_mark(w: &mut World, id: ObjectId) {
     if st(w, id).mark.is_some() {
         return;
     }
-    // spec: S-0209 claim 1 (an aircraft on the ground sets the object-present flag)
-    if let Some(rec) = w.cells.occ_mut(c, Layer::Ground) {
+    // spec: S-0209 claim 1 (an aircraft on the ground sets the object-present flag) and S-0501 claim 44 (the deck record only at rest on a high-bridge deck, the ground record otherwise)
+    let layer = mark_layer(w, id);
+    if let Some(rec) = w.cells.occ_mut(c, layer) {
         rec.others = rec.others.saturating_add(1);
     }
     if let Some(a) = st_mut(w, id) {

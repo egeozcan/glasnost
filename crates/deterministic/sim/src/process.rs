@@ -505,7 +505,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0215 claim 33 (b) and (d) (the per-tick search after the processing, judged on the behaviour it leaves)
     crate::combat::acquire::per_tick(w, id);
-    // spec: S-0215 claim 37 (a) and (a2) (the per-tick approach of an actor that cannot reach its target follows the processing and the per-tick search, with no one-step-per-tick limit)
+    // spec: S-0215 claim 37 (a) and (a2) (the per-tick approach of an actor that cannot reach its target follows the processing and the per-tick search; revision 48 specifies the resulting state, not a count of internal evaluations)
     crate::approach::per_tick(w, id);
 }
 

@@ -593,6 +593,65 @@ fn claim_13_control_centres() {
     assert!(power::unit_disabled(&w, d2));
 }
 
+// spec: S-0215 claim 9 (the guard reset applies to an actor that is deactivated or reactivated: B45 f, a control-centre switch gives the dependent vehicle guard current at once, an empty queue, no target, destination or guard spot, the timer expired now and the start tick reset, owner unchanged and the suspended slot kept) and S-0405 claim 13
+#[test]
+fn claim_13_control_centre_switch_gives_the_dependent_vehicle_a_guard_reset() {
+    let mut w = game(&rules());
+    put(&mut w, "PLANT", 0, 0, 0);
+    let k = put(&mut w, "CENTRE", 0, 2, 0);
+    let d = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "DRONE",
+        0,
+        testkit::mid(SIZE, -4, 4),
+        0,
+    );
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    let foe = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "DRONE",
+        1,
+        testkit::mid(SIZE, -4, 8),
+        0,
+    );
+    for round in 0..2 {
+        {
+            let o = w.obj_mut(d).unwrap();
+            o.beh.current = Some(Behaviour::Attack);
+            o.beh.queued = Some(Behaviour::Move);
+            o.beh.suspended = Some(Behaviour::AreaGuard);
+            o.target = Some(glasnost_sim::world::Target::Object(foe));
+            o.dest = Some(glasnost_sim::world::Target::Cell(testkit::mid(SIZE, 0, 8)));
+            o.guard_spot = Some(glasnost_sim::world::Target::Cell(testkit::mid(SIZE, 0, 9)));
+        }
+        let order_on = round == 1;
+        order(
+            &mut w,
+            A,
+            if order_on {
+                Order::PowerOn { actor: k }
+            } else {
+                Order::PowerOff { actor: k }
+            },
+        );
+        for _ in 0..3 {
+            step(&mut w);
+        }
+        assert_eq!(power::unit_disabled(&w, d), !order_on, "round {round}");
+        let o = w.obj(d).unwrap();
+        assert_eq!(o.owner, Some(A));
+        assert_eq!(o.beh.current, Some(Behaviour::Guard), "round {round}");
+        assert_eq!(o.beh.queued, None);
+        assert_eq!(o.target, None);
+        assert_eq!(o.guard_spot, None);
+        assert_eq!(o.beh.suspended, Some(Behaviour::AreaGuard), "kept");
+    }
+}
+
 // spec: S-0405 Edge cases (quirks.shared_control_centre_count off: the count is kept per powered-unit type)
 #[test]
 fn claim_13_per_type_count() {
