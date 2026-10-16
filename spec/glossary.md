@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 40
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: []
 supersedes: []
@@ -1216,7 +1216,9 @@ that every loading, unloading or docking manoeuvre creates one. See S-0208 (Term
 Concrete factory examples are a ground vehicle leaving its factory, whose clear
 report ends contact and tether (S-0417, claims 2 and 7), and an infantry factory or cloning
 building giving a released infantry unit clearance to unload, tethering it when the contact
-exchange succeeds until its next cell-arrival clear report (S-0417, claim 10).
+exchange succeeds (S-0417, claim 10). A released jumpjet infantry unit or vehicle can end both
+links with an ascent clear report, without a cell arrival (S-0417, claim 15); ordinary walking
+and teleporting infantry use the arrival reports of S-0417, claim 10.
 A newly released aircraft that appears docked at its factory is tethered from its release tick
 unless its type must return to a dock; that type refuses the release tether. Both cases establish
 contact (S-0417, claim 11). This release example is not provisional. Landing tethering and the
