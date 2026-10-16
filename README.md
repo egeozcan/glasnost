@@ -23,9 +23,10 @@ The simulation is deterministic: integers only and one seeded random stream. Nat
 
 **M6a (first wave of M6) adds** aircraft and air pads, naval units (ships move on water, wake, sink, and are built at naval yards), the V3-style guided missile launcher, and the parasite (a drone that latches inside a vehicle). Carriers and their spawned craft fight. The computer opponent builds aircraft and pads, navies on maps with water, and missile launchers.
 
+**M6b (second wave of M6) adds** hover and amphibious movement over water, transports (units board, ride and unload; the opponent ferries infantry across water), bridges (destruction from the hut, collapse, repair by an engineer), cloaking and stealth (cloaked units, cloak fields, sensors), walls and gates, the teleporting locomotor, the repair depot and the ship-repair yard, the superweapons (nuclear strike, weather storm, iron curtain, chronosphere, force shield, spy plane and paradrop, with the sidebar icons, aiming and radar launch), parachutes and paradrops, the remaining multiplayer map trigger actions, and animation playback. The opponent uses transports and every superweapon kind it can aim, hover units on water maps, and repair depots. Aircraft cast their shadow on the ground.
+
 **Not there yet (later M6 parts and beyond):**
-- ship repair at yards (the depot cycle), garrisons, bridges, cloaking, paradrops and superweapons;
-- full animation playback;
+- garrisons, engineers and capture, spies, jumpjets, crates and the other M6c abilities; psychic and genetic superweapons;
 - multiplayer over the network.
 
 ## You need your own copy of the game
