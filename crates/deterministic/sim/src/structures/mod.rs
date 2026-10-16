@@ -9,9 +9,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::world::ObjectId;
 
+pub mod engineer;
 pub mod entry;
 pub mod garrison;
 pub mod ownership;
+pub mod spy;
 
 /// The structure-topic state of an object (S-0508 Terms): a garrisonable
 /// building's occupants and shared firing index, an occupant's building.

@@ -170,6 +170,7 @@ async fn smoke_async(
                         | Effect::Hit { .. }
                         | Effect::OverlayCrushed { .. }
                         | Effect::Superweapon { .. }
+                        | Effect::Captured { .. }
                         | Effect::Cloak { .. } => {}
                     }
                 }

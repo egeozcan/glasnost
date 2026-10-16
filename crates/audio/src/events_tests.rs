@@ -1632,3 +1632,63 @@ fn abandoned_announcement_follows_the_radar_event() {
         "a nearby garrison abandoned event suppresses the announcement"
     );
 }
+
+// spec: S-0509 claim 12 and S-0701 claim 39 (the capture and loss announcements: eligible when the cause requests one, the local player is the old or new owner and the new owner's country is not passive; an ordinary building uses the captured entry for both)
+#[test]
+fn capture_announcements() {
+    use glasnost_sim::econ::TypeRef;
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let ty = TypeRef {
+        kind: Kind::Vehicle,
+        index: 0,
+    };
+    let fx = |old: u8, new: u8, announce: bool| Effect::Captured {
+        building: ObjectId(1),
+        of: ty,
+        old: Some(HouseId(old)),
+        new: Some(HouseId(new)),
+        pos: at,
+        announce,
+    };
+    let mut a = announcing(&w, &[(Announcement::BuildingCaptured, "Capt")]);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[fx(1, 0, true)], &mut u);
+    assert!(announced(&mut a, 1000), "the local player gained it");
+    a.mixer_mut().clear();
+    a.tick(&w, &[fx(0, 1, true)], &mut u);
+    assert!(
+        announced(&mut a, 2000),
+        "the local player lost it: the same entry for an ordinary building"
+    );
+    a.mixer_mut().clear();
+    a.tick(&w, &[fx(1, 0, false)], &mut u);
+    assert!(
+        !announced(&mut a, 3000),
+        "a cause that requests none: nothing"
+    );
+    a.tick(&w, &[fx(1, 1, true)], &mut u);
+    assert!(
+        !announced(&mut a, 4000),
+        "the local player is neither owner"
+    );
+}
+
+// spec: S-0509 claim 5 (the game-wide building-repaired sound plays at the building's centre, for every player)
+#[test]
+fn building_repaired_sound() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let mut a = audio(&w, &["Fixed"]);
+    let mut n = SoundNames::default();
+    n.building_repaired = Some("Fixed".into());
+    a.set_names(n);
+    let fx = Effect::Sound {
+        sound: Sound::BuildingRepaired,
+        of: None,
+        house: Some(HouseId(1)),
+        pos: Some(at),
+    };
+    a.tick(&w, &[fx], &mut Rng::new(1));
+    assert_eq!(heard(&mut a, 0), ["Fixed"]);
+}

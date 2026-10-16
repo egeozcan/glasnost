@@ -110,6 +110,25 @@ pub enum Effect {
         /// What happened.
         event: crate::cloak::machine::CloakEvent,
     },
+    /// A building changed owner (S-0509 claim 12): for the capture and loss
+    /// announcements (S-0701 claim 39), the *captured* radar event and the
+    /// local player's building placement (claim 15). `announce` is whether
+    /// the cause requests an announcement (an engineer capture or a
+    /// vehicle-like takeover do; a trigger and the occupation rules do not).
+    Captured {
+        /// The building.
+        building: ObjectId,
+        /// Its type.
+        of: crate::econ::TypeRef,
+        /// The old owner.
+        old: Option<crate::world::HouseId>,
+        /// The new owner.
+        new: Option<crate::world::HouseId>,
+        /// Where (the building's position).
+        pos: Pos,
+        /// Whether the cause requests an announcement.
+        announce: bool,
+    },
     /// A superweapon presentation event (S-0512 claim 5, S-0513 claim 5).
     Superweapon {
         /// What happened.
@@ -169,6 +188,9 @@ pub enum Sound {
     RepairBridge,
     /// The game-wide cloak sound (S-0516 claim 15), at the object.
     Cloak,
+    /// The game-wide building-repaired sound (S-0509 claim 5), at the
+    /// repaired building's centre.
+    BuildingRepaired,
     /// An entry made a building's occupant count 1 (S-0508 claim 6): the
     /// garrisoned announcement and sound for the entering unit's house, the
     /// sound at the entering unit's last position; `of` is the building's type.

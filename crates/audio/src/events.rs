@@ -102,6 +102,7 @@ enum RadarKind {
     AllyAttacked,
     UnitRepaired,
     GarrisonAbandoned,
+    Captured,
 }
 
 impl RadarKind {
@@ -118,6 +119,8 @@ impl RadarKind {
             RadarKind::UnitRepaired => (2, 400),
             // spec: S-0701 F7 (garrison abandoned 8, 400, suppresses)
             RadarKind::GarrisonAbandoned => (8, 400),
+            // spec: S-0701 F7 (captured: no suppression, 100 ticks)
+            RadarKind::Captured => (0, 100),
         }
     }
 }
@@ -609,6 +612,14 @@ impl Audio {
                 house,
                 pos,
             } => self.sound(w, *sound, *of, *house, *pos),
+            Effect::Captured {
+                of,
+                old,
+                new,
+                pos,
+                announce,
+                ..
+            } => self.captured(w, *of, *old, *new, *pos, *announce),
             // spec: S-0210 claim 8 (the crushed overlay's crush sound at the crusher)
             // The cloak events are presentation-only (selection, S-0516 claim 26).
             Effect::Cloak { .. } => {}
@@ -620,6 +631,63 @@ impl Audio {
                     .map(str::to_owned);
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
+        }
+    }
+
+    /// A building changed owner (S-0509 claim 12, S-0701 claim 39): eligible
+    /// when the cause requests an announcement, the local player is the old
+    /// or the new owner and the new owner's country is not passive. A tech
+    /// building (the needs-engineer flag) uses its imported capture
+    /// announcement when the local player gains it (silent without one) and
+    /// the tech-building-lost entry when the local player loses it; any
+    /// other building the ordinary captured entry. A *captured* radar event
+    /// is created at its cell.
+    fn captured(
+        &mut self,
+        w: &World,
+        of: TypeRef,
+        old: Option<HouseId>,
+        new: Option<HouseId>,
+        pos: Pos,
+        announce: bool,
+    ) {
+        let local = self.local;
+        let involved = local.is_some() && (local == old || local == new);
+        if !announce || !involved || new.is_none_or(|h| glasnost_sim::econ::setup::passive(w, h)) {
+            return;
+        }
+        let tech = of.kind == Kind::Building
+            && w.rules()
+                .buildings
+                .get(of.index as usize)
+                // spec: S-0701 claim 39 and S-0405 claim 8 (the needs-engineer flag)
+                .is_some_and(|b| b.raw.needs_engineer.unwrap_or(false));
+        let created = self.radar_event(RadarKind::Captured, cell_of(pos), w.tick);
+        let _ = created;
+        if !tech {
+            // spec: S-0701 claim 39 (a building without the flag: the ordinary building-captured entry for the eligible announcement)
+            self.announce(Announcement::BuildingCaptured);
+        } else if local == new {
+            // spec: S-0701 claim 39 (the imported capture announcement when the new owner is the local player; with none, silent, no fallback to the ordinary entry)
+            let name = self.sounds(of).capture_announcement;
+            self.announce_entry(name.as_deref());
+        } else {
+            // spec: S-0701 claim 39 (losing such a building as the local player: the tech-building-lost entry)
+            self.announce(Announcement::TechBuildingLost);
+        }
+    }
+
+    /// Plays the announcement entry `name` for the local player (claim 27).
+    fn announce_entry(&mut self, name: Option<&str>) {
+        let Some(id) = name.and_then(|n| self.speech.resolve(n)) else {
+            return;
+        };
+        if self
+            .announcer
+            .request(&self.speech, id, self.mixer.speaking())
+            == Requested::StopCurrent
+        {
+            self.mixer.stop_speech();
         }
     }
 
@@ -750,6 +818,11 @@ impl Audio {
                 {
                     self.announce(Announcement::StructureAbandoned);
                 }
+            }
+            // spec: S-0509 claim 5 (the game-wide building-repaired sound at the building's centre, for every player)
+            Sound::BuildingRepaired => {
+                let s = self.names.building_repaired.clone();
+                self.play_in(w, s.as_deref(), at);
             }
             // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
             Sound::LowFunds if house.is_some() && house == self.local => {

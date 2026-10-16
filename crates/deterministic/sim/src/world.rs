@@ -137,6 +137,11 @@ pub struct House {
     /// 2 south, 3 west; it starts as north.
     #[serde(default)]
     pub computed_edge: u8,
+    /// The lost-to-capture mark (S-0509 claim 11): an engineer has captured
+    /// one of this house's buildings. Nothing else sets it and nothing
+    /// clears it.
+    #[serde(default)]
+    pub lost_to_capture: bool,
 }
 
 /// A house's role (S-0009 claim 19, glossary *house*).

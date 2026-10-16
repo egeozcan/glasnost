@@ -1088,9 +1088,38 @@ fn action(
             }
             w.note("S-0508 claim 13: the house-wide hunt action's effect on units that are not garrison occupants belongs to the computer-player system and is not built");
         }
-        // spec: S-0011 I4 (14 change owner, 32 destroy attached, 42 explosion, 113 cheer, 8 drop-zone animation, 41 play an animation)
-        14 | 32 | 42 | 113 | 8 | 41 => {
-            w.note("S-0011 claims 24, 27, 28, 29, 36: change owner, destroy attached, explosion, cheer and the waypoint animations are not implemented yet (M6); no effect");
+        // spec: S-0011 claim 24 (14 change owner: every present object that carries the tag holding the firing trigger changes its owner to the resolved house, without announcement; a carrier inside a transport or building keeps its owner)
+        14 => {
+            if let Some(h) = crate::mp_triggers::resolve_house(w, a.number, triggering) {
+                let carriers: Vec<ObjectId> = w
+                    .triggers
+                    .objects
+                    .iter()
+                    .filter(|&(&id, &t)| t == tag && w.obj(id).is_some_and(|o| o.on_map))
+                    .map(|(&id, _)| id)
+                    .collect();
+                for id in carriers {
+                    let Some(o) = w.obj(id) else { continue };
+                    if o.kind == Kind::Building {
+                        crate::structures::ownership::change(
+                            w,
+                            id,
+                            Some(h),
+                            crate::structures::ownership::Cause::Trigger,
+                        );
+                    } else if o.owner != Some(h) {
+                        let old = o.owner;
+                        if let Some(ob) = w.obj_mut(id) {
+                            ob.owner = Some(h);
+                        }
+                        crate::econ::events::owner_changed(w, id, old);
+                    }
+                }
+            }
+        }
+        // spec: S-0011 I4 (32 destroy attached, 42 explosion, 113 cheer, 8 drop-zone animation, 41 play an animation)
+        32 | 42 | 113 | 8 | 41 => {
+            w.note("S-0011 claims 27, 28, 29, 36: destroy attached, explosion, cheer and the waypoint animations are not implemented yet (M6); no effect");
         }
         _ => {
             w.note("S-0011 I4: a trigger action outside the subset; no effect");

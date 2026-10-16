@@ -178,8 +178,7 @@ impl Brain {
             self.build_superweapon(w, &mut out);
         }
         if w.tick % THINK_PERIOD == 0 {
-            let own = self.script.own(w);
-            self.special.think(self.script.house, &own, w, &mut out);
+            self.special.think(&self.script, w, &mut out);
         }
         self.fire_superweapons(w, &mut out);
         self.rebuild_yard(w, &mut out);

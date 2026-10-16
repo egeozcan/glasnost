@@ -80,13 +80,16 @@ pub fn ruleset() -> Ruleset {
     r.registries.insert(
         "buildings".into(),
         [
-            "HUT", "HUT1", "HUT3", "MIL", "NEG", "ZERO", "PLAIN", "TOWER",
+            "HUT", "HUT1", "HUT3", "MIL", "NEG", "ZERO", "PLAIN", "TOWER", "TARGET", "NOCAP",
+            "VLIKE", "HUTB",
         ]
         .iter()
         .map(|s| s.to_string())
         .collect(),
     );
-    for n in ["GARRI", "ELITE", "BARE", "ASSAULT", "BOTH"] {
+    for n in [
+        "GARRI", "ELITE", "BARE", "ASSAULT", "BOTH", "ENGI", "SPYX", "ENGSPY", "ENGOCC",
+    ] {
         r.registries
             .get_mut("infantry")
             .unwrap()
@@ -171,6 +174,36 @@ pub fn ruleset() -> Ruleset {
     if let Some(u) = s.infantry.get_mut("WALKER") {
         u.combat.trainable = Some(true);
     }
+    // S-0509: TARGET (2 × 2, capturable), NOCAP (not capturable), VLIKE (a
+    // 1 × 1 building that undeploys into a vehicle, capturable), HUTB (a
+    // bridge repair hut).
+    let mut target = building(2, 2);
+    target.capturable = Some(true);
+    target.econ.buildup = Some(true);
+    target.econ.buildup_frames = Some(4);
+    s.buildings.insert("TARGET".into(), target);
+    s.buildings.insert("NOCAP".into(), building(1, 1));
+    let mut vlike = building(1, 1);
+    vlike.capturable = Some(true);
+    vlike.undeploys_into = Some("CART".into());
+    s.buildings.insert("VLIKE".into(), vlike);
+    let mut hutb = building(1, 1);
+    hutb.bridge_repair_hut = Some(true);
+    s.buildings.insert("HUTB".into(), hutb);
+    let mut engi = walker(100);
+    engi.engineer = Some(true);
+    s.infantry.insert("ENGI".into(), engi);
+    let mut spy = walker(100);
+    spy.agent = Some(true);
+    s.infantry.insert("SPYX".into(), spy);
+    let mut engspy = walker(100);
+    engspy.engineer = Some(true);
+    engspy.agent = Some(true);
+    s.infantry.insert("ENGSPY".into(), engspy);
+    let mut engocc = walker(100);
+    engocc.engineer = Some(true);
+    engocc.occupier = Some(true);
+    s.infantry.insert("ENGOCC".into(), engocc);
     s.countries.insert(
         "Civland".into(),
         Country {

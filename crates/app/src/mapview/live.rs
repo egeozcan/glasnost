@@ -1138,6 +1138,7 @@ impl Live {
                 | Effect::Hit { .. }
                 | Effect::OverlayCrushed { .. }
                 | Effect::Superweapon { .. }
+                | Effect::Captured { .. }
                 | Effect::Cloak { .. } => continue,
             };
             self.transients.push(Transient {

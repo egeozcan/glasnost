@@ -1455,11 +1455,11 @@ pub struct Quirks {
     // spec: S-0314 claim 22 and Edge cases
     #[serde(default = "on")]
     pub depot_loss_strands_hover: bool,
-    /// An engineer entering a building that is neither arrival-friendly nor capturable is used up and changes nothing; off: the entry is refused as in claim 4 and the engineer stays. Not implemented yet (wave 2).
+    /// An engineer entering a building that is neither arrival-friendly nor capturable is used up and changes nothing; off: the entry is refused as in claim 4 and the engineer stays.
     // spec: S-0509 Edge cases (claim 3 row 5)
     #[serde(default = "on")]
     pub engineer_lost_on_uncapturable: bool,
-    /// An engineer reaching a damaged arrival-friendly building during its sale repairs it and is used up; off: sale-time entry is refused as in claim 4, regardless of health. Not implemented yet (wave 2).
+    /// An engineer reaching a damaged arrival-friendly building during its sale repairs it and is used up; off: sale-time entry is refused as in claim 4, regardless of health.
     // spec: S-0509 Edge cases (proposed, pending the lead's sign-off)
     #[serde(default = "on")]
     pub engineer_repairs_during_sale: bool,
@@ -1471,11 +1471,11 @@ pub struct Quirks {
     // spec: S-0508 Edge cases (claim 12)
     #[serde(default = "on")]
     pub garrison_no_exit_removes: bool,
-    /// An infiltrated building type that matches several effect rows gives only the first; off: every matching row applies in table order, and E3 requires only tech-lab-list membership. Not implemented yet (wave 2).
+    /// An infiltrated building type that matches several effect rows gives only the first; off: every matching row applies in table order, and E3 requires only tech-lab-list membership.
     // spec: S-0510 claim 3 and Edge cases
     #[serde(default = "on")]
     pub infiltration_single_effect: bool,
-    /// A spy's thief gains the computed amount even when the victim pays less or the amount is negative; off: the amount is clamped to between 0 and the victim's balance. Not implemented yet (wave 2).
+    /// A spy's thief gains the computed amount even when the victim pays less or the amount is negative; off: the amount is clamped to between 0 and the victim's balance.
     // spec: S-0510 claim 6 and Edge cases
     #[serde(default = "on")]
     pub spy_theft_unbacked_gain: bool,

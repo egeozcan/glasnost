@@ -38,7 +38,10 @@ use glasnost_vfs::{ByteSource, MountOptions, PickedFile};
 type Scene = (&'static str, fn(&mut Lane));
 
 /// The scenes, in the order they are played.
-const SCENES: &[Scene] = &[("garrison", garrison_and_evict)];
+const SCENES: &[Scene] = &[
+    ("garrison", garrison_and_evict),
+    ("capture", engineer_captures),
+];
 
 #[test]
 #[ignore = "local lane: needs GLASNOST_GAME_DIR"]
@@ -174,6 +177,88 @@ fn garrison_and_evict(lane: &mut Lane) {
         glasnost_sim::structures::garrison::count(lane.world(), b),
     );
     lane.save("garrison-evicted");
+}
+
+/// S-0509: an engineer of the local house is sent into a capturable building
+/// of an enemy house with the click a person gives (S-0214 row I7): it walks
+/// there, captures it and is used up; the building is drawn in the local
+/// house's colour afterwards.
+fn engineer_captures(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let man = (0..r.infantry.len())
+        .find(|&i| r.infantry[i].engineer)
+        .map(|i| r.infantry[i].name.clone());
+    println!("engineer type found: {}", man.is_some());
+    let Some(man) = man else { return };
+    let local = lane.local();
+    let Some(enemy) = lane.enemy() else {
+        println!("no enemy house");
+        return;
+    };
+    let target = lane
+        .world()
+        .objects
+        .values()
+        .filter(|o| {
+            o.kind == Kind::Building
+                && o.on_map
+                && o.owner == Some(enemy)
+                && lane.world().rules().buildings[o.type_index as usize]
+                    .raw
+                    .capturable
+                    .unwrap_or(false)
+        })
+        .map(|o| o.id)
+        .min_by_key(|&id| id);
+    println!("a capturable enemy building found: {}", target.is_some());
+    // None at the start of a skirmish: the enemy gets one near the local base.
+    let target = target.or_else(|| {
+        let w = lane.world();
+        let r = w.rules();
+        let (name, size) = (0..r.buildings.len())
+            .filter(|&b| {
+                r.buildings[b].raw.capturable.unwrap_or(false) && r.buildings[b].foundation.0 > 0
+            })
+            .min_by_key(|&b| (r.buildings[b].foundation.0 * r.buildings[b].foundation.1, b))
+            .map(|b| (r.buildings[b].name.clone(), r.buildings[b].foundation))?;
+        let home = lane.home();
+        let at = lane.area(CellXY::new(home.x + 8, home.y + 8), size, 2, |l| {
+            l != land::WATER && l != land::ROCK
+        })?;
+        Some(lane.spawn(Kind::Building, &name, enemy, at))
+    });
+    let Some(b) = target else {
+        println!("no capturable building type");
+        return;
+    };
+    let site = lane.world().obj(b).map(|o| o.pos.cell()).unwrap();
+    let start = lane.open_land(CellXY::new(site.x - 6, site.y));
+    let e = lane.spawn(Kind::Infantry, &man, local, start);
+    lane.look_at(site);
+    lane.ticks(3);
+    lane.save("capture-before");
+    let sent = lane.order(local, e, ClickOn::Object(b));
+    println!("engineer at {start:?} sent at {site:?}, {sent} orders");
+    for t in 0..1500 {
+        lane.ticks(1);
+        if lane.world().obj(e).is_none() {
+            println!("engineer used up at tick {}", lane.world().tick);
+            break;
+        }
+        if t % 100 == 0 {
+            let p = lane.world().obj(e).map(|o| o.pos.cell());
+            println!("tick {}: engineer at {p:?}", lane.world().tick);
+        }
+    }
+    lane.ticks(3);
+    let owner = lane.world().obj(b).and_then(|o| o.owner);
+    println!(
+        "building owner is the local house: {}; the enemy's lost-to-capture mark: {}",
+        owner == Some(local),
+        glasnost_sim::structures::engineer::lost_to_capture(lane.world(), enemy)
+    );
+    lane.save("capture-after");
 }
 
 // ---------------------------------------------------------------------------
