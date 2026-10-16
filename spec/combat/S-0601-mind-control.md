@@ -2,11 +2,11 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: []
 supersedes: []
@@ -67,7 +67,8 @@ specs consume. These claims cover skirmish only.
 - **At capacity.** A controller that is not unlimited and holds at least as many victims as its
   capacity (claim 2).
 - **Controlled.** The state of an object held by a controller. While it lasts the object belongs to
-  the controller's house and its *original owner* is remembered (claim 6). It ends with a *release*
+  the controller's house at takeover and its *original owner* is remembered (claim 6).
+  A later controller owner change can leave those houses different (claim 11). It ends with a *release*
   (claim 9) or with a silent drop (claim 12).
 - **Permanently controlled.** The state that psychic domination gives an object. It is never
   cleared, has no controller and no original owner (claim 13).
@@ -156,7 +157,8 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    takeover flag never does ordinary area damage and never triggers bomb planting,
    electric charging, parasite attachment, temporal erasure, locomotor replacement, air-strike
    designation, bomb disarming or nuke-making through the same hit, even when its other flags
-   request those effects. Effects that do not depend on this selection still
+   request those effects. S-0514 claim 20 gives the remaining special-hit precedence when
+   takeover is not enabled. Effects that do not depend on this selection still
    happen: radiation is laid before it, and the detonation's animation, debris and flash after it
    (S-0303 claim 1).
 
@@ -170,7 +172,8 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    - on success the take-over sound (Import mapping) plays at the target when the local player
      owns the controller or owned the target before the takeover.
    - Backing: `measurable` (MC3 for target-only, no-damage hits; MC1 for takeover sound,
-     MC11 for mixed-effect and trigger-event variants). Missing-firer and missing-record hits
+     MC11 for mixed-effect and trigger-event variants; S-0514 scenario E13 for the remaining
+     special-hit exclusions and independent radiation/presentation). Missing-firer and missing-record hits
      are `unmeasured`: no stock skirmish scenario here isolates a delayed shot after firer removal
    - Confidence: high
 
@@ -182,7 +185,8 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    - *T* becomes controlled by *C* and is appended to the end of *C*'s victim list,
    - *T*'s link-line timer starts (claim 17),
    - *T* gets a guard reset (S-0215 claim 9): its target, destination and guard spot are cleared
-     and *guard* is forced. A vehicle that deploys in place (a simple-deployer vehicle, S-0517
+     and *guard* is forced, subject to that claim's refusal while *wait* is current.
+     A vehicle that deploys in place (a simple-deployer vehicle, S-0517
      claim 1) and whose current behaviour is *unload* keeps its behaviour and gets no guard reset,
    - *T* leaves any team it belonged to; a temporal attacker *T* lets go of its target (S-0514
      claim 14); an open-topped *T* clears the targets of its passengers,
@@ -193,7 +197,8 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    takeover it belongs to the controller's house in every respect, including power, production and
    prerequisites. A controlled construction yard cannot pack up (S-0213, S-0214).
    - Backing: `measurable` (MC1 and MC3; MC9 for a building; MC11 for the simple-deployer,
-     temporal-attacker, passenger-target and construction-yard variants). Team membership is
+     temporal-attacker, passenger-target and construction-yard variants; S-0215 scenario B3
+     case i for the *wait* exception). Team membership is
      `unmeasured` here: original scripted teams are outside the skirmish tests
    - Confidence: high
 
@@ -310,7 +315,9 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
       releases the victim by claim 9, including ring removal, release sound, return to the
       original owner and claim 8's fate decision. It then goes inside as its original owner's
       object, not as a removed object (S-0605 claim 7).
-    - Backing: `measurable` (MC6)
+    - Backing: `measurable` (MC6 for removal and absorption). Retention during other out-of-play
+      states, including tunnel travel, is `unmeasured`: MC6 does not isolate a controlled
+      traveller that enters and returns without a separate release event
     - Confidence: high for removal-based silent drop; medium for individual death-path lifetimes
 
 ### Permanent control and the original owner
@@ -344,8 +351,13 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
     - otherwise, including permanently controlled: its current owner.
 
     S-0414 claim 5 reads this query when a house is defeated, and may redirect a recorded original
-    owner to a civilian-side house, as it states.
-    - Backing: `measurable` through S-0414 scenario V2 variant j
+    owner to a civilian-side house, as it states. Its claim 5 table's last row needs correction:
+    permanent control supplies the current owner, not a remembered pre-domination house.
+    Joint hand-off must resolve that row to agree with this query.
+    - Backing: `measurable` through S-0414 scenarios V2 variant j and V4 parts a and b for
+      ordinary controlled objects and original-owner redirection.
+      The permanent-control query is `measurable` by MC10's defeat variant. The trigger-takeover
+      branch is `unmeasured`: its campaign-only state is outside these skirmish scenarios
     - Confidence: high
 
 ### Deploying and packing up
@@ -365,31 +377,26 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
 
 ### Overload
 
-16. **Overload pulses.** In every one of its own updates, an unlimited controller does the
-    following.
-    - The pip highlight counts down by 1 while it is positive (S-0111 claim 13 reads it).
-    - An update that begins with a positive overload countdown decrements it by 1 and does not
-      pulse, including the update that changes it from 1 to 0.
-    - An update that begins with a nonpositive countdown pulses. The level *i* is chosen from the
-      victim count *N* (Formulas). The countdown restarts at the level's frames value, and the
-      level's damage *d* is read. Thus the first pulse check is the 31st overload update after
-      creation, and positive frames values give frames + 1 updates between checks, not frames.
-      - If *d* < 1, the overload sound mark is cleared and nothing else happens.
-      - Otherwise:
-        - the pip highlight is set to 10,
-        - the controller takes a hit of *d* with the demolition warhead (S-0303, Import mapping).
-          The hit has no attacker and no attacking house, does not ignore defences, and is
-          resolved by S-0302 like any other hit, so it may kill the controller (and claim 10 then
-          releases everything),
-        - the overload sound plays at the controller once per run of damaging pulses: it plays
-          when its mark is clear, then the mark is set. A non-damaging pulse clears the mark,
-        - five spark particle systems of the rules' default spark type are created around the
-          controller (Formulas), taking 10 placement draws from the scenario random stream (any draws
-          that creating a particle system takes are its owner's),
-        - when *i* > 0 and the controller is still alive, its sideways body-rocking rate is set
-          (Formulas), taking 1 more draw.
-    - Controllers that are not unlimited never pulse.
-    - Backing: `measurable` (MC8)
+16. **Overload pulses.** An unlimited controller's pip highlight decreases by 1 on each of its
+    own updates while positive (S-0111 claim 13 reads it). Its pulse timing is:
+
+    | Countdown at the start of an overload update | Result |
+    |---|---|
+    | positive | Countdown decreases by 1; no pulse check, including the update that changes 1 to 0. |
+    | nonpositive | A pulse check occurs at level *i* for the current victim count *N* (F2). The countdown becomes framesᵢ overload updates; pulse damage is *d* = damageᵢ health points. |
+
+    The first check is the 31st overload update after creation. With an unchanged level and
+    positive frames value, consecutive checks are separated by frames + 1 overload updates.
+
+    | Pulse result | Observable effects |
+    |---|---|
+    | *d* < 1 | The overload sound mark is cleared. There is no pulse damage, highlight reset, sound, spark creation or rocking update. The ordinary highlight countdown still applies. |
+    | *d* ≥ 1 | The pip highlight is set to 10. The controller receives a hit of *d* with the demolition warhead (S-0303, Import mapping), with no attacker or attacking house and without ignoring defences. S-0302 resolves it like any other hit; a killing hit releases the victims under claim 10. The overload sound plays at the controller when its sound mark was clear, and the mark becomes set. Five spark particle systems of the rules' default spark type appear around the controller (F3), even after a lethal hit. Their positions consume 10 placement draws from the scenario random stream; draws made by particle-system creation itself belong to that creation. When *i* > 0 and the controller survives, its sideways body-rocking rate takes the F4 value, consuming one further draw. |
+
+    Thus the sound plays once per uninterrupted run of damaging checks. The hit's effects and
+    draws precede the spark placement draws, and the rocking draw follows the sparks (F3, F4).
+    Controllers that are not unlimited never pulse.
+    - Backing: `measurable` (MC8; MC11 for initial timing and nonpositive frame variants)
     - Confidence: high
 
 ### Presentation
@@ -428,9 +435,9 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
 
 **F2. Overload level.** Let the rules give three equal-length integer lists *count*, *damage* and
 *frames*, indexed from 0 to *L* − 1.
-> *i* = the smallest index with count[*i*] ≥ *N*; if there is none, *i* = *L* − 1.
-> next countdown = frames[*i*], in overload updates; pulse damage *d* = damage[*i*], in health points.
-> interval between checks = max(frames[*i*], 0) + 1 overload updates when the level is unchanged.
+> *i* = the smallest index such that countᵢ ≥ *N*; if no such index exists, *i* = *L* − 1.
+> The next countdown is framesᵢ overload updates; pulse damage *d* is damageᵢ health points.
+> interval between checks = max(framesᵢ, 0) + 1 overload updates when the level is unchanged.
 
 All values and comparisons in F1 and F2 are signed integers; there is no rounding. For an object
 receiving one overload update each tick these intervals are also tick intervals.
@@ -651,7 +658,12 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   the sound-mark reset. Use the random-state recorder, not a fixed seed, to attribute ten
   placement draws per damaging pulse and one rocking draw when the level is above zero and
   the controller survives. Account separately for draws made by the hit and particle creation.
-  Check F3 positions and F4 signs against the recorded values. A frames-tick interval, a
+  Check F3 positions and F4 signs and binary32 rocking magnitudes against the recorded values.
+  Include a pulse that kills the controller: expected release of all victims in that tick,
+  five spark systems and ten placement draws, but no rocking update or rocking draw and no
+  house credited with the overload kill. Compare a limited Psychic Tower over the same
+  observation interval: expected no overload check, pulse effects or attributed draws.
+  A frames-tick interval, a
   premature first check, an extra sound, wrong placement or a different attributed draw order
   falsifies the corresponding part.
 - **MC9. Controller building not in operation** (claims 6, 10). A's Psychic Tower holds two of B's
@@ -673,6 +685,13 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   effects (S-0612 claim 14; scenario PD7 part b). A transfer of an excluded target, successful
   ordinary takeover of a permanent victim, later return to B, refusal of the second domination,
   or failure to mark the own-house tank falsifies claim 13 under the default quirk setting.
+  In separate short-game defeat variants, C permanently takes a tank from B. Destroy B's last
+  building while A and C remain opposing contenders: expected the tank survives as C's object.
+  In a fresh run instead destroy C's last building while A and B remain opposing contenders:
+  expected the permanent tank receives C's defeat-cleanup hit and is destroyed. Use an ordinary
+  unprotected tank outside combat; record owner and existence through cleanup. Removal on B's
+  defeat or survival through C's cleanup falsifies claim 14's use of the current owner rather
+  than the pre-domination owner.
 - **MC11. Named test-map variants** (claims 1, 3, 5 to 7, 9 to 11, 17 and 18). Each variant changes
   only the properties named below on a copy of a stock type, and is removed after its run.
   These are data-only overrides, never executable changes. Record per-tick ownership, orders,
