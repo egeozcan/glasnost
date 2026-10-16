@@ -60,7 +60,7 @@ use glasnost_sim::orders::Order;
 use glasnost_sim::regions::{self, Reach};
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
 use glasnost_sim::targeting;
-use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::world::{HouseId, Object, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 /// A build plan.
@@ -308,7 +308,7 @@ pub(crate) fn idle(w: &World, id: ObjectId) -> bool {
             Some(_) => false,
         };
         arrived
-            && o.target.is_none()
+            && (o.target.is_none() || stale_guard_target(w, o))
             && matches!(
                 o.beh.current,
                 None | Some(Behaviour::Guard)
@@ -317,6 +317,29 @@ pub(crate) fn idle(w: &World, id: ObjectId) -> bool {
                     | Some(Behaviour::Move)
             )
     })
+}
+
+/// Whether a unit resting in guard holds a target it cannot shoot at: guard
+/// keeps an acquired target while it is out of the weapon's range, and the
+/// unit stays where it is (guard never pursues, S-0215 claim 24). A person
+/// sees such a unit standing still and gives it an order; so does the
+/// script, which would otherwise leave a home guard idle while the enemy
+/// destroys the base.
+fn stale_guard_target(w: &World, o: &Object) -> bool {
+    let resting = matches!(
+        o.beh.current,
+        Some(Behaviour::Guard) | Some(Behaviour::AreaGuard) | Some(Behaviour::Stop)
+    );
+    let Some(t) = o.target else { return false };
+    if !resting {
+        return false;
+    }
+    let (slot, weapon) = weapon::would_use(w, o.id, Some(t));
+    weapon.is_none()
+        || matches!(
+            check::check(w, o.id, Some(t), slot, true),
+            check::Answer::OutOfRange | check::Answer::Illegal | check::Answer::Impossible
+        )
 }
 
 /// Whether unit `id` can attack enemy `e` at all, as its cursor shows: the
@@ -360,8 +383,10 @@ pub struct Script {
     targets: Vec<CellXY>,
     /// The next target's index.
     next_target: usize,
-    /// The next army type's index.
-    next_army: usize,
+    /// The next army type's index, one counter per kind of army (vehicle,
+    /// infantry, aircraft): a counter shared by the kinds would step past
+    /// the same types every round and leave some never built.
+    next_army: [usize; 3],
     /// The tick since which idle army units have been waiting for a wave.
     waiting_since: Option<i32>,
     /// The economy watch: credits and the harvesters' summed loads at the
@@ -390,7 +415,7 @@ impl Script {
             plan,
             targets: Vec::new(),
             next_target: 0,
-            next_army: 0,
+            next_army: [0; 3],
             waiting_since: None,
             watch: Watch::default(),
         }
@@ -854,7 +879,10 @@ impl Script {
         } else {
             self.candidates(w, Role::Army)
         };
-        for kind in [Kind::Vehicle, Kind::Infantry, Kind::Aircraft] {
+        for (k, kind) in [Kind::Vehicle, Kind::Infantry, Kind::Aircraft]
+            .into_iter()
+            .enumerate()
+        {
             let of_kind: Vec<TypeRef> = army_types
                 .iter()
                 .copied()
@@ -863,10 +891,10 @@ impl Script {
             if of_kind.is_empty() {
                 continue;
             }
-            let t = of_kind[self.next_army % of_kind.len()];
+            let t = of_kind[self.next_army[k] % of_kind.len()];
             if !self.busy(w, t) {
                 out.push(Order::Build { what: t });
-                self.next_army += 1;
+                self.next_army[k] += 1;
             }
         }
 
