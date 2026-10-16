@@ -1,9 +1,9 @@
 ---
 id: Q-0986
 title: The random draws and burst state of a charge planter's rearm, the moment a strike notices a change of target, and the effect of a missing bomb warhead
-status: open
+status: answered
 related: [S-0519, S-0301, S-0213, S-0215, S-0203]
-answered-by: []
+answered-by: [S-0519]
 ---
 
 ## Need

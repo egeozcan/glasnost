@@ -2,13 +2,13 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 2
-sources-class: [decomp]
+revision: 3
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: []
+requests: [Q-0986]
 supersedes: []
 ---
 
@@ -250,8 +250,25 @@ ignores defences*, *quirk switch*. Also used:
     | a charge or delayed-kill countdown already running | none; the running countdown and its recorded planter stay as they are | its destination is cleared; rearm and scatter as below; no abort and no change to its cloak |
     | any other | planted (claim 14) | as in the first row |
 
-    *Rearm.* The walker's rearm countdown is set to the delay that S-0301 claims 1 to 8 give a
-    shot of its second weapon.
+    *Rearm.* Arrival is not a shot. In every row the rearm countdown is replaced by the
+    second weapon's arrival delay below, using the walker's current burst counter *k*, not
+    *k* + 1. Arrival neither advances nor wraps that counter, uses no ammunition, and creates
+    no weapon effect. In particular, a fresh walker with *k* = 0 and a positive second-weapon
+    burst count takes the short delay even when that count is 1.
+
+    | First applicable condition | Arrival delay, integer ticks | Scenario-stream draws |
+    |---|---|---|
+    | no second weapon | 1 | none |
+    | second weapon is sonic, or is spark-particle, fire-particle or railgun with an effect of its kind already alive on the walker | its rate-of-fire field, unchanged | none |
+    | *k* is less than the second weapon's burst count | an inclusive ranged draw from 3 through 5 | one ranged draw |
+    | otherwise | full delay of S-0301 claim 2, including the factors of claims 3, 6 and 7 | one inclusive ranged draw from 0 through 2 |
+
+    These draws use S-0202's ranged-draw rule. The full delay has S-0301 Formula F1's
+    floating-point domains and truncations, but no berserk halving: arrival does not apply
+    S-0301 claim 8 to any row. No weapon-specific burst-delay field applies to this infantry
+    walker. The delay's draw, when present, precedes draws caused by the subsequent scatter.
+    A separate clearing of the walker's target still resets its burst counter under S-0301
+    claim 4; that is not an advance caused by arrival.
 
     *Scatter.* The walker gets a scatter request whose threat point is the building's centre,
     forced and move-anywhere (S-0208 claims 11 and 12).
@@ -263,7 +280,7 @@ ignores defences*, *quirk switch*. Also used:
       missing owner and accepts-charges tests at arrival, because no validated fixture reaches
       arrival with an otherwise refused destination. The computer-only starts of S-0215 describe
       the original only; our AI uses ordinary legal orders
-    - Confidence: high for the three rows; medium for the rearm delay
+    - Confidence: high for the three rows and the arrival delay
 
 14. **The charge countdown.** Planting a charge does four things:
     - it marks the building as having a pending countdown,
@@ -380,6 +397,13 @@ ignores defences*, *quirk switch*. Also used:
     - its marked building is destroyed,
     - the designator is destroyed or removed from play (claim 20).
 
+    Cancellation takes effect when the change of target applies, not at the strike's next
+    look, the designator's next turn or the next designation impact. A change from object A
+    to B and back to A within one tick still cancels; restoring A does not undo the retreat
+    orders, ammunition loss or forgotten strike target. A change after the designator's turn
+    likewise cancels in that same tick. Merely selecting an order before it applies is not a
+    target change (S-0213 claim 3). No target-history polling rule substitutes for these effects.
+
     A cancel has these results in the tick of the cancelling event:
     - if any linked aircraft had no ammunition at cancellation, every linked aircraft now has
       0 rounds; otherwise each keeps its ammunition,
@@ -439,6 +463,30 @@ ignores defences*, *quirk switch*. Also used:
     own detonation are S-0303's.
     - Backing: `measurable` (scenarios T17 and T21 with the random-state recorder)
     - Confidence: high
+
+22. **Bomb with no bomb warhead.** It ends normally, stops ticking and detaches from its
+    carrier. It makes no area hits and no explosion animation, not even a generic fallback
+    animation. A bridge repair hut still demolishes its bridge by claim 5: that effect does
+    not depend on the warhead. Off-map carriers retain claim 6's silent removal.
+    - Backing: `measurable` (scenario T22)
+    - Confidence: high
+
+23. **Suicide with no demolition warhead.** The self-hit of claim 11 is still delivered.
+    Its positive damage bypasses defences and reduces an ordinary firer whose current health
+    is no greater than its type's strength to zero even without a warhead. No missing-warhead
+    rule makes that self-hit harmless. Completion of death is a different matter: the original
+    can fail while choosing an infantry death effect, so a completed suicide explosion cannot
+    be promised for this bad data.
+
+    Our engine completes the death deterministically, with ordinary death presentation and
+    no warhead-selected special death effect. Its death weapon still detonates under S-0312
+    claim 6, provided that weapon has its own valid warhead. The importer warns when a suicide
+    weapon is used without a game-wide demolition warhead. This is a bad-data design departure,
+    with no quirk switch, not a replacement for the suicide self-hit.
+    - Backing: `unmeasured` for the original's complete bad-data death outcome: no validated
+      fixture safely completes all death paths; scenario T23 proposes the discriminating run.
+      The safe completion rule is `design` and tested on our engine by T23
+    - Confidence: high for the self-hit and the unsafe infantry death case
 
 ## Formulas
 
@@ -582,8 +630,8 @@ turns, rather than after timed bomb detonations. No corresponding correction is 
   berserk or does psychic damage to an immune type. A firer that survives keeps no rearm
   countdown, so it may shoot again whenever the firing check allows. This is
   the original's behaviour with such data; no switch is proposed.
-- **No bomb warhead or no demolition warhead.** Both game-wide warheads default to none. What a
-  detonation or a suicide hit does without one is an open question.
+- **No bomb warhead or no demolition warhead.** Both game-wide warheads default to none.
+  Claims 22 and 23 distinguish harmless bomb expiry from the unsafe suicide-death case.
 - **Overdue bombs after transport.** A bomb that waited off the map goes off at the carrier's
   first turn after it comes back, however long ago its time ran out (claim 6).
 - **A strike that places no aircraft.** When a start places no aircraft, because the elite strike
@@ -624,14 +672,17 @@ turns, rather than after timed bomb detonations. No corresponding correction is 
 | Unit, infantry, aircraft and building types `BombSight` | bomb-sight range (claim 10) | integer, cells | 0 |
 | Weapon `Suicide` | suicide weapon (claim 11; S-0312 owns the row) | boolean (S-0003) | no |
 | Infantry type `C4` | has explosive charges (claim 13; S-0214 owns the row) | boolean (S-0003) | no |
+| Infantry type `Secondary`, `EliteSecondary` | second weapon for arrival delay (claim 13) | weapon name; rank selection by S-0308 claim 2 | S-0308 claim 2 owns fallback; unresolved weapon gives 1 tick |
+| Weapon `ROF`, `Burst` | arrival delay's rate-of-fire field and burst count (claim 13) | integers, ticks and shots respectively | 0 ticks and 1 shot, owned by S-0301 |
+| Weapon `IsSonic`, `UseSparkParticles`, `UseFireParticles`, `IsRailgun` | arrival bare-rate eligibility (claim 13) | booleans | no, owned by S-0301 |
 | Building type `CanC4` | accepts charges: not tested at arrival (claim 13; S-0214 and S-0302 own the row) | boolean (S-0003) | yes |
-| Rules, combat-damage section, `IvanWarhead` | bomb warhead (claim 5) | warhead name | none |
+| Rules, combat-damage section, `IvanWarhead` | bomb warhead (claims 5, 22) | warhead name | none: no area hits or explosion animation; hut demolition remains |
 | Rules, combat-damage section, `IvanDamage` | bomb damage (claim 5) | integer, health points | 100 |
 | Rules, combat-damage section, `IvanTimedDelay` | timed delay *D* (claims 4, 10) | integer, ticks | 450 |
 | Rules, combat-damage section, `IvanIconFlickerRate` | flicker rate *F* (F3) | integer, ticks | 8 |
 | Rules, combat-damage section, `CanDetonateTimeBomb` | timed-bomb detonate permission (S-0214 row G3, which owns the row) | boolean (S-0003) | no |
 | Rules, combat-damage section, `CanDetonateDeathBomb` | no reachable effect (claim 9) | boolean (S-0003) | no |
-| Rules, combat-damage section, `C4Warhead` | demolition warhead (claims 11, 14; S-0011 owns the row) | warhead name | none |
+| Rules, combat-damage section, `C4Warhead` | demolition warhead (claims 11, 14, 23; S-0011 owns the row) | warhead name | none; suicide retains its self-hit, with safe death completion and warning by claim 23 |
 | Rules, combat-damage section, `C4Delay` | charge delay *c*, minutes (F4) | decimal or percent, single (S-0003) | 0.03, kept in binary64 (F4) |
 | Rules, audio-visual section, `BombTickingSound` | ticking sound (claim 10) | sound name | none |
 | Rules, audio-visual section, `BombAttachSound` | bomb-attach sound (claim 2) | sound name | none |
@@ -743,7 +794,20 @@ result falsifies that part of its claim.
   visible counter increment even on refusal. Named test data gives the planter cloak, removes
   enemy detectors and gives its second weapon a distinguishable rearm delay: successful and
   protected/selling arrivals force uncloak, duplicate-countdown arrival does not. Record the
-  earliest subsequent second-weapon shot and compare with its rearm formula. A variant grants
+  earliest subsequent second-weapon shot and compare with its arrival-delay table. With the
+  random-state recorder isolate the delay draw from scatter and unrelated activity: an ordinary
+  second weapon with a positive burst count and initial *k* = 0 must use an inclusive ranged draw
+  from 3 through 5, not an inclusive ranged draw from 0 through 2, and leave *k* unchanged. Repeat
+  the successful, protected and duplicate-countdown arrivals. Named test data gives different
+  primary and secondary burst counts; fire the primary before sabotage so the retained *k* is at
+  least the second weapon's burst count: arrival must now use the full-delay calculation with an
+  inclusive ranged draw from 0 through 2, without advancing or wrapping *k*. Void any run where
+  target clearing reset *k* before arrival. Repeat without a second weapon (1 tick, no delay draw),
+  with a sonic second weapon (bare rate, no delay draw), and with a particle second weapon
+  whose effect is absent (ordinary short/full choice) or already alive (bare rate).
+  Record burst counter and rearm remaining directly as well as subsequent firing ticks.
+  Extra delay draws, an arrival counter advance, or use of the fixed rate in the ordinary
+  *k* = 0 case falsify claim 13. A variant grants
   only the veterancy charge ability: sabotage may be offered but arrival plants nothing.
 - **T14, charge and owner change (claim 14).** Capture the charged building with an engineer
   during the countdown. Expected: it still dies at expiry. In a separate run start curtain
@@ -815,6 +879,14 @@ result falsifies that part of its claim.
   (h) Named test data makes a 103-aircraft strike; cancel before firing: only the 101 newest
   linked aircraft lose their targets/destinations and queue retreat, the two oldest keep their
   orders. Repeat with an empty aircraft before cancellation: all 103 lose their ammunition.
+  (i) Use scripted successive attack orders A to B to A and record their application boundaries,
+  not just the final target. Each applied change cancels, even when both apply within one tick.
+  there is no automatic restoration of the prior aircraft attack orders. If input coalesces the
+  orders into one, the run does not test a transient change. (j) Time a later-turn target death
+  after the designator has acted, using another attacking object: its target loss cancels in
+  the killing tick, before any next designator turn or designation impact. Record cancellation
+  effects at the event boundary with a read-only recorder. A fixture unable to expose both
+  boundaries does not distinguish immediate cancellation from polling.
   Record behaviour, target, destination, ammunition and marks per tick. Falsified by any contrary
   cancellation result, an attack order in (c)/(e), cancellation in (f), or lost shared mark in (g).
 - **T20, end, loss and credit (claim 20).** (a) Record the tick when the last strike aircraft
@@ -836,6 +908,26 @@ result falsifies that part of its claim.
   Falsified by any extra draw or different order attributable to these operations. Runs with
   unrelated unassignable draws across an observation boundary are void, not evidence.
 
+- **T22, absent bomb warhead (claim 22).** Named test file `S-0519-missing-warheads.ini`
+  is a temporary base-rules override with only the bomb-warhead entry removed entirely; an empty
+  map-layer value would keep the inherited warhead. Start a fresh session. Plant on an ordinary
+  vehicle beside another vehicle, then separately on a bridge repair hut. Record health,
+  animation, ticking sound, attachment and bridge state at expiry. Expected: bomb ends with
+  no hits and no explosion animation, but the hut still demolishes its bridge. Damage, an
+  explosion animation or a lingering attached bomb falsifies claim 22. Repeat off-map expiry
+  and return to check claim 6. Remove the named file after each three-run variant.
+- **T23, absent demolition warhead (claim 23).** Use the same named temporary base-rules file,
+  now omitting only the demolition-warhead entry, in a fresh session. A suicide infantry unit
+  and, separately, a suicide vehicle attack an isolated enemy target on dry land. Keep each
+  death weapon's own warhead valid. Record health immediately around the self-hit, whether
+  play continues, death presentation and target damage. Expected source hypothesis: self-hit
+  reaches zero health; ordinary infantry death selection may stop play rather than complete
+  its death effect. This is an investigation of the unmeasured bad-data outcome, not a promise
+  of a surviving original run. A harmless self-hit falsifies the health hypothesis. On our
+  engine require a warning, completed death with ordinary presentation, no warhead-selected
+  special death effect, and exactly the normal death-weapon detonation. Run each variant three
+  times under the common setup, then remove the named file.
+
 ## Open questions
 
 - No separate effect of the imported animal marker has been traced beyond parsing it. Claim 1
@@ -844,7 +936,6 @@ result falsifies that part of its claim.
   has only the veterancy ability (Edge cases). Not traced.
 - Can a unit in *sabotage* reach a destination cell that contains no building, for example a
   bridge cell? No reachable fixture is established, so its arrival effects are not specified.
-- The effect of a missing bomb warhead or demolition warhead (Edge cases).
 - A strike whose target is not a building (reachable only with data in which the primary weapon's
   warhead has the air-strike flag, S-0308 row 6). Whether its strike target is forgotten when
   that object dies, other than through the designator's own loss of target (claim 19), is not
