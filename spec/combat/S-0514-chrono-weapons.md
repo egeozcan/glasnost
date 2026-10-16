@@ -2,11 +2,11 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0984]
 supersedes: []
@@ -220,7 +220,8 @@ before joint hand-off.
     target loss. Clearing that ordinary target alone does not detach the beam. Subsequent
     behaviour can still cause claim 14's release. Whether it does so immediately is open.
     An erased target normally cannot make its own teleporting locomotor jump because its
-    destination is cleared (S-0207 claim 20).
+    destination is cleared (S-0207 claim 20). Under a pending one-application point
+    suppression (S-0207 claim 27) the destination is kept, and the target still cannot jump.
     - Backing: `measurable` (E10 part h) for target clearing without direct detachment.
       Subsequent behaviour-driven release is `unmeasured`: that transition was not traced,
       so no deadline is claimed.
@@ -229,7 +230,8 @@ before joint hand-off.
 ### While attached
 
 17. **Target inactivity.** Infantry, vehicles and landed aircraft being erased clear their
-    target and destination and skip ordinary movement, turning and firing. Buildings skip
+    target and destination (except that a pending point suppression, S-0207 claim 27, keeps the
+    destination) and skip ordinary movement, turning and firing. Buildings skip
     ordinary behaviour processing and firing; this spec does not claim that every auxiliary
     building activity stops. Damage protection and power totals use their owning specs.
     A target with an attached beam cannot itself obtain another lock (claim 3).
