@@ -2,11 +2,11 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0122, Q-0190, Q-0120, Q-0195, Q-0226]
 supersedes: []
@@ -282,6 +282,13 @@ addition:
      negative *A*, read from the signed addition and comparison)
 
 7. **Completion.** At step 54 the item is done and the line makes no more steps.
+   Acquisition order means the order in which buildings join the house's currently owned
+   buildings, by placement into play or ownership change to that house. Capture or transfer
+   ranks a building after every building the new owner already held, regardless of creation
+   order. Losing and later reacquiring it gives it a new, later rank; buildings not lost keep
+   their relative order. Within one tick, acquisitions rank in the order their events take
+   effect, not by object number. An unchanged-owner assignment does not count as reacquisition.
+   This meaning also applies to the acquisition orders in claims 13 and 14 and F1.
    - **Units** (infantry, vehicles, aircraft). A place order without a cell releases the unit from a
      factory building of its kind that is switched on and could make it with the tech-tree condition
      left out (Terms), and, for an aircraft, has a free dock: among those, the one marked primary if
@@ -1038,6 +1045,15 @@ disturbed, and the part is repeated; the three agreeing results are one observat
   After a successful clear-exit release the next queued item starts at that boundary. A build
   order for an item that is still done adds nothing. Switched-off only factory: the item stays
   done until it is switched on and a place order is given (S-0411, claim 4).
+- Acquisition-order runs: keep two eligible factories A and B switched on, neither primary,
+  with clear exits. Create A before B, acquire B first and capture or transfer A to the observed
+  house later; expect release from A. Transfer B away and reacquire it while A stays owned.
+  Expect release from B. Assign A to its unchanged owner; expect B still. In fresh runs acquire
+  both in one tick, reversing their event order without changing object creation order; expect
+  release from whichever acquisition takes effect last. Use scripted input and test-map
+  ownership-change events, recording their within-tick order and the releasing factory with a
+  read-only recorder. Void a run if either factory becomes primary or fails eligibility.
+  A release from the earlier-acquired factory in any of these controls falsifies the rule.
 - Busy and failed releases are scenario P12.
 - Falsified if: another factory releases the unit in the clear-exit control, its next item starts
   later, a build order for an item recorded as still done adds a queued copy, or the
