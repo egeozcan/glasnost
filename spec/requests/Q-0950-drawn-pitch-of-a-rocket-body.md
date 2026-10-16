@@ -1,9 +1,9 @@
 ---
 id: Q-0950
 title: How a rocket missile's pitch shows in its drawn body
-status: open
+status: answered
 related: [S-0105, S-0106, S-0506, S-0102]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need

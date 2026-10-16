@@ -2,13 +2,13 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 19
+revision: 20
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799]
+requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950]
 supersedes: []
 ---
 
@@ -16,27 +16,10 @@ supersedes: []
 
 ## Summary
 
-**Revision scope.** Q-0799 is answered by claim 40: aircraft shadow anchors follow
-terrain, or a qualifying high-bridge deck, independently of flight height. It also
-fixes the original's extra displacement with non-flying locomotors, without a switch.
-Q-0470 adds a 4096-pixel largest side for part and shadow images,
-centred copy-rectangle clipping, suppression of non-finite placement and one importer
-warning per oversized model. These are lead-confirmed engine rules, tested against
-this spec rather than the original. Fifteen lead-classified presentation glitches remain
-fixed outright, with no switches. Q-0215's section-priority relation in F8 gives
-pair and common-pixel predictions for MS-25/MS-28 in both modes, including changed
-depth gaps and sections absent at probes. Those configurations are `measurable`,
-while the arbitrary-count characterization remains `unmeasured`. No completed
-measurement is claimed and no M-ID is assigned here. MS-28's closing sweep is still
-required, and interim engine pixels are not oracle evidence.
-
-How a voxel model (a VXL model with its HVA animation) becomes pixels: the fixed viewing
-transform, how many facings each model part can show, how the body, turret and barrel are
-placed (a building's barrel without a turret included), how the voxel's normal and the global light pick a shade from the voxel lighting table
-(VPL), how each voxel becomes a pixel, how the parts are composited, how building turrets
-recoil, how the flat voxel shadow is made, and what of earlier draws the voxel buffer keeps. Ramp tilt is left to S-0106; where the finished image
-lands among other objects is in S-0102; palettes and house colours are in S-0103; the map's
-lighting tint is in S-0104. This spec covers skirmish rendering; campaigns and network games are out of scope.
+This spec defines skirmish voxel rendering: model-part placement and animation,
+aircraft attitude, lighting, pixel coverage, recoil, shadows and image reuse.
+Slope tilt, scene compositing, palettes and map lighting belong to the related
+specs; campaigns and network games are out of scope.
 
 ## Terms
 
@@ -62,6 +45,18 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   always called a *drawn frame*. *Model frame*, *parent frame*, *local frame*, *part frame* and
   *turret-frame point* refer to coordinate frames.
 - **Model part.** One VXL+HVA pair drawn as a unit: body, turret, barrel, or an alternative body.
+- **Rocket drawing pitch** *p*. S-0506's single-precision nose pitch in radians,
+  positive nose up; it is not a raw facing. S-0506 claims 14–18 and 24 own its
+  evolution. Claim 41 only specifies how that current value appears.
+- **Flight drawing heading.** For the flying locomotor, the aircraft's aiming
+  facing (S-0501 claims 19 and 42), rounded to the 32-step facing by the rule
+  above; this need not equal the body facing that governs horizontal movement
+  in S-0501 claim 4. For the rocket locomotor, use the body facing
+  instead. This distinction also applies to their shadows.
+- **Flight bank** *β*, **flight drawing pitch** *α*. Local x-axis and y-axis
+  rotation angles in radians, respectively, for a non-crashing flying-locomotor
+  body (claim 42). Positive *α* lowers the nose; these are drawing angles, not
+  the rocket's nose-up pitch *p* or a change to its trajectory.
 - **Draw transform.** The 3×4 matrix that maps a part's model frame into view space for one draw.
 - **View space.** After the view transform: *x* to the screen's right, *y* upward on screen
   (screen rows are *−y*), *z* toward the viewer (larger *z* is nearer).
@@ -190,8 +185,10 @@ turn per unit), to tell it apart from the coarser facings derived from it.
 
 3. **Body: 32 facings.** The body rotation is the body's 32-step facing, not its raw facing:
    angle *θ_body = −(π/16) · (f₃₂ − 8)* about model +z. A unit turning smoothly therefore shows
-   at most 32 distinct body orientations on flat ground. (Ramps and pitch add tilt, S-0106.)
-   - Backing: `measurable` (MS-1)
+   at most 32 distinct heading orientations on flat ground. S-0106 supplies slope
+   tilt; claims 41–42 supply rocket pitch and flying-locomotor pitch and bank.
+   For those two locomotors, use the flight drawing heading (Terms).
+   - Backing: `measurable` (MS-1; MS-31/MS-32 for rocket and flying heading sources)
    - Confidence: high
 
 4. **Vehicle turret: 32 facings, relative to the body.** The turret is rotated relative to the
@@ -533,6 +530,16 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - **Body:** the ramp state (which settled tilt the body has, for locomotors that tilt the
       body on ramps, S-0106), the 32-step body facing, the alternative-model state, and the HVA
       complete applicable frame number.
+    - **Rocket body:** the 32-step body heading, complete applicable HVA frame and
+      pitch reuse class of claim 41, instead of a ramp state. Pitches outside its
+      three eligible classes always draw fresh and are not retained.
+    - **Flying-locomotor body:** the 32-step flight drawing heading, complete
+      applicable HVA frame, the presence of speed-dependent pitch, and bank state
+      (none, clockwise turn, counterclockwise turn; none when the configured
+      bank angle is zero), as independent components.
+      Claim 42 supplies the pitch/bank states. No ramp state is included. This key
+      covers ordinary, non-crashing flight; crashing appearances at strictly
+      positive signed height are fresh.
     - **Vehicle turret:** the ramp state, the 32-step body facing, the 32-step turret facing, the
       selected turret index for a multi-turret type, the alternative-model state and
       the complete applicable turret-frame number as separate components. Adjacent
@@ -588,7 +595,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       displacement. MS-2 covers
       the turret facing. MS-3b covers complete frame keys and cache disabling. MS-11
       covers separate state/frame components and selected turret index. MS-10 covers
-      elevation, MS-6 recoil and MS-9 mode isolation. Corrected cache components are
+      elevation, MS-6 recoil and MS-9 mode isolation. MS-31/MS-32 propose direct
+      read-only reuse observations for rocket and flying body/shadow keys, including
+      their exceptional freshness conditions. Corrected cache components are
       lead-confirmed departures tested against this spec rather than the original. Global image invalidation in the original is `unmeasured`: no scenario here forces
       such an event or separates it from a new reuse class. MS-3b's rendering fixture
       tests complete building turret frames without requiring an oracle counter above
@@ -598,7 +607,7 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       drawn fresh beside a reused turret is covered by MS-17 (turret's body facing, run 2). The point at which the original empties its caches is not a claim of this spec (a
       departure, above), and whether a new game empties them is an open question.
     - Confidence: high (complete frames, separate alternative state, current elevation
-      and body facing in the turret key), medium (ramp state and unsettled tilt, whose details
+      and body facing in the turret key; rocket and flying body keys, MS-31/MS-32), medium (ramp state and unsettled tilt, whose details
       are left to S-0106)
 
 ### Recoil
@@ -663,13 +672,17 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     which the shadow treatment then darkens. The shadow transform is
     *V · S · H(0, shadow section)*, where *S* is the body's shadow transform: the ramp tilt of the
     cell under the unit (S-0106) and the body's 32-step rotation. Height and pitch of the
-    body do not change the unmasked footprint's outline; they can change the own-image
+    body do not change the unmasked footprint's outline; this includes the rocket's
+    nose pitch and the flying body's pitch and bank (claims 41–42). Flying shadows
+    use the flight drawing heading, rocket shadows the body heading (Terms).
+    They can change the own-image
     exclusions of claim 39.
     - Backing: `measurable` (MS-8) for ordinary footprint positions and present-column output.
       Unwrapped right-pixel adjacency is a lead-confirmed departure tested by MS-24's
       enlarged-footprint variant. Independence of the outline from body height
-      and rocking is also `unmeasured`: MS-8 has no independently controlled comparison of
-      either input.
+      and rocking is also `unmeasured` for vehicles: MS-8 has no independently
+      controlled comparison of either input. MS-31/MS-32 test rocket pitch and
+      ordinary flying pitch/bank independence separately.
     - Confidence: medium (high for the two pixels per column and for present columns without
       voxels)
 
@@ -680,7 +693,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     treatment (S-0102, S-0104). It is skipped whenever the object's cloak state is not
     *uncloaked* (that is, while cloaking, cloaked or uncloaking), and when the type has the
     no-shadow option. Shadow images are cached per type like part images (key: ramp, 32-step body
-    facing), unless the type has the shadow-cache-disable option. They are also neither looked up
+    facing; for the flying locomotor substitute its 32-step aiming facing,
+    claims 41–42), unless the type has the shadow-cache-disable option. They are also neither looked up
     nor stored, but drawn fresh, while a driving or naval unit's body is not settled or while a
     hovering unit rocks (S-0106, claim 12). These freshness rules do not override the cloak and
     no-shadow suppression above. For cache-eligible shadows, the key covers every input of the
@@ -961,6 +975,82 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     the shadow's render layer, scene-depth test and own-body overlap, not its anchor.
     - Backing: `measurable` (MS-30; the non-flying placement correction is engine
       conformance, not a prediction of identical original pixels)
+    - Confidence: high
+
+### Aircraft body attitude
+
+41. **Rocket pitch is drawn throughout flight.** A rocket missile's body is drawn
+    with *V · Rz(θ_body) · Ry(−p)*, before its section HVA transforms (claim 13).
+    The heading angle is claim 3's 32-step body heading. Pitch is about the body's
+    local lateral axis, so positive *p* raises the nose in every heading. There is
+    no slope tilt and no phase-specific drawing override: pause, tilt, raise,
+    ascent, cruise and descent all show the current pitch owned by S-0506.
+    Cruise is level only when that pitch is zero, not merely because the phase is
+    named cruise. Height placement is independent of this rotation.
+    - **Pitch resolution.** The current single-precision *p* is negated and used
+      directly as the y-rotation angle. There is no rounding to 32 pitch facings,
+      nor a fixed set of initial, final and level pictures. F1's table
+      trigonometry quantises *−p* to its 8192 sine-table indices, with the exact
+      signed rounding and end-of-turn rule given there. Thus there are at most
+      8192 rotation-table choices per heading, not necessarily 8192 visibly
+      distinct images: the model, rasterisation and pitches actually reached
+      can give fewer. Single-precision matrix stores follow F0.
+    - **Reuse classes.** Zero pitch is eligible for the level class. For nonzero
+      pitch, equality with *pᵢ* gives the initial class; otherwise equality with
+      *p𝒇* gives the final class. All other pitches require fresh draws, even
+      when their table angle or rendered pixels equal an earlier pitch's.
+      Define *pᵢ = RZ₅₃(Pᵢ × c)* and
+      *p𝒇 = RZ₂₄(RZ₅₃(P𝒇 × c))*, where *Pᵢ*, *P𝒇* are the imported
+      single-precision initial/final pitch fractions of the selected rocket set,
+      widened exactly, and *c = 1.5707963267948966* radians per quarter turn
+      (binary64). RZ₅₃ and RZ₂₄ mean round toward zero to double and single
+      precision, respectively. Compare the current single pitch widened exactly
+      with those values, with no tolerance. In particular, the initial comparison
+      does not first narrow its product to single precision, so a pitch assigned
+      from an initial fraction need not qualify for the initial class. Coincident
+      initial and final values favour the initial class, except zero remains
+      level. These classes are not pitch quantisation: a fresh draw still uses
+      the current *p*.
+    - **Shadow.** When eligible under claim 31, the rocket's shadow has
+      *S = R_s · Rz(θ_body)*, where *s* is the current cell's slope shape
+      (S-0106 claim 11), regardless of pitch or flight phase. Its reuse key is
+      slope shape and 32-step body heading, with no pitch class. Intermediate
+      rocket pitch alone does not force a fresh shadow. Claim 40 owns its anchor,
+      S-0102 claim 18 owns scene-depth and own-body overlap.
+    - Backing: `measurable` (MS-31, including its reuse probe). The precise
+      table entries that yield identical captured pixels remain `unmeasured`
+      for F1's stated reason, not an unknown pitch-step count.
+    - Confidence: high
+
+42. **Flying bodies pitch and bank.** A non-crashing aircraft with the flying
+    locomotor uses *D = Rz(θ_flight) · Ry(α) · Rx(β)* and is drawn with *V · D*,
+    before the HVA. Here *θ_flight* uses the 32-step flight drawing heading,
+    not the other body-facing direction. There is no slope tilt.
+    - At strictly positive height above the current surface (the signed height
+      used in claim 40), if the current speed fraction is strictly greater than
+      the imported drawing-pitch threshold, *α* is the imported drawing-pitch
+      angle. Otherwise *α = 0*. Compare in double precision, with no rounding
+      to a facing. Positive imported angles lower the nose.
+    - Under that same strict height and speed condition, *β* is the imported
+      bank angle during an unfinished clockwise aiming-facing turn, its negative
+      during an unfinished counterclockwise turn, and zero otherwise. The turn
+      direction is S-0206's signed shorter turn, positive facing change meaning
+      clockwise. Bank is a discrete state, not proportional to heading error
+      or turn progress. Pitch does not require a turn; bank does require the
+      speed condition, even when the pitch angle is zero. In claim 26's key,
+      pitch is present only when these height/speed tests pass and the configured
+      pitch angle is nonzero; a configured zero angle has the no-pitch state.
+    - At zero or negative height, or speed fraction equal to or below the
+      threshold, both angles are zero. Take-off and landing do not separately
+      force a nose angle: the same tests apply. This claim does not replace
+      S-0312's crash attitude rules; crashing flying bodies at strictly
+      positive signed height are not reusable.
+    - The angle rotations use F1 and F0, after narrowing the configured double
+      angles to single precision toward zero. The shadow uses the current
+      slope transform and 32-step flight drawing heading (S-0106 claim 11),
+      never these pitch or bank angles; the dropship flat-shadow exception
+      remains. Its key has slope shape and that heading, not body bank or pitch.
+    - Backing: `measurable` (MS-32)
     - Confidence: high
 
 ## Formulas
@@ -1891,7 +1981,12 @@ own name, even when the type's image names a different section.
 | `TurretCount` | Rules [type] | integer | 0 | Turret count; above 0 makes a multi-turret type unless the type has rotating-barrel weapon stages (Terms, claim 12) |
 | `IsGattling` | Rules [type] | boolean | no | Rotating-barrel weapon stages; here only its effect on the multi-turret rule (claim 12) |
 | `UseTurretShadow` | Art [image], vehicles | boolean | no | Read, no effect (`quirks.no_turret_shadow`) |
-| `Locomotor` | Rules [type] | class identifier in hyphen-separated hexadecimal groups of 8, 4, 4, 4 and 12 digits, enclosed in paired brace characters, letters in either case (S-0207 claim 14) | keeps value in force; engine default teleporting locomotor (S-0207 claim 14) | Original aircraft displacement differs between the flying and other locomotors; corrected anchor is independent of this selection (claim 40) |
+| `Locomotor` | Rules [type] | class identifier in hyphen-separated hexadecimal groups of 8, 4, 4, 4 and 12 digits, enclosed in paired brace characters, letters in either case (S-0207 claim 14) | keeps value in force; engine default teleporting locomotor (S-0207 claim 14) | Selects body attitude and heading source (claims 41–42); original aircraft displacement differs between flying and other locomotors, while the corrected anchor is independent of this selection (claim 40) |
+| `V3RocketPitchInitial`, `DMislPitchInitial`, `CMislPitchInitial`; `V3RocketPitchFinal`, `DMislPitchFinal`, `CMislPitchFinal` | Rules [General] | real quarter-turn fractions, single precision | selected set's defaults and layering as S-0506 Import mapping | current pitch is governed by S-0506 claims 14–18 and 24; the same selected set supplies claim 41's exact initial/final reuse comparisons; no separate drawing-pitch key |
+| `PitchAngle` | Rules [type] | real degrees; −1 keeps the value in force; otherwise multiply by binary64 π/180 and store in double precision toward zero | 20 degrees (engine initial value 0.3490658503988659 radians) | flying body's drawing-pitch angle, claim 42 |
+| Roll&#65;ngle | Rules [type] | real degrees, same conversion and −1 sentinel as the preceding row | 30 degrees (engine initial value 0.5235987755982988 radians) | flying body's bank angle, claim 42 |
+| `PitchSpeed` | Rules [type] | real, double-precision speed fraction | 0.25 | strict speed threshold for pitch and bank, claim 42; not leptons per tick |
+| No data key | rocket/flying drawing | fixed transform and reuse rules | not imported | claims 41–42: no pitch-image count, pitch-facing count or banking-progress setting |
 | none: terrain and high-bridge marks | Map terrain and overlay data | terrain height and slope, high-bridge cells and bridge axis, as S-0106 claim 2, S-0211 claim 15 and S-0212 claim 3 specify | no deck where no intact high bridge marks the cell | Surface anchor and neighbour qualification in claim 40; no shadow-height INI key or helipad-height substitute |
 
 **Importer warnings.** The importer warns, naming the file and the place in it, in these cases. A
@@ -3205,6 +3300,73 @@ conformance for lead-confirmed departures, not an oracle experiment.
   surface rule. Negative-height and artificial-locomotor
   variants that cannot be created in the original remain conformance tests only.
 
+**MS-31 — Rocket body pitch, shadow and reuse (claims 26, 30, 41; Q-0950).**
+Use the common skirmish setup, stock data, director and mods off, speed index 2,
+800×600 captures and one bystander computer player outside the observed area.
+On a tiny flat test map, launch each stock rocket kind toward a distant stationary
+legal target, with eight launch headings, then repeat over a slope. Capture every
+tick from placement to detonation, recording position, body heading, phase and
+single-precision pitch beside each image using a proposed read-only recorder.
+Repeat each launch twice in one game, and once after restarting the game.
+Record the body silhouette separately from shadow pixels and reconstruct the
+unmasked footprint using claim 40's anchor and S-0102 claim 18's occlusion rules.
+Expected: the model matches *V · Rz(θ_body) · Ry(−p)* in every phase, including
+intermediate tilt and descent pitches. It is not limited to 32 pitches. On equal
+heading and ground shape, the unmasked shadow stays unchanged as pitch changes.
+A level body at a nonzero resolvable pitch, a 32-step pitch snap rather than F1,
+a pitch sign/order mismatch, or a pitched unmasked shadow falsifies.
+
+For reuse, propose extending the read-only recorder to report completed-image
+reuse versus a fresh body/shadow appearance; it must not alter game state or
+rendering. Compare repeated level, initial, final and intermediate poses at equal
+heading and HVA frame, computing both endpoint comparisons exactly as claim 41.
+Expected: only the three eligible pitch classes can reuse a body; all other
+pitches stay fresh. Shadows can reuse across all pitches at the same shape and
+heading, independently of body freshness. A contrary recorded reuse decision
+falsifies. Without this proposed observation, identical pixels cannot establish
+reuse or non-retention; screenshots alone test attitude and footprint, not the
+exact equality-class contract. Named test-data endpoint fractions may supplement
+the stock runs to distinguish double initial comparison from single final
+comparison; keep these runs separate from the stock observations. No such
+recorder results or completed measurements are claimed here.
+
+**MS-32 — Flying pitch and banking (claims 26, 30, 42; Q-0950).**
+Same setup and capture settings as MS-31, with a stock flying-locomotor aircraft
+on a tiny flat map and a landing pad, plus one bystander kept out. Record take-off,
+straight flight, clockwise and counterclockwise unfinished turns, turn completion,
+slowdown and landing once at each of eight headings. Record current speed fraction,
+aiming facing, body facing, signed height and turn direction alongside each
+capture. Expected: level at nonpositive height or speed at/below the threshold,
+otherwise constant configured pitch, plus positive bank on clockwise turns,
+negative bank on counterclockwise turns, and none after turn completion. Compare
+against claim 42's composed transform, not pitch in screen space. Repeat over a
+slope: body attitude is unchanged; the unpitched shadow follows the ground shape
+and flight heading. A sign/order error, use of the other facing, gradual bank
+proportional to turn progress, or a separate take-off/landing pitch falsifies.
+A supplemental named map-only test-data run gives distinguishable drawing angles
+and arranges speed samples equal to, immediately below and immediately above the
+threshold; −1 angle overrides must retain earlier angles. Use MS-31's proposed
+read-only reuse observation to distinguish the heading/pitch/bank body classes
+and the shadow's pitch-independent class. Repeat the same rounded heading and
+complete HVA frame in each pitch/bank state, then return to a previously drawn
+state. Also repeat with zero configured pitch and, separately, zero configured
+bank: a zero angle must not create its corresponding active reuse state. Hold
+the aiming-facing bucket fixed while changing only the body-facing bucket to
+distinguish the heading source for both body and shadow. If normal flight cannot
+produce that separation, the heading-source comparison remains `unmeasured`
+until a legal route does so; a forced-pose engine fixture alone is not oracle
+backing. In a separate run, destroy the airborne aircraft with ordinary weapon
+fire and capture crashing appearances at strictly positive signed height:
+each must be fresh.
+
+A recorded reuse across different applicable heading, HVA, pitch or bank classes,
+no reuse on return to an eligible retained class without invalidation, a bank
+when its angle is zero, pitch at nonpositive height or speed at/below threshold,
+a changed unmasked shadow with pitch/bank alone, or reuse of a positive-height
+crashing body falsifies the corresponding rule. A −1 override changing an
+earlier angle also falsifies the import rule. Missing reuse records leave the
+exact reuse contract inconclusive: pixel matches alone do not settle it.
+
 ## Open questions
 
 - **Turretless vehicle with a barrel part.** A vehicle with a barrel part but no turret is drawn
@@ -3225,12 +3387,12 @@ conformance for lead-confirmed departures, not an oracle experiment.
   including continued animation during spin-down and the corrected building double advance.
   Exact advances for other types belong to the combat, vehicle and building specs; MS-3c
   tests the initial frame and subsequent changes, not the exact counter-to-frame mapping.
-- **Cache keys of other locomotors.** For the flying, rocket and tunnelling locomotors the body
-  key is made up differently, and how its parts combine with the turret key, including the
-  removal of the body facing at turret displacement 0, has not been determined. Whether
-  locomotors other than the driving and naval locomotors also skip the cache while the body's
-  tilt is not settled is settled for the hovering, jumpjet and tunnelling locomotors by S-0106
-  claim 13; for the flying and rocket locomotors it has not been determined.
+- **Cache keys of other locomotors.** Claims 26 and 41–42 settle ordinary flying
+  and rocket body keys and their pitch/bank freshness conditions. The tunnelling
+  body's complete key and how these locomotors combine their keys with a vehicle
+  turret key, including removal of body facing at turret displacement 0, remain
+  undetermined. Hovering, jumpjet and tunnelling freshness during rocking or
+  digging pitch is settled by S-0106 claim 13.
 - **Image invalidation.** What observable event makes all earlier images ineligible for reuse
   in the original, and whether a new game does so, remain open (claim 26). Our engine retains
   reuse throughout a game and starts each game without earlier images. Invalidation bounds how
@@ -3243,6 +3405,21 @@ conformance for lead-confirmed departures, not an oracle experiment.
   remain `unmeasured`; no finite capture set establishes that universal rule.
   MS-28's closing sweep proposes further count and near-equal-depth tests. Interim
   engine pixels are not reference results.
+
+## Cross-spec reconciliation
+
+- **S-0106 claims 5, 8, 11 and 12.** Claims 26 and 41–42 here resolve the
+  flying/rocket body-attitude and reuse questions. Claim 11 there and its aircraft
+  heading open question must be updated: flying shadows use the 32-step aiming
+  facing, rocket shadows the 32-step body facing, and neither includes body pitch
+  or bank. Claim 12's shadow key uses the same heading source. Retain that spec's
+  slope transform and dropship flat-shadow exception. Confirm the two specs
+  together at sign-off; its current unresolved heading statement is not an
+  alternative to claims 30 and 42 here.
+- **S-0506 claims 15 and 17.** Add a pointer to claim 41 here for the body's
+  appearance throughout the flight phases and its level/endpoint reuse classes:
+  current pitch is drawn without 32-step pitch quantisation and does not pitch
+  the shadow. Flight-pitch evolution and movement formulas are unchanged.
 
 ## Questions for the project lead
 
