@@ -197,13 +197,9 @@ Q-0490 is answered by S-0102 revision 14, claim 33: when `BUILDNGZ.SHA` is missi
 
 Q-0520 is answered by S-0102 revision 15, claim 33 and its Import mapping: for `BUILDNGZ.SHA` only, an image frame 0 with a non-empty rectangle and pixel-data position 0 is failed input, whatever unused bytes follow it, not empty coverage. `mapview::build::read_companion` warns with the scene note naming the file and that failure and the eligible body is drawn with no companion and the plain upright profile of F2, writing depth, like the other failures; it is no longer provisional (`mapview::tests::building_body_companion_without_pixel_data_uses_plain_upright`). The shape decoder for other sprites is unchanged.
 
-**Open requests and their placeholders.**
+**Open requests and their placeholders.** None open here.
 
-| Where | Placeholder | Request |
-|---|---|---|
-| `air::set_mark`, `air::clear_mark` | the object-present flag of an aircraft that rests with the deck mark set stays in the ground record of its cell | Q-0872 |
-
-S-0501 revision 15 answers Q-0841 (step 5, [docs/m6-claims/step5.md](m6-claims/step5.md)); its row is retired (see "Aircraft shadow anchor" below).
+S-0501 revision 15 answers Q-0841 (step 5, [docs/m6-claims/step5.md](m6-claims/step5.md)); its row is retired (see "Aircraft shadow anchor" below). S-0501 revision 16 and S-0209 revision 37 answer Q-0872 (step 6a, [docs/m6-claims/step6a.md](m6-claims/step6a.md)): an ordinary aircraft's object-present flag is set in the deck record at rest on a high-bridge deck and in the ground record otherwise (`air::mark_layer`, chosen at each marking or clearing event from the actual position), and its row is retired.
 
 Revision 17 of S-0105 answers Q-0215 question 7 (F8's record-low relation, MS-25 and MS-28); `render::voxel::section_order` already computes it, and `section_order_is_f8_relation`, `section_order_ms25_pair_winners` and `section_order_ms28_rows` check it.
 
@@ -786,8 +782,9 @@ Provisional rules of M6b superweapons, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `tick::object_turn`, `warp::turn` | S-0513 claim 51 suppresses the five kinds of ordinary work (self-healing, behaviour processing, movement, firing, turret turning) from the first pending update through arrival effects; the code goes further and takes no other part of the turn either (the per-tick behaviour start, the cloak update, reload timers, a parasite's step), as it did under the old interim | Q-0870 |
 | `warp::place` | only a landing point outside the map fails the placement of claim 50; the member goes back to the landing retry | Q-0871 |
+
+S-0203 revision 32, S-0301 revision 18 and S-0215 revision 48 (with S-0513 revision 14 claim 51) answer Q-0870 (step 6a, [docs/m6-claims/step6a.md](m6-claims/step6a.md)): the warp update is the whole member turn from the first pending update through arrival effects (`tick::object_turn`), the reload countdown still elapses (`combat::fire::reload_elapsed`), and the expected-health bookkeeping and the protection envelope's phases are ordinary work that resumes after the hold-end test. Its row is retired.
 
 S-0512 revision 8 and S-0513 revision 11 (step 3, [docs/m6-claims/step3-sw.md](m6-claims/step3-sw.md)) answer Q-0738 (claim 48) and Q-0741 (claims 33 and 49); the rows above keep only what those claims mark unmeasured, under the new requests Q-0850 and Q-0851. S-0513 revision 12 answers Q-0800 (step 4, [docs/m6-claims/step4.md](m6-claims/step4.md)): `storm::cell_state` measures a building witness at its foundation centre (`World::reference_point`, remainders modulo 256 compared with (0, 0)) and a building is listed in every actual foundation cell; its row is retired. Q-0850 and Q-0851 stayed open until revision 13 (step 5, [docs/m6-claims/step5.md](m6-claims/step5.md)), whose claims 50 and 51 are the engine rules `warp::*` now builds: the fallback cell (0, 0) for an off-map destination and a failed search, an illegal landing cell is blocked and never placed, a refused placement returns the member to the landing retry (alive, no cap, no timeout), the first fallback and the first refusal per member and warp are reported as world notes, launch clears the path, the queued destinations and the walking, driving and hover steps, and target and destination are dropped in the first update. Their interim rows are retired; Q-0870 and Q-0871 are new.
 
