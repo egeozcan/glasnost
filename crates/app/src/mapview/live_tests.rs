@@ -1174,11 +1174,13 @@ fn animation_events_play_their_art_and_end() {
         name: "boomx".into(),
         pos,
         delay: None,
+        reverse: false,
     });
     live.world.effects.push(Effect::Anim {
         name: "NOSUCHANIM".into(),
         pos,
         delay: None,
+        reverse: false,
     });
     live.after_tick();
     assert_eq!(live.counts.anims_with_art, 1);

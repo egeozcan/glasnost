@@ -11,12 +11,19 @@
 //! - [`game`]: a game with its AI houses (world and AI state stepped, saved
 //!   and hashed together); [`brain`]: one AI house's state and thinking.
 //! - [`special`]: garrisoning, engineers capturing and spies infiltrating
-//!   (M6c).
+//!   (M6c); [`tech_buildings`]: which tech buildings an engineer is worth
+//!   sending to (S-0515).
+//! - [`deployers`]: deployable units deployed near the enemy and packed up
+//!   again (S-0517).
+//! - [`jumpjets`]: jumpjet units sent over obstacles to reach the enemy (S-0502).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod brain;
+pub mod deployers;
 pub mod fixture;
 pub mod game;
+pub mod jumpjets;
 pub mod scripted;
 pub mod skirmish;
 pub mod special;
+pub mod tech_buildings;

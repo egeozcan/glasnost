@@ -42,6 +42,9 @@ const SCENES: &[Scene] = &[
     ("garrison", garrison_and_evict),
     ("capture", engineer_captures),
     ("infiltrate", spy_infiltrates),
+    ("tech", engineer_takes_tech_building),
+    ("jumpjet", jumpjet_flies),
+    ("deploy", unit_deploys),
 ];
 
 #[test]
@@ -360,6 +363,317 @@ fn spy_infiltrates(lane: &mut Lane) {
         w.houses[usize::from(local.0)].infiltrated_infantry_factory,
     );
     lane.save("infiltrate-after");
+}
+
+/// S-0515: an engineer of the local house is sent into a cash-producing tech
+/// building of the neutral house (found by its rules fields, never by name:
+/// the needs-engineer flag with an income amount and delay) with the click a
+/// person gives; the capture pays the acquisition bonus, and the income
+/// follows at the building's cycles. Prints credits and ticks only.
+fn engineer_takes_tech_building(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let man = (0..r.infantry.len())
+        .find(|&i| r.infantry[i].engineer)
+        .map(|i| r.infantry[i].name.clone());
+    let tech = (0..r.buildings.len())
+        .filter(|&b| {
+            let x = &r.buildings[b].raw;
+            x.needs_engineer.unwrap_or(false)
+                && x.capturable.unwrap_or(false)
+                && x.produce_cash_amount.unwrap_or(0) > 0
+                && x.produce_cash_delay.unwrap_or(0) > 0
+                && r.buildings[b].foundation.0 > 0
+        })
+        .min_by_key(|&b| (r.buildings[b].foundation.0 * r.buildings[b].foundation.1, b))
+        .map(|b| {
+            let x = &r.buildings[b].raw;
+            (
+                r.buildings[b].name.clone(),
+                r.buildings[b].foundation,
+                (
+                    x.produce_cash_startup.unwrap_or(0),
+                    x.produce_cash_amount.unwrap_or(0),
+                    x.produce_cash_delay.unwrap_or(0),
+                ),
+            )
+        });
+    println!(
+        "engineer type found: {}, cash-producing tech type found: {}",
+        man.is_some(),
+        tech.is_some()
+    );
+    let (Some(man), Some((name, size, (bonus, amount, delay)))) = (man, tech) else {
+        return;
+    };
+    println!("bonus {bonus}, amount {amount}, delay {delay}");
+    let local = lane.local();
+    let neutral = (0..lane.world().houses.len())
+        .map(|i| HouseId(i as u8))
+        .find(|&h| {
+            lane.world().houses[usize::from(h.0)].role == glasnost_sim::world::HouseRole::Neutral
+        });
+    let Some(neutral) = neutral else {
+        println!("no neutral house");
+        return;
+    };
+    let home = lane.home();
+    let Some(at) = lane.area(CellXY::new(home.x + 8, home.y + 8), size, 2, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("no open ground");
+        return;
+    };
+    let b = lane.spawn(Kind::Building, &name, neutral, at);
+    let start = lane.open_land(CellXY::new(at.x - 6, at.y));
+    let e = lane.spawn(Kind::Infantry, &man, local, start);
+    lane.look_at(at);
+    lane.ticks(3);
+    let credits = |l: &Lane| l.world().houses[usize::from(l.local().0)].credits;
+    println!(
+        "credits before {}, tech building manned: {}",
+        credits(lane),
+        glasnost_sim::econ::power::manned(lane.world(), b)
+    );
+    lane.save("tech-before");
+    let sent = lane.order(local, e, ClickOn::Object(b));
+    println!("engineer at {start:?} sent at {at:?}, {sent} orders");
+    for _ in 0..1500 {
+        lane.ticks(1);
+        if lane.world().obj(e).is_none() {
+            break;
+        }
+    }
+    let captured = lane.world().tick;
+    lane.ticks(1);
+    println!(
+        "captured at tick {captured}: owner is the local house {}, manned {}, credits {}",
+        lane.world().obj(b).and_then(|o| o.owner) == Some(local),
+        glasnost_sim::econ::power::manned(lane.world(), b),
+        credits(lane)
+    );
+    lane.save("tech-captured");
+    let mut paid = Vec::new();
+    let mut last = credits(lane);
+    // Three income cycles after the capture.
+    for _ in 0..(delay.max(2) * 3 + 5) {
+        lane.ticks(1);
+        let now = credits(lane);
+        if now > last {
+            paid.push((lane.world().tick, now - last));
+        }
+        last = now;
+    }
+    println!("income payments (tick, credits): {paid:?}");
+    lane.save("tech-income");
+}
+
+/// S-0502: a unit of a jumpjet type (found by its locomotor, never by name)
+/// is ordered by a click to a cell its walkers cannot reach from where it
+/// stands (another reach region of the ground: across water or a cliff,
+/// found from the map) and flies there: it takes off, cruises and lands.
+/// Prints the states and heights by tick only.
+fn jumpjet_flies(lane: &mut Lane) {
+    use glasnost_sim::jump::Phase;
+    let w = lane.world();
+    let r = w.rules();
+    let found = [Kind::Infantry, Kind::Vehicle].into_iter().find_map(|k| {
+        let n = if k == Kind::Infantry {
+            r.infantry.len()
+        } else {
+            r.vehicles.len()
+        };
+        (0..n).find_map(|i| {
+            r.unit(k, i as u32)
+                .filter(|u| {
+                    u.jumpjet_locomotor
+                        && !u.raw.balloon_hover.unwrap_or(false)
+                        && !u.simple_deployer
+                })
+                .map(|u| (k, u.name.clone()))
+        })
+    });
+    println!("jumpjet type found: {}", found.is_some());
+    let Some((kind, name)) = found else { return };
+    let local = lane.local();
+    let home = lane.home();
+    let start = lane.open_land(CellXY::new(home.x + 3, home.y + 3));
+    let unit = lane.spawn(kind, &name, local, start);
+    lane.look_at(start);
+    lane.ticks(4);
+    // A cell 8 to 16 cells away that the ground does not reach from the start, else any open one.
+    let zone = glasnost_rules::sim::MovementZone::Normal;
+    let here = glasnost_sim::regions::reach_in(lane.world(), start, zone);
+    let across = lane
+        .world()
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| {
+            let d2 = (c.x - start.x).pow(2) + (c.y - start.y).pow(2);
+            (64..=256).contains(&d2)
+                && lane.world().cells.usable(c)
+                && glasnost_sim::regions::reach_in(lane.world(), c, zone) != here
+                && lane.world().cells.cell(c).is_some_and(|x| {
+                    x.land != land::WATER && x.land != land::ROCK && x.land != land::BEACH
+                })
+                && lane.world().cells.list(c, Layer::Ground).is_empty()
+        })
+        .min_by_key(|c| ((c.x - start.x).pow(2) + (c.y - start.y).pow(2), c.y, c.x));
+    println!("a cell across an obstacle found: {}", across.is_some());
+    let goal = across.unwrap_or_else(|| lane.open_land(CellXY::new(start.x + 12, start.y)));
+    lane.save("jumpjet-before");
+    let sent = lane.order(local, unit, ClickOn::Cell(goal));
+    println!("jumpjet at {start:?} sent to {goal:?}, {sent} orders");
+    let mut phase = None;
+    let mut shot = false;
+    let mut cruise_ticks = 0;
+    let mut changes = 0;
+    for t in 0..2000 {
+        lane.ticks(1);
+        let Some(o) = lane.world().obj(unit) else {
+            println!("the jumpjet is gone");
+            break;
+        };
+        let p = o.jump.as_ref().map(|j| j.phase);
+        if p != phase && changes < 12 {
+            changes += 1;
+            println!(
+                "tick {}: {:?}, height {}, cell {:?}",
+                lane.world().tick,
+                p,
+                lane.world().height_above_surface(unit),
+                o.pos.cell()
+            );
+            phase = p;
+        }
+        if p == Some(Phase::Cruising) {
+            cruise_ticks += 1;
+            if cruise_ticks == 30 && !shot {
+                let c = o.pos.cell();
+                lane.look_at(c);
+                lane.ticks(1);
+                lane.save("jumpjet-flight");
+                shot = true;
+            }
+        }
+        if p == Some(Phase::Grounded) && t > 20 {
+            break;
+        }
+    }
+    let end = lane.world().obj(unit).map(|o| o.pos.cell());
+    if let Some(o) = lane.world().obj(unit) {
+        let u = lane.world().rules().unit(o.kind, o.type_index);
+        println!(
+            "end state {:?}; has a target: {}; balloon-hover: {}; behaviour {:?}",
+            o.jump.as_ref().map(|j| (j.phase, j.moving)),
+            o.target.is_some(),
+            u.is_some_and(|u| u.raw.balloon_hover.unwrap_or(false)),
+            o.beh.current
+        );
+    }
+    println!("landed at {end:?}, goal {goal:?}");
+    if let Some(c) = end {
+        lane.look_at(c);
+    }
+    lane.ticks(3);
+    lane.save("jumpjet-landed");
+}
+
+/// S-0517: a vehicle that deploys in place is sent the click a person gives
+/// on it (S-0214); it is drawn with its deploying presentation while it
+/// changes (its own body hidden), with the deployed image when its type
+/// names one, and a second click packs it up again.
+fn unit_deploys(lane: &mut Lane) {
+    use glasnost_sim::econ::inplace::{self, Form};
+    let w = lane.world();
+    let r = w.rules();
+    let pick = |animated: bool| {
+        (0..r.vehicles.len()).find_map(|i| {
+            r.unit(Kind::Vehicle, i as u32)
+                .filter(|u| {
+                    u.simple_deployer
+                        && u.passengers == 0
+                        && !u.harvester
+                        && u.deploying_anim.is_some() == animated
+                        && !u.raw.deploys_into.as_deref().is_some_and(|d| !d.is_empty())
+                })
+                .map(|u| (u.name.clone(), u.jumpjet_locomotor))
+        })
+    };
+    let found = pick(true).or_else(|| pick(false));
+    let count = |f: &dyn Fn(&glasnost_sim::rules::UnitRules) -> bool| {
+        (0..r.vehicles.len())
+            .filter(|&i| r.unit(Kind::Vehicle, i as u32).is_some_and(f))
+            .count()
+    };
+    println!(
+        "vehicle types {}: simple deployers {}, with a deploying animation {}, deploying into a building {}",
+        r.vehicles.len(),
+        count(&|u| u.simple_deployer),
+        count(&|u| u.deploying_anim.is_some()),
+        count(&|u| u.raw.deploys_into.is_some())
+    );
+    println!("in-place deploying vehicle type found: {}", found.is_some());
+    let Some((name, flier)) = found else { return };
+    println!("a jumpjet type (landing first): {flier}");
+    let local = lane.local();
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 3, home.y + 3));
+    let unit = lane.spawn(Kind::Vehicle, &name, local, at);
+    lane.look_at(at);
+    lane.ticks(4);
+    lane.save("deploy-before");
+    let sent = lane.order(local, unit, ClickOn::Object(unit));
+    println!("click on the unit: {sent} orders");
+    if sent == 0 {
+        glasnost_sim::orders::issue(
+            lane.world_mut(),
+            local,
+            glasnost_sim::orders::Order::Deploy { actor: unit },
+        );
+    }
+    let mut shot = false;
+    for _ in 0..600 {
+        lane.ticks(1);
+        let f = inplace::form(lane.world(), unit);
+        if matches!(f, Form::Deploying { .. }) && !shot {
+            lane.ticks(2);
+            lane.save("deploy-transition");
+            shot = true;
+        }
+        if f == Form::Deployed {
+            break;
+        }
+    }
+    println!(
+        "form {:?}, body hidden {}, deployed image {:?}, behaviour {:?}",
+        inplace::form(lane.world(), unit),
+        inplace::body_hidden(lane.world(), unit),
+        inplace::deployed_image(lane.world(), unit),
+        lane.world().obj(unit).map(|o| o.beh.current)
+    );
+    lane.ticks(6);
+    lane.save("deploy-deployed");
+    let again = lane.order(local, unit, ClickOn::Object(unit));
+    println!("second click: {again} orders");
+    if again == 0 {
+        glasnost_sim::orders::issue(
+            lane.world_mut(),
+            local,
+            glasnost_sim::orders::Order::Deploy { actor: unit },
+        );
+    }
+    for _ in 0..600 {
+        lane.ticks(1);
+        if inplace::form(lane.world(), unit) == Form::Mobile {
+            break;
+        }
+    }
+    lane.ticks(6);
+    println!("form after: {:?}", inplace::form(lane.world(), unit));
+    lane.save("deploy-packed");
 }
 
 // ---------------------------------------------------------------------------

@@ -229,6 +229,12 @@ pub struct BuildingSwitches {
     /// building's first ownership change of any cause and never cleared.
     /// A building put on the map, by any means, is not manned.
     pub manned: bool,
+    /// The tick in which the building's income countdown was last restarted
+    /// (S-0515 claim 4, Terms); `None` before the building was first put on
+    /// the map, a countdown that has run out (the length itself is the
+    /// type's income delay).
+    #[serde(default)]
+    pub income_restart: Option<i32>,
     /// A vehicle disabled by the loss of its control centre (claim 13).
     pub unit_disabled: bool,
     /// A vehicle's cell at its previous turn (claim 13, the cell-entry rule).

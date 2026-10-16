@@ -19,6 +19,9 @@ pub enum Effect {
         /// one value or the rules do not list the type. Only the drawing
         /// reads it: the simulation keeps no playback clock.
         delay: Option<i32>,
+        /// The animation plays in reverse (S-0517 claim 6: the deploying
+        /// presentation of an undeploy); only the drawing reads it.
+        reverse: bool,
     },
     /// A detonation happened (S-0303).
     Detonation {
@@ -183,8 +186,10 @@ pub enum InfiltrationRow {
 /// The sounds of [`Effect::Sound`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sound {
-    /// A type's deploy sound (S-0415 claims 6 and 9).
+    /// A type's deploy sound (S-0415 claims 6 and 9, S-0517 claim 12).
     Deploy,
+    /// A vehicle type's undeploy sound (S-0517 claim 12).
+    Undeploy,
     /// A building type's pack-up sound, when it has one (S-0415 claim 9).
     Packup,
     /// The sell sound (S-0408 claims 6 and 12).
@@ -247,10 +252,17 @@ pub enum Sound {
 /// a shot's or a death's animations stand in it is not established (S-0203
 /// claim 2, `unmeasured`).
 pub fn anim(w: &mut crate::world::World, name: &str, pos: Pos) {
+    anim_reversible(w, name, pos, false);
+}
+
+/// [`anim`], playing in reverse when `reverse` (S-0517 claim 6: the deploying
+/// presentation of an undeploy).
+pub fn anim_reversible(w: &mut crate::world::World, name: &str, pos: Pos, reverse: bool) {
     let delay = crate::load::anim_created_at(w, name, Some((pos.x, pos.y, pos.z)));
     w.effects.push(Effect::Anim {
         name: name.to_owned(),
         pos,
         delay,
+        reverse,
     });
 }

@@ -564,6 +564,100 @@ fn spy_general_keys() {
     assert!(!warned("57%"));
 }
 
+// spec: S-0515 Import mapping (ProduceCashStartup, ProduceCashAmount and ProduceCashDelay: integers on a building type; absent: no value, read as 0; a later section that omits a key keeps the value in force)
+#[test]
+fn cash_keys_of_a_building_type() {
+    let base = "[BuildingTypes]\n0=DERRICK\n1=PLAIN\n[DERRICK]\nProduceCashStartup=1500\nProduceCashAmount=-5\nProduceCashDelay=11\n[PLAIN]\nStrength=100\n";
+    let (s, _) = import_with_map(base, "[DERRICK]\nProduceCashAmount=40\n");
+    let d = &s.buildings["DERRICK"];
+    assert_eq!(d.produce_cash_startup, Some(1500));
+    assert_eq!(d.produce_cash_amount, Some(40));
+    assert_eq!(d.produce_cash_delay, Some(11));
+    let p = &s.buildings["PLAIN"];
+    assert_eq!(
+        (
+            p.produce_cash_startup,
+            p.produce_cash_amount,
+            p.produce_cash_delay
+        ),
+        (None, None, None)
+    );
+}
+
+// spec: S-0502 Import mapping and Key case (the jumpjet fields of a type: JumpjetSpeed, JumpjetClimb, JumpjetCrash, JumpjetHeight, JumpjetAccel, JumpjetWobbles, JumpjetDeviation, JumpjetNoWobbles, JumpjetTurnRate; the stock spellings JumpJetAccel and JumpJetTurnRate are other keys and feed nothing; DeployToLand; a later layer that omits a key keeps the value)
+#[test]
+fn jumpjet_type_keys() {
+    let base = "[InfantryTypes]\n0=JJ\n1=STOCK\n[JJ]\nJumpjetSpeed=20\nJumpjetClimb=3.5\nJumpjetCrash=7.25\nJumpjetHeight=600\nJumpjetAccel=1.5\nJumpjetWobbles=0.3\nJumpjetDeviation=25\nJumpjetNoWobbles=yes\nJumpjetTurnRate=9\nDeployToLand=yes\n[STOCK]\nJumpJetAccel=9.5\nJumpJetTurnRate=77\n";
+    let (s, _) = import_with_map(base, "[JJ]\nJumpjetSpeed=22\n");
+    let t = &s.infantry["JJ"];
+    assert_eq!(t.jumpjet_speed, Some(22));
+    let rz = glasnost_num::Rounding::TowardZero;
+    let text = |d: &Option<glasnost_rules::sim::Decimal>| {
+        d.as_ref()
+            .map(|d| d.single_value(rz) == glasnost_num::decimal::nearest_double(&format_single(d)))
+    };
+    // The values read as the single-precision numbers of the written decimals.
+    fn format_single(d: &glasnost_rules::sim::Decimal) -> String {
+        d.0.clone()
+    }
+    let _ = text;
+    let single = |d: &Option<glasnost_rules::sim::Decimal>, written: &str| {
+        d.as_ref().map(|d| d.single_value(rz))
+            == Some(glasnost_rules::sim::Decimal(written.into()).single_value(rz))
+    };
+    assert!(single(&t.jumpjet_climb, "3.5"));
+    assert!(single(&t.jumpjet_crash, "7.25"));
+    assert_eq!(t.jumpjet_height, Some(600));
+    assert!(single(&t.jumpjet_accel, "1.5"));
+    assert!(single(&t.jumpjet_wobbles, "0.3"));
+    assert_eq!(t.jumpjet_deviation, Some(25));
+    assert_eq!(t.jumpjet_no_wobbles, Some(true));
+    assert_eq!(t.jumpjet_turn_rate, Some(9));
+    assert_eq!(t.deploy_to_land, Some(true));
+    let stock = &s.infantry["STOCK"];
+    assert_eq!(
+        (stock.jumpjet_accel.clone(), stock.jumpjet_turn_rate),
+        (None, None),
+        "the stock spellings have no effect"
+    );
+}
+
+// spec: S-0517 Import mapping (DeployingAnim names an animation type, UnloadingClass a vehicle type, DeployTime is read and affects no vehicle; the presentation's Rate, Start, End and Shadow keys)
+#[test]
+fn deployable_unit_keys() {
+    let base = "[VehicleTypes]\n0=MCV\n1=IMG\n[Animations]\n0=PACK\n[MCV]\nDeployingAnim=PACK\nUnloadingClass=IMG\nDeployTime=.02\nDeploysInto=\n[IMG]\n";
+    let art = "[PACK]\nRate=450\nStart=2\nEnd=7\nShadow=yes\n";
+    let (s, _) = import(base, art);
+    let v = &s.vehicles["MCV"];
+    assert_eq!(v.deploying_anim.as_deref(), Some("PACK"));
+    assert_eq!(v.unloading_class.as_deref(), Some("IMG"));
+    assert!(v.deploy_time.is_some());
+    let a = &s.animations["PACK"];
+    assert_eq!(
+        (a.rate, a.start, a.end, a.shadow),
+        (Some(450), Some(2), Some(7), Some(true))
+    );
+    // Absent keys: none.
+    let (s, _) = import("[VehicleTypes]\n0=MCV\n[MCV]\nStrength=5\n", "");
+    let v = &s.vehicles["MCV"];
+    assert_eq!(
+        (v.deploying_anim.clone(), v.unloading_class.clone()),
+        (None, None)
+    );
+}
+
+// spec: S-0502 Import mapping ([AudioVisual] DeployDir: an integer 8-step direction, absent: none given; the six [JumpjetControls] values are read and ignored)
+#[test]
+fn deploy_direction_and_jumpjet_controls() {
+    let (s, _) = import(
+        "[AudioVisual]\nDeployDir=9\n[JumpjetControls]\nSpeed=3\nClimb=2\n",
+        "",
+    );
+    assert_eq!(s.general.economy.deploy_dir, Some(9));
+    let (s, _) = import("[General]\nFlashFrameTime=7\n", "");
+    assert_eq!(s.general.economy.deploy_dir, None);
+}
+
 // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft, read for unit types; absent: no)
 #[test]
 fn considered_aircraft_flag() {
@@ -669,4 +763,14 @@ Fighter=yes\nFlyBy=no\nFlyBack=yes\nFlightLevel=333\n[GULL]\nStrength=7\n\
     assert_eq!(e.curley_shuffle, Some(true));
     assert_eq!(e.attacking_aircraft_sight_range, Some(3));
     assert_eq!(e.spy_plane_camera_frames, Some(12));
+}
+
+// spec: S-0502 Edge cases (a jumpjet speed or turn rate of 0: an importer warning, no switch)
+#[test]
+fn zero_jumpjet_speed_and_turn_rate_warn() {
+    let base = "[InfantryTypes]\n0=ZS\n1=ZT\n2=OK\n[ZS]\nJumpjetSpeed=0\n[ZT]\nJumpjetTurnRate=0\n[OK]\nJumpjetSpeed=5\nJumpjetTurnRate=4\n";
+    let (_, w) = import(base, "");
+    let hits = |k: &str| w.iter().filter(|m| m.contains(k)).count();
+    assert_eq!(hits("JumpjetSpeed=0"), 1);
+    assert_eq!(hits("JumpjetTurnRate=0"), 1);
 }

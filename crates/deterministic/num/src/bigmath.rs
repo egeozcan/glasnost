@@ -84,6 +84,37 @@ pub fn sin(theta: &BigUint) -> BigUint {
     sum.to_biguint().unwrap_or_default()
 }
 
+/// round(v × sin α) and round(v × cos α) for the angle α = 2π f / 65536 of
+/// a facing `f`, rounding half away from zero (S-0502 Edge cases,
+/// `quirks.jumpjet_step_truncation` off: the exact functions, evaluated far
+/// beyond double precision, then the integer rounding of the product).
+pub fn rounded_sin_cos(f: u16, v: i32) -> (i32, i32) {
+    // spec: S-0502 Edge cases (α = 2π F / 65536; a quarter turn is 16384 facing units)
+    let quarter = u32::from(f) / 16384;
+    let r = u32::from(f) % 16384;
+    let half_pi = pi() >> 1u32;
+    // spec: S-0502 Edge cases (θ = 2π r / 65536 = π r / 32768 within the quarter turn)
+    let theta = (pi() * BigUint::from(r)) >> 15u32;
+    let s = BigInt::from(sin(&theta));
+    let c = BigInt::from(sin(&(half_pi - theta)));
+    // The quadrant: (sin, cos) = (s, c), (c, −s), (−s, −c), (−c, s).
+    let (a, b) = match quarter {
+        0 => (s, c),
+        1 => (c, -s),
+        2 => (-s, -c),
+        _ => (-c, s),
+    };
+    let round = |x: BigInt| -> i32 {
+        let m = x * BigInt::from(v);
+        let half = BigInt::from(1u32) << (FRAC - 1);
+        let negative = m.sign() == Sign::Minus;
+        let mag = if negative { -m } else { m };
+        let q = i32::try_from((mag + half) >> FRAC).unwrap_or(0);
+        if negative { -q } else { q }
+    };
+    (round(a), round(b))
+}
+
 /// The integer square root of a big integer (floor).
 pub fn isqrt_big(n: &BigUint) -> BigUint {
     n.sqrt()

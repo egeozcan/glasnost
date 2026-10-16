@@ -201,6 +201,20 @@ fn infantry_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
     if walking || (dest && !interruptible) {
         return true;
     }
+    if let Some(fraction) = crate::jump::speed_fraction(w, firer) {
+        // spec: S-0310 claim 8 and Constants (the infantry speed fraction above 0.1, compared in double precision) and S-0502 claims 6 and 20 (a jumpjet's fraction is v_c / S)
+        if fraction.gt(glasnost_num::decimal::nearest_double("0.1")) {
+            return true;
+        }
+        // spec: S-0310 claim 8 and S-0502 claim 20 (a jumpjet infantry type with the jumpjet-turn flag gets moving while its locomotor is moving now; grounded and hovering do not)
+        if w.rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.vehicle.jump_jet_turn)
+            && crate::jump::moving_now(w, firer)
+        {
+            return true;
+        }
+    }
     // spec: S-0310 claim 8 (a fire-particle weapon while the unit has a destination)
     w.rules().combat.weapon(weapon).fire_particles && dest
 }
@@ -339,6 +353,18 @@ pub fn check(
     if crate::fall::falling(w, firer) {
         return Answer::Illegal;
     }
+    // spec: S-0301 claim 9 rank 4 and S-0517 claim 11 (a vehicle in a deploy or undeploy transition: illegal for every weapon and target; higher-ranked refusals win)
+    if kind == Kind::Vehicle && crate::econ::inplace::refuses_fire(w, firer) {
+        return Answer::Illegal;
+    }
+    // spec: S-0517 claim 11 (a magnetic beam is illegal against a target vehicle in transition or an in-place deploying vehicle whose current behaviour is unload)
+    if wr.mag_beam
+        && let Some(Target::Object(x)) = target
+        && w.obj(x).is_some_and(|t| t.kind == Kind::Vehicle)
+        && crate::econ::inplace::beam_refused(w, x)
+    {
+        return Answer::Illegal;
+    }
     let t = w.tick;
     let c = &o.combat;
     // spec: S-0301 claim 13 (the sync tick: the counter equals the sync frame for k mod B)
@@ -403,7 +429,10 @@ pub fn check(
     }
     if kind == Kind::Vehicle {
         let u = r.unit(kind, o.type_index).expect("vehicle type");
-        // Rank 11 (must deploy) needs the deploy specs' cell test for deploy-to-fire vehicles; the cell is taken to allow deploying.
+        // spec: S-0301 claim 9 rank 11 and S-0310 claim 9 (must deploy: a deploy-to-fire vehicle whose own cell fails S-0517 claim 14's cell test, when no reason of ranks 1 to 10 holds; it outranks moving, still turning and not facing)
+        if u.vehicle.deploy_to_fire && !crate::econ::inplace::deploy_test(w, firer) {
+            return Answer::MustDeploy;
+        }
         // spec: S-0310 claim 11 and S-0301 claim 9 rank 12 (a vehicle healer: illegal when the target is absent, does not count as a vehicle, or is at full health)
         if healing(w, weapon) {
             let ok = matches!(target, Some(Target::Object(x))

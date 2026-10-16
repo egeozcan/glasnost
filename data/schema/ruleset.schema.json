@@ -184,6 +184,15 @@
           ],
           "default": null
         },
+        "end": {
+          "description": "`End`, the end field *E* as written (S-0109 Import mapping: absent\nor −1 take the sprite's value).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "frame_count": {
           "description": "The image-frame count *F* of the type's current (drawn) sprite\n(S-0513 claim 46, not twice the middle frame); absent when the import\nhad no such sprite.",
           "type": [
@@ -258,12 +267,29 @@
           ],
           "default": null
         },
+        "shadow": {
+          "description": "`Shadow`, the shadow-type flag (S-0109 Import mapping); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "spawns_particle": {
           "description": "`SpawnsParticle`: the particle type the middle event requests, by\ntype name (S-0109 claim 14, S-0202 claim 15).",
           "type": [
             "string",
             "null"
           ],
+          "default": null
+        },
+        "start": {
+          "description": "`Start`, the initial image frame *a* (S-0109 Import mapping; S-0517\nF1 reads the presentation's start, end and delay).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "tiberium_chain_reaction": {
@@ -971,6 +997,33 @@
           },
           "maxItems": 2,
           "minItems": 2
+        },
+        "produce_cash_amount": {
+          "description": "`ProduceCashAmount`, the income amount in credits (S-0515 claim 5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "produce_cash_delay": {
+          "description": "`ProduceCashDelay`, the income delay in ticks (S-0515 claims 4 and 5).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "produce_cash_startup": {
+          "description": "`ProduceCashStartup`, the acquisition bonus in credits (S-0515\nclaim 3, Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "repairable": {
           "description": "`Repairable`.",
@@ -3347,6 +3400,15 @@
             "boolean",
             "null"
           ],
+          "default": null
+        },
+        "deploy_dir": {
+          "description": "`[AudioVisual] DeployDir`, the game-wide deploy direction, an 8-step\ndirection (S-0502 claim 15 and Import mapping; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
           "default": null
         },
         "flash_frame_time": {
@@ -7714,27 +7776,27 @@
           "default": true
         },
         "jumpjet_bridge_early_cruise_height": {
-          "description": "An own-cell early cruise keeps the height above the surface r as its target even when the take-off threshold used the smaller bridge-adjusted h, so it can climb again above the deck; off: it keeps h at that transition. Not implemented yet (wave 2).",
+          "description": "An own-cell early cruise keeps the height above the surface r as its target even when the take-off threshold used the smaller bridge-adjusted h, so it can climb again above the deck; off: it keeps h at that transition.",
           "type": "boolean",
           "default": true
         },
         "jumpjet_lookahead_bridge": {
-          "description": "The look-ahead adds the bridge height of the cell ahead to the jumpjet's own cell's clearance, not to the ahead cell's; off: each cell's bridge height is added to that cell's clearance. Not implemented yet (wave 2).",
+          "description": "The look-ahead adds the bridge height of the cell ahead to the jumpjet's own cell's clearance, not to the ahead cell's; off: each cell's bridge height is added to that cell's clearance.",
           "type": "boolean",
           "default": true
         },
         "jumpjet_no_cell_self_destruct": {
-          "description": "A jumpjet that cannot land and finds no cell nearby destroys itself; off: it re-enters *hovering* over its current cell. Not implemented yet (wave 2).",
+          "description": "A jumpjet that cannot land and finds no cell nearby destroys itself; off: it re-enters *hovering* over its current cell.",
           "type": "boolean",
           "default": true
         },
         "jumpjet_step_truncation": {
-          "description": "A straight-line step uses F5's shifted angle, table trigonometry and separate coordinate truncation, so southward and westward steps drift one lepton across the line of travel; off: the displacement is the speed times the double-precision sine and cosine of the facing, rounded half away from zero. Not implemented yet (wave 2).",
+          "description": "A straight-line step uses F5's shifted angle, table trigonometry and separate coordinate truncation, so southward and westward steps drift one lepton across the line of travel; off: the displacement is the speed times the double-precision sine and cosine of the facing, rounded half away from zero.",
           "type": "boolean",
           "default": true
         },
         "jumpjet_turn_slowdown_one_sided": {
-          "description": "The cruise bands' remaining-turn test uses the clockwise difference only, so even a small anticlockwise turn takes the band's slower speed; off: it uses the smaller of the clockwise and anticlockwise differences. Not implemented yet (wave 2).",
+          "description": "The cruise bands' remaining-turn test uses the clockwise difference only, so even a small anticlockwise turn takes the band's slower speed; off: it uses the smaller of the clockwise and anticlockwise differences.",
           "type": "boolean",
           "default": true
         },
@@ -10158,8 +10220,27 @@
           "format": "int32",
           "default": null
         },
+        "deploy_time": {
+          "description": "`DeployTime`, game minutes: read, with no effect on any vehicle\n(S-0517 claim 15).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "deploy_to_fire": {
           "description": "`DeployToFire` (S-0310 claim 9).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "deploy_to_land": {
+          "description": "`DeployToLand`, the landing-first flag of an in-place deploying\nvehicle (S-0502 Import mapping, S-0517 Import mapping).",
           "type": [
             "boolean",
             "null"
@@ -10178,6 +10259,14 @@
           "description": "`Deployer`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "deploying_anim": {
+          "description": "`DeployingAnim`, the deploying presentation: an animation type name\n(S-0517 Import mapping, claims 4, 6 and 12).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null
@@ -10427,6 +10516,74 @@
           ],
           "default": null
         },
+        "jumpjet_accel": {
+          "description": "`JumpjetAccel`, the acceleration *a*, a single-precision decimal\n(S-0502 Import mapping, absent 2.0). The stock spelling `JumpJetAccel`\nis another key (S-0001) and is not read.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jumpjet_climb": {
+          "description": "`JumpjetClimb`, the climb rate *c*, a single-precision decimal\n(S-0502 Import mapping, absent 5.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jumpjet_crash": {
+          "description": "`JumpjetCrash`, the crash rate *k*, a single-precision decimal\n(S-0502 Import mapping, absent 5.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jumpjet_deviation": {
+          "description": "`JumpjetDeviation`, the wobble amplitude *d* in leptons (S-0502\nImport mapping, absent 40).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "jumpjet_height": {
+          "description": "`JumpjetHeight`, the jumpjet cruise height *H* in leptons (S-0502\nImport mapping; S-0102 owns its minimum and default).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "jumpjet_no_wobbles": {
+          "description": "`JumpjetNoWobbles`, the no-wobble flag (S-0502 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "jumpjet_speed": {
+          "description": "`JumpjetSpeed`, the jumpjet speed *S*, an integer in leptons per\ntick (S-0502 Import mapping, absent 14).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "jumpjet_turn_rate": {
           "description": "`JumpjetTurnRate` (S-0206 claim 14).",
           "type": [
@@ -10435,6 +10592,17 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "jumpjet_wobbles": {
+          "description": "`JumpjetWobbles`, the wobble rate *W*, a single-precision decimal\n(S-0502 Import mapping, absent 0.15).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "large_visceroid": {
           "description": "`LargeVisceroid` (S-0009 claim 46, S-0202 Import mapping).",
@@ -10901,6 +11069,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "unloading_class": {
+          "description": "`UnloadingClass`, the deployed image type: a vehicle type name\n(S-0517 Import mapping, claim 12).",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "vehicle_thief": {

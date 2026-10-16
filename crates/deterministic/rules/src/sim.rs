@@ -381,6 +381,17 @@ pub struct AnimationType {
     /// absent: no.
     #[serde(default)]
     pub normalized: Option<bool>,
+    /// `Start`, the initial image frame *a* (S-0109 Import mapping; S-0517
+    /// F1 reads the presentation's start, end and delay).
+    #[serde(default)]
+    pub start: Option<i32>,
+    /// `End`, the end field *E* as written (S-0109 Import mapping: absent
+    /// or −1 take the sprite's value).
+    #[serde(default)]
+    pub end: Option<i32>,
+    /// `Shadow`, the shadow-type flag (S-0109 Import mapping); absent: no.
+    #[serde(default)]
+    pub shadow: Option<bool>,
 }
 
 /// A particle type's fields that its creation draws read (S-0202 claim 15
@@ -1135,6 +1146,54 @@ pub struct UnitType {
     /// `JumpjetTurnRate` (S-0206 claim 14).
     #[serde(default)]
     pub jumpjet_turn_rate: Option<i32>,
+    /// `JumpjetSpeed`, the jumpjet speed *S*, an integer in leptons per
+    /// tick (S-0502 Import mapping, absent 14).
+    #[serde(default)]
+    pub jumpjet_speed: Option<i32>,
+    /// `JumpjetClimb`, the climb rate *c*, a single-precision decimal
+    /// (S-0502 Import mapping, absent 5.0).
+    #[serde(default)]
+    pub jumpjet_climb: Option<Decimal>,
+    /// `JumpjetCrash`, the crash rate *k*, a single-precision decimal
+    /// (S-0502 Import mapping, absent 5.0).
+    #[serde(default)]
+    pub jumpjet_crash: Option<Decimal>,
+    /// `JumpjetHeight`, the jumpjet cruise height *H* in leptons (S-0502
+    /// Import mapping; S-0102 owns its minimum and default).
+    #[serde(default)]
+    pub jumpjet_height: Option<i32>,
+    /// `JumpjetAccel`, the acceleration *a*, a single-precision decimal
+    /// (S-0502 Import mapping, absent 2.0). The stock spelling `JumpJetAccel`
+    /// is another key (S-0001) and is not read.
+    #[serde(default)]
+    pub jumpjet_accel: Option<Decimal>,
+    /// `JumpjetWobbles`, the wobble rate *W*, a single-precision decimal
+    /// (S-0502 Import mapping, absent 0.15).
+    #[serde(default)]
+    pub jumpjet_wobbles: Option<Decimal>,
+    /// `JumpjetDeviation`, the wobble amplitude *d* in leptons (S-0502
+    /// Import mapping, absent 40).
+    #[serde(default)]
+    pub jumpjet_deviation: Option<i32>,
+    /// `JumpjetNoWobbles`, the no-wobble flag (S-0502 Import mapping).
+    #[serde(default)]
+    pub jumpjet_no_wobbles: Option<bool>,
+    /// `DeployToLand`, the landing-first flag of an in-place deploying
+    /// vehicle (S-0502 Import mapping, S-0517 Import mapping).
+    #[serde(default)]
+    pub deploy_to_land: Option<bool>,
+    /// `DeployingAnim`, the deploying presentation: an animation type name
+    /// (S-0517 Import mapping, claims 4, 6 and 12).
+    #[serde(default)]
+    pub deploying_anim: Option<String>,
+    /// `UnloadingClass`, the deployed image type: a vehicle type name
+    /// (S-0517 Import mapping, claim 12).
+    #[serde(default)]
+    pub unloading_class: Option<String>,
+    /// `DeployTime`, game minutes: read, with no effect on any vehicle
+    /// (S-0517 claim 15).
+    #[serde(default)]
+    pub deploy_time: Option<Decimal>,
     /// `Turret`.
     #[serde(default)]
     pub turret: Option<bool>,
@@ -1855,6 +1914,16 @@ pub struct BuildingType {
     /// `NeedsEngineer` (S-0309 claim 25 part e, Import mapping).
     #[serde(default)]
     pub needs_engineer: Option<bool>,
+    /// `ProduceCashStartup`, the acquisition bonus in credits (S-0515
+    /// claim 3, Import mapping).
+    #[serde(default)]
+    pub produce_cash_startup: Option<i32>,
+    /// `ProduceCashAmount`, the income amount in credits (S-0515 claim 5).
+    #[serde(default)]
+    pub produce_cash_amount: Option<i32>,
+    /// `ProduceCashDelay`, the income delay in ticks (S-0515 claims 4 and 5).
+    #[serde(default)]
+    pub produce_cash_delay: Option<i32>,
     /// `Storage`, storage capacity (S-0309 table C, row "storage").
     #[serde(default)]
     pub storage: Option<i32>,

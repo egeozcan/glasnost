@@ -362,7 +362,7 @@ pub fn approach_radii(w: &World, r_prime: i32, beta: i32, infantry: bool) -> Vec
 ///
 /// Every search in our engine may change the actor (S-0307 claim 17): no
 /// rule of ours asks for one that may not. A jumpjet's detour exemption
-/// (claim 24) is a seam, since no jumpjet locomotor moves an object yet.
+/// (claim 24) is the early return of the detour test.
 /// The regions must be up to date ([`crate::regions::ensure`]).
 pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Approach> {
     let rules = w.rules_arc();
@@ -527,6 +527,10 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
     // spec: S-0307 claim 19 and S-0212 claim 7 (the attacker end on its movement layer)
     let a_deck = o.layer == Layer::Deck;
     let detour = |w: &World, cell: CellXY| -> bool {
+        // spec: S-0307 claim 24 (a jumpjet: a clear primary, or the first qualifying alternative, is accepted without either inequality of claim 16)
+        if crate::jump::is_jumpjet(w, id) {
+            return true;
+        }
         // spec: S-0307 claim 19 (the candidate end on the deck when its cell carries a high bridge)
         let c_deck = w.high_bridge(cell);
         let e = |p: CellXY, pd: bool, q: CellXY, qd: bool| {
@@ -536,6 +540,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
         e(cell, c_deck, t_cell, t_deck).is_some_and(|x| x <= cheb(cell, t_cell) + 8) // spec: S-0307 claim 16 (8 cells)
             || e(a_cell, a_deck, cell, c_deck).is_some_and(|x| x <= cheb(a_cell, cell) + 8) // spec: S-0307 claim 16 (8 cells)
     };
+    let deploy_to_fire_actor = o.kind == Kind::Vehicle && u.vehicle.deploy_to_fire;
     let alternatives: &[(i32, i32)] = if q.approach_alternative_walk {
         &ALTERNATIVES
     } else {
@@ -579,6 +584,10 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
             } else {
                 Pos::centre(cell, height(w, cell, false))
             };
+            // spec: S-0517 claim 14 (in the approach search of a deploy-to-fire vehicle a primary cell is considered only when it passes the deploy-to-fire cell test, and a skipped primary never anchors the failure outcome)
+            if deploy_to_fire_actor && !crate::econ::inplace::deploy_test_cell(w, cell) {
+                continue;
+            }
             if !ranged(w, point) {
                 continue;
             }

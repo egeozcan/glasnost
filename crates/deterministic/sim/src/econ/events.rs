@@ -29,6 +29,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
     // spec: S-0414 claim 4 (the on-map counts: an entry)
     crate::econ::victory::entered_map(w, id);
     crate::econ::power::entered_map(w, id);
+    // spec: S-0515 claim 4 (a) (a building put on the map for the first time restarts its income countdown)
+    crate::structures::tech::entered_map(w, id);
     if kind == Kind::Building
         && let Some(h) = owner
     {
@@ -136,6 +138,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
         ob.combat.captured = true;
     }
     crate::econ::power::owner_changed(w, id, old);
+    // spec: S-0515 claims 3, 4 and 7 (an ownership change: the acquisition bonus from a passive old owner and the income countdown restarted)
+    crate::structures::tech::owner_changed(w, id, old);
     // spec: S-0501 claim 30 (the pad total moves with a helipad building that changes owner)
     super::tech::pad_owner_changed(w, id, old);
     for h in [old, new].into_iter().flatten() {
@@ -186,6 +190,8 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
             // spec: S-0508 claims 7 to 9 (a civilian garrison building's own turn: forced evacuation, the owner following the first occupant, the return of an abandoned building)
             crate::structures::garrison::turn(w, id);
             crate::econ::power::building_turn(w, id);
+            // spec: S-0515 claims 5 and 6 (the income cycle of a cash-producing building, in its own turn)
+            crate::structures::tech::turn(w, id);
             // spec: S-0402 claim 21 and S-0203 claim 12 (a building master's group update sees that turn's operation-state effects and animation advancement, and comes before its paid repair)
             crate::econ::slaves::group_turn(w, id);
             // spec: S-0314 claim 8 and S-0408 claim 13 (a building whose repair is on steps in its turn); S-0203 claim 12 (after the group update, so a delivery in it can pay this turn's step)

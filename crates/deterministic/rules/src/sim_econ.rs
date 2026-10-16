@@ -1027,6 +1027,10 @@ pub struct EconGeneral {
     /// onto a dock in 1/256 turns (S-0404 claim 13); absent: 0.
     #[serde(default)]
     pub pose_dir: Option<i32>,
+    /// `[AudioVisual] DeployDir`, the game-wide deploy direction, an 8-step
+    /// direction (S-0502 claim 15 and Import mapping; absent 0).
+    #[serde(default)]
+    pub deploy_dir: Option<i32>,
     /// `[General] FlightLevel`, the game-wide cruise height in leptons
     /// (S-0501 Terms); absent: 500.
     #[serde(default)]

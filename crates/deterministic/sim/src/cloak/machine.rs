@@ -473,9 +473,10 @@ pub fn late_turn(w: &mut World, id: ObjectId) {
 /// (`teleport::jump`), a superweapon warp member at its arrival-effects
 /// update (`superweapons::warp`), and a completed fall landing (`fall`).
 /// Ordinary flight and rocket flight never supply one. A jumpjet's
-/// touchdown, an underground mover's emergence, mechanical walking and
-/// drop-pod descent are seams (S-0502 and the unused locomotors are not
-/// built). Entering play alone, unloading included, is not one: the disc is
+/// touchdown supplies one (S-0502 claim 15, `jump::fly`); take-off,
+/// in-flight cell crossings, cruising arrival and hovering supply none. An
+/// underground mover's emergence, mechanical walking and drop-pod descent
+/// are seams (those locomotors are not built). Entering play alone, unloading included, is not one: the disc is
 /// added by [`entered_map`] with no adjacency test.
 pub fn cell_movement_completed(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };

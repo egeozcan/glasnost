@@ -923,6 +923,18 @@ fn add_sight_with(w: &mut World, id: ObjectId, radius: Option<i32>) {
     }
 }
 
+/// Brings an object's sight to its present position (S-0502 claim 15: a
+/// jumpjet that has touched down refreshes its sight at its new position).
+pub fn refresh_sight(w: &mut World, id: ObjectId) {
+    if !may_hold(w, id) {
+        return;
+    }
+    if w.obj(id).is_some_and(|o| o.econ.sight.sight.is_some()) {
+        remove_sight(w, id);
+        add_sight(w, id);
+    }
+}
+
 /// Removes an object's sight (claim 8).
 fn remove_sight(w: &mut World, id: ObjectId) {
     let Some(a) = w.obj_mut(id).and_then(|o| o.econ.sight.sight.take()) else {

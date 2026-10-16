@@ -133,6 +133,8 @@ pub fn create_converted(
         naval: None,
         // spec: S-0503 Terms (a hovering vehicle keeps its hover state)
         hover: (loco == Locomotor::Hover).then(|| crate::hover::HoverState::new(w.rules().mode)),
+        // spec: S-0502 claim 1 and S-0206 claim 14 (a unit that gets the jumpjet locomotor: its fields are the type's, its movement heading east)
+        jump: (loco == Locomotor::Jump).then(crate::jump::JumpState::new),
         transport: crate::transport::TransportState::default(),
         fall: crate::fall::FallState::default(),
         crush_slowdown: false,
@@ -303,6 +305,8 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
         obj.turret.set(facing, tick, keeps);
         // spec: S-0503 claim 15 (placement, factory release and teleport replacement do not reset a hover's movement heading, and the body facing is not copied into it; a newly attached hovering locomotor starts at 0, `hover::HoverState::new`; Q-0694 answered)
     }
+    // spec: S-0502 claim 1 (a jumpjet is placed grounded with its mark)
+    crate::jump::placed(w, id);
     // spec: S-0501 claim 1 (an aircraft's placement height, speed fraction and marks)
     crate::air::placed(w, id);
     // spec: S-0203 claim 2 (a terrain object takes turns exactly when its type has the spawns-resources flag)
@@ -343,6 +347,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     }
     // spec: S-0614 claim 15 (a host taken off the map releases its parasite at once)
     crate::parasite::leaving(w, id);
+    // spec: S-0502 claims 4, 13 and 14 (a jumpjet going inside releases its marks, its landing reservation and its hover slot)
+    crate::jump::leaving(w, id);
     // spec: S-0507 claim 15 (an open-topped transport leaving the map: its passengers lose their targets)
     crate::transport::leaving_map(w, id);
     crate::econ::events::leaving_map(w, id, false);
@@ -394,6 +400,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     };
     // spec: S-0614 claim 15 (a host removed while a parasite is attached releases it at once)
     crate::parasite::leaving(w, id);
+    // spec: S-0502 claims 4, 7, 13, 14 and 18 (a jumpjet leaving the map releases its marks, its landing reservation and its hover slot)
+    crate::jump::leaving(w, id);
     // spec: S-0507 claim 16 (a transport removed with passengers inside: they die without attacker credit; a removed passenger leaves its transport's passenger order)
     crate::transport::removing(w, id);
     // spec: S-0508 claim 15 (a building that leaves play with occupants still inside removes them with it, without death and without putting them out)

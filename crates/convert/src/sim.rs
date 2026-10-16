@@ -329,6 +329,21 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("strength", "Strength", Int),
     ("rot", "ROT", Int),
     ("jumpjet_turn_rate", "JumpjetTurnRate", Int),
+    // spec: S-0502 Import mapping (the jumpjet fields of a type: speed an integer; climb, crash, acceleration and wobble rate single-precision decimals; cruise height and wobble amplitude integers; the no-wobble flag; the key of the acceleration is spelled with a lower-case j and a capital A, S-0001)
+    ("jumpjet_speed", "JumpjetSpeed", Int),
+    ("jumpjet_climb", "JumpjetClimb", Dec),
+    ("jumpjet_crash", "JumpjetCrash", Dec),
+    ("jumpjet_height", "JumpjetHeight", Int),
+    ("jumpjet_accel", "JumpjetAccel", Dec),
+    ("jumpjet_wobbles", "JumpjetWobbles", Dec),
+    ("jumpjet_deviation", "JumpjetDeviation", Int),
+    ("jumpjet_no_wobbles", "JumpjetNoWobbles", Bool),
+    // spec: S-0502 Import mapping and S-0517 Import mapping (DeployToLand: a boolean)
+    ("deploy_to_land", "DeployToLand", Bool),
+    // spec: S-0517 Import mapping (DeployingAnim: an animation type name; UnloadingClass: a vehicle type name; DeployTime: a decimal in game minutes, read with no effect)
+    ("deploying_anim", "DeployingAnim", Ref(Kind::Animations)),
+    ("unloading_class", "UnloadingClass", Ref(Kind::Vehicles)),
+    ("deploy_time", "DeployTime", Dec),
     ("turret", "Turret", Bool),
     ("turret_spins", "TurretSpins", Bool),
     ("crusher", "Crusher", Bool),
@@ -465,6 +480,10 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("can_occupy_fire", "CanOccupyFire", Bool),
     ("capturable", "Capturable", Bool),
     ("needs_engineer", "NeedsEngineer", Bool),
+    // spec: S-0515 Import mapping (the three cash keys: acquisition bonus, income amount and income delay, integers; absent 0)
+    ("produce_cash_startup", "ProduceCashStartup", Int),
+    ("produce_cash_amount", "ProduceCashAmount", Int),
+    ("produce_cash_delay", "ProduceCashDelay", Int),
     ("immune_to_radiation", "ImmuneToRadiation", Bool),
     ("storage", "Storage", Int),
     ("spyable", "Spyable", Bool),
@@ -1407,6 +1426,20 @@ impl Builder<'_> {
     fn unit(&mut self, rec: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
         self.speed(rec, kind, t);
         self.fields(rec, t, kind, UNIT_FIELDS);
+        // spec: S-0502 Edge cases and Questions for the project lead (a jumpjet speed or turn rate of 0 divides by zero in the original: the importer warns; the engine's replacement values are Q-0977's)
+        for key in ["JumpjetSpeed", "JumpjetTurnRate"] {
+            let mut last = None;
+            let _ = fold(t.keys.get(key.as_bytes()), None, |v, e| {
+                value::integer(v).inspect(|&x| last = Some((x, e.layer, e.line)))
+            });
+            if let Some((0, layer, line)) = last {
+                self.warn(
+                    layer,
+                    line,
+                    format!("{key}=0 of a jumpjet type divides by zero in the original (S-0502 Edge cases, Q-0977)"),
+                );
+            }
+        }
         self.locomotor(rec, kind, t);
         self.locomotion_class(rec, kind, t);
         self.movement_zone(rec, kind, t);
@@ -1791,7 +1824,14 @@ impl Builder<'_> {
         {
             rec.put("rate", int_node(r));
         }
+        // spec: S-0109 Import mapping (Start and End: integers, kept as written; the sim reads E from the sprite when End is absent or −1)
+        for (field, key) in [("start", "Start"), ("end", "End")] {
+            if let Some(v) = sec.value(key.as_bytes()).and_then(value::integer) {
+                rec.put(field, int_node(v));
+            }
+        }
         for (field, key) in [
+            ("shadow", "Shadow"),
             ("normalized", "Normalized"),
             ("bouncer", "Bouncer"),
             ("is_meteor", "IsMeteor"),

@@ -809,6 +809,10 @@ impl Audio {
             Sound::Deploy if mine => {
                 self.play_in(w, ts.deploy.as_deref(), at);
             }
+            // spec: S-0517 claim 12 (the vehicle type's undeploy sound at its position)
+            Sound::Undeploy if mine => {
+                self.play_in(w, ts.undeploy.as_deref(), at);
+            }
             // spec: S-0415 claim 9; S-0701 claim 23 (the pack-up sound, positional at the build-down start)
             Sound::Packup if mine => {
                 self.play_in(w, ts.packup.as_deref(), at);

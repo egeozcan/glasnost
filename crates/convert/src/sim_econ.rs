@@ -625,6 +625,7 @@ const GENERAL_ECON: &[(&str, &[u8], &str, Form, &str)] = &[
     ("fog_rate", AUDIO_VISUAL, "FogRate", Dec, "S-0409"),
     ("savour_delay", AUDIO_VISUAL, "SavourDelay", Dec, "S-0414"),
     ("pose_dir", AUDIO_VISUAL, "PoseDir", Int, "S-0404"),
+    ("deploy_dir", AUDIO_VISUAL, "DeployDir", Int, "S-0502"),
     ("flight_level", GENERAL, "FlightLevel", Int, "S-0501"),
     ("reload_rate", GENERAL, "ReloadRate", Dec, "S-0501"),
     ("curley_shuffle", GENERAL, "CurleyShuffle", Bool, "S-0501"),

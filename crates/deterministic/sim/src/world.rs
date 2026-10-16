@@ -256,6 +256,9 @@ pub struct Object {
     /// Hover state of a vehicle with the hovering locomotor (S-0503).
     #[serde(default)]
     pub hover: Option<crate::hover::HoverState>,
+    /// Flight state of a unit with the jumpjet locomotor (S-0502).
+    #[serde(default)]
+    pub jump: Option<crate::jump::JumpState>,
     /// Transport state: a transport's passengers, a passenger's transport
     /// (S-0507).
     #[serde(default)]
@@ -395,6 +398,10 @@ pub struct World {
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.
     pub theater: Theater,
+    /// The hover slots (S-0502 Terms): the jumpjet that holds the slot of a
+    /// cell, at most one per cell.
+    #[serde(default)]
+    pub jump_slots: BTreeMap<CellXY, ObjectId>,
     /// The pathfinder in use (S-0212, behind a swappable interface).
     pub pathfinder: PathfinderChoice,
     /// The rules (not saved).
