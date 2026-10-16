@@ -2,13 +2,13 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 4
-sources-class: [decomp]
+revision: 5
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
-requests: []
+requests: [Q-0984]
 supersedes: []
 ---
 
@@ -31,7 +31,7 @@ before joint hand-off.
 ## Terms
 
 - **Erasing shot:** a shot whose warhead has the temporal flag, when temporal erasure is the
-  detonation effect selected. Other special-effect flags can take precedence.
+  detonation effect selected by claim 20.
 - **Temporal beam:** an attacker's persistent erasing capability, initially supplied when its
   primary weapon's warhead has the temporal flag. Gunner transfer follows S-0308 claim 6.
   One beam attaches to at most one target. It need not be visibly drawn.
@@ -43,6 +43,9 @@ before joint hand-off.
   no update; a range release under claim 11 gives no reduction.
 - **Being erased:** the glossary state. A beam lock sets it. The beam-free leaving stage of
   S-0513 claim 39 also counts, but is not a temporal beam lock.
+- **Fall-back to rest:** the event of S-0215 claims 13 to 15, with aircraft exceptions in
+  S-0501 claim 18. This is not a behaviour named idle, stop or sleep. References below to
+  making an attacker fall back mean requesting this event, not assigning a fixed behaviour.
 - **Removed without death:** removal without the target's normal death animation, death weapon,
   debris, rubble, wreck or survivors. Destruction bookkeeping can still occur (claim 13).
 
@@ -51,6 +54,8 @@ before joint hand-off.
 ### Locks and their immediate effects
 
 1. **Delivery.** A temporal detonation needs both its firer and its target still present.
+   Claim 20 decides whether temporal erasure is selected. Claims 1 to 4 describe delivery
+   from a firer that holds a temporal beam; claim 21 owns the missing-beam case.
    An object target must be in the ground render layer, otherwise this effect does nothing.
    For a jumpjet this is S-0102 claim 3's render-layer test, not a test of its flight state
    (S-0502 claim 20), combat height or in-the-air state. Being in the ground render layer
@@ -179,26 +184,35 @@ before joint hand-off.
       equivalence is `unmeasured`: these scenarios do not isolate every destruction-bookkeeping consumer.
     - Confidence: high (gains, cost bases); medium (bookkeeping equivalence).
 
-14. **Release causes.** An attached attacker lets go on arriving in a new cell, entering
-    idle behaviour, delivering another erasing hit even at the same target, being taken
+14. **Release causes.** An attached attacker lets go on arriving in a new cell, reaching
+    the common fall-back-to-rest effects, delivering another erasing hit even at the same target, being taken
     under mind control or freed, being locked by another temporal beam, or being removed.
     Gunner exit follows S-0308 claim 6; claim 11 adds the leader's range release. Arrival
     by teleport follows the new-cell rule. Removing the target invalidates all attached
-    beams and makes their attackers enter idle behaviour.
+    beams and makes their attackers fall back to rest.
+
+    The fall-back release shares S-0215 claim 13's once-per-tick common-effects limit.
+    Aircraft early exits that skip those effects do not cause this release. The resulting
+    behaviour is chosen by S-0215 claims 14 and 15 or S-0501 claim 18, not necessarily guard.
+    Merely clearing the ordinary target, assigning the stop or sleep behaviour, or processing
+    either of those behaviours is not this event. A stop order clears target and destination
+    without directly releasing the beam (S-0213 claim 8). In the ordinary stationary attack
+    case, subsequent attack processing with no target falls back to rest and then releases.
+    There is no promise of release in the tick that the order applies.
 
     Death alone is not established as a separate release: a destroyed attacker retained
     in play may continue erasing until removal, but this is a hypothesis, not a guaranteed
     lifetime rule.
-    - Backing: `measurable` (E10) for ordinary cell arrival, idle, mind control, counter-lock,
-      removal and retained-death tests. Teleport arrival and gunner exit are `unmeasured`
+    - Backing: `measurable` (E10) for ordinary cell arrival, fall-back, mind control, counter-lock,
+      removal, stop-versus-sleep and retained-death tests. Teleport arrival and gunner exit are `unmeasured`
       here: their complete movement/transfer paths have not been independently retraced.
       The owners above retain their own backings.
     - Confidence: high (ordinary release paths), medium (teleport, gunner exit),
       low (continuation after death).
 
 15. **House destruction.** S-0414 claim 5 owns surrender. A trigger that destroys all
-    objects of a house detaches the beams on each erased victim and idles their attackers
-    before the destructive hit. It does not hand leadership on or switch buildings back on.
+    objects of a house detaches the beams on each erased victim and makes their attackers
+    fall back to rest before the destructive hit. It does not hand leadership on or switch buildings back on.
     - Backing: `measurable` (E10 part g).
     - Confidence: high.
 
@@ -241,6 +255,71 @@ before joint hand-off.
     Vehicle moving-fire restrictions remain S-0310 claim 7's responsibility.
     - Backing: `measurable` (E10 parts d and f).
     - Confidence: high.
+
+### Effect selection and beam capability
+
+20. **One selected special hit.** Of the following effects, at most one is selected by a
+    projectile detonation. The first enabled row wins; all later rows are suppressed even
+    when the selected effect cannot succeed, has no suitable target or has lost its firer.
+    This is precedence between observable outcomes, not successive attempts to apply them.
+
+    | Priority | Enabled effect | Detail owned elsewhere |
+    |---|---|---|
+    | 1 | takeover | S-0601 claim 5 |
+    | 2 | bomb planting | S-0519 claim 2 |
+    | 3 | electric charging | S-0518 claim 11 |
+    | 4 | parasite attachment | S-0614 claims 1 to 4 |
+    | 5 | temporal erasure | claims 1 to 4 and 21 |
+    | 6 | locomotor replacement | selection only here |
+    | 7 | air-strike designation | S-0519 claim 16 |
+    | 8 | direct rocking, only when the projectile target is a vehicle | selection only here |
+    | 9 | bomb disarming | S-0519 claim 7 |
+    | 10 | disguise-making | selection only here |
+    | 11 | nuke-making | selection only here |
+
+    Direct rocking here means a hit directed at a vehicle, not rocking from ordinary area
+    damage. Its flag with a non-vehicle target does not suppress the later rows. All other
+    rows are selected by their flags regardless of target eligibility. With no selected row,
+    ordinary damage applies. A warhead can therefore request several rows, but cannot both
+    erase and attach a parasite, charge, designate, plant or disarm a bomb through the same
+    selected hit. In particular charging and parasite attachment outrank erasure, while
+    erasure outranks locomotor replacement, designation and disarming.
+
+    Radiation creation and the shared detonation presentation are outside this exclusion:
+    radiation can accompany any selected row, and an unsuccessful selected hit still permits
+    the shared presentation of claim 1. This does not make the later special rows eligible.
+    - Backing: `measurable` (E13).
+    - Confidence: high.
+
+21. **Erasing delivery without a beam: safe rule.** In our engine, a firer with no temporal
+    beam makes no lock and causes none of claim 2's target side effects. It does not acquire
+    a beam merely by delivering an erasing shot. Ordinary damage and later selected special
+    effects remain suppressed under claim 20; shared presentation remains eligible. This is
+    a deterministic design departure, not an ordinary lock refusal to which claim 2 applies.
+    It covers a secondary-only erasing weapon and an elite replacement that did not supply
+    a beam at creation; possession after gunner transfer still follows S-0308 claim 6.
+
+    The original has an unsafe missing-beam failure after attempting the target's spawner
+    clearing and control release; it does not establish a valid beam-free lock. Whether those
+    side effects become observable before termination is not established by a measurement.
+    - Backing: `unmeasured` for the original failure's visible outcome: no oracle run has
+      isolated this inconsistent weapon arrangement; E14 proposes one. Safe no-effect
+      delivery is `design`, to be tested by the same input in our engine.
+    - Confidence: high (safe rule and absence of a valid original beam-free lock), low
+      (observable original side effects before termination).
+
+22. **Boarding without gunner hand-over.** Boarding a non-gunner transport does not itself
+    release or transfer the passenger's beam. Any attachment still present at boarding is
+    retained and can continue reducing the target's erasure amount while the holder is a
+    passenger. This does not bypass release on arrival in a new cell, fall-back to rest or
+    control release during boarding: those events can already have detached it. A pending
+    erasing shot that arrives after boarding can establish a lock when delivery otherwise
+    qualifies. Open-topped passengers remain subject to claim 11's leader-only distance test.
+    A closed transport adds no such distance test. Gunner entry and exit are separate,
+    governed by S-0308 claim 6.
+    - Backing: `measurable` (E15).
+    - Confidence: high (boarding alone does not release), medium (isolating retained
+      attachment from the preceding arrival and fall-back events).
 
 ## Formulas
 
@@ -310,13 +389,14 @@ round-to-nearest alternative; F4's table-root narrowing follows S-0204 claim 5.
 
 | State | Event | Result |
 |---|---|---|
-| no beam | delivered hit | Side effects even on refusal; otherwise first lock |
+| unlocked target | delivered hit from a beam holder | Side effects even on refusal; otherwise first lock |
+| firer without a beam | delivered erasing hit | No lock or claim 2 side effects, by claim 21's design rule |
 | attached | another lock | Join without resetting progress |
 | attached | erasure update | Range release, or reduction and possible completion |
 | attached | leader releases with others left | Newest remaining joiner leads with unchanged amount |
 | attached | last release | Progress lost; target resumes; building switched on |
-| attached | completion | Target removed, credit applied, attackers idle |
-| attached | other target removal | Attachments invalidated, attackers idle |
+| attached | completion | Target removed, credit applied, attackers fall back to rest |
+| attached | other target removal | Attachments invalidated, attackers fall back to rest |
 
 A refused lock can free controlled units without erasing their controller. Two temporal firers
 whose pending shots reach each other cannot establish reciprocal locks: the first successful
@@ -344,7 +424,19 @@ gains are present by target removal.
 
 | Key and section | Concept | Parse form | Absent-key default |
 |---|---|---|---|
-| `Temporal`, warhead | Temporal effect, beam supplied by primary warhead | boolean | no |
+| `Temporal`, warhead | Temporal effect, beam supplied by primary warhead; missing beam uses claim 21 | boolean | no |
+| `MindControl`, warhead | Claim 20 takeover selection | boolean | no |
+| `IvanBomb`, warhead | Claim 20 bomb-planting selection | boolean | no |
+| `ElectricAssault`, warhead | Claim 20 electric-charge selection | boolean | no |
+| `Parasite`, warhead | Claim 20 parasite selection | boolean | no |
+| `IsLocomotor`, warhead | Claim 20 locomotor-replacement selection | boolean | no |
+| `Airstrike`, warhead | Claim 20 designation selection | boolean | no |
+| `directrocker`, warhead | Claim 20 direct-rocking selection on vehicle targets | boolean | no |
+| `BombDisarm`, warhead | Claim 20 disarm selection | boolean | no |
+| `MakesDisguise`, warhead | Claim 20 disguise selection | boolean | no |
+| `NukeMaker`, warhead | Claim 20 nuke-making selection | boolean | no |
+| `Primary`, `Secondary`, `ElitePrimary`, `EliteSecondary`, object type | Weapon arrangements relevant to beam creation and claim 21 | weapon names | S-0308 claims 3 to 10 |
+| `Gunner`, `OpenTopped`, transport type | Hand-over versus retained passenger beam; range-gate eligibility | booleans | no for each |
 | `Warpable`, object type | Erasable target | boolean | yes |
 | `OpenToppedWarpDistance`, CombatDamage | *W* | integer cells | 5 |
 | `WarpAway`, General | Completion animation | animation name | none |
@@ -389,9 +481,9 @@ is falsified by the opposite result under the same conditions.
   Other first-lock silence is inconclusive until normal notice suppression is excluded.
 - **E2, health (claim 6).** Repeat E1 after damaging the victim below half health.
   Expect identical duration; a shorter duration falsifies the type-strength rule.
-- **E3, joins/releases (claims 4, 9, 10).** A locks, B joins later, then A stops.
+- **E3, joins/releases (claims 4, 9, 10).** A locks, B joins later, then A moves into a new cell.
   Record amount and completion date: expect unchanged amount at join and leadership transfer,
-  with only the subsequent damage sum changed. Stop B too and relock: expect a fresh full
+  with only the subsequent damage sum changed. Move B into a new cell too and relock: expect a fresh full
   amount. A reset on joining/handover or retained progress after last release falsifies it.
 - **E4, gates (claims 1, 3).** Compare protected and unprotected targets, a named not-erasable
   type, factory-contact vehicles before and after leaving, landed and airborne aircraft,
@@ -429,7 +521,7 @@ is falsified by the opposite result under the same conditions.
 - **E8, range (claim 11, F4).** Named warp distance 3 cells. A passenger leads, then its
   transport drives away: expect release at the first target update whose F4 table-root
   distance exceeds 768 leptons, and no reduction that update. Repeat with an on-foot leader
-  and passenger joiner: expect no passenger release. Stop the leader so the passenger inherits leadership
+  and passenger joiner: expect no passenger release. Move the leader into a new cell so the passenger inherits leadership
   beyond the limit: its next check releases. Include a height difference and exact-boundary
   positions. Record both actors' own positions and calculate F4 for each update; use an
   on-foot leader control to verify that distance alone does not release it. Repeat with a
@@ -450,17 +542,27 @@ is falsified by the opposite result under the same conditions.
   (b) stop, (c) mind-control/free the attacker, (d) counter-lock it, (e) kill infantry with a
   death sequence, (f) leave it stationary through several normal firing intervals,
   (g) use a destroy-all-house trigger, (h) let a previously launched slow mind-control shot
-  change the erased victim's owner. Expect releases in a to d, no further shots in f,
-  detached/idle attackers before g's destructive hit, and ordinary target clearing without
+  change the erased victim's owner. Expect direct releases in a, c and d, no further shots in f,
+  detached attackers falling back before g's destructive hit, and ordinary target clearing without
   detachment by that clearing alone in h. Record later behaviour-driven release without a
   predicted deadline; refused takeover is inconclusive. In e, continuation until removal
   is the low-confidence hypothesis; earlier release falsifies it. Also remove a locked
-  target by a trigger and verify all attackers idle. Continue e through attacker removal:
+  target by a trigger and verify all attackers fall back under their ordinary rest-choice rules.
+  In b record the stop-order application, target/destination clearing, the next attack
+  processing and the first common fall-back effects separately. Expect no release caused by
+  the clearing itself, but release when that fall-back is reached; an intervening target
+  erasure update may still reduce the amount. A release directly at clearing, or attachment
+  retained through the common fall-back effects, falsifies the respective prediction.
+  In a separate named map-behaviour-order variant, put an attached firer in sleep, and then
+  in stop behaviour, without movement or another release event. Record attachment and
+  behaviour processing: those processings alone must not detach. A release there falsifies
+  that distinction. These are behaviour tests, not a spec for team scripts.
+  Continue e through attacker removal:
   expect its beam gone by removal, even if it persisted during the death sequence. In a
   separate named slow-projectile run with no other attackers, allow two shots from one firer
   to be in flight before the first lock. On the second impact expect the old attachment released and a fresh F1
   amount, even at the same victim. Retained progress falsifies that delivery-release rule.
-  Missing release/idle falsifies the corresponding release part.
+  Missing release/fall-back falsifies the corresponding release part.
 - **E11, target and presentation (claims 4, 17, 18).** (a) Lock moving/firing infantry,
   vehicles, landed aircraft and armed buildings: expect ordinary movement/turn/fire to stop.
   (b) Begin long locks at three global tick residues. Expect mobile sparkle creation on
@@ -483,6 +585,47 @@ is falsified by the opposite result under the same conditions.
   range allow 53 attachments. Record join order and amount reductions. Expect the leader
   plus 51 newest joiners only; all 53 contributing or a different excluded joiner falsifies it.
 
+- **E13, mixed special hits (claim 20).** Use named map weapon/warhead variants, changing
+  only effect flags and the capability needed for the selected effect. Deliver single shots
+  with each adjacent pair in claim 20's table enabled, and with temporal erasure paired
+  separately with takeover, planting, charging, parasite, designation and disarming. Choose
+  eligible targets for the winning row; for disarm tests pre-plant a long-delay bomb. Record
+  owner, bomb presence, charger count, parasite host, beam attachment, locomotor state,
+  designation state, disguise and nuclear effect, plus health and neighbouring health.
+  Expect only the higher-priority selected outcome, with no ordinary damage. Then make
+  that selected effect ineligible without changing flags: expect no lower effect and no
+  ordinary damage, not fallback selection. For direct rocking, compare vehicle and building
+  targets: only a vehicle makes that row suppress disarming and the later rows. Repeat
+  with an imported radiation level and detonation presentation, recording the radiation
+  field and presentation separately: they remain eligible with a selected special hit.
+  A lower row, both selected outcomes, or ordinary damage falsifies the corresponding
+  exclusion. Runs in which ordinary firing legality prevents delivery are inconclusive.
+  Propose a delayed projectile whose target eligibility changes after firing, not a forced
+  state write, to isolate such cases.
+- **E14, missing beam (claim 21).** Named map variants give a non-temporal rookie primary
+  and either an erasing secondary selected against the test target or an erasing elite
+  replacement on a map-placed elite firer. Confirm no beam before firing, record whether
+  delivery is reached, process survival, spawner slots and controlled-unit counts on the
+  victim, and any lock. Compare an otherwise identical primary-temporal control. In the
+  original, the hypothesis is an unsafe failure at delivery, possibly after spawner/control
+  side effects; record which effects, if any, become observable. A normal continuing lock
+  falsifies the no-valid-beam-free-lock conclusion. Earlier failure or failure to fire does
+  not settle delivery. In our engine the expected design result is continued simulation,
+  no lock and no spawner/control side effects; any such effect or ordinary damage fails
+  the design rule. No original crash outcome is claimed as measured.
+- **E15, passenger retention (claim 22).** Use a non-gunner transport and an erasable victim
+  with sufficient strength for a long lock. Send the firer to board while a slow erasing shot
+  is in flight, timed to arrive after boarding. Record all cell-arrival/fall-back events,
+  boarding, beam possession/attachment and each target reduction. Expect the pending hit
+  to lock and erasure to continue from inside the transport; compare open-topped and closed
+  variants. In another timing variant arrange impact after the last cell-arrival event but
+  before accepted boarding, and void the run if any intervening release cause occurs.
+  Expect boarding itself to retain the attachment and amount. If that timing cannot be
+  achieved, it does not measure retention of a pre-existing lock. Move the transport away:
+  expect only an open-topped leader to face claim 11's distance release. Loss of capability
+  at boarding, detachment solely at boarding, failure of otherwise eligible post-boarding
+  delivery, or a closed-transport distance release falsifies the respective part.
+
 ## Open questions
 
 - Later behaviour-driven detachment after an erased victim changes owner.
@@ -493,6 +636,18 @@ is falsified by the opposite result under the same conditions.
 
 ## Cross-spec changes required before hand-off
 
-- Glossary, erasure amount: replace the unconditional decrease each tick with a decrease
-  at each eligible target erasure update (claims 7 and 8). Skipped turns and range-release
-  updates give no reduction.
+- S-0518 claim 11: cite claim 20 for complete effect selection, including charging above
+  parasite attachment and temporal erasure; failed charging does not fall through.
+- S-0601 claim 5: retain takeover's existing precedence and point to claim 20 for the
+  remaining effects' ordering. No correction to its takeover outcome is needed.
+- S-0519 claims 2, 7 and 16: qualify planting, disarming and designation by claim 20's
+  selection. Planting outranks charging and erasure; erasure outranks designation and
+  disarming; locomotor replacement outranks designation; failed higher effects still
+  suppress lower ones. Include direct rocking and disguise-making where applicable.
+- S-0614 claims 1 and 3: qualify detonation attachment by claim 20's selection. Takeover,
+  planting and charging suppress attachment; attachment suppresses erasure even on failure.
+  This does not change the separate firing-time departure from the map.
+- S-0215 claim 13: its existing fall-back release answers the idle-event part. Clarify
+  that it tests possession of an attached temporal beam, not the currently selected weapon.
+  Share its common-effects once-per-tick limit and aircraft early exits. Stop-order target
+  clearing and processing stop or sleep alone do not count as fall-back (claim 14).

@@ -1,9 +1,9 @@
 ---
 id: Q-0984
 title: Where temporal erasure ranks among the special detonation effects, what "idle behaviour" means for a beam, and a firer with no beam
-status: open
+status: answered
 related: [S-0514, S-0518, S-0601, S-0519, S-0614, S-0215]
-answered-by: []
+answered-by: [S-0514]
 ---
 
 ## Need
