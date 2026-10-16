@@ -99,3 +99,79 @@ fn the_type_flags() {
     assert_eq!(s.buildings["Pit"].crate_beneath, Some(true));
     assert_eq!(s.buildings["Pit"].crate_beneath_is_money, Some(true));
 }
+
+fn layered(base: &str, mode: &str, map: &str) -> Vec<glasnost_rules::sim_econ::Powerup> {
+    let file = |n: &str, t: &str| InputFile {
+        name: n.into(),
+        origin: "test".into(),
+        bytes: t.as_bytes().to_vec(),
+    };
+    let inputs = Inputs {
+        base: Some(file("rules.ini", base)),
+        mode: Some(file("mode.ini", mode)),
+        map: Some(file("test.map", map)),
+        ..Inputs::default()
+    };
+    let import = convert(&inputs, &ImportOptions::default());
+    glasnost_rules::resolve_ruleset(Some((import.tree, import.provenance)), &[])
+        .unwrap_or_else(|e| panic!("{e}"))
+        .ruleset
+        .sim
+        .general
+        .economy
+        .powerups
+        .expect("a table")
+}
+
+const LAYER_BASE: &str =
+    "[Powerups]\nMoney=60,Gold,yes,200\nUnit=30\n[AnimationTypes]\n1=Gold\n[Gold]\n";
+
+// spec: S-0520 claim 28 and Import mapping, scenario CR19 (a power-up section in an intermediate layer resets every omitted entry's weight and animation to 0 and the NONE lookup (no animation) while keeping the water flag and the argument; a layer without the section changes none; a map restating an entry with only weight and animation keeps the earlier water flag and argument; a section of only empty entries does not exist)
+#[test]
+fn the_power_up_table_is_layered() {
+    // A: the mode holds the section with another effect only; the map omits it.
+    let a = layered(LAYER_BASE, "[Powerups]\nUnit=7\n", "");
+    assert_eq!((a[0].weight, a[0].animation.is_none()), (0, true), "A");
+    assert!(a[0].water, "A keeps the water flag");
+    assert_eq!(
+        a[0].argument.as_ref().map(|d| d.0.as_str()),
+        Some("200"),
+        "A keeps the argument"
+    );
+    assert_eq!(a[1].weight, 7);
+    // B: no layer after the base holds the section.
+    let b = layered(LAYER_BASE, "", "");
+    assert_eq!(
+        (b[0].weight, b[0].animation.as_deref()),
+        (60, Some("Gold")),
+        "B"
+    );
+    // C: A's mode, and the map restates Money with only weight and animation.
+    let c = layered(
+        LAYER_BASE,
+        "[Powerups]\nUnit=7\n",
+        "[Powerups]\nMoney=9,Gold\n",
+    );
+    assert_eq!(
+        (c[0].weight, c[0].animation.as_deref()),
+        (9, Some("Gold")),
+        "C"
+    );
+    assert!(c[0].water);
+    assert_eq!(c[0].argument.as_ref().map(|d| d.0.as_str()), Some("200"));
+    // A section holding only empty entries does not exist in its layer.
+    let e = layered(LAYER_BASE, "[Powerups]\nCloak=\n", "");
+    assert_eq!(
+        (e[0].weight, e[0].animation.as_deref()),
+        (60, Some("Gold")),
+        "empty entries"
+    );
+}
+
+// spec: S-0520 claim 28 and Import mapping (the reset's animation is the lookup of NONE); S-0003 claim 14 (`none` names no type, so no animation type can carry that name in a type list: the lookup finds none; Q-1033 asks how CR19's separately defined type of that name arises)
+#[test]
+fn the_reset_animation_lookup_finds_no_type_named_none() {
+    let base = "[Powerups]\nMoney=60,Gold,yes,200\nUnit=30\n[AnimationTypes]\n1=Gold\n2=NONE\n[Gold]\n[NONE]\n";
+    let a = layered(base, "[Powerups]\nUnit=7\n", "");
+    assert_eq!(a[0].animation, None);
+}
