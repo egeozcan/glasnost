@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -396,8 +396,11 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     crash motion: its growing fall counter supplies a downward contribution, not necessarily
     the net descent, because ordinary altitude adjustment can still apply. That claim also owns
     its sinking branch. A crashable vehicle using jumpjet movement uses the crash motion of
-    S-0502 claim 18, with that claim's idle-update and magnetic-lift qualifications. The
-    ordinary non-rocket impact rules below still belong to this claim. Magnetic drops are
+    S-0502 claim 18, with its magnetic-lift qualifications. S-0502 claim 3's safety
+    departure guarantees the next movement update for a pending crash above the surface,
+    even without a move order: a dead hovering unit cannot remain suspended merely because
+    its order ended. This guarantee is an engine design rule, not established original
+    behaviour. The ordinary non-rocket impact rules below still belong to this claim. Magnetic drops are
     different: S-0607 claims 16 to 19 own a dropped seized unit's impact, including clear-cell
     survival and sinking. Only a vehicle whose type can crash retains this claim's ordinary
     crash-end exception (S-0607 claim 18); a dropped seized aircraft does not (S-0607 claim 19).
@@ -419,7 +422,7 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       no attacker (so its kill is credited to no one); an explosion
       animation chosen by S-0303 F5 for that amount appears, and a detonation with that amount, the
       demolition warhead, no source object and no source house follows at the impact point.
-    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9.
+    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9. The original jumpjet idle-crash aftermath remains `unmeasured` under S-0502 claim 3 (diagnostic J15): an ordinary killing hit also clears orders and can invoke its stopped-movement rule, so the otherwise idle case has not been isolated. The pending-crash update guarantee is design, not an oracle observation.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
       empty list, their independence from height, and uncredited passenger cleanup at removal.
       Rocket interception inherits S-0506
