@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -485,6 +485,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
       ammunition above 1, so test data must supply it)
 
 11. **Reloading (vehicles only).** A vehicle whose type has *A* ≥ 0 regains ammunition over time.
+    The ordinary reload opportunities below are subject to the warp exclusion described after the table.
 
     | Vehicle state or event | Reload behaviour |
     |---|---|
@@ -499,8 +500,21 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     division toward zero (Formula F3). Infantry and buildings never regain ammunition over time.
     A vehicle regains at most one round in each of its turns, so a reload delay of 0 or less still
     gives one round per tick.
-    - Backing: `measurable` (scenario F10)
-    - Confidence: high (formula, restart on each shot, one round per completion); medium (the
+
+    **Warp exclusion (engine design).** Under S-0513 claim 51, from the first pending warp
+    update through arrival effects inclusive, the vehicle performs no ordinary reload work:
+    no round is granted and no countdown is restarted by that work. Elapsed time on an
+    existing reload countdown still passes; this is not the moving-vehicle freeze in the
+    table. During arrival hold, ordinary reload eligibility returns after the hold-end test,
+    whether the hold continues or expires. There are no catch-up grants: an expired countdown
+    permits at most one round in that eligible turn, followed by the ordinary restart.
+    Immediate damage and explicit event-driven effects remain eligible under their own rules,
+    including claim 17. This is our engine's continuation rule, not an established original
+    per-stage rule; S-0513 claim 52 leaves the original's continuation unresolved.
+    - Backing: `measurable` (scenario F10; its warp part tests our engine only).
+      Original per-stage warp continuation is `unmeasured` under S-0513 claim 52's
+      incomplete continuation evidence (scenario SW23 part g there).
+    - Confidence: high (warp design contract, formula, restart on each shot, one round per completion); medium (the
       never-started countdown that counts as over, the frozen countdown while moving, and the restart
       by damage of claim 17)
 
@@ -513,7 +527,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 ### Shots that wait
 
 13. **Firing frames (sprite vehicles).** A vehicle whose type has *F* > 0 firing frames has a
-    firing-frame counter that changes as follows:
+    firing-frame counter that changes as follows at an ordinary eligible opportunity
+    (subject to the warp exclusion below):
 
     | Counter | Event | Result |
     |---|---|---|
@@ -537,8 +552,19 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     with the primary weapon while the counter runs gets *rearming* until the counter equals *s*. In
     the tick in which it equals *s* the rearm countdown is ignored and the shot can be made; that
     shot is a *sync shot*. With no sync frame given, firing frames change only the picture.
-    - Backing: `measurable` (scenario F11, test data only; its tunnel part for the tunnel rows)
-    - Confidence: medium
+
+    **Warp exclusion (engine design).** S-0513 claim 51 suppresses firing-frame advancement
+    from the first pending warp update through arrival effects inclusive. The counter retains
+    its value; elapsed time on the separate rearm countdown still passes. During arrival hold,
+    ordinary advancement eligibility returns after the hold-end test, whether the hold
+    continues or expires, with no replay of the skipped advancements. This does not grant a
+    shot while materialising or bypass any other firing refusal (claim 9). The rule is our
+    engine's design, not established original per-stage continuation (S-0513 claim 52).
+    - Backing: `measurable` (scenario F11, test data only; its tunnel part for the tunnel rows
+      and its warp part for our engine's contract). Original per-stage warp continuation is
+      `unmeasured` under S-0513 claim 52's incomplete continuation evidence
+      (scenario SW23 part g there).
+    - Confidence: high (warp design contract); medium (other firing-frame rules)
 
 14. **Animation-delayed building shots.** In the ordinary non-SAM attack path, outside
     S-0215 claim 32's active upgrade weapon gate, a building whose type has the
@@ -1050,6 +1076,16 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   not regain its round in the first turn after its shot (never regains it, or only after the
   reload delay), or part (f) differs from part (a).
 
+- Warp part (engine-only contract test, not an oracle prediction): use the stationary vehicle
+  of part (a), short of at least two rounds, with a reload countdown that expires during the
+  warp. Exercise every boundary in S-0513 claim 51, including off-map retries and arrival
+  effects, then a multi-tick arrival hold. Record ammunition, countdown deadline and stage
+  each tick. Expect no ordinary reload grant or restart through arrival effects, an unchanged
+  deadline despite elapsed time, and just one round on the first eligible hold turn after
+  the hold-end test, with its normal reload restart. A grant in an excluded turn, a postponed
+  deadline solely due to warp, or multiple catch-up rounds falsifies the contract. Repeat with
+  a never-started countdown: its first grant likewise waits for an eligible hold turn.
+
 **F11. Firing frames and sync.**
 - Setup: test art file: a sprite vehicle with 4 firing frames and firing sync frame 3 for
   burst-counter value 0, a weapon with burst count 1 and a long rate-of-fire field.
@@ -1069,6 +1105,16 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   attack again. Expected: the counter does not fall during the transit, so the next shot is made
   *T* ticks later than it would be without the tunnel. Falsified if the transit turns count
   (the shot comes as without the tunnel).
+
+- Warp part (engine-only contract test, not an oracle prediction): arrange a running
+  firing-frame counter on the main-part vehicle when warp begins. Exercise every boundary
+  in S-0513 claim 51, including off-map retries, arrival effects and a multi-tick arrival hold.
+  Record stage, counter and the rearm deadline each tick. Expect no counter advancement through
+  arrival effects, but no extension of the rearm deadline. On hold turns expect only the normal
+  single advancement after the hold-end test, without catch-up decrements; materialising still
+  prevents firing. Any contrary counter change, warp-only deadline extension or shot while
+  materialising falsifies the contract. Original continuation remains unresolved; S-0513
+  scenario SW23 part g proposes the separate oracle comparison.
 
 **F12. Animation-delayed building.**
 - Setup: a stock building with the animation-delayed-fire flag (or a test art file giving it a
