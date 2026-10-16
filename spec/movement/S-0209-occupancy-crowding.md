@@ -2,7 +2,7 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 40
+revision: 41
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -3308,11 +3308,10 @@ approved text at paired hand-off, rather than treating the earlier approved summ
   repeated check. Jump-time target loss and reversion stay owned by S-0207 claim 20 e
   and S-0215 claim 10; reservation layers do not change that contract.
 
-S-0102 claim 3 and its layer table must use S-0502 claim 4's same two-height
-predicate: ground when surface height *r* < 208 leptons or adjusted height *r*′ = 0
-leptons, not when *r*′ < 208 leptons. Its bridge rule must distinguish on-deck
-surface height and the independent bridge/parachute falling state from crashing.
-Hand off that correction with this spec.
+The S-0102 alignment item is satisfied: its claim 3 and layer table agree with
+S-0502 claim 4's two-height predicate and distinguish on-deck surface height
+and the independent bridge/parachute falling state from crashing. No further
+S-0102 correction is required.
 
 ## Questions for the project lead
 
