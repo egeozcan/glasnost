@@ -2,7 +2,7 @@
 id: S-0106
 title: Slope shapes, terrain surface height and voxel tilt on slopes
 topic: rendering
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -178,6 +178,9 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    | flying, rocket | no tilt from slopes |
 
    "The cell under the unit" is the cell that contains the unit's centre (its height ignored).
+   Flying bodies use the 32-step aiming-facing drawing heading; rocket bodies use the
+   32-step body heading. Their pitch and bank, without slope tilt, are specified by
+   S-0105 claims 41–42; their image reuse is specified by S-0105 claim 26.
    - Backing: `measurable`: scenario T4 for the locomotors that stock data gives to voxel units
      (driving, teleporting, powered hovering, jumpjet, flying, rocket), T6 for the others
      (walking, mechanical walking, drop-pod, tunnelling, naval, given to a voxel vehicle by named
@@ -185,8 +188,7 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
    - Confidence: high for driving, naval, walking, mechanical walking, drop-pod, teleporting and
      jumpjet; high for hovering's powered-height test (S-0503 claims 8 and 10),
      medium for tunnelling (its surface states belong to the vehicle specs),
-     medium for flying and rocket, whose bodies take their orientation from rules
-     of the aircraft specs that this spec does not fix
+     high for flying and rocket slope exclusion and heading sources (S-0105 claims 41–42)
 
 6. **Tilt state of the tilting locomotors.** On each ground-layer movement tick on which the slope shape of the cell
    that contains the unit's centre differs from its current shape, a unit with a tilting locomotor
@@ -231,15 +233,15 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
      and medium for which tick's drawn frames show *j* = 0 (whether the drawn frames of tick
      *t*<sub>0</sub> already show the transition, Open questions)
 
-8. **Settled tilt.** A body that is settled (no transition running and no rocking) is drawn with
+8. **Settled tilt.** A body tilted by claim 5 that is settled (no transition running and no rocking) is drawn with
    *D* = *R*<sub>s<sub>c</sub></sub> · Rz(*θ*<sub>body</sub>), the product of the shape's tilt
    (left factor) and the body's 32-step rotation of S-0105 claim 3 (right factor). The tilt therefore does not depend on the body facing.
    The body's ramp state (S-0105 claim 26) is the shape whose tilt it shows: *s*<sub>c</sub> for
    the tilting locomotors, and the shape of the cell under the unit for a powered-down hovering
    unit and for a tunnelling unit in its surface state. Walking, mechanical walking,
    drop-pod, teleporting, jumpjet and powered hovering bodies have no ramp state.
-   Full reuse keys for flying and rocket bodies remain open in S-0105; no complete key
-   for those bodies is asserted here. For a body with ramp state, an image made on one
+   Flying and rocket bodies also have no ramp state: S-0105 claims 26 and 41–42
+   specify their heading, attitude and complete reuse conditions. For a body with ramp state, an image made on one
    shape is never reused on another, although shapes 5 … 8 and 9 … 12 give identical images.
    - Backing: `measurable` (T2 for driving, T6 for tunnelling and naval, T7 for hovering)
      for the settled transform and rejection of a flat image on shapes 1 … 16. T12 tests
@@ -269,15 +271,20 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
 ### Shadows
 
 11. **Shadow tilt.** For every locomotor, whenever a voxel shadow is drawn, the transform of its
-    unmasked footprint, *S* of S-0105 claim 30, is *R*<sub>s</sub> · Rz(*θ*<sub>body</sub>), where *s* is the slope
+    unmasked footprint, *S* of S-0105 claim 30, is *R*<sub>s</sub> · Rz(*θ*<sub>shadow</sub>), where *s* is the slope
     shape of the cell that contains the unit's centre (its height ignored), taken at the moment of
     the draw: there is no transition, and the unit's own tilt state is not used. So the shadow of a
     walking, teleporting or powered hovering unit on a slope is tilted although its body is not,
     the shadow of a jumpjet, an aircraft or a rocket in flight is tilted by the shape of the cell
     below it, and while a driving unit's body is in a transition its shadow already shows the new
     shape. One exception: an aircraft with the flying locomotor whose type has the dropship flag
-    (Import mapping) always gets the flat shadow (*s* taken as 0). For aircraft, which of the
-    aircraft's facings gives *θ*<sub>body</sub> belongs to the aircraft specs (Open questions).
+    (Import mapping) always gets the flat shadow (*s* taken as 0).
+    The angle *θ*<sub>shadow</sub> uses S-0105 claim 3's 32-step heading conversion:
+    the aiming facing for the flying locomotor, and the body facing for rockets and
+    the other locomotors. Flying shadows therefore use the same aiming-facing drawing
+    heading as flying bodies; rocket shadows use the same body heading as rocket bodies
+    (S-0105 claims 41–42). Neither shadow includes body pitch or bank. A change in those
+    angles alone does not change the unmasked footprint, even while the body changes pose.
     These tilt assertions describe the unmasked footprint, not every darkened screen pixel.
     Every vehicle shadow, fresh or reused, excludes the vehicle's current completed own-part
     image (S-0105 claim 39). Only the unmasked footprint is cached, so an earlier pose or
@@ -285,21 +292,31 @@ lepton ρ*, *table trigonometry*, *table square root*, *fresh draw*, *image cach
     The original reused shadows with old-pose cutouts, a presentation glitch fixed by that claim.
     - Backing: `measurable`: scenario T4 for the driving, teleporting, hovering, jumpjet, flying
       and rocket locomotors, T6 for the walking, mechanical walking, drop-pod, tunnelling and naval
-      locomotors, T3 for the shadow during a transition and T8 for the dropship exception
+      locomotors, T3 for the shadow during a transition and T8 for the dropship exception.
+      T4's attitude part tests flying/rocket heading sources and pitch/bank exclusion,
+      following S-0105 claims 41–42.
     - Confidence: high for the transform of every locomotor; medium for which drawn objects have a
       shadow at all (a rocket, a tunnelling unit below ground), which S-0105 and the aircraft and
-      vehicle specs own, and for the flying locomotor's facing
+      vehicle specs own
 
 12. **Shadow images and the cache.**
     - **Ramp state of the shadow.** The ramp state in a shadow's image-cache key (S-0105 claim 31)
       is the *s* of claim 11, for every locomotor (always 0 for an aircraft with the dropship
-      flag). So an unmasked shadow footprint made on flat ground is never reused on a slope.
+      flag). The heading component uses claim 11's same 32-step heading source:
+      aiming facing for flying shadows and body facing for rocket shadows. Neither
+      body pitch nor bank contributes to these shadow keys; a flying or rocket body
+      requiring a fresh draw does not itself force a fresh shadow (S-0105 claims 26,
+      41–42). So an unmasked shadow footprint made on flat ground is never reused on
+      a slope, except that the dropship exception always uses the flat state.
       - Backing: `measurable` (scenario T3 and T6) when the two shapes have visibly
         different footprints: a flat footprint must not reappear on shapes 1 … 16 at
         the same facing. Separate shadow reuse classes for equal-transform shapes
         are `unmeasured`: unlike body shading in T12, the unmasked shadow has no
         fresh-draw shading difference, and current masking agrees on every appearance,
-        so no scenario here distinguishes their separate keys.
+        so no scenario here distinguishes their separate keys. Flying/rocket heading
+        and attitude-independent reuse are tested by the proposed read-only reuse
+        observations in S-0105 claims 41–42's measurement scenarios. Without that
+        recorder, identical pixels do not establish reuse or storage.
       - Confidence: high
     - **Unsettled shadows.** While a driving or naval unit's body is not settled, and while a
       hovering unit rocks, its shadow image is made fresh: it is never taken from the image cache
@@ -628,7 +645,8 @@ arctan(104/256) and arctan(208/(256√2)), respectively. These angles are double
 radians, rounded as S-0105 F0 specifies; all other F2 operations are unchanged. They are
 falsifying hypotheses for the oracle. The first is also the corrected engine's settled
 render; the second is not an engine alternative. A *C4 shadow render* is
-S-0105 claim 30's footprint with *S* = *R*<sub>s</sub> · Rz(*θ*<sub>body</sub>). The *flat image*
+S-0105 claim 30's footprint with *S* = *R*<sub>s</sub> · Rz(*θ*<sub>shadow</sub>), using
+claim 11's heading source. The *flat image*
 of a unit is its capture on flat ground at the same facing.
 
 Shadow shape comparisons in T3, T4, T6 and T7 use that unmasked footprint only as the set
@@ -738,6 +756,19 @@ rule already specified in T11; no oracle run is expected to reproduce either cor
 - *Falsified if:* a teleporting, powered hovering or jumpjet body is tilted; the aircraft's or the
   rocket's body takes on a C4 tilt over a slope cell; a shadow that is drawn stays flat over a slope
   cell. (A rocket that casts no shadow at all tests only its body.)
+- *Attitude part:* also run the flight attitude comparisons of S-0105 claims 41–42,
+  with the same capture settings, flat/slope routes and stock subjects. Record aiming
+  and body facings, pitch, bank, centre cell and tick for every captured pose. Compare
+  the unmasked footprint at equal shape and rounded drawing heading while pitch or
+  bank changes. Expected: it remains claim 11's footprint, not a projection of the
+  pitched or banked body. For flying subjects, seek poses with different rounded
+  aiming and body facings: the shadow and body heading must follow the aiming facing.
+  Rockets must follow body facing. A footprint that follows body pitch/bank, or the
+  wrong heading source, falsifies the rule. Changes explained only by the current
+  own-image mask do not falsify it. If the two flying facings never separate, record
+  that heading-source comparison as inconclusive, not confirmed. Exact reuse requires
+  the proposed read-only recorder in those claims' scenarios; images alone test the
+  footprint, not reuse eligibility.
 
 **T5. Tilter flag (claim 10).**
 - *Setup:* the map of T1 with an override section that sets the tilter flag of one stock driving
@@ -979,7 +1010,6 @@ rule already specified in T11; no oracle run is expected to reproduce either cor
   saddle surface: an alternative that follows the corners cannot be defined without them.
 - Where an airborne vehicle's shadow lands vertically remains open. Aircraft shadow placement,
   including high-bridge neighbour qualification, is specified by S-0105 claim 40.
-  Which of an aircraft's facings turns its shadow remains open (claim 11).
 - Which states of the tunnelling locomotor count as its surface state (claim 5). This belongs
   to the vehicle specs. Hovering power and the height used by its test are resolved by
   S-0503 claims 8 and 10.
