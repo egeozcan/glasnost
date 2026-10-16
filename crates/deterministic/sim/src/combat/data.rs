@@ -1474,10 +1474,10 @@ pub fn combat_rules(
                 .as_ref()
                 .and_then(|n| names.get(&(Kind::Building, n.clone())).copied()),
             // spec: S-0518 Import mapping (the engine's starting held modifier is 100; support cap 8, rearm 100, duration 15)
-            modifier: g.prism_support_modifier.unwrap_or(100),
-            max: g.prism_support_max.unwrap_or(8),
-            rearm: g.prism_support_delay.unwrap_or(100),
-            duration: g.prism_support_duration.unwrap_or(15),
+            modifier: g.prism_support_modifier.unwrap_or(100), // spec: S-0518 Import mapping (starting held modifier 100)
+            max: g.prism_support_max.unwrap_or(8), // spec: S-0518 Import mapping (support cap 8)
+            rearm: g.prism_support_delay.unwrap_or(100), // spec: S-0518 Import mapping (support rearm 100)
+            duration: g.prism_support_duration.unwrap_or(15), // spec: S-0518 Import mapping (beam duration 15)
         },
         warp_away: g.warp_away.clone(),
         chrono_sparkle: g.chrono_sparkle.clone(),

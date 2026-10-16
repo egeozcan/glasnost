@@ -24,6 +24,7 @@ pub mod deployers;
 pub mod fixture;
 pub mod game;
 pub mod jumpjets;
+pub mod linked;
 pub mod radiation;
 pub mod scripted;
 pub mod skirmish;

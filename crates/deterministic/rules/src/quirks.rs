@@ -1563,27 +1563,27 @@ pub struct Quirks {
     // spec: S-0517 claim 8 and Edge cases
     #[serde(default = "on")]
     pub deploy_transition_discards_orders: bool,
-    /// A dropped or projectile-less delayed master shot keeps the support count, so the next shot gets the kept bonus on top of new supporters, with no beams for the kept part; off: the count becomes 0 whenever the delayed shot comes, fired or not. Not implemented yet (wave 2).
+    /// A dropped or projectile-less delayed master shot keeps the support count, so the next shot gets the kept bonus on top of new supporters, with no beams for the kept part; off: the count becomes 0 whenever the delayed shot comes, fired or not.
     // spec: S-0518 claim 10 and Edge cases
     #[serde(default = "on")]
     pub prism_count_survives_dropped_shot: bool,
-    /// Every rules layer with a general section re-reads the support modifier with the held value as its default and multiplies the result by 100, even when the layer lacks the key; off: a layer without the key leaves the held value unchanged. Not implemented yet (wave 2).
+    /// Every rules layer with a general section re-reads the support modifier with the held value as its default and multiplies the result by 100, even when the layer lacks the key; off: a layer without the key leaves the held value unchanged.
     // spec: S-0518 claim 16, F4 and Edge cases
     #[serde(default = "on")]
     pub prism_modifier_reread_scale: bool,
-    /// Supporters need not be in operation, so a switched-off, pulsed, unfinished or selling building still supports a working master; off: a building not in operation (S-0405 claim 8) is not eligible. Not implemented yet (wave 2).
+    /// Supporters need not be in operation, so a switched-off, pulsed, unfinished or selling building still supports a working master; off: a building not in operation (S-0405 claim 8) is not eligible.
     // spec: S-0518 claim 2 and Edge cases
     #[serde(default = "on")]
     pub prism_support_ignores_operation: bool,
-    /// With a prism delayed-fire field of 0, a recruited supporter stays eligible until its turn, so another master of the same house processed before then also counts it; off: a building with a pending beam is not eligible. Not implemented yet (wave 2).
+    /// With a prism delayed-fire field of 0, a recruited supporter stays eligible until its turn, so another master of the same house processed before then also counts it; off: a building with a pending beam is not eligible.
     // spec: S-0518 claim 2 and Edge cases
     #[serde(default = "on")]
     pub prism_zero_delay_double_count: bool,
-    /// A building of a non-overpowerable type never removes chargers that stopped aiming at it; off: it removes them as an overpowerable type does. Not implemented yet (wave 2).
+    /// A building of a non-overpowerable type never removes chargers that stopped aiming at it; off: it removes them as an overpowerable type does.
     // spec: S-0518 claim 12 and Edge cases
     #[serde(default = "on")]
     pub stale_chargers_kept: bool,
-    /// A vehicle with an electric-charge secondary has no break-off search and keeps firing charge shots at the building while enemies approach; off: vehicles break off as infantry do. Not implemented yet (wave 2).
+    /// A vehicle with an electric-charge secondary has no break-off search and keeps firing charge shots at the building while enemies approach; off: vehicles break off as infantry do.
     // spec: S-0518 claim 15 and Edge cases
     #[serde(default = "on")]
     pub vehicle_charge_no_break_off: bool,

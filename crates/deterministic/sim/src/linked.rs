@@ -362,22 +362,32 @@ pub fn start_charging(w: &mut World, id: ObjectId) -> bool {
 /// that finds a target takes it and the mark clears. Returns whether the
 /// mark was set (the search ran).
 pub fn break_off(w: &mut World, id: ObjectId) {
-    let marked = w
-        .obj(id)
-        .is_some_and(|o| o.kind == Kind::Infantry && o.combat.charging);
+    // spec: S-0518 claim 15 and Edge cases (the break-off search belongs to infantry; quirks.vehicle_charge_no_break_off off: vehicles break off too)
+    let no_vehicles = w.rules().quirks.vehicle_charge_no_break_off;
+    let marked = w.obj(id).is_some_and(|o| {
+        o.combat.charging && (o.kind == Kind::Infantry || (!no_vehicles && o.kind == Kind::Vehicle))
+    });
     if !marked {
         return;
     }
-    // spec: S-0518 claim 15 (a range-kind search centred on its position, with no targeting-timer gate or reset draw)
+    // spec: S-0518 claim 15 (a range-kind search centred on its position, with no targeting-timer gate or reset draw; the unit takes what it finds instead of the building)
+    let prev = w.obj(id).and_then(|o| o.target);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.target = None;
+    }
     let found = crate::combat::acquire::search(
         w,
         id,
         crate::combat::acquire::SearchKind::Range,
         crate::combat::acquire::SearchContext::PerTick,
     );
-    if found.is_some()
-        && let Some(ob) = w.obj_mut(id)
-    {
-        ob.combat.charging = false;
+    if let Some(ob) = w.obj_mut(id) {
+        if found.is_some() {
+            ob.combat.charging = false;
+        } else {
+            // Nothing found: it keeps charging.
+            ob.target = prev;
+            ob.combat.charging = true;
+        }
     }
 }

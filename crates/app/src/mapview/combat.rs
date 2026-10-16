@@ -477,6 +477,9 @@ pub enum TransientKind {
     Burst(i32),
     /// An animation.
     Anim,
+    /// A point of a prism support beam, shown for this many ticks (S-0518
+    /// claim 6; our placeholder: a row of marks along the beam).
+    Beam(i32),
 }
 
 impl Transient {
@@ -493,6 +496,7 @@ impl Transient {
                 stage: age * BURST_STAGES / BURST_TICKS,
             }),
             TransientKind::Anim => (age < ANIM_TICKS).then_some(Marker::Anim),
+            TransientKind::Beam(life) => (age < life).then_some(Marker::Muzzle),
         }
     }
 }

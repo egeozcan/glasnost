@@ -62,6 +62,10 @@ pub struct Uses {
     pub radiation: u32,
     /// Erasing units sent against an enemy (S-0514).
     pub erasures: u32,
+    /// Prism buildings ordered (S-0518).
+    pub prisms: u32,
+    /// Chargers sent at an own overpowerable building (S-0518).
+    pub charges: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -104,12 +108,23 @@ impl Special {
         self.deployers(script, &own, w, out);
         self.radiation(script, &own, w, out);
         self.chrono(script, &own, w, out);
+        self.linked(script, &own, w, out);
     }
 
     /// Counts one deploy order given to a deployable unit (S-0517,
     /// `deployers`).
     pub(crate) fn count_deploy(&mut self) {
         self.uses.deploys += 1;
+    }
+
+    /// Counts one prism building ordered (S-0518, `linked`).
+    pub(crate) fn count_prism(&mut self) {
+        self.uses.prisms += 1;
+    }
+
+    /// Counts one charger sent at a building (S-0518, `linked`).
+    pub(crate) fn count_charge(&mut self) {
+        self.uses.charges += 1;
     }
 
     /// Counts one erasing unit sent against an enemy (S-0514, `chrono`).

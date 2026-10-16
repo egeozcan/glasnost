@@ -47,6 +47,7 @@ const SCENES: &[Scene] = &[
     ("deploy", unit_deploys),
     ("radiation", radiation_field),
     ("chrono", chrono_erases),
+    ("prism", prism_supports),
 ];
 
 #[test]
@@ -827,6 +828,94 @@ fn chrono_erases(lane: &mut Lane) {
     }
     lane.ticks(3);
     lane.save("chrono-erased");
+}
+
+/// S-0518: the prism type of the install (found by the game-wide setting)
+/// is built three times near each other for the local house; the first is
+/// ordered to attack an enemy vehicle, recruits the others, and fires one
+/// stronger shot; the support beams are drawn as marks. Prints counts and
+/// ticks only.
+fn prism_supports(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let prism = r.combat.general.prism.building;
+    let victim = (0..r.vehicles.len())
+        .find(|&i| {
+            r.unit(Kind::Vehicle, i as u32)
+                .is_some_and(|u| u.combat.slots[0].is_none() && !u.harvester && u.strength > 0)
+        })
+        .map(|i| r.vehicles[i].name.clone());
+    println!(
+        "prism type named: {}, modifier {}, cap {}, target vehicle found: {}",
+        prism.is_some(),
+        r.combat.general.prism.modifier,
+        r.combat.general.prism.max,
+        victim.is_some()
+    );
+    let (Some(p), Some(vname)) = (prism, victim) else {
+        return;
+    };
+    let pname = r.buildings[p as usize].name.clone();
+    let local = lane.local();
+    let enemy = (0..lane.world().houses.len())
+        .map(|i| HouseId(i as u8))
+        .find(|&h| {
+            h != local
+                && lane.world().houses[usize::from(h.0)].role
+                    == glasnost_sim::world::HouseRole::Player
+        })
+        .unwrap_or(local);
+    let home = lane.home();
+    let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let sites = [(0, 0), (-3, 0), (-3, 3)];
+    let prisms: Vec<ObjectId> = sites
+        .iter()
+        .map(|&(dx, dy)| {
+            lane.spawn(
+                Kind::Building,
+                &pname,
+                local,
+                CellXY::new(spot.x + dx, spot.y + dy),
+            )
+        })
+        .collect();
+    let target = lane.spawn(
+        Kind::Vehicle,
+        &vname,
+        enemy,
+        CellXY::new(spot.x + 5, spot.y),
+    );
+    lane.look_at(spot);
+    lane.ticks(4);
+    lane.save("prism-before");
+    let sent = lane.order(local, prisms[0], ClickOn::Object(target));
+    println!("click on the target: {sent} orders");
+    let hp = lane.world().obj(target).map_or(0, |o| o.health);
+    let mut shot = false;
+    let mut peak = 0;
+    for t in 0..400 {
+        // The lane keeps the house at full power, as a person with enough plants would.
+        lane.world_mut().houses[usize::from(local.0)]
+            .econ
+            .power
+            .output = 100_000;
+        lane.ticks(1);
+        let n = lane.world().obj(prisms[0]).map_or(0, |o| o.combat.support);
+        peak = peak.max(n);
+        if n > 0 && !shot {
+            shot = true;
+            lane.save("prism-beams");
+            println!("first recruitment at tick {t}");
+        }
+        if lane.world().obj(target).is_none() {
+            break;
+        }
+    }
+    println!(
+        "support count peak {peak}, target health {hp} -> {:?}",
+        lane.world().obj(target).map(|o| o.health)
+    );
+    lane.save("prism-after");
 }
 
 // ---------------------------------------------------------------------------

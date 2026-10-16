@@ -2269,3 +2269,7 @@ mod radiation_tests;
 #[cfg(test)]
 #[path = "sim_temporal_tests.rs"]
 mod temporal_tests;
+
+#[cfg(test)]
+#[path = "sim_linked_tests.rs"]
+mod linked_tests;

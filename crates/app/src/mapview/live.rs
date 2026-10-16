@@ -1131,6 +1131,21 @@ impl Live {
         self.follow_owners();
         self.update_anims(now);
         for e in effects {
+            if let Effect::SupportBeam {
+                from, to, duration, ..
+            } = e
+            {
+                // S-0518 claim 6: a support beam, drawn as nine marks from the supporter to the master for its duration.
+                let (a, b) = (at(from), at(to));
+                for i in 0..=8 {
+                    self.transients.push(Transient {
+                        kind: TransientKind::Beam(duration.max(1)),
+                        at: (a.0 + (b.0 - a.0) * i / 8, a.1 + (b.1 - a.1) * i / 8),
+                        born: now,
+                    });
+                }
+                continue;
+            }
             let (kind, pos) = match e {
                 Effect::Shot { from, .. } => {
                     self.counts.shots += 1;
