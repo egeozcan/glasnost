@@ -90,6 +90,9 @@ pub struct Names {
     pub army: Vec<String>,
 }
 
+/// The kinds of army the round-robin builds from, one counter each.
+const ARMY_KINDS: [Kind; 3] = [Kind::Vehicle, Kind::Infantry, Kind::Aircraft]; // nocite: the three kinds of army unit
+
 /// Ticks between two thinks.
 pub const THINK_PERIOD: i32 = 15; // nocite: tuning of our own opponent
 
@@ -386,7 +389,7 @@ pub struct Script {
     /// The next army type's index, one counter per kind of army (vehicle,
     /// infantry, aircraft): a counter shared by the kinds would step past
     /// the same types every round and leave some never built.
-    next_army: [usize; 3],
+    next_army: [usize; ARMY_KINDS.len()],
     /// The tick since which idle army units have been waiting for a wave.
     waiting_since: Option<i32>,
     /// The economy watch: credits and the harvesters' summed loads at the
@@ -415,7 +418,7 @@ impl Script {
             plan,
             targets: Vec::new(),
             next_target: 0,
-            next_army: [0; 3],
+            next_army: [0; ARMY_KINDS.len()],
             waiting_since: None,
             watch: Watch::default(),
         }
@@ -879,10 +882,7 @@ impl Script {
         } else {
             self.candidates(w, Role::Army)
         };
-        for (k, kind) in [Kind::Vehicle, Kind::Infantry, Kind::Aircraft]
-            .into_iter()
-            .enumerate()
-        {
+        for (k, kind) in ARMY_KINDS.into_iter().enumerate() {
             let of_kind: Vec<TypeRef> = army_types
                 .iter()
                 .copied()

@@ -154,7 +154,31 @@ impl Brain {
     /// A counts-only diagnostic of the brain's state (local-lane reports,
     /// see [`Script::diagnose`]).
     pub fn diagnose(&self, w: &World) -> String {
-        self.script.diagnose(w)
+        let mut s = self.script.diagnose(w);
+        // The ferry: idle infantry at home, whether its run crosses water,
+        // the ferries the house owns and the types it could build for a run.
+        if let (Some(home), Some(goal)) = (self.script.home(w), self.script.attack_goal(w)) {
+            let infantry: Vec<ObjectId> = self
+                .script
+                .of_role(w, Role::Army)
+                .into_iter()
+                .filter(|&id| {
+                    w.obj(id).is_some_and(|o| {
+                        o.kind == Kind::Infantry
+                            && dist2(o.pos.cell(), home) <= 4 * FERRY_HOME * FERRY_HOME // nocite: tuning (twice the home radius)
+                    }) && idle(w, id)
+                })
+                .collect();
+            let crossing = infantry.iter().any(|&p| Self::crossing(w, p, goal));
+            s.push_str(&format!(
+                "; ferry: idle infantry at home {}, run crosses water {crossing}, ferries owned {}, type for a land run {}, type for a crossing {}",
+                infantry.len(),
+                self.ferries(w).len(),
+                self.ferry_type(w, false).is_some(),
+                self.ferry_type(w, true).is_some()
+            ));
+        }
+        s
     }
 
     /// Thinks at the start of the world's current tick; returns the orders

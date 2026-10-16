@@ -104,6 +104,8 @@ struct Game {
     /// still standing (S-0507), and superweapon launches (S-0513), by the
     /// own AI's games.
     loads: usize,
+    /// The loads onto a transport with the hovering locomotor.
+    hover_loads: usize,
     unloads: usize,
     launches: usize,
     /// The launches by superweapon kind (the kind names of the simulation).
@@ -460,10 +462,7 @@ fn play_ai(
     let mut seen: [BTreeMap<Role, BTreeSet<u32>>; PLAYERS] = Default::default();
     let mut last = [i32::MAX; PLAYERS];
     let mut drained = 0usize;
-    // The (house, superweapon type) pairs ready after the last tick.
-    let mut ready_before: BTreeSet<(usize, usize)> = BTreeSet::new();
-    // The (passenger, transport) pairs of the last tick.
-    let mut riding: BTreeSet<(u32, u32)> = BTreeSet::new();
+    let mut tally = Tally::default();
     // `GLASNOST_AI_TRACE=n`: a timeline line per house every n ticks.
     let trace: i32 = std::env::var("GLASNOST_AI_TRACE")
         .ok()
@@ -484,43 +483,7 @@ fn play_ai(
             }
         }
         drained = w.effects.len();
-        let now: BTreeSet<(u32, u32)> = w
-            .objects
-            .keys()
-            .filter_map(|&p| Some((p.0, glasnost_sim::transport::riding(w, p)?.0)))
-            .collect();
-        g.loads += now.difference(&riding).count();
-        g.unloads += riding
-            .difference(&now)
-            .filter(|&&(p, t)| {
-                let alive = |i| {
-                    w.obj(glasnost_sim::world::ObjectId(i))
-                        .is_some_and(|o| o.on_map && o.health > 0)
-                };
-                alive(p) && alive(t)
-            })
-            .count();
-        riding = now;
-        // A launch spends a ready record that is still granted afterwards:
-        // count each such fall of the ready mark (a lost giving building
-        // also clears the grant).
-        let ready_now: BTreeSet<(usize, usize)> = (0..PLAYERS)
-            .flat_map(|h| (0..w.rules().superweapons.types.len()).map(move |i| (h, i)))
-            .filter(|&(h, i)| {
-                glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
-                    .is_some_and(|r| r.granted && r.ready && !r.suspended)
-            })
-            .collect();
-        for &(h, i) in ready_before.difference(&ready_now) {
-            if glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
-                .is_some_and(|r| r.granted)
-            {
-                g.launches += 1;
-                let kind = w.rules().superweapons.types[i].kind;
-                *g.launches_by_kind.entry(format!("{kind:?}")).or_default() += 1;
-            }
-        }
-        ready_before = ready_now;
+        tally.observe(w);
         features(w, &mut g.features);
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
@@ -564,6 +527,11 @@ fn play_ai(
         }
     }
     g.run_ms = t.elapsed().as_millis();
+    g.loads = tally.loads;
+    g.hover_loads = tally.hover_loads;
+    g.unloads = tally.unloads;
+    g.launches = tally.launches;
+    g.launches_by_kind = tally.launches_by_kind;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
     let world = &game.world;
@@ -634,6 +602,82 @@ fn play_ai(
     }
     g.save_matches = same_at_save && loaded.state_hash() == end;
     Ok(())
+}
+
+/// What the lane counts of the transports and superweapons while a game
+/// runs (one [`Tally::observe`] after every tick).
+#[derive(Debug, Default)]
+pub struct Tally {
+    /// Passengers that boarded a transport.
+    pub loads: usize,
+    /// Of those, the loads onto a transport with the hovering locomotor.
+    pub hover_loads: usize,
+    /// Passengers let out beside a transport still standing.
+    pub unloads: usize,
+    /// Superweapon launches in all.
+    pub launches: usize,
+    /// Superweapon launches by kind name.
+    pub launches_by_kind: BTreeMap<String, usize>,
+    /// The (house, superweapon type) pairs ready after the last tick.
+    ready_before: BTreeSet<(usize, usize)>,
+    /// The (passenger, transport) pairs of the last tick.
+    riding: BTreeSet<(u32, u32)>,
+}
+
+impl Tally {
+    /// Counts what changed in the world's last tick.
+    pub fn observe(&mut self, w: &World) {
+        let now: BTreeSet<(u32, u32)> = w
+            .objects
+            .keys()
+            .filter_map(|&p| Some((p.0, glasnost_sim::transport::riding(w, p)?.0)))
+            .collect();
+        self.loads += now.difference(&self.riding).count();
+        // The loads onto a hovering transport (it crosses water).
+        self.hover_loads += now
+            .difference(&self.riding)
+            .filter(|&&(_, t)| {
+                w.obj(glasnost_sim::world::ObjectId(t))
+                    .and_then(|o| w.rules().unit(o.kind, o.type_index))
+                    .is_some_and(|u| u.locomotor == Locomotor::Hover)
+            })
+            .count();
+        self.unloads += self
+            .riding
+            .difference(&now)
+            .filter(|&&(p, t)| {
+                let alive = |i| {
+                    w.obj(glasnost_sim::world::ObjectId(i))
+                        .is_some_and(|o| o.on_map && o.health > 0)
+                };
+                alive(p) && alive(t)
+            })
+            .count();
+        self.riding = now;
+        // A launch spends a ready record that is still granted afterwards:
+        // count each such fall of the ready mark (a lost giving building
+        // also clears the grant).
+        let ready_now: BTreeSet<(usize, usize)> = (0..PLAYERS)
+            .flat_map(|h| (0..w.rules().superweapons.types.len()).map(move |i| (h, i)))
+            .filter(|&(h, i)| {
+                glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
+                    .is_some_and(|r| r.granted && r.ready && !r.suspended)
+            })
+            .collect();
+        for &(h, i) in self.ready_before.difference(&ready_now) {
+            if glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
+                .is_some_and(|r| r.granted)
+            {
+                self.launches += 1;
+                let kind = w.rules().superweapons.types[i].kind;
+                *self
+                    .launches_by_kind
+                    .entry(kind.map_or("no kind".to_string(), |k| format!("{k:?}")))
+                    .or_default() += 1;
+            }
+        }
+        self.ready_before = ready_now;
+    }
 }
 
 /// The state of a game that did not end, counts only: per player house its
@@ -891,6 +935,17 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
                 if loco == Some(Locomotor::Hover) {
                     note("hovers");
                 }
+                // A hovering or amphibious-zone unit standing on water (it
+                // crossed the sea, S-0503).
+                if (loco == Some(Locomotor::Hover)
+                    || r.unit(o.kind, o.type_index)
+                        .is_some_and(|u| u.zone == glasnost_rules::sim::MovementZone::Amphibious))
+                    && w.cells
+                        .cell(o.pos.cell())
+                        .is_some_and(|c| c.land == glasnost_map::terrain::land::WATER)
+                {
+                    note("hover or amphibious on water");
+                }
                 if glasnost_sim::naval::sinking(w, *id) {
                     note("ships sinking");
                 }
@@ -1065,8 +1120,9 @@ fn report(
         if players != Players::Scripted {
             let _ = writeln!(
                 s,
-                "  transports: {} loads, {} unloads; superweapon launches: {}{}",
+                "  transports: {} loads ({} onto a hovering transport), {} unloads; superweapon launches: {}{}",
                 g.loads,
+                g.hover_loads,
                 g.unloads,
                 g.launches,
                 if g.launches_by_kind.is_empty() {

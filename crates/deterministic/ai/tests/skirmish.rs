@@ -208,6 +208,7 @@ fn builds_a_navy_on_a_water_map() {
 /// (`GLASNOST_SWEEP=1-32 cargo test --release -p glasnost-ai --test skirmish naval_seed_sweep -- --ignored --nocapture`).
 #[test]
 #[ignore = "a sweep of whole games; set GLASNOST_SWEEP=<from>-<to>"]
+#[allow(clippy::disallowed_methods, clippy::disallowed_macros)] // a local diagnostic: reads the host environment and prints, no simulation
 fn naval_seed_sweep() {
     let range = std::env::var("GLASNOST_SWEEP").unwrap_or_else(|_| "1-8".into());
     let (a, b) = range.split_once('-').expect("GLASNOST_SWEEP=<from>-<to>");

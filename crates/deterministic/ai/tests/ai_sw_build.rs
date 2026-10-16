@@ -103,8 +103,8 @@ fn count(w: &World, h: u8, name: &str) -> usize {
 // it (S-0512 Terms: the type is named by the building's first field).
 #[test]
 fn builds_the_building_of_each_kind() {
-    for i in 0..KINDS.len() {
-        let giver = KINDS[i].1;
+    for (i, kind) in KINDS.iter().enumerate() {
+        let giver = kind.1;
         let mut g = start(&[i]);
         while g.world.tick < 12_000
             && g.outcome().is_none()
@@ -116,7 +116,7 @@ fn builds_the_building_of_each_kind() {
             (0..2).any(|h| count(&g.world, h, giver) > 0),
             "{} ({}) was built by tick {}",
             giver,
-            KINDS[i].2,
+            kind.2,
             g.world.tick
         );
     }

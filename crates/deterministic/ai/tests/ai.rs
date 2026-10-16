@@ -152,6 +152,67 @@ fn defends_the_base() {
     }
 }
 
+// A unit resting in guard keeps a target that is out of its weapon's range
+// and does not pursue it (S-0215 claim 24). The script counts such a unit as
+// idle, so that it is sent at the enemy (and infantry in that state can board
+// a ferry).
+#[test]
+fn a_guard_holding_an_out_of_range_target_is_sent() {
+    use glasnost_sim::combat::{check, weapon};
+    let map = fixture::map();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    while g.world.tick % 15 != 0 || g.world.tick < 30 {
+        g.step();
+    }
+    let yard = of(&g.world, 0, "MCV")
+        .first()
+        .copied()
+        .or_else(|| of(&g.world, 0, "YARD").first().copied())
+        .expect("house 0 has its start object");
+    let at = g.world.obj(yard).unwrap().pos.cell();
+    let free = |w: &World, c: glasnost_map::CellXY| {
+        w.cells.usable(c) && w.objects.values().all(|o| o.pos.cell() != c)
+    };
+    let mine_at = (4..14)
+        .map(|d| glasnost_map::CellXY::new(at.x, at.y + d))
+        .find(|&c| free(&g.world, c) && free(&g.world, glasnost_map::CellXY::new(c.x + 6, c.y)))
+        .expect("two free cells six apart");
+    let theirs_at = glasnost_map::CellXY::new(mine_at.x + 6, mine_at.y);
+    let mine = testkit::spawn(&mut g.world, Kind::Vehicle, "GUNR", 0, mine_at, 0);
+    let theirs = testkit::spawn(&mut g.world, Kind::Vehicle, "GUNR", 1, theirs_at, 0);
+    // The enemy is seen once the sight update of a tick ran; start over on
+    // the next think tick.
+    for _ in 0..15 {
+        g.step();
+    }
+    while g.world.tick % 15 != 0 {
+        g.step();
+    }
+    let t = Some(Target::Object(theirs));
+    g.world.obj_mut(mine).unwrap().target = t;
+    let (slot, _) = weapon::would_use(&g.world, mine, t);
+    assert_eq!(
+        check::check(&g.world, mine, t, slot, true),
+        check::Answer::OutOfRange,
+        "the precondition: the target is out of range"
+    );
+    assert!(shroud::seen(&g.world, HouseId(0), theirs_at));
+    let orders = Brain::new(&g.world, &map, HouseId(0)).think(&g.world);
+    assert!(
+        orders.iter().any(|o| matches!(o,
+            Order::Behaviour { actor, target: Some(Target::Object(e)), .. }
+                if *actor == mine && *e == theirs)),
+        "the guard is sent at the enemy: {orders:?}"
+    );
+}
+
 // A base in a clearing too small for the usual gap between buildings still
 // gets every building it needs: the gap narrows, as a person squeezes a
 // building in when the room is short (M6c step 2d: on two stock maps both
@@ -402,6 +463,7 @@ fn builds_and_fires_a_superweapon() {
 /// (`GLASNOST_SWEEP=1-32 cargo test --release -p glasnost-ai --test ai superweapon_seed_sweep -- --ignored --nocapture`).
 #[test]
 #[ignore = "a sweep of whole games; set GLASNOST_SWEEP=<from>-<to>"]
+#[allow(clippy::disallowed_methods, clippy::disallowed_macros)] // a local diagnostic: reads the host environment and prints, no simulation
 fn superweapon_seed_sweep() {
     let range = std::env::var("GLASNOST_SWEEP").unwrap_or_else(|_| "1-8".into());
     let (a, b) = range.split_once('-').expect("GLASNOST_SWEEP=<from>-<to>");
