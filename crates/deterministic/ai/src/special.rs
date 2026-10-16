@@ -60,6 +60,8 @@ pub struct Uses {
     pub deploys: u32,
     /// Units sent out of a radiation field (S-0525).
     pub radiation: u32,
+    /// Erasing units sent against an enemy (S-0514).
+    pub erasures: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -101,12 +103,18 @@ impl Special {
         self.jumpjets(script, &own, w, out);
         self.deployers(script, &own, w, out);
         self.radiation(script, &own, w, out);
+        self.chrono(script, &own, w, out);
     }
 
     /// Counts one deploy order given to a deployable unit (S-0517,
     /// `deployers`).
     pub(crate) fn count_deploy(&mut self) {
         self.uses.deploys += 1;
+    }
+
+    /// Counts one erasing unit sent against an enemy (S-0514, `chrono`).
+    pub(crate) fn count_erasure(&mut self) {
+        self.uses.erasures += 1;
     }
 
     /// Counts one unit sent out of a radiation field (S-0525, `radiation`).

@@ -46,6 +46,7 @@ const SCENES: &[Scene] = &[
     ("jumpjet", jumpjet_flies),
     ("deploy", unit_deploys),
     ("radiation", radiation_field),
+    ("chrono", chrono_erases),
 ];
 
 #[test]
@@ -745,6 +746,87 @@ fn radiation_field(lane: &mut Lane) {
             .collect::<Vec<_>>()
     );
     lane.save("radiation-damage");
+}
+
+/// S-0514: a unit with a temporal beam (found by its primary weapon's
+/// warhead flag) is sent the attack click against an enemy vehicle; the
+/// target is locked, sparkles, and is removed when its erasure amount has
+/// run out. Prints counts and ticks only.
+fn chrono_erases(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let eraser = (0..r.infantry.len())
+        .map(|i| (Kind::Infantry, i as u32))
+        .chain((0..r.vehicles.len()).map(|i| (Kind::Vehicle, i as u32)))
+        .find(|&(k, i)| {
+            r.unit(k, i).is_some_and(|u| {
+                u.combat.slots[0]
+                    .and_then(|p| r.combat.weapon(p).warhead)
+                    .is_some_and(|h| r.combat.warhead(h).temporal)
+            })
+        })
+        .map(|(k, i)| (k, r.unit(k, i).map(|u| u.name.clone()).unwrap_or_default()));
+    let victim = (0..r.vehicles.len())
+        .find(|&i| {
+            r.unit(Kind::Vehicle, i as u32).is_some_and(|u| {
+                u.combat.slots[0].is_none() && !u.harvester && u.strength > 0 && u.passengers == 0
+            })
+        })
+        .map(|i| r.vehicles[i].name.clone());
+    println!(
+        "erasing type found: {}, target vehicle type found: {}, sparkle animation {}, warp-away {}",
+        eraser.is_some(),
+        victim.is_some(),
+        r.combat.general.chrono_sparkle.is_some(),
+        r.combat.general.warp_away.is_some()
+    );
+    let (Some((kind, ename)), Some(vname)) = (eraser, victim) else {
+        return;
+    };
+    let local = lane.local();
+    let enemy = (0..lane.world().houses.len())
+        .map(|i| HouseId(i as u8))
+        .find(|&h| {
+            h != local
+                && lane.world().houses[usize::from(h.0)].role
+                    == glasnost_sim::world::HouseRole::Player
+        })
+        .unwrap_or(local);
+    let home = lane.home();
+    let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let at_e = CellXY::new(spot.x, spot.y + 1);
+    let at_v = CellXY::new(spot.x + 3, spot.y);
+    let e = lane.spawn(kind, &ename, local, at_e);
+    let v = lane.spawn(Kind::Vehicle, &vname, enemy, at_v);
+    lane.look_at(spot);
+    lane.ticks(4);
+    lane.save("chrono-before");
+    let sent = lane.order(local, e, ClickOn::Object(v));
+    println!("click on the target: {sent} orders");
+    let mut locked_at = None;
+    let mut shot = false;
+    for t in 0..2400 {
+        lane.ticks(1);
+        let w = lane.world();
+        if locked_at.is_none() && glasnost_sim::temporal::erased(w, v) {
+            locked_at = Some(t);
+        }
+        if let Some(l) = locked_at
+            && !shot
+            && t >= l + 30
+        {
+            shot = true;
+            let amount = w.temporal.locks.get(&v).map(|l| l.amount);
+            println!("locked at {l}; amount after 30 updates {amount:?}");
+            lane.save("chrono-erasing");
+        }
+        if lane.world().obj(v).is_none() {
+            println!("target removed at tick {t}");
+            break;
+        }
+    }
+    lane.ticks(3);
+    lane.save("chrono-erased");
 }
 
 // ---------------------------------------------------------------------------

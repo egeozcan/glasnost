@@ -1503,19 +1503,19 @@ pub struct Quirks {
     // spec: S-0508 claim 14 and Edge cases; S-0311 claim 9
     #[serde(default = "on")]
     pub assaulter_reversed_kill_credit: bool,
-    /// A trainable erasing leader gets F5's direct experience gain on top of ordinary kill credit, which may go elsewhere; off: only ordinary S-0311 credit remains. Not implemented yet (wave 2).
+    /// A trainable erasing leader gets F5's direct experience gain on top of ordinary kill credit, which may go elsewhere; off: only ordinary S-0311 credit remains.
     // spec: S-0514 claim 13 and Edge cases; S-0311 claim 9
     #[serde(default = "on")]
     pub erasure_double_experience: bool,
-    /// When the last erasing attacker lets go before completion, the building is switched on regardless of its state before the lock; off: release restores its switch state from before the first lock. Not implemented yet (wave 2).
+    /// When the last erasing attacker lets go before completion, the building is switched on regardless of its state before the lock; off: release restores its switch state from before the first lock.
     // spec: S-0514 claim 10 and Edge cases; S-0405 claim 8
     #[serde(default = "on")]
     pub erasure_release_switches_on: bool,
-    /// Only a leading erasing attacker inside an open-topped transport is checked against the warp distance, not joiners; off: the distance limit applies to every attached open-topped passenger. Not implemented yet (wave 2).
+    /// Only a leading erasing attacker inside an open-topped transport is checked against the warp distance, not joiners; off: the distance limit applies to every attached open-topped passenger.
     // spec: S-0514 claim 11 and Edge cases
     #[serde(default = "on")]
     pub erasure_distance_leader_only: bool,
-    /// A delivered erasing hit clears the target's spawner slots and frees the units it mind-controls even when the new lock is refused; off: a refused lock does not clear spawners or free controlled units (the firer's previous beam still lets go). Not implemented yet (wave 2).
+    /// A delivered erasing hit clears the target's spawner slots and frees the units it mind-controls even when the new lock is refused; off: a refused lock does not clear spawners or free controlled units (the firer's previous beam still lets go).
     // spec: S-0514 claim 2 and Edge cases
     #[serde(default = "on")]
     pub erasure_refused_hit_side_effects: bool,

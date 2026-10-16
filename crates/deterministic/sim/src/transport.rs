@@ -594,6 +594,8 @@ pub fn board(w: &mut World, p: ObjectId, t: ObjectId) {
         // spec: S-0308 claim 6 (an object enters a gunner vehicle and is then its only passenger: its weapon number becomes the passenger type's mode index)
         let m = mode_index(w, p);
         crate::combat::weapon::set_weapon_number(w, t, m);
+        // spec: S-0308 claim 6 and S-0514 claim 4 (a first passenger with a temporal beam hands it to the vehicle, attached or not)
+        crate::temporal::hand_over(w, t, p);
     }
 }
 
@@ -1217,9 +1219,9 @@ fn passenger_left(w: &mut World, t: ObjectId, p: ObjectId) {
 }
 
 /// The temporal beam hand-back to the last passenger of a gunner vehicle
-/// (S-0308 claim 6). Seam: temporal beams belong to S-0514, not built.
+/// (S-0308 claim 6): the beam goes back and lets go (S-0514).
 pub fn temporal_hand_back(w: &mut World, t: ObjectId, p: ObjectId) {
-    let _ = (w, t, p);
+    crate::temporal::hand_back(w, t, p);
 }
 
 fn set_air_phase(w: &mut World, t: ObjectId, phase: i32) {

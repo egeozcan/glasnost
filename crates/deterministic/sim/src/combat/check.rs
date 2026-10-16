@@ -178,12 +178,8 @@ fn vehicle_moving(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
 /// hand-over (S-0308 claim 6) can also supply one; gunner transports are
 /// not built, so no beam comes from it yet.
 pub fn has_temporal_beam(w: &World, id: ObjectId) -> bool {
-    let r = w.rules();
-    // spec: S-0514 Terms and S-0310 claim 7 (a primary weapon whose warhead is temporal supplies a beam at creation)
-    type_combat(w, id)
-        .and_then(|tc| tc.slots[0])
-        .and_then(|p| r.combat.weapon(p).warhead)
-        .is_some_and(|h| r.combat.warhead(h).temporal)
+    // spec: S-0514 Terms and S-0310 claim 7 (a primary weapon whose warhead is temporal supplies a beam at creation; a gunner vehicle carries its first passenger's)
+    crate::temporal::has_beam(w, id)
 }
 
 /// Whether an infantry unit is "moving" for a weapon (S-0310 claim 8).
@@ -335,6 +331,13 @@ pub fn check(
     }
     // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0207 claim 20 (f) (phasing in)
     if crate::teleport::phasing_in(w, firer) {
+        return Answer::Rearming;
+    }
+    // spec: S-0301 claim 9 rank 4 and S-0514 claim 19 (a firer that already holds this very target with a temporal weapon: rearming)
+    if let Some(Target::Object(x)) = target
+        && r.combat.warhead_of(weapon).is_some_and(|h| h.temporal)
+        && crate::temporal::holds(w, firer, x)
+    {
         return Answer::Rearming;
     }
     // spec: S-0301 claim 9 rank 4 and S-0614 claim 8 (a spawner weapon of a held mobile firer: impossible, whatever its organic type)

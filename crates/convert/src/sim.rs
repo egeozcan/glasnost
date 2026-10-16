@@ -413,6 +413,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("legal_target", "LegalTarget", Bool),
     ("bombable", "Bombable", Bool),
     ("immune_to_radiation", "ImmuneToRadiation", Bool),
+    // spec: S-0514 Import mapping (Warpable: a boolean; absent: yes)
+    ("warpable", "Warpable", Bool),
     ("balloon_hover", "BalloonHover", Bool),
     ("spray_attack", "SprayAttack", Bool),
     ("tilts_when_crushes", "TiltsWhenCrushes", Bool),
@@ -485,6 +487,8 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("produce_cash_amount", "ProduceCashAmount", Int),
     ("produce_cash_delay", "ProduceCashDelay", Int),
     ("immune_to_radiation", "ImmuneToRadiation", Bool),
+    // spec: S-0514 Import mapping (Warpable: a boolean; absent: yes)
+    ("warpable", "Warpable", Bool),
     ("storage", "Storage", Int),
     ("spyable", "Spyable", Bool),
     ("can_c4", "CanC4", Bool),
@@ -2261,3 +2265,7 @@ mod transport_tests;
 #[cfg(test)]
 #[path = "sim_radiation_tests.rs"]
 mod radiation_tests;
+
+#[cfg(test)]
+#[path = "sim_temporal_tests.rs"]
+mod temporal_tests;

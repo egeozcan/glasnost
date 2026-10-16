@@ -698,6 +698,18 @@ pub struct General {
     /// established.
     #[serde(default)]
     pub default_spark_system: Option<String>,
+    /// `[General] WarpAway`, the completion animation (S-0514 Import
+    /// mapping).
+    #[serde(default)]
+    pub warp_away: Option<String>,
+    /// `[General] ChronoSparkle1`, the sparkle animation (S-0514 Import
+    /// mapping).
+    #[serde(default)]
+    pub chrono_sparkle: Option<String>,
+    /// `[CombatDamage] OpenToppedWarpDistance`, cells (S-0514 Import
+    /// mapping).
+    #[serde(default)]
+    pub open_topped_warp_distance: Option<i32>,
     /// `[Radiation] RadDurationMultiple`, the duration multiple *M*
     /// (S-0525 Import mapping, F2).
     #[serde(default)]
@@ -1421,6 +1433,10 @@ pub struct UnitType {
     /// `ImmuneToRadiation`.
     #[serde(default)]
     pub immune_to_radiation: Option<bool>,
+    /// `Warpable`, the erasable-target flag (S-0514 Import mapping); absent:
+    /// yes.
+    #[serde(default)]
+    pub warpable: Option<bool>,
     /// `BalloonHover`.
     #[serde(default)]
     pub balloon_hover: Option<bool>,
@@ -1946,6 +1962,10 @@ pub struct BuildingType {
     /// `ImmuneToRadiation` (S-0302 claim 8).
     #[serde(default)]
     pub immune_to_radiation: Option<bool>,
+    /// `Warpable`, the erasable-target flag (S-0514 Import mapping); absent:
+    /// yes.
+    #[serde(default)]
+    pub warpable: Option<bool>,
     /// `NeedsEngineer` (S-0309 claim 25 part e, Import mapping).
     #[serde(default)]
     pub needs_engineer: Option<bool>,

@@ -59,6 +59,7 @@ pub mod superweapons;
 pub mod surface;
 pub mod targeting;
 pub mod teleport;
+pub mod temporal;
 pub mod testkit;
 pub mod tick;
 pub mod tracks;

@@ -398,6 +398,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
+    // spec: S-0514 claims 12 and 14 (a removed target invalidates all attached beams and its attackers idle; a removed attacker's beam lets go)
+    crate::temporal::leaving(w, id);
     // spec: S-0614 claim 15 (a host removed while a parasite is attached releases it at once)
     crate::parasite::leaving(w, id);
     // spec: S-0502 claims 4, 7, 13, 14 and 18 (a jumpjet leaving the map releases its marks, its landing reservation and its hover slot)

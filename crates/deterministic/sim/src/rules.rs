@@ -1645,6 +1645,8 @@ fn unit_combat(
     c.mobile_fire = u.mobile_fire.unwrap_or(true);
     c.immune = u.immune.unwrap_or(false);
     c.immune_radiation = u.immune_to_radiation.unwrap_or(false);
+    // spec: S-0514 Import mapping (Warpable absent: yes)
+    c.warpable = u.warpable.unwrap_or(true);
     c
 }
 
@@ -1672,6 +1674,8 @@ fn building_rules(
     combat.immune = bt.immune.unwrap_or(false);
     // spec: S-0302 Import mapping (ImmuneToRadiation absent: no)
     combat.immune_radiation = bt.immune_to_radiation.unwrap_or(false);
+    // spec: S-0514 Import mapping (Warpable absent: yes)
+    combat.warpable = bt.warpable.unwrap_or(true);
     // spec: S-0610 claim 1 (both psychic immunities absent from every layer: yes for building types)
     combat.immune_psionic_weapons = bt.combat.immune_to_psionic_weapons.unwrap_or(true);
     combat.immune_psionics = bt.combat.immune_to_psionics.unwrap_or(true);

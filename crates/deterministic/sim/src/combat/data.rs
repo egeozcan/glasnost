@@ -519,6 +519,9 @@ pub struct TypeCombat {
     pub type_immune: bool,
     /// Immune to radiation.
     pub immune_radiation: bool,
+    /// May be erased by a temporal weapon (S-0514 Import mapping,
+    /// `Warpable`).
+    pub warpable: bool,
     /// Immune to psionic weapons.
     pub immune_psionic_weapons: bool,
     /// Immune to poison.
@@ -730,6 +733,13 @@ pub struct RadRules {
 /// Game-wide combat values.
 #[derive(Clone, Debug)]
 pub struct CombatGeneral {
+    /// The completion animation of an erasure (S-0514 Import mapping).
+    pub warp_away: Option<String>,
+    /// The sparkle animation of an erased or phasing-in unit (S-0514 claim
+    /// 18).
+    pub chrono_sparkle: Option<String>,
+    /// The open-topped warp distance *W*, cells (S-0514 F4).
+    pub warp_distance: i32,
     /// The radiation settings (S-0525).
     pub radiation: RadRules,
     /// Maximum damage.
@@ -1263,6 +1273,7 @@ pub fn type_combat(
         immune: false,
         type_immune: b(c.type_immune),
         immune_radiation: false,
+        warpable: true, // spec: S-0514 Import mapping (Warpable absent: yes)
         // spec: S-0610 claim 1 (both psychic immunities absent: no here; building types take yes in `building_rules`)
         immune_psionic_weapons: b(c.immune_to_psionic_weapons),
         immune_poison: b(c.immune_to_poison),
@@ -1438,6 +1449,10 @@ pub fn combat_rules(
     // spec: S-0314 Constants (repair rates absent: the double nearest 0.016)
     let rate = |d: &Option<Decimal>| dec(d, mode).unwrap_or_else(|| nearest_double("0.016"));
     let general = CombatGeneral {
+        warp_away: g.warp_away.clone(),
+        chrono_sparkle: g.chrono_sparkle.clone(),
+        // spec: S-0514 Constants (warp distance default 5 cells) and Import mapping
+        warp_distance: g.open_topped_warp_distance.unwrap_or(5),
         // spec: S-0525 Import mapping (every [Radiation] value absent: the value in force, 0 or none at a fresh start)
         radiation: RadRules {
             duration_multiple: g.rad_duration_multiple.unwrap_or(0),

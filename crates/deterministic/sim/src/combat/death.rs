@@ -169,7 +169,7 @@ fn exploding(w: &World, id: ObjectId) -> bool {
 /// (S-0302 claim 1), actors that overrode against it revert (S-0215 claim
 /// 10), and objects targeting it lose it; projectiles aimed at it target
 /// its cell (S-0306 claim 17).
-fn mark_killed(w: &mut World, id: ObjectId) {
+pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     if let Some(ob) = w.obj_mut(id) {
         ob.combat.killed = true;

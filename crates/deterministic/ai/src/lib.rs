@@ -19,6 +19,7 @@
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod brain;
+pub mod chrono;
 pub mod deployers;
 pub mod fixture;
 pub mod game;

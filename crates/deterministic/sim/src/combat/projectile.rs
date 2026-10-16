@@ -1425,6 +1425,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
             pr.pos,
             p.inviso,
             area,
+            pr.target,
         );
         let _ = res;
         if let Some(aw) = p.airburst_weapon {
@@ -1449,6 +1450,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
             pr.pos,
             p.inviso,
             area,
+            pr.target,
         );
         // spec: S-0306 claim 21 (after every detonation: R(256, 512), then one raw value for the nearby point)
         let lambda = w.rng.ranged(256, 512, half);
@@ -1530,7 +1532,7 @@ pub fn projectile_detonation(
     invisible: bool,
 ) -> DetonationResult {
     detonation_inner(
-        w, weapon, damage, point, attacker, house, q, invisible, true,
+        w, weapon, damage, point, attacker, house, q, invisible, true, None,
     )
 }
 
@@ -1549,6 +1551,7 @@ fn detonation_inner(
     q: Pos,
     invisible: bool,
     area: bool,
+    target: Option<Target>,
 ) -> DetonationResult {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
@@ -1563,6 +1566,12 @@ fn detonation_inner(
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
         return DetonationResult::Missed;
     };
+    // spec: S-0514 claim 1 (a temporal warhead's erasing effect replaces ordinary direct and area damage; the other special effects that rank before it are not yet ranked, Q-0984: the parasite, air-strike and electric-charge flags win)
+    let erasing = wh_temporal(&rules, h);
+    if erasing {
+        crate::temporal::deliver(w, attacker, target);
+    }
+    let area = area && !erasing;
     let res = if area {
         area::detonate(
             w,
@@ -1615,6 +1624,13 @@ fn detonation_inner(
         }
     }
     res
+}
+
+/// Whether a warhead's special effect is temporal erasure: the flag, with
+/// no parasite, air-strike or electric-charge flag (Q-0984).
+fn wh_temporal(rules: &crate::rules::SimRules, h: WarheadId) -> bool {
+    let wh = rules.combat.warhead(h);
+    wh.temporal && !(wh.parasite || wh.airstrike || wh.electric_assault)
 }
 
 /// The explosion animation of S-0303 F5 (with the electromagnetic case's

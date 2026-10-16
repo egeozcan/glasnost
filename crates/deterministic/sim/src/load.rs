@@ -450,6 +450,7 @@ pub fn new_game(
         cloak: Default::default(),
         sw: Default::default(),
         radiation: Default::default(),
+        temporal: Default::default(),
         spawned: Default::default(),
         triggers: Default::default(),
         econ: crate::econ::WorldEcon {

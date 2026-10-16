@@ -1053,6 +1053,28 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
     ),
     ("hover_brake", GENERAL, "HoverBrake", Dec, "S-0503"),
     ("hover_dampen", GENERAL, "HoverDampen", Dec, "S-0503"),
+    // spec: S-0514 Import mapping (WarpAway and ChronoSparkle1 animation names; OpenToppedWarpDistance an integer of cells)
+    (
+        "warp_away",
+        GENERAL,
+        "WarpAway",
+        Ref(Kind::Animations),
+        "S-0514",
+    ),
+    (
+        "chrono_sparkle",
+        GENERAL,
+        "ChronoSparkle1",
+        Ref(Kind::Animations),
+        "S-0514",
+    ),
+    (
+        "open_topped_warp_distance",
+        COMBAT_DAMAGE,
+        "OpenToppedWarpDistance",
+        Int,
+        "S-0514",
+    ),
     // spec: S-0525 Import mapping ([Radiation]: integers, three decimals held as doubles, the warhead name; RadColor is read apart)
     (
         "rad_duration_multiple",

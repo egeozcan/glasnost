@@ -153,7 +153,18 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none_or(crate::combat::damage::dead) {
         return;
     }
-    process::turn(w, id);
+    // spec: S-0514 claims 14, 17 and 18 (an attached attacker lets go on arriving in a new cell; a target being erased takes its erasure update and sparkle in its own turn and skips ordinary movement, turning, firing and behaviour; a building skips behaviour processing and firing; a phasing-in unit sparkles)
+    crate::temporal::holder_turn(w, id);
+    crate::temporal::phasing_sparkle(w, id);
+    if crate::temporal::turn(w, id) {
+        return;
+    }
+    if w.obj(id).is_none() {
+        return;
+    }
+    if !crate::temporal::building_erased(w, id) {
+        process::turn(w, id);
+    }
     if w.obj(id).is_none() {
         return;
     }
@@ -169,7 +180,9 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         // spec: S-0513 claims 8 and 13 (a silo's accepted launch leaves on its next update)
         crate::superweapons::nuke::silo_turn(w, id);
-        crate::combat::behave::delayed_shot_turn(w, id);
+        if !crate::temporal::building_erased(w, id) {
+            crate::combat::behave::delayed_shot_turn(w, id);
+        }
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);
         // spec: S-0501 claim 26 (a pad's service step, in the pad's own turn)

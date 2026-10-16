@@ -164,6 +164,8 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
     if !o.kind.is_mobile() {
         return;
     }
+    // spec: S-0514 claim 14 (an attached attacker lets go on entering idle behaviour: falling back to rest)
+    crate::temporal::let_go(w, id);
     // spec: S-0501 claim 18 and table T2 (the first three rows come before the common effects)
     if crate::air::fall_back_early(w, id) {
         return;

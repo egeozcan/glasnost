@@ -499,7 +499,8 @@ fn melee_held(_w: &World, _id: ObjectId) -> bool {
 }
 
 /// Being erased (S-0214 Terms): a superweapon warp member in its leaving
-/// stage (S-0513 claim 39); the erasing weapons are S-0514's seam.
+/// stage (S-0513 claim 39) or an object a temporal beam is attached to
+/// (S-0514).
 fn being_erased(w: &World, id: ObjectId) -> bool {
     crate::econ::power::being_erased(w, id)
 }

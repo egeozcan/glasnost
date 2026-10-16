@@ -1194,8 +1194,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures
                     )
                 })
                 .collect();

@@ -628,8 +628,8 @@ fn swept_kind(k: Kind) -> bool {
 /// `quirks.defeat_cancellation_skip` a hit whose effects delete k objects
 /// at once (production cancellations) at or before its place skips the
 /// next max(k − 1, 0) objects of the four kinds, whoever owns them. Mind
-/// control and being erased are seams: no object is under mind control or
-/// being erased yet.
+/// control is a seam (no object is under mind control yet); an erased
+/// victim's beams are detached first (S-0514 claim 15).
 fn destroy_all(w: &mut World, h: HouseId) {
     let warhead = w.rules().combat.general.c4_warhead;
     let skip_quirk = w.rules().quirks.defeat_cancellation_skip;
@@ -656,6 +656,8 @@ fn destroy_all(w: &mut World, h: HouseId) {
         if owner != Some(h) || health <= 0 {
             continue;
         }
+        // spec: S-0514 claim 15 (a destroy-all detaches the beams on each erased victim and idles their attackers before the destructive hit)
+        crate::temporal::detach_for_destruction(w, id);
         w.econ.end.deleted = Some(Vec::new());
         // spec: S-0414 claim 5 (amount: current health; the demolition warhead; ignores defences; no-escape marker; no attacker, no attacking house)
         crate::combat::damage::apply(
