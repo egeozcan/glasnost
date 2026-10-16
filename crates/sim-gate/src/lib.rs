@@ -28,8 +28,12 @@
 use glasnost_ai::{fixture, game::Game, skirmish};
 use glasnost_sim::{save, testkit};
 
-/// Seed of the gate's replay.
-pub const SEED: u32 = 20_261_010;
+/// Seed of the gate's replay. Moved from 20 261 010 in M6c step 2: with the
+/// AI changes of that step the straight duel of the old seed never reached
+/// its silo (its house spent its credits on the army), and the gate requires
+/// that a duel launches a superweapon; this seed does, and every duel still
+/// loads and unloads a transport.
+pub const SEED: u32 = 20_261_011;
 
 /// Ticks of the full gate run.
 pub const TICKS: i32 = 3000;
