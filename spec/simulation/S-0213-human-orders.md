@@ -2,11 +2,11 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530]
 supersedes: []
@@ -430,8 +430,8 @@ Terms).
 
    | The actor | Effect of the stop order |
    |---|---|
-   | Any actor | Its target and destination both become nothing, and it breaks off any contact. Its behaviour is unchanged, except as the harvester row says |
-   | A mobile actor | It has no queued destinations left (claim 5: how they arise is S-0215's) and stops following any planned route. With its order-level destination gone it comes to rest as the movement specs describe, including the hovering vehicle's retained movement destination below (this spec does not claim that it halts within the same tick) |
+   | Any actor | Its target and destination both become nothing, and it breaks off any contact. Its behaviour is unchanged, except as the harvester row and the jumpjet reroute below say |
+   | A mobile actor | It has no queued destinations left (claim 5: how they arise is S-0215's) and stops following any planned route. With its order-level destination gone it comes to rest as the movement specs describe, including the hovering vehicle's retained movement destination and the jumpjet reroute below (this spec does not claim that it halts within the same tick) |
    | An actor with spawned aircraft (such as a carrier) | Its spawned aircraft are called off their target |
    | An open-topped transport | Its passengers lose their targets too |
    | A harvester whose behaviour is *harvest* or *return* | It gets the behaviour *guard* at once |
@@ -454,6 +454,28 @@ Terms).
    update does not promise a later factory report through an unchanged contact.
    These movement outcomes inherit S-0503 claims 15–16's backing, confidence and
    Scenarios H12 and H15.
+
+   A jumpjet instead uses S-0502 claims 17 and 24's stop reroute when it has a
+   movement commitment (S-0502 Terms, *moving*). Its order-level destination becomes
+   empty, but its separate movement point can be replaced and movement can continue.
+   This is not S-0502 claim 16's direct no-point instruction to the locomotor.
+
+   | Flight state at stop | Successful reroute outcome |
+   |---|---|
+   | Ascending | Continues ascending towards the replacement point |
+   | Cruising | Continues cruising towards the replacement point, with ordinary arrival |
+   | Hovering with a movement commitment | Keeps that commitment and remains hovering at application; on its next update starts cruising if the replacement horizontal point differs from its position, otherwise follows S-0502 claim 13's hover rules |
+   | Descending | Releases its landing reservation and re-ascends under S-0502 claim 16, including that claim's deploy-request and *unload*-to-*guard* consequences |
+
+   Without a movement commitment, stop has no locomotor effect on a grounded or hovering
+   jumpjet. Both nearby searches of S-0502 claims 17 and 16 apply to rerouting, so the
+   replacement need not be the current position; infantry can receive another standing
+   position in the same cell. Failure to find a cell has S-0502 claim 17's self-destruction
+   outcome for a still-living unit. Later arrival uses the then-current target, including
+   this order's target clearing. Stop therefore promises neither an immediate halt nor
+   completion at the old movement point. These outcomes inherit S-0502 claim 24's
+   `measurable` backing (Scenario J19) and high confidence for stop dispatch and flight-state
+   outcomes; the no-cell destruction retains claim 17's medium confidence and Scenario J11.
 
    The slave-recall row applies only to vehicles: a stop order to a deployed slave-miner
    building does not itself recall its slaves (Scenario O4 part ii b).
