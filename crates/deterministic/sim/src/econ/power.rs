@@ -265,10 +265,9 @@ pub fn manned(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.econ.building.manned)
 }
 
-/// Occupants who are inside an occupiable building (S-0215). Seam.
+/// Occupants who are inside an occupiable building (S-0215, S-0508).
 pub fn occupants(w: &World, id: ObjectId) -> i32 {
-    let _ = (w, id);
-    0
+    crate::structures::garrison::count(w, id)
 }
 
 // ---------------------------------------------------------------------------

@@ -106,6 +106,11 @@ struct Game {
     loads: usize,
     unloads: usize,
     launches: usize,
+    /// Per player house: the special-ability orders the own AI gave (M6c:
+    /// garrisons, capture, infiltration), and the garrison occupants inside
+    /// buildings at the end.
+    special: [glasnost_ai::special::Uses; PLAYERS],
+    occupants_inside: usize,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     replay_ms: u128,
@@ -558,7 +563,18 @@ fn play_ai(
     g.run_ms = t.elapsed().as_millis();
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
+    for (h, u) in game.special_uses() {
+        if let Some(s) = g.special.get_mut(usize::from(h.0)) {
+            *s = u;
+        }
+    }
     let world = &game.world;
+    g.occupants_inside = world
+        .objects
+        .values()
+        .filter(|o| o.kind == glasnost_sim::rules::Kind::Building)
+        .map(|o| o.structure.occupants.len())
+        .sum();
     for h in 0..PLAYERS {
         g.credits[h] = world.houses[h].credits;
         for t in all_types(world) {
@@ -1014,6 +1030,23 @@ fn report(
                 s,
                 "  transports: {} loads, {} unloads; superweapon launches: {}",
                 g.loads, g.unloads, g.launches
+            );
+            let uses: Vec<String> = g
+                .special
+                .iter()
+                .enumerate()
+                .map(|(h, u)| {
+                    format!(
+                        "house {h} garrison {} capture {} infiltrate {}",
+                        u.garrisons, u.engineers, u.spies
+                    )
+                })
+                .collect();
+            let _ = writeln!(
+                s,
+                "  special abilities (orders): {}; garrison occupants inside at the end: {}",
+                uses.join("; "),
+                g.occupants_inside
             );
         }
         let f: Vec<String> = g

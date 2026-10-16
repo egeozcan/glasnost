@@ -132,6 +132,11 @@ pub enum Announcement {
     Promoted,
     /// The local player set a rally point (S-0701 claim 28).
     RallySet,
+    /// An entry made a building's occupant count 1 (S-0508 claim 6).
+    StructureGarrisoned,
+    /// A civilian garrison building returned to the civilian house
+    /// (S-0508 claim 8).
+    StructureAbandoned,
 }
 
 impl Announcement {
@@ -159,6 +164,8 @@ impl Announcement {
             Self::Defeat => "EVA_YouHaveLost",
             Self::Promoted => "EVA_UnitPromoted",
             Self::RallySet => "EVA_NewRallyPointEstablished",
+            Self::StructureGarrisoned => "EVA_StructureGarrisoned",
+            Self::StructureAbandoned => "EVA_StructureAbandoned",
         }
     }
 }
@@ -195,6 +202,10 @@ pub struct SoundNames {
     pub building_damage: Option<String>,
     /// `BuildingDieSound` (S-0701 claims 23 and 37).
     pub building_die: Option<String>,
+    /// `BuildingGarrisonedSound` (S-0508 claim 6, S-0701 claim 28).
+    pub building_garrisoned: Option<String>,
+    /// `BuildingAbandonedSound` (S-0508 claim 8, S-0701 claim 28).
+    pub building_abandoned: Option<String>,
     /// `UpgradeVeteranSound` (S-0701 claim 23).
     pub upgrade_veteran: Option<String>,
     /// `UpgradeEliteSound` (S-0701 claim 23).
@@ -333,6 +344,9 @@ impl SoundNames {
             building_slam: global("BuildingSlam"),
             building_damage: global("BuildingDamageSound"),
             building_die: global("BuildingDieSound"),
+            // spec: S-0508 Import mapping (`[AudioVisual] BuildingGarrisonedSound` and `BuildingAbandonedSound`: sound names, none when absent)
+            building_garrisoned: global("BuildingGarrisonedSound"),
+            building_abandoned: global("BuildingAbandonedSound"),
             upgrade_veteran: global("UpgradeVeteranSound"),
             upgrade_elite: global("UpgradeEliteSound"),
             base_under_attack: global("BaseUnderAttackSound"),

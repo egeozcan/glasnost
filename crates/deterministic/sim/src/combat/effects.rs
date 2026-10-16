@@ -169,6 +169,16 @@ pub enum Sound {
     RepairBridge,
     /// The game-wide cloak sound (S-0516 claim 15), at the object.
     Cloak,
+    /// An entry made a building's occupant count 1 (S-0508 claim 6): the
+    /// garrisoned announcement and sound for the entering unit's house, the
+    /// sound at the entering unit's last position; `of` is the building's type.
+    Garrisoned,
+    /// A civilian garrison building returned to the civilian house
+    /// (S-0508 claim 8): the abandoned sound (not positioned, not
+    /// throttled), the *garrison abandoned* radar event at the building's
+    /// top-left cell and, when the event is created, the announcement, for
+    /// the owner that lost the building (`house`).
+    Abandoned,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

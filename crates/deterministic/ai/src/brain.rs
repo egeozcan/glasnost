@@ -125,6 +125,8 @@ pub fn default_plan() -> Plan {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Brain {
     script: Script,
+    /// The special abilities (M6c): garrisons, capture, infiltration.
+    special: crate::special::Special,
 }
 
 impl Brain {
@@ -143,7 +145,15 @@ impl Brain {
     pub fn with_starts(w: &World, starts: &[CellXY], house: HouseId, plan: Plan) -> Self {
         let mut script = Script::new(house, plan);
         script.set_starts(w, starts);
-        Self { script }
+        Self {
+            script,
+            special: Default::default(),
+        }
+    }
+
+    /// How many orders the brain gave to use each special ability.
+    pub fn special_uses(&self) -> crate::special::Uses {
+        self.special.uses()
     }
 
     /// The house.
@@ -166,6 +176,10 @@ impl Brain {
             self.send_for_repair(w, &mut out);
             self.ferry(w, &mut out);
             self.build_superweapon(w, &mut out);
+        }
+        if w.tick % THINK_PERIOD == 0 {
+            let own = self.script.own(w);
+            self.special.think(self.script.house, &own, w, &mut out);
         }
         self.fire_superweapons(w, &mut out);
         self.rebuild_yard(w, &mut out);

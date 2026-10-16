@@ -150,6 +150,7 @@ pub fn create_converted(
         econ: Default::default(),
         cloak: Default::default(),
         sw: Default::default(),
+        structure: Default::default(),
     };
     w.objects.insert(id, obj);
     veteran_at_creation(w, id);
@@ -364,6 +365,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     crate::parasite::leaving(w, id);
     // spec: S-0507 claim 16 (a transport removed with passengers inside: they die without attacker credit; a removed passenger leaves its transport's passenger order)
     crate::transport::removing(w, id);
+    // spec: S-0508 claim 15 (a building that leaves play with occupants still inside removes them with it, without death and without putting them out)
+    crate::structures::garrison::removing(w, id);
     // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)
     crate::econ::slaves::removing(w, id);
     // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)

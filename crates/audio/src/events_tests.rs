@@ -1584,3 +1584,51 @@ fn chrono_sounds() {
     a.tick(&w, &fx, &mut Rng::new(1));
     assert_eq!(heard(&mut a, 0), ["Away", "Back"]);
 }
+
+// spec: S-0508 claim 6; S-0701 claim 28 (structure garrisoned: the garrisoned sound and the announcement for the local player's entering unit, whoever owns the building; nothing for another house's unit)
+#[test]
+fn garrisoned_feedback_is_the_entering_units() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let fx = |h: u8| Effect::Sound {
+        sound: Sound::Garrisoned,
+        of: None,
+        house: Some(HouseId(h)),
+        pos: Some(at),
+    };
+    let mut a = announcing(&w, &[(Announcement::StructureGarrisoned, "Garr")]);
+    let mut n = SoundNames::default();
+    n.set_announcement(Announcement::StructureGarrisoned, "Garr");
+    n.building_garrisoned = Some("GarrSound".into());
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[fx(1)], &mut u);
+    assert!(!announced(&mut a, 1000), "another house's unit: nothing");
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(announced(&mut a, 2000), "the local player's entering unit");
+}
+
+// spec: S-0508 claim 8; S-0701 claim 28 and F7 (structure abandoned: the announcement for the owner that lost the building when it is the local player, only when the garrison abandoned radar event is created: 8 cells, 400 ticks, suppressing)
+#[test]
+fn abandoned_announcement_follows_the_radar_event() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let fx = |h: u8| Effect::Sound {
+        sound: Sound::Abandoned,
+        of: None,
+        house: Some(HouseId(h)),
+        pos: Some(at),
+    };
+    let mut a = announcing(&w, &[(Announcement::StructureAbandoned, "Aband")]);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[fx(1)], &mut u);
+    assert!(!announced(&mut a, 1000), "another house lost it: nothing");
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(announced(&mut a, 2000), "the local player lost it");
+    a.mixer_mut().clear();
+    a.tick(&w, &[fx(0)], &mut u);
+    assert!(
+        !announced(&mut a, 3000),
+        "a nearby garrison abandoned event suppresses the announcement"
+    );
+}

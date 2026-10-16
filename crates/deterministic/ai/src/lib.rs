@@ -10,6 +10,8 @@
 //! - [`skirmish`]: the headless skirmish runner that records a replay.
 //! - [`game`]: a game with its AI houses (world and AI state stepped, saved
 //!   and hashed together); [`brain`]: one AI house's state and thinking.
+//! - [`special`]: garrisoning, engineers capturing and spies infiltrating
+//!   (M6c).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod brain;
@@ -17,3 +19,4 @@ pub mod fixture;
 pub mod game;
 pub mod scripted;
 pub mod skirmish;
+pub mod special;

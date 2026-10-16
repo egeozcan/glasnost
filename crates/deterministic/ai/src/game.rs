@@ -31,7 +31,7 @@ use crate::brain::Brain;
 /// Format version of a game save (the world's own save inside it carries
 /// the simulation's version).
 // nocite: version number of our own save format
-pub const GAME_FORMAT_VERSION: u32 = 1;
+pub const GAME_FORMAT_VERSION: u32 = 2;
 
 /// A running game.
 pub struct Game {
@@ -114,6 +114,15 @@ impl Game {
     /// The game's result once it is over (S-0414).
     pub fn outcome(&self) -> Option<victory::Outcome> {
         victory::outcome(&self.world)
+    }
+
+    /// The special-ability orders each AI house has given (M6c), in house
+    /// order of the brains.
+    pub fn special_uses(&self) -> Vec<(HouseId, crate::special::Uses)> {
+        self.brains
+            .iter()
+            .map(|b| (b.house(), b.special_uses()))
+            .collect()
     }
 
     /// The AI houses.

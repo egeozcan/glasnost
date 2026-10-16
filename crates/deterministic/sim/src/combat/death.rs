@@ -280,6 +280,11 @@ pub fn destruction_raises(w: &mut World, id: ObjectId, hit: &Hit) {
 /// The death effects of a killing hit (S-0312 claim 1 and its table).
 pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     let Some(o) = w.obj(id).cloned() else { return };
+    if o.structure.inside.is_some() {
+        // spec: S-0508 claim 19 (an occupant killed inside a building by its own house's defeat: individual killing hits, no eviction, no index repair; like a passenger it shows no death effects)
+        passenger_death(w, id, hit);
+        return;
+    }
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     mark_killed(w, id);
@@ -643,6 +648,8 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
             x.contact = None;
         }
     }
+    // spec: S-0312 claim 17 and S-0508 claim 13 (garrisoned infantry are evicted, without hunting or an inside fallback; with no qualifying exit cell the original removes every occupant without killing it)
+    crate::structures::garrison::destroyed(w, id);
     let (fw, fh) = o.foundation;
     // spec: S-0312 claim 19 (a) (a foundation at least 2 × 2: discarded draws, then a percent draw for the smudge)
     if fw >= 2 && fh >= 2 {

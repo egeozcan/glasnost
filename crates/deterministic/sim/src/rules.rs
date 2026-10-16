@@ -1598,6 +1598,8 @@ fn building_rules(
         can_occupy_fire: b(bt.can_occupy_fire),
         // spec: S-0313 Import mapping (MaxNumberOccupants absent: 0)
         max_occupants: bt.max_number_occupants.unwrap_or(0),
+        // spec: S-0313 Import mapping (garrison muzzle points absent: (0, 0) each)
+        garrison_muzzles: bt.garrison_muzzles.clone().unwrap_or_default(),
         // spec: S-0314 Import mapping (self-heal counts absent: 0)
         infantry_self_heal: bt.infantry_gain_self_heal.unwrap_or(0),
         units_self_heal: bt.units_gain_self_heal.unwrap_or(0),

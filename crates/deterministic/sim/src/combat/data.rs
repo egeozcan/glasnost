@@ -120,6 +120,8 @@ pub struct WeaponRules {
     pub area_fire: bool,
     /// Launch-inside flag (S-0614 Terms).
     pub limbo_launch: bool,
+    /// The animation of an assault's occupant removal (S-0508 claim 14).
+    pub occupant_anim: Option<String>,
     /// Animation list: the per-direction delivery animation (S-0614 claim 9).
     pub anim: Vec<String>,
     /// Fake-blink time in ticks (S-0516 claim 39).
@@ -644,6 +646,8 @@ pub struct BuildingCombat {
     pub can_occupy_fire: bool,
     /// Maximum occupants.
     pub max_occupants: i32,
+    /// Garrison muzzle points, pixel shifts (S-0313 claim 6).
+    pub garrison_muzzles: Vec<[i32; 2]>, // nocite: pixel pairs, our shape
     /// Infantry self-heal count.
     pub infantry_self_heal: i32,
     /// Vehicle self-heal count.
@@ -1091,6 +1095,7 @@ pub fn tables(
                 area_fire: b(w.area_fire),
                 // spec: S-0614 Import mapping (LimboLaunch absent: no; Anim absent: empty)
                 limbo_launch: b(w.limbo_launch),
+                occupant_anim: w.occupant_anim.clone(),
                 anim: w.anim.clone().unwrap_or_default(),
                 // spec: S-0516 Import mapping (DisguiseFakeBlinkTime absent: 0 ticks)
                 disguise_fake_blink: w.disguise_fake_blink_time.unwrap_or(0),

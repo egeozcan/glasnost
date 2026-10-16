@@ -273,6 +273,10 @@ pub struct Object {
     /// Superweapon state: protection, warp, silo launch (S-0513).
     #[serde(default)]
     pub sw: crate::superweapons::ObjSw,
+    /// Garrison state: a building's occupants and shared firing index, an
+    /// occupant's building (S-0508).
+    #[serde(default)]
+    pub structure: crate::structures::StructState,
 }
 
 /// One house in the game setup.

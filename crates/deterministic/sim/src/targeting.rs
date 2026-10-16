@@ -512,7 +512,7 @@ fn mind_controlled(_w: &World, _id: ObjectId) -> bool {
 
 /// The occupation test of S-0508 claim 1, row I8's "can garrison": the
 /// infantry unit `actor` may garrison building `t`.
-fn may_garrison(w: &World, actor: ObjectId, t: ObjectId) -> bool {
+pub fn may_garrison(w: &World, actor: ObjectId, t: ObjectId) -> bool {
     let (Some(a), Some(b), Some(tb)) = (w.obj(actor), w.obj(t), building(w, t)) else {
         return false;
     };
@@ -548,19 +548,34 @@ fn may_garrison(w: &World, actor: ObjectId, t: ObjectId) -> bool {
     if !owner_ok {
         return false;
     }
-    // spec: S-0508 claim 1 (the occupant count is not equal to the occupant capacity: equality only, quirk)
-    if crate::econ::power::occupants(w, t) == tb.building.max_occupants {
+    // spec: S-0508 claim 1 (the occupant count is not equal to the occupant capacity: equality only, quirks.garrison_capacity_equality; off: the count must be below the capacity)
+    let n = crate::econ::power::occupants(w, t);
+    let full = if w.rules().quirks.garrison_capacity_equality {
+        n == tb.building.max_occupants
+    } else {
+        n >= tb.building.max_occupants
+    };
+    if full {
         return false;
     }
     // spec: S-0508 claim 1 (not both positive health and badly damaged: h ≤ the red ratio, S-0108 Terms and F3)
-    if b.health > 0
-        && tb.strength != 0
-        && health_cmp(w, t, w.rules().general.condition_red) != std::cmp::Ordering::Greater
-    {
+    if badly_damaged(w, t) {
         return false;
     }
     // spec: S-0508 claim 1 (the unit is not mind-controlled)
     !mind_controlled(w, actor)
+}
+
+/// A building with positive health and a health ratio at or below the red
+/// ratio (S-0108 Terms, compared as S-0108 F3 states; S-0508 claim 1).
+pub fn badly_damaged(w: &World, t: ObjectId) -> bool {
+    let Some(b) = w.obj(t) else { return false };
+    let Some(tb) = building(w, t) else {
+        return false;
+    };
+    b.health > 0
+        && tb.strength != 0
+        && health_cmp(w, t, w.rules().general.condition_red) != std::cmp::Ordering::Greater
 }
 
 /// Phasing in after a teleporting jump (S-0214 Terms, S-0207 claim 20 f).

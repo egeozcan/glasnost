@@ -883,16 +883,16 @@ fn fire_actions(w: &mut World, tag: u32, inst: &Instance) {
     let actions = w.triggers.map.triggers[inst.trigger as usize]
         .actions
         .clone();
-    let _ = tag;
     // spec: S-0011 claim 11 (every action takes effect, in list order, even when an earlier one had no effect)
     for a in &actions {
-        action(w, a, inst.trigger, inst.triggering);
+        action(w, a, tag, inst.trigger, inst.triggering);
     }
 }
 
 fn action(
     w: &mut World,
     a: &glasnost_map::triggers::Action,
+    tag: u32,
     trigger: u32,
     triggering: Option<HouseId>,
 ) {
@@ -1067,6 +1067,26 @@ fn action(
             if let Some(c) = waypoint_cell(w, a.waypoint) {
                 crate::superweapons::protect::curtain(w, None, c, true);
             }
+        }
+        // spec: S-0508 Import mapping and S-0011 pointer table (111 evict the occupants of the first eligible building attached to the firing trigger: no hunting, no inside fallback)
+        111 => {
+            let attached: Vec<ObjectId> = w
+                .triggers
+                .objects
+                .iter()
+                .filter(|&(&id, &t)| {
+                    t == tag && w.obj(id).is_some_and(|o| o.kind == Kind::Building)
+                })
+                .map(|(&id, _)| id)
+                .collect();
+            crate::structures::garrison::trigger_evict(w, &attached);
+        }
+        // spec: S-0508 Import mapping and S-0011 claim 23 (6 house-wide hunt: the number slot is a house value; its garrison evictions hunt, without inside fallback)
+        6 => {
+            if let Some(h) = crate::mp_triggers::resolve_house(w, a.number, triggering) {
+                crate::structures::garrison::hunt_order(w, h);
+            }
+            w.note("S-0508 claim 13: the house-wide hunt action's effect on units that are not garrison occupants belongs to the computer-player system and is not built");
         }
         // spec: S-0011 I4 (14 change owner, 32 destroy attached, 42 explosion, 113 cheer, 8 drop-zone animation, 41 play an animation)
         14 | 32 | 42 | 113 | 8 | 41 => {

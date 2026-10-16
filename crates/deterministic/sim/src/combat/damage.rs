@@ -70,8 +70,9 @@ fn d(n: i64, mode: Rounding) -> F64 {
 }
 
 /// The shot damage D_s of a weapon fired by an object (S-0302 claim 2,
-/// F1), fixed at the moment of firing. Garrisons, bunkers and open-topped
-/// transports (M_g, M_b, M_t) are seams: no firer is in those situations.
+/// F1), fixed at the moment of firing. Bunkers and open-topped transports
+/// (M_b, M_t) are seams: no firer is in those situations; a garrisoned
+/// building's multiplier M_g applies (S-0508).
 pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
     let r = w.rules();
     let mode = r.mode;
@@ -81,9 +82,19 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
         return 0;
     }
     let dmg = wr.damage;
+    // spec: S-0302 F1 (E₂ = trunc(RZ₅₃(E₁ × M_g)) for a garrisoned building, whatever the sign of D)
+    let garrison = |e1: i32| {
+        if crate::structures::garrison::garrisoned(w, firer) {
+            d(i64::from(e1), mode)
+                .mul(r.combat.general.damage_mult[0], mode)
+                .to_i32_common()
+        } else {
+            e1
+        }
+    };
     // spec: S-0302 F1 (E₀ = D for D ≤ 0: the multipliers leave it unchanged)
     if dmg <= 0 {
-        return dmg;
+        return garrison(dmg);
     }
     let Some(o) = w.obj(firer) else { return dmg };
     let fh = o
@@ -97,13 +108,14 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
         .mul(d(i64::from(dmg), mode), mode)
         .to_i32_common();
     // spec: S-0302 F1 (E₁ = trunc(RZ₅₃(E₀ × V_c)) for a firer with the veteran firepower bonus)
-    if has_ability(w, firer, Ability::Firepower) {
+    let e1 = if has_ability(w, firer, Ability::Firepower) {
         d(i64::from(e0), mode)
             .mul(r.combat.general.veteran_combat, mode)
             .to_i32_common()
     } else {
         e0
-    }
+    };
+    garrison(e1)
 }
 
 /// The house armour factor A_h for a target (S-0302 claim 5): the factor of

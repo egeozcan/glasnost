@@ -264,6 +264,13 @@ const WEAPON_COMBAT: &[Row] = &[
     ("reveal_on_fire", "RevealOnFire", Bool, "S-0409"),
     ("limbo_launch", "LimboLaunch", Bool, "S-0614"),
     ("anim", "Anim", Refs(Kind::Animations), "S-0614"),
+    // spec: S-0508 Import mapping (OccupantAnim: an animation name of the weapon, none when absent)
+    (
+        "occupant_anim",
+        "OccupantAnim",
+        Ref(Kind::Animations),
+        "S-0508",
+    ),
 ];
 
 /// Combat fields of projectiles.
@@ -1162,6 +1169,8 @@ const DAMAGE_WARN: i32 = 1 << 24; // spec: S-0302 Edge cases (a damage field abo
 
 /// The largest garrison muzzle-point count the original supports (S-0313
 /// Edge cases).
+const COVERED_MUZZLE_POINTS: usize = 32; // nocite: how many MuzzleFlash keys the coverage table lists, our own bound
+const MUZZLE_POINTS_READ: i32 = 256; // nocite: a bound on the points read (S-0313 Edge cases: every point up to the capacity), our own safety limit
 const MAX_OCCUPANTS_QUIET: i32 = 10; // spec: S-0313 Edge cases (more than ten garrison muzzle points)
 
 /// The scan radius range without a warning (S-0303 Edge cases).
@@ -1466,6 +1475,10 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     for n in 1..=SLOTS {
         flh.push(format!("Weapon{n}FLH"));
         flh.push(format!("EliteWeapon{n}FLH"));
+    }
+    // spec: S-0313 Import mapping (MuzzleFlash followed by 0, 1, …: the garrison muzzle points)
+    for n in 0..COVERED_MUZZLE_POINTS {
+        flh.push(format!("MuzzleFlash{n}"));
     }
     keyed(&["art"], &flh, "S-0313");
     keyed(
@@ -2121,6 +2134,26 @@ impl Builder<'_> {
         // spec: S-0313 Import mapping (PrimaryFirePixelOffset: two integers, pixels)
         if let Some(v) = self.art_tuple::<2>(kind, index, t, "PrimaryFirePixelOffset") {
             Self::put_tuple(rec, "primary_fire_pixel_offset", v);
+        }
+        // spec: S-0313 Import mapping (MuzzleFlash followed by 0, 1, …: two integers, pixels, of the building image, one for each place of the occupant capacity; a point not given is (0, 0))
+        if let Some(n) = int_of(key(t, "MaxNumberOccupants")).filter(|&n| n > 0) {
+            let mut pts: Vec<[i32; 2]> = Vec::new();
+            let mut any = false;
+            for i in 0..n.min(MUZZLE_POINTS_READ) {
+                let p = self.art_tuple::<2>(kind, index, t, &format!("MuzzleFlash{i}"));
+                any |= p.is_some();
+                pts.push(p.unwrap_or([0; 2]));
+            }
+            if any {
+                rec.put(
+                    "garrison_muzzles",
+                    jsonc::array(
+                        pts.iter()
+                            .map(|p| jsonc::array(p.iter().map(|&x| int_node(x)).collect()))
+                            .collect(),
+                    ),
+                );
+            }
         }
         // spec: S-0313 claim 10 and Import mapping (TurretAnimX, TurretAnimY: integers, pixels, from the building type's rules section through its layers, a missing key keeping the held value; absent 0; art has no effect)
         let xy =

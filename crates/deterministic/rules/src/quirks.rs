@@ -1463,11 +1463,11 @@ pub struct Quirks {
     // spec: S-0509 Edge cases (proposed, pending the lead's sign-off)
     #[serde(default = "on")]
     pub engineer_repairs_during_sale: bool,
-    /// A garrison's exit search never tries the corner cell (x₀ − 1, y₀ − 1); off: the corner is tried last. Not implemented yet (wave 2).
+    /// A garrison's exit search never tries the corner cell (x₀ − 1, y₀ − 1); off: the corner is tried last.
     // spec: S-0508 Edge cases (claim 10)
     #[serde(default = "on")]
     pub garrison_exit_skips_corner: bool,
-    /// An eviction without inside fallback and with no qualifying exit cell removes every occupant; off: the eviction does nothing and the occupants stay inside. Not implemented yet (wave 2).
+    /// An eviction without inside fallback and with no qualifying exit cell removes every occupant; off: the eviction does nothing and the occupants stay inside.
     // spec: S-0508 Edge cases (claim 12)
     #[serde(default = "on")]
     pub garrison_no_exit_removes: bool,
@@ -1499,7 +1499,7 @@ pub struct Quirks {
     // spec: S-0517 claim 13 and Edge cases; S-0310 claim 9 and Edge cases
     #[serde(default = "on")]
     pub deploy_to_fire_repacks: bool,
-    /// An assault that clears garrison occupants records the surviving assaulter as destroyed by each removed occupant, which gets the kill credit and experience; off: each removed occupant is the victim, with destruction notifications and loss bookkeeping, and the assaulter gets ordinary kill credit and experience. The assaulter survives in both settings. Not implemented yet (wave 2).
+    /// An assault that clears garrison occupants records the surviving assaulter as destroyed by each removed occupant, which gets the kill credit and experience; off: each removed occupant is the victim, with destruction notifications and loss bookkeeping, and the assaulter gets ordinary kill credit and experience. The assaulter survives in both settings.
     // spec: S-0508 claim 14 and Edge cases; S-0311 claim 9
     #[serde(default = "on")]
     pub assaulter_reversed_kill_credit: bool,
@@ -1539,7 +1539,7 @@ pub struct Quirks {
     // spec: S-0502 claim 11, F6 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_turn_slowdown_one_sided: bool,
-    /// Garrison entry is refused only when the occupant count equals the capacity, so a negative capacity admits occupants indefinitely; off: entry requires an occupant count below the capacity, so a non-positive capacity admits none. Not implemented yet (wave 2).
+    /// Garrison entry is refused only when the occupant count equals the capacity, so a negative capacity admits occupants indefinitely; off: entry requires an occupant count below the capacity, so a non-positive capacity admits none.
     // spec: S-0508 claim 1 and Edge cases
     #[serde(default = "on")]
     pub garrison_capacity_equality: bool,

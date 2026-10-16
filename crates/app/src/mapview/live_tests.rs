@@ -887,6 +887,7 @@ fn live_building_items(
             owner: b"Neutral".to_vec(),
             health,
             facing: 0,
+            occupied: false,
             object: sim_code(ObjectId(5)),
             unloading,
             gate_door,

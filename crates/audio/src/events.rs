@@ -101,6 +101,7 @@ enum RadarKind {
     UnitLost,
     AllyAttacked,
     UnitRepaired,
+    GarrisonAbandoned,
 }
 
 impl RadarKind {
@@ -115,6 +116,8 @@ impl RadarKind {
             RadarKind::AllyAttacked => (8, 600),
             // spec: S-0701 F7 (unit repaired 2, 400)
             RadarKind::UnitRepaired => (2, 400),
+            // spec: S-0701 F7 (garrison abandoned 8, 400, suppresses)
+            RadarKind::GarrisonAbandoned => (8, 400),
         }
     }
 }
@@ -731,6 +734,22 @@ impl Audio {
             Sound::Cloak => {
                 let s = w.rules().cloak.sound.clone();
                 self.play_in(w, s.as_deref(), at);
+            }
+            // spec: S-0508 claim 6 and S-0701 claim 28 (structure garrisoned: the local player's entering unit, regardless of the building's owner; the garrisoned sound at the entering unit's last position)
+            Sound::Garrisoned if house.is_some() && house == self.local => {
+                let s = self.names.building_garrisoned.clone();
+                self.play_in(w, s.as_deref(), at);
+                self.announce(Announcement::StructureGarrisoned);
+            }
+            // spec: S-0508 claim 8 and S-0701 claim 28 (structure abandoned: the owner that lost the building, when it is the local player; the abandoned sound on the screen, unthrottled; the announcement only when F7 creates a garrison abandoned event at the top-left cell)
+            Sound::Abandoned if house.is_some() && house == self.local => {
+                let s = self.names.building_abandoned.clone();
+                self.play_in(w, s.as_deref(), Where::Screen);
+                if let Some(p) = pos
+                    && self.radar_event(RadarKind::GarrisonAbandoned, cell_of(p), w.tick)
+                {
+                    self.announce(Announcement::StructureAbandoned);
+                }
             }
             // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
             Sound::LowFunds if house.is_some() && house == self.local => {

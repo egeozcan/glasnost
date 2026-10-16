@@ -633,6 +633,12 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
                 }
             }
         }
+        // spec: S-0508 claim 13 (a deploy order given to a garrisonable building: its occupants are evicted without hunting or inside fallback)
+        (Some(Behaviour::Unload), Kind::Building)
+            if crate::structures::garrison::garrisonable(w, id) =>
+        {
+            crate::structures::garrison::process_unload(w, id)
+        }
         // spec: S-0417 claims 2 and 9 (a factory building's unloading)
         (Some(Behaviour::Unload), Kind::Building) => crate::econ::release::process_unload(w, id),
         // spec: S-0408 claim 16 (selling: a processing delay of 1, no draw)
