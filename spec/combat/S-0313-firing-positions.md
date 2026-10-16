@@ -2,7 +2,7 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -172,6 +172,14 @@ S-0202: R(*a*, *b*). In addition:
    point *i* without wrapping by the number of configured points (S-0508 claim 14). Supported
    assault point numbers are 0 through 9; a missing point keeps its imported default. No safe
    original animation position is specified for position 10 or later.
+   Our engine instead uses point *j* = *i* mod 10 for assault positions *i* ≥ 10
+   (S-0508 claim 25), an exact non-negative integer remainder with no rounding.
+   The selected point uses S-0508 claim 14's lookup, F3 projection and missing-point
+   default (0, 0), exactly as for positions 0 through 9. The divisor is always 10,
+   independent of configured-point count, occupant count and firing index. This engine
+   safety departure has no quirk switch and leaves positions 0 through 9 unchanged.
+   Animation and reversed credit still precede each occupant's removal, in descending
+   list-position order (S-0508 claim 14).
    Assault's reversed kill credit names the individual occupant,
    not a firing occupant selected through the building (S-0508 claims 10, 11 and 14,
    and S-0311 claim 9). These effects therefore impose no reset-before-release requirement.
@@ -214,8 +222,11 @@ S-0202: R(*a*, *b*). In addition:
      `unmeasured`: no safe result is established or unsafe confirming attack proposed.
      Engine death removal, repaired-index muzzle selection and post-removal advancement are
      `measurable` on our engine (P5's engine-only variant and S-0508 claim 23); these are design
-     requirements, not predictions for the original.
-   - Confidence: high (the cycle, action reset, additional entry, engine safety rule and defeat's off-map hits),
+     requirements, not predictions for the original. Assault's point selection at positions
+     10 or later is `measurable` on our engine (P5's engine-only assault variant and
+     S-0508 claim 25), not an oracle prediction. The original's unsafe animation result
+     there remains `unmeasured`: no safe outcome or confirming run is established.
+   - Confidence: high (the cycle, action reset, additional entry, engine safety rules and defeat's off-map hits),
      medium (the shift arithmetic, F3, limited set-up removal and defeat index retention)
 
 7. **Buildings with a primary fire pixel shift.** A building that is not garrisoned and whose type
@@ -544,6 +555,23 @@ the user, not a request to alter the game.
   distinction. Stay within the supported assault point numbers. No shot or credited
   destruction is artificially inserted between removals: no validated ordinary-input fixture
   reaches such an intermediate reading (Q-0670).
+- Engine-only assault variant (S-0508 claim 25's G19 check): on our engine only, repeat
+  the clearing fixture with named `garrison-assault-large.map`, an invented capacity of
+  21, and distinct identified occupants entered individually. Named test art gives all ten
+  supported points distinguishable pixel pairs and a visible occupant animation. Test
+  counts 10, 11, 12 and 21 in three fresh games each, at the common game speed and settings.
+  Record event-time list identities, animation creation positions, credit notifications,
+  removals and completed-action index. Expected: positions 10, 11 and 20 use points 0, 1
+  and 0, respectively; positions 0 through 9 use their own point numbers. Compare integer
+  positions with F3. Repeat the 12-occupant case with point 0 omitted and point 1 nonzero:
+  position 10 uses default (0, 0), not another configured point. Repeat with different
+  starting firing indices prepared by ordinary shots, stopping fire before assault:
+  animation points are unchanged. Each animation and credit precedes that occupant's
+  removal, all in descending list-position order, and the completed-action index is 0.
+  Missing animations, different selected points or integer positions, dependence on the
+  configured-point count or firing index, changed credit/removal order or a nonzero
+  completed-action index falsifies the corresponding engine rule. Do not run positions
+  10 or later in the original as a safe control; its unsafe result remains unmeasured.
 - Defeat variant: in a named `firing-index-defeat.map`, add a third isolated living contender.
   The human house enters three identifiable occupants, fires exactly once and stops at index 1.
   A timed building-only ownership trigger transfers the building to a surviving hostile house,
