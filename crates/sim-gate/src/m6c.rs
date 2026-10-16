@@ -30,6 +30,9 @@ pub struct Exercise {
     pub cash_cycles: u32,
     /// Ticks in which a jumpjet unit was above the ground (S-0502).
     pub flight_ticks: u32,
+    /// Jumpjet units a factory built that rose into the air (the ascent
+    /// that ends the factory contact, S-0417 claim 15).
+    pub jumpjets_built: u32,
     /// Deploy and undeploy sounds, one per change of form (S-0517).
     pub deploy_changes: u32,
     /// Ticks in which some cell held radiation (S-0525).
@@ -75,7 +78,7 @@ impl Exercise {
     /// counter that stayed zero (empty when the run exercised all of them).
     pub fn missing(&self) -> Vec<&'static str> {
         let u = &self.uses;
-        let checks: [(&'static str, u32); 28] = [
+        let checks: [(&'static str, u32); 29] = [
             ("garrison orders (S-0508)", u.garrisons),
             ("garrison occupants inside (S-0508)", self.occupants),
             ("engineer orders (S-0509)", u.engineers),
@@ -86,6 +89,10 @@ impl Exercise {
             ("tech building income cycles (S-0515)", self.cash_cycles),
             ("jumpjet orders (S-0502)", u.jumps),
             ("jumpjet flight (S-0502)", self.flight_ticks),
+            (
+                "jumpjet units built and flown (S-0417 claim 15)",
+                self.jumpjets_built,
+            ),
             ("deploy orders (S-0517)", u.deploys),
             ("changes of deployed form (S-0517)", self.deploy_changes),
             ("radiation exits (S-0525)", u.radiation),
@@ -122,6 +129,10 @@ struct Watch {
     striking: BTreeSet<ObjectId>,
     restarts: BTreeMap<ObjectId, (Option<glasnost_sim::world::HouseId>, Option<i32>)>,
     crates: BTreeMap<u16, (i32, i32)>,
+    /// The objects of the first observed tick (the starting units).
+    initial: Option<BTreeSet<ObjectId>>,
+    /// Built jumpjet units seen in the air.
+    flown: BTreeSet<ObjectId>,
 }
 
 /// Which kinds of M6c state have been seen so far in a run (a save and a
@@ -172,6 +183,19 @@ impl Exercise {
                 && glasnost_sim::jump::is_jumpjet(w, o.id)
                 && glasnost_sim::jump::height_above(w, o.id) > 0
         });
+        let initial = watch
+            .initial
+            .get_or_insert_with(|| w.objects.keys().copied().collect());
+        for o in w.objects.values() {
+            if o.on_map
+                && !initial.contains(&o.id)
+                && glasnost_sim::jump::is_jumpjet(w, o.id)
+                && glasnost_sim::jump::height_above(w, o.id) > 0
+                && watch.flown.insert(o.id)
+            {
+                self.jumpjets_built += 1;
+            }
+        }
         if flying {
             self.flight_ticks += 1;
             if !seen.flight {

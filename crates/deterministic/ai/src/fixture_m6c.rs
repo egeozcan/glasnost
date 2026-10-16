@@ -130,6 +130,12 @@ pub fn ruleset() -> Ruleset {
             b.spyable = Some(true);
         }
     }
+    // The barracks has a door kind, as every real one has: only such a
+    // building gives a released jumpjet unit its ascent report (S-0417
+    // claim 15).
+    if let Some(b) = r.sim.buildings.get_mut("PILL") {
+        b.econ.door_first = Some(true);
+    }
     // The refinery stores money, so a spy can steal it (the first base
     // building an army sees).
     if let Some(b) = r.sim.buildings.get_mut("PROC") {
@@ -404,11 +410,11 @@ pub fn ruleset() -> Ruleset {
     // The armed special types the barracks builds too (the army builder
     // takes them in turn with the rifleman), so that the abilities are used
     // all game long and not only by the units each house starts with. The
-    // engineer, the spy and the jumpjet unit are not built: the sidebar
-    // rules of the brain order the first two, and a jumpjet unit would hold
-    // its factory (Q-1070).
+    // engineer and the spy are not built: the sidebar rules of the brain
+    // order them. The jumpjet unit is built and leaves its barracks by its
+    // ascent (S-0417 claim 15, which answers Q-1070).
     for n in [
-        "GARRI", "DEPI", "RADI", "ERAS", "ZAPR", "PLNT", "DISA", "KAMI", "SABO",
+        "GARRI", "JETI", "DEPI", "RADI", "ERAS", "ZAPR", "PLNT", "DISA", "KAMI", "SABO",
     ] {
         if let Some(t) = r.sim.infantry.get_mut(n) {
             t.tech_level = Some(1);
