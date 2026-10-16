@@ -147,7 +147,7 @@ fn claim_17_a_blocked_jump_is_dropped_at_the_next_processing() {
         Some(Target::Cell(c)) => c,
         other => panic!("the second search sets a cell: {other:?}"),
     };
-    // The retained reservation leaves the first cell's entry outcome not clear (S-0209 claim 5), so the search from here gives the other ore cell.
+    // The retained reservation leaves the first cell's entry outcome a moving blocker: the miner is not listed there, so it is not excused from the flag (S-0209 claim 5 rows VP1 and VR5); the search from here gives the other ore cell.
     assert_ne!(second, first);
     assert_eq!(landing(&w, h), Some(second));
     assert!(

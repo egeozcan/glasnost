@@ -47,7 +47,9 @@ pub struct TeleportState {
     /// The destination *L* was fixed for.
     pub for_dest: Option<Target>,
     /// The cell holding the vehicle-present mark when it is not the
-    /// object's own cell (part a: the cell of *L*).
+    /// object's own cell (part a: the cell of *L*), also after an empty
+    /// assignment cancelled the jump to *L* (part h: `landing` is then
+    /// `None` and the reservation stays).
     pub mark: Option<CellXY>,
     /// Phasing in: the jump tick *t*₀ and the delay *D* (part f, F9).
     pub phasing: Option<(i32, i64)>,

@@ -112,4 +112,4 @@ No state field changed: the save format stays 45 and the AI game format stays 13
 - a temporal-beam lock refuses destinations;
 - pending suppression meets a teleporting destination.
 
-`cargo test --release -p glasnost-sim-gate -- --include-ignored` passes against the unchanged goldens of the base (f43b0b5): `full_run_matches_golden`, `debug_prefix_matches_golden` and both `m6c` tests. Their hashes did not change.
+`cargo test --release -p glasnost-sim-gate -- --include-ignored` passes against the unchanged goldens of the base (f43b0b5): `full_run_matches_golden`, `debug_prefix_matches_golden` and both `m6c` tests. Their hashes did not change, but no type in the gate fixtures uses the teleporting locomotor, so this does not test the changes. The real-data AI lane and the seed sweeps were not run here.
