@@ -2,7 +2,7 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -549,9 +549,14 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     truncated toward zero, not floating point. Balloon-hover infantry still uses *q* = 4.
     Equality at either boundary does not qualify. The test applies on every qualifying
     ascending update, not only on a detected threshold crossing; after a successful report
-    there is no factory contact left to report again. A rise directly to or past the target
-    in one physics step skips this window; this claim does not invent an ascent-completion
-    report for that untested case.
+    there is no factory contact left to report again.
+
+    **Skipped-window safety departure (design).** A released unit satisfying the same
+    type and factory-contact conditions whose ascent reaches or passes *h*ₜ without a
+    qualifying report gives the clear report in that reaching update. Both links end
+    and the destination effects below apply in that same update. This fixes a permanent
+    factory block, with no quirk switch. The original's strict-window report is skipped
+    by such a rise; no alternative original release event is established.
 
     A ground vehicle factory in the waiting stage of table S1 can start closing on its
     first subsequent unloading processing that observes the ended link, in the same tick
@@ -586,14 +591,17 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     has no saved spot to reapply.
     - Backing: `measurable` (U14 for ordinary stock vehicle and infantry release, ascent
       tick, both links, destination effects and subsequent production). Balloon-hover
-      infantry, non-balloon jumpjet vehicles, missing type flags, a one-step ascent that
-      skips the window and a resting no-rally infantry unit's unsolicited take-off are
+      infantry, non-balloon jumpjet vehicles, missing type flags, the original aftermath
+      of a one-step ascent that skips the window and a resting no-rally infantry unit's
+      unsolicited take-off are
       `unmeasured` here: no stock factory-release fixture exercising those cases is
       established. The report rule is established conditional on ascent, not on a measured
       automatic no-rally take-off. U14 records that remaining limitation explicitly.
+      The skipped-window fallback is a design rule, not an observation of the original.
+      U14's engine-only variant tests it separately.
     - Confidence: high (report, same-update loss of both links, height and type tests,
-      no foundation test and destination effects); medium (combined normal-release
-      consequences and the first eligible factory processing).
+      no foundation test and destination effects; decided safety fallback); medium
+      (combined normal-release consequences and the first eligible factory processing).
 
 ## Formulas
 
@@ -1053,8 +1061,19 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
   If a stock factory-produced non-balloon jumpjet vehicle or balloon-hover infantry
   exists, repeat and expect respectively the quarter and quarter thresholds; otherwise
   record those branches as untested. Do not alter type data or force memory states to
-  manufacture them. A stock ascent skipping the strict window supplies a diagnostic,
-  not evidence for an invented fallback release event.
+  manufacture them. A stock ascent skipping the strict window supplies a diagnostic
+  of the original's aftermath, not evidence for the design fallback.
+
+  **Engine-only skipped-window variant (design, not an original-game measurement).**
+  Use named engine test data for an otherwise qualifying factory-released jumpjet whose
+  first rising physics step reaches or passes the target height without a prior
+  qualifying report. Repeat with and without a saved rally, and at equality and above
+  the target. Record the same unit and factory observables as above. Expect both links
+  to end in that reaching update, with claim 15's saved-guard-spot or destination-discard
+  and scatter effects; the factory then follows its ordinary closing or free-contact-place
+  rules. A surviving link, a report delayed until cruise, destination arrival or touchdown,
+  or different destination effects falsifies the design rule. S-0502 J26 tests the same
+  departure; do not score this variant as evidence about the original.
 
 ## Open questions
 
@@ -1084,7 +1103,9 @@ Use stock data, no engine add-ons, director off and mods off, a tiny flat clear 
    been traced.
 9. Resolved for the ascent interaction (Q-1070): claim 15 establishes the clear report
    and same-update contact/tether loss, with U14 to confirm it. Still unmeasured: a
-   one-step climb that skips the strict window and missing type flags; no stock release
-   fixture is established for either. No fallback tick is inferred. The separate cause
-   of any unsolicited no-rally infantry take-off remains Open question 3.
+   original aftermath of a one-step climb that skips the strict window and missing
+   type flags; no stock release fixture is established for either. Claim 15 supplies
+   the decided reaching-update safety fallback for the skipped window, not an inferred
+   original release event. The separate cause of any unsolicited no-rally infantry
+   take-off remains Open question 3.
 
