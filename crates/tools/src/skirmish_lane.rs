@@ -123,7 +123,7 @@ struct Game {
     /// could build at some sampled tick and the ones it had a new object
     /// of (not a starting unit), by [`unit_class`] (PLAN 4.7: the own AI
     /// builds every unit class its side can build).
-    offered: [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
+    offered: [BTreeMap<(&'static str, u8, u32), (i32, bool)>; PLAYERS],
     made: [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
     /// Counts-only state of a game that is not over at the end (the own
     /// AI's games): per house its objects by kind, the resource left on the
@@ -1157,7 +1157,7 @@ fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
 fn classes(
     w: &World,
     starting: &BTreeSet<u32>,
-    offered: &mut [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
+    offered: &mut [BTreeMap<(&'static str, u8, u32), (i32, bool)>; PLAYERS],
     made: &mut [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
 ) {
     let units = |t: &glasnost_sim::econ::TypeRef| {
@@ -1167,7 +1167,13 @@ fn classes(
         for t in all_types(w).into_iter().filter(units) {
             for (h, set) in offered.iter_mut().enumerate() {
                 if tech::buildable(w, HouseId(h as u8), t) {
-                    set.insert((unit_class(w, t.kind, t.index), t.kind as u8, t.index));
+                    set.entry((unit_class(w, t.kind, t.index), t.kind as u8, t.index))
+                        .or_insert((
+                            w.tick,
+                            w.rules()
+                                .unit(t.kind, t.index)
+                                .is_some_and(|u| u.primary.is_some()),
+                        ));
                 }
             }
         }
@@ -1381,7 +1387,7 @@ fn report(
         if players != Players::Scripted {
             for h in 0..PLAYERS {
                 let mut by: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
-                for &(c, k, i) in &g.offered[h] {
+                for &(c, k, i) in g.offered[h].keys() {
                     let e = by.entry(c).or_default();
                     e.0 += 1;
                     if g.made[h].contains(&(c, k, i)) {
@@ -1398,6 +1404,23 @@ fn report(
                     "  house {h} unit types by class (built/buildable): {}; buildable but never built: {never}",
                     v.join(", ")
                 );
+                // The never-built types by kind, class, weapon and the first tick they were offered (no names).
+                let kinds = [Kind::Infantry, Kind::Vehicle, Kind::Aircraft];
+                let left: Vec<String> = g.offered[h]
+                    .iter()
+                    .filter(|(t, _)| !g.made[h].contains(t))
+                    .map(|(&(c, k, _), &(first, armed))| {
+                        let kind = kinds.into_iter().find(|&x| x as u8 == k);
+                        format!(
+                            "{:?} {c} {} from tick {first}",
+                            kind.unwrap_or(Kind::Infantry),
+                            if armed { "armed" } else { "unarmed" }
+                        )
+                    })
+                    .collect();
+                if !left.is_empty() {
+                    let _ = writeln!(s, "  house {h} never built: {}", left.join(", "));
+                }
             }
         }
         for h in 0..PLAYERS {
