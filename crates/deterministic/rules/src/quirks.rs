@@ -1467,6 +1467,10 @@ pub struct Quirks {
     // spec: S-0508 Edge cases (claim 10)
     #[serde(default = "on")]
     pub garrison_exit_skips_corner: bool,
+    /// A garrison's exit candidate at terrain level −6 or lower qualifies without the later entry tests; off: it gets the ordinary terrain, usable-area and occupancy tests.
+    // spec: S-0508 Edge cases (claim 10)
+    #[serde(default = "on")]
+    pub garrison_negative_level_exit: bool,
     /// An eviction without inside fallback and with no qualifying exit cell removes every occupant; off: the eviction does nothing and the occupants stay inside.
     // spec: S-0508 Edge cases (claim 12)
     #[serde(default = "on")]
@@ -2180,6 +2184,7 @@ impl Default for Quirks {
             engineer_lost_on_uncapturable: true,
             engineer_repairs_during_sale: true,
             garrison_exit_skips_corner: true,
+            garrison_negative_level_exit: true,
             garrison_no_exit_removes: true,
             infiltration_single_effect: true,
             spy_theft_unbacked_gain: true,
@@ -3171,6 +3176,10 @@ impl Quirks {
             (
                 "garrison_exit_skips_corner",
                 self.garrison_exit_skips_corner,
+            ),
+            (
+                "garrison_negative_level_exit",
+                self.garrison_negative_level_exit,
             ),
             ("garrison_no_exit_removes", self.garrison_no_exit_removes),
             (

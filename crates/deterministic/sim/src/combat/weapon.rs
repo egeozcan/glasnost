@@ -96,7 +96,7 @@ pub fn slot_weapon(w: &World, id: ObjectId, i: usize) -> Option<WeaponId> {
 /// an elite occupant's elite occupying weapon, else (with
 /// `quirks.elite_occupant_skips_occupy_weapon`) its own slot 0, else the
 /// occupying weapon; any other occupant's occupying weapon, else the weapon
-/// in its own slot 0. `None` when no occupant exists (Q-0970).
+/// in its own slot 0. `None` when no occupant exists.
 pub fn occupant_weapon(w: &World, building: ObjectId) -> Option<WeaponId> {
     let occ = crate::structures::garrison::current_occupant(w, building)?;
     let tc = veterancy::type_combat(w, occ)?;

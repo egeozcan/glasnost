@@ -290,15 +290,36 @@ fn claim_8_abandoned_buildings_return() {
     assert_eq!(ab, vec![(Some(A), true)], "feedback for the owner it lost");
 }
 
-// spec: S-0508 claim 8 and Q-0971 (with no civilian house the owner is left unchanged and nothing is announced)
+// spec: S-0508 claim 24 (engine design rule, answers Q-0971: with no civilian house claim 8 changes no owner and gives no abandoned sound at any turn)
 #[test]
-fn claim_8_no_civilian_house_leaves_the_owner() {
+fn claim_24_no_civilian_house_leaves_the_owner() {
     let mut w = testkit::game_with(&ruleset(), SIZE, 7);
     let b = testkit::spawn(&mut w, Kind::Building, "HUT", 0, at(0, 0), 0);
     assert!(garrison::civilian_house(&w).is_none());
     w.effects.clear();
     testkit::run(&mut w, 3);
     assert_eq!(owner(&w, b), Some(A));
+    assert!(sounds(&w, Sound::Abandoned).is_empty());
+    // Every later turn alike.
+    testkit::run(&mut w, 10);
+    assert_eq!(owner(&w, b), Some(A));
+    assert!(sounds(&w, Sound::Abandoned).is_empty());
+}
+
+// spec: S-0508 claim 24 and claim 9 (with no civilian house the forced evacuation of a badly damaged civilian garrison building still empties it; the owner stays, with no abandoned sound, radar event or announcement)
+#[test]
+fn claim_24_forced_evacuation_still_applies_without_a_civilian_house() {
+    let mut w = testkit::game_with(&ruleset(), SIZE, 7);
+    let b = testkit::spawn(&mut w, Kind::Building, "HUT", 0, at(0, 0), 0);
+    let u = put(&mut w, Kind::Infantry, "GARRI", 0, -6, -6);
+    assert!(garrison::attempt(&mut w, u, b));
+    assert!(!on_map(&w, u));
+    w.obj_mut(b).unwrap().health = 150;
+    w.effects.clear();
+    testkit::run(&mut w, 3);
+    assert!(on_map(&w, u), "evacuated");
+    assert_eq!(garrison::count(&w, b), 0);
+    assert_eq!(owner(&w, b), Some(A), "owner retained");
     assert!(sounds(&w, Sound::Abandoned).is_empty());
 }
 
@@ -401,6 +422,86 @@ fn claim_10_the_corner_is_skipped_or_last() {
             assert!(us.iter().all(|&u| w.obj(u).unwrap().pos.cell() == corner));
         }
     }
+}
+
+/// A game with a 2 × 2 hut of Alpha whose top-left cell is `at(dx, dy)` and
+/// one occupier inside.
+fn garrisoned_at(dx: i32, dy: i32) -> (World, ObjectId, ObjectId) {
+    let mut w = game();
+    let b = civ_hut(&mut w, "HUT", dx, dy);
+    let u = put(&mut w, Kind::Infantry, "GARRI", 0, dx - 6, dy - 6);
+    assert!(garrison::attempt(&mut w, u, b));
+    (w, b, u)
+}
+
+fn set_level(w: &mut World, c: glasnost_map::CellXY, level: i8) {
+    w.cells.grid.get_mut(c).expect("a legal cell").level = level;
+}
+
+// spec: S-0508 claim 10 (there is no independent usable-area gate, but the entry check applies S-0209 claim 4's rejection of a cell outside the usable area to an ordinary occupant, which entered from inside it: such a ring cell does not qualify even though it is legal and passable)
+#[test]
+fn claim_10_a_ring_cell_outside_the_usable_area_does_not_qualify() {
+    let (mut w, b, _) = garrisoned_at(0, 0);
+    let ring = garrison::exit_ring(at(0, 0), (2, 2), true);
+    assert_eq!(garrison::exit_cell(&w, b), Some(ring[0]));
+    // A high cell is legal but unusable (S-0009 claim 4: the level moves the usable band).
+    set_level(&mut w, ring[0], 30);
+    assert!(w.cells.cell(ring[0]).is_some() && !w.cells.usable(ring[0]));
+    assert_eq!(garrison::exit_cell(&w, b), Some(ring[1]));
+}
+
+// spec: S-0508 claim 10 and Edge cases (a ring cell at terrain level −6 or lower is clear before the usable-area and occupancy tests, quirks.garrison_negative_level_exit; off: the ordinary tests, so the unusable cell is rejected); S-0208 claim 19 (the same bypass for a teleporting landing)
+#[test]
+fn claim_10_negative_level_exit_bypass_and_its_quirk() {
+    for quirk in [true, false] {
+        // The far end of the map: the top-priority ring cell is legal, unusable at level −6, and blocked by a building.
+        let (mut w, b, _) = garrisoned_at(9, 9);
+        let mut rules = (*w.rules_arc()).clone();
+        rules.quirks.garrison_negative_level_exit = quirk;
+        w.rules = Some(std::sync::Arc::new(rules));
+        let ring = garrison::exit_ring(at(9, 9), (2, 2), true);
+        set_level(&mut w, ring[0], -6);
+        assert!(w.cells.cell(ring[0]).is_some() && !w.cells.usable(ring[0]));
+        block(&mut w, ring[0]);
+        assert!(w.cells.usable(ring[1]));
+        let want = if quirk { ring[0] } else { ring[1] };
+        assert_eq!(
+            garrison::exit_cell(&w, b),
+            Some(want),
+            "quirk {quirk}: clear without the later tests, or the ordinary tests"
+        );
+        // Level −5 gets no bypass.
+        set_level(&mut w, ring[0], -5);
+        assert_eq!(garrison::exit_cell(&w, b), Some(ring[1]));
+    }
+}
+
+// spec: S-0508 claim 10 (a candidate with no map cell reads as the stand-in blank cell of S-0009 claim 44 and meets the same entry check; it is not refused by an independent legal-cell gate, and for an ordinary occupant inside the usable area it fails that check through the outside-area rejection, so the search goes on to the next rank)
+#[test]
+fn claim_10_a_ring_cell_off_the_map_is_read_as_the_stand_in_cell() {
+    // Building cells s = 70 .. 72; the top-priority ring cells lie beyond the legal edge (s > 72).
+    let (w, b, _) = garrisoned_at(11, 11);
+    let ring = garrison::exit_ring(at(11, 11), (2, 2), true);
+    assert!(w.cells.cell(ring[0]).is_none(), "off the map");
+    let exit = garrison::exit_cell(&w, b).expect("another rank qualifies");
+    let first_usable = ring
+        .iter()
+        .copied()
+        .find(|&c| w.cells.usable(c))
+        .expect("a usable ring cell");
+    assert_eq!(exit, first_usable, "the off-map ranks fail the check, the next qualifies");
+}
+
+// spec: S-0508 claim 11 and 22 (an occupant that cannot be placed is removed, not destroyed; here one already on the map, an inconsistent state, is not put out a second time)
+#[test]
+fn claim_22_an_occupant_that_cannot_be_placed_is_removed() {
+    let (mut w, b, us) = garrisoned(2);
+    let losses = w.houses[0].combat.losses;
+    w.obj_mut(us[0]).unwrap().on_map = true;
+    assert!(garrison::evict(&mut w, b, Evict::PLAIN));
+    assert!(w.obj(us[0]).is_none(), "removed");
+    assert!(on_map(&w, us[1]), "the other is put out");
+    assert_eq!(w.houses[0].combat.losses, losses, "not destroyed");
 }
 
 // spec: S-0508 claim 11 (all occupants are put on the map in that one cell, from the last to the first, at its centre, facing 0; each has its target cleared and a scatter request before the next is placed; a hunting eviction gives hunt)
@@ -621,6 +722,88 @@ fn claim_14_reversed_kill_credit() {
     }
 }
 
+/// Alpha's assaulter and Beta's `n` occupants (the first of them with
+/// experience marks) in a hut whose points `points` are set; the assaulter's
+/// weapon has an occupant animation. Returns the animation positions of the
+/// assault in the order they were created.
+fn assault_animations(n: usize, points: Vec<[i32; 2]>, index: u32) -> (Vec<(i32, i32)>, World, ObjectId) {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("HUT").unwrap().garrison_muzzles = Some(points);
+    r.sim.weapons.get_mut("Rifle").unwrap().occupant_anim = Some("OCCA".into());
+    let mut w = game_on(&r, Default::default());
+    let b = civ_hut(&mut w, "HUT", 0, 0);
+    for _ in 0..n {
+        enter(&mut w, b, "GARRI", 1);
+    }
+    testkit::run(&mut w, 2);
+    w.obj_mut(b).unwrap().structure.index = index;
+    let a = put(&mut w, Kind::Infantry, "ASSAULT", 0, -6, 0);
+    w.effects.clear();
+    garrison::attempt(&mut w, a, b);
+    let at: Vec<(i32, i32)> = w
+        .effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Anim { name, pos, .. } if name == "OCCA" => Some((pos.x, pos.y)),
+            _ => None,
+        })
+        .collect();
+    (at, w, b)
+}
+
+// spec: S-0508 claim 14 (occupants are removed from the last list position to position 0; the animation of the occupant at list position i uses the building's muzzle point i, independent of the shared firing index; counts of one and two occupants give the point sequences 0 and 1, 0)
+#[test]
+fn claim_14_animation_points_follow_the_list_position() {
+    let points = vec![[4, 6], [10, 0], [0, 20]];
+    let b0 = at(0, 0);
+    let expect = |w: &World, b: ObjectId, k: usize| {
+        let (dx, dy) = garrison::assault_shift(w, b, k);
+        (256 * b0.x + dx, 256 * b0.y + dy)
+    };
+    for index in [0, 1, 2] {
+        let (anims, w, b) = assault_animations(3, points.clone(), index);
+        assert_eq!(
+            anims,
+            vec![expect(&w, b, 2), expect(&w, b, 1), expect(&w, b, 0)],
+            "points 2, 1, 0 whatever the firing index {index}"
+        );
+        assert_eq!(w.obj(b).unwrap().structure.index, 0);
+    }
+    let (anims, w, b) = assault_animations(2, points.clone(), 1);
+    assert_eq!(anims, vec![expect(&w, b, 1), expect(&w, b, 0)]);
+    let (anims, w, b) = assault_animations(1, points, 0);
+    assert_eq!(anims, vec![expect(&w, b, 0)]);
+    // The three points are distinguishable.
+    assert_ne!(expect(&w, b, 0), expect(&w, b, 1));
+}
+
+// spec: S-0508 claim 14 and Import mapping (no wrapping by the number of configured points: a point the art does not give keeps the default (0, 0), not point 0)
+#[test]
+fn claim_14_a_missing_point_is_the_default_not_a_wrap() {
+    let b0 = at(0, 0);
+    let (anims, w, b) = assault_animations(3, vec![[4, 6], [10, 0]], 0);
+    let (dx1, dy1) = garrison::assault_shift(&w, b, 1);
+    let (dx0, dy0) = garrison::assault_shift(&w, b, 0);
+    assert_ne!((dx0, dy0), (0, 0));
+    assert_eq!(garrison::assault_shift(&w, b, 2), (0, 0));
+    assert_eq!(
+        anims,
+        vec![
+            (256 * b0.x, 256 * b0.y),
+            (256 * b0.x + dx1, 256 * b0.y + dy1),
+            (256 * b0.x + dx0, 256 * b0.y + dy0),
+        ]
+    );
+}
+
+// spec: S-0508 claim 14 (the assault removes every occupant: last position first, each credited as destroying the assaulter before its removal) and claim 18 (the completed action leaves index 0)
+#[test]
+fn claim_14_removes_every_occupant_and_resets_the_index() {
+    let (_, w, b) = assault_animations(3, vec![], 2);
+    assert_eq!(garrison::count(&w, b), 0);
+    assert_eq!(w.obj(b).unwrap().structure.index, 0);
+}
+
 // spec: S-0508 claim 15 (a completed erasure removes the occupants with the building, without death and without putting them out)
 #[test]
 fn claim_15_erasure() {
@@ -699,7 +882,7 @@ fn claim_18_index_reset_and_additional_entry() {
     assert_eq!(garrison::current_occupant(&w, b), Some(us[1]));
 }
 
-// spec: S-0508 claim 19 (the defeat of an occupant's own house kills its occupants one by one inside a building of a surviving house: no eviction, the numeric index and the list are kept)
+// spec: S-0508 claim 19 (the defeat of an occupant's own house kills its occupants one by one inside a building of a surviving house, hitting the off-map occupants: no eviction, the foreign building is not hit)
 #[test]
 fn claim_19_defeat_hits_occupants_in_a_foreign_building() {
     let (mut w, b, us) = garrisoned(3);
@@ -718,13 +901,67 @@ fn claim_19_defeat_hits_occupants_in_a_foreign_building() {
         hp,
         "the foreign building is not hit"
     );
-    assert_eq!(
-        w.obj(b).unwrap().structure.index,
-        1,
-        "numeric index retained"
-    );
-    assert_eq!(occ(&w, b), us, "places kept (Q-0970)");
-    assert_eq!(garrison::count(&w, b), 3);
-    assert!(garrison::living(&w, b).is_empty());
+    // spec: S-0508 claim 23 (engine design rule, G18: after A's three occupants die the count is 0 and the index 0 in the same update, with no occupant to fire or to receive experience)
+    assert_eq!(garrison::count(&w, b), 0);
+    assert!(occ(&w, b).is_empty(), "places removed");
+    assert_eq!(w.obj(b).unwrap().structure.index, 0);
     assert_eq!(garrison::current_occupant(&w, b), None);
+    assert_eq!(garrison::experience_recipient(&w, b), None);
+    // Claim 8: the emptied building is eligible for abandonment at its turn.
+    w.effects.clear();
+    testkit::run(&mut w, 2);
+    assert_eq!(owner(&w, b), Some(CIV));
+}
+
+/// Kills occupant `id` inside its building by an independent death event
+/// (a killing hit from the garrison's own house, as the defeat's hits are).
+fn kill_inside(w: &mut World, id: ObjectId) {
+    let hit = glasnost_sim::combat::damage::Hit {
+        amount: 10_000,
+        warhead: w.rules().combat.general.c4_warhead,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: true,
+        no_escape: false,
+    };
+    glasnost_sim::combat::death::kill(w, id, &hit);
+}
+
+// spec: S-0508 claim 23 (engine design rule, answers Q-0970; G18): an occupant that dies inside has its place removed in the same update; the others keep their order and are numbered from 0; the index 1 is kept when below the new count; a later eviction places only the remaining occupants in reverse order; the dead place does not count for capacity (claim 1)
+#[test]
+fn claim_23_a_death_inside_removes_the_place_and_keeps_the_index_in_range() {
+    let (mut w, b, us) = garrisoned(3);
+    w.obj_mut(b).unwrap().structure.index = 1;
+    kill_inside(&mut w, us[1]);
+    assert_eq!(occ(&w, b), vec![us[0], us[2]], "order retained, V removed");
+    assert_eq!(garrison::count(&w, b), 2);
+    assert_eq!(w.obj(b).unwrap().structure.index, 1, "kept below the count");
+    assert_eq!(garrison::current_occupant(&w, b), Some(us[2]));
+    // The count after removal is the count of claim 1: a place is free again.
+    let late = put(&mut w, Kind::Infantry, "GARRI", 0, -6, -4);
+    assert!(garrison::may_enter(&w, late, b));
+    // The eviction places only U and W, in reverse order.
+    assert!(garrison::evict(&mut w, b, Evict::PLAIN));
+    assert!(on_map(&w, us[0]) && on_map(&w, us[2]));
+    assert!(w.obj(us[1]).is_none());
+}
+
+// spec: S-0508 claim 23 (the index at or above the new count becomes 0, a range check and not a reduction modulo the count: index 2 and the middle or the last place dying gives 0, not 1)
+#[test]
+fn claim_23_an_index_out_of_range_becomes_zero_not_a_modulus() {
+    for victim in [1, 2] {
+        let (mut w, b, us) = garrisoned(3);
+        w.obj_mut(b).unwrap().structure.index = 2;
+        kill_inside(&mut w, us[victim]);
+        assert_eq!(garrison::count(&w, b), 2);
+        assert_eq!(w.obj(b).unwrap().structure.index, 0, "victim {victim}");
+        assert_eq!(garrison::current_occupant(&w, b), Some(us[0]));
+    }
+    // Index 0 stays 0, and the first place dying keeps a lower index too.
+    let (mut w, b, us) = garrisoned(3);
+    w.obj_mut(b).unwrap().structure.index = 1;
+    kill_inside(&mut w, us[0]);
+    assert_eq!(occ(&w, b), vec![us[1], us[2]]);
+    assert_eq!(w.obj(b).unwrap().structure.index, 1);
 }

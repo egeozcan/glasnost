@@ -21,9 +21,8 @@ pub mod tech;
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StructState {
     /// A building's occupants in order: the first is the one that has been
-    /// inside longest (S-0508 Terms). An identifier that names no object is
-    /// an occupant killed inside by the defeat of its own house (claim 19):
-    /// it keeps its place (Q-0970).
+    /// inside longest (S-0508 Terms). An occupant that dies inside has its
+    /// place removed in the same update (claim 23, an engine design rule).
     pub occupants: Vec<ObjectId>,
     /// The shared occupant and muzzle index (S-0313 claim 6, S-0508 claim
     /// 18), counted from 0.
