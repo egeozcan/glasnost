@@ -18,6 +18,10 @@ const LIMIT: i32 = 40_000;
 /// The seed of the synthetic game.
 const SEED: u32 = 5;
 
+/// The seed of the naval game (29 of the seeds 1 to 32 pass; 5, 7 and 17
+/// do not, because their ships never leave the harbour before the game ends).
+const NAVAL_SEED: u32 = 6;
+
 fn run_for(ticks: i32) -> skirmish::Run {
     skirmish::run(
         fixture::rules(),
@@ -192,24 +196,44 @@ fn climbs_to_the_launcher_and_fires() {
 
 // On a map with water the houses build a naval yard on the sea, then
 // ships, and send the ships to the water off the enemy base; ships fight
-// and sink. The whole game's course shifts with every spec revision (a house
-// can lose its construction yard before its naval yard stands), so a few
-// seeds are tried and one game must show all of it.
+// and sink. One fixed seed is played; `naval_seed_sweep` reports how many
+// seeds of a range show all of it.
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
 fn builds_a_navy_on_a_water_map() {
-    let mut failures = Vec::new();
-    for seed in [SEED, 6, 7, 8] {
+    navy_game(NAVAL_SEED).unwrap_or_else(|e| panic!("seed {NAVAL_SEED}: {e:?}"));
+}
+
+/// The pass count of `navy_game` over a range of seeds
+/// (`GLASNOST_SWEEP=1-32 cargo test --release -p glasnost-ai --test skirmish naval_seed_sweep -- --ignored --nocapture`).
+#[test]
+#[ignore = "a sweep of whole games; set GLASNOST_SWEEP=<from>-<to>"]
+#[allow(clippy::disallowed_methods, clippy::disallowed_macros)] // a local diagnostic: reads the host environment and prints, no simulation
+fn naval_seed_sweep() {
+    let range = std::env::var("GLASNOST_SWEEP").unwrap_or_else(|_| "1-8".into());
+    let (a, b) = range.split_once('-').expect("GLASNOST_SWEEP=<from>-<to>");
+    let (a, b): (u32, u32) = (a.parse().expect("from"), b.parse().expect("to"));
+    let mut passed = 0;
+    let mut failing: BTreeMap<String, u32> = BTreeMap::new();
+    for seed in a..=b {
         match navy_game(seed) {
-            Ok(()) => return,
-            Err(e) => failures.push((seed, e)),
+            Ok(()) => passed += 1,
+            Err(e) => {
+                println!("seed {seed}: {e:?}");
+                for c in e {
+                    *failing.entry(c).or_default() += 1;
+                }
+            }
         }
     }
-    panic!("no seed showed a navy: {failures:?}");
+    println!(
+        "naval games passing: {passed} of {}; failing claims: {failing:?}",
+        b - a + 1
+    );
 }
 
 /// One seed's naval game, checked; the error names the first claim that fails.
-fn navy_game(seed: u32) -> Result<(), String> {
+fn navy_game(seed: u32) -> Result<(), Vec<String>> {
     let map = fixture::map_naval();
     let run = skirmish::run(
         fixture::rules(),
@@ -274,33 +298,33 @@ fn navy_game(seed: u32) -> Result<(), String> {
             }
         })
         .expect("the replay runs");
-    if !(yard_on_water) {
-        return Err(format!("every naval yard stands on water"));
+    // Every claim is checked, so a sweep can say which ones fail how often.
+    let mut failed: Vec<String> = Vec::new();
+    if !yard_on_water {
+        failed.push("every naval yard stands on water".into());
     }
-    // Both houses used to build a naval yard and ships before the fighting reached
-    // either base; since the M6b2 revisions (S-0207 claim 26 and the others) one house can
-    // lose its construction yard first, so one navy is required here (see docs/development.md).
     for name in ["NAVY", "BOAT"] {
         if !most.iter().any(|m| m.get(name).copied().unwrap_or(0) > 0) {
-            return Err(format!("a house built {name}: {most:?}"));
+            failed.push(format!("a house built {name}"));
         }
     }
-    // S-0503: the hovercraft is army of the land vehicle factory once a
-    // naval yard stands.
-    if !(most.iter().any(|m| m.get("HOVR").copied().unwrap_or(0) > 0)) {
-        return Err(format!("a house built a hovercraft: {most:?}"));
+    // The hovercraft (S-0503) needs a lab, which comes after the naval yard; most games end
+    // before it is built, so `builds_a_hovercraft_once_a_naval_yard_and_a_lab_stand` (ai.rs) checks it.
+    if !furthest.iter().any(|&d| d > 0) {
+        failed.push(format!("a ship crossed towards the enemy: {furthest:?}"));
     }
-    if !(furthest.iter().any(|&d| d > 0)) {
-        return Err(format!("a ship crossed towards the enemy: {furthest:?}"));
-    }
-    if !(ship_fired) {
-        return Err(format!("a ship took a target"));
+    if !ship_fired {
+        failed.push("a ship took a target".into());
     }
     // spec: S-0504 claim 4 (a killed ship on water sinks)
-    if !(sunk > 0) {
-        return Err(format!("a ship sank"));
+    if sunk == 0 {
+        failed.push("a ship sank".into());
     }
-    Ok(())
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(failed)
+    }
 }
 
 // The houses climb to an aircraft pad, build planes on it, send idle

@@ -18,9 +18,10 @@
 //!   next wave's goal, across water when they cannot walk there, loading
 //!   and unloading with the clicks a person gives;
 //! - **superweapons** (S-0512, S-0513): once the harvesters are kept, it
-//!   builds the cheapest building it can that gives a superweapon, when it
-//!   has none, before going on with the tech climb; every tick, a ready
-//!   missile or storm superweapon (as the sidebar shows it) is fired with
+//!   builds, one after the other, the cheapest building it can that gives a
+//!   kind of superweapon it has no building for yet (every Allied and Soviet
+//!   kind the tech tree offers), before going on with the tech climb; every
+//!   tick, a ready missile or storm superweapon (as the sidebar shows it) is fired with
 //!   the order a person gives, at the seen enemy cell with the most seen
 //!   enemies around it and none of the house's own objects; a ready
 //!   paradrop (S-0522) is fired at a free usable land cell near home, and
@@ -29,8 +30,7 @@
 //!   on its buildings with seen enemies at them, a spy plane at the enemy
 //!   base, and the teleport takes a group of its armed vehicles (first
 //!   stage) to a free block next to the enemy base (second stage), each with
-//!   the order a person gives (it builds only for the missile and storm
-//!   kinds, not for these);
+//!   the order a person gives;
 //! - **selling out**: a house with no income for a long while and too few
 //!   credits for an army unit sells its buildings one by one for their
 //!   refunds and builds army units with them, and builds no more buildings;
@@ -59,8 +59,8 @@ use glasnost_sim::world::{HouseId, Layer, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 use crate::scripted::{
-    self, Plan, Role, SPIRAL_RINGS, Script, THINK_PERIOD, all_types, can_attack, deploys_into_yard,
-    dist2, idle, is_yard,
+    self, CLIMB_DEPTH, Plan, Role, SPIRAL_RINGS, Script, THINK_PERIOD, all_types, can_attack,
+    deploys_into_yard, dist2, idle, is_yard,
 };
 use crate::skirmish::start_cells;
 
@@ -97,8 +97,12 @@ const ASHORE: i64 = 4; // nocite: tuning of our own opponent
 /// seen enemies count for its worth and the house's own objects forbid it.
 const STRIKE_RADIUS: i64 = 3; // nocite: tuning of our own opponent
 /// The fewest of its own armed vehicles in an effect block for an iron
-/// curtain or a teleport source.
+/// curtain.
 const GROUP_MIN: usize = 3; // nocite: tuning of our own opponent
+/// The fewest of its own armed vehicles in an effect block for a teleport
+/// source (a block of three, with none of its infantry in it, was too rare:
+/// the teleport stood ready for thousands of ticks in the local lane).
+const TELEPORT_MIN: usize = 2; // nocite: tuning of our own opponent
 /// The fewest of its own buildings in an effect block for a force shield.
 const SHIELD_MIN: usize = 2; // nocite: tuning of our own opponent
 /// Cells from a group of vehicles within which a seen enemy counts as a
@@ -161,6 +165,78 @@ impl Brain {
         self.script.house
     }
 
+    /// A counts-only diagnostic of the brain's state (local-lane reports,
+    /// see [`Script::diagnose`]).
+    pub fn diagnose(&self, w: &World) -> String {
+        let mut s = self.script.diagnose(w);
+        // The superweapon buildings: giving types whose kind the house has
+        // no building for, how many it can build now, place now, or reach by
+        // a building that clears their blocker.
+        let owned: std::collections::BTreeSet<_> = self
+            .script
+            .own(w)
+            .into_iter()
+            .filter_map(|id| w.obj(id).filter(|o| o.kind == Kind::Building))
+            .flat_map(|o| Self::giving_kinds(w, o.type_index))
+            .collect();
+        let giving: Vec<TypeRef> = all_types(w)
+            .into_iter()
+            .filter(|t| t.kind == Kind::Building)
+            .filter(|t| {
+                Self::giving_kinds(w, t.index)
+                    .iter()
+                    .any(|k| !owned.contains(k))
+            })
+            .collect();
+        let buildable: Vec<&TypeRef> = giving
+            .iter()
+            .filter(|&&t| tech::buildable(w, self.house(), t))
+            .collect();
+        let placeable = buildable
+            .iter()
+            .filter(|&&&t| self.script.place_cell(w, t).is_some())
+            .count();
+        let reachable = giving
+            .iter()
+            .filter(|&&t| !tech::buildable(w, self.house(), t))
+            .filter(|&&t| self.script.unblocker(w, t, CLIMB_DEPTH).is_some())
+            .count();
+        s.push_str(&format!(
+            "; superweapon buildings: kinds owned {}, giving types without an owned kind {}, buildable now {}, placeable {}, blocked but reachable by a clearing building {}, harvesters kept {}, selling {}",
+            owned.len(),
+            giving.len(),
+            buildable.len(),
+            placeable,
+            reachable,
+            self.script.harvesters_kept(w),
+            self.script.selling()
+        ));
+        // The ferry: idle infantry at home, whether its run crosses water,
+        // the ferries the house owns and the types it could build for a run.
+        if let (Some(home), Some(goal)) = (self.script.home(w), self.script.attack_goal(w)) {
+            let infantry: Vec<ObjectId> = self
+                .script
+                .of_role(w, Role::Army)
+                .into_iter()
+                .filter(|&id| {
+                    w.obj(id).is_some_and(|o| {
+                        o.kind == Kind::Infantry
+                            && dist2(o.pos.cell(), home) <= 4 * FERRY_HOME * FERRY_HOME // nocite: tuning (twice the home radius)
+                    }) && idle(w, id)
+                })
+                .collect();
+            let crossing = infantry.iter().any(|&p| Self::crossing(w, p, goal));
+            s.push_str(&format!(
+                "; ferry: idle infantry at home {}, run crosses water {crossing}, ferries owned {}, type for a land run {}, type for a crossing {}",
+                infantry.len(),
+                self.ferries(w).len(),
+                self.ferry_type(w, false).is_some(),
+                self.ferry_type(w, true).is_some()
+            ));
+        }
+        s
+    }
+
     /// Thinks at the start of the world's current tick; returns the orders
     /// to issue, in the order to issue them (a later order to the same unit
     /// replaces an earlier one, so the reactions come last).
@@ -187,32 +263,53 @@ impl Brain {
         out
     }
 
-    /// Whether the brain fires superweapon type `i`: the missile and storm
-    /// kinds, aimed at enemies.
-    fn aimed(w: &World, i: u32) -> bool {
+    /// The kind of superweapon type `i` when the brain fires it: every kind
+    /// of the Allied and Soviet sides (the nuclear strike, the weather
+    /// storm, the iron curtain, the teleport's two stages, the paradrops, the
+    /// spy plane and the force shield). The Yuri kinds are not built
+    /// (S-0610, S-0611, S-0612) and give none.
+    fn fired_kind(w: &World, i: u32) -> Option<glasnost_sim::superweapons::SwKind> {
         use glasnost_sim::superweapons::SwKind;
-        w.rules()
-            .superweapons
-            .types
-            .get(i as usize)
-            .is_some_and(|t| matches!(t.kind, Some(SwKind::Missile | SwKind::Storm)))
+        let k = w.rules().superweapons.types.get(i as usize)?.kind?;
+        matches!(
+            k,
+            SwKind::Missile
+                | SwKind::Storm
+                | SwKind::IronCurtain
+                | SwKind::Chrono
+                | SwKind::ChronoWarp
+                | SwKind::Paradrop
+                | SwKind::AmerParadrop
+                | SwKind::SpyPlane
+                | SwKind::ForceShield
+        )
+        .then_some(k)
     }
 
-    /// Whether building type `b` gives a superweapon the brain fires
-    /// (S-0512 Terms: a first or second superweapon field).
-    fn gives_superweapon(w: &World, b: u32) -> bool {
+    /// The kinds that building type `b` gives and the brain fires (S-0512
+    /// Terms: its first and second superweapon fields), in field order.
+    fn giving_kinds(w: &World, b: u32) -> Vec<glasnost_sim::superweapons::SwKind> {
         w.rules()
             .superweapons
             .building_sw
             .get(b as usize)
-            .is_some_and(|f| f.iter().flatten().any(|&i| Self::aimed(w, i)))
+            .map(|f| {
+                f.iter()
+                    .flatten()
+                    .filter_map(|&i| Self::fired_kind(w, i))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Builds the cheapest building the house can build and place now that
-    /// gives a superweapon it fires, when it has none, keeps its harvesters and is
-    /// not selling out. It comes before the tech climb (it replaces a climb
-    /// building this think ordered) but after a building the plan places
-    /// or a power plant, refinery or factory it wants.
+    /// gives a kind of superweapon it fires and has no building for yet,
+    /// once it keeps its harvesters and is not selling out: so in time one
+    /// building of every kind its side's tech tree offers (the kinds come
+    /// from the rules' superweapon types that the buildings name, no
+    /// building is named here). It comes before the tech climb (it replaces
+    /// a climb building this think ordered) but after a building the plan
+    /// places or a power plant, refinery or factory it wants.
     fn build_superweapon(&self, w: &World, out: &mut Vec<Order>) {
         let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
         if self.script.selling() || !self.script.harvesters_kept(w) || out.iter().any(|o| {
@@ -221,19 +318,38 @@ impl Brain {
         }) {
             return;
         }
-        let has = self.script.own(w).into_iter().any(|id| {
-            w.obj(id).is_some_and(|o| {
-                o.kind == Kind::Building && Self::gives_superweapon(w, o.type_index)
-            })
-        });
-        if has {
-            return;
-        }
-        let t = all_types(w)
+        let owned: std::collections::BTreeSet<_> = self
+            .script
+            .own(w)
             .into_iter()
-            .filter(|t| t.kind == Kind::Building && Self::gives_superweapon(w, t.index))
+            .filter_map(|id| w.obj(id).filter(|o| o.kind == Kind::Building))
+            .flat_map(|o| Self::giving_kinds(w, o.type_index))
+            .collect();
+        let giving: Vec<TypeRef> = all_types(w)
+            .into_iter()
+            .filter(|t| t.kind == Kind::Building)
+            .filter(|t| {
+                Self::giving_kinds(w, t.index)
+                    .iter()
+                    .any(|k| !owned.contains(k))
+            })
+            .collect();
+        // A giving building the house can build and place now; for one its
+        // tech tree still blocks, the building that clears the blocker (as a
+        // person climbs the tree to a superweapon), the tech climb's own
+        // rule. The cheapest of these is built next.
+        let t = giving
+            .iter()
+            .copied()
             .filter(|&t| tech::buildable(w, self.house(), t))
             .filter(|&t| self.script.place_cell(w, t).is_some())
+            .chain(
+                giving
+                    .iter()
+                    .copied()
+                    .filter(|&t| !tech::buildable(w, self.house(), t))
+                    .filter_map(|t| self.script.unblocker(w, t, CLIMB_DEPTH)),
+            )
             .min_by_key(|&t| (production::cost_field(w, t), t.index));
         if let Some(t) = t
             && !self.script.busy(w, t)
@@ -304,7 +420,7 @@ impl Brain {
     /// units, claim 35) and no unit of anyone else (both would protect or
     /// send them too); the first in cell order on equal counts. With
     /// `fight`, a seen enemy must be within [`FIGHT`] cells.
-    fn vehicle_block(&self, w: &World, fight: bool) -> Option<CellXY> {
+    fn vehicle_block(&self, w: &World, fight: bool, min: usize) -> Option<CellXY> {
         let house = self.house();
         let enemies = self.script.seen_enemies(w);
         let mine: Vec<(CellXY, bool)> = w
@@ -333,7 +449,7 @@ impl Brain {
                     c,
                 )
             })
-            .filter(|&(n, _)| n >= GROUP_MIN)
+            .filter(|&(n, _)| n >= min)
             .max_by_key(|&(n, c)| (n, std::cmp::Reverse((c.y, c.x))))
             .map(|(_, c)| c)
     }
@@ -341,12 +457,12 @@ impl Brain {
     /// An iron curtain's cell: a block of the house's armed vehicles that
     /// is fighting.
     fn curtain_cell(&self, w: &World) -> Option<CellXY> {
-        self.vehicle_block(w, true)
+        self.vehicle_block(w, true, GROUP_MIN)
     }
 
     /// A teleport source's cell: a block of the house's armed vehicles.
     fn group_cell(&self, w: &World) -> Option<CellXY> {
-        self.vehicle_block(w, false)
+        self.vehicle_block(w, false, TELEPORT_MIN)
     }
 
     /// A force shield's cell: the building of the house with the most of

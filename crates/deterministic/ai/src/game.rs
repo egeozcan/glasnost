@@ -31,7 +31,7 @@ use crate::brain::Brain;
 /// Format version of a game save (the world's own save inside it carries
 /// the simulation's version).
 // nocite: version number of our own save format
-pub const GAME_FORMAT_VERSION: u32 = 5;
+pub const GAME_FORMAT_VERSION: u32 = 6;
 
 /// A running game.
 pub struct Game {
@@ -122,6 +122,14 @@ impl Game {
         self.brains
             .iter()
             .map(|b| (b.house(), b.special_uses()))
+            .collect()
+    }
+
+    /// A counts-only diagnostic line per AI house (local-lane reports).
+    pub fn diagnose(&self) -> Vec<(HouseId, String)> {
+        self.brains
+            .iter()
+            .map(|b| (b.house(), b.diagnose(&self.world)))
             .collect()
     }
 

@@ -60,7 +60,7 @@ use glasnost_sim::orders::Order;
 use glasnost_sim::regions::{self, Reach};
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
 use glasnost_sim::targeting;
-use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::world::{HouseId, Object, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 /// A build plan.
@@ -89,6 +89,9 @@ pub struct Names {
     /// Army units.
     pub army: Vec<String>,
 }
+
+/// The kinds of army the round-robin builds from, one counter each.
+const ARMY_KINDS: [Kind; 3] = [Kind::Vehicle, Kind::Infantry, Kind::Aircraft]; // nocite: the three kinds of army unit
 
 /// Ticks between two thinks.
 pub const THINK_PERIOD: i32 = 15; // nocite: tuning of our own opponent
@@ -123,7 +126,7 @@ pub(crate) const SPIRAL_RINGS: i32 = 12; // nocite: tuning of our own opponent
 pub(crate) const WIDE_RINGS: i32 = 32; // nocite: tuning of our own opponent
 
 /// How many buildings deep the tech climb looks for one it can build now.
-const CLIMB_DEPTH: u32 = 4; // nocite: tuning of our own opponent
+pub(crate) const CLIMB_DEPTH: u32 = 4; // nocite: tuning of our own opponent
 
 /// What a type is for in the plan.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -310,7 +313,7 @@ pub(crate) fn idle(w: &World, id: ObjectId) -> bool {
         // A deployed vehicle or one changing form takes no destination (S-0517 claim 9), so it is not free for a wave.
         arrived
             && !glasnost_sim::econ::inplace::blocks_destination(w, id)
-            && o.target.is_none()
+            && (o.target.is_none() || stale_guard_target(w, o))
             && matches!(
                 o.beh.current,
                 None | Some(Behaviour::Guard)
@@ -319,6 +322,29 @@ pub(crate) fn idle(w: &World, id: ObjectId) -> bool {
                     | Some(Behaviour::Move)
             )
     })
+}
+
+/// Whether a unit resting in guard holds a target it cannot shoot at: guard
+/// keeps an acquired target while it is out of the weapon's range, and the
+/// unit stays where it is (guard never pursues, S-0215 claim 24). A person
+/// sees such a unit standing still and gives it an order; so does the
+/// script, which would otherwise leave a home guard idle while the enemy
+/// destroys the base.
+fn stale_guard_target(w: &World, o: &Object) -> bool {
+    let resting = matches!(
+        o.beh.current,
+        Some(Behaviour::Guard) | Some(Behaviour::AreaGuard) | Some(Behaviour::Stop)
+    );
+    let Some(t) = o.target else { return false };
+    if !resting {
+        return false;
+    }
+    let (slot, weapon) = weapon::would_use(w, o.id, Some(t));
+    weapon.is_none()
+        || matches!(
+            check::check(w, o.id, Some(t), slot, true),
+            check::Answer::OutOfRange | check::Answer::Illegal | check::Answer::Impossible
+        )
 }
 
 /// Whether unit `id` can attack enemy `e` at all, as its cursor shows: the
@@ -362,8 +388,10 @@ pub struct Script {
     targets: Vec<CellXY>,
     /// The next target's index.
     next_target: usize,
-    /// The next army type's index.
-    next_army: usize,
+    /// The next army type's index, one counter per kind of army (vehicle,
+    /// infantry, aircraft): a counter shared by the kinds would step past
+    /// the same types every round and leave some never built.
+    next_army: [usize; ARMY_KINDS.len()],
     /// The tick since which idle army units have been waiting for a wave.
     waiting_since: Option<i32>,
     /// The economy watch: credits and the harvesters' summed loads at the
@@ -392,7 +420,7 @@ impl Script {
             plan,
             targets: Vec::new(),
             next_target: 0,
-            next_army: 0,
+            next_army: [0; ARMY_KINDS.len()],
             waiting_since: None,
             watch: Watch::default(),
         }
@@ -572,7 +600,7 @@ impl Script {
     /// of `t`, looking `depth` buildings deeper when the one that clears it
     /// is blocked itself; `None` when `t` is not blocked, is refused for
     /// another reason (tech level, owner, side) or nothing clears it.
-    fn unblocker(&self, w: &World, t: TypeRef, depth: u32) -> Option<TypeRef> {
+    pub(crate) fn unblocker(&self, w: &World, t: TypeRef, depth: u32) -> Option<TypeRef> {
         if tech::buildable(w, self.house, t) {
             return None;
         }
@@ -856,7 +884,7 @@ impl Script {
         } else {
             self.candidates(w, Role::Army)
         };
-        for kind in [Kind::Vehicle, Kind::Infantry, Kind::Aircraft] {
+        for (k, kind) in ARMY_KINDS.into_iter().enumerate() {
             let of_kind: Vec<TypeRef> = army_types
                 .iter()
                 .copied()
@@ -865,10 +893,10 @@ impl Script {
             if of_kind.is_empty() {
                 continue;
             }
-            let t = of_kind[self.next_army % of_kind.len()];
+            let t = of_kind[self.next_army[k] % of_kind.len()];
             if !self.busy(w, t) {
                 out.push(Order::Build { what: t });
-                self.next_army += 1;
+                self.next_army[k] += 1;
             }
         }
 
@@ -1050,7 +1078,12 @@ impl Script {
         } else {
             SPIRAL_RINGS
         };
-        self.spiral(w, rings).find(|&c| self.fits(w, t, c))
+        // A cramped base (a start in a small clearing) has no cell with the
+        // usual gap: the gap narrows, as a person squeezes a building in
+        // when the room is short, down to none.
+        (0..=GAP)
+            .rev()
+            .find_map(|gap| self.spiral(w, rings).find(|&c| self.fits_gap(w, t, c, gap)))
     }
 
     /// The cells of the square spiral around the construction yard, ring by
@@ -1069,11 +1102,16 @@ impl Script {
     /// Whether a place order for `t` at `c` is legal, the cell test passes
     /// and the foundation is free.
     fn fits(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
+        self.fits_gap(w, t, c, GAP)
+    }
+
+    /// [`Script::fits`] with a gap of `gap` cells to other buildings.
+    fn fits_gap(&self, w: &World, t: TypeRef, c: CellXY, gap: i32) -> bool {
         // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12); an upgrade needs only the former.
         let upgrade = placement::place_type(w, t.index).upgrade_of.is_some();
         placement::place_legal(w, self.house, t, c)
             && (upgrade || placement::cell_test(w, t.index, c, &placement::Test::order(self.house)))
-            && self.free(w, t, c)
+            && self.free_gap(w, t, c, None, gap)
     }
 
     /// The water the base grows toward: when a naval factory type that the
@@ -1133,6 +1171,11 @@ impl Script {
 
     /// [`Script::free`], not counting object `but`.
     pub(crate) fn free_but(&self, w: &World, t: TypeRef, c: CellXY, but: Option<ObjectId>) -> bool {
+        self.free_gap(w, t, c, but, GAP)
+    }
+
+    /// [`Script::free_but`] with a gap of `gap` cells.
+    fn free_gap(&self, w: &World, t: TypeRef, c: CellXY, but: Option<ObjectId>, gap: i32) -> bool {
         let cells = placement::foundation_cells(w, t.index, c);
         // Only what the house knows: its own objects and those on cells it
         // has explored (the AI sees only its own house's shroud; fog is off
@@ -1151,14 +1194,99 @@ impl Script {
                 if o.kind == Kind::Building {
                     let (fw, fh) = o.foundation;
                     cells.iter().all(|k| {
-                        k.x < tl.x - GAP
-                            || k.x > tl.x + fw - 1 + GAP
-                            || k.y < tl.y - GAP
-                            || k.y > tl.y + fh - 1 + GAP
+                        k.x < tl.x - gap
+                            || k.x > tl.x + fw - 1 + gap
+                            || k.y < tl.y - gap
+                            || k.y > tl.y + fh - 1 + gap
                     })
                 } else {
                     !cells.contains(&tl)
                 }
             })
+    }
+
+    /// A diagnostic of the house's plan, counts only (local-lane reports):
+    /// whether it keeps its harvesters, for every role it lacks the cells
+    /// that the placement spiral turns down by stage, the enemies it has
+    /// seen and whether its army reaches them by the movement zone.
+    pub fn diagnose(&self, w: &World) -> String {
+        use std::fmt::Write as _;
+        let mut s = String::new();
+        let _ = write!(
+            s,
+            "selling {}, harvesters {}/{} (slave buildings {}), waiting since {:?}",
+            self.watch.selling,
+            self.of_role(w, Role::Harvester).len(),
+            self.plan.harvesters,
+            self.slave_buildings(w).len(),
+            self.waiting_since
+        );
+        let wanted = [Role::Power, Role::Refinery]
+            .into_iter()
+            .chain(FACTORIES.into_iter().map(Role::Factory));
+        for role in wanted {
+            let have = self.of_role(w, role).len();
+            let cands = self.candidates(w, role);
+            let _ = write!(
+                s,
+                "; {role:?}: have {have}, buildable types {}",
+                cands.len()
+            );
+            if have == 0
+                && let Some(&t) = cands.first()
+            {
+                let (mut cells, mut legal, mut test, mut free, mut bare) = (0, 0, 0, 0, 0);
+                for c in self.spiral(w, SPIRAL_RINGS) {
+                    cells += 1;
+                    let ok = placement::place_legal(w, self.house, t, c);
+                    legal += usize::from(ok);
+                    let t2 = ok
+                        && placement::cell_test(w, t.index, c, &placement::Test::order(self.house));
+                    test += usize::from(t2);
+                    free += usize::from(t2 && self.free(w, t, c));
+                    bare += usize::from(t2 && self.free_gap(w, t, c, None, 0));
+                }
+                let _ = write!(
+                    s,
+                    " (first type: of {cells} spiral cells {legal} legal, {test} pass the cell test, {free} also keep the gap, {bare} are free of objects)"
+                );
+            }
+        }
+        let enemies = self.seen_enemies(w);
+        let ebuild = enemies
+            .iter()
+            .filter(|&&(e, _)| w.obj(e).is_some_and(|o| o.kind == Kind::Building))
+            .count();
+        let _ = write!(
+            s,
+            "; seen enemies {} (buildings {ebuild}); army {}",
+            enemies.len(),
+            self.of_role(w, Role::Army).len()
+        );
+        let mut reach: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+        if let Some(home) = self.home(w) {
+            let mut probe = w.clone();
+            regions::ensure(&mut probe);
+            if let Some(&(_, goal)) = enemies.iter().min_by_key(|&&(_, c)| dist2(c, home)) {
+                for id in self.of_role(w, Role::Army) {
+                    let Some(o) = w.obj(id) else { continue };
+                    let Some(zone) = w.rules().unit(o.kind, o.type_index).map(|u| u.zone) else {
+                        continue;
+                    };
+                    let mine = regions::reach_in(&probe, o.pos.cell(), zone);
+                    let e = reach.entry(format!("{zone:?}")).or_default();
+                    e.0 += 1;
+                    e.1 += usize::from(
+                        matches!(mine, Reach::Region(_))
+                            && mine == regions::reach_in(&probe, goal, zone),
+                    );
+                }
+            }
+        }
+        let _ = write!(
+            s,
+            "; army reaching the nearest seen enemy, by zone (units, reaching): {reach:?}"
+        );
+        s
     }
 }

@@ -75,7 +75,9 @@ fn push(r: &mut Ruleset, reg: &str, n: &str) {
     }
 }
 
-fn building(w: i32, h: i32, cost: i32, power: i32) -> BuildingType {
+/// A building type of the synthetic skirmish: buildable by both sides at
+/// tech level 1, with the given foundation, cost and power.
+pub fn building(w: i32, h: i32, cost: i32, power: i32) -> BuildingType {
     let mut b = BuildingType {
         strength: Some(1000),
         foundation: Some([w, h]),
@@ -484,6 +486,30 @@ pub fn map() -> Map {
         }
     }
     m.waypoints = waypoints;
+    m
+}
+
+/// The cramped map: [`map`] with start 0 in a small clearing (the cells
+/// within `pocket` cells of the start) inside a moat of water four
+/// cells wide, left open by a land bridge of three cells to the east, so
+/// that the clearing is too small for the plan's buildings with the usual
+/// gap between them.
+pub fn map_cramped(pocket: i32) -> Map {
+    let mut m = map();
+    let s = at(-START_DX, 0);
+    let cells: Vec<CellXY> = m.cells.iter().map(|(c, _)| c).collect();
+    for c in cells {
+        let d = (c.x - s.x).abs().max((c.y - s.y).abs());
+        let bridge = (c.y - s.y).abs() <= 1 && c.x > s.x;
+        if d > pocket
+            && d <= pocket + 4
+            && !bridge
+            && let Some(cell) = m.cells.get_mut(c)
+        {
+            cell.tile = WATER_TILE;
+            cell.overlay = glasnost_map::NO_OVERLAY;
+        }
+    }
     m
 }
 
