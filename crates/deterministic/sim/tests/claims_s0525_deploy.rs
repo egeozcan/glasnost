@@ -177,3 +177,42 @@ fn the_own_cell_shot_is_made_in_the_deciding_processing() {
         "the own-cell target is dropped in the same processing"
     );
 }
+
+// spec: S-0525 claims 1 and 4 (revision 2, scenario RF4 part e) and S-0215 claim 31: with a live field centred on the unit's cell whose level has fallen below the firing threshold, the own-cell shot's top-up is effective in the tick of the deciding processing, not at a later tick or animation frame
+#[test]
+fn the_own_cell_top_up_is_effective_in_the_deciding_tick() {
+    let mut w = world();
+    let i = ready_unit(&mut w);
+    let cell = w.obj(i).unwrap().pos.cell();
+    let rr = w.rules().combat.weapon_index["RadRifle"];
+    radiation::detonation(&mut w, rr, cell);
+    let mut prev = w.obj(i).unwrap().beh.last;
+    let mut before = radiation::centre_field_level(&w, cell).expect("a field");
+    let mut topped = false;
+    for _ in 0..3000 {
+        step(&mut w);
+        let last = w.obj(i).unwrap().beh.last;
+        let level = radiation::centre_field_level(&w, cell);
+        if last != prev {
+            prev = last;
+            if last.is_some_and(|l| l.1 == 2) {
+                let after = level.expect("the field is still there");
+                assert!(after > before, "topped up in the tick of the shot");
+                assert!(
+                    w.obj(i).unwrap().target.is_none(),
+                    "the own-cell target is dropped in that processing"
+                );
+                // The deployed-fire sequence makes no second shot: the level only falls.
+                for _ in 0..3 {
+                    step(&mut w);
+                }
+                let later = radiation::centre_field_level(&w, cell).expect("field");
+                assert!(later <= after, "no extra shot from the sequence");
+                topped = true;
+                break;
+            }
+        }
+        before = level.expect("the field persists until the shot");
+    }
+    assert!(topped, "the unit fired once the level had fallen");
+}

@@ -103,6 +103,28 @@ fn a_sonic_second_weapon_keeps_its_bare_rate() {
     assert_eq!(w.obj(s).unwrap().combat.rearm_delay, 44);
 }
 
+// spec: S-0301 claim 19 (revision 20, scenario F18) and claim 1: charge arrival replaces the rearm countdown without a shot even when a countdown already runs, and leaves the burst counter and ammunition alone
+#[test]
+fn arrival_replaces_a_running_countdown() {
+    let mut w = world(|_| {});
+    let b = target_building(&mut w);
+    let s = sabotage(&mut w, "SABO", 0, b);
+    let tick = w.tick;
+    {
+        let o = w.obj_mut(s).unwrap();
+        o.combat.rearm_until = tick + 900;
+        o.combat.rearm_delay = 900;
+    }
+    let mut r = w.rng.clone();
+    let want = r.ranged(3, 5, w.rules().quirks.ranged_draw_half_span);
+    let ammo = w.obj(s).unwrap().combat.ammo;
+    assert!(bomb::charge_arrival(&mut w, s));
+    let o = w.obj(s).unwrap();
+    assert_eq!(o.combat.rearm_delay, want, "replaced, not kept or extended");
+    assert_eq!(o.combat.rearm_until, tick + want);
+    assert_eq!((o.combat.burst, o.combat.ammo), (0, ammo));
+}
+
 fn strike_setup() -> (World, ObjectId, ObjectId, ObjectId) {
     let mut w = world(|_| {});
     let d = quiet(&mut w, Kind::Vehicle, "DESIG", 0, at(0, 0));
