@@ -68,9 +68,72 @@ pub enum Locomotor {
     Ship,
     /// The hovering locomotor of a vehicle (S-0503 Terms).
     Hover,
+    /// The jumpjet locomotor of an infantry unit or a vehicle (S-0502).
+    Jump,
     /// Not moved in M3: every other locomotor, and a locomotor on a kind
     /// whose movement with it no spec gives (S-0207 Open questions).
     None,
+}
+
+/// A type's jumpjet fields (S-0502 Terms, claim 1): copied to each unit
+/// that gets the jumpjet locomotor.
+#[derive(Clone, Copy, Debug)]
+pub struct JumpFields {
+    /// The speed *S*, leptons per tick.
+    pub speed: i32,
+    /// The acceleration *a*, single precision held as a double.
+    pub accel: F64,
+    /// The climb rate *c*, single precision held as a double.
+    pub climb: F64,
+    /// The crash rate *k*, single precision held as a double.
+    pub crash: F64,
+    /// The cruise height *H* in leptons, after S-0102's minimum.
+    pub height: i32,
+    /// The wobble rate *W*, single precision held as a double.
+    pub wobbles: F64,
+    /// The wobble amplitude *d* in leptons.
+    pub deviation: i32,
+    /// The no-wobble flag.
+    pub no_wobble: bool,
+    /// The jumpjet turn-rate field *T* as imported (F6).
+    pub turn_field: i32,
+    /// The turn rate ω of the movement heading after S-0206 claim 6.
+    pub omega: i32,
+}
+
+impl JumpFields {
+    /// The jumpjet fields of an imported type, with the engine defaults of
+    /// S-0502 Import mapping.
+    pub fn from_type(u: &UnitType, mode: Rounding, negative_wrap: bool) -> Self {
+        let single = |d: &Option<Decimal>, text: &str| -> F64 {
+            d.clone()
+                .unwrap_or_else(|| Decimal(text.into()))
+                .single_value(mode)
+        };
+        // spec: S-0502 Import mapping (JumpjetTurnRate absent: 4)
+        let turn_field = u.jumpjet_turn_rate.unwrap_or(4);
+        Self {
+            // spec: S-0502 Import mapping (JumpjetSpeed absent: 14)
+            speed: u.jumpjet_speed.unwrap_or(14),
+            // spec: S-0502 Import mapping (the acceleration absent: 2.0, single precision)
+            accel: single(&u.jumpjet_accel, "2.0"),
+            // spec: S-0502 Import mapping (JumpjetClimb absent: 5.0, single precision)
+            climb: single(&u.jumpjet_climb, "5.0"),
+            // spec: S-0502 Import mapping (JumpjetCrash absent: 5.0, single precision)
+            crash: single(&u.jumpjet_crash, "5.0"),
+            // spec: S-0102 Import mapping (JumpjetHeight absent: 500, raised to 208 when smaller) and S-0502 claim 1 (H is the type's field after that minimum)
+            height: u.jumpjet_height.unwrap_or(500).max(208),
+            // spec: S-0502 Import mapping (JumpjetWobbles absent: 0.15, single precision)
+            wobbles: single(&u.jumpjet_wobbles, "0.15"),
+            // spec: S-0502 Import mapping (JumpjetDeviation absent: 40)
+            deviation: u.jumpjet_deviation.unwrap_or(40),
+            // spec: S-0502 Import mapping (JumpjetNoWobbles absent: no)
+            no_wobble: u.jumpjet_no_wobbles.unwrap_or(false),
+            turn_field,
+            // spec: S-0206 claims 6 and 14 (the jumpjet turn-rate field passed through claim 6: the movement heading's rate ω)
+            omega: turn_rate(turn_field, negative_wrap),
+        }
+    }
 }
 
 /// A mobile type's resolved fields.
@@ -149,8 +212,13 @@ pub struct UnitRules {
     /// Jumpjet flag.
     pub jumpjet: bool,
     /// Whether the type's imported locomotor is the jumpjet locomotor
-    /// (S-0511 claim 15), which our movement does not model.
+    /// (S-0511 claim 15, S-0502).
     pub jumpjet_locomotor: bool,
+    /// The jumpjet fields of the type (S-0502 claim 1).
+    pub jump: JumpFields,
+    /// The landing-first flag, `DeployToLand` (S-0502 Import mapping,
+    /// S-0517 Terms).
+    pub deploy_to_land: bool,
     /// Veteran and elite ability names.
     pub abilities: (Vec<String>, Vec<String>),
     /// Passengers: the capacity of a transport (S-0507 Terms).
@@ -1409,6 +1477,8 @@ fn unit_rules(
         (Kind::Vehicle, rs::Locomotor::Ship) => Locomotor::Ship,
         // spec: S-0503 Terms and claim 1 (a hovering vehicle: a vehicle with the hovering locomotor; the locomotor alone chooses the model)
         (Kind::Vehicle, rs::Locomotor::Hover) => Locomotor::Hover,
+        // spec: S-0502 claim 1 and Terms (a unit that gets the jumpjet locomotor: an infantry or vehicle type whose imported locomotor is the jumpjet one; the locomotor, not the JumpJet flag, chooses the model)
+        (Kind::Vehicle | Kind::Infantry, rs::Locomotor::Jumpjet) => Locomotor::Jump,
         _ => Locomotor::None,
     };
     let cells = |d: &Option<Decimal>| -> i32 {
@@ -1472,6 +1542,9 @@ fn unit_rules(
         jumpjet: b(u.jumpjet),
         // spec: S-0511 claim 15 (a type with jumpjet locomotion)
         jumpjet_locomotor: loco == rs::Locomotor::Jumpjet,
+        jump: JumpFields::from_type(&u, mode, q.turn_rate_negative_wrap),
+        // spec: S-0502 Import mapping (DeployToLand absent: no)
+        deploy_to_land: b(u.deploy_to_land),
         abilities: (u.veteran_abilities.clone(), u.elite_abilities.clone()),
         // spec: S-0507 Import mapping (Passengers absent: 0, not a transport)
         passengers: u.passengers.unwrap_or(0),

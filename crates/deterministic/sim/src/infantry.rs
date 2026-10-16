@@ -8,7 +8,7 @@ use glasnost_rules::sim::MovementZone;
 use serde::{Deserialize, Serialize};
 
 use crate::rules::Kind;
-use crate::world::{ObjectId, Target, World};
+use crate::world::{Layer, ObjectId, Target, World};
 
 /// The 42 sequence kinds (S-0107 Terms), with our snake-case names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -248,7 +248,20 @@ fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
             return x;
         }
     }
-    // spec: S-0107 claim 7 (hovering: airborne units only; no airborne infantry in M3)
+    // spec: S-0107 claim 7 and Constants (hovering: stand becomes hover when the unit is airborne, 208 leptons above the surface, and not on a bridge deck, and its hover entry has S ≥ 1; quirks.hover_needs_nonzero_start off: C > 0 instead)
+    if q == Seq::Stand
+        && o.layer != Layer::Deck
+        && crate::combat::weapon::airborne_by_height(w, id)
+        && u.sequences.get(Seq::Hover.key()).is_some_and(|e| {
+            if w.rules().quirks.hover_needs_nonzero_start {
+                e.start >= 1
+            } else {
+                e.count > 0
+            }
+        })
+    {
+        return Seq::Hover;
+    }
     // spec: S-0107 claim 7 (panic: walk becomes panic above fear 199)
     if q == Seq::Walk && fear > 199 {
         return Seq::Panic;
@@ -270,6 +283,8 @@ pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>)
     crate::depot::destination_given(w, id);
     // spec: S-0503 claim 4 (the hovering locomotor takes a move: ρ = 1 when powered and not moving now)
     crate::hover::take_destination(w, id);
+    // spec: S-0502 claim 16 (the jumpjet locomotor takes a destination point: the nearby-cell search, the move state and the re-ascent of a descending one)
+    crate::jump::take_destination(w, id);
     // spec: S-0207 claim 25 (a driving or ship locomotor installs the supplied point at the assignment, before any path search)
     crate::drive::take_destination(w, id);
     let Some(o) = w.obj(id) else { return };
@@ -467,9 +482,21 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
             request(w, id, q, false);
         }
     } else {
-        // spec: S-0107 claim 10 (moving: crawl when prone, walk otherwise; jumpjets ask for hover or fly)
-        let q = if s.prone { Seq::Crawl } else { Seq::Walk };
-        request(w, id, q, false);
+        if let Some(fraction) = crate::jump::speed_fraction(w, id) {
+            // spec: S-0107 claim 10 (moving now: a jumpjet asks for nothing while in the attack state, otherwise for hover at a speed fraction of at most 0.8 and fly above it; the double nearest 0.8)
+            if !s.attack {
+                let q = if fraction.le(crate::rules::nearest_double("0.8")) {
+                    Seq::Hover
+                } else {
+                    Seq::Fly
+                };
+                request(w, id, q, false);
+            }
+        } else {
+            // spec: S-0107 claim 10 (moving: crawl when prone, walk otherwise)
+            let q = if s.prone { Seq::Crawl } else { Seq::Walk };
+            request(w, id, q, false);
+        }
     }
 }
 

@@ -94,6 +94,43 @@ const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
         "S-0006, S-0009",
     ),
     ("overlays", "CellAnim", Outcome::Field, "S-0009"),
+    // spec: S-0502 claim 2 and Import mapping ([JumpjetControls] TurnRate, Speed, Climb, Acceleration, WobblesPerSecond and WobbleDeviation are read and ignored: no effect on play; CruiseHeight is S-0102's layer threshold)
+    (
+        "global:JumpjetControls",
+        "TurnRate",
+        Outcome::Ignored,
+        "S-0502",
+    ),
+    (
+        "global:JumpjetControls",
+        "Speed",
+        Outcome::Ignored,
+        "S-0502",
+    ),
+    (
+        "global:JumpjetControls",
+        "Climb",
+        Outcome::Ignored,
+        "S-0502",
+    ),
+    (
+        "global:JumpjetControls",
+        "Acceleration",
+        Outcome::Ignored,
+        "S-0502",
+    ),
+    (
+        "global:JumpjetControls",
+        "WobblesPerSecond",
+        Outcome::Ignored,
+        "S-0502",
+    ),
+    (
+        "global:JumpjetControls",
+        "WobbleDeviation",
+        Outcome::Ignored,
+        "S-0502",
+    ),
     ("global:Easy", "*", Outcome::Field, "S-0006"),
     ("global:Normal", "*", Outcome::Field, "S-0006"),
     ("global:Difficult", "*", Outcome::Field, "S-0006"),

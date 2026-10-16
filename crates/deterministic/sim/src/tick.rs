@@ -107,6 +107,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
             crate::rocket::tick(w, id);
             return;
         }
+        if crate::jump::crashing(w, id) {
+            // spec: S-0502 claim 18 and S-0312 claim 16 (a killed jumpjet that started to crash keeps its jumpjet movement until it hits the ground)
+            crate::jump::tick(w, id);
+            return;
+        }
         if crate::air::crashing(w, id) {
             // spec: S-0501 claim 9 (a crashing aircraft keeps its flying movement until it hits the ground)
             crate::air::tick(w, id);
@@ -208,6 +213,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         _ if crate::econ::release::temporary_drive(w, id) => !held && drive::tick(w, id),
         // spec: S-0207 claim 20 (d) (the jump on the first movement update after L is fixed; the behaviour is processed before it)
         Some(Locomotor::Teleport) => crate::teleport::tick(w, id),
+        // spec: S-0502 claims 3 to 21 (the jumpjet locomotor; S-0614 claim 8 lists no hold for it)
+        Some(Locomotor::Jump) => crate::jump::tick(w, id),
         // spec: S-0501 claims 1 to 10 (aircraft flight)
         Some(Locomotor::Fly) => !held && crate::air::tick(w, id),
         // A rocket-locomotor type outside the rocket-flight mode has no movement of its own (S-0506 Terms).

@@ -1519,23 +1519,23 @@ pub struct Quirks {
     // spec: S-0514 claim 2 and Edge cases
     #[serde(default = "on")]
     pub erasure_refused_hit_side_effects: bool,
-    /// An own-cell early cruise keeps the height above the surface r as its target even when the take-off threshold used the smaller bridge-adjusted h, so it can climb again above the deck; off: it keeps h at that transition. Not implemented yet (wave 2).
+    /// An own-cell early cruise keeps the height above the surface r as its target even when the take-off threshold used the smaller bridge-adjusted h, so it can climb again above the deck; off: it keeps h at that transition.
     // spec: S-0502 claim 7 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_bridge_early_cruise_height: bool,
-    /// The look-ahead adds the bridge height of the cell ahead to the jumpjet's own cell's clearance, not to the ahead cell's; off: each cell's bridge height is added to that cell's clearance. Not implemented yet (wave 2).
+    /// The look-ahead adds the bridge height of the cell ahead to the jumpjet's own cell's clearance, not to the ahead cell's; off: each cell's bridge height is added to that cell's clearance.
     // spec: S-0502 claim 9, F3 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_lookahead_bridge: bool,
-    /// A jumpjet that cannot land and finds no cell nearby destroys itself; off: it re-enters *hovering* over its current cell. Not implemented yet (wave 2).
+    /// A jumpjet that cannot land and finds no cell nearby destroys itself; off: it re-enters *hovering* over its current cell.
     // spec: S-0502 claim 17 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_no_cell_self_destruct: bool,
-    /// A straight-line step uses F5's shifted angle, table trigonometry and separate coordinate truncation, so southward and westward steps drift one lepton across the line of travel; off: the displacement is the speed times the double-precision sine and cosine of the facing, rounded half away from zero. Not implemented yet (wave 2).
+    /// A straight-line step uses F5's shifted angle, table trigonometry and separate coordinate truncation, so southward and westward steps drift one lepton across the line of travel; off: the displacement is the speed times the double-precision sine and cosine of the facing, rounded half away from zero.
     // spec: S-0502 claim 10, F5 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_step_truncation: bool,
-    /// The cruise bands' remaining-turn test uses the clockwise difference only, so even a small anticlockwise turn takes the band's slower speed; off: it uses the smaller of the clockwise and anticlockwise differences. Not implemented yet (wave 2).
+    /// The cruise bands' remaining-turn test uses the clockwise difference only, so even a small anticlockwise turn takes the band's slower speed; off: it uses the smaller of the clockwise and anticlockwise differences.
     // spec: S-0502 claim 11, F6 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_turn_slowdown_one_sided: bool,

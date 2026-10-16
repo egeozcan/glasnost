@@ -584,6 +584,56 @@ fn cash_keys_of_a_building_type() {
     );
 }
 
+// spec: S-0502 Import mapping and Key case (the jumpjet fields of a type: JumpjetSpeed, JumpjetClimb, JumpjetCrash, JumpjetHeight, JumpjetAccel, JumpjetWobbles, JumpjetDeviation, JumpjetNoWobbles, JumpjetTurnRate; the stock spellings JumpJetAccel and JumpJetTurnRate are other keys and feed nothing; DeployToLand; a later layer that omits a key keeps the value)
+#[test]
+fn jumpjet_type_keys() {
+    let base = "[InfantryTypes]\n0=JJ\n1=STOCK\n[JJ]\nJumpjetSpeed=20\nJumpjetClimb=3.5\nJumpjetCrash=7.25\nJumpjetHeight=600\nJumpjetAccel=1.5\nJumpjetWobbles=0.3\nJumpjetDeviation=25\nJumpjetNoWobbles=yes\nJumpjetTurnRate=9\nDeployToLand=yes\n[STOCK]\nJumpJetAccel=9.5\nJumpJetTurnRate=77\n";
+    let (s, _) = import_with_map(base, "[JJ]\nJumpjetSpeed=22\n");
+    let t = &s.infantry["JJ"];
+    assert_eq!(t.jumpjet_speed, Some(22));
+    let rz = glasnost_num::Rounding::TowardZero;
+    let text = |d: &Option<glasnost_rules::sim::Decimal>| {
+        d.as_ref()
+            .map(|d| d.single_value(rz) == glasnost_num::decimal::nearest_double(&format_single(d)))
+    };
+    // The values read as the single-precision numbers of the written decimals.
+    fn format_single(d: &glasnost_rules::sim::Decimal) -> String {
+        d.0.clone()
+    }
+    let _ = text;
+    let single = |d: &Option<glasnost_rules::sim::Decimal>, written: &str| {
+        d.as_ref().map(|d| d.single_value(rz))
+            == Some(glasnost_rules::sim::Decimal(written.into()).single_value(rz))
+    };
+    assert!(single(&t.jumpjet_climb, "3.5"));
+    assert!(single(&t.jumpjet_crash, "7.25"));
+    assert_eq!(t.jumpjet_height, Some(600));
+    assert!(single(&t.jumpjet_accel, "1.5"));
+    assert!(single(&t.jumpjet_wobbles, "0.3"));
+    assert_eq!(t.jumpjet_deviation, Some(25));
+    assert_eq!(t.jumpjet_no_wobbles, Some(true));
+    assert_eq!(t.jumpjet_turn_rate, Some(9));
+    assert_eq!(t.deploy_to_land, Some(true));
+    let stock = &s.infantry["STOCK"];
+    assert_eq!(
+        (stock.jumpjet_accel.clone(), stock.jumpjet_turn_rate),
+        (None, None),
+        "the stock spellings have no effect"
+    );
+}
+
+// spec: S-0502 Import mapping ([AudioVisual] DeployDir: an integer 8-step direction, absent: none given; the six [JumpjetControls] values are read and ignored)
+#[test]
+fn deploy_direction_and_jumpjet_controls() {
+    let (s, _) = import(
+        "[AudioVisual]\nDeployDir=9\n[JumpjetControls]\nSpeed=3\nClimb=2\n",
+        "",
+    );
+    assert_eq!(s.general.economy.deploy_dir, Some(9));
+    let (s, _) = import("[General]\nFlashFrameTime=7\n", "");
+    assert_eq!(s.general.economy.deploy_dir, None);
+}
+
 // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft, read for unit types; absent: no)
 #[test]
 fn considered_aircraft_flag() {

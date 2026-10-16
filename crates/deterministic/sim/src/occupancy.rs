@@ -87,6 +87,8 @@ pub fn in_progress(w: &World, id: ObjectId) -> bool {
                 .is_some_and(|d| d.track.is_some() || d.turning_in_place)
             // spec: S-0503 Terms (a hovering vehicle with a heading point is moving)
             || o.hover.as_ref().is_some_and(|h| h.point.is_some())
+            // spec: S-0502 Terms and claim 20 (a jumpjet's locomotor is moving it in every jumpjet state except grounded and hovering)
+            || crate::jump::moving_now(w, o.id)
             || !o.path.steps.is_empty()
     })
 }

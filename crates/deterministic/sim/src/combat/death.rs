@@ -369,6 +369,10 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
                 // spec: S-0312 claims 15 and 32 table row 2 (a vessel already sinking that fails claim 10's conditions ends at 0 health after claim 9's animations and draws; a type that cannot crash stays in play, still sinking: S-0504 claim 4 goes on, tick::object_turn)
                 return;
             }
+            // spec: S-0312 claims 15 and 16 (a destroyed vehicle whose type can crash, above the terrain, starts to crash and stays in play until it hits the ground; a crashable vehicle using jumpjet movement uses S-0502 claim 18's motion)
+            if crashable && !already_sinking && crate::jump::start_crash(w, id, Some(hit)) {
+                return;
+            }
             // spec: S-0312 claim 15 (every other destroyed vehicle leaves play at the end of its death effects; a crashable type that was sinking cannot start a crash below the surface and is removed)
             leave_play(w, id);
         }
@@ -441,6 +445,10 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
     // Row 1 (the water case) rests on a condition no spec identifies; it is not applied.
     // spec: S-0107 claim 17 row 2 (a prone cyborg or a jumpjet type: a general animation, no sequence)
     if (u.cyborg && prone) || u.jumpjet {
+        // spec: S-0107 claim 17 (the rows that show no sequence remove the unit at once, unless its type has the crash flag and a crash begins instead: the jumpjet locomotor's, S-0502 claim 18)
+        if u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
+            return;
+        }
         leave_play(w, id);
         return;
     }

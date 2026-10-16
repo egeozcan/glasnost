@@ -213,6 +213,9 @@ pub struct Rules {
     /// The pose direction of an aircraft released onto a dock, 1/256 turns
     /// (S-0404 claim 13).
     pub pose_dir: i32,
+    /// The game-wide deploy direction, an 8-step direction (S-0502 claim 15
+    /// and Import mapping; absent 0).
+    pub deploy_dir: i32,
     /// The separate-aircraft flag (S-0404 claim 2).
     pub separate_aircraft: bool,
     /// The pad aircraft types (S-0404 claim 2).
@@ -371,6 +374,8 @@ impl Rules {
             max_queued: g.maximum_queued_objects.unwrap_or(5),
             // spec: S-0404 Constants (pose direction absent: 0)
             pose_dir: g.pose_dir.unwrap_or(0),
+            // spec: S-0502 Import mapping ([AudioVisual] DeployDir absent: 0 at program start)
+            deploy_dir: g.deploy_dir.unwrap_or(0),
             // spec: S-0404 Import mapping (SeparateAircraft absent: no)
             separate_aircraft: g.separate_aircraft.unwrap_or(false),
             pad_aircraft: g

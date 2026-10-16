@@ -1135,6 +1135,42 @@ pub struct UnitType {
     /// `JumpjetTurnRate` (S-0206 claim 14).
     #[serde(default)]
     pub jumpjet_turn_rate: Option<i32>,
+    /// `JumpjetSpeed`, the jumpjet speed *S*, an integer in leptons per
+    /// tick (S-0502 Import mapping, absent 14).
+    #[serde(default)]
+    pub jumpjet_speed: Option<i32>,
+    /// `JumpjetClimb`, the climb rate *c*, a single-precision decimal
+    /// (S-0502 Import mapping, absent 5.0).
+    #[serde(default)]
+    pub jumpjet_climb: Option<Decimal>,
+    /// `JumpjetCrash`, the crash rate *k*, a single-precision decimal
+    /// (S-0502 Import mapping, absent 5.0).
+    #[serde(default)]
+    pub jumpjet_crash: Option<Decimal>,
+    /// `JumpjetHeight`, the jumpjet cruise height *H* in leptons (S-0502
+    /// Import mapping; S-0102 owns its minimum and default).
+    #[serde(default)]
+    pub jumpjet_height: Option<i32>,
+    /// `JumpjetAccel`, the acceleration *a*, a single-precision decimal
+    /// (S-0502 Import mapping, absent 2.0). The stock spelling `JumpJetAccel`
+    /// is another key (S-0001) and is not read.
+    #[serde(default)]
+    pub jumpjet_accel: Option<Decimal>,
+    /// `JumpjetWobbles`, the wobble rate *W*, a single-precision decimal
+    /// (S-0502 Import mapping, absent 0.15).
+    #[serde(default)]
+    pub jumpjet_wobbles: Option<Decimal>,
+    /// `JumpjetDeviation`, the wobble amplitude *d* in leptons (S-0502
+    /// Import mapping, absent 40).
+    #[serde(default)]
+    pub jumpjet_deviation: Option<i32>,
+    /// `JumpjetNoWobbles`, the no-wobble flag (S-0502 Import mapping).
+    #[serde(default)]
+    pub jumpjet_no_wobbles: Option<bool>,
+    /// `DeployToLand`, the landing-first flag of an in-place deploying
+    /// vehicle (S-0502 Import mapping, S-0517 Import mapping).
+    #[serde(default)]
+    pub deploy_to_land: Option<bool>,
     /// `Turret`.
     #[serde(default)]
     pub turret: Option<bool>,

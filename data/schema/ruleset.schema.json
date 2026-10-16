@@ -3376,6 +3376,15 @@
           ],
           "default": null
         },
+        "deploy_dir": {
+          "description": "`[AudioVisual] DeployDir`, the game-wide deploy direction, an 8-step\ndirection (S-0502 claim 15 and Import mapping; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "flash_frame_time": {
           "description": "`[General] FlashFrameTime`, *F* in ticks (S-0410 claim 10); absent: 7.",
           "type": [
@@ -10193,6 +10202,14 @@
           ],
           "default": null
         },
+        "deploy_to_land": {
+          "description": "`DeployToLand`, the landing-first flag of an in-place deploying\nvehicle (S-0502 Import mapping, S-0517 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "deployed_crushable": {
           "description": "`DeployedCrushable`.",
           "type": [
@@ -10454,6 +10471,74 @@
           ],
           "default": null
         },
+        "jumpjet_accel": {
+          "description": "`JumpjetAccel`, the acceleration *a*, a single-precision decimal\n(S-0502 Import mapping, absent 2.0). The stock spelling `JumpJetAccel`\nis another key (S-0001) and is not read.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jumpjet_climb": {
+          "description": "`JumpjetClimb`, the climb rate *c*, a single-precision decimal\n(S-0502 Import mapping, absent 5.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jumpjet_crash": {
+          "description": "`JumpjetCrash`, the crash rate *k*, a single-precision decimal\n(S-0502 Import mapping, absent 5.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "jumpjet_deviation": {
+          "description": "`JumpjetDeviation`, the wobble amplitude *d* in leptons (S-0502\nImport mapping, absent 40).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "jumpjet_height": {
+          "description": "`JumpjetHeight`, the jumpjet cruise height *H* in leptons (S-0502\nImport mapping; S-0102 owns its minimum and default).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "jumpjet_no_wobbles": {
+          "description": "`JumpjetNoWobbles`, the no-wobble flag (S-0502 Import mapping).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "jumpjet_speed": {
+          "description": "`JumpjetSpeed`, the jumpjet speed *S*, an integer in leptons per\ntick (S-0502 Import mapping, absent 14).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "jumpjet_turn_rate": {
           "description": "`JumpjetTurnRate` (S-0206 claim 14).",
           "type": [
@@ -10462,6 +10547,17 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "jumpjet_wobbles": {
+          "description": "`JumpjetWobbles`, the wobble rate *W*, a single-precision decimal\n(S-0502 Import mapping, absent 0.15).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "large_visceroid": {
           "description": "`LargeVisceroid` (S-0009 claim 46, S-0202 Import mapping).",

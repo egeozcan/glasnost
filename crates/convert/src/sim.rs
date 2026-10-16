@@ -329,6 +329,17 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("strength", "Strength", Int),
     ("rot", "ROT", Int),
     ("jumpjet_turn_rate", "JumpjetTurnRate", Int),
+    // spec: S-0502 Import mapping (the jumpjet fields of a type: speed an integer; climb, crash, acceleration and wobble rate single-precision decimals; cruise height and wobble amplitude integers; the no-wobble flag; the key of the acceleration is spelled with a lower-case j and a capital A, S-0001)
+    ("jumpjet_speed", "JumpjetSpeed", Int),
+    ("jumpjet_climb", "JumpjetClimb", Dec),
+    ("jumpjet_crash", "JumpjetCrash", Dec),
+    ("jumpjet_height", "JumpjetHeight", Int),
+    ("jumpjet_accel", "JumpjetAccel", Dec),
+    ("jumpjet_wobbles", "JumpjetWobbles", Dec),
+    ("jumpjet_deviation", "JumpjetDeviation", Int),
+    ("jumpjet_no_wobbles", "JumpjetNoWobbles", Bool),
+    // spec: S-0502 Import mapping and S-0517 Import mapping (DeployToLand: a boolean)
+    ("deploy_to_land", "DeployToLand", Bool),
     ("turret", "Turret", Bool),
     ("turret_spins", "TurretSpins", Bool),
     ("crusher", "Crusher", Bool),

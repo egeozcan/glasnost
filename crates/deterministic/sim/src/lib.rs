@@ -30,6 +30,7 @@ pub mod econ;
 pub mod fall;
 pub mod hover;
 pub mod infantry;
+pub mod jump;
 pub mod load;
 pub mod mp_triggers;
 pub mod naval;

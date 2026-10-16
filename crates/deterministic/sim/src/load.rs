@@ -446,6 +446,7 @@ pub fn new_game(
         projectiles: Default::default(),
         scaled_spawn_delay: Default::default(),
         flying: Default::default(),
+        jump_slots: Default::default(),
         cloak: Default::default(),
         sw: Default::default(),
         spawned: Default::default(),
