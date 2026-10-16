@@ -2,11 +2,11 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 31
+revision: 32
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295]
 supersedes: []
@@ -320,6 +320,11 @@ used by this spec:
    that cell is the attacker's own cell and its own entry still counts as taken. These choices
    supply approach points, not reservations by themselves. Claim 21 below owns the walking
    consequence of a successful shortcut.
+
+   Infantry jumpjet destination adjustment also uses this occupant-aware choice. S-0502
+   claim 23 owns its desired point, occupancy surface and ranged draw, including refusal
+   and failure cases; its backing and confidence are those of that claim. This does not
+   use the ordinary walker's surface-selection test above.
 
    Transport exits also use this occupant-aware choice:
    - S-0507 claim 10 uses the serving neighbour's centre as the desired point for an infantry

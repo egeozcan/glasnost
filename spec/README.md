@@ -85,7 +85,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0306](combat/S-0306-projectiles.md) | Projectiles (launch, flight, homing, scatter, detonation) | combat | 12 | approved | — |
 | [S-0408](economy/S-0408-sell-repair.md) | Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired) | economy | 20 | approved | — |
 | [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 28 | approved | — |
-| [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 31 | approved | — |
 | [S-0404](production/S-0404-production-queue-payment.md) | Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion) | production | 17 | approved | — |
 | [S-0410](ui/S-0410-radar-minimap.md) | Radar and minimap (when radar is available, what the radar map shows and how it is coloured) | ui | 20 | approved | — |
 | [S-0210](movement/S-0210-crushing.md) | Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing) | movement | 21 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 33 | approved | — |
 | [S-0313](combat/S-0313-firing-positions.md) | Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack) | combat | 9 | approved | — |
 | [S-0517](combat/S-0517-deployable-units.md) | Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing) | combat | 6 | approved | — |
+| [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 32 | approved | — |
