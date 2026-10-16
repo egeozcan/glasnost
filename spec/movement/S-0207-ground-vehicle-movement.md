@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 34
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130]
 supersedes: []
 ---
 
@@ -60,6 +60,8 @@ the *scatter* and *paralysed* properties of a behaviour, *falling back to rest* 
 S-0211: the land type *tunnel* and the *high-bridge cell* (its claim 15). Whether a drive vehicle
 is *on a bridge deck* (glossary *bridge deck*) is set by claim 5 here. The *exit apron cell*
 is the target cell of a ground vehicle factory's exit track (S-0417 Terms and claim 3).
+
+The *order-level destination* is the destination that behaviours and factory report tests see, as S-0212 takes it from S-0503 claims 15 and 16. *Point suppression* is claim 27's one-application skip of the next otherwise due nonempty point application; a *pending* suppression is one not yet consumed.
 
 - **Drive vehicle.** A vehicle whose locomotor is the driving locomotor (wheeled and tracked ground
   vehicles in stock data), that is, an object of the vehicle type kind (glossary *vehicle*) that
@@ -1080,9 +1082,13 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       Landing for deploy is not such a transition; destination-driven cancellation of jumpjet
       landing belongs to S-0502 claim 16 (see also S-0517 claim 8).
       When the object is given a destination (its behaviour or an order sets one, S-0215),
-      subject to those restrictions, the locomotor takes it at once. It drops the destination and does
+      subject to those restrictions, the locomotor takes it at once, unless a pending suppression (claim 27) stops it. It drops the destination and does
       nothing, when the object is disabled by an electromagnetic pulse, is *held*
-      (S-0614 Terms), is *being erased* or is *phasing in* (S-0214 Terms). Otherwise it fixes its
+      (S-0614 Terms), is *being erased* or is *phasing in* (S-0214 Terms). This drop empties the
+      order-level destination and happens only when the locomotor is offered the destination:
+      a pending one-application point suppression (claim 27) means it is not offered, so a suppressed
+      assignment is never dropped by this rule. A pending suppression is the only exception to the drop and to the fixing of a landing point: under one, whatever the object's state, the destination is kept and no landing point is fixed (claim 27, Q-1130 table, second row). Parts (e), (f) and (h) below, the State and ordering table and the
+      open questions state that exception where it applies. Otherwise it fixes its
       **landing point** *L* at once (parts b and c). For a vehicle, the vehicle-present
       mark of the occupancy record (S-0209) moves at once from the cell of the object's old point
       to the cell of *L*. For a vehicle this reservation is in the **ground record**, even
@@ -1158,7 +1164,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       jumping object (S-0519 Terms). The exception also applies after a strike ends normally:
       its strike target is kept (S-0519 claims 18 and 20), so no strike need be in progress.
       This is not an erasing-weapon exception: an object being erased drops destinations
-      under part a and cannot make this jump (S-0514 claim 16).
+      under part a, except that a pending suppression (claim 27) keeps the destination, and it
+      cannot make this jump (S-0514 claim 16).
       When an override is in effect and that exception does
       not hold, the attacker reverts on the jump tick: it drops the jumping object if that object
       remains its target, but keeps a different target restored by the revert (S-0215 claim 10).
@@ -1213,7 +1220,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       in S-0301) for *D* ticks, *D* from F9. An object whose type has the harvester flag of a
       vehicle type does not phase in at all. While phasing in:
       - it stays where it landed,
-      - every new destination is dropped (part a), so orders that would move it are lost, not
+      - every new destination is dropped (part a), except one that a pending suppression (claim 27)
+        keeps, so orders that would move it are lost, not
         delayed; S-0214 owns the refusal of player orders to a unit that is phasing in,
       - a weapon's firing check gives the early *rearming* answer (S-0301 claim 9),
       - its behaviour is still processed (S-0215 claim 2).
@@ -1236,7 +1244,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       is not followed afterwards. A new destination given before the jump replaces *L*, moving the
       occupancy mark again (part a). Because the jump follows on the next movement update, a target
       that moves rarely gets a chance to move in between. A destination given while the object is
-      phasing in is dropped. Whether a behaviour that chases a moving target gives a new
+      phasing in is dropped, unless a pending suppression (claim 27) keeps it. Whether a behaviour
+      that chases a moving target gives a new
       destination after the jump is S-0215's.
     - (i) **Random draws.** Landing choice and position change take no draw of their own.
       The two warp animations are ordinary animation creations and take every applicable
@@ -1652,7 +1661,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     **The restoring assignment's destination.** With a teleporting predecessor,
     successful restoration makes that same assignment fix its landing point under
     claim 20, rather than install a driving destination point first. Provided no
-    already-pending point suppression or claim 20 disabling state prevents it, the
+    already-pending point suppression (see the following paragraphs) or claim 20
+    disabling state prevents it, the
     vehicle jumps on its next teleporting movement update, possibly in the same tick
     (claim 20 d). A pending earlier teleport can therefore be replaced by this offered
     destination. Restoration sets neither pending state, but does not exempt this
@@ -1671,6 +1681,40 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     the qualified docking assignment described here remains a separate restoration
     route; neither requires an invented unconditional clear at the apron.
 
+    **Suppression meets a teleporting destination (Q-1130).** The suppression test belongs to
+    every nonempty vehicle destination assignment, whatever the active locomotor. An unchanged
+    offer is rejected without consuming any suppression. A refusal that stops the assignment
+    before the order-level destination is kept leaves suppression pending. Otherwise the nonempty
+    order-level destination is kept, and while suppression is pending the active locomotor is
+    not offered the point. It is not specific to restoration, to a teleporting predecessor or
+    to driving. The table gives the results for a vehicle whose active locomotor is teleporting.
+
+    | Vehicle at the assignment | Suppression pending before it | Result |
+    |---|---|---|
+    | Not disabled, held, being erased or phasing in | no | Claim 20 (a) fixes the landing point |
+    | Any state, including disabled, held, being erased or phasing in | yes | The locomotor is not offered the point: no landing point is fixed, no claim 20 (a) refusal test runs, and no earlier landing point, pending jump or reservation changes. Suppression is consumed. The new nonempty order-level destination stays |
+    | Disabled, held, being erased or phasing in | no | The destination is dropped: the order-level destination becomes empty (claim 20 a). Nothing is consumed |
+
+    So a pending suppression is consumed by a teleporting vehicle even while it is phasing in or
+    held, and the order-level destination then stays without a landing point; the vehicle
+    does not jump toward it. A later equal offer is ignored by the unchanged-destination
+    rejection unless refresh is pending, so nothing re-fixes the point until a further
+    effective assignment arrives. A refusal that stops the assignment before the order-level
+    destination is kept (a bunkered vehicle or one riding in an open-topped transport) leaves
+    suppression pending; empty assignments never test it.
+    Those refusals belong to the specs that own them.
+
+    Reachability: the dock fallback sets suppression only for a vehicle whose active
+    locomotor is not teleporting. It can set suppression in an assignment that an early refusal
+    then stops before the order-level destination is kept. When an assignment goes on to keep
+    its destination, the same assignment consumes the suppression. Suppression therefore stays
+    pending across assignments only if an early refusal stops the assignment that set it and the
+    locomotor becomes teleporting before the next assignment. A vehicle holding dock contact is not ordinarily
+    in a bunker or an open-topped transport, and no sequence is known that makes it so and
+    then switches it to teleporting. Even a purpose-made map with scripted input has no known
+    way to build that state, so the table's second row and the restored-predecessor case are
+    `unmeasured` for that reason, and D32 gives a conditional diagnostic.
+
     **Separate consumption events.** A changed or refreshed unchanged assignment
     consumes any refresh already pending even if subsequent point adjustment fails.
     A rejected assignment does not consume it; S-0502 claim 28 owns the balloon-hover
@@ -1683,8 +1727,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     next otherwise eligible equal assignment can consequently reach the dock test again.
     There is no limit of one test or one fallback per entry attempt.
 
-    Suppression applies equally to claim 25's driving point and to a jumpjet movement
-    point. It consumes one application, not a whole order or every future assignment.
+    Suppression applies equally to claim 25's driving point, to a jumpjet movement
+    point and to a teleporting landing point (the table above). It consumes one application, not a whole order or every future assignment.
     An empty clear stops locomotion but does not consume nonempty-point suppression.
     Claim 20's landing-point rules apply only when a point actually reaches teleporting
     movement. Ordinary stop, move, deploy and behaviour changes do not independently
@@ -1698,14 +1742,18 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
       predecessor's same-assignment destination and separate consumption are
       `unmeasured`: no ordinary stock sequence isolating every predicate and both
       outcomes is established. In particular the immobilized, non-teleporting
-      combination has no established ordinary-play fixture. D32 gives conditional
+      combination has no established ordinary-play fixture. The second row of the Q-1130 table
+      (suppression pending at an assignment to a teleporting vehicle) is likewise `unmeasured`:
+      the reachability paragraph above says why no fixture, ordinary or scripted, is known to
+      produce it. D32 gives conditional
       diagnostics, not evidence that those paths are unreachable or that their states
       may be omitted.
     - Confidence: high for immobilization identity, the assignment event, predicates,
       temporary-driving eligibility, routing to the restored predecessor,
       placement clear and distinct consumption events; medium for ordinary stock
       reachability beyond placement and the composed post-exit restoration
-      consequences inherited from S-0417 claim 16
+      consequences inherited from S-0417 claim 16; medium for rows 1 and 3 of the Q-1130 table,
+      which restate claim 20 (a) and its backing (D22); low for row 2, which is `unmeasured` (see above)
 
 ## Formulas
 
@@ -1860,7 +1908,7 @@ observable completion tick. The harvester exception instead has no phasing-in st
 | Targeting-timer threshold at the end of phasing in | more than 10 | ticks | Claim 20 f |
 | Range of the targeting-timer draw at the end of phasing in | 4 to 8, both included | ticks | Claim 20 f |
 
-**T1 Track point tables.** Each table row gives a point in driving order. The index starts at 0. The columns *x* and *y* are the point's displacement from the track target in leptons along the map axes (*y* grows towards map south); *f* is its facing in 1/256 turn. The target itself, (0, 0), is not listed. Point numbers used for chain, entry and release points count from 0. A release point lies inside the curve's first cell (the cell its current step enters) and is the point at which that cell's occupancy record (glossary) stops showing a vehicle present, although the vehicle is still in the cell (S-0209 claim 1). The values include irregular points, including (−129, 129) in curve B and facings 66 then 64 in curve D. Curve F's point 0, (−512, 256, 32), is the track's own start (the centre of the cell the vehicle starts from); every other curve's first point lies one increment along the track. Curve F's point 0 still costs 7 progress units to pass and moves the vehicle 0 leptons; F3's cost of 399 includes it. All listed values are part of the original data and are kept.
+**T1 Track point tables.** Each table row gives a point in driving order. The index starts at 0. The columns *x* and *y* are the point's displacement from the track target in leptons along the map axes (*y* grows towards map south); *f* is its facing in 1/256 turn. The target itself, (0, 0), is not listed. Point numbers used for chain, entry and release points count from 0. A release point lies inside the curve's first cell (the cell its current step enters) and is the point at which that cell's occupancy record (glossary) stops showing a vehicle present, although the vehicle is still in the cell (S-0209 claim 1). The values include irregular points, including (−129, 129) in curve B and facings 66 then 64 in curve D. Curve F's point 0, (−512, 256, 32), is the track's own start (the centre of the cell the vehicle starts from); every other curve's first point lies one increment along the track. Curve F's point 0 still costs 7 progress units to pass and moves the vehicle 0 leptons; F3's cost of 399 includes it. All listed values are engine constants: fixed inside the original's program, not read from any data file.
 
 **Curve A** (straight, towards map north; 23 points; no chain point).
 
@@ -2206,10 +2254,11 @@ its target in the direction of travel, and end with facing equal to the last ste
 | holding a path found on this tick | repeated check: cloaked blocker or blocked | gives up the move |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, no threat point | destination from the nearby-cell search, behaviours unchanged, no draw (claim 16) |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, threat point | one draw over 0 to 2 (after a draw over 1 to 4 when it has a target and the request is not forced), destination among the eight neighbours, *move* queued (claim 16) |
-| teleporting, idle | destination given, not disabled, not being erased, not phasing in | landing point *L* fixed at once, kind-specific occupancy reservation moved to *L* (claim 20 a–c) |
+| teleporting, idle | destination given, not disabled, not held, not being erased, not phasing in, no suppression pending | landing point *L* fixed at once, kind-specific occupancy reservation moved to *L* (claim 20 a–c) |
+| teleporting, any state | destination given, suppression pending (claim 27) | no landing point fixed, no jump; destination kept; suppression consumed (claim 27, Q-1130 table, second row) |
 | teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: target-loss and revert subject to claim 20 e's airstrike and restored-target distinctions, projectiles lose it, kind-specific arrival and crate rules apply, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
 | teleporting, *L* fixed | its next movement update, *L* equals its position or none was fixed | destination removed, no jump (claim 20 b, d) |
-| phasing in | destination given | dropped (claim 20 a) |
+| phasing in | destination given | dropped (claim 20 a), unless suppression is pending (claim 27): then kept, no landing point |
 | phasing in | first tick with *t* − *t*₀ ≥ *D* (at least *t*₀ + 1) | phasing in ends; only with no target, conditional timer shortening then gated teleport search, whose normal timer draw replaces the shortening when both occur; idle fallback when no target is set (claim 20 f) |
 
 A change of speed fraction takes effect in the progress of the same tick (claim 10).
@@ -2258,7 +2307,7 @@ its new destination from that tick.
   costs slightly more than the track sums. This is original behaviour and has no switch: it is also the only rule that empties the budget
   that piles up above the track-end cap (claim 12), so turning it off would need a new limit of its
   own, which is a design change rather than a quirk.
-- **Odd points in the track data** (T1) are original data, and our engine keeps them.
+- **Odd points in the track data** (T1) are engine constants of the original, and our engine keeps them.
 - **Slope factors at the ends of a bridge deck** (claim 9 (c)). The slope factor compares terrain
   heights, so the track onto a high bridge from land at deck level gets the downhill factor and the
   track off it gets the uphill factor, although the deck is level. This is original behaviour and
@@ -2304,7 +2353,7 @@ its new destination from that tick.
   deck height and listing. Removal clears both a pending reservation and actual
   occupancy, leaving no orphan reservation. S-0209's ordinary entry rules apply to the selected record in
   either setting. The switch changes no landing search, delay or random draw by itself.
-- **Orders given while phasing in are lost** (claim 20 f), not deferred to its end. Original
+- **Orders given while phasing in are lost** (claim 20 f), not deferred to its end, except a destination that a pending suppression keeps (claim 27). Original
   behaviour, no switch.
 - **`quirks.drive_giveup_ignores_contact`** (claim 15, F7). Default (original): at a step check the
   give-up test against stationary friends does not ask about contact, so a vehicle within the
@@ -2338,6 +2387,15 @@ its new destination from that tick.
 - **A scatter without a threat point queues no *move*** (claim 16). The vehicle drives to the scatter
   cell in whatever behaviour it has, so after arriving it does what that behaviour does with no
   destination (S-0215). Original behaviour, no switch.
+- **A teleporting vehicle keeps a destination without a landing point under pending suppression**
+  (claim 27, Q-1130). Original behaviour, selected by `quirks.teleport_suppression_keeps_destination`
+  (proposed name; default: the original behaviour). The state arises from a pending suppression at
+  an assignment to a teleporting vehicle in any state (claim 27, Q-1130 table, second row), so it
+  is not limited to disabled, held, erased or phasing-in vehicles. Off (proposed alternative): the
+  suppressed assignment is handled by claim 20 (a) as an ordinary one, with the destination dropped
+  in those four states and a landing point fixed in the others. No ordinary or scripted play is
+  known to reach the state (claim 27, reachability). The destination stays and no jump follows until
+  a later effective assignment. Whether the switch exists, and its default, are for the project lead (Q1).
 
 ## Import mapping
 
@@ -3699,6 +3757,12 @@ the test again through refresh; there is no once-per-entry latch. Occupying the 
 with any ground vehicle, including the mover, must prevent this activation. Empty
 clears do not consume any still-pending nonempty-point suppression. Record jumpjet
 point applications separately if a stock sequence qualifies a jumpjet.
+If a pending suppression ever meets a teleporting vehicle, record its landing point,
+order-level destination, phasing-in and held states and the suppression state across that
+one assignment. Expect no new landing point fixed by this assignment, an unchanged earlier jump, the new order-level
+destination retained and suppression consumed, including while phasing in or held. A
+dropped destination with suppression still pending, or a landing point fixed despite
+suppression, falsifies the suppression table of claim 27.
 Any contrary qualified result falsifies the respective rule. No stock fixture
 establishing all these diagnostic states is known here; do not manufacture them
 through writes or count an unqualified docking run as confirmation. Void a run if
@@ -3724,6 +3788,15 @@ conditional diagnostic for that combination and assignment-time restoration.
 
 ## Cross-spec changes to confirm
 
+- Q-1130: S-0514 claims 16 and 17 say an erased object's destination is cleared, and claim 16 says
+  that stops its teleporting jump. Under a pending suppression (claim 27 here) the destination is
+  kept and no jump follows. S-0514 must name that exception.
+- Q-1130: S-0215 claim 2 says an infantry unit or vehicle that is being erased drops its target and
+  destination on each such tick. Under a pending suppression (claim 27 here) a vehicle's destination
+  is kept. S-0215 claim 2 must name that exception. Its leaving-stage clause is not changed by this.
+- Q-1130: S-0214 (Terms, "Being erased, phasing in") says a destination given to the teleporting
+  locomotor while phasing in is dropped. Under a pending suppression (claim 27 here) it is kept.
+  S-0214 must name that exception.
 - Q-1110: S-0502 claim 27 must replace the undefined aftereffects predicate with
   warp-pending immobilization from claim 27 here, not phasing in, held or a cooldown.
   the predicate is checked independently of current locomotor. Its successful-restoration
@@ -3829,8 +3902,8 @@ conditional diagnostic for that combination and assignment-time restoration.
   specs. The ship case is settled by S-0504 claim 1 and the hover case by S-0503 claim 5.
 - Whether a stock setup can establish an airstrike aimed at a living object that makes its
   own teleporting-locomotor jump (claim 20 e). An erasing-weapon lock supplies no such
-  exception: the erased object cannot accept a destination or jump (claim 20 a,
-  S-0514 claim 16).
+  exception: an erased object drops its destination and cannot jump (claim 20 a,
+  S-0514 claim 16), except that a pending suppression (claim 27) keeps the destination without a jump.
 - Whether any stock setup gives a vehicle a pending teleport or a phasing-in state before
   temporary driving begins (claim 21). Factory exit establishes the ordinary case, not those
   conditional states.
