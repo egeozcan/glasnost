@@ -1,9 +1,9 @@
 ---
 id: Q-0970
 title: What a garrisoned building does when its firing index names a dead occupant
-status: open
+status: answered
 related: [S-0508, S-0308, S-0313, S-0311, S-0414]
-answered-by: []
+answered-by: [S-0508]
 ---
 
 ## Need

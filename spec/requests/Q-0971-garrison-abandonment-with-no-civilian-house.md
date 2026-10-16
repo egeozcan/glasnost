@@ -1,9 +1,9 @@
 ---
 id: Q-0971
 title: Return of an emptied civilian garrison building when no house plays a civilian-side country
-status: open
+status: answered
 related: [S-0508, S-0414]
-answered-by: []
+answered-by: [S-0508]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 6
-sources-class: [decomp]
+revision: 7
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0660, Q-0972, Q-0973]
+requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971]
 supersedes: []
 ---
 
@@ -46,8 +46,8 @@ Neighbouring specs own the rest:
   (glossary, *in play*), keeps its own owner, and is neither destroyed nor removed. A building's
   occupants form an ordered list: the *first occupant* is the one that has been inside longest.
   List positions are integers numbered from 0. A *dead occupant place* is a position retained
-  after claim 19's defeat hit kills its occupant. It still counts as a place, not as a living
-  unit (claim 20).
+  after claim 19's defeat hit kills its occupant in the original (claim 20). Our engine removes
+  that place under claim 23; it is not a living unit.
 - **Occupant capacity.** A garrisonable type's imported occupant limit (Import mapping), tested
   for equality as claim 1 specifies, not as a general upper bound.
 - **Occupier type, assaulter type.** Infantry types marked as able to garrison, and as able to clear
@@ -172,7 +172,8 @@ Neighbouring specs own the rest:
    empty civilian garrison building that the map gives to a player, or that a player captures,
    returns to the civilian house at its first turn.
    These return and feedback rules require an existing civilian house. Claim 21 describes the
-   original's unsafe missing-house case; retaining the owner silently is not its rule.
+   original's unsafe missing-house case; claim 24 instead requires silent owner retention in
+   our engine.
    - Backing: `measurable` (scenarios G4 and G6)
    - Confidence: high (the change and the gate on the owner); medium (the radar event throttling the
      announcement)
@@ -183,7 +184,8 @@ Neighbouring specs own the rest:
    same turn under claim 8, with feedback for the owner it had before returning. While it stays badly damaged,
    claim 1 refuses every new occupant. A garrisonable building of any other tech level is never
    evacuated this way. Evacuation itself does not require a civilian house; if none exists, the
-   occupants still leave but the subsequent ownership operation is unsafe (claim 21).
+   occupants still leave. The original's subsequent ownership operation is unsafe (claim 21).
+   Our engine retains the owner without abandonment feedback (claim 24).
    - Backing: `measurable` (scenario G6)
    - Confidence: high
 
@@ -362,7 +364,8 @@ Neighbouring specs own the rest:
     occupants (claim 5) and retain the index, rather than resetting or advancing it.
     This specifies the completed action, without requiring an order between its index reset
     and individual releases or removals. None of these actions offers selective evacuation.
-    The distinct selective death caused by house defeat has claim 19's rule, not this reset.
+    Independent death inside has the original-side rule of claim 19 and our engine's safety
+    departure of claim 23, not this whole-building reset.
     - Backing: `measurable` (G14) for completed deploy-evacuation/assault reset, reoccupation
       and additional entry. Reset on other eviction causes, including failed-exit removal, is
       `unmeasured` here: G6 to G13 observe departures but do not isolate the firing index across
@@ -374,6 +377,8 @@ Neighbouring specs own the rest:
 
 19. **Skirmish departure and death inventory.** The following events have different scopes.
     A change to the building is not, by itself, a change to any occupant's own house (claim 17).
+    The table gives original outcomes; our engine replaces the independent-death result with
+    claim 23's safety rule.
 
     | Event | Occupants affected | Result and index rule |
     |---|---|---|
@@ -394,12 +399,12 @@ Neighbouring specs own the rest:
     away from its occupants' house survives that house's defeat while its occupants are hit.
     Defeat does not require a unit to be on the map before delivering its killing hit.
 
-    Such a death retains the numeric firing index: it neither resets it nor reduces it modulo
+    In the original, such a death retains the numeric firing index: it neither resets it nor reduces it modulo
     a new count. It also does not perform the individual occupancy removal described for
     set-up in S-0311 claim 15. The original can consequently retain a dead occupant among its
     firing choices. Continued firing or experience selection through that dead choice has
-    no specified safe result here; a deterministic safety policy needs a project-lead decision.
-    This is not evidence that the surviving occupants are compacted and renumbered.
+    no specified safe original result here. This is not evidence of original survivor compaction.
+    Claim 23 supplies our engine's deliberately different removal and index rule.
     - Backing: `measurable` for the completed whole-building departure outcomes through G6 to
       G14, with index-reset coverage limited as in claim 18; ordinary hits through G12,
       ownership transfer through G10, and defeat hits and numeric
@@ -411,7 +416,7 @@ Neighbouring specs own the rest:
     - Confidence: high (group actions and defeat's off-map inclusion); medium (selective
       mixed-house consequence, retained index and dead firing choice)
 
-20. **Dead places still count; their use is unsafe (Q-0970).** After claim 19's independent
+20. **Original behaviour: dead places still count; their use is unsafe (Q-0970).** After claim 19's independent
     defeat death, the list length n still includes the dead occupant place. The capacity test
     of claim 1, empty-building test of claim 8, delay quotient of S-0301 claim 7 and firing-index
     modulus of S-0313 claim 6 all use this n, not a count of living occupants. A building with
@@ -432,16 +437,16 @@ Neighbouring specs own the rest:
     search and release attempt, or in removal when there is no exit. It does not intentionally
     create a replacement unit. Once the occupant no longer exists, neither a successful release
     nor an orderly skip is guaranteed; no placement for that dead place is specified as safe.
-    A deterministic continuation is a safety departure requiring the project lead, not an
-    original rule that can be recovered by choosing a survivor.
-    - Backing: `measurable` for retained n and non-abandonment (G15's count observation).
-      Delay and modulus use the same count by their cited claims, but firing through a dead
-      place, occupant experience selection and later eviction are `unmeasured`: G15 stops
-      before such unsafe uses. No safe confirming run or outcome is proposed for them.
+    Claim 23 defines the deterministic safety departure for our engine; it is not an original
+    rule recovered by choosing a survivor.
+    - Backing: `unmeasured` for unsafe original continuation: no safe confirming run or outcome
+      is proposed for firing, experience or eviction through a dead place. G15 retains the
+      proposed count/non-abandonment observation before unsafe use; that limited observation
+      is `measurable`. Delay and modulus use the same original count by their cited claims.
     - Confidence: high (unchanged count and absence of dead-place filtering); medium (the
       boundary beyond which no dependable continuation can be specified)
 
-21. **No civilian house is not silent retention (Q-0971).** With no civilian house, an empty
+21. **Original behaviour: no civilian house is not silent retention (Q-0971).** With no civilian house, an empty
     civilian garrison building does not simply keep its owner without feedback. At its turn,
     the original still requests claim 8's local-owner sound and radar event, with the
     announcement conditional on event creation, then attempts an ownership change without a
@@ -449,7 +454,7 @@ Neighbouring specs own the rest:
     happens after claim 9's forced evacuation: evacuation is not skipped, and emptying leads
     into this unsafe ownership operation in that turn. A still-occupied building with a valid
     owner cannot match a nonexistent civilian house and therefore does not change owner under
-    claim 7. Silent owner retention would be a safety departure, not the original behaviour.
+    claim 7. Claim 24 requires silent owner retention as a safety departure, not original behaviour.
     - Backing: `unmeasured`: no deliberate missing-house crash run is proposed. A diagnostic
       variant of G6 would remove civilian-side membership from every instantiated country and
       observe the first empty-building turn only, but is not a safe confirming scenario for a
@@ -475,6 +480,43 @@ Neighbouring specs own the rest:
       `unmeasured`: no validated data-only fixture supplies a still-listed living occupant in
       those inconsistent states or invokes eviction outside an active game. G16 records any
       normal-state loss as a falsifier, not evidence for an unspecified random failure.
+    - Confidence: high
+
+23. **Engine design rule: remove an occupant's place on death (Q-0970).** This is a safety
+    departure from claims 19 and 20, not original behaviour, with no quirk switch. When an
+    occupant dies inside, from defeat or any other cause, its place is removed in the same
+    update. The remaining occupants keep their relative order and are numbered from 0.
+    The numeric firing index is retained if it is less than the new count n; otherwise it
+    becomes 0, including when n = 0. This is a range check, not reduction modulo n.
+
+    Claims 1 and 8, S-0301 claim 7 and S-0313 claim 6 use the count after removal. No shot,
+    experience award or eviction placement uses a removed place. With n > 0, the repaired
+    index selects the weapon under S-0308 claim 13 and muzzle under S-0313 claim 6; ordinary
+    successful-shot advancement still applies. Experience follows S-0311 claim 8 using the
+    remaining occupants and the current index at destruction time, not an unconditional
+    no-experience rule. Its trainable-building self-recipient branch remains unchanged.
+    With n = 0 there is no occupant weapon or occupant experience recipient, and a civilian
+    garrison building is empty for claim 8, subject to claim 24. Later eviction places only
+    remaining occupants under claims 10 to 12; it creates nothing for a removed place.
+    The distinguishing observable from the original is the reduced count in that death update,
+    and, after the last occupant dies, eligibility for abandonment at the building's turn.
+    - Backing: `measurable` on our engine (G18); the required result is a design rule, not an
+      oracle prediction. Original count retention and unsafe continuation retain G15 and
+      claim 20's backing limitations.
+    - Confidence: high
+
+24. **Engine design rule: missing civilian house suppresses abandonment (Q-0971).** This is
+    a safety departure from claim 21, not original behaviour, with no quirk switch. When no
+    civilian house exists, claims 8 and 9 do not change the building's owner. It keeps its
+    current owner at every later turn while that condition holds, without the abandoned sound,
+    radar event or announcement. Claim 9's forced evacuation still applies and empties the
+    building under claims 10 to 12. With a civilian house present, claims 8 and 9 are unchanged.
+    Claim 7's occupied-building rule is unchanged: a valid owner cannot equal a nonexistent
+    civilian house. The distinguishing observable is the absence of abandonment feedback at
+    the first empty-building turn, rather than the original's feedback attempt followed by
+    unsafe ownership; stable owner retention is an engine promise only.
+    - Backing: `measurable` on our engine (G6's missing-house variant); this is a design rule,
+      not an oracle prediction. The original unsafe path remains `unmeasured` under claim 21.
     - Confidence: high
 
 ## Formulas
@@ -509,14 +551,16 @@ rejection condition, not a requirement that an accepted building have positive h
 | occupier walking in *capture*, destination a garrisonable building | arrival in a cell of that building, test passed | one entry raise; unit inside at the end of the list; announcement when it is the first |
 | same | arrival, test failed | no raise; destination cleared; scatter from the building centre |
 | civilian garrison building, civilian house owner, occupants ≥ 1 | building's turn | owner becomes the first occupant's house |
-| civilian garrison building, other owner, no occupants | building's turn | abandoned sound and radar event for the local player; owner becomes the civilian house |
-| civilian garrison building, badly damaged, occupants ≥ 1 | building's turn | eviction, then (now empty) return to the civilian house, same turn |
+| civilian garrison building, other owner, no occupants, civilian house exists | building's turn | abandoned sound and radar event for the local player; owner becomes the civilian house |
+| civilian garrison building, badly damaged, occupants ≥ 1, civilian house exists | building's turn | eviction, then (now empty) return to the civilian house, same turn |
+| civilian garrison building, no civilian house, empty or badly damaged | building's turn in our engine | forced eviction when badly damaged; owner retained, no abandonment feedback (claim 24) |
+| occupied building | occupant dies inside, in our engine | place removed that update, order retained; index kept when in range, otherwise 0 (claim 23) |
 | garrisoned building | deploy order, destruction, sale, trigger, hunt order | eviction with the options of claim 13 |
 | garrisoned building | erasure completes | occupants removed with it |
 
 Ordering as observed:
-- A civilian garrison building emptied by forced evacuation returns to civilian ownership in
-  that same turn and gives abandonment feedback to the owner losing it. A building still occupied
+- With a civilian house present, a civilian garrison building emptied by forced evacuation
+  returns to civilian ownership in that same turn and gives abandonment feedback to the owner losing it. A building still occupied
   can instead follow its first occupant's owner. Claims 7 and 8 cannot both change its owner in
   one turn.
 - Within one eviction: the exit cell is chosen once; occupants are placed from the last to the
@@ -548,8 +592,8 @@ Ordering as observed:
   last, after the cells of claim 10.
 - **`quirks.garrison_no_exit_removes`** (default: on). An eviction without inside fallback and with
   no qualifying exit cell removes every occupant (claim 12). With claim 9, a civilian garrison
-  building surrounded by blockers loses its occupants when it becomes badly damaged and returns to
-  the civilian house in the same turn. Fixed behaviour: the eviction does nothing; the occupants
+  building surrounded by blockers loses its occupants when it becomes badly damaged and, when a
+  civilian house exists, returns to that house in the same turn. Fixed behaviour: the eviction does nothing; the occupants
   stay inside, and a later eviction tries again.
 - **Mixed garrison.** Because the owner change of claim 7 waits for the building's turn, infantry of
   two houses can both enter a civilian-owned building in the same tick, each passing the passive
@@ -559,8 +603,10 @@ Ordering as observed:
   garrisoned building to another house leaves the occupants as they are (claim 17).
 - **No civilian house.** With stock data this cannot happen in a skirmish: the neutral house's
   country belongs to the civilian side, and S-0009 claim 28 never removes a passive house.
-  Claim 21 describes the unsafe original result with altered data. A safe alternative still
-  needs the project lead's decision; no quirk is proposed for an unsafe result.
+  Claim 21 describes the unsafe original result with altered data. Claim 24 requires silent
+  owner retention in our engine, without a quirk switch.
+- **Death inside.** Claim 20 describes the original's unsafe retained places. Claim 23 requires
+  same-update removal and index range repair in our engine, without a quirk switch.
 - **Both type marks.** An infantry type marked both occupier and assaulter is an occupier only: it
   never assaults.
 
@@ -583,10 +629,10 @@ Ordering as observed:
 | `MuzzleFlash`*n* (art, building image), n from 0 through 9 | pixel pair for assault animation of list position n (claim 14); no point-count modulus or firing-index selection | two integers in pixels, as S-0313 | (0, 0), as S-0313 |
 | No user-data field | shared occupant/muzzle index and action reset (claims 18 and 19) | runtime integer, not imported | initially 0 (S-0313 claim 6) |
 | No additional user-data field | defeat hits on occupants (claim 19) | event rule, not imported | S-0414 claim 5 and S-0303 Import mapping own the defeat hit and its warhead |
-| No user-data field | retained dead places in capacity, abandonment, delay and modulus (claim 20) | runtime integer count | no automatic filtering |
+| No user-data field | original retained dead places (claim 20), replaced in our engine by death removal and index range repair (claim 23) | runtime integer count and index, not imported | engine design rule always applies; no quirk setting |
 | No user-data field | reverse assault credit/removal order (claim 14) | integer list position | independent of the firing index |
 | No additional user-data field | exit qualification and centre-placement conditions (claims 10 and 22) | runtime spatial/state tests | no independent legal-cell gate; outside-map reads as S-0009 claim 44 |
-| No additional user-data field | no-civilian-house case (claim 21) | house lookup using the country-side mapping above | no original silent-retention fallback |
+| No additional user-data field | no-civilian-house case (claims 21 and 24) | house lookup using the country-side mapping above | original unsafe; our engine retains owner without abandonment feedback, always |
 
 The initial absent defaults above have high confidence and `unmeasured` backing here: no fixture
 removes the supplying stock layer and distinguishes an initial default from a retained earlier
@@ -699,6 +745,19 @@ change owner. The initially empty civilian building returns at its first turn wi
 local feedback. Repeat with all exit-ring cells blocked: the damaged civilian one loses its
 occupants without deaths and returns in that same turn. A delayed return, surviving garrison with
 no exit, or damage evacuation of the non-civilian copy falsifies the corresponding rule.
+
+**G6 missing-house variant (claims 21 and 24).** Use a named `garrison-no-civilian.map`
+variant of G6 in which every instantiated country's side mapping excludes the civilian side.
+On our engine, test both an initially empty A-owned civilian garrison building and a garrisoned
+one damaged to the red threshold with positive health. Use free exits, bind a distinct abandoned
+sound as in G4, and keep the feedback queue clear. Record owner, occupants, placements, sound,
+radar events and announcements for the first empty-building turn and ten subsequent turns.
+Expected: owner A throughout, no abandoned sound/event/announcement; damage still evacuates
+all occupants. Repeat three fresh games per case, plus G6's civilian-house-present control.
+Any owner change or abandonment feedback without a civilian house, or skipped forced evacuation,
+falsifies claim 24. These are engine design-rule checks only. The original diagnostic would
+observe the first empty turn's attempted feedback and unsafe ownership operation, but remains
+unmeasured: no deliberate missing-house crash run or stable original-owner prediction is proposed.
 
 **G7. Exit ranking and placement (claims 10 and 11).** Setup: a garrisoned W × H building on clear
 level ground, with impassable blockers at chosen ring cells. Procedure: deploy to evacuate. In
@@ -863,7 +922,9 @@ and the index remains 1. If a building turn can be observed without a new dead-p
 must not treat these places as empty or request abandonment. A count decrement, abandonment
 caused by these deaths alone, a reset or
 modulo repair, an eviction caused solely by the occupants' defeat, or exclusion of their hits
-because they are off-map falsifies that part. Repeat three fresh runs. The original's local
+because they are off-map falsifies that part. This is an original-only expectation: our engine instead removes the
+places in that update (claim 23), so the count distinguishes the two even without another shot.
+Repeat three fresh runs. The original's local
 end delay does not prevent observing the surrender tick. Do not continue an unsafe attack
 as a test of a promised credit recipient. This tests numeric retention without assuming a
 validated mixed-house garrison fixture; that selective-survival consequence remains unmeasured.
@@ -929,18 +990,37 @@ than infer it from simultaneous identical animations. Do not run unsupported poi
 a test of a promised safe result. Normal assaulter survival and reversed credit remain G10's
 controls.
 
+**G18. Death-removal safety departure (claim 23, our engine only).** Use G15's foreign-owned
+building and defeat event, retaining surviving contender B. After A's three occupants die,
+expect count 0 and index 0 in that same update, no occupant weapon or occupant experience
+recipient, no later placement for those occupants, and claim 8's empty return at the building's
+turn when a civilian house exists. This deliberately differs from G15's original retained n.
+
+Also use deterministic engine fixtures with three identified occupants in entry order U, V, W,
+index 1, and an independent death of V while inside. Expect remaining order U, W, count 2,
+index 1 and W's weapon at muzzle 1 on the next ordinary shot. That successful non-disc-laser
+shot advances the index to 0. In a separate fixture start at index 2 and kill V: expect index 0,
+not index 1 as modulo reduction would give. Repeat the latter with W dying instead to check
+last-place removal. Test both defeat hits and an independently supplied occupant death event.
+These engine fixtures do not claim an original mixed-house entry setup. For experience, resolve
+a credited destruction while the repaired index names W, before a new launch: the ordinary
+occupant-recipient branch gives W the award, and a trainable-building control takes it itself
+under S-0311 claim 8. Evict afterwards with free exits: only U and W are placed in reverse order.
+Record counts, identities, index, weapon, muzzle, launch success, experience and placements.
+Repeat three fresh runs per case. A retained dead place, changed survivor order, out-of-range
+index, removed-place shot/award/placement, or incorrect abandonment falsifies the departure.
+No unsafe original firing, credit or eviction continuation is proposed as a control.
+
 ## Open questions
 
-- Q-0660's original index questions are answered by claims 18 and 19: whole-building actions
-  reset on completion, additional entry retains the index, and an occupant's own-house defeat
-  can kill it independently without index repair. Safe firing and experience selection after
-  a dead occupant remains among the choices are not answered; S-0308, S-0313 and S-0311 must
-  coordinate a project-lead safety decision, rather than infer compaction or a safe recipient.
-- Q-0970: claim 20 answers retained count and the lack of dead-place filtering, but safe
-  weapon/launch/index progression, occupant experience and later eviction still require a
-  safety departure. No dependable original outcome exists after the occupant has been removed.
-- Q-0971: claim 21 answers the original's attempted feedback, evacuation and unsafe ownership
-  operation. A stable safe owner/feedback policy for later turns remains a lead decision.
+- Q-0660's original index questions are answered by claims 18 and 19; the corresponding
+  engine death-removal and index rule is claim 23, rather than original dead-place retention.
+- Q-0970 is answered by claims 20 and 23: original unsafe retention remains unmeasured beyond
+  G15's limited observation; the engine removes dead places, repairs the index and uses only
+  remaining occupants for firing, experience and eviction. No lead decision is pending.
+- Q-0971 is answered by claims 21 and 24: original unsafe ownership remains unmeasured, while
+  our engine retains the owner silently on every missing-house turn without skipping forced
+  evacuation. No lead decision is pending.
 - Q-0972 is answered by claims 10 and 22: no independent legal-cell gate, ordinary outside-area
   rejection through the entry check, and no normal centre-placement crowding or terrain failure.
   Exception-state and off-map qualification observations retain their stated unmeasured limits.
@@ -956,13 +1036,23 @@ The current S-0308 claim 13, S-0313 claim 6 and S-0311 claim 15 already agree on
 reset and claim 19's defeat exception. Earlier demands to change their reset ordering are satisfied.
 The remaining coordination is:
 
-- **S-0301 claim 7:** cite claim 20 for n including retained dead places, without predicting a
-  successful shot through a dead place.
-- **S-0308 claim 13 and S-0313 claim 6:** cite claim 20 for unchanged n and the absence of an
-  original next-living substitution. Numeric muzzle selection is not a safe-launch guarantee.
-- **S-0311 claims 8, 9 and 15:** cite claim 20 for the unsafe dead-place recipient and claim 14
-  for reverse-list assault credit/removal. Trainable-building self-credit remains claim 8's
-  separate branch; no dead-place exemption for every building is implied.
+- **S-0301 claim 7:** distinguish claim 20's original retained count from claim 23's engine
+  count after same-update death removal; use the latter in the engine's delay quotient.
+- **S-0308 claim 13:** retain claim 20's unsafe original description, but apply claim 23's
+  stable death removal and index range repair in our engine. Weapon selection uses the
+  repaired index among remaining occupants, with ordinary successful-shot advancement.
+  No shot uses a removed place and an empty list supplies no occupant weapon. Update the
+  index table and remove the pending-lead question.
+- **S-0313 claim 6:** retain original numeric-index retention as claim 20's unsafe original
+  case, but apply claim 23's engine removal, survivor order and index rule: keep k when
+  k < new n, otherwise 0, including n = 0. Muzzle selection and successful-shot modulus use
+  the repaired index and new count. Remove the pending-lead question and add G18's engine check.
+- **S-0311 claims 8 and 15 and firing-occupant term:** distinguish claim 20's unsafe original
+  recipient from claim 23's engine same-update death removal and index repair. Credit uses
+  remaining occupants at the current repaired index under claim 8; no removed place receives
+  experience, an empty list has no occupant recipient, and trainable-building self-credit
+  is unchanged. Remove the pending-lead question. Claim 9 also needs claim 14's reverse-list
+  assault credit/removal order.
 - **S-0313 claim 6 and its assault measurement:** use claim 14's point i for list position i,
   without wrapping by configured points or using the firing index. G17 replaces the previously
   unresolved animation correspondence.
@@ -971,14 +1061,6 @@ The remaining coordination is:
 
 ## Questions for the project lead
 
-- Select a deterministic safety departure for claim 19's dead occupant remaining among the
-  firing choices. The original's numeric-index retention does not determine whether our engine
-  should compact survivors, which survivor should fire next, or who should receive experience.
-  Coordinate the decision with S-0308 claim 13, S-0313 claim 6 and S-0311 claims 8 and 15.
-  No safe continuation is invented here, and no quirk switch is proposed for an undefined result.
-- With no civilian house, adopt leaving the owner unchanged and skipping abandoned feedback?
-  Claim 21 establishes that this would be a departure, not the original rule. Forced evacuation
-  itself can remain unchanged. No deliberate unsafe-data run is proposed.
 - For assaults with more than ten occupants, select a safe animation policy beyond point 9.
   The original supplies no point-count wrapping rule. This is separate from ordinary supported
   assault order and point selection (claim 14).
