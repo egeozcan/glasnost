@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -238,8 +238,8 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
      draw.
    - The parts that do not depend on the owner (leaving the team, the temporal let-go and the
      passengers' targets of claim 6) happen for every owner.
-   - Backing: `unmeasured` here: these scenarios do not isolate the original's scripted-team
-     decisions or the equivalent decision for a neutral controller. The policy for our AI is design
+   - Backing: `measurable` (MC12 for the original computer-player fate decision, including the
+     draw when a team-type override replaces the selected fate). The policy for our AI is design
    - Confidence: medium
 
 ### Ending control
@@ -351,9 +351,9 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
     - otherwise, including permanently controlled: its current owner.
 
     S-0414 claim 5 reads this query when a house is defeated, and may redirect a recorded original
-    owner to a civilian-side house, as it states. Its claim 5 table's last row needs correction:
-    permanent control supplies the current owner, not a remembered pre-domination house.
-    Joint hand-off must resolve that row to agree with this query.
+    owner to a civilian-side house, as it states. Permanently controlled objects have no remembered
+    pre-domination owner: they survive that former owner's defeat and receive the defeat-cleanup
+    hit when their current owner is defeated, as S-0414 claim 5 states.
     - Backing: `measurable` through S-0414 scenarios V2 variant j and V4 parts a and b for
       ordinary controlled objects and original-owner redirection.
       The permanent-control query is `measurable` by MC10's defeat variant. The trigger-takeover
@@ -421,10 +421,10 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
     On buildings it uses a building-height-based placement and draws in front of the building.
     The exact vertical conversion is not established here.
     The ring is removed at release (claim 9). When the object leaves the game the ring goes with it.
-    - Backing: `measurable` (MC1 for mobile rings; MC9 for building foreground placement).
-      Exact building-height conversion is `unmeasured`: its multiplier has not been traced, and
-      no pixel-calibrated building-ring comparison is proposed here
-    - Confidence: high for animation choice; medium for placement
+    - Backing: `measurable` (MC1 for mobile rings; MC9 for building foreground placement; MC13
+      for the exact building-height conversion)
+    - Confidence: high for animation choice; medium for placement and exact building-height
+      conversion
 
 ## Formulas
 
@@ -739,6 +739,29 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   presentation result falsifies the relevant part, except for the explicitly fixed transport
   selection drawing bug in claim 17. No stock value is prescribed by these
   overrides.
+
+- **MC12. Computer-player fate decision** (claim 8). On a purpose-made skirmish map, use a
+  named test controller and eligible victims, with the controller owned by a bystander computer
+  player; keep the observed area clear under the glossary's void rule. Use named test data to
+  make each fate-table selection condition and each fate outcome observable, including a team
+  type with a fate override. Record the controller's money and power, the victim's health and
+  maximum health, team assignment, destination/behaviour, and scenario-random-stream state before
+  and after each takeover and release. Repeat deterministic variants three times; use separate
+  runs for each table precedence and outcome. Expected: the selected table follows the stated
+  precedence, one inclusive 1–100 draw is consumed even when a team override replaces the fate,
+  and assignment failures fall back to hunt. A different table, draw count, selected fate or
+  fallback falsifies the corresponding part of claim 8. The neutral/special-house rule can be
+  checked by repeating with that house as the new owner.
+- **MC13. Building control-ring height** (claim 18). On a named test map, have a Yuri Prime
+  control a building with a visible controlled animation. Record the building sprite and ring
+  pixels in a fixed-resolution capture, and compare the ring's vertical position against the
+  building's height and the corresponding mobile ring-height setting. Repeat with named test
+  variants that change only the building height and the ring-height field, three valid runs per
+  variant. Expected: the ring stays in front of the building and its vertical placement follows
+  the original's building-height conversion. A pixel position inconsistent with the same
+  measured conversion across repeats, or a change caused by altering an unrelated field,
+  falsifies the placement rule. Record the measured conversion in the measurement record before
+  stating a numeric formula.
 
 ## Open questions
 
