@@ -40,6 +40,8 @@ fn rules() -> Arc<SimRules> {
         jumpjet_height: Some(300),
         ..Default::default()
     };
+    // The barracks has a door kind, as every real one has: only such a building qualifies for S-0417 claim 15's ascent report.
+    r.sim.buildings.get_mut("PILL").unwrap().econ.door_first = Some(true);
     r.sim.infantry.insert("JETI".into(), jumper(true));
     r.sim.infantry.insert("JETX".into(), jumper(false));
     Arc::new(SimRules::new(&r, "synthetic-skirmish"))
@@ -246,7 +248,7 @@ fn builds_a_jumpjet_unit_and_its_factory_stays_free() {
     let mut ordered = false;
     let mut built: Option<ObjectId> = None;
     let mut freed = false;
-    for _ in 0..400 {
+    'run: for _ in 0..400 {
         let orders = brain.think(&w);
         ordered |= orders.iter().any(
             |o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == idx),
@@ -254,21 +256,30 @@ fn builds_a_jumpjet_unit_and_its_factory_stays_free() {
         for o in orders {
             glasnost_sim::orders::issue(&mut w, HouseId(0), o);
         }
-        testkit::run(&mut w, 15);
-        if built.is_none() {
-            built = w
-                .objects
-                .values()
-                .find(|o| {
-                    o.owner == Some(HouseId(0)) && o.kind == Kind::Infantry && o.type_index == idx
-                })
-                .map(|o| o.id);
-        }
-        if let Some(u) = built
-            && w.obj(u).is_some_and(|o| o.contact.is_none() && o.econ.exit.is_none())
-        {
-            freed = true;
-            break;
+        for _ in 0..15 {
+            testkit::run(&mut w, 1);
+            if built.is_none() {
+                built = w
+                    .objects
+                    .values()
+                    .find(|o| {
+                        o.owner == Some(HouseId(0))
+                            && o.kind == Kind::Infantry
+                            && o.type_index == idx
+                            && o.on_map
+                    })
+                    .map(|o| o.id);
+            }
+            if let Some(u) = built
+                && w.obj(u)
+                    .is_some_and(|o| o.contact.is_none() && o.econ.exit.is_none())
+            {
+                // The link ended while the unit was still climbing: the ascent report, not an arrival or an order.
+                freed = glasnost_sim::jump::phase(&w, u)
+                    == Some(glasnost_sim::jump::Phase::Ascending)
+                    && w.height_above_surface(u) > 0;
+                break 'run;
+            }
         }
     }
     assert!(ordered, "the house orders the jumpjet unit");

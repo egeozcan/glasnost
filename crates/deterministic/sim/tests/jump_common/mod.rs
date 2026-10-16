@@ -4,6 +4,8 @@
 //! game data.
 #![allow(dead_code)]
 
+pub mod factory;
+
 use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{

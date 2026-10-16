@@ -782,6 +782,10 @@ fn claim_21_previous_deck_landing() {
         o.dest = None;
         o.path.steps.clear();
     }
+    // spec: S-0417 claim 5 and S-0207 claim 27 (restoration needs no driving movement report: the track ends and no destination point remains)
+    run_until(&mut w, 200, |w| {
+        !glasnost_sim::drive::movement_report(w, id, false)
+    });
     assert!(glasnost_sim::econ::release::restore_locomotor(&mut w, id));
     assert_eq!(vehicle_flags(&w, dc), (true, false), "at restoration");
     // Driving marked its current cell at its actual height: the deck.

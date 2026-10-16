@@ -446,6 +446,12 @@ fn building(w: &World, id: ObjectId) -> Option<&BuildingHarvest> {
     w.rules().econ.harvest.buildings.get(o.type_index as usize)
 }
 
+/// Whether building `b` permits dock unloading (its type's `DockUnload`
+/// flag; S-0207 claim 27, S-0402 Terms).
+pub fn permits_dock_unload(w: &World, b: ObjectId) -> bool {
+    building(w, b).is_some_and(|x| x.dock_unload)
+}
+
 /// The harvest state of a harvester, created on first use.
 fn state(w: &mut World, id: ObjectId) -> Option<&mut HarvestState> {
     let n = w.rules().econ.resource.tiberiums.len();
@@ -1314,7 +1320,8 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     };
     if o.pos.cell() != dc {
         // spec: S-0402 claim 10 row 2 (not on the docking cell: its destination is set to it, an ordinary move)
-        if o.dest != Some(Target::Cell(dc)) {
+        // spec: S-0402 claim 10 row 2 (revision 26: the docking cell is offered at each such processing; an unchanged offer is ignored unless pending destination refresh makes it effective, S-0207 claim 27, so it reaches the dock test again after a fallback)
+        if o.dest != Some(Target::Cell(dc)) || crate::refresh::pending(w, id) {
             drive_to(w, id, Target::Cell(dc));
         }
         return standard(w, id);

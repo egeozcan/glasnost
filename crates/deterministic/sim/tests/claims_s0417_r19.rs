@@ -6,63 +6,17 @@
 mod jump_common;
 
 use glasnost_map::CellXY;
-use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::BuildingType;
 use glasnost_sim::econ::release::{self, Outcome};
 use glasnost_sim::jump::Phase;
 use glasnost_sim::objects;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
-use jump_common::{SIZE, at, d, phase, step, until};
+use jump_common::{SIZE, at, phase, step, until};
 
-fn ruleset() -> Ruleset {
-    let mut r = jump_common::ruleset();
-    // A vehicle factory with a 3 x 2 foundation and an invented door time, and a barracks with the first door kind.
-    let mut vf = BuildingType {
-        strength: Some(500),
-        foundation: Some([3, 2]),
-        factory: Some("vehicle".into()),
-        weapons_factory: Some(true),
-        ..Default::default()
-    };
-    vf.deploy_time = Some(d("0.01"));
-    vf.combat.armor = None;
-    let mut bar = BuildingType {
-        strength: Some(500),
-        foundation: Some([2, 2]),
-        factory: Some("infantry".into()),
-        ..Default::default()
-    };
-    bar.econ.door_first = Some(true);
-    bar.combat.armor = None;
-    // A building with a rally-capable foundation but neither door kind nor the vehicle factory flag.
-    let mut plain = BuildingType {
-        strength: Some(500),
-        foundation: Some([2, 2]),
-        factory: Some("infantry".into()),
-        ..Default::default()
-    };
-    plain.combat.armor = None;
-    let b = r.registries.get_mut("buildings").unwrap();
-    b.extend(["VF", "BAR", "PLAIN"].map(String::from));
-    r.sim.buildings.insert("VF".into(), vf);
-    r.sim.buildings.insert("BAR".into(), bar);
-    r.sim.buildings.insert("PLAIN".into(), plain);
-    // A jumpjet vehicle and infantry whose cruise height is tiny and whose climb passes it in one step (the skipped window).
-    let mut quick_v = r.sim.vehicles.get("JV").unwrap().clone();
-    quick_v.jumpjet_height = Some(4);
-    quick_v.jumpjet_climb = Some(d("60.0"));
-    r.sim.vehicles.insert("JVQUICK".into(), quick_v);
-    r.registries
-        .get_mut("vehicles")
-        .unwrap()
-        .push("JVQUICK".into());
-    r
-}
 
 fn game() -> World {
-    let mut w = testkit::game_with(&ruleset(), SIZE, 7);
+    let mut w = testkit::game_with(&jump_common::factory::ruleset(), SIZE, 7);
     testkit::run(&mut w, 4);
     w
 }
@@ -109,6 +63,8 @@ fn claim_15_infantry_ends_contact_in_the_quarter_window() {
     assert_eq!(release::release(&mut w, k, u), Outcome::Released);
     assert!(release::tethered(&w, u));
     assert_eq!(w.obj(u).unwrap().dest, Some(r));
+    let point_before = w.obj(u).unwrap().jump.as_ref().unwrap().dest;
+    assert!(point_before.is_some());
     let (before, at_report) = run_to_report(&mut w, u, 200).expect("the contact ended");
     let ht = w.obj(u).unwrap().jump.as_ref().unwrap().ht;
     assert_eq!(ht, 500);
@@ -120,8 +76,17 @@ fn claim_15_infantry_ends_contact_in_the_quarter_window() {
     let o = w.obj(u).unwrap();
     assert!(!release::tethered(&w, u));
     assert!(o.econ.exit.is_none());
-    // The jumpjet is still above its factory's foundation and climbing: no cell crossing was needed.
+    // The jumpjet is still above its factory and climbing: no cell crossing was needed.
     assert_eq!(phase(&w, u), Phase::Ascending);
+    // spec: S-0417 claim 15 (placement consumed the guard spot, so the order-level destination is discarded; a refused scatter leaves the movement point and commitment as they were)
+    assert_eq!(o.guard_spot, None);
+    let j = o.jump.as_ref().unwrap();
+    if o.dest.is_none() {
+        assert_eq!(j.dest, point_before);
+        assert!(j.moving);
+    } else {
+        assert_ne!(o.dest, Some(r), "the rally destination was discarded");
+    }
 }
 
 // spec: S-0417 claim 15 (an infantry factory has no unloading stage: the contacted place is free in the report tick, so the next release is no longer busy on account of the old contact; claim 14)
@@ -197,7 +162,11 @@ fn claim_15_no_rally_discards_the_destination() {
     // The locomotor's movement point and commitment survive the discard (a scatter that is accepted may replace them).
     let j = o.jump.as_ref().unwrap();
     assert!(j.moving);
-    assert!(j.dest.is_some() || point.is_none());
+    assert!(point.is_some());
+    if o.dest.is_none() {
+        // A refused scatter: the preceding point stays exactly.
+        assert_eq!(j.dest, point);
+    }
     for _ in 0..50 {
         step(&mut w);
         let o = w.obj(u).unwrap();
@@ -267,6 +236,59 @@ fn claim_15_other_buildings_give_no_report() {
         step(&mut w);
     }
     assert!(w.obj(u).unwrap().contact.is_some());
+}
+
+// spec: S-0417 claim 5 and S-0207 claim 27 (revision 19: restoration of a temporarily driving teleporting vehicle needs a suspended predecessor, no driving movement report, no restoration lock and no seizure; completing the exit track alone is insufficient while the locomotor destination point is retained; restoration alone enables neither pending state)
+#[test]
+fn claim_5_restoration_needs_no_movement_report() {
+    let mut w = game();
+    let k = building(&mut w, "VF");
+    let u = unit(&mut w, Kind::Vehicle, "TELE");
+    assert_eq!(release::release(&mut w, k, u), Outcome::Released);
+    // The exit track runs to the apron and the vehicle leaves the factory's contact.
+    assert!(until(&mut w, 400, |w| {
+        let o = w.obj(u).unwrap();
+        o.contact.is_none() && o.econ.temporary_drive
+    }));
+    // The track is complete but its destination point is retained: each fall-back to rest leaves the temporary locomotor.
+    run_ticks(&mut w, 100);
+    let o = w.obj(u).unwrap();
+    assert!(o.econ.temporary_drive, "a retained point prevents restoration");
+    assert!(o.drive.as_ref().unwrap().goal.is_some());
+    assert!(!release::restore_locomotor(&mut w, u));
+    // A stop removes the point at once; the next fall-back restores.
+    glasnost_sim::econ::assign_destination(&mut w, u, None);
+    assert!(!glasnost_sim::drive::movement_report(&w, u, false));
+    glasnost_sim::process::fall_back(&mut w, u, false);
+    let o = w.obj(u).unwrap();
+    assert!(!o.econ.temporary_drive && o.drive.is_none());
+    // Restoration alone enables neither the refresh state nor the suppression.
+    assert!(!o.econ.refresh && !o.econ.point_suppression);
+}
+
+// spec: S-0417 claim 5 and S-0207 claim 27 (a heading point horizontally different from the actual position is a driving movement report too)
+#[test]
+fn claim_5_a_different_heading_point_is_a_report() {
+    let mut w = game();
+    let k = building(&mut w, "VF");
+    let u = unit(&mut w, Kind::Vehicle, "TELE");
+    assert_eq!(release::release(&mut w, k, u), Outcome::Released);
+    assert!(until(&mut w, 400, |w| w
+        .obj(u)
+        .unwrap()
+        .drive
+        .as_ref()
+        .is_some_and(|d| d.track.is_some())));
+    // On the track: its heading point is the apron centre, away from the vehicle.
+    glasnost_sim::drive::stop_point(&mut w, u);
+    assert!(glasnost_sim::drive::movement_report(&w, u, false));
+    assert!(!glasnost_sim::econ::release::restorable(&w, u, false));
+}
+
+fn run_ticks(w: &mut World, n: i32) {
+    for _ in 0..n {
+        step(w);
+    }
 }
 
 // spec: S-0417 claim 15 (the state is serialisable and hashed: a save taken after the report restores the same world)

@@ -330,8 +330,11 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
     // spec: S-0112 claim 7 (a gate or wall tower placed recomputes the wall bits of its fixed cells)
     crate::walls::building_placed(w, id);
     if o.kind.is_mobile() {
+        // spec: S-0207 claim 27 (successful placement enables destination refresh during the initial idle-behaviour setup and clears it when that setup finishes)
+        crate::refresh::placement_begin(w, id);
         // spec: S-0215 Terms (the placement fall-back: an actor falls back to rest when placed)
         crate::process::fall_back(w, id, true);
+        crate::refresh::placement_end(w, id);
     }
     crate::econ::events::entered_map(w, id, by_order);
 }

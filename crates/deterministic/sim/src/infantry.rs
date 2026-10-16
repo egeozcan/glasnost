@@ -277,6 +277,8 @@ fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
 /// or the same object). A first or different destination and a cleared one
 /// make no request. The request is not saved when refused.
 pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>) {
+    // spec: S-0207 claim 27 (a vehicle's effective assignment runs the dock test before the locomotors take the destination)
+    let token = crate::refresh::begin(w, id, before);
     // spec: S-0207 claim 20 (a) (the teleporting locomotor takes a destination at once)
     crate::teleport::take_destination(w, id);
     // spec: S-0314 claim 22 (a destination given while a depot or tank bunker occupies the cell switches the locomotor on)
@@ -287,6 +289,8 @@ pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>)
     crate::jump::take_destination(w, id);
     // spec: S-0207 claim 25 (a driving or ship locomotor installs the supplied point at the assignment, before any path search)
     crate::drive::take_destination(w, id);
+    // spec: S-0207 claim 27 (the refresh this assignment consumed is gone, unless the dock fallback newly enabled it here)
+    crate::refresh::finish(w, id, token);
     let Some(o) = w.obj(id) else { return };
     // spec: S-0107 claim 15 (clearing a destination makes no request)
     let Some(new) = o.dest else { return };

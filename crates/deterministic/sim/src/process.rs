@@ -347,6 +347,10 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
             ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             ob.dest = None;
         }
+        if placement {
+            // spec: S-0207 claim 27 (Q-1090: the placement fall-back's destination clear is an effective assignment, empty-to-empty included, while placement's refresh is enabled: it stops locomotion, consumes refresh and enables no point suppression)
+            crate::econ::assign_destination(w, id, None);
+        }
     };
     // spec: S-0215 claim 15 row 1 (attack-move memory, or wait: nothing changes)
     if o.attack_move.is_some() || cur == Some(Behaviour::Wait) {

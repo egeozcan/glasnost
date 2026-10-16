@@ -188,7 +188,8 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
     }
     let Some(o) = w.obj(id).cloned() else { return };
     let mut st = o.teleport.clone().unwrap_or_default();
-    if o.dest == st.for_dest {
+    // spec: S-0207 claim 27 (pending destination refresh makes an unchanged assignment effective whatever the locomotor)
+    if o.dest == st.for_dest && !crate::refresh::pending(w, id) {
         return;
     }
     let Some(dest) = o.dest else {

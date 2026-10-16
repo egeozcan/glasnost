@@ -1480,6 +1480,32 @@ pub fn temporary_drive(w: &World, id: ObjectId) -> bool {
 /// locomotor back (S-0215 claim 13 row 1, S-0417 claim 5). Returns
 /// whether it did.
 pub fn restore_locomotor(w: &mut World, id: ObjectId) -> bool {
+    if !restorable(w, id, false) {
+        return false;
+    }
+    restore(w, id)
+}
+
+/// Whether a temporarily driving vehicle's suspended predecessor can be
+/// restored (S-0417 claim 5, S-0207 claim 27 table row 1): a suspended
+/// predecessor, no driving movement report, no restoration lock and a
+/// vehicle that is not seized. Completing the exit track alone is not
+/// enough: a retained locomotor destination point still prevents it.
+/// `assigning`: the test is made inside a destination assignment, before the
+/// locomotor takes the offered destination.
+pub fn restorable(w: &World, id: ObjectId, assigning: bool) -> bool {
+    // spec: S-0207 claim 27 (the suspended predecessor is present: the vehicle drives temporarily)
+    temporary_drive(w, id)
+        // spec: S-0207 claim 27 (not seized; magnetic lift is a seam)
+        && !crate::jump::seized(w, id)
+        // spec: S-0207 Terms, Restoration lock (it starts absent on a new driving locomotor and nothing in the engine sets it, so it never holds)
+        // spec: S-0417 claim 5 and S-0207 claim 27 (no driving movement report: no locomotor destination point and no heading point horizontally different from the actual position)
+        && !crate::drive::movement_report(w, id, assigning)
+}
+
+/// Gives the vehicle its own locomotor back, the eligibility already
+/// judged (S-0215 claim 13 row 1).
+pub fn restore(w: &mut World, id: ObjectId) -> bool {
     if !temporary_drive(w, id) {
         return false;
     }
