@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 43
+revision: 44
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1627,7 +1627,7 @@ Terms specific to this spec:
     | Failed ordinary approach (S-0307 claim 17), ground infantry or vehicle on terrain without bridges, excluding jumpjet and special crushing, deploying or balloon-hover searches | the failure centre of S-0307 claim 17, including after candidate trials | the actor's | own zone | that of the actor's ground cell for its own zone | never | yes | no | none |
     | jumpjet movement-point adjustment, non-balloon-hover vehicle (S-0502 claims 16 and 23) | the ordered point's cell | *hover* | *fly* | none | never | no | no | none |
     | jumpjet movement-point adjustment, infantry or balloon-hover vehicle (S-0502 claims 16 and 23) | the ordered point's cell | *hover* | *fly* | none | the centre carries a high bridge | no | no | none |
-    | jumpjet failed-landing reroute (S-0502 claims 17 and 23) | the unit's current cell | the type's own | own zone, not simplified | none | never | no | no | none |
+    | jumpjet stopped-movement reroute, including failed landing and effective order-level destination clears (S-0502 claims 17, 23 and 24) | the unit's current cell | the type's own | own zone, not simplified | none | never | no | no | none |
     | Animated landing-first undeploy (S-0502 claim 23) | the vehicle's current cell | the type's own, *winged* counted as *track* | own zone, not simplified | that of the centre cell for that zone, read for its deck when the vehicle is on a bridge deck; none when that read gives no reach region | the vehicle is on a bridge deck | no | no | none |
     | Teleporting landing of a non-infantry object (S-0207 claim 20 b) | the destination cell | the object's | own zone, not simplified | that of the destination cell for its own zone, read for its deck in deck mode (claim 4); none when that read gives no reach region | the destination is a bridge cell and the object's world height is more than 312 leptons above surface height *H* there (exact integer comparison) | no | no | none |
     | Infantry teleport object-destination fallback (S-0208 claim 19), after landing-point refusal | the cell of the destination object's heading point (its next movement point, or its position if it has none) | the infantry type's | own zone, not simplified | that of the infantry unit's heading-point cell for its own zone, read for its deck when the unit is on a bridge deck; its teleporting locomotor's heading point is its position | the centre carries a high bridge | yes | no | none |
@@ -1698,8 +1698,17 @@ Terms specific to this spec:
     row excludes bridge cells; the other three allow them. The animated-undeploy row
     selects the initial destination before the subsequent movement-point adjustment.
     S-0502 claim 23 supplies the settings and S-0517 claim 6 owns its assignment.
-    Grounded self-occupancy is not lifted for movement-point adjustment. These settings
-    have high confidence and are `measurable` (S-0502 scenario J16).
+    Searches retain the unit's own occupancy: a nonempty searched record rejects the
+    candidate even when its only mark belongs to that unit, except for the *winged*
+    class's omission of occupancy checks below. Grounded self-occupancy is not lifted
+    for movement-point adjustment. Infantry standing-position adjustment happens after
+    cell selection and supplies no exemption from this whole-record test.
+    The stopped-movement row is not limited to failed landing or player stop: it also
+    applies to effective order-level destination clears during deploy or behaviour
+    processing while the jumpjet retains a movement commitment. S-0502 claim 24 owns
+    which assignments are effective, including suppression of redundant assignments.
+    Without a movement commitment there is no reroute. These settings have high
+    confidence and are `measurable` (S-0502 scenarios J16, J19 and J22).
 
     The failed-approach row, the non-balloon-hover jumpjet movement-point row and both
     free-unit searches exclude bridge cells. The teleporting
@@ -3623,9 +3632,16 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 procedure, recorder and 20-seed comparison for the four jumpjet rows of T5. Compare
 selection at the recorded search tick with the ring, visibility and collection rules
 here. Include bridge exclusion versus allowance, deck mode, overlay-bearing candidates,
-height differences and reach-region boundaries. Record animated undeploy's initial
-selection separately from its subsequent movement-point adjustment. A selected cell
-inconsistent with its T5 settings or these shared selection rules falsifies the claim.
+height differences and reach-region boundaries. Include a grounded ordinary vehicle's
+own-cell search with its own occupancy as the only mark: that cell must be rejected,
+not temporarily cleared for selection. Record animated undeploy's initial selection
+separately from its subsequent movement-point adjustment. Use S-0502 J19 and J22's
+setups and qualifying observations for effective destination clears from stop, deploy
+and behaviour processing, distinguishing suppressed repeated assignments and idle
+units from actual reroutes. Predict each actual reroute with the stopped-movement
+row at its search tick. A selected cell inconsistent with its T5 settings or these
+shared selection rules, or treating a qualifying effective clear as exempt from this
+row, falsifies the claim.
 
 **Transport caller checks (claim 25).** Use S-0507 T13's tiny flat skirmish map,
 stock-data setup with director and mods off, game-speed index 2 and 800 × 600.
