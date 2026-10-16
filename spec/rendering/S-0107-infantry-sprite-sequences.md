@@ -2,11 +2,11 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0087, Q-0212]
 supersedes: []
@@ -306,7 +306,14 @@ used by this spec only:
       attack state while it is moving now, so that sentence stands on the original's rule as read)
     - Confidence: high (medium for that sentence)
 
-11. **Firing.** On a tick on which an infantry unit has a target, is not in the attack state and
+11. **Firing.** The rules below describe ordinary target firing. The radiation-immune
+    deployer's own-cell secondary shot in S-0215 claim 31 is an exception: it fires during
+    the behaviour processing that decides to shoot, without waiting for any fire-frame field,
+    and clears its target in that same processing after firing and before starting
+    *deployed-fire*. That sequence presents an already-made shot, not a pending second shot
+    under this claim. A later independently acquired target follows the ordinary rules below.
+
+    On a tick on which an infantry unit has a target, is not in the attack state and
     its weapon is ready to fire, it enters the attack state, its body facing is set at once (no
     turning) to the direction of the target, and it asks (not forced) for a firing kind. The
     highest row of this table whose situation holds decides:
@@ -361,8 +368,10 @@ used by this spec only:
     interruptible.
     - Backing: `measurable` (scenario M8: part (a) for the shot timing, the facing snap, fire
       frames 0 and *C* and the prone repeat shot; part (b) for the airstrike reset; part (c) for
-      the shot during *go-prone*; part (d) for the end of the attack state on a change of target)
-    - Confidence: high (the kind choice, the fire-frame rule, the facing snap), medium (the end
+      the shot during *go-prone*; part (d) for the end of the attack state on a change of target, and
+      part (e) for the immediate own-cell exception)
+    - Confidence: high (the kind choice, the fire-frame rule, the facing snap, the immediate
+      own-cell exception), medium (the end
       conditions of the attack state and the prone repeat shot)
 
 12. **Facing toward a target for jumpjets.** For a jumpjet that has a target, the facing used in
@@ -1415,6 +1424,12 @@ whose …") means any stock type with that property; the property is a precondit
     running sequence, and the stage of the sequence is not restarted (the same kind is requested
     again and turned down). Falsified if the facing stays on the old direction until the sequence
     completes. Runs: three per variant.
+  - (e) Immediate own-cell exception: use the setup, procedure and recording of S-0215
+    claim 31's measurement scenario B19(e). Expected: the secondary shot occurs on the
+    deciding behaviour-processing tick, its own-cell target is cleared on that tick before
+    *deployed-fire* starts, and changing the fire-frame fields does not delay the shot or
+    cause another shot from that sequence. A delayed shot, a retained target or an extra
+    sequence-driven shot falsifies the exception.
 - **M9 (claim 14).**
   - (a) Timer bounds and outcome ratios. Over 50 games, leave one soldier idle for 18000 ticks per game, and log the
     ticks between visible idle outcomes and the outcomes. Only some attempts can be seen: *r* = 0
