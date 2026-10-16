@@ -2,7 +2,7 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -268,7 +268,7 @@ before joint hand-off.
     | 1 | takeover | S-0601 claim 5 |
     | 2 | bomb planting | S-0519 claim 2 |
     | 3 | electric charging | S-0518 claim 11 |
-    | 4 | parasite attachment | S-0614 claims 1 to 4 |
+    | 4 | parasite attachment | S-0614 claims 1 to 4 and 24 |
     | 5 | temporal erasure | claims 1 to 4 and 21 |
     | 6 | locomotor replacement | selection only here |
     | 7 | air-strike designation | S-0519 claim 16 |
@@ -284,6 +284,12 @@ before joint hand-off.
     erase and attach a parasite, charge, designate, plant or disarm a bomb through the same
     selected hit. In particular charging and parasite attachment outrank erasure, while
     erasure outranks locomotor replacement, designation and disarming.
+
+    When takeover, bomb planting or electric charging suppresses attachment, a carried
+    parasite remains off the map, unattached and inactive, rather than making a failed-latch
+    return, regardless of target latchability or the selected effect's success (S-0614
+    claim 24). That claim owns `quirks.parasite_suppressed_latch_strands_unit` (default
+    original) and its return-only alternative; neither setting permits fallback attachment.
 
     Radiation creation and the shared detonation presentation are outside this exclusion:
     radiation can accompany any selected row, and an unsuccessful selected hit still permits
@@ -602,6 +608,22 @@ is falsified by the opposite result under the same conditions.
   exclusion. Runs in which ordinary firing legality prevents delivery are inconclusive.
   Propose a delayed projectile whose target eligibility changes after firing, not a forced
   state write, to isolate such cases.
+
+  For carried parasites, follow S-0614 claim 24's fate test as well. For each of takeover,
+  planting and charging, retain a clear firing cell and record the carried unit's existence,
+  health, map presence and attachment at detonation and for 300 ticks afterwards. Compare
+  successful and refused higher effects, latchable mobile targets, targets made non-latchable
+  during flight, building and forced-cell targets where firing permits, and lost-target
+  detonations. Include a vehicle firer whose charging fails and named infantry-parasite
+  variants able to charge or plant, plus a takeover-capable variant. Use three completed
+  shots per reachable arrangement; shots removed without detonation test a different case.
+  Expect the surviving carried parasite to remain extant, off-map, unattached and inactive,
+  without return, recovery timer, death effects, kill experience or replacement. Record the
+  higher effect's outcome separately. Return, attachment or removal caused solely by carrier
+  completion falsifies this fate. Distinguish an extant off-map unit from silent removal
+  with the recorder, not screen disappearance. An attachment-selected control whose target
+  becomes non-latchable must instead attempt S-0614 claim 4's return. Firing refusal is
+  inconclusive; change eligibility during flight rather than bypassing firing legality.
 - **E14, missing beam (claim 21).** Named map variants give a non-temporal rookie primary
   and either an erasing secondary selected against the test target or an erasing elite
   replacement on a map-placed elite firer. Confirm no beam before firing, record whether
