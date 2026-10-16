@@ -971,6 +971,60 @@ fn ferries_infantry_across_a_strait() {
     );
 }
 
+// Infantry that cannot walk to the next wave's goal (PLAN §4.7, S-0212
+// claim 4): on the strait map a rifleman standing far from home on its own
+// shore is called home, where the ferry takes idle infantry, instead of
+// being sent to the nearest shore cell to the goal and left there.
+#[test]
+fn infantry_that_cannot_walk_to_the_goal_waits_at_home() {
+    let map = fixture::map_strait();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-strait",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the strait skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let mid = fixture::at(0, 0).x;
+    let side = (yard.x - mid).signum();
+    let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+        i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
+    };
+    // A free land cell on the house's own shore, 20 to 30 cells from home.
+    let far = g
+        .world
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| {
+            (c.x - mid) * side > fixture::STRAIT_HALF
+                && (400..=900).contains(&d2(c, yard))
+                && !free_cells(&g.world, c, 1).is_empty()
+                && free_cells(&g.world, c, 1)[0] == c
+        })
+        .min_by_key(|&c| (d2(c, yard), c.y, c.x))
+        .expect("a far cell on the home shore");
+    let walker = testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, far, 0);
+    let at_home = |w: &World| {
+        w.obj(walker)
+            .is_some_and(|o| !o.on_map || d2(o.pos.cell(), yard) <= 17 * 17)
+    };
+    // Called home at once, before any wave would go (the waves wait 3000
+    // ticks for stragglers), and still home (or aboard a ferry) later.
+    let soon = g.world.tick + 2500;
+    assert!(
+        step_until(&mut g, soon, at_home),
+        "the rifleman came home to wait for a ferry"
+    );
+    let later = g.world.tick + 4000;
+    step_until(&mut g, later, |_| false);
+    assert!(at_home(&g.world), "no wave sent it off to the shore");
+}
+
 /// The skirmish rules with a paradrop (test data of our own): the
 /// superweapon DROP (paradrop kind, not power-dependent) given by the
 /// building AIRB, which no house can build, the plane PDPLANE and the

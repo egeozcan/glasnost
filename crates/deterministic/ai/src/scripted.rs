@@ -99,6 +99,10 @@ pub const THINK_PERIOD: i32 = 15; // nocite: tuning of our own opponent
 /// Cells within which an idle army unit attacks a seen enemy.
 const ENGAGE: i64 = 10; // nocite: tuning of our own opponent
 
+/// Cells from home within which infantry waiting for a ferry stays (the
+/// brain's ferry takes idle infantry from within twice its home radius).
+const FERRY_GATHER: i64 = 15; // nocite: tuning of our own opponent
+
 /// Ticks after which idle army units go as a wave even when fewer than the
 /// plan's wave size.
 const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
@@ -930,6 +934,8 @@ impl Script {
             }
         }
         let mut waiting: Vec<ObjectId> = Vec::new();
+        let home = self.home(w);
+        let ahead = self.attack_goal(w);
         for id in army.iter().copied().filter(|&id| idle(w, id)) {
             let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
                 continue;
@@ -946,6 +952,23 @@ impl Script {
                     target: Some(Target::Object(e)),
                     dest: None,
                 });
+            } else if let (Some(h), Some(g)) = (home, ahead)
+                && self.needs_ferry(w, id, g)
+            {
+                // Infantry that cannot walk to the goal waits at home for
+                // a ferry (the brain's ferry takes idle infantry from
+                // there) instead of standing at the nearest shore.
+                if dist2(at, h) > FERRY_GATHER * FERRY_GATHER {
+                    let mut near = BTreeMap::new();
+                    let dest = self.reachable(w, id, h, &mut near);
+                    out.push(Order::Behaviour {
+                        actor: id,
+                        behaviour: Behaviour::Move,
+                        attack_move: false,
+                        target: None,
+                        dest: Some(Target::Cell(dest)),
+                    });
+                }
             } else {
                 waiting.push(id);
             }
@@ -993,6 +1016,21 @@ impl Script {
             }
         }
         out
+    }
+
+    /// Whether unit `id` is infantry that cannot walk to `goal`: it stands
+    /// in a reach region of its movement zone (S-0212 claim 4) that does
+    /// not hold the goal, and it does not fly (S-0502).
+    pub(crate) fn needs_ferry(&self, w: &World, id: ObjectId, goal: CellXY) -> bool {
+        let Some(o) = w.obj(id) else { return false };
+        if o.kind != Kind::Infantry || crate::jumpjets::flies(w, id) {
+            return false;
+        }
+        let Some(zone) = w.rules().unit(o.kind, o.type_index).map(|u| u.zone) else {
+            return false;
+        };
+        let from = regions::reach_in(w, o.pos.cell(), zone);
+        matches!(from, Reach::Region(_)) && regions::reach_in(w, goal, zone) != from
     }
 
     /// Where unit `id` goes for goal `c`: the goal itself when it lies in

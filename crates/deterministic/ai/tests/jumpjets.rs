@@ -171,7 +171,7 @@ fn flies_only_at_what_it_has_explored() {
     );
 }
 
-// S-0502, PLAN §4.7: a wave's jumpjets go to the enemy's own cell, where a walking unit of the wave is sent to the nearest cell of its own bank.
+// S-0502, PLAN §4.7: a wave's jumpjets go to the enemy's own cell, while a walking unit that cannot walk there waits at home for a ferry.
 #[test]
 fn a_wave_sends_its_jumpjets_across() {
     let mut g = game(5);
@@ -203,17 +203,14 @@ fn a_wave_sends_its_jumpjets_across() {
         })
     };
     let goal = dest_of(jet).expect("the jumpjet joins the wave");
-    let walks = dest_of(walker).expect("the walker joins the wave");
     let at = |id: ObjectId| w.obj(id).unwrap().pos.cell();
     assert!(
         across.iter().any(|&e| at(e) == goal),
         "the jumpjet goes to the enemy's own cell"
     );
     assert!(across_obstacle(&w, at(walker), goal));
-    assert!(
-        !across_obstacle(&w, at(walker), walks),
-        "the walker stays on its own bank"
-    );
+    // The walker, which cannot walk there, stays at home for a ferry.
+    assert_eq!(dest_of(walker), None, "the walker waits at home");
 }
 
 // spec: S-0417 claim 15 (answers Q-1070: a released jumpjet unit ends its factory contact and tether in its ascent, so no interim hold remains), PLAN §4.7: with no jumpjet unit, a barracks and a seen enemy no walking unit reaches, the house orders a jumpjet unit from its sidebar like a person, builds it, and the barracks is free for the next unit once the unit has climbed away.
