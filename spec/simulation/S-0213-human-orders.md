@@ -2,7 +2,7 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 33
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -455,10 +455,13 @@ Terms).
    These movement outcomes inherit S-0503 claims 15–16's backing, confidence and
    Scenarios H12 and H15.
 
-   A jumpjet instead uses S-0502 claims 17 and 24's stop reroute when it has a
-   movement commitment (S-0502 Terms, *moving*). Its order-level destination becomes
-   empty, but its separate movement point can be replaced and movement can continue.
-   This is not S-0502 claim 16's direct no-point instruction to the locomotor.
+   A jumpjet instead uses S-0502 claims 17 and 24's reroute when the stop produces
+   an effective destination clear and it has a movement commitment (S-0502 Terms,
+   *moving*). Its order-level destination becomes empty, but its separate movement
+   point can be replaced and movement can continue. An unchanged vehicle assignment
+   can be suppressed instead (claim 21); then no reroute occurs and the preceding
+   movement point and commitment survive. This is not S-0502 claim 16's direct
+   no-point instruction to the locomotor.
 
    | Flight state at stop | Successful reroute outcome |
    |---|---|
@@ -527,6 +530,22 @@ Terms).
     passengers or garrison occupants out. These consequences belong to S-0215,
     S-0517 claims 1 to 8 (in-place vehicle deploying and deploy-fire vehicles), and the
     special-abilities specs.
+
+    For a jumpjet, the destination clear has S-0502 claim 24's movement consequences,
+    just as an effective stop clear does (claim 8), whenever it retains a movement
+    commitment. Deploy therefore need not erase its movement point or halt its flight:
+    a successful reroute supplies a replacement point, with the flight-state outcomes
+    in claim 8's table. A suppressed unchanged vehicle assignment instead retains the
+    preceding point and commitment (claim 21). For a landing-first vehicle hovering
+    with a commitment, a different replacement horizontal point causes cruise before
+    descent; an equal one lets the landing request produce descent. Touchdown uses
+    the retained point. With no commitment, the clear does not create one, and the
+    landing request alone does not wake idle hover. These are S-0502 claims 13 and 24's
+    consequences, not an extra deploy movement instruction.
+    - Backing for the jumpjet consequences: `measurable` (S-0502 Scenario J22),
+      confidence: high for effective-clear dispatch, medium for exceptional aftermath.
+      The uncommitted idle-hover starting case remains `unmeasured`, as in that claim:
+      no ordinary stock order sequence establishing it is settled.
     - Backing: `measurable` (Scenario O6) for the vehicle-factory cell and for the unit that
       deploys in the way its type says (which shows that *unload* was queued and took effect). That
       the actor also breaks off contact and loses its target and destination is `unmeasured`: the
@@ -792,9 +811,11 @@ Terms).
     fraidycat nor a cyborg, and a sequence that permits the request. A first destination,
     a different destination and clearing a destination make no such request. Equality means
     the same cell or the same object, not different objects occupying the same cell.
-    The following are the destination assignments made by the orders of this spec.
+    The following are the destination requests made by the orders of this spec.
+    the jumpjet filters below can suppress a destination assignment without cancelling
+    the order's other effects.
 
-    | Order | Assignment at application, after its checks pass |
+    | Order | Destination request at application, after its checks pass |
     |---|---|
     | Plain move | The order's destination, after any group spreading of claim 7 |
     | Attack-move with a destination | The same assignment as plain move after claim 6's translation |
@@ -805,17 +826,43 @@ Terms).
     | Scatter | Claim 9 sends a request, not a move order. Only a destination assignment made by an accepted request is subject to the equality rule (S-0208 claims 11 to 13) |
     | Queued move or route point | Recording a future point is not destination assignment. When following it assigns a destination, S-0107's same rule applies; route following is distinct from a plain behaviour order (claims 16 and 17; S-0215 claims 13 and 14) |
 
+    **Destination filters and clears for jumpjets.** S-0502 claims 23 and 24 qualify these
+    requests, including table T3 parts (e) and (f):
+    - Outside an ion storm, jumpjet-type infantry ignore a nonempty destination assignment
+      whose cell equals their current cell, before any movement-point search. This is a
+      test of the type's jumpjet flag, not merely its locomotor. It applies while grounded
+      too: an ordinary own-cell order does not promise take-off, an assignment or get-up.
+      It does not prevent the order's separate target, behaviour or guard-spot effects.
+    - An ordinary jumpjet vehicle ignores an unchanged order-level destination, including
+      empty-to-empty, unless its destination-refresh state requires reassignment
+      (S-0502 Terms). A balloon-hover vehicle can first substitute its retained destination
+      while it still has a target. A suppressed assignment neither reroutes nor erases
+      the movement point nor consumes an infantry standing-position draw.
+    - Every effective destination clear reroutes a committed jumpjet under S-0502 claims
+      17 and 24, whether caused by stop, deploy or behaviour-order application. The
+      order-level destination is empty after rerouting, but the replacement movement
+      point and commitment survive. Changing behaviour alone is not a destination clear.
+      Without a commitment, the clear has no locomotor effect. Claim 8 gives the
+      successful reroute's flight-state consequences; failure has S-0502 claim 17's outcome.
+
+    These filters and clear outcomes inherit S-0502 claims 23 and 24's backing and
+    confidence: `measurable` (J2 and J16 for own-cell infantry rejection; J19 and J22
+    for effective clears and ordinary vehicle suppression), high for the filters and
+    effective-clear dispatch. Destination-refresh activation and balloon-hover target
+    substitution remain `unmeasured` under J22's diagnostic: normal landing-first
+    vehicle runs do not isolate them. Exceptional aftermath retains medium confidence.
+
     A qualifying reassignment at order application requests get-up at that boundary, before
     any movement in the next tick (claim 1), not at locomotor start. Merely moving to the cell
     the unit occupies does not qualify when it had no destination; repeating that cell while
-    it is still its destination does. A refused sequence request is not saved until movement
+    it is still its destination does, unless the jumpjet own-cell filter suppresses assignment. A refused sequence request is not saved until movement
     starts. Later destination assignments during behaviour processing or movement can request
     get-up on a later tick; S-0215 and the movement specs own when those assignments occur.
     No order-family whitelist is imported.
 
     **Attack order versus approach (Q-0072).** For an ordinary armed infantry unit or vehicle,
     an attack order with an object target and no destination leaves that target and an empty
-    destination at the order boundary. This does not mean the actor remains stationary:
+    destination at the order boundary, subject to the jumpjet destination filters above. This does not mean the actor remains stationary:
     S-0215 claim 37 owns the subsequent approach step's trigger, gating and destination
     renewal, including its medium-confidence zero-speed qualifications in part g; those
     qualifications do not promise displacement. S-0307 claims 15 to 18 own the covered
@@ -1184,7 +1231,8 @@ applies. "The resulting behaviour" is the order's behaviour, or for an attack-mo
 | (h) | The actor is a mobile actor controlling slave units (a slave-miner harvester, which works with its slaves) and the resulting behaviour is not *attack* | Its slaves are sent back to guard it |
 
 Destination assignments in table T3 parts (e) and (f), including assignments that repeat the
-current destination, use claim 21 and S-0107 claim 15. They must not be interpreted as an
+current destination, use claim 21 and S-0107 claim 15, subject to claim 21's jumpjet
+assignment filters and effective-clear rerouting. They must not be interpreted as an
 unconditional get-up effect of a move behaviour. Scatter and route following use the same rule
 only when they actually assign a destination.
 
@@ -1322,6 +1370,19 @@ Keyboard-command feedback (claim 18) is tested by S-0701 Scenario D4, including 
 and nonempty-but-ineligible selections, one cue for several ordered objects, failed issuance
 at the pending-order limit, and route-mode guard. Record cue requests separately from orders
 applied: a cue is not proof that an order passed its application checks.
+
+The jumpjet destination assignments (claims 8, 10 and 21) are tested by S-0502 Scenarios
+J2, J16, J19 and J22, with their setup and recorder requirements. In particular, compare
+deploy with a nonempty order-level destination against deploy after stop has emptied it
+while retaining a movement commitment. The effective clear reroutes and preserves the
+replacement movement point; an ordinary suppressed empty-to-empty vehicle assignment
+preserves the preceding point without another reroute. Record flight state and touchdown
+position: a different replacement causes cruise before descent, and landing uses the
+retained point. Erasing either retained point, or rerouting on a suppressed assignment,
+falsifies the distinction. For jumpjet-type infantry outside an ion storm, J2/J16's
+own-cell order must be rejected before point adjustment, including while grounded.
+Starting ascent solely from that assignment falsifies the filter. These are companion
+scenarios, not measurements already performed here.
 
 **Scenario O1: tick boundary (claims 1 and 14).**
 - *Setup:* two identical vehicles of the human player, side by side and selected together, facing
