@@ -2,11 +2,11 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0150, Q-0151, Q-0193, Q-0267, Q-0285]
 supersedes: []
@@ -35,6 +35,10 @@ within the update and their continuation after defeat. S-0202 claim 16 agrees wi
 19 and 23 on score-request eligibility, house order and continuation of the scenario stream.
 S-0701's Import mapping already supplies the literal defeat, player-defeated and victory
 announcement bindings; its post-defeat muting agrees with claim 5 and V20 here.
+S-0601 claim 14 agrees with claim 5's permanent-control row: the original-owner query
+supplies the current owner, so the former owner's defeat does not hit the object, but the
+current owner's cleanup does. Joint hand-off must include that corrected row; S-0601
+scenario MC10 supplies both defeat variants.
 
 **Partial request answer.** Q-0193 is listed only for claim 17's defeat-count answer to
 part of question 3. Reopen the request at hand-off and record that limited answer.
@@ -228,7 +232,8 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
      | of another house, held by this house | — | not hit |
      | of this house, held by another house through a controlling unit | some house of the game plays a country of the civilian side (the civilian side of claim 12, Import mapping) | not hit; the first such house in house order takes this house's place as its original house, so when the control ends it passes to that house instead of coming back |
      | of this house, held by another house through a controlling unit | no house of the game plays a country of the civilian side | hit |
-     | of this house, taken over for good by another house, with no controlling unit | — | hit |
+     | permanently controlled, with no controlling unit | current owner is this defeated house | hit; no pre-domination owner is remembered |
+     | permanently controlled, with no controlling unit | current owner is another house | not hit, even if this defeated house owned it before domination |
 
      How each object dies (death weapons, survivors, remains) is S-0312's.
    - **The house is marked defeated** (claim 1), whatever happens to those objects afterwards.
@@ -267,16 +272,17 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
      credit). Not measured, with reasons: the amount equal to the current health is
      `unmeasured` (no observable separates an amount equal to the current health from a larger
      one, and S-0312 owns any effect that reads the amount of a killing hit); which warhead is
-     named is backed by S-0303 (claim 19) and not by this spec's scenarios; the last table row
-     (taken over for good, no controlling unit) is `unmeasured` (no way to arrange such an object
-     is identified). Stopping an erasure is `unmeasured`: V4 does not arrange an object under
+     named is backed by S-0303 (claim 19) and not by this spec's scenarios. The permanent-control
+     rows are `measurable` through S-0601 scenario MC10's separate former-owner and current-owner
+     defeat variants. Stopping an erasure is `unmeasured`: V4 does not arrange an object under
      an erasing weapon at surrender. The defeat message and announcement are `measurable`
      through V7's message capture and audio recording; post-defeat announcement suppression
      is `measurable` through V20, using a lengthened end delay in the original.
      The computer-player alliance reaction is `unmeasured`: no scenario isolates its optional
      AI response, and it is outside our engine's rules. Reveal and radar are backed by the
      scenarios of S-0409 and S-0410 cited above
-   - Confidence: high for the destruction, the ignored defences and the first two table rows, and
+   - Confidence: high for the destruction, the ignored defences, the first two table rows and
+     the permanent-control rows, and
      medium for the missing attacker and attacking house (S-0302 claim 1 gives them, V4 part c
      checks them through the result screen only); medium for the civilian-side cases
 
