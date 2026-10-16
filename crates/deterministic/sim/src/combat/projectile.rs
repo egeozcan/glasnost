@@ -1243,11 +1243,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
             let arrival = rows.arrival || (rows.passed && jumpjet);
             let reached = rows.reached;
             let pt = detonation_point(w, &pr, &p, point, arrival, reached, speed_start);
-            if rules
-                .combat
-                .warhead_of(pr.weapon)
-                .is_some_and(|h| h.nuke_maker)
-            {
+            // spec: S-0514 claim 20 (nuke-making is the last row: a higher selected row replaces it)
+            if special_of(w, pr.weapon, pr.target) == Some(Special::NukeMake) {
                 // spec: S-0513 claim 8 (a missile-maker warhead does no damage at its burst: it is replaced by the falling missile, claim 9)
                 pr.pos = pt;
                 crate::superweapons::nuke::burst(w, &pr);
@@ -1394,19 +1391,11 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     // spec: S-0303 claim 2, S-0306 claim 21 and S-0614 claim 1 (a parasite-flag warhead's projectile makes no area hits; its animation and debris stay)
     // spec: S-0303 claim 2 and S-0519 claim 16 (an air-strike-flag warhead's projectile makes no area hits, whether or not it calls or redirects a strike; a projectile-producer rule only)
     // spec: S-0303 claim 2 and S-0518 claim 11 (a detonation selecting the electric-charge effect bypasses area damage at any target, even when it registers no charger)
-    // Seam: S-0518 claim 11 ranks mind control and demolition charge planting above the
-    // electric-charge effect; neither is modelled (S-0601, S-0519 claim 13), so a flagged
-    // warhead always selects it. Charger registration is S-0518's (not built).
-    let disguises = rules
-        .combat
-        .warhead_of(pr.weapon)
-        .is_some_and(|h| h.makes_disguise);
+    // spec: S-0514 claim 20 (one selected special hit; a selected row replaces ordinary damage and suppresses every later row)
+    let special = special_of(w, pr.weapon, pr.target);
     // spec: S-0516 claim 31 (a disguise-flag warhead's projectile does no damage to the target)
-    let area = !disguises
-        && !rules.combat.warhead_of(pr.weapon).is_some_and(|h| {
-            h.parasite || h.airstrike || h.electric_assault || h.ivan_bomb || h.bomb_disarm
-        });
-    if disguises {
+    let area = special.is_none();
+    if special == Some(Special::Disguise) {
         // spec: S-0516 claim 31 (detonating on its target, it disguises its firer)
         crate::cloak::disguise::disguise_hit(w, pr.attacker, pr.target);
     }
@@ -1567,27 +1556,22 @@ fn detonation_inner(
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
         return DetonationResult::Missed;
     };
-    // spec: S-0514 claim 1 (a temporal warhead's erasing effect replaces ordinary direct and area damage; the other special effects that rank before it are not yet ranked, Q-0984: the parasite, air-strike and electric-charge flags win)
-    // spec: S-0518 claim 11 (an electric-charge detonation registers an infantry firer on the building it hit, whatever the building)
-    if rules.combat.warhead(h).electric_assault {
-        crate::linked::charge_hit(w, attacker, target);
+    // spec: S-0514 claim 20 (one selected special hit: the first enabled row of the table wins, all later rows and ordinary damage are suppressed even when the selected effect cannot succeed; takeover and locomotor replacement are selected here and their effects are seams, S-0601 and the locomotor specs are not built)
+    let special = special_of(w, weapon, target);
+    match special {
+        // spec: S-0518 claim 11 (an electric-charge detonation registers an infantry firer on the building it hit, whatever the building)
+        Some(Special::Charge) => crate::linked::charge_hit(w, attacker, target),
+        // spec: S-0519 claims 2 and 7 (a bomb-planting warhead plants on its target instead of area damage; a disarm warhead removes the target's bomb; the distance is not tested)
+        Some(Special::Bomb) => crate::bomb::plant(w, attacker, target),
+        // spec: S-0519 claim 16 (an air-strike warhead calls or redirects the strike instead of area damage; a shot at a cell, a destroyed firer or a non-designator calls none)
+        Some(Special::Airstrike) => crate::strike::designation(w, attacker, target),
+        Some(Special::Disarm) => crate::bomb::disarm(w, target),
+        // spec: S-0514 claims 1 and 21 (the erasing effect replaces ordinary damage; a firer with no beam makes no lock and no side effect)
+        Some(Special::Erase) => crate::temporal::deliver(w, attacker, target),
+        _ => {}
     }
-    // spec: S-0519 claims 2 and 7 (a bomb-planting warhead plants on its target instead of area damage; a disarm warhead removes the target's bomb; the distance is not tested)
-    if rules.combat.warhead(h).ivan_bomb {
-        crate::bomb::plant(w, attacker, target);
-    }
-    // spec: S-0519 claim 16 (an air-strike warhead calls or redirects the strike instead of area damage; a shot at a cell, a destroyed firer or a non-designator calls none)
-    if rules.combat.warhead(h).airstrike {
-        crate::strike::designation(w, attacker, target);
-    }
-    if rules.combat.warhead(h).bomb_disarm {
-        crate::bomb::disarm(w, target);
-    }
-    let erasing = wh_temporal(&rules, h);
-    if erasing {
-        crate::temporal::deliver(w, attacker, target);
-    }
-    let area = area && !erasing;
+    // spec: S-0514 claim 20 (with no selected row ordinary damage applies; a selected row, built or not, replaces it)
+    let area = area && special.is_none();
     let res = if area {
         area::detonate(
             w,
@@ -1642,11 +1626,68 @@ fn detonation_inner(
     res
 }
 
-/// Whether a warhead's special effect is temporal erasure: the flag, with
-/// no parasite, air-strike or electric-charge flag (Q-0984).
-fn wh_temporal(rules: &crate::rules::SimRules, h: WarheadId) -> bool {
-    let wh = rules.combat.warhead(h);
-    wh.temporal && !(wh.parasite || wh.airstrike || wh.electric_assault)
+/// The special effect a projectile detonation selects (S-0514 claim 20), in
+/// the order of the claim's table: the first enabled row wins.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Special {
+    /// Row 1, takeover (S-0601 claim 5; the effect is a seam, S-0601 is not built).
+    Takeover,
+    /// Row 2, bomb planting (S-0519 claim 2).
+    Bomb,
+    /// Row 3, electric charging (S-0518 claim 11).
+    Charge,
+    /// Row 4, parasite attachment (S-0614 claims 1 to 4).
+    Parasite,
+    /// Row 5, temporal erasure (S-0514 claims 1 to 4 and 21).
+    Erase,
+    /// Row 6, locomotor replacement (selection only here; the effect is a seam).
+    Locomotor,
+    /// Row 7, air-strike designation (S-0519 claim 16).
+    Airstrike,
+    /// Row 8, direct rocking of a vehicle target (selection only here).
+    DirectRock,
+    /// Row 9, bomb disarming (S-0519 claim 7).
+    Disarm,
+    /// Row 10, disguise-making (S-0516 claim 31).
+    Disguise,
+    /// Row 11, nuke-making (S-0513 claim 8).
+    NukeMake,
+}
+
+/// The special effect `weapon`'s warhead selects against `target`; `None`
+/// when no row is enabled, so ordinary damage applies.
+pub fn special_of(w: &World, weapon: WeaponId, target: Option<Target>) -> Option<Special> {
+    let h = w.rules().combat.warhead_of(weapon)?;
+    // spec: S-0514 claim 20 (the first enabled row wins; every later row is suppressed even when the selected effect cannot succeed, has no suitable target or has lost its firer)
+    let vehicle = || {
+        // spec: S-0514 claim 20 (direct rocking counts only when the projectile target is a vehicle; its flag with another target does not suppress the later rows)
+        matches!(target, Some(Target::Object(x)) if w.obj(x).is_some_and(|o| o.kind == Kind::Vehicle))
+    };
+    if h.mind_control {
+        Some(Special::Takeover)
+    } else if h.ivan_bomb {
+        Some(Special::Bomb)
+    } else if h.electric_assault {
+        Some(Special::Charge)
+    } else if h.parasite {
+        Some(Special::Parasite)
+    } else if h.temporal {
+        Some(Special::Erase)
+    } else if h.is_locomotor {
+        Some(Special::Locomotor)
+    } else if h.airstrike {
+        Some(Special::Airstrike)
+    } else if h.direct_rocker && vehicle() {
+        Some(Special::DirectRock)
+    } else if h.bomb_disarm {
+        Some(Special::Disarm)
+    } else if h.makes_disguise {
+        Some(Special::Disguise)
+    } else if h.nuke_maker {
+        Some(Special::NukeMake)
+    } else {
+        None
+    }
 }
 
 /// The explosion animation of S-0303 F5 (with the electromagnetic case's

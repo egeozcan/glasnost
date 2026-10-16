@@ -11742,6 +11742,14 @@
           "format": "int32",
           "default": null
         },
+        "direct_rocker": {
+          "description": "`directrocker`, the direct-rocking selection of S-0514 claim 20\n(absent: no).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "electric_assault": {
           "description": "`ElectricAssault`.",
           "type": [
@@ -11815,6 +11823,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "mind_control": {
+          "description": "`MindControl`, the takeover selection of S-0514 claim 20 (absent: no).",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "nuke_maker": {

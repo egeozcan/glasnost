@@ -261,9 +261,13 @@ pub fn carrier_ended(w: &mut World, carrier: ObjectId, weapon: WeaponId, detonat
         // spec: S-0614 claim 21 (removed without detonating: the parasite stays off the map, unattached and unable to act; no latch, return, death or recovery)
         return;
     }
+    // spec: S-0514 claim 20 and S-0614 claims 1 and 3 (attachment is the fourth row: takeover, bomb planting and charging in the same warhead suppress it; what becomes of the carried parasite then is Q-1032, interim: it fails to latch)
+    let selected =
+        crate::combat::projectile::special_of(w, weapon, target.map(crate::world::Target::Object))
+            == Some(crate::combat::projectile::Special::Parasite);
     match target {
         // spec: S-0614 claim 3 (the projectile's target object is latchable: it becomes the host; no distance is tested)
-        Some(t) if detonated && latchable(w, p, t) => attach(w, p, t),
+        Some(t) if detonated && selected && latchable(w, p, t) => attach(w, p, t),
         // spec: S-0614 claim 4 (not latchable, or a cell: the parasite fails to latch); claim 21 (quirks.parasite_carrier_loss_strands_unit off: removal without detonation attempts the same return)
         _ => fail_latch(w, p),
     }

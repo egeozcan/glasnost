@@ -2632,4 +2632,11 @@ pub struct WarheadType {
     /// `IsLocomotor` (S-0308 row 7).
     #[serde(default)]
     pub is_locomotor: Option<bool>,
+    /// `MindControl`, the takeover selection of S-0514 claim 20 (absent: no).
+    #[serde(default)]
+    pub mind_control: Option<bool>,
+    /// `directrocker`, the direct-rocking selection of S-0514 claim 20
+    /// (absent: no).
+    #[serde(default)]
+    pub direct_rocker: Option<bool>,
 }

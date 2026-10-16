@@ -320,6 +320,10 @@ pub struct WarheadRules {
     pub makes_disguise: bool,
     /// The missile-maker flag (S-0513 claim 8).
     pub nuke_maker: bool,
+    /// The takeover flag, `MindControl` (S-0514 claim 20, row 1).
+    pub mind_control: bool,
+    /// The direct-rocking flag, `directrocker` (S-0514 claim 20, row 8).
+    pub direct_rocker: bool,
     /// The bright flag (S-0524 claim 6).
     pub bright: bool,
     /// The flash-size fraction, single precision widened (S-0524 claim 6).
@@ -1116,6 +1120,9 @@ pub fn tables(
                 makes_disguise: b(h.makes_disguise),
                 // spec: S-0513 Import mapping (NukeMaker absent: no)
                 nuke_maker: b(h.nuke_maker),
+                // spec: S-0514 Import mapping (MindControl and directrocker, the flags of claim 20's selection; absent: no)
+                mind_control: b(h.mind_control),
+                direct_rocker: b(h.direct_rocker),
                 // spec: S-0524 I2 (Bright absent: false)
                 bright: b(h.bright),
                 // spec: S-0524 I2 (CombatLightSize: narrowed to single precision; absent 0)
