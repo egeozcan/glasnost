@@ -175,7 +175,7 @@ fn claim_18_living_crash_credits_nobody() {
     assert_eq!(kills, (w.houses[0].combat.kills, w.houses[1].combat.kills));
 }
 
-// spec: S-0502 claim 3 and Open questions (a crash start on a jumpjet that is hovering with no move order: the interim rule lets the crash start wake its update, Q-0979)
+// spec: S-0502 claim 3 and S-0312 claim 16 (safety departure, engine design rule: a pending aerial crash start on a jumpjet hovering with no move order guarantees its next update, so a dead hovering unit does not stay suspended; answers Q-0979)
 #[test]
 fn claim_3_crash_start_wakes_an_idle_hover() {
     let mut w = game();

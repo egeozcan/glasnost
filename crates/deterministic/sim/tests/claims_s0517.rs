@@ -142,7 +142,7 @@ fn claim_4_deploying_presentation_and_f1() {
     assert_eq!(anims(&w), vec![("DEPA".to_string(), false)], "forward");
     let o = w.obj(v).unwrap();
     assert_eq!(o.beh.last.map(|l| l.1), Some(1), "delay 1 in transition");
-    // d = 2 and E = 5: the vehicle is deployed at since + 8, not before.
+    // d = 2 and E = 5: the vehicle is deployed at since + 9, not before.
     let mut done = None;
     for _ in 0..30 {
         step(&mut w);
@@ -151,7 +151,11 @@ fn claim_4_deploying_presentation_and_f1() {
             break;
         }
     }
-    assert_eq!(done, Some(since + 8), "t₀ + (E − 1) d");
+    assert_eq!(
+        done,
+        Some(since + 9),
+        "t₀ + (E − 1) d + 1 (claim 7, P1 C: 9 ticks for a delay of 2 and E = 5)"
+    );
     assert_eq!(behaviour(&w, v).0, Some(Behaviour::Guard));
     // While deploying the body is hidden and the deployed image is not yet used.
     assert!(inplace::deployed_image(&w, v).is_some());
@@ -184,7 +188,11 @@ fn claim_6_undeploy_presentation_and_f2() {
             break;
         }
     }
-    assert_eq!(done, Some(since + 6), "t₀ + (E − 2) d");
+    assert_eq!(
+        done,
+        Some(since + 7),
+        "t₀ + (E − 2) d + 1 (claim 7, P1 C: 7 ticks for a delay of 2 and E = 5)"
+    );
     assert!(!inplace::body_hidden(&w, v));
 }
 
@@ -416,6 +424,56 @@ fn claim_12_sound_requests() {
             assert!(u >= 3, "{u}");
         } else {
             assert_eq!(u, 1);
+        }
+    }
+}
+
+// spec: S-0517 claim 7, F1, F2 and P1 C (the exact completion: t0 + (E - 1) d + 1 for a deploy and t0 + (E - 2) d + 1 for an undeploy, 5 and 4 ticks for d = 1 and E = 5, 9 and 7 for d = 2, whatever the start tick, and the count uses the base delay, not the game-speed-normalised playback delay)
+#[test]
+fn claim_7_exact_completion_and_the_base_delay() {
+    for (rate, normalized, speed, deploy_ticks, undeploy_ticks) in [
+        (900, false, 4u8, 5, 4),
+        (450, false, 4, 9, 7),
+        (900, true, 1, 5, 4),
+        (450, true, 6, 9, 7),
+    ] {
+        for extra in [0, 1] {
+            let mut r = ruleset();
+            let a = r.sim.animations.get_mut("DEPA").unwrap();
+            a.rate = Some(rate);
+            a.normalized = Some(normalized);
+            let mut w = testkit::game_with(&r, SIZE, 7);
+            w.game_speed = speed;
+            testkit::run(&mut w, 4 + extra);
+            let v = tank(&mut w, "ATANK", 0, 0);
+            deploy(&mut w, v);
+            assert!(until(&mut w, 40, |w| matches!(
+                form(w, v),
+                Form::Deploying { .. }
+            )));
+            let Form::Deploying { since } = form(&w, v) else {
+                unreachable!()
+            };
+            assert!(until(&mut w, 40, |w| form(w, v) == Form::Deployed));
+            assert_eq!(
+                w.tick - 1 - since,
+                deploy_ticks,
+                "deploy, rate {rate}, normalised {normalized}"
+            );
+            deploy(&mut w, v);
+            assert!(until(&mut w, 40, |w| matches!(
+                form(w, v),
+                Form::Undeploying { .. }
+            )));
+            let Form::Undeploying { since } = form(&w, v) else {
+                unreachable!()
+            };
+            assert!(until(&mut w, 40, |w| form(w, v) == Form::Mobile));
+            assert_eq!(
+                w.tick - 1 - since,
+                undeploy_ticks,
+                "undeploy, rate {rate}, normalised {normalized}"
+            );
         }
     }
 }

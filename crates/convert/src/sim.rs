@@ -1426,7 +1426,7 @@ impl Builder<'_> {
     fn unit(&mut self, rec: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
         self.speed(rec, kind, t);
         self.fields(rec, t, kind, UNIT_FIELDS);
-        // spec: S-0502 Edge cases and Questions for the project lead (a jumpjet speed or turn rate of 0 divides by zero in the original: the importer warns; the engine's replacement values are Q-0977's)
+        // spec: S-0502 claim 25 and Import mapping (a jumpjet speed or turn rate of 0 divides by zero in the original: the importer warns for every type having either zero field; the engine's replacement values are claim 25's design rules, no quirk switch)
         for key in ["JumpjetSpeed", "JumpjetTurnRate"] {
             let mut last = None;
             let _ = fold(t.keys.get(key.as_bytes()), None, |v, e| {
@@ -1436,7 +1436,7 @@ impl Builder<'_> {
                 self.warn(
                     layer,
                     line,
-                    format!("{key}=0 of a jumpjet type divides by zero in the original (S-0502 Edge cases, Q-0977)"),
+                    format!("{key}=0 of a jumpjet type divides by zero in the original (S-0502 claim 25)"),
                 );
             }
         }

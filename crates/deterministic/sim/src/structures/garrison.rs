@@ -573,11 +573,9 @@ fn assault(w: &mut World, unit: ObjectId, b: ObjectId) {
         if let Some(name) = anim.as_deref()
             && let Some((pos, f)) = base
         {
-            // spec: S-0508 claim 14 (supported point numbers 0 through 9; a position beyond has no supported animation point, Q-0990 interim: no animation)
-            if i < ASSAULT_POINTS {
-                let at = muzzle_position(w, b, i, pos, f);
-                effects::anim(w, name, at);
-            }
+            // spec: S-0508 claim 14 (supported point numbers 0 through 9; point i for list position i) and claim 25 (engine design rule, no quirk switch: position i >= 10 uses point i mod 10, the divisor always 10, not the configured-point count, the occupant count or the firing index)
+            let at = muzzle_position(w, b, i % ASSAULT_POINTS, pos, f);
+            effects::anim(w, name, at);
         }
         let hit = Hit {
             amount: 0,
@@ -623,7 +621,7 @@ fn occupant_animation(w: &World, unit: ObjectId) -> Option<String> {
 }
 
 /// The number of muzzle points an assault supports.
-// spec: S-0508 Constants (supported assault muzzle points 10, numbered 0 through 9; not a modulus)
+// spec: S-0508 Constants (supported assault muzzle points 10, numbered 0 through 9; also the engine-only remainder divisor of claim 25)
 const ASSAULT_POINTS: usize = 10;
 
 /// The position of garrison muzzle point `k` of building `b` for an

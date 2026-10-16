@@ -316,6 +316,8 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                     crate::transport::clear_passenger_targets(w, actor);
                 }
             }
+            // spec: S-0213 claim 8 and S-0502 claims 17 and 24 (a jumpjet with a movement commitment is rerouted by the stop; the order-level destination stays empty)
+            crate::jump::stop_ordered(w, actor);
         }
         Order::Scatter { actor } => {
             // spec: S-0213 claim 9 (a mobile actor, live, on the map and not tethered: no threat point, forced, not move-anywhere)

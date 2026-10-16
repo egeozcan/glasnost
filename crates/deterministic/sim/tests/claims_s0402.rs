@@ -1515,3 +1515,44 @@ fn claim_10_second_route_refused() {
         }
     }
 }
+
+// spec: S-0402 claim 3b and F1a (Q-0900; H27), S-0207 claim 26 and S-0215 claim 2 (a seeking harvester that ends its last track in the field cell still holds the order-level destination at the due processing before the next locomotion update, so it loads only at a processing strictly after the destination's removal tick T + 1; the first bale comes 19 ticks after loading starts), from several starting distances
+#[test]
+fn claim_3b_loading_starts_after_the_destination_is_removed() {
+    let r = ruleset();
+    let mut seen = 0;
+    for (k, x) in [-1, 0, 1, 2, 3, 5, 6, 8].into_iter().enumerate() {
+        let mut w = game_with_ore(&r, &field(4, -1, 5), 7 + k as u32);
+        place_building(&mut w, "REFN", 0, refinery_cell());
+        let h = place_vehicle(&mut w, "HARV", 0, at(x, 6 + k as i32 % 3), 0);
+        harvest_now(&mut w, h);
+        let mut removed = None; // T + 1: the tick whose locomotion update removed the destination
+        let mut with_dest = false;
+        let mut start = None;
+        let mut bale = None;
+        for _ in 0..400 {
+            testkit::run(&mut w, 1);
+            let dest = w.obj(h).unwrap().dest.is_some();
+            let phase = harvest::phase(&w, h);
+            if phase == Phase::Seeking && with_dest && !dest {
+                removed = Some(w.tick);
+            }
+            if phase == Phase::Loading && start.is_none() {
+                start = Some(w.tick);
+            }
+            if start.is_some() && bale.is_none() && harvest::state_of(&w, h).total() > 0 {
+                bale = Some(w.tick);
+                break;
+            }
+            with_dest = dest;
+        }
+        let (s, b) = (start.expect("loading"), bale.expect("bale"));
+        if let Some(t1) = removed {
+            // No loading start at or before the removal tick; the processing in T + 1 stays seeking.
+            assert!(s > t1, "loading at {s}, destination removed at {t1}");
+            seen += 1;
+        }
+        assert_eq!(b - s, 19, "the first bale 19 ticks after loading starts");
+    }
+    assert!(seen >= 4, "the arrivals with a removal observed: {seen}");
+}
