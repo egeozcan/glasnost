@@ -397,6 +397,11 @@ pub struct World {
     /// Temporal beams and erasures (S-0514).
     #[serde(default)]
     pub temporal: crate::temporal::TemporalWorld,
+    /// The number of building acquisitions so far (S-0518 claim 3): each
+    /// placement of a building into play and each ownership change of one
+    /// takes the next number as that building's acquisition rank.
+    #[serde(default)]
+    pub acquisitions: u64,
     /// Crate places and the any-crate mark (S-0520).
     #[serde(default)]
     pub crates: crate::crates::CrateWorld,

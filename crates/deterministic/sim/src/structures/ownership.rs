@@ -63,6 +63,8 @@ pub fn change(w: &mut World, b: ObjectId, new: Option<HouseId>, cause: Cause) {
     if let Some(ob) = w.obj_mut(b) {
         ob.owner = new;
     }
+    // spec: S-0518 claim 3 (an ownership change makes the building the new owner's newest acquisition)
+    crate::linked::acquire(w, b);
     crate::econ::events::owner_changed(w, b, old);
     if spawner {
         // spec: S-0509 claim 12 and S-0506 claim 13 (a missile silo's spawner clears its slots when the building changes house)

@@ -48,6 +48,20 @@ fn distance(w: &World, a: ObjectId, b: ObjectId) -> i64 {
     isqrt(n as u128) as i64
 }
 
+/// A building joins its house's buildings (S-0518 claim 3): by placement into
+/// play or by an ownership change to that house. It takes the next
+/// acquisition number, which ranks it after every building the house already
+/// held; acquisitions within one tick rank in the order they take effect.
+/// An unchanged-owner assignment is no acquisition (the callers do not call).
+pub fn acquire(w: &mut World, b: ObjectId) {
+    // spec: S-0518 claim 3 (a captured or transferred building ranks after every building the new owner already held, even if created earlier; losing and reacquiring gives a new later rank; acquisitions within one tick rank in the order their events take effect, not by object number)
+    w.acquisitions = w.acquisitions.wrapping_add(1);
+    let n = w.acquisitions;
+    if let Some(ob) = w.obj_mut(b) {
+        ob.combat.acquired = n;
+    }
+}
+
 /// The delayed-fire field *d* of the prism type (S-0518 claims 6 and 7).
 fn delay_field(w: &World) -> i32 {
     w.rules().combat.general.prism.building.map_or(0, |t| {
@@ -98,13 +112,19 @@ pub fn recruit(w: &mut World, master: ObjectId) -> bool {
     }
     // spec: S-0518 Terms (support reach: the master's slot-1 weapon range, 0 without one)
     let reach = crate::combat::range::firer_weapon_range(w, master, 1);
-    // spec: S-0518 claim 3 (the nearest by F2; a tie goes to the one the house acquired first: our engine's creation order, Q-0985)
+    // spec: S-0518 claim 3 (the nearest by F2; a tie goes to the one the house acquired first, S-0404 claim 7, Q-0985 answered by revision 3: the acquisition rank, not the object number; the number only completes the ordering, no two buildings share a rank)
     let best = w
         .objects
         .keys()
         .copied()
         .filter(|&b| eligible(w, master, b, reach))
-        .min_by_key(|&b| (distance(w, master, b), b));
+        .min_by_key(|&b| {
+            (
+                distance(w, master, b),
+                w.obj(b).map_or(0, |o| o.combat.acquired),
+                b,
+            )
+        });
     let Some(s) = best else { return false };
     let to = crate::combat::position::fire_point(w, master, 0, 0);
     let due = w.tick.wrapping_add((delay_field(w) - 1).max(0));
@@ -346,13 +366,11 @@ pub fn start_charging(w: &mut World, id: ObjectId) -> bool {
             })
     });
     let Some(b) = found else { return false };
-    let tick = w.tick;
-    let stale = w.rules().quirks.stale_suspended_revert;
     if let Some(ob) = w.obj_mut(id) {
         crate::spawn::set_own_target(ob, Some(Target::Object(b)));
         ob.combat.charging = true;
-        ob.beh
-            .queue_and_start_at_once(Behaviour::Attack, tick, stale);
+        // spec: S-0518 claim 14 (attack is queued without starting immediately; the processing keeps its ordinary delay, Q-0985 answered by revision 3)
+        ob.beh.queue(Some(Behaviour::Attack));
     }
     true
 }
@@ -370,24 +388,17 @@ pub fn break_off(w: &mut World, id: ObjectId) {
     if !marked {
         return;
     }
-    // spec: S-0518 claim 15 (a range-kind search centred on its position, with no targeting-timer gate or reset draw; the unit takes what it finds instead of the building)
-    let prev = w.obj(id).and_then(|o| o.target);
-    if let Some(ob) = w.obj_mut(id) {
-        ob.target = None;
-    }
+    // spec: S-0518 claim 15 (revision 3, Q-0985 answered: the range search of S-0309 claim 1 centred on its position, run before the ordinary approach, with no targeting-timer gate or reset draw; the held building target is not tested, protected or cleared; passive-acquisition permissions and the opportunity gate do not limit it, the no-auto-fire restriction does)
     let found = crate::combat::acquire::search(
         w,
         id,
         crate::combat::acquire::SearchKind::Range,
-        crate::combat::acquire::SearchContext::PerTick,
+        crate::combat::acquire::SearchContext::BreakOff,
     );
-    if let Some(ob) = w.obj_mut(id) {
-        if found.is_some() {
-            ob.combat.charging = false;
-        } else {
-            // Nothing found: it keeps charging.
-            ob.target = prev;
-            ob.combat.charging = true;
-        }
+    if found.is_some()
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0518 claim 15 (a nonempty result becomes the target and clears the mark, even when it equals the held building; nothing found: the held target and the mark stay unchanged)
+        ob.combat.charging = false;
     }
 }
