@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1526,8 +1526,12 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     in the completion tick, not the order-level destination. Completion alone therefore
     leaves an ordinary cell destination present for the rest of that locomotion update.
     With the goal unchanged and no intervening effect, the first row removes it at the
-    next tick's locomotion update, which begins without an active track. Arrival-report
-    effects can separately change the goal in the completion tick (claim 12). For an
+    next tick's locomotion update, which begins without an active track. If completion
+    is in tick *T*, due harvest seeking processing in tick *T* + 1 still sees the
+    retained order-level destination before locomotion removes it later that tick.
+    It therefore remains seeking rather than starting loading; S-0402 claim 3b owns
+    the resulting loading-start and first-bale timing. Arrival-report effects can
+    separately change the goal in the completion tick (claim 12). For an
     *enter* goal naming a depot, neither completion nor the next update's mere cell
     equality removes the building destination. Its entry and servicing effects own any
     subsequent removal; it is not forcibly discarded at the end of the last track.
@@ -1544,7 +1548,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     the depot's entry exchange will never change state. The *move* behaviour's subsequent
     fallback when it has no destination is S-0215 claim 22's separate event.
     - Backing: `measurable` (D30; D31 for destinations naming units, moving/stationary
-      equivalence and the guard exception; S-0314 claim 17's H19 f for accepted same-cell entry)
+      equivalence and the guard exception; S-0314 claim 17's H19 f for accepted same-cell entry,
+      and S-0402 claim 3b's H27 for harvest processing before next-tick cleanup)
     - Confidence: high for the cell/object distinction, moving/stationary equivalence and cleanup conditions; medium for
       the composed tick timing and approach-destination fallback
 
