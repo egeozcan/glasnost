@@ -2,11 +2,11 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-16
 measurements: []
 requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796]
 supersedes: []
@@ -73,7 +73,7 @@ Two kinds of rule are kept apart throughout.
   - This is the *sensed cell* of S-0309 (Terms).
 - **Cell-arrival update.** The movement event that relocates mobile sensor coverage and
   tests adjacency reveal. It can also result from a superweapon warp or fall landing.
-  placement alone is distinct. Its timing depends on the movement or relocation (claim 22). The earlier name
+  Placement alone is distinct. Its timing depends on the movement or relocation (claim 22). The earlier name
   *completed-cell movement event* means this event, not every cell-boundary crossing.
 - **Idle generator.** A cloak generator with neither growth nor shrinking pending. This is
   independent of its radius and of being in operation (claim 20).
@@ -514,8 +514,10 @@ Two kinds of rule are kept apart throughout.
       On capture, this happens for the old field before any new-owner growth.
     - Backing: `measurable` (CS11, CS17, CS18 parts D and I, CS19, CS21), except the restart of
       an idle below-full positive-radius neighbour is `unmeasured`: no ordinary setup for
-      that idle state is established. CS19 gives the conditional test. Its eligibility
-      rule is settled; only construction of that state remains unavailable.
+      that idle state is established. CS19 gives the conditional test. Unchanged-operation
+      behaviour after a runtime type-radius change is also `unmeasured`: no sanctioned
+      skirmish fixture for that change is established (CS21). These rules are settled.
+      Only construction of the distinguishing states remains unavailable.
     - Confidence: high
 
 ### Sensors
@@ -554,7 +556,6 @@ Two kinds of rule are kept apart throughout.
       | Walking infantry | Arrival and snap to the chosen standing position (S-0208 claims 6 and 23), including intermediate walking targets and same-cell arrivals; not reservation, boundary crossing or a physical step alone |
       | Hovering, including amphibious hovering | The non-refusing heading-point choices and no-point restoration cases of S-0503 claim 15. Coverage uses the actual position at that event, before any cached final travel, not the newly chosen heading cell. A clear choice can produce it when movement starts. Arrival need not snap to a cell centre; crossing a boundary during later travel does not produce it |
       | Ordinary flying aircraft | None from taking off, flight across cells, destination arrival or landing. Coverage remains where entering play or another independent coverage-changing event left it (`quirks.flying_sensor_disc_stationary`) |
-
       | Teleporting locomotor, any mobile object kind | At the destination in the jump tick, after position, height and landing-layer placement, not reservation or phasing-in completion (S-0207 claims 20 and 22) |
       | A jumpjet | At completed touchdown (S-0502 claim 15), after landing placement and before the later sight refresh and crate pickup; none on takeoff, in-flight cell crossings, cruising arrival or hovering |
       | Rocket flight | None during launch, flight or impact (S-0506 claims 14–21); its entering-play disc stays behind until an independent coverage-changing event |
@@ -880,8 +881,10 @@ Two kinds of rule are kept apart throughout.
 
 ### Turn timing and degenerate inputs
 
-42. **Cloak timing within a turn.** Due behaviour processing precedes the ordinary cloak
-    update, for both mobile objects and buildings. Consequently a shot or uncloak cause
+42. **Cloak timing within a turn.** The following order applies when the object receives
+    an ordinary cloak update; it does not grant that update during every warp stage.
+    Due behaviour processing precedes the ordinary cloak update, for both mobile objects
+    and buildings. Consequently a shot or uncloak cause
     produced by that behaviour is already visible to the cloak update in the same turn.
     Ordinary mobile locomotion and the separate infantry/vehicle firing attempt follow the
     cloak update. A unit whose uncloak completes there can therefore make its ordinary
@@ -894,9 +897,26 @@ Two kinds of rule are kept apart throughout.
       in the abort band can trigger a draw even on an update with no step.
     - Each ordinary cloak update advances at most one stage, never several overdue steps.
       Event-driven field or sensor re-evaluations are additional and immediate (claim 6),
-      not delayed until the object's next ordinary cloak update.
-    - Backing: `measurable` (CS18 part A)
-    - Confidence: high
+      not delayed until the object's next ordinary cloak update. Explicit uncloak causes
+      likewise change the cloak state when they occur (claims 11–13), without requiring
+      an ordinary update; starting an uncloak does not itself advance its fading stage.
+    - **Warp suppression (engine design).** For the members covered by S-0513 claim 51,
+      ordinary cloak updates are suppressed from the first pending warp update through
+      arrival effects, inclusive. They regain ordinary eligibility during arrival hold,
+      after the hold-end test. No missed fade steps are replayed: the next ordinary update
+      still advances at most one stage. Elapsed-tick cloak and stage countdowns continue
+      to elapse, but elapsed time alone does not advance a fade or complete an uncloak.
+      This suppression does not postpone applicable immediate damage reactions, field or
+      sensor re-evaluations, or the arrival sensor transfer and adjacency reveal of
+      claims 13 and 22. Each event retains its own conditions. This is the engine contract,
+      not a finding that every original object kind suppresses cloak work at all those
+      boundaries; S-0513 claim 52 retains that original-side uncertainty.
+    - Backing: `measurable` for ordinary ordering (CS18 part A) and for warp suppression
+      in our engine only (CS18 part A's engine controls). Original per-stage warp
+      continuation is `unmeasured`: no isolated per-kind continuation observation is
+      established here; S-0513 claim 52 retains that evidence gap.
+    - Confidence: high for ordinary ordering and the design contract; original per-stage
+      warp continuation remains unresolved as stated in S-0513 claim 52
 
 43. **Degenerate mobile fade inputs.** A negative stage speed is nonzero but its stage
     countdown is already expired on every update. Both fade directions therefore advance
@@ -948,16 +968,20 @@ rounding before comparison.
 - Claim 5 starts at once when *h*/*h*ₘₐₓ > ρ (strict).
 - Claim 8 applies when *h*/*h*ₘₐₓ ≤ ρ.
 
-F5, cloak field circle (integers). The sequence (*x*ᵢ, *y*ᵢ, *e*ᵢ) for *i* = 0, 1, 2, … is:
+F5, cloak field circle (integer midpoint recurrence). For a positive integer radius *r*,
+the initial state is (*x*₀, *y*₀, *e*₀) = (0, *r*, 3 − 2*r*). For each state with
+*x*ᵢ ≤ *y*ᵢ, the next state is defined by:
 
-> *x*₀ = 0, *y*₀ = *r*, *e*₀ = 3 − 2*r*, and *x*ᵢ₊₁ = *x*ᵢ + 1.
->
-> When *e*ᵢ < 0: *y*ᵢ₊₁ = *y*ᵢ and *e*ᵢ₊₁ = *e*ᵢ + 4*x*ᵢ + 6.
->
-> When *e*ᵢ ≥ 0: *y*ᵢ₊₁ = *y*ᵢ − 1 and *e*ᵢ₊₁ = *e*ᵢ + 4(*x*ᵢ − *y*ᵢ) + 10.
+| Condition | *x*ᵢ₊₁ | *y*ᵢ₊₁ | *e*ᵢ₊₁ |
+|---|---:|---:|---:|
+| *e*ᵢ < 0 | *x*ᵢ + 1 | *y*ᵢ | *e*ᵢ + 4*x*ᵢ + 6 |
+| *e*ᵢ ≥ 0 | *x*ᵢ + 1 | *y*ᵢ − 1 | *e*ᵢ + 4(*x*ᵢ − *y*ᵢ) + 10 |
 
-The field of radius *r* is the union, over every *i* with *x*ᵢ ≤ *y*ᵢ, of four spans: the rows
-*dy* = ±*x*ᵢ for |*dx*| ≤ *y*ᵢ and the rows *dy* = ±*y*ᵢ for |*dx*| ≤ *x*ᵢ.
+The candidate circle is the union, over all states with *x*ᵢ ≤ *y*ᵢ, of the cells in rows
+*dy* = ±*x*ᵢ with |*dx*| ≤ *y*ᵢ and rows *dy* = ±*y*ᵢ with |*dx*| ≤ *x*ᵢ.
+Displacements are integer cells relative to the generator centre; all arithmetic is integer,
+with no rounding. This defines a set of cells, not a required enumeration order. Claim 20
+separately defines interruptions that can leave some candidate cells uncovered.
 
 F6, owner's disguise cycle (integers):
 
@@ -1149,19 +1173,39 @@ skirmish data does not provide those test combinations. Remove all overrides aft
 
 Use tick-stamped screen and sound capture, scripted input and a read-only recorder. Repeat each
 deterministic sub-test three times. Record target lines, selection, radar pixels, images, sound
-and health as named below. Every expected result is falsified by a differing result with the
-same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolated below.
+and health as named below. Each sub-test inherits this map, speed, recording setup and repeat count unless it says
+otherwise. Its observed area is the test objects' cells, their coverage discs and the routes
+between them. Views from different houses are recorded in separate skirmish runs with the
+viewing house as the human participant; a view change must not change game state.
+Every expected result below, including each table entry, is falsified by a differing result
+with the same eligibility conditions. A failed setup or an independent refusal makes a run
+inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses not isolated below.
 
 - **CS1, timings.** Setup: an infantry type that cloaks by itself, at full health, on open ground.
   - **(a)** Record the tick at which it starts cloaking and the tick at which it becomes fully
     cloaked. Expected: *c* · *S* ticks with the imported *S* and *N*. Falsified by another value.
-  - **(b)** Watch, as the owner and as an enemy without sensors, how it is drawn through the bands
-    of claim 28, and whether a vehicle's shadow shows while it fades.
-  - **(c)** Order it to fire at a target in range. Expected: firing comes (*N* − 1) · *S* ticks
-    after the uncloak starts. It then cannot start cloaking again until *D* ticks after the uncloak
-    completes, which needs a test file with *d* > 0.
-  - **(d)** Listen for the cloak sound at the start and at the uncloak.
-  - **(e)** Repeat (c) with a stock submarine.
+  - **(b)** Record each positive stage and its image as owner and as an unsensing enemy.
+    Repeat with a self-cloaking vehicle to observe its shadow. Expected: below fraction 64,
+    25 % translucency; 64–191, 50 %; 192–254, an enemy sees rippling and the owner sees
+    50 %; at least 255, no enemy image and 50 % for the owner. Use a large stage count
+    to reach the last band while uncloaking. Fully cloaked, only the owner sees the
+    unsensed unit, at 50 %. No vehicle shadow appears in any non-uncloaked state.
+    Any wrong band, visible unsensed enemy full cloak or surviving fading shadow falsifies it.
+  - **(c)** Order it to fire at an in-range target using a weapon requiring visibility, with
+    ammunition, facing and rearm ready. Expected: uncloak completes after (*N* − 1) · *S*
+    ticks; its first otherwise-due separate firing attempt may shoot then, not earlier.
+    In a separate delay run use *d* > 0, clear the target and let rearm expire before the
+    delay expires. Expected: no new cloak before *D* ticks after completion, then a start
+    on the first eligible update. An earlier shot or re-cloak, or a further delay without
+    another blocker, falsifies the corresponding rule.
+  - **(d)** Record sound events and their positions at cloak start and forced uncloak start.
+    Configure an audible game-wide cloak sound and a distinct type-specific sound in
+    CS-fixture. Expected: one game-wide sound at each start, located at the unit, never
+    the type-specific sound. A missing, duplicate or wrong sound falsifies claim 15.
+    CS17 separately checks silent aborts and repeated causes.
+  - **(e)** Repeat (c) with a stock submarine. Expected: it is submerged throughout all three
+    non-uncloaked states and cannot fire its visibility-requiring weapon until surfacing
+    completes after F2 ticks. Earlier firing or a different state boundary falsifies claim 41.
 - **CS2, sources.**
   - **(a)** Record a stock submarine's placement at a yard within the usable area, before
     its first ordinary update. Expected: initially uncloaked, then normal submerging on an
@@ -1171,23 +1215,39 @@ same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolate
     neither cloaks.
   - **(c)** A cloak-stop vehicle: ordered to move while uncloaked, it never starts cloaking. Once
     fully cloaked and then moved, it stays cloaked.
-  - **(d)** An aircraft inside an own cloak field cloaks only on the pad.
+  - **(d)** Place a landed aircraft inside its owner's field, then repeat airborne.
+    Expected: a ready landed aircraft starts cloaking; an airborne one does not. After
+    cloaking while landed, take off without another uncloak cause: it stays fully cloaked.
+    A failed eligible landed start, airborne start or takeoff-only uncloak falsifies it.
 - **CS3, ready conditions.** A self-cloaker with an enemy inside its weapon range does not start
   cloaking. When the enemy leaves, it starts at once.
-- **CS4, the red-health draw.** Use a self-cloaker at health below the red ratio (a test file
-  lowers health), repeated over many seeds.
-  - **(a)** Record the number of ticks until cloaking starts. Expected: geometric, with
-    *p* = 0.04 per eligible tick.
-  - **(b)** Repeat at full health. Expected: immediate.
-  - **(c)** Count aborts in the 50 % band. Expected: about 10 % per eligible tick.
-
-  The random-state recorder can confirm the number of draws per tick.
+- **CS4, the red-health draw.** Use CS-fixture self-cloakers below, exactly at and above
+  the red ratio, with no other start blocker. Across fresh skirmishes collect at least
+  1000 eligible start updates and 1000 eligible abort-band updates; record the random
+  stream and correlate each ranged result with the transition, rather than using a
+  statistical tolerance as the verdict.
+  - **(a)** At/below red, expected: one R(0, 99) per eligible start update, with a start
+    exactly when the result is below 4. Any different draw count or outcome falsifies it.
+    The waiting-time distribution should consequently be geometric with *p* = 0.04.
+  - **(b)** Above red, including full health, expected: immediate start without a start
+    draw. A random wait or such a draw falsifies it.
+  - **(c)** During cloaking at/below red, expected: one R(0, 99) on every update in the
+    post-step 64–127 fraction band, and an abort exactly for results below 10. There is
+    no abort draw outside that band. An inconsistent transition or draw falsifies it.
+    No sound accompanies an abort. CS18 A isolates the completing-step boundary.
 - **CS5, the cloak field.**
   - **(a)** A friendly tank parks inside a powered generator's field. Expected: it cloaks with no
     delay, even at low health.
   - **(b)** It drives out. Expected: it uncloaks on leaving.
-- **CS6, EMP.** Hit a fully cloaked self-cloaker with an EMP weapon, outside any field and then
-  inside one. Expected: it uncloaks outside and stays cloaked inside.
+- **CS6, EMP.** Disable an own-flag self-cloaker with a fixture EMP attack, then let it
+  finish any hit-triggered uncloak and cloak again inside its owner's field while still
+  EMP-disabled. Keep a matched disabled cloaked control inside coverage and shrink the
+  field off the test unit. Record coverage, disable expiry and cloak state. Expected:
+  the disabled unit inside the field stays cloaked; the one losing coverage starts
+  uncloaking on its next ordinary cloak update. A spontaneous inside-field uncloak or
+  continued full cloak outside falsifies claim 9, provided no ability supplies another
+  cloak source. This isolates ongoing disable eligibility from claim 12's immediate hit
+  reaction; a revealing hit is not evidence that EMP alone defeated field coverage.
 - **CS7, uncloak causes.**
   - **(a)** C4 plant.
   - **(b)** A vehicle crush.
@@ -1219,9 +1279,23 @@ same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolate
     legal healing conditions for the healing control. Any contrary shot/no-shot result with the
     target retained and all other firing conditions met falsifies the mean test; a lost target
     makes that trial inconclusive.
-  - **(d)** Aircraft drop a hidden target.
-  - **(e)** Click tests, as owner, ally and enemy.
-  - **(f)** Radar, as ally and enemy, with and without own sensors.
+  - **(d)** Keep an aircraft targeting an enemy through both cloak transitions by sensing
+    the target at both moments. Once fully cloaked, remove that coverage without moving
+    or damaging the target. Repeat with coverage retained and with an allied target.
+    Record retained target. Expected: the now-unsensed non-allied target is dropped.
+    This specific aircraft rule does not drop the sensed or allied control. A retained
+    unsensed hostile target falsifies claim 25. Earlier loss or an independent target-loss
+    cause makes the aircraft-specific trial inconclusive.
+  - **(e)** On explored ground, hover/click a fully cloaked mobile object as owner, ally and
+    enemy, then add the viewer's own coverage. Expected: owner can pick it; unsensing
+    non-owners cannot, allies included; sensing removes this cloak-specific refusal.
+    Select a sensed non-owned object before cloak start: selection is still lost at start.
+    Repeat on buildings: level 15 without sensing cannot be picked even by the owner.
+    A differing click/selection result without another refusal falsifies claim 26.
+  - **(f)** With radar available and the cell otherwise visible to radar, record the pixel
+    of a fully cloaked object as ally and enemy, with and without the viewer's coverage.
+    Expected: no pixel without own sensing, a pixel with it. An unsensed pixel or a
+    sensed omission solely due to cloak falsifies claim 27.
 - **CS10, buildings.**
   - Count ticks from power-on until a building in a generator's field is fully cloaked. Expected:
     15 ticks after the field reaches it.
@@ -1234,17 +1308,37 @@ same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolate
 - **CS12, sensors.**
   - **(a)** Map the disc of a mobile sensor with sensors-sight *R* by walking a cloaked enemy
     unit along each axis. Expected: |*dx*| ≤ *R* − 1 and |*dy*| ≤ *R* − 1, with the strict squared-distance test, symmetric on both axes.
-  - **(b)** An allied sensor gives no coverage.
-  - **(c)** A sensor array placed unpowered never senses.
-  - **(d)** Selling an array leaves cells between its sensors-sight and the cloak radius unsensed
-    for a second array placed there afterwards, until a third sensor covers them.
-  - **(e)** Capture: coverage stays with the old owner.
+  - **(b)** Put an allied sensor over an explored, fully cloaked hostile witness outside
+    adjacency distance, with no viewer-owned sensor there. Expected: the viewer has no
+    sensed count and cannot see/attack it; the sensor's owner can. Shared coverage
+    falsifies owner-only sensing.
+  - **(c)** Place an array out of operation, restore power, and probe its disc with the
+    witness. Expected: no coverage before or after restoration. Compare an array placed
+    operational and then depowered: its coverage remains. Activation on restoration or
+    loss on later depowering falsifies the once-only rule.
+  - **(d)** Give an array a cloak radius larger than its sensor sight in CS-fixture. Sell
+    it, then cover a cell in the excess removal annulus with one mobile sensor and then
+    two. Expected: the count is −1 after sale, 0 with one added sensor and 1 with two.
+    Only the last reveals the still-cloaked witness. A different count or visibility
+    boundary falsifies the removal-radius/negative-count rules.
+  - **(e)** Capture an activated array. Expected: coverage stays with the old owner, none
+    is added for the new owner. Remove it and record both houses' counts: only the new
+    owner's counts are decremented. Transfer at capture or old-owner subtraction on
+    removal falsifies claim 23.
 - **CS13, disguise acquisition.**
-  - **(a)** A spy disguises from across the map.
+  - **(a)** Give a spy an unobstructed legal infantry target across the map, using its
+    unlimited-range disguise weapon. Record movement, detonation, both objects' health,
+    and copied disguise type/house. Expected: no approach movement, unchanged target
+    health, firer copies the target's type and owner; a disguised target instead supplies
+    its disguise type/house. Movement required solely for disguise range, damage, or the
+    wrong copied identity falsifies claim 31. CS17 tests the vehicle target-kind matrix.
   - **(b)** A new spy shows its side default to an enemy, who still auto-targets it.
-  - **(c)** Damage does not undo a permanent disguise. A test file clears the permanent flag, and
-    then a hit clears it. An infantry disguiser that is not permanent keeps its disguise while
-    moving.
+  - **(c)** Disguise permanent infantry as another house, then deliver an accepted surviving
+    hit. Expected: its disguise resets to its owner's side default, rather than preserving
+    the copied identity or becoming undisguised. Clear the permanent flag in a separate
+    fixture run: a hit now clears the disguise. Move that temporary infantry disguiser
+    without damage: movement alone preserves its disguise. The opposite state/identity
+    in any of these controls falsifies claims 32–34.
 - **CS14, disguise when still.**
   - **(a)** A still disguise-when-still vehicle takes a terrain disguise. The random-state recorder confirms one draw of
     range *n*.
@@ -1266,8 +1360,15 @@ same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolate
     solely due to disguise during a valid drive-through, falsifies the distinction (S-0210
     claims 2–3 and 11). A missed route or lost disguise makes that trial inconclusive.
 - **CS16, drawn disguise.**
-  - **(a)** The owner sees the disguise image on ticks 8 to 55 of every 256.
-  - **(b)** An ally sees the disguise.
+  - **(a)** Record the owner's view every tick for two full 256-tick cycles after disguise
+    acquisition, without damage, motion or firing. Expected: disguise image at cycle
+    phases 8–55, real image otherwise, with the exact translucencies of Table B.
+    Any wrong image, band boundary or cycle period falsifies claims 37 and F6.
+  - **(b)** Record the same unit as mutual ally and enemy, with no fake blink or detector
+    coverage. Expected: both see its disguise in the disguise house's colours. Add each
+    viewer's building detector coverage in separate runs: that viewer sees the real
+    unit without clearing its disguise. An ally-only real image, wrong colours or a
+    disguise cleared by detection falsifies the corresponding rule.
   - **(c)** Use three houses with distinct radar colours: viewer *V*, unit owner *O* and disguise
     house *D*. Have an infantry disguiser of *O* copy infantry of *D* before observing its stable
     radar pixel from *V*, on explored ground with radar available, no overlapping radar object,
@@ -1278,7 +1379,14 @@ same eligibility conditions. CS17 supplements CS1–CS16 for clauses not isolate
     mutual hostility as controls: owner's and disguise-house colours respectively. The opposite
     colour in any otherwise valid run falsifies claim 38. A missing radar object, lost disguise,
     changed disguise house or interference makes the run inconclusive.
-  - **(d)** After the vehicle fires, enemies see the real unit for the weapon's fake-blink time.
+  - **(d)** Fire a stationary disguised vehicle at a legal target without moving or taking
+    damage, using two positive fake-blink times in separate CS-fixture runs. Record the
+    projectile-creation tick, timer, retained disguise and enemy image. Expected: the
+    timer is set on projectile creation and non-owners see the real unit while it runs,
+    then the retained disguise again. The owner keeps its ordinary cycle. Repeat while
+    undisguised: the timer is still set. Repeat with infantry: no fake blink starts.
+    Wrong duration, disguise loss solely from firing, owner-cycle override or an infantry
+    fake blink falsifies claim 39. Failure to create a projectile is not a timer-start test.
 
 ### CS17: clause-isolation checks
 
@@ -1292,7 +1400,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 2, 3, 16 | Compare placed/factory-created vehicles and infantry within the usable area and vehicle placement outside it. Populate only the veteran, then only the elite cloak-ability list. Give cloak-stop to a crate-cloaked vehicle and move it while visible, then while cloaked. | Fresh ordinary placements are uncloaked. Only outside-area vehicle placement with the own flag forces a full cloak. Elite accepts either list. Crates do not bypass cloak-stop on starting; movement does not break a full cloak. |
 | 4, 5 | Separately retain a rearm timer, an in-range target, the seized state, positive height and war-factory contact on a self-cloaker. Remove each blocker. Compare out-of-range targets. | Each listed blocker prevents a start; full health and no blockers permit it. |
 | 5, 8 | Collect 1000 eligible updates at, below and above the red ratio, and 1000 low-health updates in the abort band across restarts. Read the stream state and match ranged draws. | At/below red starts use one draw below 4, above red none. Aborts require one draw below 10 in the specified band only. |
-| 5, 6, 9, 17 | Compare own-flag and ability cloakers inside/outside a field under EMP, paralysis and warp. Give aircraft a crate or ability; compare landed and airborne starts, then take off after cloaking. | The disable gate bars own-flag starts outside a field, not ability/field starts when otherwise ready. Losing the last source breaks a full cloak. Airborne starts fail; takeoff alone does not break a full cloak. |
+| 5, 6, 9, 17 | Compare own-flag and ability cloakers inside/outside a field under EMP and paralysis, after any immediate hit reaction. Give aircraft a crate or ability; compare landed and airborne starts, then take off after cloaking. For warp use CS18 A's engine contract and preserve its original-side limitation. | On eligible ordinary updates the disable gate bars own-flag starts outside a field, not ability/field starts when otherwise ready. Losing the last source breaks a full cloak. Airborne starts fail; takeoff alone does not break a full cloak. Suppressed warp updates are not failed eligibility tests. |
 | 11, 12, 15 | Repeat CS7 for each accepted and rejected hit category in claim 12. Record sounds and fade. Repeat a hit while already uncloaking. | Accepted hits and listed uncloak causes sound; rejected hits do not reveal. Repeated causes during uncloaking do not replay sound. |
 | 13 | Share a neighbouring cell between sensor and non-sensor infantry. Swap which is nearest the top corner. Repeat with an ability sensor and on a bridge. | Only the nearest ground-layer candidate counts. A sensor approaching a stationary target gives coverage, not adjacency uncloaking. |
 | 14, 24–26 | Retain own-house, sensed-enemy and unsensed-enemy targeters at the mobile start/completion. Repeat on a building. Select a sensed non-owned object before it cloaks. Try positive-damage force fire on a hidden own target and healing on a hidden ally. | Unsensed enemies drop at both mobile moments, buildings only at the start. Non-owner selection is lost at cloak start even with sensors. Positive mean weapon damage is refused; nonpositive mean passes the cloak test for an own or allied target, independently of the selected weapon's sign. |
@@ -1329,6 +1437,16 @@ unavailable state construction are identified below rather than counted as measu
   turns. Expect abort draws only for the post-step 50 % band, never on the completing step.
   An abort on that step or a pre-step-only band draw falsifies claim 42. An in-range target
   that itself prevents cloaking is not a valid start-cloak timing control.
+  For the engine-only warp contract, repeat with a fading member at each boundary of
+  S-0513 claim 51. Record stage, cloak state, remaining countdowns and arrival sensor
+  coverage. Expected: no ordinary fade step through arrival effects, elapsed countdowns
+  continue, and the first eligible hold update advances at most one overdue stage.
+  Arrange a surviving cloaked arrival beside an enemy sensor: arrival coverage transfer
+  and adjacency uncloak still occur during arrival effects, before ordinary fade work
+  resumes. An otherwise applicable field re-evaluation or surviving hit must likewise
+  take effect immediately, not wait for hold. Any ordinary fade step in an excluded
+  boundary, burst catch-up, or delayed applicable event falsifies this engine contract.
+  These checks do not establish the original's unresolved per-kind continuation.
 - **B — Mobile disc and removal (claim 22; Q-0721).** Drive a stock sensor vessel past a
   stationary cloaked witness at the disc edge, outside adjacency range. Record boundary
   crossing, completed-cell arrival and first visibility. Expected: coverage changes on
