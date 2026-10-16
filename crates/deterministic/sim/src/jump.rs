@@ -134,6 +134,9 @@ pub struct JumpState {
     pub mark: Option<Mark>,
     /// The landing reservation (Terms).
     pub reservation: Option<Mark>,
+    /// The cell list the jumpjet is in (claims 4 and 22): a hovering or
+    /// cruising jumpjet keeps the listing it had, in its old cell.
+    pub listed: Option<(CellXY, Layer)>,
     /// The cell whose hover slot the jumpjet holds.
     pub slot: Option<CellXY>,
     /// It stands on a bridge deck.
@@ -163,6 +166,7 @@ impl JumpState {
             fraction: F64::ZERO,
             mark: None,
             reservation: None,
+            listed: None,
             slot: None,
             on_deck: false,
             landing_request: false,
@@ -365,24 +369,39 @@ fn set_mark(w: &mut World, id: ObjectId, m: Mark) {
     }
 }
 
-fn clear_mark(w: &mut World, id: ObjectId, m: Mark) {
+/// Clears one of the jumpjet's marks: the actual-position mark and the
+/// landing reservation can name the same standing position (claim 4: a
+/// descent supplies both), which the other then still holds.
+fn clear_mark(w: &mut World, id: ObjectId, m: Mark, other: Option<Mark>) {
     let q = occ_quirks(w);
     match m.position {
-        Some(_) => w.cells.clear_infantry(m.cell, m.layer, id, q),
+        Some(p) => {
+            if other == Some(m) {
+                return;
+            }
+            let mine = w
+                .cells
+                .occ(m.cell, m.layer)
+                .and_then(|r| r.marks[usize::from(p)])
+                .is_some_and(
+                    |k| matches!(k.by, crate::cells::Marker::Infantry(who, _) if who == id),
+                );
+            if mine {
+                w.cells.clear_position(m.cell, m.layer, p, q);
+            }
+        }
         None => w.cells.claim_vehicle(m.cell, m.layer, false),
     }
 }
 
 /// Lifts the ground occupancy mark.
 fn lift_mark(w: &mut World, id: ObjectId) {
-    let Some(m) = w
-        .obj_mut(id)
-        .and_then(|o| o.jump.as_mut())
-        .and_then(|j| j.mark.take())
-    else {
+    let Some(j) = w.obj_mut(id).and_then(|o| o.jump.as_mut()) else {
         return;
     };
-    clear_mark(w, id, m);
+    let Some(m) = j.mark.take() else { return };
+    let other = j.reservation;
+    clear_mark(w, id, m, other);
 }
 
 /// Lays the ground mark at the present position (claim 4).
@@ -393,20 +412,30 @@ fn lay_mark(w: &mut World, id: ObjectId) {
         return;
     }
     lift_mark(w, id);
+    // spec: S-0502 claim 4 and S-0209 claim 1 (an actual-position mark of an infantry unit takes a standing position; a position that another unit holds stays that unit's: nothing is marked)
+    if let Some(p) = want.position
+        && w.cells.occ(want.cell, want.layer).is_some_and(|r| {
+            r.marks[usize::from(p)].is_some_and(
+                |k| !matches!(k.by, crate::cells::Marker::Infantry(who, _) if who == id),
+            )
+        })
+    {
+        return;
+    }
     set_mark(w, id, want);
     upd(w, id, |j| j.mark = Some(want));
 }
 
 /// Releases the landing reservation.
 fn release_reservation(w: &mut World, id: ObjectId) {
-    let Some(m) = w
-        .obj_mut(id)
-        .and_then(|o| o.jump.as_mut())
-        .and_then(|j| j.reservation.take())
-    else {
+    let Some(j) = w.obj_mut(id).and_then(|o| o.jump.as_mut()) else {
         return;
     };
-    clear_mark(w, id, m);
+    let Some(m) = j.reservation.take() else {
+        return;
+    };
+    let other = j.mark;
+    clear_mark(w, id, m, other);
 }
 
 fn release_slot(w: &mut World, id: ObjectId) {
@@ -444,10 +473,12 @@ pub fn placed(w: &mut World, id: ObjectId) {
     }
     let layer = o.layer;
     let m = mark_at(w, id, o.pos, layer);
+    let cell = o.pos.cell();
     upd(w, id, |j| {
         j.phase = Phase::Grounded;
         j.on_deck = layer == Layer::Deck;
         j.mark = Some(m);
+        j.listed = Some((cell, layer));
     });
 }
 
@@ -485,21 +516,51 @@ pub fn leaving(w: &mut World, id: ObjectId) {
         return;
     }
     lift_mark(w, id);
+    unlist(w, id);
     release_reservation(w, id);
     release_slot(w, id);
+}
+
+/// Takes the jumpjet out of the cell list it is in (claim 4): the cell of
+/// its listing, which a hovering or cruising unit may have left.
+fn unlist(w: &mut World, id: ObjectId) {
+    let listed = w
+        .obj_mut(id)
+        .and_then(|o| o.jump.as_mut())
+        .and_then(|j| j.listed.take());
+    match listed {
+        Some((c, l)) => w.cells.leave(c, l, id),
+        None => {
+            if let Some(c) = w.obj(id).map(|o| o.pos.cell()) {
+                w.cells.leave_both(c, id);
+            }
+        }
+    }
+}
+
+/// Puts the jumpjet in the list of `layer` of the cell of its position.
+fn list_at(w: &mut World, id: ObjectId, layer: Layer) {
+    let Some(cell) = w.obj(id).map(|o| o.pos.cell()) else {
+        return;
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        ob.layer = layer;
+    }
+    w.cells.enter(cell, layer, id, false);
+    upd(w, id, |j| j.listed = Some((cell, layer)));
 }
 
 /// Takes the unit off the ground: its mark and cell listing go (claim 4).
 fn leave_ground(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    let (cell, layer) = (o.pos.cell(), o.layer);
+    let cell = o.pos.cell();
     lift_mark(w, id);
-    w.cells.leave(cell, layer, id);
+    unlist(w, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.layer = Layer::Ground;
     }
     upd(w, id, |j| j.on_deck = false);
-    // spec: S-0211 claim 5 (an object leaving a cell recomputes it) and Q-0981 (interim: at take-off, not at crossings in the air)
+    // spec: S-0211 claim 5 and S-0502 claim 26 (the old placement's removal recomputes its cell)
     crate::load::recalc_cells(w, &[cell]);
 }
 
@@ -507,15 +568,38 @@ fn leave_ground(w: &mut World, id: ObjectId) {
 fn settle(w: &mut World, id: ObjectId, layer: Layer) {
     let Some(o) = w.obj(id) else { return };
     let cell = o.pos.cell();
+    unlist(w, id);
     w.cells.leave_both(cell, id);
-    if let Some(ob) = w.obj_mut(id) {
-        ob.layer = layer;
-    }
-    w.cells.enter(cell, layer, id, false);
+    list_at(w, id, layer);
     upd(w, id, |j| j.on_deck = layer == Layer::Deck);
     lay_mark(w, id);
-    // spec: S-0211 claim 5 (an object put into a cell recomputes it) and Q-0981 (interim: at touchdown)
+    // spec: S-0211 claim 5 and S-0502 claim 26 (touchdown supplies its ordinary placement recompute)
     crate::load::recalc_cells(w, &[cell]);
+}
+
+/// The height below which a jumpjet's new position is listed (claim 4): on
+/// flat land a positive height below 208 leptons qualifies, 208 or more does not.
+// spec: S-0502 claim 4 (positive heights below 208 leptons list, 208 or above do not; integer comparisons; Q-1010 asks how this follows S-0102 claim 3's layer table)
+const LISTING_HEIGHT: i32 = 208;
+
+/// Whether the jumpjet's position qualifies for ground-layer placement
+/// (claim 4): the effective height, S-0102 claim 3's *h*′, is below
+/// [`LISTING_HEIGHT`].
+fn placement_qualifies(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let on_deck = st(w, id).is_some_and(|j| j.on_deck);
+    let h = height_above(w, id);
+    // spec: S-0102 claim 3 (h′ = h − 416 when the unit is over a high-bridge cell, is not on the bridge, is not falling and h ≥ 416; otherwise h′ = h)
+    let eff = if w.high_bridge(o.pos.cell())
+        && !on_deck
+        && !crate::fall::falling(w, id)
+        && h >= BRIDGE_HEIGHT
+    {
+        h - BRIDGE_HEIGHT
+    } else {
+        h
+    };
+    eff < LISTING_HEIGHT
 }
 
 // ---------------------------------------------------------------------------
@@ -538,55 +622,71 @@ fn point_of(w: &World, t: Target) -> Pos {
     }
 }
 
-/// The standing point a free infantry position of a cell gives (claim 16).
-fn free_standing_point(w: &World, id: ObjectId, c: CellXY, z: i32, from: Pos) -> Pos {
-    let top = w.rules().quirks.top_position_counts_as_centre;
-    let own = st(w, id).and_then(|j| j.reservation.or(j.mark));
-    let layer = if w.high_bridge(c) && z > centre_height(w, c) {
+/// The standing point an infantry jumpjet takes in the found cell `c`
+/// (claim 23): the desired point is the cell's centre class at world height
+/// 0, so the choice reads ground occupancy unless the cell's high-bridge
+/// deck at its centre is at or below world height 0, and the first free
+/// side position wins after one ranged draw over 0 to 3 (S-0208 claim 3's
+/// table O rows R0 to R3). `None` is a failed adjustment: the vehicle-present
+/// or object-present refusal takes no draw; all side positions taken still
+/// takes it.
+fn standing_choice(w: &mut World, c: CellXY, z: i32) -> Option<Pos> {
+    // spec: S-0502 claim 23 (the desired point has world height 0; ground occupancy, except when the cell has a high bridge whose deck at its centre is at or below world height 0, then deck occupancy)
+    let layer = if w.high_bridge(c) && centre_height(w, c) + BRIDGE_HEIGHT <= 0 {
         Layer::Deck
     } else {
         Layer::Ground
     };
-    let free = |p: u8| {
-        w.cells.occ(c, layer).is_some_and(|r| {
-            !r.taken(p)
-                || own.is_some_and(|m| m.cell == c && m.layer == layer && m.position == Some(p))
-        })
-    };
-    // spec: S-0502 claim 16 (an infantry jumpjet takes a free standing position in the found cell) and Q-0975 (interim: the ordered point's own position, then the side positions in S-0208 table O's order for it, no draw, the centre when none is free)
-    let class = position_class(from.x.rem_euclid(256), from.y.rem_euclid(256), top);
-    let mut order = vec![class];
-    order.extend(crate::walk::row_for(class, 0).iter().copied());
-    let p = order.into_iter().find(|&p| free(p)).unwrap_or(0);
+    // spec: S-0502 claim 23 (the vehicle-present refusal and the ground object-present or open-gate refusal of S-0208 claim 3 give no adjusted point and no draw; otherwise one ranged draw over 0 to 3 selects row R0 to R3, centre and top are never selected)
+    let p = crate::walk::choose_position(w, c, layer, crate::cells::position::CENTRE, false)?;
     let (sx, sy) = standing_point(p);
-    Pos::new(256 * c.x + sx, 256 * c.y + sy, z) // spec: S-0204 claim 2 and S-0208 table P (a standing point within its cell)
+    // spec: S-0204 claim 2 and S-0208 table P (a standing point within its cell), with the terrain height plus 416 on any high bridge (claim 23)
+    Some(Pos::new(256 * c.x + sx, 256 * c.y + sy, z))
 }
 
-/// The nearby-cell search of claims 16 and 17 (S-0212 claim 25).
-fn search(w: &World, id: ObjectId, centre: CellXY, hover_class: bool) -> Option<CellXY> {
+/// The three uses of the nearby-cell search of S-0502 claim 23.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Use {
+    /// Claim 16, a vehicle that is not balloon-hover.
+    MoveVehicle,
+    /// Claim 16, an infantry unit or a balloon-hover vehicle.
+    MoveInfantry,
+    /// Claim 17, a stopped or failed landing.
+    Stop,
+}
+
+/// The nearby-cell search of claims 16 and 17 (S-0212 claim 25) with the
+/// settings of S-0502 claim 23: a 1 x 1-cell footprint, no further test, no
+/// no-overlay condition, no reference cell, no reach region and no height
+/// condition in every row.
+fn search(w: &World, id: ObjectId, centre: CellXY, use_: Use) -> Option<CellXY> {
     let o = w.obj(id)?;
     let u = w.rules().unit(o.kind, o.type_index)?;
-    let class = if hover_class {
-        // spec: S-0502 claim 16 (for the hover locomotion class and the flying movement zone)
-        Some(glasnost_rules::sim::LocomotionClass::Hover)
-    } else {
-        u.class
-    };
-    let zone = if hover_class {
-        glasnost_rules::sim::MovementZone::Fly
-    } else {
-        u.zone
-    };
-    // spec: S-0502 claims 16 and 17 and Q-0975 (interim settings the claims leave open: no reach region, deck mode when the centre is a bridge cell, the height condition on, no reference cell, bridge cells allowed, no overlay condition)
-    let s = crate::path::NearbySettings {
-        class,
-        zone,
-        reach: None,
-        deck: w.high_bridge(centre),
-        height: true,
-        reference: None,
-        no_bridges: false,
-        no_overlay: false,
+    let s = match use_ {
+        Use::MoveVehicle | Use::MoveInfantry => crate::path::NearbySettings {
+            // spec: S-0502 claims 16 and 23 (the hover locomotion class and the flying movement zone)
+            class: Some(glasnost_rules::sim::LocomotionClass::Hover),
+            zone: glasnost_rules::sim::MovementZone::Fly,
+            reach: None,
+            // spec: S-0502 claim 23 (deck mode never for a vehicle that is not balloon-hover; for an infantry unit or a balloon-hover vehicle when the centre carries a high bridge)
+            deck: use_ == Use::MoveInfantry && w.high_bridge(centre),
+            height: false,
+            reference: None,
+            // spec: S-0502 claim 23 (bridge cells excluded for the vehicle row, allowed for the other)
+            no_bridges: use_ == Use::MoveVehicle,
+            no_overlay: false,
+        },
+        // spec: S-0502 claim 23 (claim 17: the unit's current cell, its type's own class and its own movement zone, not simplified, no reach region, deck mode never, no height condition, bridge cells allowed)
+        Use::Stop => crate::path::NearbySettings {
+            class: u.class,
+            zone: u.zone,
+            reach: None,
+            deck: false,
+            height: false,
+            reference: None,
+            no_bridges: false,
+            no_overlay: false,
+        },
     };
     crate::path::nearby(w, centre, crate::path::NearbyUse::Settings(s))
 }
@@ -605,41 +705,83 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         return;
     }
     upd(w, id, |j| j.order = dest);
+    match dest {
+        Some(t) => order_point(w, id, t),
+        None => {
+            // spec: S-0502 claims 16, 17 and 24 (an order-level destination that becomes empty is not claim 16's direct no-point instruction: for a jumpjet with a movement commitment it invokes claim 17's reroute, which assigns a replacement movement point; with none, claim 17 does nothing; Q-1012 interim: every such clear, not only the stop order)
+            stop_with(w, id, false);
+        }
+    }
+}
+
+/// A direct instruction giving the locomotor no point (claim 16, *No point*):
+/// the movement point and the moving flag are cleared and nothing else
+/// changes. While the jumpjet is moving now the instruction is refused and the
+/// preceding movement stays (claim 24's safety departure).
+pub fn no_point(w: &mut World, id: ObjectId) {
+    if !is_jumpjet(w, id) {
+        return;
+    }
+    // spec: S-0502 claim 24 (safety departure: refused while moving now, so the jumpjet never flies towards an absent point)
+    if moving_now(w, id) {
+        return;
+    }
+    // spec: S-0502 claim 16 (no point: the movement point and the moving flag are cleared, nothing else changes)
+    upd(w, id, |j| {
+        j.dest = None;
+        j.moving = false;
+    });
+}
+
+/// A destination given to the locomotor (claim 16), whether or not it is the
+/// order-level destination.
+fn order_point(w: &mut World, id: ObjectId, t: Target) {
     let phase = st(w, id).map_or(Phase::Grounded, |j| j.phase);
-    // spec: S-0502 claim 16 (it releases any landing reservation it holds, unless it is grounded)
+    let p = point_of(w, t);
+    // spec: S-0502 claim 16 (it releases any landing reservation it holds, unless it is grounded or claim 24's safety refusal retains the preceding movement)
+    let held = st(w, id).and_then(|j| j.reservation);
     if phase != Phase::Grounded {
         release_reservation(w, id);
     }
-    let Some(t) = dest else {
-        // spec: S-0502 claim 16 (no point: the jumpjet stops being moving and nothing else happens)
-        upd(w, id, |j| j.moving = false);
-        return;
-    };
-    let p = point_of(w, t);
     let exact = balloon_vehicle(w, id) || (vehicle(w, id) && entering(w, id));
     let infantry = w.obj(id).is_some_and(|o| o.kind == Kind::Infantry);
-    let found = if exact {
-        // spec: S-0502 claim 16 (a balloon-hover vehicle and a vehicle whose current or queued behaviour is enter keep the exact point)
-        Some(p)
+    // spec: S-0502 claim 23 (the search settings of the use: infantry and balloon-hover vehicles have their own row)
+    let use_ = if infantry || balloon_vehicle(w, id) {
+        Use::MoveInfantry
     } else {
-        // spec: S-0502 claim 16 and scenario J2 (an order to the unit's own cell keeps that cell: the unit's own mark does not count against the cell in the search; Q-0975)
-        let own = st(w, id).and_then(|j| j.mark);
-        lift_mark(w, id);
-        let found = search(w, id, p.cell(), true);
-        if own.is_some() {
-            lay_mark(w, id);
-        }
-        found.map(|c| {
-            let z = point_of(w, Target::Cell(c)).z;
-            if infantry {
-                free_standing_point(w, id, c, z, p)
-            } else {
-                Pos::centre(c, z)
-            }
-        })
+        Use::MoveVehicle
     };
+    // spec: S-0502 claim 23 says claim 16's search does not lift a grounded unit's own occupancy, while claim 7 and scenario J2 give the own-cell order's early cruise, which needs the own cell to qualify; Q-1011 interim: the unit's own mark is lifted for the search, as before
+    let own = st(w, id).and_then(|j| j.mark);
+    lift_mark(w, id);
+    let cell = search(w, id, p.cell(), use_);
+    if own.is_some() {
+        lay_mark(w, id);
+    }
+    let found = cell.and_then(|c| {
+        let z = point_of(w, Target::Cell(c)).z;
+        if exact {
+            // spec: S-0502 claim 16 (a balloon-hover vehicle and a vehicle whose current or queued behaviour is enter keep the exact point)
+            Some(p)
+        } else if infantry {
+            // spec: S-0502 claim 16 and claim 23 (an infantry jumpjet takes a standing position in the found cell: the choice with its ranged draw)
+            standing_choice(w, c, z)
+        } else {
+            Some(Pos::centre(c, z))
+        }
+    });
     let Some(d) = found else {
-        // spec: S-0502 claim 16 (no cell found: the ordered point is kept as the destination and the moving state is left as it was; Q-0976)
+        // spec: S-0502 claim 24 (safety departure: a failed adjustment that would retain an off-map point is refused; the preceding point, moving flag, state, speeds, target height and landing reservation stay; no clamping to the edge)
+        if w.cells.cell(p.cell()).is_none() {
+            if let Some(m) = held
+                && phase != Phase::Grounded
+            {
+                set_mark(w, id, m);
+                upd(w, id, |j| j.reservation = Some(m));
+            }
+            return;
+        }
+        // spec: S-0502 claim 16 (adjustment finds no point: the ordered point itself remains the movement destination, with the moving flag, flight state, speeds and target height unchanged; a descending unit does not re-ascend; an idle unit does not start)
         upd(w, id, |j| j.dest = Some(p));
         return;
     };
@@ -682,6 +824,12 @@ fn give(w: &mut World, id: ObjectId, c: CellXY) {
     take_destination(w, id);
 }
 
+/// Gives the locomotor a new movement point only (the reroute of a stop
+/// order, claim 24): the order-level destination stays as it is.
+fn give_point(w: &mut World, id: ObjectId, c: CellXY) {
+    order_point(w, id, Target::Cell(c));
+}
+
 /// A neighbour step (claim 21): one ranged draw over 0 to 7 gives a step
 /// direction whose neighbouring cell becomes the new destination; the
 /// jumpjet enters *cruising*.
@@ -700,16 +848,38 @@ fn neighbour_step(w: &mut World, id: ObjectId) {
 /// centre; not found, it destroys itself with no credit (or, with
 /// `quirks.jumpjet_no_cell_self_destruct` off, hovers again).
 pub fn stop(w: &mut World, id: ObjectId) {
+    stop_with(w, id, true);
+}
+
+/// A stop order (S-0213 claim 8, S-0502 claim 24) after it has cleared the
+/// actor's order-level destination: a jumpjet with a movement commitment is
+/// stopped by claim 17's reroute, which assigns a replacement movement point
+/// and leaves the order-level destination empty. Without a commitment it does
+/// nothing. It is not claim 16's direct instruction giving no point.
+pub fn stop_ordered(w: &mut World, id: ObjectId) {
+    if !is_jumpjet(w, id) {
+        return;
+    }
+    // The order-level destination is empty, so the locomotor has nothing new to take from it.
+    upd(w, id, |j| j.order = None);
+    stop_with(w, id, false);
+}
+
+fn stop_with(w: &mut World, id: ObjectId, order_level: bool) {
     if !moving(w, id) {
         // spec: S-0502 claim 17 (stopping a jumpjet that is not moving does nothing)
         return;
     }
     release_reservation(w, id);
     let here = pos(w, id).cell();
-    // spec: S-0502 claim 17 (a nearby-cell search around its current cell, for its type's own locomotion class and movement zone)
-    if let Some(c) = search(w, id, here, false) {
-        // spec: S-0502 claim 17 (it re-orders itself to that cell's centre, at its terrain height plus the bridge height on a high-bridge cell)
-        give(w, id, c);
+    // spec: S-0502 claims 17 and 23 (a nearby-cell search around its current cell, for its type's own locomotion class and own movement zone, with claim 23's settings)
+    if let Some(c) = search(w, id, here, Use::Stop) {
+        // spec: S-0502 claim 17 (it re-orders itself to that cell's centre, at its terrain height plus the bridge height on a high-bridge cell) and claim 24 (a player stop: the replacement is a movement point, the order-level destination stays empty)
+        if order_level {
+            give(w, id, c);
+        } else {
+            give_point(w, id, c);
+        }
         return;
     }
     if !w.rules().quirks.jumpjet_no_cell_self_destruct {
@@ -777,7 +947,7 @@ fn speed_step(j: &mut JumpState, f: &JumpFields, mode: Rounding) {
     } else {
         q
     };
-    // spec: S-0502 F1 and Edge cases (the speed fraction v_c′ / S; S = 0 divides by zero in the original, a deterministic 0 here, Q-0977)
+    // spec: S-0502 F1 and Edge cases (the speed fraction v_c′ / S; S = 0 divides by zero in the original, a deterministic 0 here, claim 25)
     j.fraction = if f.speed == 0 {
         F64::ZERO
     } else {
@@ -797,12 +967,13 @@ fn direct_reference(w: &World, p: Pos, k: F64, mode: Rounding) -> i32 {
 }
 
 /// The clearance of a cell (F3): its height at the centre plus the
-/// allowance of what stands in its ground layer (the jumpjet itself
-/// excluded; Q-0978) and the bridge height.
-fn clearance(w: &World, c: CellXY, skip: ObjectId) -> (i32, i32) {
+/// allowance of what is listed in its ground layer (the jumpjet itself
+/// included when it is listed there; S-0502 claim 22) and the bridge height.
+fn clearance(w: &World, c: CellXY) -> (i32, i32) {
     let base = centre_height(w, c);
     let mut allowance = 0;
     let list = w.cells.list(c, Layer::Ground);
+    // spec: S-0502 claim 22 (the actual ground-layer listings, not hover slots or reservations; a listed jumpjet supplies the 85-lepton allowance, including to itself, there is no self-exclusion; a deck-only listing supplies none)
     // spec: S-0502 claim 9 and F3 (a building listed in the cell's ground layer gives 104 leptons per level of its art height; otherwise infantry, a vehicle or an aircraft listed there gives 85; terrain objects, overlays and deck-only objects give nothing)
     if let Some(b) = list
         .iter()
@@ -816,7 +987,6 @@ fn clearance(w: &World, c: CellXY, skip: ObjectId) -> (i32, i32) {
                 .map_or(0, |t| t.building.art_height);
     } else if list
         .iter()
-        .filter(|&&x| x != skip)
         .filter_map(|&x| w.obj(x))
         .any(|x| matches!(x.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft))
     {
@@ -830,7 +1000,7 @@ fn clearance(w: &World, c: CellXY, skip: ObjectId) -> (i32, i32) {
 fn look_ahead(w: &World, id: ObjectId, j: &JumpState, mode: Rounding) -> i32 {
     let p = pos(w, id);
     let own = p.cell();
-    let (c_base, c_bridge) = clearance(w, own, id);
+    let (c_base, c_bridge) = clearance(w, own);
     let mut c = c_base + c_bridge;
     let mut n = c;
     if j.vc.gt(F64::ZERO) {
@@ -838,7 +1008,7 @@ fn look_ahead(w: &World, id: ObjectId, j: &JumpState, mode: Rounding) -> i32 {
         let e = usize::from(eight_direction(j.heading.value(w.tick)));
         let (dx, dy) = STEP_DIRECTIONS[e];
         let ahead = CellXY::new(own.x + dx, own.y + dy);
-        let (n_base, n_bridge) = clearance(w, ahead, id);
+        let (n_base, n_bridge) = clearance(w, ahead);
         if w.rules().quirks.jumpjet_lookahead_bridge {
             // spec: S-0502 F3 and quirks.jumpjet_lookahead_bridge (the original adds the neighbouring cell's bridge height to the own cell's clearance instead of to N)
             c += n_bridge;
@@ -922,18 +1092,13 @@ pub fn step_position(w: &World, p: Pos, heading: Facing, v: i32, mode: Rounding)
     }
 }
 
-/// Moves the jumpjet horizontally to (x, y), keeping its cell listing.
+/// Moves the jumpjet horizontally to (x, y). Its cell listing does not
+/// follow: a hovering or cruising jumpjet keeps the listing it had in its
+/// old cell, and any other state lists its new position again.
 fn move_to(w: &mut World, id: ObjectId, x: i32, y: i32) {
-    let Some(o) = w.obj(id) else { return };
-    let (from, layer) = (o.pos.cell(), o.layer);
-    let to = CellXY::new(x / 256, y / 256); // spec: S-0204 claim 2 (cell = (trunc(x / 256), trunc(y / 256)))
+    // spec: S-0502 claims 4 and 22 (hover and cruise cell crossings do not transfer a listing)
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.x = x;
         ob.pos.y = y;
-    }
-    if from != to && w.cells.list(from, layer).contains(&id) {
-        // A jumpjet on the ground (a slide at touchdown) keeps its listing.
-        w.cells.leave(from, layer, id);
-        w.cells.enter(to, layer, id, false);
     }
 }

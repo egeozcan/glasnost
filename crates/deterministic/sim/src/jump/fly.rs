@@ -3,11 +3,59 @@
 
 use super::*;
 
+/// Removes the old placement before a physics step (claims 4, 22 and 26):
+/// the mark and the cell listing go, and the cell of the position is
+/// recomputed, even high above it or without horizontal travel.
+fn remove_placement(w: &mut World, id: ObjectId) {
+    let Some(cell) = w.obj(id).map(|o| o.pos.cell()) else {
+        return;
+    };
+    lift_mark(w, id);
+    unlist(w, id);
+    // spec: S-0502 claim 26 and S-0211 claim 5 (in every state but hovering and cruising, the cell before every physics step is recomputed on removal of the old placement)
+    crate::load::recalc_cells(w, &[cell]);
+}
+
+/// The new placement after a physics step (claims 4 and 26): the on-deck
+/// state ends at the first rise; a position that qualifies is listed (on the
+/// deck when the on-deck state is set, on the ground otherwise) and marked,
+/// and its cell is recomputed.
+fn place_after_step(w: &mut World, id: ObjectId) {
+    // spec: S-0502 claim 4 (at the first rise from the surface the on-deck state ends)
+    if height_above(w, id) > 0 && st(w, id).is_some_and(|j| j.on_deck) {
+        upd(w, id, |j| j.on_deck = false);
+        if let Some(o) = w.obj_mut(id) {
+            o.layer = Layer::Ground;
+        }
+    }
+    // spec: S-0502 claim 4 (the new position is eligible for listing only when it qualifies; a jumpjet does not use the aircraft's positive-listing-height exclusion)
+    if !placement_qualifies(w, id) {
+        return;
+    }
+    let layer = if st(w, id).is_some_and(|j| j.on_deck) {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    list_at(w, id, layer);
+    // spec: S-0502 claim 4 (actual-position marking follows the ordinary kind-specific rules of S-0209 claim 1, here the mark of the unit at its position)
+    lay_mark(w, id);
+    if let Some(cell) = w.obj(id).map(|o| o.pos.cell()) {
+        // spec: S-0502 claim 26 (the resulting cell is also recomputed when the new position qualifies for ground-layer placement)
+        crate::load::recalc_cells(w, &[cell]);
+    }
+}
+
 /// Everything a physics step does to the jumpjet: speed, height, step,
-/// facing and occupancy (claims 4, 6, 8 and 10).
+/// facing and occupancy (claims 4, 6, 8, 10, 22 and 26).
 fn physics(w: &mut World, id: ObjectId) {
     let mode = w.rules().mode;
     let Some(f) = fields(w, id) else { return };
+    // spec: S-0502 claims 4 and 22 (hovering and cruising physics make no new listing or mark and leave an existing listing alone; every other state removes its own listing before the clearance is evaluated)
+    let placing = st(w, id).is_some_and(|j| !matches!(j.phase, Phase::Hovering | Phase::Cruising));
+    if placing {
+        remove_placement(w, id);
+    }
     let Some(mut j) = st(w, id).cloned() else {
         return;
     };
@@ -20,6 +68,7 @@ fn physics(w: &mut World, id: ObjectId) {
     let crashing = j.phase == Phase::Crashing;
     let entering = j.crash_started && !matches!(j.phase, Phase::Crashing | Phase::Crashed);
     j.crossed_deck = false;
+    let mut dropped = None;
     if crashing || entering {
         // spec: S-0502 claim 18 (the extra crash drop k after the ordinary height step, the resulting world height truncated toward zero; in the update that starts the crash the ordinary physics still used the preceding state)
         let before = z;
@@ -27,6 +76,7 @@ fn physics(w: &mut World, id: ObjectId) {
         let deck = w.surface_at(p.x, p.y) + BRIDGE_HEIGHT;
         // spec: S-0502 claim 18 (over a high-bridge cell the drop ends the fall when its height before is at or above the deck and after it below)
         j.crossed_deck = w.high_bridge(p.cell()) && before >= deck && z < deck;
+        dropped = Some((before, z));
     }
     if crashing {
         // spec: S-0502 claim 18 and S-0206 claim 14 (the heading's target is 11520 facing units clockwise ahead of its current value, turning at the heading's rate)
@@ -53,9 +103,11 @@ fn physics(w: &mut World, id: ObjectId) {
     }
     let keeps = w.rules().quirks.set_facing_keeps_target;
     let held = seized(w, id);
+    // The ordinary step ends at the height before the crash drop.
+    let step_z = dropped.map_or(z, |(before, _)| before);
     if let Some(o) = w.obj_mut(id) {
         o.jump = Some(j);
-        o.pos.z = z;
+        o.pos.z = step_z;
         if !snap && !held {
             // spec: S-0502 claim 10 (the body facing is set to the movement heading in each physics step; a seized unit keeps its body facing, S-0607 claim 7)
             o.body.set(heading, tick, keeps);
@@ -64,26 +116,20 @@ fn physics(w: &mut World, id: ObjectId) {
     if (nx, ny) != (p.x, p.y) {
         move_to(w, id, nx, ny);
     }
-    occupancy_step(w, id);
-}
-
-/// The occupancy after a physics step (claim 4): a jumpjet off the ground
-/// is neither listed nor marked; one that stands on it and is not hovering
-/// or cruising has its mark laid at its present position.
-fn occupancy_step(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id) else { return };
-    let (cell, layer) = (o.pos.cell(), o.layer);
-    let listed = w.cells.list(cell, layer).contains(&id);
-    let phase = st(w, id).map_or(Phase::Grounded, |j| j.phase);
-    let r = height_above(w, id);
-    if r > 0 {
-        // spec: S-0502 claim 4 (when a jumpjet leaves the ground, its height above the surface rising from 0, its occupancy mark is lifted and it is no longer on a deck)
-        if listed || st(w, id).is_some_and(|j| j.mark.is_some()) {
-            leave_ground(w, id);
+    if placing {
+        place_after_step(w, id);
+    }
+    if let Some((_, after)) = dropped {
+        // spec: S-0502 claim 26 and S-0211 claim 5 (a crash's additional drop likewise recomputes its pre-drop cell and supplies another placement and recompute only when the new position qualifies under claim 4; the events of one tick are not collapsed)
+        if placing {
+            remove_placement(w, id);
         }
-    } else if listed && !matches!(phase, Phase::Hovering | Phase::Cruising) {
-        // spec: S-0502 claim 4 (in every other state its mark is lifted and laid again at its current position; an unchanged mark is not replaced, which has no observable effect)
-        lay_mark(w, id);
+        if let Some(o) = w.obj_mut(id) {
+            o.pos.z = after;
+        }
+        if placing {
+            place_after_step(w, id);
+        }
     }
 }
 
@@ -146,7 +192,12 @@ fn grounded_outcome(w: &mut World, id: ObjectId) {
     let mode = w.rules().mode;
     // spec: S-0502 claim 5 (in its first update with a move order a grounded jumpjet: speed fraction 1, current and maximum speeds 0, target height H, ascending)
     upd(w, id, |j| {
-        j.fraction = int(1, mode);
+        // spec: S-0502 claims 5 and 25 (the speed fraction becomes 1, except 0 for S = 0: engine design rule, no quirk switch)
+        j.fraction = if f.speed == 0 {
+            F64::ZERO
+        } else {
+            int(1, mode)
+        };
         j.vc = F64::ZERO;
         j.vm = F64::ZERO;
         j.ht = f.height;
@@ -246,7 +297,7 @@ fn cruising_outcome(w: &mut World, id: ObjectId) {
         (v, none.then_some(f.height / 2)) // spec: S-0502 F6 (H / 2 when it has no target)
     } else if t > 0 && r < (50 * s) / t {
         // spec: S-0502 F6 and Constants (the third band: ρ < (50 × S) div T, band distance factor 50)
-        // spec: S-0502 F6 (ρ < (50 × S) div T: S / 2, and max(S / 5, 1.0) when D > 5T; trunc(H × 0.75) when it has no target; T = 0 gives an empty band, Q-0977)
+        // spec: S-0502 F6 (ρ < (50 × S) div T: S / 2, and max(S / 5, 1.0) when D > 5T; trunc(H × 0.75) when it has no target; T = 0 gives an empty band, S-0502 claim 25)
         let v = if dd > 5 * t {
             int(s / 5, mode).max(one)
         } else {
@@ -257,6 +308,8 @@ fn cruising_outcome(w: &mut World, id: ObjectId) {
         // spec: S-0502 F6 (otherwise S at the full height H, whether or not it has a target)
         (int(s, mode), Some(f.height))
     };
+    // spec: S-0502 claim 25 (S = 0: every cruise-band speed is 0, a speed floor included; T = 0 leaves the middle band empty above)
+    let vm = if s == 0 { F64::ZERO } else { vm };
     upd(w, id, |j| {
         j.vm = vm;
         if let Some(h) = ht {
@@ -359,7 +412,12 @@ fn landing_check(w: &mut World, id: ObjectId, d: Pos) -> bool {
     // spec: S-0502 claim 15 (infantry: the standing position at the destination point is free, or the jumpjet already holds its landing reservation; a vehicle always passes this part)
     if infantry
         && let Some(p) = m.position
-        && w.cells.occ(cell, layer).is_some_and(|r| r.taken(p))
+        // spec: S-0502 claim 4 (a descent can supply an actual-position mark of its own as well as the landing reservation): the unit's own mark does not take the standing position from it
+        && w.cells.occ(cell, layer).is_some_and(|r| {
+            r.marks[usize::from(p)].is_some_and(
+                |k| !matches!(k.by, crate::cells::Marker::Infantry(who, _) if who == id),
+            )
+        })
         && !holds
     {
         return false;
@@ -581,7 +639,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     }
     let Some(j) = st(w, id) else { return false };
     let now = !matches!(j.phase, Phase::Grounded | Phase::Hovering);
-    // spec: S-0502 claim 3 (a jumpjet that is neither moving nor moving now takes no update: its height, wobble phase and speed fraction do not change); the interim wake rule for a crash start on an idle jumpjet is Q-0979
+    // spec: S-0502 claim 3 (a jumpjet that is neither moving nor moving now takes no update: its height, wobble phase and speed fraction do not change); a pending aerial crash start also guarantees the next update, a safety departure and engine design rule (claim 3, S-0312 claim 16)
     if !(j.moving || now || j.crash_started) {
         return false;
     }

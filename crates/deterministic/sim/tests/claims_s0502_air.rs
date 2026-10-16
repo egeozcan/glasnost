@@ -298,6 +298,9 @@ fn claim_10_jumpjet_turn_exception() {
         go(&mut w, u, cell);
         w.obj_mut(u).unwrap().target = Some(Target::Object(t));
         jump::start_in_flight(&mut w, u, Phase::Hovering, 500);
+        // An infantry order to its own cell takes a side standing position (S-0502 claim 23): the hover keeps the movement point at its position.
+        let at_p = w.obj(u).unwrap().pos;
+        w.obj_mut(u).unwrap().jump.as_mut().unwrap().dest = Some(at_p);
         w.obj_mut(u).unwrap().body = Turning::at(0);
     }
     step_world(&mut w);

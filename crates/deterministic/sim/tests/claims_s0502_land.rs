@@ -72,7 +72,7 @@ fn marked_by(w: &World, c: CellXY, id: ObjectId) -> bool {
         .any(|m| matches!(m.by, Marker::Infantry(who, _) if who == id))
 }
 
-// spec: S-0502 claim 4 and scenario J3 (a hovering or cruising jumpjet takes no place in the occupancy record; on the ground it has its mark; the mark is lifted as it first rises off the surface; a descending one holds its landing reservation; touchdown marks its place)
+// spec: S-0502 claim 4 and scenario J3 (on flat land a non-hover, non-cruise placement lists and marks at heights 1 and 50 and not at 300; the first rise clears the old mark but does not forbid a later low replacement; a hovering or cruising jumpjet makes no new mark; a descending one holds its landing reservation; touchdown marks its place)
 #[test]
 fn claim_4_occupancy_marks() {
     let mut w = game();
@@ -93,16 +93,44 @@ fn claim_4_occupancy_marks() {
         marked_by(&w, cu, u),
         "still marked at height 0 in the take-off update"
     );
-    step(&mut w);
-    assert!(height(&w, u) > 0);
-    assert!(
-        !marked_by(&w, cu, u),
-        "the mark is lifted at the first rise"
-    );
-    assert_eq!(record(&w, cv, Layer::Ground).vehicles, 0);
-    assert!(
-        !w.cells.list(cu, Layer::Ground).contains(&u),
-        "no longer listed"
+    // Low ascent places again at every height below 208 and not above it.
+    let mut low = 0;
+    let mut high = 0;
+    for _ in 0..60 {
+        step(&mut w);
+        let h = height(&w, u);
+        let c = pos(&w, u).cell();
+        let listed = w.cells.list(c, Layer::Ground).contains(&u);
+        let marked = marked_by(&w, c, u);
+        let (cv2, hv) = (pos(&w, v).cell(), height(&w, v));
+        if h > 0 && h < 208 {
+            assert!(listed && marked, "low ascent lists and marks it at {h}");
+            low += 1;
+        } else if h >= 208 {
+            assert!(!listed && !marked, "no placement at {h}");
+            assert!(j(&w, u).listed.is_none());
+            high += 1;
+        }
+        if hv > 0 && hv < 208 {
+            assert_eq!(
+                record(&w, cv2, Layer::Ground).vehicles,
+                1,
+                "the flag at {hv}"
+            );
+        } else if hv >= 208 {
+            assert_eq!(
+                record(&w, cv2, Layer::Ground).vehicles,
+                0,
+                "no flag at {hv}"
+            );
+            assert!(!w.cells.list(cv2, Layer::Ground).contains(&v));
+        }
+    }
+    assert!(low > 10 && high > 0);
+    assert_eq!(
+        record(&w, cv, Layer::Ground).vehicles,
+        0,
+        "the first cell is clear"
     );
     // Cruising: no place anywhere.
     let c = cruiser_over(&mut w);
@@ -207,6 +235,9 @@ fn claim_14_no_landing_on_water_or_beach() {
         let mut w = game();
         let u = descender(&mut w, "JJ", Kind::Infantry, 4, 0, 300);
         w.cells.grid.get_mut(at(4, 0)).unwrap().land = l;
+        // The unit is a cell away: a descending jumpjet's physics recomputes the land of the cell under it (claim 26).
+        let p = pos(&w, u);
+        w.obj_mut(u).unwrap().pos = Pos::new(p.x - 256, p.y, p.z);
         step(&mut w);
         assert_eq!(phase(&w, u), Phase::Hovering, "land {l}");
         assert_eq!(j(&w, u).ht, 500);
@@ -235,16 +266,28 @@ fn claim_14_no_landing_on_water_or_beach() {
     assert!(j(&w, other).slot.is_some());
     let u = descender(&mut w, "JJ", Kind::Infantry, 4, 0, 60);
     w.cells.grid.get_mut(at(4, 0)).unwrap().land = land::WATER;
+    // The unit is a cell away: a descending jumpjet's physics recomputes the land of the cell under it (claim 26).
+    let p = pos(&w, u);
+    w.obj_mut(u).unwrap().pos = Pos::new(p.x - 256, p.y, p.z);
     let mut r = w.rng.clone();
     let half = w.rules().quirks.ranged_draw_half_span;
     let draw = r.ranged(0, 7, half);
+    let _ = r.ranged(0, 3, half); // spec: S-0502 claims 21 and 23 (the infantry point adjustment's own draw follows the neighbour draw)
     jump::tick(&mut w, u);
     assert_eq!(phase(&w, u), Phase::Cruising);
-    assert_eq!(w.rng.taken(), r.taken(), "one ranged draw over 0 to 7");
+    assert_eq!(
+        w.rng.taken(),
+        r.taken(),
+        "one ranged draw over 0 to 7, then the adjustment's draw over 0 to 3"
+    );
     let Some(Target::Cell(n)) = w.obj(u).unwrap().dest else {
         panic!("a destination cell")
     };
-    assert_eq!(direction(at(4, 0), n), draw as usize);
+    assert_eq!(
+        direction(at(3, 0), n),
+        draw as usize,
+        "from the unit's own cell"
+    );
 }
 
 // spec: S-0502 claim 15 and scenario J9 (touchdown at bridge-adjusted height 0: speed fraction 0, position the destination point, its mark placed, destination and move order cleared, grounded, slot released; the descent is by c per tick)
@@ -303,15 +346,23 @@ fn claim_15_touchdown_on_a_deck() {
     assert_eq!(o.layer, Layer::Deck);
     assert!(w.cells.list(c, Layer::Deck).contains(&u));
     assert!(j(&w, u).on_deck);
-    // Taking off from the deck: the mark is lifted and it is no longer on a deck (claim 4).
+    // Taking off from the deck: the old mark is cleared and it is no longer on a deck (claim 4); a low replacement is on the ground.
     go(&mut w, u, at(12, 4));
     for _ in 0..4 {
         step(&mut w);
     }
     assert!(height(&w, u) > 0);
-    assert!(!j(&w, u).on_deck && j(&w, u).mark.is_none());
+    assert!(!j(&w, u).on_deck);
     assert_eq!(w.obj(u).unwrap().layer, Layer::Ground);
     assert!(!w.cells.list(c, Layer::Deck).contains(&u));
+    assert!(
+        w.cells.list(c, Layer::Ground).contains(&u),
+        "listed on the ground again at a low height"
+    );
+    for _ in 0..60 {
+        step(&mut w);
+    }
+    assert!(height(&w, u) >= 208 && j(&w, u).mark.is_none() && j(&w, u).listed.is_none());
 }
 
 // spec: S-0502 claim 15 and scenario J9 (the landing check fails on an occupied cell: the vehicle standing in the cell makes the entry outcome refuse, the reservation is released and the jumpjet re-routes to a nearby free cell on that tick, and lands there)
@@ -395,9 +446,21 @@ fn claim_16_orders() {
     assert!(s.reservation.is_none());
     assert_eq!((s.phase, s.ht), (Phase::Ascending, 500));
     assert!(s.moving);
-    // No point: no longer moving.
+    // The order-level destination cleared (S-0213 claim 8 and S-0502 claim 24): not the direct no-point instruction; the moving unit is rerouted by claim 17 to a replacement point.
     glasnost_sim::econ::assign_destination(&mut w, u, None);
-    assert!(!jump::moving(&w, u));
+    assert!(jump::moving(&w, u) && j(&w, u).dest.is_some());
+    assert_eq!(j(&w, u).phase, Phase::Ascending);
+    // A direct no-point instruction (claim 16, claim 24's safety departure): refused while moving now.
+    let before = j(&w, u).clone();
+    jump::no_point(&mut w, u);
+    assert_eq!(&before, j(&w, u), "refused while ascending");
+    // To an idle hovering unit it clears the point and the moving flag and changes nothing else.
+    let hv = hoverer(&mut w, "JJ", Kind::Infantry, 6, -6);
+    assert!(jump::moving(&w, hv));
+    let (ph, ht) = (j(&w, hv).phase, j(&w, hv).ht);
+    jump::no_point(&mut w, hv);
+    assert!(!jump::moving(&w, hv) && j(&w, hv).dest.is_none());
+    assert_eq!((j(&w, hv).phase, j(&w, hv).ht), (ph, ht));
     // An order into a building's cell snaps to a nearby cell's centre.
     let b = put(&mut w, "TALL", Kind::Building, 1, -6, 6);
     let _ = b;
@@ -504,9 +567,14 @@ fn claim_21_neighbour_step_on_arrival() {
     let half = w.rules().quirks.ranged_draw_half_span;
     let mut r = w.rng.clone();
     let draw = r.ranged(0, 7, half);
+    let _ = r.ranged(0, 3, half); // spec: S-0502 claims 21 and 23 (the infantry point adjustment follows the neighbour draw with its own draw over 0 to 3)
     jump::tick(&mut w, u);
     assert_eq!(phase(&w, u), Phase::Cruising);
-    assert_eq!(w.rng.taken(), r.taken(), "exactly one ranged draw");
+    assert_eq!(
+        w.rng.taken(),
+        r.taken(),
+        "the neighbour draw and the infantry adjustment's draw"
+    );
     let Some(Target::Cell(n)) = w.obj(u).unwrap().dest else {
         panic!("the neighbour cell is the new destination")
     };
@@ -538,9 +606,14 @@ fn claim_21_neighbour_step_at_the_end_of_an_ascent() {
     let mut r = w.rng.clone();
     let half = w.rules().quirks.ranged_draw_half_span;
     let draw = r.ranged(0, 7, half);
+    let _ = r.ranged(0, 3, half); // spec: S-0502 claims 21 and 23 (the infantry point adjustment follows the neighbour draw with its own draw over 0 to 3)
     jump::tick(&mut w, u);
     assert_eq!(phase(&w, u), Phase::Cruising);
-    assert_eq!(w.rng.taken(), r.taken(), "one ranged draw at the conflict");
+    assert_eq!(
+        w.rng.taken(),
+        r.taken(),
+        "the neighbour draw and the infantry adjustment's draw at the conflict"
+    );
     let Some(Target::Cell(n)) = w.obj(u).unwrap().dest else {
         panic!("a destination cell")
     };

@@ -489,7 +489,10 @@ fn claim_10_a_ring_cell_off_the_map_is_read_as_the_stand_in_cell() {
         .copied()
         .find(|&c| w.cells.usable(c))
         .expect("a usable ring cell");
-    assert_eq!(exit, first_usable, "the off-map ranks fail the check, the next qualifies");
+    assert_eq!(
+        exit, first_usable,
+        "the off-map ranks fail the check, the next qualifies"
+    );
 }
 
 // spec: S-0508 claim 11 and 22 (an occupant that cannot be placed is removed, not destroyed; here one already on the map, an inconsistent state, is not put out a second time)
@@ -726,7 +729,11 @@ fn claim_14_reversed_kill_credit() {
 /// experience marks) in a hut whose points `points` are set; the assaulter's
 /// weapon has an occupant animation. Returns the animation positions of the
 /// assault in the order they were created.
-fn assault_animations(n: usize, points: Vec<[i32; 2]>, index: u32) -> (Vec<(i32, i32)>, World, ObjectId) {
+fn assault_animations(
+    n: usize,
+    points: Vec<[i32; 2]>,
+    index: u32,
+) -> (Vec<(i32, i32)>, World, ObjectId) {
     let mut r = ruleset();
     r.sim.buildings.get_mut("HUT").unwrap().garrison_muzzles = Some(points);
     r.sim.buildings.get_mut("HUT").unwrap().max_number_occupants = Some(21);
@@ -791,7 +798,11 @@ fn claim_25_positions_ten_and_later_use_the_remainder() {
             for (created, pos) in anims.iter().enumerate() {
                 let i = n - 1 - created;
                 let (dx, dy) = garrison::assault_shift(&w, b, i % 10);
-                assert_eq!(*pos, (256 * b0.x + dx, 256 * b0.y + dy), "position {i} of {n}");
+                assert_eq!(
+                    *pos,
+                    (256 * b0.x + dx, 256 * b0.y + dy),
+                    "position {i} of {n}"
+                );
             }
             assert_eq!(garrison::count(&w, b), 0);
             assert_eq!(w.obj(b).unwrap().structure.index, 0);
