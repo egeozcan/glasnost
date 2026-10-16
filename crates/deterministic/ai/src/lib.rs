@@ -25,6 +25,7 @@ pub mod chrono;
 pub mod crates;
 pub mod deployers;
 pub mod fixture;
+pub mod fixture_m6c;
 pub mod game;
 pub mod jumpjets;
 pub mod linked;
