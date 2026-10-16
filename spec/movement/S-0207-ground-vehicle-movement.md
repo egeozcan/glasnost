@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -29,7 +29,8 @@ turning and waiting. Claim 19 states when a vehicle with the driving, ship or ho
 that approaches a target stops once the target is in range, and what happens to its destination. Claims 24 and 25 distinguish
 stored heading height and the separate locomotor destination point, including factory exits.
 Claim 26 distinguishes cell-goal removal at rest from retained goals naming buildings or units and fixes
-its tick relative to final track completion.
+its tick relative to final track completion. Claim 27 covers the qualified teleport/dock
+transition and its separate destination-refresh and movement-point suppression states for vehicles.
 This spec covers skirmish. Network games and campaigns are out of scope.
 
 ## Terms
@@ -82,6 +83,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
   - claim 24 and D27 cover heading-point heights for driving and ship vehicles,
   - claims 25 and 26, with D29 and D30, cover the separate locomotor destination point
     and order-level goal removal for driving and ship vehicles.
+
+  - claim 27 covers destination refresh and the qualified teleport/dock transition for
+    vehicles of any locomotor.
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -1553,6 +1557,49 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - Confidence: high for the cell/object distinction, moving/stationary equivalence and cleanup conditions; medium for
       the composed tick timing and approach-destination fallback
 
+27. **Destination refresh at placement and a teleporting dock approach.** This claim
+    covers vehicles whatever their current locomotor. A destination-refresh state makes
+    an otherwise eligible assignment effective even when it names the unchanged cell
+    or object, including empty-to-empty. It starts absent. Successful placement into play
+    enables it only during initial idle-behaviour setup and clears it when that setup
+    finishes (S-0502 claim 27).
+
+    A later activation requires all of these conditions: the vehicle's type has the
+    teleport-capable flag; it is not immobilized by teleport aftereffects, has no
+    magnetic-lift source and is not seized; its dock contact is a building permitting
+    dock unloading; the requested destination is a cell with no ground-layer vehicle,
+    and its current locomotor is not teleporting. The type flag is independent of the
+    currently active locomotor.
+
+    When these conditions hold and temporary locomotion can finish and restore its
+    suspended predecessor, that restoration does not enable refresh or movement-point
+    suppression. The retained teleporting state follows claim 21 when applicable.
+    Otherwise movement is stopped, current behaviour is cleared and *enter* is queued.
+    Destination refresh and suppression of one subsequent movement-point application
+    then become pending.
+
+    These are separate states. An effective changed or refreshed unchanged destination
+    assignment consumes refresh even if subsequent point adjustment fails. An assignment
+    rejected before becoming effective does not consume it; S-0502 claim 28 owns the
+    balloon-hover clear rejection. Separately, the next nonempty assignment that would
+    apply a point to locomotion consumes the one-application suppression instead of
+    applying that point. The order-level destination can therefore change without a new
+    locomotor destination point. An empty destination stops movement under the ordinary
+    clearing rules rather than consuming this nonempty-point suppression. Claim 20's
+    landing-point rules apply when a point actually reaches teleporting movement, not
+    merely because the order-level destination changed.
+
+    Ordinary stop, move, deploy and behaviour changes do not themselves enable refresh.
+    This qualified dock transition is distinct from claim 21's ordinary factory-exit
+    restoration; neither restoration alone nor a retained destination implies that the
+    fallback states were set.
+    - Backing: `measurable` (D32 and S-0502 J24 for placement and ordinary-order
+      nonactivation). The qualified dock fallback and its separate suppression are
+      `unmeasured`: no stock sequence isolating every predicate and both pending states
+      is established; D32 gives a conditional diagnostic, not a claim of reachability.
+    - Confidence: high for the predicates and distinct state effects; medium for stock
+      reachability beyond placement
+
 ## Formulas
 
 Every floating-point operation in this spec, in the claims (the speed-fraction updates of claim 10
@@ -2275,6 +2322,14 @@ Claim 19 has no key of its own: the range test's fields are S-0307's, and the pa
 No key feeds the destination of the override of claim 15 or the choice of the nearest object in
 the look at the first cell of a new path (F8): both are engine rules. The close-enough distance
 of the give-up test is imported as S-0209 says.
+
+| Input | Concept | Parse form | Absent-key default |
+|---|---|---|---|
+| Vehicle type `Teleporter` | teleport-capable flag in claim 27, independent of current locomotor | boolean (S-0003) | false |
+| Building type `DockUnload` | permits dock unloading in claim 27 | boolean (S-0003) | false |
+
+Claim 27's destination-refresh and one-application suppression states are runtime
+behaviour, with no imported tuning.
 
 ## Measurement scenarios
 
@@ -3479,6 +3534,30 @@ that changes the goal before locomotion is not evidence of cell-style cleanup. I
 input cannot establish a particular unit-kind or guard combination, retain that control as
 a measurement proposal needing a verified test-map setup; do not substitute a cell goal
 or report it as measured. No memory-writing oracle tool is proposed.
+
+**D32. Destination refresh and dock-transition diagnostic (claim 27).**
+
+Use a tiny flat skirmish map, stock data, speed index 2, director and mods off,
+one human house and one distant bystander computer player. Record placement,
+initial idle setup, effective destination assignments, the order-level destination,
+current locomotor, locomotor destination point and the two pending states with a
+read-only recorder; propose missing recorder support to the user. Observe the
+same vehicle's ordinary move, stop and applicable deploy orders after placement.
+Expected: refresh exists only during initial idle setup and those ordinary orders
+do not newly set it. Persistence beyond setup or ordinary-order activation falsifies
+claim 27. S-0502 J24 supplies the corresponding jumpjet placement comparison.
+
+Conditional diagnostic: if an ordinary stock dock sequence establishes every
+predicate of claim 27, record those predicates individually and distinguish
+successful temporary-locomotor restoration from the fallback. Expect restoration
+to set neither state, and fallback to stop movement, clear current behaviour,
+queue *enter* and set both. Record effective changed and unchanged assignments
+and point applications independently: refresh is consumed by the next effective
+assignment, while suppression skips one otherwise due nonempty point application.
+An empty clear alone must not consume the latter. Any contrary qualified result
+falsifies the respective rule. No such stock fixture is established here; do not
+manufacture the pending states through writes or count an unqualified docking run
+as confirmation. Void a run if an unlisted bystander object affects the test area.
 
 ## Cross-spec changes to confirm
 
