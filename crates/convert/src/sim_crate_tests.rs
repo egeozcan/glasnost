@@ -101,6 +101,15 @@ fn the_type_flags() {
 }
 
 fn layered(base: &str, mode: &str, map: &str) -> Vec<glasnost_rules::sim_econ::Powerup> {
+    layered_with(base, mode, map, crate::layers::LayerQuirks::default())
+}
+
+fn layered_with(
+    base: &str,
+    mode: &str,
+    map: &str,
+    quirks: crate::layers::LayerQuirks,
+) -> Vec<glasnost_rules::sim_econ::Powerup> {
     let file = |n: &str, t: &str| InputFile {
         name: n.into(),
         origin: "test".into(),
@@ -112,7 +121,11 @@ fn layered(base: &str, mode: &str, map: &str) -> Vec<glasnost_rules::sim_econ::P
         map: Some(file("test.map", map)),
         ..Inputs::default()
     };
-    let import = convert(&inputs, &ImportOptions::default());
+    let opts = ImportOptions {
+        quirks,
+        ..ImportOptions::default()
+    };
+    let import = convert(&inputs, &opts);
     glasnost_rules::resolve_ruleset(Some((import.tree, import.provenance)), &[])
         .unwrap_or_else(|e| panic!("{e}"))
         .ruleset
@@ -121,6 +134,24 @@ fn layered(base: &str, mode: &str, map: &str) -> Vec<glasnost_rules::sim_econ::P
         .economy
         .powerups
         .expect("a table")
+}
+
+// spec: S-0520 claim 28 and S-0006 claim 5 (quirks.override_resets_keys off: an omitted entry retains all four held values; an entry no layer mentions has the fixed default of S-0006's switch-off paragraph, weight 0 and no animation: Q-1034 asks whether S-0520's built-in table applies instead)
+#[test]
+fn the_power_up_table_with_the_reset_switch_off() {
+    let quirks = crate::layers::LayerQuirks {
+        override_resets_keys: false,
+        ..crate::layers::LayerQuirks::default()
+    };
+    let a = layered_with(LAYER_BASE, "[Powerups]\nUnit=7\n", "", quirks);
+    assert_eq!(
+        (a[0].weight, a[0].animation.as_deref(), a[0].water),
+        (60, Some("Gold"), true),
+        "the omitted entry keeps its held values"
+    );
+    assert_eq!(a[0].argument.as_ref().map(|d| d.0.as_str()), Some("200"));
+    assert_eq!(a[1].weight, 7);
+    assert_eq!(a[3].weight, 0, "never mentioned (Q-1034)");
 }
 
 const LAYER_BASE: &str =
