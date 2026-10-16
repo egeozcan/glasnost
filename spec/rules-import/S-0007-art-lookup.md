@@ -2,7 +2,7 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -603,11 +603,7 @@ This spec covers skirmish only. Network games and campaigns are out of scope.
     does not select the suffixed art section's trailer animation or delay: the trail still uses
     the unsuffixed section's settings. The theater flag, the new-theater flag, the voxel flag and
     the line-trail settings follow claim 2 and the exception in claim 9.
-    - **Without the voxel flag:** the sprite is the one claims 5 to 8 give an infantry sprite (found
-      and subst as defined under Formulas): found(I ‖
-      .E) with the theater flag, found(subst(I ‖ .shp)) with the new-theater flag, found(I ‖ .shp)
-      otherwise. On snow the alternate-arctic-art flag has **no** effect on such a projectile: its
-      sprite is always built from I, never from I ‖ "A".
+    - **Without the voxel flag:** the projectile uses a sprite. With the theater flag, it looks for I with the current theater extension. Otherwise, with the new-theater flag, it first applies letter substitution to I ‖ .shp and looks for that name. If neither flag is set, it looks for I ‖ .shp. For each of these names, if the file cannot be resolved, the generic fallback replaces its second character with G and is tried once; if that also cannot be resolved, the projectile has no sprite. On snow the alternate-arctic-art flag has **no** effect on such a projectile: its sprite name is always built from I, never I ‖ "A".
     - **With the voxel flag:** the projectile is drawn as a voxel model with the parts of claim 16 for a
       type that is not a vehicle (body I, optional turret I ‖ "TUR", optional barrel I ‖ "BARL"), and
       claim 18 decides when the voxel art is discarded. A sprite is never drawn for it, whatever
@@ -1112,9 +1108,9 @@ Game-wide rows in S-0109's Import mapping remain in their named rules/settings s
 in either animation art section. The `Theater` and `NewTheater` rows there remain subject to
 claim 2, not claim 34. Drawing and event defaults are owned by their consuming specs; only the
 source-section distinction is added here. Joint hand-off must make S-0109's section wording and
-S-0102/S-0103's animation rows explicit about claim 34. S-0102's combined boolean row currently
-says `ShouldUseCellDrawer` defaults to no; it must say yes, matching S-0103 claim 8 and the row
-above. `UseNormalLight` still defaults to no.
+S-0103's animation rows explicit about claim 34. S-0102 claim 34 and its animation import rows
+already use the own-section rule, with `ShouldUseCellDrawer` defaulting to yes and
+`UseNormalLight` to no, matching S-0103 claim 8 and the rows above.
 
 Projectiles, voxel animations and superweapons, rules database, the type's own section:
 
