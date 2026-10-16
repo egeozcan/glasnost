@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 33
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1508,9 +1508,23 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     after the track-completion row has cleared the locomotor destination, or can be removed
     by a later behaviour effect. S-0212 claims 20 to 22 own whether a search failure waits,
     retries or gives up; this claim adds no new give-up condition.
-    - Backing: `measurable` (D29; D28 for the factory instruction)
+    **Factory-exit lifetime.** S-0417 claim 16 owns the subsequent factory-exit
+    lifecycle. Completing the exit track with no order-level destination retains
+    its locomotor destination point. The clear report, loss of contact and tether,
+    and queueing *harvest* do not themselves stop locomotion or restore a suspended
+    predecessor; there is no factory-exit timeout clearing that point. A later
+    accepted rally, scatter or ore destination replaces it in the active driving
+    locomotion. Qualifying completion at that later goal or an effective stop
+    clears the resulting point under this claim and claim 26. The retained point
+    prevents temporary-driving restoration under claim 27 until such clearing.
+    Track completion at the apron alone is insufficient (S-0417 claim 5).
+    - Backing: `measurable` (D29; D28 for the factory instruction; S-0417 claim 16
+      for the factory lifecycle and its U15 scenario). Retention with all later
+      replacements and effective stops excluded inherits that claim's `unmeasured`
+      limitation: no finite trace establishes perpetual retention.
     - Confidence: high for assignment, independent presence, stopping and track-completion clearing,
-      medium for the resulting lifetime across approach-destination fallback
+      medium for the resulting lifetime across approach-destination fallback and the
+      composed post-exit restoration consequences
 
 26. **Removing the order-level goal at rest (Q-0797, Q-0830).** For driving and ship vehicles,
     a destination that names a cell differs from one that names an object, including a
@@ -1646,7 +1660,16 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     driving destination point prevents restoration even when the offered destination
     differs or would be immediately reachable. Assignment-time restoration here is
     separate from a later fall-back-to-rest restoration under S-0215 claim 13; factory
-    exit point clearing belongs to S-0417 claim 5, not an extra clear supplied here.
+    exit point lifetime belongs to S-0417 claim 16, not an extra clear supplied here.
+    That lifecycle retains the point after no-order exit completion, replaces it
+    on a later accepted destination, and clears it on qualifying goal completion
+    or effective stopping under claims 25 and 26. A factory-built chrono miner
+    still using temporary driving therefore drives its first leg to distant ore.
+    Queueing harvest or starting loading alone does not restore teleporting
+    movement. S-0417 claims 5 and 16 own those temporary-driving consequences.
+    A subsequent eligible fall-back to rest can restore the predecessor, while
+    the qualified docking assignment described here remains a separate restoration
+    route; neither requires an invented unconditional clear at the apron.
 
     **Separate consumption events.** A changed or refreshed unchanged assignment
     consumes any refresh already pending even if subsequent point adjustment fails.
@@ -1669,7 +1692,9 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     implies that either pending state was set.
     - Backing: `measurable` (D32 and S-0502 J24 for placement and ordinary-order
       nonactivation; D33 for warp-pending immobilization versus phasing in and an
-      ordinary factory exit). The qualified dock evaluation, fallback, restored
+      ordinary factory exit; S-0417 claim 16 for the factory lifecycle and its U15
+      scenario, including that claim's unmeasured no-follow-up limitation). The
+      qualified dock evaluation, fallback, restored
       predecessor's same-assignment destination and separate consumption are
       `unmeasured`: no ordinary stock sequence isolating every predicate and both
       outcomes is established. In particular the immobilized, non-teleporting
@@ -1679,7 +1704,8 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
     - Confidence: high for immobilization identity, the assignment event, predicates,
       temporary-driving eligibility, routing to the restored predecessor,
       placement clear and distinct consumption events; medium for ordinary stock
-      reachability beyond placement
+      reachability beyond placement and the composed post-exit restoration
+      consequences inherited from S-0417 claim 16
 
 ## Formulas
 
