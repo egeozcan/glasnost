@@ -1,9 +1,9 @@
 ---
 id: Q-1031
 title: When a jumpjet vehicle's destination-refresh state is active and when a balloon-hover vehicle substitutes its retained destination
-status: open
+status: answered
 related: [S-0502, S-0213, S-0517]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

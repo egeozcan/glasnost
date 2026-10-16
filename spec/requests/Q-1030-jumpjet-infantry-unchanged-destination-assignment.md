@@ -1,9 +1,9 @@
 ---
 id: Q-1030
 title: Whether a jumpjet-type infantry unit ignores an unchanged order-level destination assignment
-status: open
+status: answered
 related: [S-0502, S-0213, S-0107]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
