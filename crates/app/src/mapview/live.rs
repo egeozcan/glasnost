@@ -388,8 +388,8 @@ impl anims::Env for AnimEnv<'_> {
 pub fn shadow_anchor(w: &World, o: &Object) -> ShadowAnchor {
     use glasnost_sim::cells::Axis;
     let ground = w.surface_at(o.pos.x, o.pos.y);
-    // Q-0841 interim: an aircraft is marked on a deck when its layer is the deck layer
-    let marked = o.layer == Layer::Deck;
+    // spec: S-0105 claim 40 and Terms (marked on a bridge deck: S-0501 claim 43's aircraft deck mark, not the render layer or an occupancy inference; landing sets it, ordinary climbing clears it, horizontal flight and hovering leave it)
+    let marked = o.air.as_ref().is_some_and(|a| a.deck);
     // spec: S-0105 Terms (a = z − H − b, b = 416 while marked on a bridge deck, otherwise 0)
     let a = o.pos.z - ground - if marked { 416 } else { 0 };
     let c = o.pos.cell();

@@ -8,8 +8,8 @@
 //! before its arrival hold, whether it takes the rest of its turn is
 //! unmeasured in the original; our engine's rule (S-0513 claim 51, engine
 //! design) is that none of the five kinds of ordinary work runs there, so the
-//! warp update is the whole turn there, other parts of the turn (the cloak
-//! update, reload timers and so on) being left out as before.
+//! warp update is the whole turn there (Q-0870 interim: the other parts of the
+//! turn, the cloak update, reload timers and so on, are left out as before).
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -460,7 +460,7 @@ fn lift_off(w: &mut World, id: ObjectId) {
         crate::drive::release_claims(w, id);
     }
     let cell = o.pos.cell();
-    w.cells.leave(cell, o.layer, id);
+    w.cells.leave_both(cell, id);
     let q = crate::objects::occ_quirks(w);
     if let Some(wt) = o.walk.as_ref().and_then(|s| s.target) {
         w.cells.clear_infantry(wt.cell(), o.layer, id, q);
@@ -649,6 +649,7 @@ fn redirect(w: &mut World, id: ObjectId, m: Member) {
 fn place(w: &mut World, id: ObjectId, m: Member) {
     let Some(o) = w.obj(id).cloned() else { return };
     let c = m.landing.cell();
+    // Q-0871 interim: only a landing point outside the map fails the placement.
     // spec: S-0513 claim 50 (a placement failure never deletes a member: it stays alive in the landing-retry stage with its landing point, owner and passengers retained and retries on the next update; no retry cap and no timeout death; the first failure per member and warp is reported)
     if w.cells.cell(c).is_none() {
         if !m.refused {

@@ -440,6 +440,13 @@ impl Cells {
         }
     }
 
+    /// An object leaves both cell layers of a cell (an aircraft's listing
+    /// moves between them, S-0209 claim 13).
+    pub fn leave_both(&mut self, c: CellXY, id: ObjectId) {
+        self.leave(c, Layer::Ground, id);
+        self.leave(c, Layer::Deck, id);
+    }
+
     /// An object leaves a cell layer.
     pub fn leave(&mut self, c: CellXY, l: Layer, id: ObjectId) {
         if let Some(i) = self.idx(c) {

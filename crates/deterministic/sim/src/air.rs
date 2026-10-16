@@ -187,6 +187,9 @@ pub struct AirState {
     /// The cell holding its object-present mark (S-0209 claim 1), while it
     /// is on the ground.
     pub mark: Option<CellXY>,
+    /// The aircraft deck mark (claim 43): its own standing-on-deck state,
+    /// not inferred from a layer or an occupancy flag.
+    pub deck: bool,
     /// The holding-height mark (claim 6).
     pub holding: bool,
     /// The run lock (claim 31).
@@ -265,19 +268,100 @@ fn st_mut(w: &mut World, id: ObjectId) -> Option<&mut AirState> {
     Some(o.air.get_or_insert_with(AirState::default))
 }
 
-/// The height *h* above the terrain (S-0501 Terms). The bridge-deck rule is
-/// a seam: no aircraft is flagged on a bridge.
-pub fn height(w: &World, id: ObjectId) -> i32 {
+/// The deck allowance in leptons: the height of a bridge deck above the
+/// terrain.
+// spec: S-0501 claim 43 (the 416-lepton deck allowance and reference)
+const DECK_ALLOWANCE: i32 = 416;
+
+/// Whether the aircraft carries its deck mark (S-0501 claim 43).
+pub fn deck_marked(w: &World, id: ObjectId) -> bool {
     w.obj(id)
-        .map_or(0, |o| o.pos.z - w.surface_at(o.pos.x, o.pos.y))
+        .and_then(|o| o.air.as_ref())
+        .is_some_and(|a| a.deck)
+}
+
+/// Whether altitude calculations use the bridge deck as the reference:
+/// the aircraft is marked, or it is unmarked, over a high-bridge cell and at
+/// least 416 leptons above the terrain (S-0501 Terms, *height*).
+fn deck_reference(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.air.as_ref().is_some_and(|a| a.deck) {
+        return true;
+    }
+    // spec: S-0501 Terms (height: an unmarked aircraft at least 416 leptons above terrain on a high-bridge cell also uses the deck as its reference; claim 43 distinguishes this temporary reference from the mark)
+    w.high_bridge(o.pos.cell()) && o.pos.z - w.surface_at(o.pos.x, o.pos.y) >= DECK_ALLOWANCE
+}
+
+/// The world height that *h* = 0 stands for (S-0501 Terms): the terrain
+/// surface, plus 416 leptons when the deck is the reference.
+fn base(w: &World, id: ObjectId) -> i32 {
+    let Some(o) = w.obj(id) else { return 0 };
+    w.surface_at(o.pos.x, o.pos.y) + if deck_reference(w, id) { DECK_ALLOWANCE } else { 0 }
+}
+
+/// The height *h* above the terrain (S-0501 Terms): the signed world height
+/// minus the terrain surface height at the aircraft's horizontal position,
+/// minus 416 leptons when the deck is its reference (claim 43).
+pub fn height(w: &World, id: ObjectId) -> i32 {
+    w.obj(id).map_or(0, |o| o.pos.z - base(w, id))
+}
+
+/// The listing height in leptons (S-0209 claim 13): world height minus the
+/// terrain surface height minus the deck allowance of 416 leptons when the
+/// aircraft's own deck mark is set, in exact integer arithmetic.
+pub fn listing_height(w: &World, id: ObjectId) -> i32 {
+    // spec: S-0209 claim 13 (listing height = world height − terrain surface height − deck allowance; the allowance is 416 when the aircraft's own deck mark is set, else 0)
+    w.obj(id).map_or(0, |o| {
+        o.pos.z
+            - w.surface_at(o.pos.x, o.pos.y)
+            - if deck_marked(w, id) { DECK_ALLOWANCE } else { 0 }
+    })
 }
 
 /// This spec's *on the ground* test (S-0501 Terms): *h* at most the
 /// landing height 0, or drawn in the ground layer, which applies exactly at
 /// a height of 0 or below (claim 7).
 pub fn on_ground(w: &World, id: ObjectId) -> bool {
-    // spec: S-0501 Terms (on the ground: h ≤ landing height 0, or in the ground layer) and claim 7 (the ground layer exactly when the height above the surface is at most 0, no hysteresis)
-    height(w, id) <= 0
+    // spec: S-0501 Terms (on the ground: h ≤ landing height 0, or in the ground layer) and claim 7 (the ground layer exactly when the height above the surface, the deck mark included, is at most 0; no hysteresis)
+    listing_height(w, id) <= 0
+}
+
+/// The cell layer the aircraft is listed in (S-0209 claim 13), or none.
+fn listing_layer(w: &World, id: ObjectId) -> Option<Layer> {
+    // spec: S-0209 claim 13 (a positive listing height excludes the aircraft from both cell-layer lists; at 0 or below it is listed on deck when deck-marked, and on ground otherwise)
+    if listing_height(w, id) > 0 {
+        None
+    } else if deck_marked(w, id) {
+        Some(Layer::Deck)
+    } else {
+        Some(Layer::Ground)
+    }
+}
+
+/// Brings the aircraft's cell listing in line with its listing height and
+/// mark (S-0209 claim 13): taking off removes the listing when the listing
+/// height becomes positive, and landing adds it again. A listing already
+/// right is left alone, so the listing order does not change.
+pub fn sync_listing(w: &mut World, id: ObjectId) {
+    if !is_aircraft(w, id) {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    if !o.on_map {
+        return;
+    }
+    let cell = o.pos.cell();
+    let want = listing_layer(w, id);
+    for l in [Layer::Ground, Layer::Deck] {
+        let listed = w.cells.list(cell, l).contains(&id);
+        if want == Some(l) {
+            if !listed {
+                w.cells.enter(cell, l, id, false);
+            }
+        } else if listed {
+            w.cells.leave(cell, l, id);
+        }
+    }
 }
 
 /// The in-the-air answer of an aircraft (S-0501 Terms): S-0307's
@@ -420,6 +504,8 @@ pub fn placed(w: &mut World, id: ObjectId) {
     // spec: S-0501 claim 1 (a type placed carrying passengers is a passenger carrier for life)
     a.passenger_carrier |= passengers(w, id) > 0;
     a.entered = usable;
+    // spec: S-0501 claim 43 (ordinary fresh ground placement replaces the requested height with the terrain height; a placement is no way to require a deck landing: the mark is clear)
+    a.deck = false;
     let z = if ground {
         // spec: S-0501 claim 1 (ground placement replaces the requested world height with the terrain height)
         a.ground = true;
@@ -451,6 +537,7 @@ pub fn placed(w: &mut World, id: ObjectId) {
         ob.layer = Layer::Ground;
         ob.air = Some(a);
     }
+    sync_listing(w, id);
 }
 
 /// The marks an aircraft holds for removal (S-0209 claim 1): its
@@ -482,6 +569,7 @@ pub fn clear_mark(w: &mut World, id: ObjectId) {
     }
 }
 
+// Q-0872 interim: the object-present flag of a deck-marked aircraft at rest stays in the ground record of its cell.
 fn set_mark(w: &mut World, id: ObjectId) {
     let Some(c) = w.obj(id).map(|o| o.pos.cell()) else {
         return;
@@ -526,8 +614,10 @@ pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
         a.tgt = F64::ZERO;
         a.unfinished = false;
         a.flying_to = None;
+        a.deck = false; // spec: S-0501 claim 43 (a pad grants no mark: the mark is clear on a pad)
     }
     set_mark(w, id);
+    sync_listing(w, id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1107,10 +1197,14 @@ pub fn landing_facing(w: &World, id: ObjectId) -> Facing {
 fn touchdown(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     let surface = w.surface_at(o.pos.x, o.pos.y);
+    // spec: S-0501 claim 43 (landing finishes on a high-bridge cell while the world height is at least the terrain surface height plus 416 leptons: the deck mark is set before settling at landing height; an already marked aircraft keeps it)
+    let marked = deck_marked(w, id)
+        || (w.high_bridge(o.pos.cell()) && o.pos.z - surface >= DECK_ALLOWANCE);
     if let Some(ob) = w.obj_mut(id) {
-        ob.pos.z = surface;
+        ob.pos.z = surface + if marked { DECK_ALLOWANCE } else { 0 };
     }
     if let Some(a) = st_mut(w, id) {
+        a.deck = marked;
         a.ground = true;
         a.landing = false;
         a.taking_off = false;
@@ -1283,6 +1377,13 @@ fn impact(w: &mut World, id: ObjectId) {
 /// Moves an aircraft with the flying locomotor in its turn (S-0501 claims
 /// 1 to 10); whether it moved.
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
+    let moved = tick_flight(w, id);
+    // spec: S-0209 claim 13 (taking off removes the listing when the listing height becomes positive, and landing adds it again)
+    sync_listing(w, id);
+    moved
+}
+
+fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     if !is_aircraft(w, id) {
         return false;
     }
@@ -1311,7 +1412,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         let h = height(w, id);
         let (k, h1) = crash_step(k, h, dead);
         a2.crash = Some(k);
-        let surface = w.surface_at(o.pos.x, o.pos.y);
+        let surface = base(w, id);
         if let Some(ob) = w.obj_mut(id) {
             ob.pos.z = surface + h1;
             ob.air = Some(a2.clone());
@@ -1465,14 +1566,26 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     // Altitude (claims 2 and 3).
     let h = height(w, id);
     if !a.ground {
-        let nh = if h < a.held && alive {
+        let climbing = h < a.held && alive;
+        let nh = if climbing {
             climb(h, a.held, passengers(w, id) > 0)
         } else if h > a.held {
             descend(h, a.held, dead)
         } else {
             h
         };
-        let surface = w.surface_at(o.pos.x, o.pos.y);
+        // The reference of this adjustment: the terrain, or the deck (S-0501 Terms, claim 43).
+        let surface = base(w, id);
+        let was_marked = a.deck;
+        let temporary_deck = !was_marked && deck_reference(w, id);
+        if climbing {
+            // spec: S-0501 claim 43 (an ordinary altitude adjustment that climbs toward the held height clears the mark in that movement tick, the first climbing tick after a deck take-off included)
+            a.deck = false;
+        } else if h > a.held && temporary_deck && nh <= 0 {
+            // spec: S-0501 claim 43 (ordinary descent that uses the high bridge as its reference and whose step reaches or passes height 0 above that deck sets the mark, with the resulting height 0 above the deck)
+            a.deck = true;
+        }
+        // spec: S-0501 claim 43 (horizontal flight or hovering alone, without one of these altitude or landing transitions, leaves the mark unchanged)
         if let Some(ob) = w.obj_mut(id) {
             ob.pos.z = surface + nh;
         }
@@ -1516,6 +1629,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
                 s.landing = false;
                 s.taking_off = true;
                 s.held = cruise;
+                // spec: S-0501 claim 43 (a touchdown refused under claim 7 clears the mark as take-off restarts)
+                s.deck = false;
             }
         }
         return w.obj(id).is_some_and(|ob| ob.pos != start);
@@ -1584,10 +1699,9 @@ fn move_to(w: &mut World, id: ObjectId, np: Pos) {
         ob.pos.y = np.y;
     }
     if from != to {
-        w.cells.leave(from, Layer::Ground, id);
-        if w.cells.cell(to).is_some() {
-            w.cells.enter(to, Layer::Ground, id, false);
-        }
+        w.cells.leave_both(from, id);
+        // The listing in the new cell follows the listing height (S-0209 claim 13).
+        sync_listing(w, id);
         // spec: S-0516 claim 22 and Edge cases (quirks.flying_sensor_disc_stationary: a crossing in flight relocates no sensor disc; off, it does)
         crate::cloak::machine::flight_cell_crossed(w, id);
     }

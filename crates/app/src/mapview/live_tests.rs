@@ -1491,9 +1491,11 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
 
 /// S-0105 claim 40: the bridge qualification of the aircraft shadow anchor (a high-bridge cell and
 /// its neighbour towards y - 1 for an axis along cell x; a >= 416 unmarked, a >= 0 marked), and the
-/// terrain anchor otherwise, whatever the flight height.
+/// terrain anchor otherwise, whatever the flight height. The mark is S-0501 claim 43's aircraft
+/// deck mark (`AirState::deck`), not the render layer or the occupant listing (Q-0841 answered).
 #[test]
 fn aircraft_shadow_anchor_bridge_qualification() {
+    use glasnost_sim::air::AirState;
     use glasnost_sim::cells::Axis;
     use glasnost_sim::world::Layer;
     let mut w = testkit::new_game(5);
@@ -1505,26 +1507,38 @@ fn aircraft_shadow_anchor_bridge_qualification() {
     w.cells.bridge_axis[i] = Axis::X;
     let id = testkit::spawn(&mut w, glasnost_sim::rules::Kind::Vehicle, "CART", 0, c, 0);
     let ground = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
-    let anchor = |w: &mut glasnost_sim::world::World, z: i32, layer| {
+    let anchor = |w: &mut glasnost_sim::world::World, z: i32, marked: bool| {
         let o = w.obj_mut(id).unwrap();
         o.pos.z = ground + z;
-        o.layer = layer;
+        o.air = Some(AirState {
+            deck: marked,
+            ..Default::default()
+        });
         let o = w.obj(id).unwrap().clone();
         super::live::shadow_anchor(w, &o)
     };
     // The neighbour is no high-bridge cell: terrain, at any height.
-    assert!(!anchor(&mut w, 1500, Layer::Ground).deck);
+    assert!(!anchor(&mut w, 1500, false).deck);
     w.cells.deck[j] = true;
-    assert!(
-        !anchor(&mut w, 415, Layer::Ground).deck,
-        "a = 415 is below the deck"
-    );
-    assert!(anchor(&mut w, 416, Layer::Ground).deck, "a = 416 qualifies");
-    assert_eq!(anchor(&mut w, 416, Layer::Ground).ground, ground);
+    assert!(!anchor(&mut w, 415, false).deck, "a = 415 is below the deck");
+    assert!(anchor(&mut w, 416, false).deck, "a = 416 qualifies");
+    assert_eq!(anchor(&mut w, 416, false).ground, ground);
     // Marked on the deck, b = 416: a = z - 416 >= 0.
-    assert!(!anchor(&mut w, 415, Layer::Deck).deck);
-    assert!(anchor(&mut w, 416, Layer::Deck).deck);
+    assert!(!anchor(&mut w, 415, true).deck);
+    assert!(anchor(&mut w, 416, true).deck);
+    // The render layer and the listing are no substitute for the mark (S-0501 claim 43).
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.pos.z = ground + 415;
+        o.air = Some(AirState::default());
+        o.layer = Layer::Deck;
+    }
+    let o = w.obj(id).unwrap().clone();
+    assert!(
+        !super::live::shadow_anchor(&w, &o).deck,
+        "a deck layer without the mark does not count"
+    );
     // A destroyed deck (no mark) cannot qualify.
     w.cells.deck[i] = false;
-    assert!(!anchor(&mut w, 1500, Layer::Ground).deck);
+    assert!(!anchor(&mut w, 1500, false).deck);
 }

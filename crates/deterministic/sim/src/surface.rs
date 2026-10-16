@@ -74,7 +74,9 @@ impl World {
     pub fn surface_for(&self, id: crate::world::ObjectId) -> i32 {
         let Some(o) = self.obj(id) else { return 0 };
         let t = self.surface_at(o.pos.x, o.pos.y);
-        if o.layer == crate::world::Layer::Deck {
+        // spec: S-0501 claim 43 (an aircraft with its own deck mark is measured from the deck, S-0105 claim 40's b)
+        let marked = o.air.as_ref().is_some_and(|a| a.deck);
+        if o.layer == crate::world::Layer::Deck || marked {
             t + 416 // spec: S-0307 Constants (bridge deck height 416 leptons above the terrain)
         } else {
             t
