@@ -121,20 +121,17 @@ fn presentation(w: &World, id: ObjectId) -> Option<&AnimRules> {
     w.rules().animation(name)
 }
 
-/// The stage delay *d* of an animation type (S-0109 claim 2, F1).
+/// The base stage delay *d* of an animation type (S-0109 claim 2, F1): the
+/// rate-derived delay before random rate selection and game-speed
+/// normalisation (S-0517 claim 7: the vehicle's completion clock does not
+/// follow the playback delay).
 fn stage_delay(w: &World, a: &AnimRules) -> i32 {
     let q = &w.rules().quirks;
-    let d = match a.rate {
+    match a.rate {
         // spec: S-0109 claim 2 (a type without the rate field has d = 1)
         None => 1,
-        // spec: S-0109 claim 2 and F1 (d = ⌊900 / ρ⌋ for ρ > 0, 0 for ρ ≤ 0; quirks.anim_fast_rate_freezes off: a positive rate gives at least 1)
+        // spec: S-0109 claim 2 and F1 (d = floor(900 / rho) for rho > 0, 0 for rho <= 0; quirks.anim_fast_rate_freezes off: a positive rate gives at least 1) and S-0517 claim 7 (the base delay, without random rate selection or normalisation)
         Some(r) => crate::rules::anim_delay(r, q.anim_fast_rate_freezes),
-    };
-    // spec: S-0109 claim 4 and S-0107 F3 (a normalised type's delay follows the game speed, quirks.speed_normalised_delays)
-    if a.normalized && q.speed_normalised_delays {
-        crate::infantry::normalised(d, w.game_speed)
-    } else {
-        d
     }
 }
 
@@ -165,8 +162,8 @@ fn completed(w: &World, a: &AnimRules, since: i32, less: i32) -> bool {
         // spec: S-0517 Edge cases (quirks.deploy_stall_zero_delay on: with d = 0 no stages advance and the transition never completes; off: any zero-delay transition completes at the next processing)
         return !w.rules().quirks.deploy_stall_zero_delay;
     }
-    // spec: S-0517 F1 and F2 and claim 7 and Q-0982 (T, not T + 1: the first processing at or after t₀ + (E − 1) d, or (E − 2) d for an undeploy: the stage advance of that tick comes before the processing)
-    now_of(w).wrapping_sub(since) >= stages.wrapping_mul(d)
+    // spec: S-0517 F1 and F2 and claim 7 (completion on t₀ + (E − 1) d + 1, or t₀ + (E − 2) d + 1 for an undeploy, in both directions: the stage count that reaches the threshold in tick T is seen by the processing of T + 1)
+    now_of(w).wrapping_sub(since) > stages.wrapping_mul(d)
 }
 
 fn now_of(w: &World) -> i32 {
@@ -307,7 +304,7 @@ fn undeploy_step(w: &mut World, id: ObjectId) {
 
 /// A landing-first vehicle that completes an animated undeploy is given a
 /// destination from a nearby-cell search centred on its position, so that
-/// its locomotor takes off again (claim 6; the search's settings are Q-0975 question 2).
+/// its locomotor takes off again (claim 6; the search's settings are S-0502 claim 23's last row).
 fn landing_first_take_off(w: &mut World, id: ObjectId) {
     let landing_first = unit_of(w, id).is_some_and(|u| u.deploy_to_land);
     if !landing_first || presentation(w, id).is_none() {
@@ -315,18 +312,29 @@ fn landing_first_take_off(w: &mut World, id: ObjectId) {
     }
     let Some(o) = w.obj(id) else { return };
     let Some(u) = unit_of(w, id) else { return };
-    // spec: S-0517 claim 6 and Q-0975 (S-0212 claim 25's search centred on its position, for its own class and zone; interim settings: no reach region, deck mode at a bridge cell, the height condition, no reference cell)
+    // spec: S-0517 claim 6 and S-0502 claim 23 (S-0212 claim 25's search centred on the vehicle's position: the type's own class with winged counted as track, its own movement zone, not simplified, the reach region of the centre cell for that zone read for its deck when the vehicle is on a deck (none when the read gives none), deck mode when on a deck, no height condition, no reference cell, bridge cells allowed, no further test)
+    let at = o.pos.cell();
+    let deck = o.layer == Layer::Deck;
+    let class = match u.class {
+        Some(glasnost_rules::sim::LocomotionClass::Winged) => {
+            Some(glasnost_rules::sim::LocomotionClass::Track)
+        }
+        c => c,
+    };
+    let zone = u.zone;
+    crate::regions::ensure(w);
+    let reach = crate::regions::reach_read(w, at, zone, deck);
+    let reach = (reach != crate::regions::Reach::None).then_some(reach);
     let s = crate::path::NearbySettings {
-        class: u.class,
-        zone: u.zone,
-        reach: None,
-        deck: w.high_bridge(o.pos.cell()),
-        height: true,
+        class,
+        zone,
+        reach,
+        deck,
+        height: false,
         reference: None,
         no_bridges: false,
         no_overlay: false,
     };
-    let at = o.pos.cell();
     if let Some(c) = crate::path::nearby(w, at, crate::path::NearbyUse::Settings(s)) {
         super::assign_destination(w, id, Some(Target::Cell(c)));
     }
