@@ -214,9 +214,9 @@ fn a_wave_sends_its_jumpjets_across() {
     );
 }
 
-// S-0417 claim 10 (a jumpjet's factory contact and tether end at no established event), PLAN §4.7, Q-1070: with no jumpjet unit, a barracks and a seen enemy no walking unit reaches, the house does not order a jumpjet unit from its sidebar (it would stay tethered to its barracks and close it for good), however much it has to spend, and its army builder never picks the type.
+// spec: S-0417 claim 15 (answers Q-1070: a released jumpjet unit ends its factory contact and tether in its ascent, so no interim hold remains), PLAN §4.7: with no jumpjet unit, a barracks and a seen enemy no walking unit reaches, the house orders a jumpjet unit from its sidebar like a person, builds it, and the barracks is free for the next unit once the unit has climbed away.
 #[test]
-fn orders_no_jumpjet_unit_that_would_jam_its_factory() {
+fn builds_a_jumpjet_unit_and_its_factory_stays_free() {
     let mut g = game(5);
     ready(&mut g);
     let (mut w, jet, _) = scene(&g);
@@ -241,20 +241,37 @@ fn orders_no_jumpjet_unit_that_would_jam_its_factory() {
         kind: Kind::Infantry,
         index: idx,
     };
-    assert!(glasnost_ai::scripted::jams_factory(&w, t));
     assert!(glasnost_sim::econ::tech::buildable(&w, HouseId(0), t));
     let mut brain = Brain::new(&w, &fixture::map_strait(), HouseId(0));
-    for _ in 0..40 {
+    let mut ordered = false;
+    let mut built: Option<ObjectId> = None;
+    let mut freed = false;
+    for _ in 0..400 {
         let orders = brain.think(&w);
-        assert!(
-            !orders.iter().any(
-                |o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == idx)
-            ),
-            "{orders:?}"
+        ordered |= orders.iter().any(
+            |o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == idx),
         );
         for o in orders {
             glasnost_sim::orders::issue(&mut w, HouseId(0), o);
         }
         testkit::run(&mut w, 15);
+        if built.is_none() {
+            built = w
+                .objects
+                .values()
+                .find(|o| {
+                    o.owner == Some(HouseId(0)) && o.kind == Kind::Infantry && o.type_index == idx
+                })
+                .map(|o| o.id);
+        }
+        if let Some(u) = built
+            && w.obj(u).is_some_and(|o| o.contact.is_none() && o.econ.exit.is_none())
+        {
+            freed = true;
+            break;
+        }
     }
+    assert!(ordered, "the house orders the jumpjet unit");
+    assert!(built.is_some(), "the unit is built and released");
+    assert!(freed, "its factory contact and tether ended");
 }

@@ -138,7 +138,6 @@ fn cheapest_armed_jumpjet(w: &World, house: glasnost_sim::world::HouseId) -> Opt
                 .is_some_and(|u| u.jumpjet_locomotor && u.primary.is_some() && !u.harvester)
         })
         .filter(|&t| tech::buildable(w, house, t))
-        .filter(|&t| !scripted::jams_factory(w, t))
         .min_by_key(|&t| (production::cost_field(w, t), t.index))
 }
 
