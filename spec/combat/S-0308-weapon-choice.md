@@ -2,13 +2,13 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-16
 measurements: []
-requests: [Q-0083]
+requests: [Q-0083, Q-0970]
 supersedes: []
 ---
 
@@ -296,11 +296,25 @@ This spec covers skirmish combat and import. Network games and campaigns are out
     Defeat or surrender of an occupant's own house is a separate selective-death exception
     (S-0508 claim 19): its occupants receive killing hits even inside a surviving foreign-owned
     building, and in a mixed-house garrison other houses' occupants can survive. Such a death
-    neither resets nor reduces the numeric index modulo a new count, and does not compact
+    in the original neither resets nor reduces the numeric index modulo a new count, and does not compact
     the occupants as set-up removal does. A dead occupant can remain among the firing choices.
-    No safe subsequent weapon choice or experience recipient through that dead choice is
-    specified here; this requires a project-lead decision. A refused firing attempt or void
-    shot does not advance the index (S-0301 claim 15).
+    In the original the occupant count still includes that dead place (S-0508 claim 20).
+    There is no next-living substitution or dead-place weapon fallback: once the occupant
+    no longer exists, no dependable weapon, successful launch or experience recipient is
+    specified. Numeric muzzle selection alone does not guarantee a safe launch.
+
+    **Engine safety departure.** S-0508 claim 23 replaces this unsafe original result,
+    without a quirk switch. Any occupant death inside removes its place in the same update.
+    Survivors keep their relative order and are numbered from 0. With new count n, retain
+    the integer index k when k < n; otherwise set it to 0, including when n = 0. This is
+    range repair, not reduction modulo n. With occupants remaining, the repaired index
+    selects the current occupant's weapon by the rules below, subject to claim 12's upgrade
+    precedence. Ordinary successful-shot advancement uses the new count. No shot uses a
+    removed place. With n = 0 there is no occupant weapon: claims 12 and 2 supply the ordinary
+    upgrade/host resolution, and table P row 2 no longer applies. An empty building is not
+    guaranteed a weapon or permission to fire. Experience and abandonment follow S-0508
+    claim 23 and S-0311 claim 8, not a dead-place fallback.
+    A refused firing attempt or void shot does not advance the index (S-0301 claim 15).
     The weapon is:
     - for an elite occupant: its type's elite occupying weapon if the type has one, and otherwise
       the weapon in the occupant's own slot 0 (with claim 2),
@@ -318,11 +332,13 @@ This spec covers skirmish combat and import. Network games and campaigns are out
       differently owned entrants. Individual set-up removal is `unmeasured`, as S-0311 claim 15
       explains. Unchanged index on a refused or void attempt is `unmeasured` here: these parts
       do not isolate an unsuccessful launch between distinguishable occupants. Unsafe continued
-      firing or credit through a dead choice is `unmeasured`: no safe oracle result is predicted.
+      original firing or credit through a dead choice is `unmeasured`: no safe oracle result is predicted.
+      The engine departure is `measurable` (W9 part i, shared with S-0508 claim 23's G18).
+      Its required results are design rules, not oracle predictions.
       Occupant substitution in other slots is `unmeasured`: these garrison parts choose only
       slot 0 for their shots. Other clearing causes inherit S-0508 claim 18's backing limitations.
     - Confidence: high for the rotation, weapon rule, completed whole-building action reset,
-      additional entry and defeat's inclusion of off-map occupants; medium for the order of
+      additional entry, the engine safety departure and defeat's inclusion of off-map occupants; medium for the order of
       occupants, individual set-up removal, mixed-house consequence and retained dead choice
 
 ### Other uses of the weapons
@@ -379,13 +395,12 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 
 **F1. Mean weapon damage.**
 
-> *d*ᵢ = damage(slot *i*) + ambient damage(slot *i*)  (integers, sum in signed 32-bit)
+> For each slot *i*, *d*ᵢ = damage(slot *i*) + ambient damage(slot *i*) when that slot holds a weapon; otherwise its contribution is 0. Each damage sum is an integer sum in signed 32-bit arithmetic.
 >
-> *M* = trunc((*d*₀ + *d*₁) / 2) when both slots hold a weapon, *M* = *d*ᵢ when only slot *i* does,
-> and *M* = 0 when neither does
+> For a switching type, *M* = *d*ᵢ for its current weapon-number slot *i*.
+> For every other object, *M* = trunc((*d*₀ + *d*₁) / 2) when both slots hold a weapon, *M* = *d*ᵢ when only slot *i* holds one, and *M* = 0 when neither holds one.
 
-trunc is truncation toward zero (S-0205, claim 2), so a sum of −3 gives *M* = −1. Integer
-arithmetic, no rounding mode involved.
+trunc is truncation toward zero (S-0205, claim 2), so a sum of −3 gives *M* = −1. The slot contributions and their sum are integers; division by 2 is truncated toward zero. No other rounding mode is involved.
 
 **F2. Gattling slots.** *slot* = 2 × *s* + *a*, where *s* is the integer gattling stage and *a* is an integer equal to 0 or 1: *a* = 1 when the target is an airborne object and the weapon in slot 1 has an anti-air projectile, and *a* = 0 otherwise. The result is an integer slot; evaluation uses integer arithmetic and no rounding. The supported integer width and overflow behaviour of this expression are not established here and must not be inferred from this formula.
 
@@ -508,7 +523,8 @@ number unchanged.
 | a whole-building eviction or clearing action completes (S-0508 claim 18) | index = 0; no intermediate reset/release ordering required |
 | an additional occupant enters (S-0508 claim 18) | index unchanged; entrant appended |
 | an individual occupant is removed during scenario set-up (S-0311 claim 15) | index unchanged; remaining occupants keep relative order |
-| an occupant dies from its own house's defeat or surrender while the building survives (S-0508 claim 19) | numeric index unchanged, no modulo repair or occupant compaction; safe use of a retained dead choice unspecified |
+| original only: an occupant dies from its own house's defeat or surrender while the building survives (S-0508 claims 19 and 20) | numeric index and count unchanged, no compaction or next-living substitution; dead-place weapon use has no dependable result |
+| our engine: any occupant dies inside (S-0508 claim 23) | remove its place in the same update, preserving survivor order; retain index if below new count, otherwise set 0; later shots use remaining occupants and the new count; no occupant weapon when empty |
 
 Ordering: none of its own. The choice is made each time a rule asks for it, with the state at that
 moment (for example the gattling stage and the deployed state of the same tick). S-0609 claims
@@ -534,6 +550,10 @@ moment (for example the gattling stage and the deployed state of the same tick).
 - **Elite occupants skip the occupying weapon** (claim 13). Switch
   `quirks.elite_occupant_skips_occupy_weapon` (default on). Off: an elite occupant without an elite
   occupying weapon fires its type's occupying weapon when the type has one.
+- **Death inside a garrison** (claim 13). S-0508 claim 20 records the original's retained
+  dead places, unchanged count and unsafe later use, without a next-living substitution or
+  weapon fallback. Our engine always applies S-0508 claim 23's same-update stable removal
+  and index range repair. This safety departure has no quirk switch.
 - **The airstrike row is final** (row 6). A firer whose secondary has an airstrike warhead never
   reaches the zero-versus, water, land or air rows. No switch: it is a data choice, not a defect.
 - **Deploy weapon index not checked** (claim 9). A deployed deploy-fire vehicle uses its deploy
@@ -857,6 +877,20 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   the above-count retained-position and excess-count controls; its unsafe diagnostic part
   predicts no deterministic original result. In our engine excess counts must use at most
   three positions and the ordinary fallbacks, with the importer warning.
+- *Part i (engine death-removal checks):* share S-0508 claim 23's G18 deterministic engine
+  fixtures, three fresh runs each, game-speed index 2, director and mods off. Use three
+  occupants U, V, W in entry order with distinguishable weapons, no upgrades and index 1.
+  Kill V inside during an independent death event. Record survivor order, count, index,
+  resolved weapon and successful launches. Expect U, W, count 2, index 1: W's weapon is
+  selected and its next successful ordinary shot advances the index to 0. Repeat starting
+  at index 2: V's death gives index 0, not the modulo result 1. Repeat with last-place W
+  dying. After the final occupant dies, expect count 0, index 0 and no occupant weapon.
+  Check ordinary host/upgrade resolution separately rather than expecting a dead-place
+  fallback or a guaranteed shot. A removed occupant's weapon, changed survivor order,
+  retained dead place, wrong range repair or wrong ordinary advancement falsifies the
+  corresponding engine rule. G18 also checks recipient selection and abandonment.
+  These results deliberately differ from part g's original-only observations; do not
+  attempt unsafe original firing as a control.
 - *Falsified if:* any damage in parts a to d differs from their expected sequences, part e
   rotates occupants or muzzles after a disc-laser shot while its ordinary-weapon control
   alternates, or part f or g differs from its index predictions.
@@ -921,9 +955,10 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
 
 - Which states make an aircraft a kamikaze aircraft (row 12): owned by the aircraft specs.
 - S-0508 claim 5 gives entry order for the occupant list; W9 tests the resulting firing order.
-  Claims 18 and 19 there settle completed-action reset, additional-entry retention and the
-  distinct own-house-defeat case. S-0311 claim 15's limited set-up compaction is not a repair
-  rule for defeat deaths. No modulo repair or safe continuation through a dead choice is inferred.
+  S-0508 claims 18 and 19 settle completed-action reset, additional-entry retention and the
+  original own-house-defeat case. Claim 20 records unchanged count and unsafe continuation.
+  Claim 23 supplies the engine death-removal and index range-repair departure. No safety
+  policy remains pending here; S-0311 claim 15's limited set-up case is distinct.
 - The rearm-countdown transfer of claim 6, restarted from slot 7, remains low confidence
   pending W4 part g. Temporal beam transfer and exit release agree with S-0514 claims 9,
   10 and 14.
@@ -934,14 +969,17 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
 
 ## Cross-spec changes to confirm
 
-- S-0313 claim 6: confirm the approved text retains completed-action reset without intermediate ordering and the own-house-defeat exception with numeric-index retention, without inferred compaction or modulo repair.
-- S-0311's firing-occupant term and claim 15: confirm the approved text uses completed-action reset without intermediate ordering and distinguishes defeat deaths from set-up compaction. Safe credit through a retained dead choice remains a project-lead decision.
+- S-0313 claim 6 and its index table must distinguish S-0508 claim 20's unsafe original
+  count retention from claim 23's engine same-update stable death removal and range repair.
+  Muzzle selection and successful-shot advancement use the repaired index and new count.
+  Numeric muzzle selection is not proof of a safe original launch. Replace the pending-lead
+  question with G18's engine check. Its assault scenario must follow S-0508 claim 14's
+  reverse-list credit/removal order and point i for occupant list position i, not the firing index.
+- S-0311's firing-occupant term and claims 8 and 15 must apply S-0508 claim 23's engine
+  removal and repaired-index recipient selection, distinguishing claim 20's unsafe original
+  result. Removed places receive nothing and an empty list has no occupant recipient, while
+  trainable-building self-credit is unchanged. Replace the pending-lead question with G18's
+  engine check. Claim 9 must include S-0508 claim 14's reverse-list assault credit/removal order.
 
-The approved revisions reviewed for this scrub already state these rules; this confirmation is for joint sign-off, not a request to revise them again.
-
-## Questions for the project lead
-
-- Choose a deterministic safety policy for weapon choice, muzzle selection and experience
-  credit after own-house defeat leaves a dead occupant among a surviving building's firing
-  choices (S-0508 claim 19; S-0313 claim 6; S-0311 claim 15). This spec does not infer a
-  replacement occupant, compaction or modulo repair.
+These are coordinated changes for joint sign-off; neither unsafe original continuation nor
+intermediate reset ordering is made an engine requirement.
