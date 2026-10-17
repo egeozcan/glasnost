@@ -57,7 +57,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0612](superweapons/S-0612-psychic-dominator.md) | Psychic Dominator superweapon | superweapons | 1 | approved | — |
 | [S-0615](combat/S-0615-special-hit-effects.md) | Special-hit effects (death-kind animations, the burning walker and the disc laser) | combat | 1 | approved | — |
 | [S-0205](simulation/S-0205-number-domains.md) | Number domains (integers, floating point, the round-toward-zero mode, conversions) | simulation | 8 | approved | — |
-| [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 27 | approved | — |
 | [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 16 | approved | — |
 | [S-0603](structures/S-0603-grinder.md) | Grinder (recycling units into credits) | structures | 2 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 2 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 29 | approved | — |
 | [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 36 | approved | — |
 | [S-0004](rules-import/S-0004-type-registration-order.md) | Type registration order | rules-import | 18 | approved | — |
+| [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 28 | approved | — |
