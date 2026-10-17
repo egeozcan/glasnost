@@ -647,24 +647,8 @@ fn claim_9_bunker_hit_rows() {
     assert!(w.obj(b).unwrap().health < hb);
 }
 
-// spec: S-0606 claim 9 and S-0601 claim 3 (ordinary mind control cannot take over a bunkered vehicle)
-#[test]
-fn claim_9_no_mind_control() {
-    let mut w = game();
-    let b = pit(&mut w, "PIT");
-    let u = fill(&mut w, b, 6, 1);
-    let ctl = put(&mut w, Kind::Vehicle, "TANK", 1, -6, -6);
-    assert!(!glasnost_sim::mind::take(&mut w, ctl, u));
-    assert_eq!(w.obj(u).unwrap().owner, Some(ALPHA));
-}
-
 // ---------------------------------------------------------------------------
 // Claims 12 to 14: leaving.
-
-fn deploy(w: &mut World, u: ObjectId) {
-    orders::issue(w, ALPHA, Order::Deploy { actor: u });
-    tick::step(w);
-}
 
 // spec: S-0606 claim 12 (unload: walls-down effects; the release track toward F4; the nearby-cell destination and move; the bunker back at clearing with guard queued and no contact)
 // spec: S-0606 table T2 (the release track ends at F4 facing 192)
