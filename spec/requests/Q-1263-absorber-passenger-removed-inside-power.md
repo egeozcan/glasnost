@@ -1,9 +1,9 @@
 ---
 id: Q-1263
 title: Does a passenger removed inside an absorbing building make the owner's power due
-status: open
+status: answered
 related: [S-0605, S-0405, S-0414]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need

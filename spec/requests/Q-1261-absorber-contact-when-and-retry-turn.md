@@ -1,9 +1,9 @@
 ---
 id: Q-1261
 title: When an entrant asks an absorbing building for contact, and when a waiting entrant retries
-status: open
+status: answered
 related: [S-0605, S-0213, S-0215]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need

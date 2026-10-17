@@ -1,9 +1,9 @@
 ---
 id: Q-1264
 title: Which standing position a passenger takes when an absorbing building is destroyed
-status: open
+status: answered
 related: [S-0605, S-0312, S-0208]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need
