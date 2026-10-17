@@ -820,9 +820,9 @@ pub struct MindRules {
     /// The fate tables of claim 8: normal, wounded, low power, low money;
     /// each the weights of team, grinder, bio reactor, hunt.
     pub fate: [Vec<i32>; 4], // spec: S-0601 claim 8 (four fate tables)
-    /// The low-money mark, credits (claim 8; absent: none, Q-1202).
+    /// The low-money mark, credits (claim 8; absent: none, never selecting its table).
     pub low_money_mark: Option<i32>,
-    /// The wounded mark, a single widened (claim 8; absent: none, Q-1202).
+    /// The wounded mark, a single widened (claim 8; absent: none, never selecting its table).
     pub wounded_mark: Option<F64>,
 }
 
@@ -1617,7 +1617,7 @@ pub fn combat_rules(
                 g.ai_capture_low_power.clone().unwrap_or_default(),
                 g.ai_capture_low_money.clone().unwrap_or_default(),
             ],
-            // Q-1202 (interim: an absent mark never selects its table)
+            // spec: S-0601 claim 8 and Import mapping (revision 9: an absent mark is none and never selects its table, our engine's design rule)
             low_money_mark: g.ai_capture_low_money_mark,
             // spec: S-0601 claim 8 (the wounded mark is a binary32 threshold, compared without narrowing the quotient)
             wounded_mark: single(&g.ai_capture_wounded_mark, mode),

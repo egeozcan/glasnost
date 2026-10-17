@@ -146,7 +146,7 @@ pub fn action_coverage(code: i32) -> Coverage {
 pub fn event_coverage(code: i32) -> Coverage {
     match code {
         // spec: S-0011 I3 (the supported subset)
-        1 | 8 | 13 | 31 | 36 | 37 | 47 | 48 | 51 | 60 | 61 => Coverage::Implemented,
+        1 | 6 | 8 | 13 | 31 | 36 | 37 | 44 | 47 | 48 | 51 | 60 | 61 => Coverage::Implemented,
         _ => Coverage::Unknown,
     }
 }

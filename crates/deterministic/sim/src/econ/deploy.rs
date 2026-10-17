@@ -109,17 +109,18 @@ pub fn packs_up(w: &World, id: ObjectId) -> bool {
 
 /// Deploy readiness of a vehicle that deploys into a building (S-0214
 /// Terms). Being disabled and inside a tunnel are other topics' states and
-/// never hold yet.
-fn deploy_ready(w: &World, id: ObjectId) -> bool {
+/// never hold yet. The key command's deploy rule reads it too (S-0213
+/// table T2).
+pub fn deploy_ready(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
-    // spec: S-0214 Terms (not when it deploys into a construction yard while it is mind-controlled, S-0601 Terms)
     let into_yard = deploys_into(w, o.kind, o.type_index).is_some_and(|b| {
         w.rules().buildings[b as usize]
             .raw
             .construction_yard
             .unwrap_or(false)
     });
-    if into_yard && mind_controlled(w, id) {
+    // spec: S-0214 Terms (revision 39: not when it deploys into a construction yard while it is controlled by a controlling object) and S-0601 claims 13 and 15 (revision 9: only control by a controller counts; a permanently controlled vehicle is not refused)
+    if into_yard && crate::mind::controlled_by(w, id).is_some() {
         return false;
     }
     // spec: S-0214 Terms and S-0415 claim 2 (not when it deploys into a building while a parasite is on it, S-0614)

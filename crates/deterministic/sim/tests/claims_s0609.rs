@@ -353,7 +353,7 @@ fn thresholds_out_of_order_apply_as_written() {
     assert_eq!(gattling::f2(&t, &thr, 21, 2, 1, true), (20, 2));
 }
 
-// spec: S-0609 Import mapping and Edge cases (a stage count above 6 is used as 6; stage count 0 or 1: the thresholds stay 0, the value never grows); Q-1220 interim (negative settings are used as 0)
+// spec: S-0609 Import mapping and Edge cases (a stage count above 6 is used as 6; stage count 0 or 1: the thresholds stay 0, the value never grows) and revision 4 (negative settings are used as 0)
 #[test]
 fn spin_type_from_fields() {
     let mut c = glasnost_rules::sim::CombatFields::default();
@@ -376,6 +376,26 @@ fn spin_type_from_fields() {
     assert_eq!(gattling::f1(&s, &s.normal, 0, 0, 1), (0, 0, false));
     c.weapon_stages = Some(-2);
     assert_eq!(SpinType::from_fields(&c).stages, 0);
+}
+
+// spec: S-0609 Edge cases and Constants (revision 4, answering Q-1220: every spin product and sum and the elapsed-tick count saturate at 2³¹ − 1, nothing wraps; a saturated value is left unchanged by F1)
+#[test]
+fn saturation_at_the_32_bit_bound() {
+    let (t, thr) = st([10, 30, i32::MAX], i32::MAX, i32::MAX);
+    // u × m and v + u × m saturate.
+    assert_eq!(gattling::f1(&t, &thr, 5, 0, 3).0, i32::MAX);
+    // A saturated value is at the cap: F1 leaves it.
+    assert_eq!(gattling::f1(&t, &thr, i32::MAX, 2, 3).0, i32::MAX);
+    // d × m saturates, and the value falls to 0, not below.
+    assert_eq!(gattling::f2(&t, &thr, 100, 0, 5, true).0, 0);
+    // The elapsed-tick count stays at the bound.
+    let r = rules();
+    let mut w = game(&r);
+    let a = put(&mut w, Kind::Vehicle, "GAT", ALPHA, 0, 0);
+    w.obj_mut(a).unwrap().beh.elapsed = i32::MAX - 1;
+    gattling::elapse(&mut w, a);
+    gattling::elapse(&mut w, a);
+    assert_eq!(w.obj(a).unwrap().beh.elapsed, i32::MAX);
 }
 
 // ---------------------------------------------------------------------------

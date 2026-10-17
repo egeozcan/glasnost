@@ -26,16 +26,17 @@ pub enum Cause {
     /// The occupation rules of a civilian garrison building (S-0508 claims 7
     /// and 8): no announcement of this kind.
     Occupation,
-    /// Mind control (S-0601 claims 6 and 9): no announcement (S-0509 claim
-    /// 12 announces engineer captures and vehicle-like takeovers only).
+    /// The mind-control takeover and release of a building (S-0601 claims
+    /// 6 and 9): requests an announcement (S-0509 claim 12).
     MindControl,
 }
 
 impl Cause {
     /// Whether the cause requests a capture or loss announcement (S-0509
-    /// claim 12: an engineer capture and a vehicle-like takeover do).
+    /// claim 12: an engineer capture, a vehicle-like takeover and the
+    /// mind-control takeover and release of a building do).
     pub fn announces(self) -> bool {
-        matches!(self, Cause::Capture | Cause::Takeover)
+        matches!(self, Cause::Capture | Cause::Takeover | Cause::MindControl)
     }
 }
 
@@ -79,7 +80,7 @@ pub fn change(w: &mut World, b: ObjectId, new: Option<HouseId>, cause: Cause) {
         old,
         new,
         pos,
-        // spec: S-0509 claim 12 (an engineer capture and a vehicle-like takeover request an announcement; a trigger and the occupation rules do not)
+        // spec: S-0509 claim 12 (an engineer capture, a vehicle-like takeover and the mind-control takeover and release of a building request an announcement; a trigger and the occupation rules do not)
         announce: cause.announces(),
     });
 }

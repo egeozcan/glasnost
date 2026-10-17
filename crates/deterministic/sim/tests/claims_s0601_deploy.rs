@@ -183,7 +183,7 @@ fn claim_15_quirk_off_inherits_the_link() {
     assert_eq!(w.obj(b).unwrap().owner, Some(HouseId(ALPHA)), "released");
 }
 
-// spec: S-0214 Terms (a mind-controlled vehicle is not deploy-ready to deploy into a construction yard; Q-1200 for the conflict with S-0601 scenario MC7)
+// spec: S-0601 claim 15 (revision 9: a vehicle controlled by a controller is not deploy-ready when it would deploy into a construction yard: no yard appears) and S-0214 Terms (revision 39)
 #[test]
 fn controlled_mcv_does_not_deploy_into_a_yard() {
     let r = rules();
@@ -191,5 +191,85 @@ fn controlled_mcv_does_not_deploy_into_a_yard() {
     let _ = glasnost_sim::orders::issue(&mut w, HouseId(BETA), Order::Deploy { actor: v });
     testkit::run(&mut w, 60);
     assert!(w.obj(v).is_some());
+    assert!(buildings(&w).is_empty());
+}
+
+// spec: S-0601 claim 15 (revision 9: the deploy command gives a controlled construction vehicle no order, because it fails deploy readiness; a non-yard deployer is deploy-ready and gets one) and S-0213 the deploy rule
+#[test]
+fn deploy_command_skips_a_controlled_mcv() {
+    use glasnost_sim::targeting::{KeyCommand, key_command};
+    let r = rules();
+    let (w, _ctrl, v) = setup(&r, "MCV");
+    assert!(key_command(&w, HouseId(BETA), &[v], KeyCommand::Deploy).is_empty());
+    let (w, _ctrl, k) = setup(&r, "KIT");
+    assert_eq!(
+        key_command(&w, HouseId(BETA), &[k], KeyCommand::Deploy),
+        vec![Order::Deploy { actor: k }]
+    );
+}
+
+// spec: S-0601 claim 15 (revision 9: after a release the construction vehicle is deploy-ready again, with no trace of the control)
+#[test]
+fn released_mcv_deploys() {
+    let r = rules();
+    let (mut w, ctrl, v) = setup(&r, "MCV");
+    glasnost_sim::objects::remove(&mut w, ctrl);
+    assert_eq!(w.obj(v).unwrap().owner, Some(HouseId(ALPHA)));
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        HouseId(ALPHA),
+        Order::Deploy { actor: v }
+    ));
+    run_until_gone(&mut w, v);
+    let b = buildings(&w)[0];
+    assert_eq!(w.obj(b).unwrap().owner, Some(HouseId(ALPHA)));
+}
+
+// spec: S-0601 claims 13 and 15 (revision 9: a permanently controlled construction vehicle is not refused: it deploys and the yard belongs to the dominating house) and S-0214 Terms (revision 39)
+#[test]
+fn dominated_mcv_deploys_for_the_dominating_house() {
+    let r = rules();
+    let mut w = testkit::game_with(&r, SIZE, 17);
+    testkit::run(&mut w, 4);
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "MCV",
+        ALPHA,
+        c(0, 0),
+        (D * 256) as u16,
+    );
+    assert!(mind::dominate(&mut w, v, HouseId(BETA)));
+    assert!(mind::mind_controlled(&w, v));
+    deploy(&mut w, v);
+    run_until_gone(&mut w, v);
+    let b = buildings(&w)[0];
+    assert_eq!(w.obj(b).unwrap().owner, Some(HouseId(BETA)));
+}
+
+// spec: S-0601 claim 15 (revision 9: a deploy order already queued when the vehicle is taken does not survive the guard reset of claim 6)
+#[test]
+fn queued_deploy_does_not_survive_the_takeover() {
+    use glasnost_sim::rules::Behaviour;
+    let r = rules();
+    let mut w = testkit::game_with(&r, SIZE, 17);
+    testkit::run(&mut w, 4);
+    let ctrl = testkit::spawn(&mut w, Kind::Vehicle, "CTRL", BETA, c(-6, -6), 0);
+    let k = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "KIT",
+        ALPHA,
+        c(0, 0),
+        (D * 256) as u16,
+    );
+    // The deploy order's effect (S-0213 claim 10): unload queued, not yet started.
+    w.obj_mut(k).unwrap().beh.queue(Some(Behaviour::Unload));
+    assert!(mind::take(&mut w, ctrl, k));
+    let o = w.obj(k).unwrap();
+    assert_ne!(o.beh.queued, Some(Behaviour::Unload));
+    assert_ne!(o.beh.current, Some(Behaviour::Unload));
+    testkit::run(&mut w, 60);
+    assert!(w.obj(k).is_some(), "no deploy");
     assert!(buildings(&w).is_empty());
 }
