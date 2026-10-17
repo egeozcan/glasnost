@@ -242,7 +242,13 @@ fn claim_1_records_and_capacity() {
     let ps = put(&mut w, Kind::Building, "PSI", BETA, 4, 4);
     let r = mind::controller(&w, c3).expect("a record");
     assert_eq!(
-        (r.capacity, r.unlimited, r.countdown, r.highlight, r.sound_mark),
+        (
+            r.capacity,
+            r.unlimited,
+            r.countdown,
+            r.highlight,
+            r.sound_mark
+        ),
         (3, false, 30, 0, false)
     );
     assert!(r.victims.is_empty());
@@ -282,7 +288,10 @@ fn claim_2_at_capacity() {
     assert!(!mind::at_capacity(&w, c1));
     assert!(mind::take(&mut w, c1, a));
     assert!(mind::at_capacity(&w, c1));
-    assert!(mind::can_take(&w, c1, b), "an explicit order is not refused for it");
+    assert!(
+        mind::can_take(&w, c1, b),
+        "an explicit order is not refused for it"
+    );
     assert!(mind::take(&mut w, m, b));
     assert!(!mind::at_capacity(&w, m));
 }
@@ -306,7 +315,10 @@ fn claim_3_takeover_test_rows() {
     assert!(mind::can_take(&w, c3, grunt));
     assert!(!mind::can_take(&w, c3, own), "the same house");
     assert!(!mind::can_take(&w, c3, stoic), "psionics immunity");
-    assert!(!mind::can_take(&w, c3, hut), "a building is immune by default");
+    assert!(
+        !mind::can_take(&w, c3, hut),
+        "a building is immune by default"
+    );
     assert!(mind::can_take(&w, c3, hutoff));
     // Construction and selling.
     w.obj_mut(hutoff).unwrap().beh.current = Some(Behaviour::Selling);
@@ -392,9 +404,15 @@ fn claim_7_full_controller_cannot_fire() {
     }
     let t = veh(&mut w, "BOX", ALPHA, 2, 1);
     w.obj_mut(c3).unwrap().target = Some(Target::Object(t));
-    assert_eq!(check(&w, c3, Some(Target::Object(t)), 0, false), Answer::Illegal);
+    assert_eq!(
+        check(&w, c3, Some(Target::Object(t)), 0, false),
+        Answer::Illegal
+    );
     w.obj_mut(m).unwrap().target = Some(Target::Object(t));
-    assert_ne!(check(&w, m, Some(Target::Object(t)), 0, false), Answer::Illegal);
+    assert_ne!(
+        check(&w, m, Some(Target::Object(t)), 0, false),
+        Answer::Illegal
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -518,7 +536,11 @@ mod tags {
         mind::detonation(&mut w, Some(tank), Some(Target::Object(stoic)));
         assert_eq!(w.triggers.fired, f0, "no record: no notification");
         mind::detonation(&mut w, Some(c3), Some(Target::Object(stoic)));
-        assert_eq!(w.triggers.fired - f0, 2, "two raises (6 and 44), the takeover failing");
+        assert_eq!(
+            w.triggers.fired - f0,
+            2,
+            "two raises (6 and 44), the takeover failing"
+        );
         assert_eq!(owner(&w, stoic), Some(ALPHA));
     }
 }
@@ -590,7 +612,11 @@ fn claim_7_capacity_1_replaces() {
     let stoic = veh(&mut w, "STOIC", ALPHA, 5, 0);
     assert!(mind::take(&mut w, c1, a));
     mind::detonation(&mut w, Some(c1), Some(Target::Object(stoic)));
-    assert_eq!(mind::controlled_by(&w, a), Some(c1), "a refused landing keeps it");
+    assert_eq!(
+        mind::controlled_by(&w, a),
+        Some(c1),
+        "a refused landing keeps it"
+    );
     w.effects.clear();
     mind::detonation(&mut w, Some(c1), Some(Target::Object(b)));
     assert_eq!(owner(&w, a), Some(ALPHA));
@@ -661,7 +687,11 @@ fn claim_8_table_precedence() {
     let rng = w.rng.clone();
     assert!(mind::take(&mut w, cn, b));
     assert_ne!(w.rng, rng, "the draw is taken");
-    assert_ne!(w.obj(b).unwrap().beh.queued, Some(Behaviour::Hunt), "low money: nothing");
+    assert_ne!(
+        w.obj(b).unwrap().beh.queued,
+        Some(Behaviour::Hunt),
+        "low money: nothing"
+    );
     // Wounded: health 499 of 1000 below 0.5.
     let r = fate_rules(|g| g.ai_capture_wounded_mark = Some(dec("0.5")));
     let mut w = testkit::game_with_non_players(&r, SIZE, 1);
@@ -674,7 +704,11 @@ fn claim_8_table_precedence() {
         w.obj_mut(x).unwrap().beh.queued = None;
     }
     assert!(mind::take(&mut w, cn, b));
-    assert_ne!(w.obj(b).unwrap().beh.queued, Some(Behaviour::Hunt), "wounded");
+    assert_ne!(
+        w.obj(b).unwrap().beh.queued,
+        Some(Behaviour::Hunt),
+        "wounded"
+    );
     let cn2 = veh(&mut w, "CTRL3", NEUTRAL, 0, 5);
     assert!(mind::take(&mut w, cn2, c));
     assert_eq!(
@@ -968,7 +1002,11 @@ fn claim_14_holder_defeat_spares_victims() {
     assert!(mind::take(&mut w, c, a));
     glasnost_sim::econ::victory::defeat(&mut w, HouseId(BETA));
     assert!(w.obj(a).is_some_and(|o| o.health > 0));
-    assert_eq!(owner(&w, a), Some(ALPHA), "released by the controller's death");
+    assert_eq!(
+        owner(&w, a),
+        Some(ALPHA),
+        "released by the controller's death"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1008,7 +1046,11 @@ fn claim_16_pulse_timing_and_draws() {
     for _ in 0..30 {
         mind::overload_turn(&mut w, m);
     }
-    assert_eq!(w.obj(m).unwrap().health, full, "no check in the first 30 updates");
+    assert_eq!(
+        w.obj(m).unwrap().health,
+        full,
+        "no check in the first 30 updates"
+    );
     assert_eq!(mind::controller(&w, m).unwrap().countdown, 0);
     w.effects.clear();
     let mut expect = w.rng.clone();
@@ -1094,10 +1136,17 @@ fn claim_17_link_lines() {
     for k in 0..5 {
         flh.push([10 * k, 0, 100 + k]);
     }
-    r.sim.vehicles.get_mut("MASTER").unwrap().combat.alternate_flh = Some(flh);
+    r.sim
+        .vehicles
+        .get_mut("MASTER")
+        .unwrap()
+        .combat
+        .alternate_flh = Some(flh);
     let mut w = testkit::game_with(&r, SIZE, 1);
     let m = veh(&mut w, "MASTER", BETA, 0, 0);
-    let t: Vec<ObjectId> = (0..6).map(|i| veh(&mut w, "BOX", ALPHA, 3, i - 3)).collect();
+    let t: Vec<ObjectId> = (0..6)
+        .map(|i| veh(&mut w, "BOX", ALPHA, 3, i - 3))
+        .collect();
     for &x in &t {
         assert!(mind::take(&mut w, m, x));
     }
@@ -1105,7 +1154,11 @@ fn claim_17_link_lines() {
     assert!(mind::take(&mut w, m, b2));
     let lines = mind::link_lines(&w);
     assert_eq!(lines.len(), 7);
-    assert!(lines.iter().all(|l| l.house == Some(HouseId(BETA)) && l.timer));
+    assert!(
+        lines
+            .iter()
+            .all(|l| l.house == Some(HouseId(BETA)) && l.timer)
+    );
     for (k, l) in lines.iter().enumerate() {
         assert_eq!(l.from, mind::anchor(&w, m, k));
     }
@@ -1177,8 +1230,16 @@ fn transport_refuses_controlled_and_controllers() {
     use glasnost_sim::transport::{Answer as Dock, answer};
     assert_eq!(answer(&w, cart_b, c), Dock::Accepts, "no victims yet");
     assert!(mind::take(&mut w, c, a));
-    assert_eq!(answer(&w, cart_b, c), Dock::Neither, "a controller of objects");
-    assert_eq!(answer(&w, cart_b, a), Dock::Neither, "a mind-controlled unit");
+    assert_eq!(
+        answer(&w, cart_b, c),
+        Dock::Neither,
+        "a controller of objects"
+    );
+    assert_eq!(
+        answer(&w, cart_b, a),
+        Dock::Neither,
+        "a mind-controlled unit"
+    );
     assert_eq!(answer(&w, cart_a, a), Dock::Neither, "not allied any more");
     assert_eq!(answer(&w, cart_b, free), Dock::Accepts);
 }

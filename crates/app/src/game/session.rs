@@ -1039,11 +1039,17 @@ impl Session {
         let selected = |id: ObjectId| self.play.selection.contains(&id);
         for l in glasnost_sim::mind::link_lines(w) {
             let carrier = glasnost_sim::transport::riding(w, l.controller);
-            if !(l.timer || selected(l.controller) || selected(l.victim) || carrier.is_some_and(selected)) {
+            if !(l.timer
+                || selected(l.controller)
+                || selected(l.victim)
+                || carrier.is_some_and(selected))
+            {
                 continue;
             }
             // Our own: no line into or out of cells the local player has not explored.
-            let seen = |p: glasnost_sim::world::Pos| glasnost_sim::econ::shroud::explored(w, self.play.local, p.cell());
+            let seen = |p: glasnost_sim::world::Pos| {
+                glasnost_sim::econ::shroud::explored(w, self.play.local, p.cell())
+            };
             if !(seen(l.from) && seen(l.to)) {
                 continue;
             }
@@ -1064,7 +1070,8 @@ impl Session {
         // spec: S-0601 claim 18 (the control ring on a controlled object, the permanent ring on a permanently controlled one, raised by the ring height; on a building in front of it). Seam: the ring animations' art is not drawn yet; a marker stands in at the ring's place.
         for o in w.objects.values() {
             // Our own: no ring on objects in cells the local player has not explored.
-            if !o.on_map || !glasnost_sim::econ::shroud::explored(w, self.play.local, o.pos.cell()) {
+            if !o.on_map || !glasnost_sim::econ::shroud::explored(w, self.play.local, o.pos.cell())
+            {
                 continue;
             }
             let Some(ring) = glasnost_sim::mind::ring(w, o.id) else {
@@ -1072,7 +1079,11 @@ impl Session {
             };
             let (qx, qy) = project_lifted(ring.at.x, ring.at.y, ring.at.z);
             let (x, y) = world_to_screen(qx, qy);
-            let ink = if ring.permanent { PERMA_RING_INK } else { RING_INK };
+            let ink = if ring.permanent {
+                PERMA_RING_INK
+            } else {
+                RING_INK
+            };
             ring_marker(&mut d, x, y, ink, m);
         }
         if let (Some(drag), Some(p)) = (self.drag, self.pointer)
@@ -1169,7 +1180,16 @@ const PERMA_RING_INK: [u8; 4] = [255, 120, 255, 255];
 /// 18).
 fn ring_marker(d: &mut DrawList, x: i32, y: i32, rgba: [u8; 4], clip: Rect) {
     // nocite: our own stand-in shape
-    const PTS: [(i32, i32); 8] = [(6, 0), (4, 2), (0, 3), (-4, 2), (-6, 0), (-4, -2), (0, -3), (4, -2)];
+    const PTS: [(i32, i32); 8] = [
+        (6, 0),
+        (4, 2),
+        (0, 3),
+        (-4, 2),
+        (-6, 0),
+        (-4, -2),
+        (0, -3),
+        (4, -2),
+    ];
     for i in 0..PTS.len() {
         let (a, b) = (PTS[i], PTS[(i + 1) % PTS.len()]);
         let (p, q) = ((x + a.0, y + a.1), (x + b.0, y + b.1));

@@ -187,13 +187,23 @@ fn no_order_to_a_controller_at_capacity() {
 #[test]
 fn unlimited_controller_stops_before_overload() {
     let g = game();
-    let (w, u, ids) = scene(&g, &[(Kind::Vehicle, "MASTER")], &[("RICH", 3, 0), ("GUNR", 4, 2)]);
-    assert!(glasnost_ai::mind::safe_more(&w, u[0]), "N + 1 = 1: level 0, no damage");
+    let (w, u, ids) = scene(
+        &g,
+        &[(Kind::Vehicle, "MASTER")],
+        &[("RICH", 3, 0), ("GUNR", 4, 2)],
+    );
+    assert!(
+        glasnost_ai::mind::safe_more(&w, u[0]),
+        "N + 1 = 1: level 0, no damage"
+    );
     let mut b = brain(&w);
     assert_eq!(attack_of(&b.think(&w), u[0]), Some(ids[0]));
     let mut w = w;
     assert!(mind::take(&mut w, u[0], ids[0]));
-    assert!(!glasnost_ai::mind::safe_more(&w, u[0]), "N + 1 = 2: level 1, damage 5");
+    assert!(
+        !glasnost_ai::mind::safe_more(&w, u[0]),
+        "N + 1 = 2: level 1, damage 5"
+    );
     let mut b = brain(&w);
     let orders = b.think(&w);
     assert_eq!(attack_of(&orders, u[0]), None, "{orders:?}");
@@ -216,4 +226,3 @@ fn two_controllers_pick_two_enemies() {
     assert_ne!(a, c);
     assert!(ids.contains(&a.unwrap()) && ids.contains(&c.unwrap()));
 }
-

@@ -91,6 +91,7 @@ pub enum Effect {
         /// The released object's type, whose own release sound is preferred.
         of: Option<crate::econ::TypeRef>,
         /// The houses that hear a take-over sound.
+        // spec: S-0601 claim 5 (two houses: the controller's and the target's before)
         houses: [Option<crate::world::HouseId>; 2],
         /// Where.
         pos: Option<Pos>,

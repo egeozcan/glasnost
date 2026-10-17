@@ -287,7 +287,10 @@ impl Brain {
                 behaviour: Behaviour::Attack,
                 target: Some(Target::Object(_)),
                 ..
-            } => glasnost_sim::mind::controller(w, *actor).is_none() || crate::mind::safe_more(w, *actor),
+            } => {
+                glasnost_sim::mind::controller(w, *actor).is_none()
+                    || crate::mind::safe_more(w, *actor)
+            }
             _ => true,
         });
         out

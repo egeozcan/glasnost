@@ -887,13 +887,55 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         Int,
         "S-0601",
     ),
-    ("overload_count", COMBAT_DAMAGE, "OverloadCount", Maxima, "S-0601"),
-    ("overload_damage", COMBAT_DAMAGE, "OverloadDamage", Maxima, "S-0601"),
-    ("overload_frames", COMBAT_DAMAGE, "OverloadFrames", Maxima, "S-0601"),
-    ("ai_capture_normal", GENERAL, "AICaptureNormal", Maxima, "S-0601"),
-    ("ai_capture_wounded", GENERAL, "AICaptureWounded", Maxima, "S-0601"),
-    ("ai_capture_low_power", GENERAL, "AICaptureLowPower", Maxima, "S-0601"),
-    ("ai_capture_low_money", GENERAL, "AICaptureLowMoney", Maxima, "S-0601"),
+    (
+        "overload_count",
+        COMBAT_DAMAGE,
+        "OverloadCount",
+        Maxima,
+        "S-0601",
+    ),
+    (
+        "overload_damage",
+        COMBAT_DAMAGE,
+        "OverloadDamage",
+        Maxima,
+        "S-0601",
+    ),
+    (
+        "overload_frames",
+        COMBAT_DAMAGE,
+        "OverloadFrames",
+        Maxima,
+        "S-0601",
+    ),
+    (
+        "ai_capture_normal",
+        GENERAL,
+        "AICaptureNormal",
+        Maxima,
+        "S-0601",
+    ),
+    (
+        "ai_capture_wounded",
+        GENERAL,
+        "AICaptureWounded",
+        Maxima,
+        "S-0601",
+    ),
+    (
+        "ai_capture_low_power",
+        GENERAL,
+        "AICaptureLowPower",
+        Maxima,
+        "S-0601",
+    ),
+    (
+        "ai_capture_low_money",
+        GENERAL,
+        "AICaptureLowMoney",
+        Maxima,
+        "S-0601",
+    ),
     (
         "ai_capture_low_money_mark",
         GENERAL,
@@ -3162,12 +3204,14 @@ impl Builder<'_> {
         }
         // spec: S-0601 Import mapping (the three overload lists: the importer warns when damage or frames is shorter than count, or when count is empty while the others are given)
         let untrimmed = self.i.ini_quirks.list_items_untrimmed;
-        let lists: Vec<(&str, Option<KeyState>)> = ["OverloadCount", "OverloadDamage", "OverloadFrames"]
-            .iter()
-            .map(|k| (*k, self.global(COMBAT_DAMAGE, k)))
-            .collect();
+        let lists: Vec<(&str, Option<KeyState>)> =
+            ["OverloadCount", "OverloadDamage", "OverloadFrames"]
+                .iter()
+                .map(|k| (*k, self.global(COMBAT_DAMAGE, k)))
+                .collect();
         let len = |st: &Option<KeyState>| {
-            list_of(st.as_ref(), untrimmed).map_or(0, |l| l.iter().filter(|x| !x.is_empty()).count())
+            list_of(st.as_ref(), untrimmed)
+                .map_or(0, |l| l.iter().filter(|x| !x.is_empty()).count())
         };
         let n = len(&lists[0].1);
         for (k, st) in &lists[1..] {
@@ -3226,7 +3270,8 @@ impl Builder<'_> {
             let w = n
                 .filter(|n| !n.is_empty() && !value::is_no_type(n))
                 .and_then(|n| find_in(outcome, Kind::Weapons, &n))?;
-            let h = text_of(key(w, "Warhead")).and_then(|n| find_in(outcome, Kind::Warheads, &n))?;
+            let h =
+                text_of(key(w, "Warhead")).and_then(|n| find_in(outcome, Kind::Warheads, &n))?;
             (bool_of(key(h, "MindControl")) == Some(true)).then(|| {
                 (
                     int_of(key(w, "Damage")).unwrap_or(0),

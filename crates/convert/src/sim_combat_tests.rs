@@ -1473,10 +1473,7 @@ fn mind_control_type_and_weapon_fields() {
         (m.lepton_mind_control_offset, m.mind_control_ring_offset),
         (Some(33), Some(-4))
     );
-    assert_eq!(
-        m.alternate_flh,
-        Some(vec![[1, 2, 3], [0, 0, 0], [7, 8, 9]])
-    );
+    assert_eq!(m.alternate_flh, Some(vec![[1, 2, 3], [0, 0, 0], [7, 8, 9]]));
     let c = &s.vehicles["Cart"].combat;
     assert_eq!(
         (
@@ -1553,12 +1550,18 @@ fn mind_control_warnings() {
                 [CombatDamage]\nOverloadCount=1,2,3\nOverloadDamage=1,2\nOverloadFrames=4,5,6\n";
     let (_, w) = sim(base, "", "");
     assert!(warned(&w, "Side carries a takeover weapon in Secondary"));
-    assert!(warned(&w, "Elite carries a takeover weapon in ElitePrimary"));
+    assert!(warned(
+        &w,
+        "Elite carries a takeover weapon in ElitePrimary"
+    ));
     assert!(warned(&w, "Weak has a takeover Primary with damage 0"));
     assert!(!warned(&w, "Fine "));
     assert!(!warned(&w, "Free "));
     assert!(warned(&w, "OverloadDamage is shorter than OverloadCount"));
     assert!(!warned(&w, "OverloadFrames is shorter"));
     let (_, w) = sim("[CombatDamage]\nOverloadDamage=1\n", "", "");
-    assert!(warned(&w, "OverloadDamage is given but OverloadCount is empty"));
+    assert!(warned(
+        &w,
+        "OverloadDamage is given but OverloadCount is empty"
+    ));
 }

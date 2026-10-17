@@ -1452,7 +1452,13 @@ pub fn type_combat(
         alternate_flh: {
             // spec: S-0601 Import mapping (AlternateFLH0 through AlternateFLH4 absent: the zero triple)
             let mut a = [[0; 3]; crate::mind::ANCHORS];
-            for (i, f) in c.alternate_flh.iter().flatten().take(crate::mind::ANCHORS).enumerate() {
+            for (i, f) in c
+                .alternate_flh
+                .iter()
+                .flatten()
+                .take(crate::mind::ANCHORS)
+                .enumerate()
+            {
                 a[i] = *f;
             }
             a

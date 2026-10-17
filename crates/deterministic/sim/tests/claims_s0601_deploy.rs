@@ -94,7 +94,8 @@ fn rules() -> Ruleset {
     yard.construction_yard = Some(true);
     yard.factory = Some("building".into());
     s.buildings.insert("YARD".into(), yard);
-    s.buildings.insert("SHOP".into(), building(2, 2, Some("KIT")));
+    s.buildings
+        .insert("SHOP".into(), building(2, 2, Some("KIT")));
     s.vehicles.insert("MCV".into(), deployer("YARD"));
     s.vehicles.insert("KIT".into(), deployer("SHOP"));
     r
@@ -109,7 +110,14 @@ fn setup(r: &Ruleset, name: &str) -> (World, ObjectId, ObjectId) {
     let mut w = testkit::game_with(r, SIZE, 17);
     testkit::run(&mut w, 4);
     let ctrl = testkit::spawn(&mut w, Kind::Vehicle, "CTRL", BETA, c(-6, -6), 0);
-    let v = testkit::spawn(&mut w, Kind::Vehicle, name, ALPHA, c(0, 0), (D * 256) as u16);
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        name,
+        ALPHA,
+        c(0, 0),
+        (D * 256) as u16,
+    );
     assert!(mind::take(&mut w, ctrl, v));
     (w, ctrl, v)
 }
@@ -152,7 +160,11 @@ fn claim_15_deploy_makes_control_permanent() {
     assert!(!mind::mind_controlled(&w, b));
     assert!(mind::controller(&w, ctrl).unwrap().victims.is_empty());
     glasnost_sim::objects::remove(&mut w, ctrl);
-    assert_eq!(w.obj(b).unwrap().owner, Some(HouseId(BETA)), "nothing given back");
+    assert_eq!(
+        w.obj(b).unwrap().owner,
+        Some(HouseId(BETA)),
+        "nothing given back"
+    );
 }
 
 // spec: S-0601 claim 15 and Edge cases (quirks.deploy_makes_control_permanent off: the new object inherits the control link, the original owner and its list place, and is released as the old object would have been)

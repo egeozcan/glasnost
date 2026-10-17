@@ -365,7 +365,12 @@ fn mind_control(lane: &mut Lane) {
     let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
     let c = lane.spawn(kind, &cname, local, CellXY::new(spot.x - 3, spot.y));
     // One enemy vehicle at a time, so the controller lives to take the next.
-    let mut vs: Vec<ObjectId> = vec![lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(spot.x + 1, spot.y))];
+    let mut vs: Vec<ObjectId> = vec![lane.spawn(
+        Kind::Vehicle,
+        &vname,
+        enemy,
+        CellXY::new(spot.x + 1, spot.y),
+    )];
     let rec = glasnost_sim::mind::controller(lane.world(), c).map(|r| (r.capacity, r.unlimited));
     println!("controller record (capacity, unlimited): {rec:?}");
     lane.look_at(spot);
@@ -374,7 +379,12 @@ fn mind_control(lane: &mut Lane) {
     let mut taken = Vec::new();
     for n in 0..2 {
         if n == 1 {
-            let v = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(spot.x + 1, spot.y + 2));
+            let v = lane.spawn(
+                Kind::Vehicle,
+                &vname,
+                enemy,
+                CellXY::new(spot.x + 1, spot.y + 2),
+            );
             vs.push(v);
         }
         let v = vs[n];
@@ -383,7 +393,10 @@ fn mind_control(lane: &mut Lane) {
         for t in 0..600 {
             lane.ticks(1);
             if glasnost_sim::mind::controlled_by(lane.world(), v) == Some(c) {
-                println!("vehicle {n} taken after {t} ticks; owner is the local house {}", lane.world().obj(v).is_some_and(|o| o.owner == Some(local)));
+                println!(
+                    "vehicle {n} taken after {t} ticks; owner is the local house {}",
+                    lane.world().obj(v).is_some_and(|o| o.owner == Some(local))
+                );
                 taken.push(v);
                 break;
             }
@@ -414,8 +427,14 @@ fn mind_control(lane: &mut Lane) {
         );
     }
     let lines = glasnost_sim::mind::link_lines(lane.world()).len();
-    let rings = vs.iter().filter(|&&v| glasnost_sim::mind::ring(lane.world(), v).is_some()).count();
-    println!("link lines {lines}; rings {rings}; taken in turn {}", taken.len());
+    let rings = vs
+        .iter()
+        .filter(|&&v| glasnost_sim::mind::ring(lane.world(), v).is_some())
+        .count();
+    println!(
+        "link lines {lines}; rings {rings}; taken in turn {}",
+        taken.len()
+    );
     lane.c.session.as_mut().unwrap().play.selection = vec![c];
     if let Some(at) = lane.world().obj(c).map(|o| o.pos.cell()) {
         lane.look_at(at);
@@ -428,7 +447,10 @@ fn mind_control(lane: &mut Lane) {
         .iter()
         .filter(|&&v| lane.world().obj(v).is_some_and(|o| o.owner == Some(enemy)))
         .count();
-    println!("controller removed: {back} of {} back with their owner", taken.len());
+    println!(
+        "controller removed: {back} of {} back with their owner",
+        taken.len()
+    );
     lane.save("mind-released");
 }
 
@@ -452,16 +474,29 @@ fn mind_overload(lane: &mut Lane) {
     let home = lane.home();
     let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
     let c = lane.spawn(kind, &cname, local, CellXY::new(spot.x - 4, spot.y));
-    let counts = lane.world().rules().combat.general.mind.overload_count.clone();
+    let counts = lane
+        .world()
+        .rules()
+        .combat
+        .general
+        .mind
+        .overload_count
+        .clone();
     let n = counts.iter().copied().max().unwrap_or(0).max(0) as usize + 2;
     let n = n.min(12);
     let mut held = 0;
     for i in 0..n {
-        let at = lane.open_land(CellXY::new(spot.x + (i % 4) as i32 * 2, spot.y + (i / 4) as i32 * 2));
+        let at = lane.open_land(CellXY::new(
+            spot.x + (i % 4) as i32 * 2,
+            spot.y + (i / 4) as i32 * 2,
+        ));
         let v = lane.spawn(Kind::Vehicle, &vname, enemy, at);
         held += usize::from(glasnost_sim::mind::take(lane.world_mut(), c, v));
     }
-    println!("victims taken directly: {held} (overload counts list length {})", counts.len());
+    println!(
+        "victims taken directly: {held} (overload counts list length {})",
+        counts.len()
+    );
     lane.c.session.as_mut().unwrap().play.selection = vec![c];
     lane.look_at(spot);
     let start = lane.permille(c);
@@ -471,7 +506,10 @@ fn mind_overload(lane: &mut Lane) {
     for _ in 0..300 {
         lane.ticks(1);
         if lane.world().obj(c).is_none() {
-            println!("the controller died of overload at tick {}", lane.world().tick);
+            println!(
+                "the controller died of overload at tick {}",
+                lane.world().tick
+            );
             break;
         }
         low = low.min(lane.permille(c));

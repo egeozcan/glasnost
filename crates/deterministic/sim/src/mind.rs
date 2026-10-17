@@ -164,7 +164,8 @@ pub fn controls_objects(w: &World, id: ObjectId) -> bool {
 /// victims as its capacity. S-0309 claims 2 and 18 read it.
 pub fn at_capacity(w: &World, id: ObjectId) -> bool {
     // spec: S-0601 claim 2 and F1 (at capacity ⇔ ¬unlimited ∧ N ≥ capacity)
-    controller(w, id).is_some_and(|c| !c.unlimited && c.victims.len() as i64 >= i64::from(c.capacity))
+    controller(w, id)
+        .is_some_and(|c| !c.unlimited && c.victims.len() as i64 >= i64::from(c.capacity))
 }
 
 /// The original-owner query (claim 14): a controlled object's recorded
@@ -232,7 +233,8 @@ pub fn can_take(w: &World, c: ObjectId, t: ObjectId) -> bool {
         return false;
     }
     // spec: S-0601 claim 3 and F1 (unlimited ∨ N < capacity ∨ capacity = 1)
-    if !(rec.unlimited || (rec.victims.len() as i64) < i64::from(rec.capacity) || rec.capacity == 1) {
+    if !(rec.unlimited || (rec.victims.len() as i64) < i64::from(rec.capacity) || rec.capacity == 1)
+    {
         return false;
     }
     // spec: S-0601 claim 3 (T's current behaviour is neither construction nor selling)
@@ -579,6 +581,7 @@ pub fn fate(w: &mut World, v: ObjectId, c: ObjectId) {
     // spec: S-0601 claim 8 (cumulative weights in the order team, grinder, bio reactor, hunt; exact integer addition)
     let mut sum: i64 = 0;
     let mut picked = None;
+    // spec: S-0601 claim 8 (four weights: team, grinder, bio reactor, hunt)
     for (i, &wt) in table.iter().take(4).enumerate() {
         sum += i64::from(wt);
         if i64::from(r) <= sum {
@@ -984,7 +987,11 @@ pub fn link_lines(w: &World) -> Vec<LinkLine> {
                 continue;
             }
             let lift = type_combat(w, v).map_or(0, |tc| tc.link_height);
-            let timer = w.mind.victims.get(&v).is_some_and(|r| w.tick < r.line_until);
+            let timer = w
+                .mind
+                .victims
+                .get(&v)
+                .is_some_and(|r| w.tick < r.line_until);
             out.push(LinkLine {
                 controller: c,
                 victim: v,

@@ -5,10 +5,10 @@ use glasnost_num::geom::n_step;
 use glasnost_num::trig::{cos_t, sin_t};
 use glasnost_num::{F64, Rounding};
 
-use glasnost_rules::sim::Flh;
 use crate::combat::veterancy::{self, Rank};
 use crate::rules::Kind;
 use crate::world::{ObjectId, Pos, World};
+use glasnost_rules::sim::Flh;
 
 /// A single-precision constant from the decimal that identifies it.
 fn single_const(text: &str) -> F64 {
@@ -172,7 +172,7 @@ pub fn transform_point(w: &World, firer: ObjectId, flh: Flh, k: i32) -> Pos {
     let base = if o.kind == Kind::Building {
         // spec: S-0313 Terms (a building's base point: the top corner of its foundation at its world height)
         let c = o.pos.cell();
-        Pos::new(256 * c.x, 256 * c.y, o.pos.z)
+        Pos::new(256 * c.x, 256 * c.y, o.pos.z) // spec: S-0313 Terms (256 leptons per cell)
     } else {
         // spec: S-0313 Terms (any other firer: its position)
         o.pos
@@ -246,7 +246,7 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
     // spec: S-0313 claim 2 (the lateral part negated for an odd burst counter)
     let sigma = if k.rem_euclid(2) == 1 { -1 } else { 1 };
     let delta = tc.turret_offset;
-    let tr_flh = M34::translation(flh[0], sigma * flh[1], flh[2], mode);
+    let tr_flh = M34::translation(flh[0], sigma * flh[1], flh[2], mode); // spec: S-0313 claim 2 (odd burst counter: lateral part negated)
     let tm = if o.kind == Kind::Building && !r.quirks.building_fire_point_shift_fixed {
         // spec: S-0313 Edge cases (building_fire_point_shift_fixed off: T = Rz(θ) · Tr(δ) · Tr(F, σL, H))
         M34::rz(theta, mode)
@@ -258,7 +258,7 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
             .mul(&M34::rz(theta, mode), mode)
             .mul(&tr_flh, mode)
     };
-    let (u, v, wz) = (tm.0[0][3], tm.0[1][3], tm.0[2][3]);
+    let (u, v, wz) = (tm.0[0][3], tm.0[1][3], tm.0[2][3]); // spec: S-0313 F1 (the translation column of the 3 × 4 matrix)
     // spec: S-0313 F1 (shift = (trunc u, trunc(−v), trunc w))
     let p = Pos::new(
         base.x + u.to_i32_common(),
