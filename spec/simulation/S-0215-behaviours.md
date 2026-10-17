@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 57
+revision: 58
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-17
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1166]
 supersedes: []
 ---
 
@@ -115,6 +115,9 @@ target is dropped in that processing after the shot. Previously the table alread
 the shot, target removal and sequence delay, but did not distinguish this immediate
 shot from S-0107 claim 11's ordinary fire-frame shot. S-0525 claims 1 and 4 already
 own radiation creation and top-up at detonation, not the decision to shoot.
+Q-1166 question 1 is answered by claim 11: the late start also performs the fall-back to rest
+(unmeasured, with the reason given there). Question 2 (self-healing against the berserk countdown)
+belongs to S-0610 and is not answered here.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -903,7 +906,7 @@ Terms used by this spec:
     the end-of-update start below. No quirk switch: it is the original's order, not a defect.
     Backing for the late start. (i) The expiry-update instance of a berserk unit that is infantry,
     moving, and ready: `measurable` by B46 below, which reads the current and queued behaviour after
-    the last update of the expiry tick. (ii) Every other late start: `unmeasured`. In the unchanged case
+    the last update of the expiry tick. (ii) Every other late start, for its queued-behaviour effect: `unmeasured`. The fall-back to rest below has its own backing. In the unchanged case
     the queued behaviour is also made current by the next update's first start before it is processed,
     so the only other difference is the current behaviour seen after the update by actors that update
     later in that tick (or after an intervening change of readiness, slots or orders). Observing it
@@ -921,8 +924,17 @@ Terms used by this spec:
     opportunity. S-0501 claim 31 owns all three aircraft start points. An infantry unit that
     is ready to change and has neither a current nor a queued behaviour falls back to rest (claims
     13 and 14) at its first per-tick start, and the behaviour that this fall-back queues, if any,
-    becomes current at that same start. Whether the late start also performs the fall-back is not
-    established and is not asserted.
+    becomes current at that same start. The late start does the same: an infantry unit that is ready
+    at the late start with neither a current nor a queued behaviour falls back to rest in that same
+    update, and the behaviour that the fall-back queues, if any, becomes current at that same late
+    start, so a recorder reading after the update sees it current (not queued, and not deferred to
+    the next update). That update's firing check sees the state the fall-back leaves. Like any late
+    start it is not processed until the unit's next update. Backing: `unmeasured`; no setup is
+    known that leaves an infantry unit ready with both slots empty at the late start of a chosen
+    update (claim 22's fall-back happens inside a processing, which leaves a behaviour current or
+    queued, and a newly created actor is the only case that starts with none), so the claim cannot be observed without
+    inventing one; confidence medium. An infantry unit that completes a capture or hijack is
+    consumed in that update, so no observable depends on whether the late start follows.
 
     These per-tick starts, the late start included, are subject to claim 2's exclusions. In our engine, S-0513 claim 51
     additionally suppresses them for vehicles, teleporter infantry and landed aircraft from
@@ -5371,8 +5383,6 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   per-tick drop of claim 37 a, the only way an actor in those behaviours reaches the step, so they
   stay unmeasured; the *attack*, *area guard* and human-controlled *hunt* rows are backed by
   scenario B32 (c and c2).
-- Whether the late start of claim 11 also performs the fall-back to rest that claims 13 and 14 give an
-  infantry unit with neither a current nor a queued behaviour. Claim 11 does not assert it.
 
 ### Cross-spec changes to confirm
 
