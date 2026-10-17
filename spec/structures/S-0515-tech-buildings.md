@@ -2,11 +2,11 @@
 id: S-0515
 title: Tech buildings (manned state, acquisition bonus, periodic income, ownership changes)
 topic: structures
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -26,11 +26,9 @@ skirmish only; campaigns and network games are out of scope.
 
 ## Terms
 
-- **Tech building.** A building whose type has the needs-engineer flag (S-0405, Terms). The stock
-  ones are the neutral service buildings that maps place for the neutral house: the oil derrick, the
-  hospitals, the machine shop, the airport, the outpost, the secret lab and the civilian power
-  plant. "Tech building" is a name for this spec's subject; no rule below depends on the name, only
-  on the type's fields.
+- **Tech building.** A building whose type has the needs-engineer flag (S-0405, Terms). "Tech
+  building" is a name for this spec's subject; no rule below depends on the name, only on the type's
+  fields.
 - **Ownership change.** S-0509's *building ownership change* (S-0509, Terms), written short: any change of a
   building on the map from one owning house to another, whatever causes it: an engineer capture
   (S-0509 claim 8), an occupation or its end (S-0508), a trigger action (S-0011 claim 24). A
