@@ -2,11 +2,11 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070, Q-1110]
 supersedes: []
@@ -827,7 +827,7 @@ relative actor update orders; confidence medium.
 
 ## Measurement scenarios
 
-Use stock data, no engine add-ons, director off and mods off, a tiny flat clear map, one human house and one bystander computer player, fixed game speed index 2 (S-0201 supplies real-time pacing). Run each part with three recorded seeds. Use scripted input and a read-only recorder for tick numbers, positions, destinations, contact/tether, behaviours and scenario stream state. These are recorder proposals, not claims that all fields are currently exposed. The observed area comprises the tested factories, their foundations, exit tracks, aprons and neighbours, and every route or destination followed by a named test unit. Apply the bystander void rule: repeat a run if an unnamed bystander object enters that area or acts on a test object, or if the bystander is defeated before observation ends. Do not assume the bystander remains idle. Separate other actors' draws and animation events from unloading draws; recording only the global tick draw count is insufficient. Do not change data to manufacture the unmeasured cases above.
+Use stock data, no engine add-on and no mods (the named test files of a scenario excepted), a tiny flat clear map, one human house and one bystander computer player, fixed game speed index 2 (S-0201 supplies real-time pacing). Run each part with three recorded seeds. Use scripted input and a read-only recorder for tick numbers, positions, destinations, contact/tether, behaviours and scenario stream state. These are recorder proposals, not claims that all fields are currently exposed. The observed area comprises the tested factories, their foundations, exit tracks, aprons and neighbours, and every route or destination followed by a named test unit. Apply the bystander void rule: repeat a run if an unnamed bystander object enters that area or acts on a test object, or if the bystander is defeated before observation ends. Do not assume the bystander remains idle. Separate other actors' draws and animation events from unloading draws; recording only the global tick draw count is insufficient. Do not change data to manufacture the unmeasured cases above.
 
 - **U1, factory kinds.** Produce a vehicle, ship, infantry and aircraft from their respective
   factories. Record factory behaviours and door state after release. Expect only the vehicle and
