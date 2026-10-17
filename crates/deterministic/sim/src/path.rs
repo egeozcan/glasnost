@@ -1077,6 +1077,38 @@ pub struct NearbySettings {
     pub no_overlay: bool,
 }
 
+impl NearbySettings {
+    /// The settings that S-0212 table T5 gives the idle harvester step-off
+    /// (S-0402 claim 13) and the waiting absorber approach (S-0605 claim
+    /// 4) for unit `id` around `centre`: the unit's own locomotion class,
+    /// *winged* counted as *track*; its type's own movement zone; the reach
+    /// region of the centre cell for that zone, read for its deck when the
+    /// unit is on a bridge deck; deck mode then; no height condition, no
+    /// further test, no reference cell, bridge cells allowed.
+    /// The regions must be up to date ([`regions::ensure`]).
+    pub fn own_class(w: &World, id: ObjectId, centre: CellXY) -> Option<NearbySettings> {
+        let o = w.obj(id)?;
+        let u = w.rules().unit(o.kind, o.type_index)?;
+        let deck = o.layer == Layer::Deck;
+        Some(NearbySettings {
+            // spec: S-0212 table T5 (step-off and waiting absorber approach rows: the unit's own locomotion class, winged counted as track)
+            class: u.class.map(|k| match k {
+                LocomotionClass::Winged => LocomotionClass::Track,
+                other => other,
+            }),
+            // spec: S-0212 table T5 (its own movement zone; the reach region of the centre cell for that zone, read for its deck in deck mode)
+            zone: u.zone,
+            reach: Some(regions::reach_read(w, centre, u.zone, deck)),
+            // spec: S-0212 table T5 (deck mode when the unit is on a bridge deck; no height condition; no further test; no reference cell)
+            deck,
+            height: false,
+            reference: None,
+            no_bridges: false,
+            no_overlay: false,
+        })
+    }
+}
+
 /// The nearby-cell search (S-0212 claim 25).
 /// The regions must be up to date ([`regions::ensure`]).
 pub fn nearby(w: &World, centre: CellXY, use_: NearbyUse) -> Option<CellXY> {
@@ -1804,14 +1836,23 @@ fn corridor_search(
     let mut searches = 0;
     let mut first = true;
     loop {
-        let Some(chains) = corridor::coarse(w, secs, coarse_zone, start_end, dest_end, &closed)
-        else {
-            // spec: S-0212 claim 13 (a first coarse search that fails: one cell search without a corridor, final; a repeated one: the computation fails)
-            return if first {
-                search(w, req, None, &mut progress)
-            } else {
-                None
-            };
+        let chains = match corridor::coarse_why(w, secs, coarse_zone, start_end, dest_end, &closed)
+        {
+            Ok(c) => c,
+            Err(why) => {
+                // spec: S-0212 claim 13 (a first coarse search that fails: one cell search without a corridor, final)
+                if first {
+                    return search(w, req, None, &mut progress);
+                }
+                // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off: a failed repeated coarse search is followed by one cell search without a corridor, final; a retry is made only after fewer than 5 cell searches, so it is at most the 5th; departure D2's chain-length failure fails the computation whatever the switch)
+                if !w.rules().quirks.corridor_retry_no_fallback
+                    && why != corridor::CoarseFail::ChainLength
+                {
+                    return search(w, req, None, &mut progress);
+                }
+                // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback on: a repeated coarse search that fails fails the computation)
+                return None;
+            }
         };
         first = false;
         searches += 1;
