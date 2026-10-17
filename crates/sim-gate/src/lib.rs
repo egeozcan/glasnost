@@ -81,7 +81,10 @@ pub const M6C_TICKS: i32 = 12_000;
 /// before the full run ends (seed 1 among them with an earlier tuning),
 /// and the full run must play all its ticks. Seed 2 does in every tuning
 /// tried, so it is kept, and nothing more (see `docs/development.md`, *Determinism gate*).
-pub const M7A_SEED: u32 = 2;
+/// Moved from 2 to 3 at M7a step 1g (S-0605 revision 2 and the AI's
+/// re-send of a stalled entrant): Alpha then won seed 2 at tick 10 314;
+/// seed 3 played all its ticks in each of the three sweeps of that step.
+pub const M7A_SEED: u32 = 3;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;
