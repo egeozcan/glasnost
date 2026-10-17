@@ -258,7 +258,8 @@ fn examine(w: &mut World, h: HouseId, id: ObjectId, to: Option<CellXY>) {
 /// The object joins the warp group (claim 34).
 fn join(w: &mut World, h: HouseId, id: ObjectId, to: CellXY, fell_back: bool) {
     let Some(o) = w.obj(id).cloned() else { return };
-    // Tank bunkers are not built (S-0606, structures specs): no bunker link exists to end.
+    // spec: S-0513 claim 34 and S-0606 claim 14 (a bunkered vehicle's link ends in place with the walls-down effects; the bunker goes back to clearing)
+    crate::structures::bunker::release_in_place(w, id);
     // spec: S-0513 claim 34 (its docking, repair and similar contact links end)
     if crate::depot::link(w, id).is_some() {
         crate::depot::release(w, id);

@@ -274,9 +274,9 @@ pub(crate) fn vehicle_like(w: &World, id: ObjectId) -> bool {
 /// Whether an ordinary band box can add the object to house `house`'s
 /// selection (S-0214 claim 19): an own selectable infantry unit, vehicle,
 /// aircraft or vehicle-like building in play, not already selected, not
-/// tethered to a building that stands on its cell. Deactivated objects,
-/// slaves controlled by a master and units held in a tank bunker are
-/// excluded too; none of those states exists yet, so no object is one.
+/// tethered to a building that stands on its cell, not a bunkered vehicle
+/// or an occupied bunker (S-0606 claim 11). Deactivated objects and slaves
+/// controlled by a master are excluded too; neither state exists yet.
 pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0214 claim 19 (own infantry, vehicles and aircraft; ordinary buildings excluded, vehicle-like buildings taken)
@@ -292,8 +292,12 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
                 && crate::objects::foundation_cells(b.pos.cell(), b.foundation)
                     .contains(&o.pos.cell())
         });
+    // spec: S-0214 claim 19 and S-0606 claim 11 (a bunkered vehicle and an occupied bunker are excluded from the ordinary band box)
+    let bunker = crate::structures::bunker::bunkered(w, id)
+        || (crate::structures::bunker::is_bunker(w, id)
+            && crate::structures::bunker::occupied(w, id));
     // spec: S-0214 claim 19 (in play, selectable, not being erased, not already selected; enemy and allied objects never added)
-    kind_ok && own(w, house, id) && selectable(w, id) && !selection.contains(&id) && !tether
+    kind_ok && own(w, house, id) && selectable(w, id) && !selection.contains(&id) && !tether && !bunker
 }
 
 /// Rally-capable (S-0214 Terms): a factory of infantry or vehicles, a
@@ -378,7 +382,10 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
     match kind(w, id) {
         // spec: S-0214 Terms (movable mobile object: not disabled, not a spawned aircraft type, not a slave unit, …)
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
-        Some(Kind::Infantry | Kind::Vehicle) => !crate::parasite::held(w, id),
+        // spec: S-0214 Terms and S-0606 claim 11 (not held inside a tank bunker)
+        Some(Kind::Infantry | Kind::Vehicle) => {
+            !crate::parasite::held(w, id) && !crate::structures::bunker::bunkered(w, id)
+        }
         Some(Kind::Aircraft) => {
             !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
                 && !crate::parasite::held(w, id)
@@ -1149,12 +1156,13 @@ fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
             Action::NoDeploy
         };
     }
+    let bunkered = crate::structures::bunker::bunkered(w, actor);
     // spec: S-0214 table VD row VD4 (no passengers, no deploy weapon, not in a bunker)
-    if !passengers(w, actor) && !deploy_weapon {
+    if !passengers(w, actor) && !deploy_weapon && !bunkered {
         return Action::Nothing;
     }
-    // spec: S-0214 table VD row VD5 (no passengers and a deploy weapon)
-    if !passengers(w, actor) && deploy_weapon {
+    // spec: S-0214 table VD row VD5 (held in a tank bunker, or no passengers and a deploy weapon; S-0606 claim 11)
+    if bunkered || (!passengers(w, actor) && deploy_weapon) {
         return if ready {
             Action::Deploy
         } else {
@@ -1240,6 +1248,8 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
         && building(w, t).is_some()
         && ally
         && (crate::depot::accepts(w, t, actor, true)
+            // spec: S-0606 claim 2 (a tank bunker's permission: row P10 accepts)
+            || (!crate::depot::is_depot(w, t) && crate::structures::bunker::permits(w, t, actor))
             || (recycler
                 && crate::structures::grinder::answer(w, t, actor)
                     == crate::transport::Answer::Accepts));

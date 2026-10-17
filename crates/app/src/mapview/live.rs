@@ -1211,7 +1211,9 @@ impl Live {
                 | Effect::SupportBeam { .. }
                 | Effect::Captured { .. }
                 | Effect::Infiltrated { .. }
-                | Effect::Cloak { .. } => continue,
+                | Effect::Cloak { .. }
+                | Effect::SpecialAnims { .. }
+                | Effect::Bunkered { .. } => continue,
             };
             self.transients.push(Transient {
                 kind,

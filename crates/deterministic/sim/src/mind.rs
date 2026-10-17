@@ -25,7 +25,9 @@
 //!   claim 8 says for a failed assignment. The bio-reactor fate
 //!   ([`bio_reactor_fate`]) is S-0605 claim 16's search; accepted absorption
 //!   (S-0605 claim 7) calls [`release_one`].
-//! - S-0606 (tank bunkers): [`bunkered`]; no vehicle is in one yet.
+//! - S-0612 (the Psychic Dominator) is not built (M7b): its takeover of a
+//!   bunkered vehicle keeps the bunker link (S-0606 claim 15), which an
+//!   owner change never ends here.
 //! - Teams: our engine has no scripted teams, so the team fate falls back to
 //!   *hunt* and leaving a team is nothing (claim 6).
 //! - Particle systems: the overload sparks take their ten placement draws
@@ -190,11 +192,11 @@ pub fn redirect_original_owner(w: &mut World, id: ObjectId, to: Option<HouseId>)
     }
 }
 
-/// Seam: S-0606 (tank bunkers) is not built. The bunker row of claim 3
-/// reads this; no vehicle sits in a tank bunker yet.
+/// The bunker row of claim 3: a vehicle that sits in a tank bunker
+/// (S-0606 Terms, bunker link).
 pub fn bunkered(w: &World, id: ObjectId) -> bool {
-    // spec: S-0601 claim 3 (a vehicle that sits in a tank bunker; S-0606 is not built)
-    w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle) && crate::transport::tank_bunker(w, id)
+    // spec: S-0601 claim 3 (a vehicle that sits in a tank bunker)
+    w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle) && crate::structures::bunker::bunkered(w, id)
 }
 
 /// The takeover test (claim 3): controller `c` can take object `t` now.

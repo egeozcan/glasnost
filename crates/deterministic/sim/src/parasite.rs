@@ -161,7 +161,10 @@ pub fn latchable(w: &World, parasite: ObjectId, target: ObjectId) -> bool {
     {
         return false;
     }
-    // Being bunkered in a tank bunker is a seam: no tank bunkers yet.
+    // spec: S-0614 claim 2 and S-0606 claim 9 (it is not bunkered in a tank bunker)
+    if crate::structures::bunker::bunkered(w, target) {
+        return false;
+    }
     // spec: S-0614 claim 2 (a naval parasite: the target's cell is a water tile)
     if naval(w, parasite) && !water_tile(w, t.pos.cell()) {
         return false;

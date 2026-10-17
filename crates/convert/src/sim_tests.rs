@@ -1249,3 +1249,17 @@ fn buildup_delay_sign() {
     assert!(!decimal_times_at_least("1%", 900, 10));
     assert!(decimal_times_at_least("2", 900, 1800));
 }
+
+/// spec: S-0606 Edge cases (the importer warns when a tank bunker type's foundation is not 2 × 2; none for a 2 × 2 bunker or a non-bunker)
+#[test]
+fn bunker_foundation_warning() {
+    let base = "[BuildingTypes]\n1=Pit\n2=Big\n3=Bare\n4=Shed\n\
+                [Pit]\nBunker=yes\n[Big]\nBunker=yes\n[Bare]\nBunker=yes\n[Shed]\nX=1\n";
+    let art = "[Pit]\nFoundation=2x2\n[Big]\nFoundation=3x2\n[Shed]\nFoundation=3x3\n";
+    let (s, w) = sim(base, "", art);
+    assert_eq!(s.buildings["Pit"].bunker, Some(true));
+    assert!(!warned(&w, "buildings Pit is a tank bunker"));
+    assert!(warned(&w, "buildings Big is a tank bunker with a 3x2 foundation"));
+    assert!(warned(&w, "buildings Bare is a tank bunker with a 1x1 foundation"));
+    assert!(!warned(&w, "buildings Shed"));
+}

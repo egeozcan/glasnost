@@ -1699,7 +1699,7 @@ pub struct Quirks {
     // spec: S-0605 claims 13 and 16 and Edge cases
     #[serde(default = "on")]
     pub enter_nearest_survives_absorption: bool,
-    /// The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left. Not implemented yet (wave 2).
+    /// The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left.
     // spec: S-0606 claim 6 and Edge cases
     #[serde(default = "on")]
     pub bunker_clear_nearest_only: bool,

@@ -1722,6 +1722,32 @@ fn bio_reactor_sounds() {
     assert!(heard(&mut b, 0).is_empty());
 }
 
+/// spec: S-0606 claims 7, 12 and 14 (the imported walls-up and walls-down sounds at the bunker's position, for every player; none set: silent)
+#[test]
+fn bunker_walls_sounds() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let mut n = SoundNames::default();
+    n.bunker_walls_up = Some("Up".into());
+    n.bunker_walls_down = Some("Down".into());
+    let fx = |sound| Effect::Sound {
+        sound,
+        of: None,
+        house: Some(HouseId(1)),
+        pos: Some(at),
+    };
+    for (sound, name) in [(Sound::BunkerWallsUp, "Up"), (Sound::BunkerWallsDown, "Down")] {
+        let mut a = audio(&w, &["Up", "Down"]);
+        a.set_names(n.clone());
+        a.tick(&w, &[fx(sound)], &mut Rng::new(1));
+        assert_eq!(heard(&mut a, 0), [name]);
+    }
+    let mut b = audio(&w, &["Up"]);
+    b.set_names(SoundNames::default());
+    b.tick(&w, &[fx(Sound::BunkerWallsUp)], &mut Rng::new(1));
+    assert!(heard(&mut b, 0).is_empty());
+}
+
 fn infiltration(
     rows: Vec<glasnost_sim::combat::effects::InfiltrationRow>,
     satellite: bool,

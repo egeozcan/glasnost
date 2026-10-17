@@ -34,8 +34,10 @@ pub fn tick(w: &mut World, id: ObjectId, facing_error: bool) {
         targets = crate::combat::behave::turret_target_rows(w, id, facing_error);
     } else if u.turret && !u.turret_spins && o.target.is_none() {
         let g = r.general.guard_area_targeting_delay;
-        // spec: S-0206 claim 9 (rest rows: not turning, at least G + 5 ticks since the vehicle last fired; a spinning turret never uses them)
-        let rested = !o.turret.turning(t) && t.wrapping_sub(o.last_fired) >= g.wrapping_add(5);
+        // spec: S-0206 claim 9 (rest rows: not turning, at least G + 5 ticks since the vehicle last fired, not inside a tank bunker, S-0606 claim 9; a spinning turret never uses them)
+        let rested = !o.turret.turning(t)
+            && t.wrapping_sub(o.last_fired) >= g.wrapping_add(5)
+            && !crate::structures::bunker::bunkered(w, id);
         if rested {
             if let Some(dest) = o.dest {
                 let p = match dest {

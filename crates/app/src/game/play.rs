@@ -372,6 +372,10 @@ impl Play {
                 // spec: S-0516 claim 26 (a cloak start or re-evaluation takes the object out of a non-owner's selection)
                 self.selection.retain(|&x| x != id);
             }
+            if let Effect::Bunkered { vehicle, .. } = *e {
+                // spec: S-0606 claim 7 (the bunkered vehicle is removed from the selection; the client has no control groups yet)
+                self.selection.retain(|&x| x != vehicle);
+            }
         }
         self.captured_yard_cancels_placement();
         self.selection

@@ -469,6 +469,12 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
     }
     // The factory, repair-bay and reload rules of unarmed buildings belong to the structures specs.
     let dr = cur.map_or(450, |c| rules.behaviour(c).rate_delay); // spec: S-0215 claim 4 (no behaviour: 450 ticks)
+    if !b.building.unit_repair
+        && let Some(d) = crate::structures::bunker::early_start(w, id)
+    {
+        // spec: S-0606 claim 5 and S-0215 claim 29 (the earlier guard transition also applies to a bunker: 1 tick, no delay draw)
+        return d;
+    }
     if b.building.unit_repair {
         if let Some(d) = crate::depot::early_start(w, id) {
             // spec: S-0215 claim 29 and S-0314 claim 17 (the earlier guard transition: 1 tick, no delay draw)

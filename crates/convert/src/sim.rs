@@ -1437,7 +1437,8 @@ impl Builder<'_> {
                 Kind::Buildings => {
                     self.fields(&mut rec, t, kind, BUILDING_FIELDS);
                     self.turret_snap_warning(t);
-                    self.foundation(&mut rec, kind, i, t);
+                    let size = self.foundation(&mut rec, kind, i, t);
+                    self.bunker_foundation_warning(t, size);
                     self.building_combat(&mut rec, i, t);
                     self.type_econ(&mut rec, kind, i, t);
                 }
@@ -2242,7 +2243,13 @@ impl Builder<'_> {
     /// A building's foundation (S-0108 Import mapping): at each type read
     /// the image name's art section gives the size; the type id's section
     /// replaces it only with a size other than 1 × 1.
-    fn foundation(&mut self, rec: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
+    fn foundation(
+        &mut self,
+        rec: &mut Rec,
+        kind: Kind,
+        index: usize,
+        t: &TypeRec,
+    ) -> Option<[i32; 2]> {
         let mut held: Option<([i32; 2], bool)> = None;
         for image in self.images(kind, index, t) {
             if let Some(entry) = self
@@ -2269,6 +2276,25 @@ impl Builder<'_> {
                 // spec: S-0406 claim 2 and Import mapping (the word 3x3Refinery is the 8-cell 3 × 3 word)
                 rec.put("foundation_refinery", jsonc::boolean(true));
             }
+        }
+        held.map(|h| h.0)
+    }
+
+    /// The importer's warning for a tank bunker type whose foundation is
+    /// not 2 × 2 (S-0606 Edge cases): its docking and release points need
+    /// not be cell centres. `size` is the converted foundation, absent for
+    /// the simulation's 1 × 1 default.
+    fn bunker_foundation_warning(&mut self, t: &TypeRec, size: Option<[i32; 2]>) {
+        let bunker = fold(t.keys.get(&b"Bunker"[..]), None, |v, _| value::boolean(v));
+        // spec: S-0606 Edge cases (the importer warns when a bunker type's foundation is not 2 × 2)
+        let size = size.unwrap_or([1, 1]);
+        if bunker == Some(true) && size != [2, 2] {
+            self.warn(0, 0, format!(
+                "buildings {} is a tank bunker with a {}x{} foundation: the docking and release points assume 2x2 and need not be cell centres (S-0606 Edge cases)",
+                show(&t.name),
+                size[0],
+                size[1]
+            ));
         }
     }
 

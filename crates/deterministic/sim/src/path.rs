@@ -993,7 +993,10 @@ pub fn heading_point(w: &World, id: ObjectId) -> Option<Pos> {
         )),
         // spec: S-0314 claim 18 (a vehicle in depot contact heads for the docking point, not the building's position)
         Target::Object(t) => {
-            crate::depot::heading_point(w, id, t).or_else(|| w.obj(t).map(|x| x.pos))
+            // spec: S-0606 claim 4 (a vehicle approaching a bunker heads for the docking point)
+            crate::depot::heading_point(w, id, t)
+                .or_else(|| crate::structures::bunker::heading_point(w, id, t))
+                .or_else(|| w.obj(t).map(|x| x.pos))
         }
     }
 }

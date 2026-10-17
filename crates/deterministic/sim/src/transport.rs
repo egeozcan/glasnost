@@ -275,12 +275,11 @@ pub fn in_tube(w: &World, id: ObjectId) -> bool {
     false
 }
 
-/// Whether a building is a tank bunker (claims 7 and 8). Seam: tank
-/// bunkers belong to the structures specs (S-0508 and its neighbours),
-/// which are not built, so no building is one.
+/// Whether a building is a tank bunker (claims 7 and 8): its type has the
+/// bunker flag (S-0606 Terms).
 pub fn tank_bunker(w: &World, building: ObjectId) -> bool {
-    let _ = (w, building);
-    false
+    // spec: S-0507 claim 7 and S-0606 Terms (a building whose type has the bunker flag)
+    crate::structures::bunker::is_bunker(w, building)
 }
 
 /// Whether a vehicle carries a bomb mark (S-0312 claims 11 and 12): the mark

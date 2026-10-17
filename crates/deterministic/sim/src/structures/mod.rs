@@ -1,18 +1,21 @@
 //! Structures and special infantry abilities of M6c: garrisons (S-0508),
 //! engineers and capture (S-0509) and spies and infiltration (S-0510); of
-//! M7a: absorbing buildings (S-0605) and recycling buildings (S-0603).
+//! M7a: absorbing buildings (S-0605), recycling buildings (S-0603) and
+//! vehicle bunkers (S-0606).
 //!
 //! [`entry`] is the one place where an infantry unit's arrival at a building
 //! is turned into an entry (garrison, capture, infiltration or refusal);
 //! [`garrison`] holds the occupants of garrisonable buildings;
 //! [`absorb`] the passengers of absorbing buildings; [`grinder`] the
-//! consumption of entrants by recycling buildings.
+//! consumption of entrants by recycling buildings; [`bunker`] the entry,
+//! occupancy and release of a tank bunker's vehicle.
 
 use serde::{Deserialize, Serialize};
 
 use crate::world::ObjectId;
 
 pub mod absorb;
+pub mod bunker;
 pub mod engineer;
 pub mod entry;
 pub mod garrison;
@@ -48,4 +51,16 @@ pub struct StructState {
     /// while held, every *guard* and *area guard* processing searches again
     /// (S-0215 claims 24 and 26 row 3).
     pub enter_nearest: bool,
+    /// A tank bunker's entry stage (S-0606 Terms, table S1); *clearing*
+    /// when it takes in no vehicle.
+    #[serde(default)]
+    pub bunker_stage: bunker::Stage,
+    /// A tank bunker's side of the bunker link: its bunkered vehicle
+    /// (S-0606 Terms, claim 7).
+    #[serde(default)]
+    pub bunker_occupant: Option<ObjectId>,
+    /// A vehicle's side of the bunker link: the tank bunker it is bunkered
+    /// in (S-0606 Terms, claim 7).
+    #[serde(default)]
+    pub bunkered_in: Option<ObjectId>,
 }

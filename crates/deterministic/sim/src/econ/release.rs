@@ -1651,7 +1651,7 @@ pub fn arrival(w: &mut World, id: ObjectId) {
 }
 
 /// A vehicle factory's run-away reply to a clear report (S-0417 claim 8).
-fn run_away(w: &mut World, id: ObjectId) {
+pub(crate) fn run_away(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     let here = o.pos.cell();
     // spec: S-0417 claim 8 (a destination other than u's current cell is kept)

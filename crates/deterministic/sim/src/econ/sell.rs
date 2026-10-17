@@ -612,7 +612,9 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
             crate::econ::slaves::first_sale_processing(w, id);
             // spec: S-0408 claim 6 (first processing: docked units told to leave; a bunkered vehicle let out; burning animations end) and S-0402 claim 11 (a refinery's harvesters)
             crate::econ::harvest::refinery_sold(w, id);
-            w.note("S-0408 claim 6: bunkered vehicles, other docked services and burning animations are other topics' (seams)");
+            // spec: S-0408 claim 6 and S-0606 claim 13 (a bunkered vehicle is let out on the release track, without walls-down effects or a new behaviour or destination)
+            crate::structures::bunker::let_out(w, id);
+            w.note("S-0408 claim 6: other docked services and burning animations are other topics' (seams)");
             if sale.packs {
                 // spec: S-0415 claim 9 (at the sale's first processing the type's deploy sound at the building's position)
                 w.effects.push(Effect::Sound {
