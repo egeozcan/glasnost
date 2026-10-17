@@ -19,6 +19,8 @@
 //! infantry; the deaths leave clouds that drift and hit what stands in them.
 //! S-0605 (infantry absorber): three infantry are clicked into an absorber
 //! one at a time and the house's output rises; deployed, it lets them out.
+//! S-0603 (grinder): three infantry, an own vehicle and a mind-controlled
+//! enemy vehicle are clicked into a recycling building and consumed.
 //!
 //! Run with `cargo test --release -p glasnost-app --test m7a_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -57,6 +59,7 @@ const SCENES: &[Scene] = &[
     ("gattling", gattling_spin),
     ("gas", gas_clouds),
     ("absorber", absorber),
+    ("grinder", grinder),
 ];
 
 #[test]
@@ -646,6 +649,103 @@ fn absorber(lane: &mut Lane) {
         power(lane).0 == start.0
     );
     lane.save("absorber-released");
+}
+
+/// A recycling building type (S-0603 Terms: the grinding flag) and its
+/// foundation.
+fn grinder_type(w: &World) -> Option<(String, (i32, i32))> {
+    w.rules()
+        .buildings
+        .iter()
+        .find(|b| b.raw.grinding.unwrap_or(false))
+        .map(|b| (b.name.clone(), b.foundation))
+}
+
+/// S-0603 claims 1, 3 to 5, 8 and 9: a recycling building of the local
+/// house; three infantry, an own vehicle and an enemy vehicle taken over by
+/// a controller (set up directly) are sent in by the click a person gives
+/// (the recycle cursor); each is consumed on arriving in a foundation cell
+/// and the house is paid. Counts, ticks and three screens; no money values.
+fn grinder(lane: &mut Lane) {
+    let w = lane.world();
+    let ty = grinder_type(w);
+    let inf = human_infantry(w);
+    let veh = plain_vehicle(w);
+    let ctl = controller_type(w, false);
+    println!(
+        "grinder type found: {}, infantry type found: {}, vehicle type found: {}, controller type found: {}",
+        ty.is_some(),
+        inf.is_some(),
+        veh.is_some(),
+        ctl.is_some()
+    );
+    let (Some((gname, size)), Some(iname), Some(vname)) = (ty, inf, veh) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let near = CellXY::new(home.x + 8, home.y + 8);
+    let Some(at) = lane.area(near, size, 4, |l| l != land::WATER && l != land::ROCK) else {
+        println!("no room for the grinder");
+        return;
+    };
+    let b = lane.spawn(Kind::Building, &gname, local, at);
+    lane.ticks(4);
+    println!("grinder placed");
+    let row = at.y + size.1 + 3;
+    let mut units: Vec<ObjectId> = (0..3)
+        .map(|i| lane.spawn(Kind::Infantry, &iname, local, CellXY::new(at.x + i, row)))
+        .collect();
+    units.push(lane.spawn(Kind::Vehicle, &vname, local, CellXY::new(at.x + 4, row)));
+    let mut taken = false;
+    if let (Some((ck, cname)), Some(enemy)) = (ctl, lane.enemy()) {
+        let c = lane.spawn(ck, &cname, local, CellXY::new(at.x + 4, row + 3));
+        let foe = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(at.x + 6, row + 1));
+        taken = glasnost_sim::mind::take(lane.world_mut(), c, foe);
+        if taken {
+            units.push(foe);
+        }
+    }
+    println!("controlled enemy vehicle among them: {taken}");
+    lane.look_at(CellXY::new(at.x + 1, at.y + 2));
+    lane.ticks(2);
+    lane.save("grinder-before");
+    let credits = |lane: &Lane| lane.world().houses[usize::from(local.0)].credits;
+    let start = credits(lane);
+    for &u in &units {
+        let cursor = targeting::cursor(lane.world(), local, &[u], ClickOn::Object(b), Modifiers::default());
+        let n = lane.order(local, u, ClickOn::Object(b));
+        println!("click on the grinder: cursor {cursor:?}, {n} orders");
+    }
+    let mut shot = false;
+    let mut left = units.len();
+    for t in 0..1500 {
+        lane.ticks(1);
+        let now = units
+            .iter()
+            .filter(|&&u| lane.world().obj(u).is_some_and(|o| o.on_map))
+            .count();
+        if now < left {
+            println!("{} consumed after {t} ticks; house paid {}", left - now, credits(lane) > start);
+            left = now;
+        }
+        if t == 20 && !shot {
+            lane.save("grinder-bound");
+            shot = true;
+        }
+        if left == 0 {
+            break;
+        }
+    }
+    println!(
+        "consumed {} of {}; the house was paid {}; grinder still standing {}",
+        units.len() - left,
+        units.len(),
+        credits(lane) > start,
+        lane.world().obj(b).is_some_and(|o| o.on_map)
+    );
+    lane.ticks(10);
+    lane.save("grinder-after");
 }
 
 /// S-0613 claims 2, 4, 5, 8 to 13: a virus unit of the local house is
