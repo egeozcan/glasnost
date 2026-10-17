@@ -46,6 +46,7 @@ const GROUP: i64 = 3; // nocite: tuning of our own opponent
 /// (S-0610 Terms: a berserk weapon).
 pub fn berserk_weapon(w: &World, id: ObjectId) -> bool {
     let r = w.rules();
+    // nocite: the primary and secondary slots our own AI looks at
     (0..2).any(|i| {
         weapon::slot_weapon(w, id, i)
             .and_then(|wp| r.combat.warhead_of(wp))
@@ -68,10 +69,10 @@ fn sensor_type(w: &World, t: TypeRef) -> bool {
 pub(crate) fn build_sensor(script: &Script, w: &World) -> Option<TypeRef> {
     let house = script.house;
     if !psychic::sensors(w, house).is_empty()
-        || script.own(w).iter().any(|&id| {
-            w.obj(id)
-                .is_some_and(|o| sensor_type(w, tech::type_of(o)))
-        })
+        || script
+            .own(w)
+            .iter()
+            .any(|&id| w.obj(id).is_some_and(|o| sensor_type(w, tech::type_of(o))))
     {
         return None;
     }
@@ -100,7 +101,13 @@ pub(crate) fn reveal_cell(script: &Script, w: &World) -> Option<CellXY> {
     {
         return Some(c);
     }
-    let near = |c: CellXY| starts.iter().map(|&s| dist2(s, c)).min().unwrap_or_else(|| dist2(home, c));
+    let near = |c: CellXY| {
+        starts
+            .iter()
+            .map(|&s| dist2(s, c))
+            .min()
+            .unwrap_or_else(|| dist2(home, c))
+    };
     w.cells
         .grid
         .iter()
@@ -137,7 +144,8 @@ impl Special {
             // An idle unit, or one in guard that took the target nearest it
             // by itself: a person re-aims it at the group.
             let guarding = w.obj(id).is_some_and(|o| {
-                o.dest.is_none() && matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::AreaGuard))
+                o.dest.is_none()
+                    && matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::AreaGuard))
             });
             if !berserk_weapon(w, id)
                 || psychic::berserk(w, id)
@@ -166,7 +174,9 @@ impl Special {
                 })
                 .min();
             let Some((_, _, e)) = best else { continue };
-            if w.obj(id).is_some_and(|o| o.target == Some(Target::Object(e))) {
+            if w.obj(id)
+                .is_some_and(|o| o.target == Some(Target::Object(e)))
+            {
                 continue;
             }
             out.push(Order::Behaviour {

@@ -276,7 +276,10 @@ impl Brain {
         self.find_deploy_spot(w, &mut out);
         self.defend(w, &mut out);
         // spec: S-0214 claim 15 and S-0610 claim 6 (a berserk unit takes no orders: a person cannot give it one, so neither does the brain)
-        out.retain(|o| o.actor().is_none_or(|a| !glasnost_sim::psychic::berserk(w, a)));
+        out.retain(|o| {
+            o.actor()
+                .is_none_or(|a| !glasnost_sim::psychic::berserk(w, a))
+        });
         out
     }
 

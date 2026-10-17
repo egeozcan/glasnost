@@ -119,7 +119,14 @@ fn berserk_spreads(lane: &mut Lane) {
     let s = lane.spawn(kind, &sname, local, CellXY::new(spot.x - 3, spot.y));
     let vs: Vec<ObjectId> = [(1, 0), (2, 0), (1, 1)]
         .iter()
-        .map(|&(dx, dy)| lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(spot.x + dx, spot.y + dy)))
+        .map(|&(dx, dy)| {
+            lane.spawn(
+                Kind::Vehicle,
+                &vname,
+                enemy,
+                CellXY::new(spot.x + dx, spot.y + dy),
+            )
+        })
         .collect();
     lane.look_at(spot);
     lane.ticks(4);
@@ -159,7 +166,11 @@ fn berserk_spreads(lane: &mut Lane) {
             println!("20 ticks later: enemy vehicles aiming at their own side {targets}");
             lane.save("berserk-turned");
         }
-        if went.is_some() && vs.iter().all(|&v| !glasnost_sim::psychic::berserk(lane.world(), v)) {
+        if went.is_some()
+            && vs
+                .iter()
+                .all(|&v| !glasnost_sim::psychic::berserk(lane.world(), v))
+        {
             println!("berserk over at tick {t}");
             break;
         }
@@ -176,7 +187,14 @@ fn sensor_shows_intent(lane: &mut Lane) {
     let w = lane.world();
     let r = w.rules();
     let sensor = (0..r.buildings.len())
-        .filter(|&b| r.buildings[b].raw.econ.psychic_detection_radius.unwrap_or(0) > 0)
+        .filter(|&b| {
+            r.buildings[b]
+                .raw
+                .econ
+                .psychic_detection_radius
+                .unwrap_or(0)
+                > 0
+        })
         .min_by_key(|&b| (r.buildings[b].foundation.0 * r.buildings[b].foundation.1, b))
         .map(|b| (r.buildings[b].name.clone(), r.buildings[b].foundation));
     let mover = plain_vehicle(w);
@@ -203,7 +221,12 @@ fn sensor_shows_intent(lane: &mut Lane) {
         let r = lane.world().rules();
         (0..r.buildings.len())
             .filter(|&p| r.buildings[p].raw.econ.power.unwrap_or(0) > 0)
-            .max_by_key(|&p| (r.buildings[p].raw.econ.power.unwrap_or(0), std::cmp::Reverse(p)))
+            .max_by_key(|&p| {
+                (
+                    r.buildings[p].raw.econ.power.unwrap_or(0),
+                    std::cmp::Reverse(p),
+                )
+            })
             .map(|p| (r.buildings[p].name.clone(), r.buildings[p].foundation))
     };
     if let Some((pname, psize)) = plant
@@ -284,7 +307,10 @@ fn psychic_reveal(lane: &mut Lane) {
             .filter(|(c, _)| glasnost_sim::econ::shroud::explored(w, local, *c))
             .count()
     };
-    println!("explored cells after the reveal: {}", explored(lane.world()));
+    println!(
+        "explored cells after the reveal: {}",
+        explored(lane.world())
+    );
     lane.ticks(2);
     lane.save("reveal-after");
     lane.ticks(60);
@@ -385,7 +411,9 @@ impl Lane {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
         let out = std::env::var_os("GLASNOST_LANE_OUT")
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m7a"));
+            .unwrap_or_else(|| {
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m7a")
+            });
         std::fs::create_dir_all(&out).unwrap();
         let mut c = Client::new();
         c.resize((1280, 800));

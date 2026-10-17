@@ -155,7 +155,12 @@ fn sends_a_berserk_weapon_at_an_enemy_group() {
     let g = game(rules(false));
     let (w, unit, ids) = scene(
         &g,
-        &[("GUNR", 3, 0), ("GUNR", 7, 0), ("GUNR", 8, 0), ("GUNR", 7, 1)],
+        &[
+            ("GUNR", 3, 0),
+            ("GUNR", 7, 0),
+            ("GUNR", 8, 0),
+            ("GUNR", 7, 1),
+        ],
     );
     let mut b = brain(&w);
     let orders = b.think(&w);
@@ -252,7 +257,12 @@ fn fires_the_psychic_reveal_at_an_unseen_enemy_start() {
         .collect();
     assert_eq!(fired.len(), 1, "{orders:?}");
     assert!(!glasnost_sim::econ::shroud::seen(&w, HouseId(0), fired[0]));
-    assert!(dist(fired[0], enemy) <= 25, "{:?} near the enemy start {:?}", fired[0], enemy);
+    assert!(
+        dist(fired[0], enemy) <= 25,
+        "{:?} near the enemy start {:?}",
+        fired[0],
+        enemy
+    );
     assert_eq!(b.special_uses().reveals, 1);
     // Every start seen: it scouts an unexplored cell instead.
     for c in testkit_starts(&w) {
@@ -260,7 +270,11 @@ fn fires_the_psychic_reveal_at_an_unseen_enemy_start() {
     }
     let fired = fires(&brain(&w).think(&w), i);
     assert_eq!(fired.len(), 1);
-    assert!(!glasnost_sim::econ::shroud::explored(&w, HouseId(0), fired[0]));
+    assert!(!glasnost_sim::econ::shroud::explored(
+        &w,
+        HouseId(0),
+        fired[0]
+    ));
     // The whole map explored: the reveal is kept.
     glasnost_sim::econ::shroud::crate_reveal(&mut w, HouseId(0));
     assert!(fires(&brain(&w).think(&w), i).is_empty());

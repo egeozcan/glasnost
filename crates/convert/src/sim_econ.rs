@@ -166,12 +166,7 @@ const BUILDING_ECON: &[Row] = &[
         Int,
         "S-0513, S-0610",
     ),
-    (
-        "has_radial_indicator",
-        "HasRadialIndicator",
-        Bool,
-        "S-0610",
-    ),
+    ("has_radial_indicator", "HasRadialIndicator", Bool, "S-0610"),
     ("laser_fence_post", "LaserFencePost", Bool, "S-0406"),
     ("guard_range", "GuardRange", Dec, "S-0406"),
     (
@@ -331,7 +326,9 @@ const POWERUPS: &[u8] = b"Powerups"; // spec: S-0520 Import mapping (`[Powerups]
 /// The built-in power-up weights at a fresh start, in table order
 /// (S-0520 claim 28, Import mapping).
 // spec: S-0520 Import mapping (weights 50, 20, 1, 3, 5, 5, 20, 1, 1, 10, 10, 10, 1, 3, 1, 1, 1, 1, 1; no animations, water flags off, arguments 0.0)
-const POWERUP_STARTUP_WEIGHTS: [i32; 19] = [50, 20, 1, 3, 5, 5, 20, 1, 1, 10, 10, 10, 1, 3, 1, 1, 1, 1, 1];
+const POWERUP_STARTUP_WEIGHTS: [i32; 19] = [
+    50, 20, 1, 3, 5, 5, 20, 1, 1, 10, 10, 10, 1, 3, 1, 1, 1, 1, 1,
+];
 
 /// The power-up keys in table order (S-0520 claim 8, Import mapping).
 pub(crate) const POWERUP_KEYS: [&str; 19] = [
@@ -1062,7 +1059,13 @@ const GENERAL_SW: &[(&str, &[u8], &str, Form, &str)] = &[
     ),
     ("berserk_color", AUDIO_VISUAL, "BerserkColor", Int, "S-0610"),
     // spec: S-0610 claim 16 (BerzerkAllowed is read but has no effect)
-    ("berzerk_allowed", COMBAT_DAMAGE, "BerzerkAllowed", Bool, "S-0610"),
+    (
+        "berzerk_allowed",
+        COMBAT_DAMAGE,
+        "BerzerkAllowed",
+        Bool,
+        "S-0610",
+    ),
 ];
 
 /// The coverage rows of the keys this module converts: (category, key,

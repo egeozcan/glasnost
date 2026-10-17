@@ -62,7 +62,12 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
         "S-0302, S-0610",
     ),
     ("immune_to_poison", "ImmuneToPoison", Bool, "S-0302"),
-    ("immune_to_psionics", "ImmuneToPsionics", Bool, "S-0302, S-0610"),
+    (
+        "immune_to_psionics",
+        "ImmuneToPsionics",
+        Bool,
+        "S-0302, S-0610",
+    ),
     ("berserk_friendly", "BerserkFriendly", Bool, "S-0610"),
     ("damage_self", "DamageSelf", Bool, "S-0302, S-0303"),
     ("max_debris", "MaxDebris", Int, "S-0312"),

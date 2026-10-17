@@ -251,7 +251,10 @@ fn reach_point(w: &World, t: Target) -> Pos {
 pub fn intent_line(w: &World, viewer: HouseId, unit: ObjectId) -> Option<IntentLine> {
     let o = w.obj(unit)?;
     // spec: S-0610 claim 10 (an infantry, vehicle or aircraft in play)
-    if !matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft) || !o.on_map || o.health <= 0 {
+    if !matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
+        || !o.on_map
+        || o.health <= 0
+    {
         return None;
     }
     // spec: S-0610 claim 10 (not owned by the viewer's house, and the viewer's house does not count the owner as an ally: the viewer's side of the one-way alliance)

@@ -1428,17 +1428,29 @@ fn psychic_type_flags() {
     let (s, _) = sim(base, "", "");
     let d = &s.vehicles["Drone"].combat;
     assert_eq!(
-        (d.berserk_friendly, d.immune_to_psionics, d.immune_to_psionic_weapons),
+        (
+            d.berserk_friendly,
+            d.immune_to_psionics,
+            d.immune_to_psionic_weapons
+        ),
         (Some(true), Some(true), Some(false))
     );
     let c = &s.vehicles["Cart"].combat;
     assert_eq!(
-        (c.berserk_friendly, c.immune_to_psionics, c.immune_to_psionic_weapons),
+        (
+            c.berserk_friendly,
+            c.immune_to_psionics,
+            c.immune_to_psionic_weapons
+        ),
         (None, None, None)
     );
     let h = &s.buildings["Hut"].combat;
     assert_eq!(
-        (h.berserk_friendly, h.immune_to_psionics, h.immune_to_psionic_weapons),
+        (
+            h.berserk_friendly,
+            h.immune_to_psionics,
+            h.immune_to_psionic_weapons
+        ),
         (Some(false), Some(false), None)
     );
 }

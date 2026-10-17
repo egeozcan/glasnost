@@ -126,7 +126,9 @@ fn rules() -> Ruleset {
         );
     }
     vehicle(&mut r, "BOX", |_| {});
-    vehicle(&mut r, "STOIC", |t| t.combat.immune_to_psionics = Some(true));
+    vehicle(&mut r, "STOIC", |t| {
+        t.combat.immune_to_psionics = Some(true)
+    });
     vehicle(&mut r, "DRONE", |t| {
         t.combat.immune_to_psionics = Some(true);
         t.combat.berserk_friendly = Some(true);
@@ -203,7 +205,11 @@ fn claim_1_defaults_by_kind() {
     let w = testkit::game_with(&rules(), SIZE, 1);
     let r = w.rules();
     let b = |n: &str| &r.buildings[r.index_of(Kind::Building, n).unwrap() as usize].combat;
-    let v = |n: &str| &r.unit(Kind::Vehicle, r.index_of(Kind::Vehicle, n).unwrap()).unwrap().combat;
+    let v = |n: &str| {
+        &r.unit(Kind::Vehicle, r.index_of(Kind::Vehicle, n).unwrap())
+            .unwrap()
+            .combat
+    };
     assert!(b("HUT").immune_psionics && b("HUT").immune_psionic_weapons);
     assert!(b("HUTON").immune_psionics && b("HUTON").immune_psionic_weapons);
     assert!(!b("HUTOFF").immune_psionics && !b("HUTOFF").immune_psionic_weapons);
@@ -218,7 +224,11 @@ fn claim_1_psychic_damage_weapon_fires_at_immune_buildings() {
     let car = put(&mut w, Kind::Vehicle, "PSICAR", ALPHA, -2, 0);
     for (name, hurt) in [("HUT", false), ("HUTON", false), ("HUTOFF", true)] {
         let hut = put(&mut w, Kind::Building, name, BETA, 2, 3);
-        assert_ne!(aim(&mut w, car, Target::Object(hut)), Answer::Illegal, "{name}");
+        assert_ne!(
+            aim(&mut w, car, Target::Object(hut)),
+            Answer::Illegal,
+            "{name}"
+        );
         let h = Hit {
             amount: 100,
             warhead: Some(wh(&w, "PSI")),
@@ -246,7 +256,10 @@ fn claim_2_pulse_reaches_everyone_and_immunity_ignores_it() {
     let boxv = put(&mut w, Kind::Vehicle, "BOX", BETA, 0, 1);
     let grunt = put(&mut w, Kind::Infantry, "GRUNT", BETA, -1, 0);
     let calm = put(&mut w, Kind::Infantry, "CALM", BETA, 0, -1);
-    let before: Vec<i32> = [hut, boxv, grunt, calm].iter().map(|&i| health(&w, i)).collect();
+    let before: Vec<i32> = [hut, boxv, grunt, calm]
+        .iter()
+        .map(|&i| health(&w, i))
+        .collect();
     let point = Pos::centre(at(0, 0), 0);
     let psi = wh(&w, "PSI");
     area::detonate(
@@ -260,7 +273,10 @@ fn claim_2_pulse_reaches_everyone_and_immunity_ignores_it() {
             resources: true,
         },
     );
-    let after: Vec<i32> = [hut, boxv, grunt, calm].iter().map(|&i| health(&w, i)).collect();
+    let after: Vec<i32> = [hut, boxv, grunt, calm]
+        .iter()
+        .map(|&i| health(&w, i))
+        .collect();
     assert_eq!(after[0], before[0], "the building ignores the hit");
     assert!(after[1] < before[1], "the vehicle is damaged");
     assert!(after[2] < before[2], "the plain infantry is damaged");
@@ -517,7 +533,12 @@ fn claim_9_membership_capture_and_operation() {
     let (mut w, eye) = sensor_world();
     assert_eq!(psychic::sensors(&w, HouseId(ALPHA)), vec![eye]);
     assert!(psychic::sensors(&w, HouseId(BETA)).is_empty());
-    glasnost_sim::structures::ownership::change(&mut w, eye, Some(HouseId(BETA)), glasnost_sim::structures::ownership::Cause::Trigger);
+    glasnost_sim::structures::ownership::change(
+        &mut w,
+        eye,
+        Some(HouseId(BETA)),
+        glasnost_sim::structures::ownership::Cause::Trigger,
+    );
     assert!(psychic::sensors(&w, HouseId(ALPHA)).is_empty());
     assert_eq!(psychic::sensors(&w, HouseId(BETA)), vec![eye]);
     w.obj_mut(eye).unwrap().econ.building.switched_off = true;
@@ -537,12 +558,18 @@ fn claim_10_detection_conditions() {
     w.obj_mut(away).unwrap().dest = Some(Target::Cell(at(9, 9)));
     let lines = psychic::intent_lines(&w, HouseId(ALPHA));
     let units: Vec<ObjectId> = lines.iter().map(|l| l.unit).collect();
-    assert_eq!(units, vec![mover, striker], "the unit's own position plays no part");
+    assert_eq!(
+        units,
+        vec![mover, striker],
+        "the unit's own position plays no part"
+    );
     assert_eq!(lines[0].owner, Some(HouseId(BETA)));
     // Alpha allies Beta: no lines (the viewer's side of the alliance decides).
     sw_common::ally(&mut w, HouseId(ALPHA), HouseId(BETA));
     assert!(psychic::intent_lines(&w, HouseId(ALPHA)).is_empty());
-    w.houses[usize::from(ALPHA)].allies.retain(|&h| h != HouseId(BETA));
+    w.houses[usize::from(ALPHA)]
+        .allies
+        .retain(|&h| h != HouseId(BETA));
     // Beta allying Alpha does not suppress Alpha's lines.
     sw_common::ally(&mut w, HouseId(BETA), HouseId(ALPHA));
     assert_eq!(psychic::intent_lines(&w, HouseId(ALPHA)).len(), 2);
@@ -576,11 +603,23 @@ fn f1_reach_boundary() {
         let c = w.reference_point(eye);
         let r = 4 * 256;
         let out = if table { 64 } else { 1 };
-        assert!(psychic::within_reach(&w, eye, Pos::new(c.x + r, c.y, c.z)), "{table}");
-        assert!(!psychic::within_reach(&w, eye, Pos::new(c.x + r + out, c.y, c.z)), "{table}");
+        assert!(
+            psychic::within_reach(&w, eye, Pos::new(c.x + r, c.y, c.z)),
+            "{table}"
+        );
+        assert!(
+            !psychic::within_reach(&w, eye, Pos::new(c.x + r + out, c.y, c.z)),
+            "{table}"
+        );
         // Height counts: 1024 east and 300 up is beyond reach; 900 east and 300 up is within.
-        assert!(!psychic::within_reach(&w, eye, Pos::new(c.x + r, c.y, c.z + 300)), "{table}");
-        assert!(psychic::within_reach(&w, eye, Pos::new(c.x + 900, c.y, c.z + 300)), "{table}");
+        assert!(
+            !psychic::within_reach(&w, eye, Pos::new(c.x + r, c.y, c.z + 300)),
+            "{table}"
+        );
+        assert!(
+            psychic::within_reach(&w, eye, Pos::new(c.x + 900, c.y, c.z + 300)),
+            "{table}"
+        );
     }
 }
 
@@ -609,7 +648,11 @@ fn visibility_quirk_both_positions() {
         let hidden = put(&mut w, Kind::Vehicle, "BOX", BETA, -10, -10);
         w.obj_mut(hidden).unwrap().dest = Some(Target::Cell(at(1, 1)));
         assert!(!shroud::seen(&w, HouseId(ALPHA), at(-10, -10)));
-        assert_eq!(psychic::intent_lines(&w, HouseId(ALPHA)).len(), usize::from(on), "{on}");
+        assert_eq!(
+            psychic::intent_lines(&w, HouseId(ALPHA)).len(),
+            usize::from(on),
+            "{on}"
+        );
     }
 }
 
@@ -639,7 +682,9 @@ fn reveal_rules(radius: Option<i32>) -> Ruleset {
         },
     );
     register(&mut r, "superweapons", "REVEAL");
-    building(&mut r, "MINDB", |b| b.econ.super_weapon = Some("REVEAL".into()));
+    building(&mut r, "MINDB", |b| {
+        b.econ.super_weapon = Some("REVEAL".into())
+    });
     r.sim.general.superweapons.psychic_reveal_radius = radius;
     r.sim.general.superweapons.psychic_reveal_activate_sound = Some("Whisper".into());
     r
@@ -671,7 +716,10 @@ fn claims_13_14_launch_and_area() {
     assert!(!shroud::explored(&w, sw_common::BETA, c(0, 0)));
     let ev = sw_common::events(&w);
     assert!(ev.contains(&(SwEvent::RevealSound, Some(sw_common::ALPHA), Some(REVEAL))));
-    assert!(!ev.iter().any(|e| matches!(e.0, SwEvent::Launch | SwEvent::Radar)));
+    assert!(
+        !ev.iter()
+            .any(|e| matches!(e.0, SwEvent::Launch | SwEvent::Radar))
+    );
     let pos = w.effects.iter().find_map(|e| match e {
         glasnost_sim::combat::effects::Effect::Superweapon {
             event: SwEvent::RevealSound,
@@ -692,7 +740,10 @@ fn claim_14_no_high_ground_test() {
     let mut plain = sw_common::game(&reveal_rules(Some(3)));
     plain.cells.grid.get_mut(c(4, 2)).unwrap().level = 8;
     shroud::area_reveal(&mut plain, sw_common::ALPHA, Pos::centre(t, 0), 3);
-    assert!(!shroud::explored(&plain, sw_common::ALPHA, c(3, 0)), "an ordinary reveal is blocked");
+    assert!(
+        !shroud::explored(&plain, sw_common::ALPHA, c(3, 0)),
+        "an ordinary reveal is blocked"
+    );
     let w = launched(Some(3), t, Some(c(4, 2)));
     assert!(shroud::explored(&w, sw_common::ALPHA, c(3, 0)));
     let wide = launched(Some(5), t, None);

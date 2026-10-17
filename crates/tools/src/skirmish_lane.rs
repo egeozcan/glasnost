@@ -362,9 +362,7 @@ fn play(
     let chosen = match g.sides {
         Some((a, b)) if a == b => countries(rules)
             .into_iter()
-            .filter(|(i, _)| {
-                rules.econ.tech.country_side.get(*i as usize) == Some(&Some(a))
-            })
+            .filter(|(i, _)| rules.econ.tech.country_side.get(*i as usize) == Some(&Some(a)))
             .map(|(_, n)| n)
             .take(PLAYERS)
             .collect(),
