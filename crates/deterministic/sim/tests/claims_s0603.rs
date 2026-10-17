@@ -201,6 +201,12 @@ fn game() -> World {
     game_on(&rules())
 }
 
+fn game_on_sized(size: i32) -> World {
+    let mut w = testkit::game_with(&rules(), size, 7);
+    testkit::run(&mut w, 2);
+    w
+}
+
 fn at(dx: i32, dy: i32) -> CellXY {
     testkit::mid(SIZE, dx, dy)
 }
@@ -978,3 +984,54 @@ fn grinder_fate_end_to_end() {
     assert_eq!(credits(&w, HouseId(2)) - c0, 300, "P for a non-player house");
 }
 
+
+/// Sends BUGGY from (-20, 0) towards `dest` with a north–south line of WALL
+/// buildings at x = -4 from y = -`half` to `half`; returns whether it was
+/// consumed and the tick its destination was first cleared, if it was.
+/// On a larger map than [`game`]'s (size 50), where the outcome depends on
+/// how the line falls in the corridor's blocks.
+fn past_a_line(half: i32, grinder: bool) -> (bool, Option<i32>) {
+    const BIG: i32 = 50;
+    let at = |dx, dy| testkit::mid(BIG, dx, dy);
+    let mut w = game_on_sized(BIG);
+    let b = testkit::spawn(&mut w, Kind::Building, "GRND", 0, at(0, 0), 0);
+    for y in -half..=half {
+        testkit::spawn(&mut w, Kind::Building, "WALL", 0, at(-4, y), 0);
+    }
+    testkit::run(&mut w, 3);
+    let car = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, at(-20, 0), 0);
+    let (behaviour, dest) = if grinder {
+        (Behaviour::Eaten, Target::Object(b))
+    } else {
+        (Behaviour::Move, Target::Cell(at(-2, 0)))
+    };
+    orders::issue(
+        &mut w,
+        ALPHA,
+        Order::Behaviour { actor: car, behaviour, attack_move: false, target: None, dest: Some(dest) },
+    );
+    let mut lost = None;
+    for t in 0..600 {
+        tick::step(&mut w);
+        if gone(&w, car) {
+            return (true, lost);
+        }
+        if lost.is_none() && w.obj(car).unwrap().dest.is_none() {
+            lost = Some(t);
+        }
+    }
+    (false, lost)
+}
+
+// spec: S-0603 claims 3 and 4 with S-0212 claims 1, 13 and 23 (the entrant's approach is an ordinary path computation to the building: past a short line of buildings it drives round and is consumed; past a line of seven the corridor's retries close the way round, the new coarse search fails, the computation fails and the destination is cleared on the first tick, exactly as for a move order to a cell behind the line; Q-1280 asks whether the game does this)
+#[test]
+fn claims_3_4_approach_past_a_line_of_buildings() {
+    assert_eq!(past_a_line(1, true).0, true, "round a line of three");
+    let (consumed, lost) = past_a_line(3, true);
+    assert!(!consumed, "not past a line of seven");
+    // The order applies in the next tick (S-0213 claim 1); the first path
+    // computation fails in the one after.
+    assert_eq!(lost, Some(1), "the destination is cleared at once");
+    let (_, lost) = past_a_line(3, false);
+    assert_eq!(lost, Some(1), "a move to a cell behind the line fails alike");
+}
