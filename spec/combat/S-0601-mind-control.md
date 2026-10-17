@@ -2,13 +2,13 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-17
 measurements: []
-requests: [Q-1200, Q-1201, Q-1202, Q-1203]
+requests: [Q-1150, Q-1200, Q-1201, Q-1202, Q-1203]
 supersedes: []
 ---
 
@@ -202,22 +202,25 @@ The glossary also defines *trigger*, used here.
    - *Judging.* S-0011 claim 8 owns how events 6 and 44 are judged, including the base of event 44's
      value, which counts houses from zero. Neither event records a triggering house. S-0011
      claim 8 covers only raises on a tagged target; a raise of event 44 after a one-time or all-carriers tag has left the
-     target is governed by `quirks.removed_tag_attack_event` (next item). This claim supplies only the
+     target is governed by the next item. This claim supplies only the
      raises' order and cause above.
    - *Tag removed by the first raise.* When a raise of a one-time or all-carriers trigger on event 6
      takes the tag off the target, as the repeat-type table of S-0011 (State and ordering) gives, the
-     tag leaves the target. The original then still raises event 44 at the target, although the tag
-     has gone, and that raise faults. The crash needs no bad data, only a legal one-time trigger on
-     the tag. So under the glossary it is a quirk, not a departure, and it has the switch
-     `quirks.removed_tag_attack_event`. Off: event 44 is raised only if the target still carries a
-     tag at that point, and then on that tag, whichever tag it is. This follows S-0011 claim 10 and
-     its repeat-type table, under which the raising carrier loses the tag. As every quirk switch's default is the original's behaviour (glossary, *quirk switch*), this switch defaults to the fault. Whether the fault stays a quirk at all is for the project lead (Questions for the project lead).
+     tag leaves the target. Event 44 is then raised only if the target still carries a tag at that
+     point, and then on that tag, whichever tag it is. This follows S-0011 claim 10 and its repeat-type
+     table, under which the raising carrier loses the tag. **Departure:** the original still raises
+     event 44 at the target although the tag has gone, and that raise faults; the fault needs no bad
+     data, only a legal one-time trigger on the tag, and it has no gameplay value, so it is not
+     reproduced and has no quirk switch, by lead decision on Q-1150: an original fault on legal data
+     with no gameplay value is fixed outright as a departure.
    - Backing: `measurable` (MC3 for target-only, no-damage hits; MC1 for takeover sound,
      MC11 for mixed-effect variants, and MC14 for the order, cause and judging of the two events.
      S-0514 scenario E13 for the remaining special-hit exclusions and independent
      radiation/presentation). Missing-firer and missing-record hits are `unmeasured`: no
-     scenario here isolates a delayed shot after firer removal. The removed-tag fault
-     is `unmeasured`: the original's fault must not be provoked on the oracle
+     scenario here isolates a delayed shot after firer removal. The removed-tag departure
+     is `unmeasured`: the original's fault must not be provoked on the oracle. MC14 part a uses
+     only a repeating tag (repeat type 2), which no raise removes, so it cannot provoke the fault,
+     and no scenario here exercises the skipped raise.
    - Confidence: high; medium for the outcome with special house values (−1 and the
      player-position values), which MC14 part a tests
 
@@ -678,8 +681,8 @@ F3 uses exact integer additions and integer draws, with no rounding.
 - **Construction vehicle taken by control** (claim 15): it is not deploy-ready until released,
   while a permanently controlled or trigger-held one is. No switch: the readiness rule is
   S-0214's, with the narrowing named in Open questions.
-- **Second attack event after a tag-removing first raise** (claim 5): the original faults. With
-  `quirks.removed_tag_attack_event` off, the raise is skipped when no tag is attached (claim 5).
+- **Second attack event after a tag-removing first raise** (claim 5): the original faults; the
+  raise is skipped when no tag is attached (departure, no switch).
 - **Absent fate-table marks** (claim 8): an absent mark never selects its table, with an importer
   warning (departure from an original whose result is not determined).
 
@@ -981,10 +984,15 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   exclusion reads *controlled by a controlling object*; permanently controlled and trigger-held
   vehicles are not refused; claim 15; Q-1200). No further change. The other uses of
   *mind-controlled* there are unchanged.
-- S-0701 claim 39: approved S-0509 claim 12 already lists the mind-control takeover and release of a
-  building. Revise S-0701 claim 39 to drop "which S-0509 claim 12 lists once the named change in
-  Changes for other specs is made", and the medium confidence that depends on that pending change.
+- S-0701 claim 39: no change needed. Approved S-0701 claim 39 already states that S-0509 claim 12 lists
+  the mind-control takeover and release of a building, without a condition. Its medium confidence for
+  mind-control entry selection rests on MC9 being proposed and not run; this revision does not change that.
+- Glossary, *departure* and *quirk switch*: add a third case to *departure*, a fault of the original on
+  legal data that has no gameplay value, which our engine fixes outright with no switch, as the lead
+  decided on Q-1150. The *quirk switch* entry's "no switch" rule, which now covers only bad data and host or
+  real-time dependence, takes the same case. This claim (claim 5) is the first case.
+- S-0011: no change needed; it names no switch for this case.
 
 ## Questions for the project lead
 
-- Whether the removed-tag fault stays a quirk switch, claim 5, whose default is the original's fault as the glossary requires, or whether the glossary should add a category for a fault on legal data (Q-1203).
+None open.

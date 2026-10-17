@@ -1,9 +1,9 @@
 ---
 id: Q-1150
 title: What our engine does in the default position of quirks.removed_tag_attack_event
-status: open
+status: answered
 related: [S-0601, S-0011]
-answered-by: []
+answered-by: [S-0601]
 ---
 
 ## Need
