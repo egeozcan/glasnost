@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -276,7 +276,7 @@ The glossary also defines *trigger*, used here.
    computer-controlled. It picks one of four weighted fate tables, using the controlling house's
    money, its power and the object's health ratio (Import mapping). It then takes one draw from
    the scenario random stream in 1 to 100, and the cumulative weights select a fate: join the
-   controller's team, go to the nearest grinder, go to the nearest bio reactor, hunt, or nothing.
+   controller's team, go to the nearest grinder, go to the nearest bio reactor (an absorbing building; S-0605 claim 16), hunt, or nothing.
    The draw range is inclusive; cumulative weights use exact integer addition with no rounding.
    A team type's fate override replaces the selected fate, not the draw: the draw is still consumed.
    The table precedence is low money, then insufficient power, then wounded health, otherwise
@@ -725,8 +725,7 @@ missing damage or frames entry and gives no overload pulses when the count list 
 
 ## Measurement scenarios
 
-All scenarios: skirmish on a small purpose-made map, stock data except the named test-map variants
-of MC11, the director and mods off, game-speed index 3, bench at 800×600. Ticks have the
+All scenarios: skirmish on a small purpose-made map, stock data apart from the named test files of each scenario (the named test-map variants of MC11 among them), with no engine add-on and no mods otherwise (*measurement setup*, glossary), game-speed index 3, bench at 800×600. Ticks have the
 rate specified by S-0201 claim 4; all intervals below use tick counts, not elapsed seconds.
 A is the viewing human. B and C are named bystander computer players: their unrelated objects
 cannot reach the observation area, and a run is void if they interfere or are defeated. For
