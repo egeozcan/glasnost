@@ -992,6 +992,112 @@ fn ferries_infantry_across_a_strait() {
     );
 }
 
+// A ferry stuck unloading (S-0507 claim 10: a passenger with no exit blocks
+// those behind it and the transport retries until the unload is
+// interrupted) is moved on to land nearby, as a person would; one that has
+// only just begun to unload is left to it.
+#[test]
+fn a_ferry_stuck_unloading_is_moved_on() {
+    let map = fixture::map_strait();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-strait",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the strait skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let mid = fixture::at(0, 0).x;
+    let side = (yard.x - mid).signum();
+    // Away from home (more than the ferry's home radius), on the home shore.
+    let away = glasnost_map::CellXY::new(yard.x + side * 14, yard.y);
+    let cells = free_cells(&g.world, away, 4);
+    assert_eq!(cells.len(), 4, "room away from home");
+    let lift = testkit::spawn(&mut g.world, Kind::Vehicle, "LIFT", 0, cells[0], 0);
+    for &c in &cells[1..] {
+        let p = testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, c, 0);
+        glasnost_sim::transport::board(&mut g.world, p, lift);
+    }
+    assert_eq!(glasnost_sim::transport::count(&g.world, lift), 3);
+    let moves = |w: &World, since: i32| {
+        let mut w = w.clone();
+        let o = w.obj_mut(lift).unwrap();
+        o.beh.current = Some(glasnost_sim::rules::Behaviour::Unload);
+        o.beh.start_tick = since;
+        o.dest = None;
+        let mut brain = Brain::with_plan(&w, &map, HouseId(0), glasnost_ai::brain::default_plan());
+        brain.think(&w).into_iter().any(|o| {
+            matches!(o, Order::Behaviour { actor, dest: Some(Target::Cell(_)), .. } if actor == lift)
+        })
+    };
+    let now = g.world.tick;
+    assert!(
+        moves(&g.world, now - 1000),
+        "a ferry unloading for 1000 ticks is moved on"
+    );
+    assert!(
+        !moves(&g.world, now - 10),
+        "a ferry that has just begun to unload is left to it"
+    );
+}
+
+// A loaded ferry that stands just outside its home radius (PLAN §4.7): it
+// leaves across the strait for the goal instead of unloading where the
+// infantry would only be gathered and boarded again.
+#[test]
+fn a_loaded_ferry_near_home_leaves_for_the_goal() {
+    let map = fixture::map_strait();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-strait",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the strait skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let mid = fixture::at(0, 0).x;
+    let side = (yard.x - mid).signum();
+    let away = glasnost_map::CellXY::new(yard.x + side * 14, yard.y);
+    let cells = free_cells(&g.world, away, 4);
+    assert_eq!(cells.len(), 4, "room near home");
+    let lift = testkit::spawn(&mut g.world, Kind::Vehicle, "LIFT", 0, cells[0], 0);
+    for &c in &cells[1..] {
+        let p = testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, c, 0);
+        glasnost_sim::transport::board(&mut g.world, p, lift);
+    }
+    assert_eq!(glasnost_sim::transport::count(&g.world, lift), 3);
+    let mut brain = Brain::with_plan(
+        &g.world,
+        &map,
+        HouseId(0),
+        glasnost_ai::brain::default_plan(),
+    );
+    let orders = brain.think(&g.world);
+    let dest = orders.iter().find_map(|o| match o {
+        Order::Behaviour {
+            actor,
+            dest: Some(Target::Cell(c)),
+            ..
+        } if *actor == lift => Some(*c),
+        _ => None,
+    });
+    let dest = dest.expect("the loaded ferry is sent somewhere");
+    assert!(
+        (dest.x - mid) * side < 0,
+        "the ferry crosses to the far shore, not {dest:?}"
+    );
+}
+
 // Infantry that cannot walk to the next wave's goal (PLAN §4.7, S-0212
 // claim 4): on the strait map a rifleman standing far from home on its own
 // shore is called home, where the ferry takes idle infantry, instead of

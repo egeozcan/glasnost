@@ -93,6 +93,10 @@ const WAIT_FAR: i64 = 6; // nocite: tuning of our own opponent
 /// The ring around a ferry, in cells, searched for land when it cannot
 /// let its passengers out where it stopped.
 const ASHORE: i64 = 4; // nocite: tuning of our own opponent
+/// Ticks after which a ferry still unloading with passengers aboard is
+/// taken to be stuck (a passenger with no exit blocks the rest, and the
+/// transport retries for good, S-0507 claim 10) and is moved on.
+const UNLOAD_STUCK: i32 = 450; // nocite: tuning of our own opponent
 /// The radius, in cells, around a superweapon's target cell within which
 /// seen enemies count for its worth and the house's own objects forbid it.
 const STRIKE_RADIUS: i64 = 3; // nocite: tuning of our own opponent
@@ -902,11 +906,32 @@ impl Brain {
         let mut taken: Vec<ObjectId> = Vec::new();
         for f in ferries {
             let Some(o) = w.obj(f) else { continue };
+            let at = o.pos.cell();
+            let aboard = transport::count(w, f);
+            // A passenger that finds no exit blocks those behind it, and the
+            // transport keeps retrying until the unload is interrupted
+            // (S-0507 claim 10). A person sees the ferry stand there full and
+            // moves it on to land nearby, where the unload click is made
+            // again.
+            if o.beh.current == Some(Behaviour::Unload)
+                && aboard > 0
+                && o.dest.is_none()
+                && w.tick - o.beh.start_tick > UNLOAD_STUCK
+            {
+                if let Some(c) = self.land_cell(w, f, at, (1, ASHORE), at, None) {
+                    out.push(Order::Behaviour {
+                        actor: f,
+                        behaviour: Behaviour::Move,
+                        attack_move: false,
+                        target: None,
+                        dest: Some(Target::Cell(c)),
+                    });
+                }
+                continue;
+            }
             if !idle(w, f) {
                 continue;
             }
-            let at = o.pos.cell();
-            let aboard = transport::count(w, f);
             let room = transport::capacity(w, f);
             let at_home = dist2(at, home) <= FERRY_HOME * FERRY_HOME;
             let go = |c: CellXY| Order::Behaviour {
@@ -916,6 +941,26 @@ impl Brain {
                 target: None,
                 dest: Some(Target::Cell(c)),
             };
+            // Leave for the goal: land near it from which the passengers'
+            // own zone reaches it.
+            let to_goal = || {
+                let zone = transport::passengers(w, f)
+                    .first()
+                    .and_then(|&p| w.obj(p))
+                    .and_then(|p| w.rules().unit(p.kind, p.type_index))
+                    .map(|u| u.zone);
+                self.land_cell(w, f, goal, (DROP_NEAR, DROP_FAR), at, zone)
+            };
+            // A loaded ferry that has drifted just outside the home radius
+            // would only drop infantry that are gathered and boarded again:
+            // it leaves for the goal instead.
+            let near_home = dist2(at, home) <= 4 * FERRY_HOME * FERRY_HOME; // nocite: tuning (the gathering radius above)
+            if !at_home && aboard > 0 && near_home {
+                if let Some(c) = to_goal() {
+                    out.push(go(c));
+                }
+                continue;
+            }
             if !at_home {
                 if aboard == 0 {
                     if let Some(c) = self.land_cell(w, f, home, (WAIT_NEAR, WAIT_FAR), at, None) {
@@ -957,14 +1002,7 @@ impl Brain {
                 .collect();
             let full = aboard >= FERRY_LOAD.min(room);
             if full || (aboard > 0 && entering.is_empty() && free.is_empty()) {
-                // Leave for the goal: land near it from which the
-                // passengers' own zone reaches it.
-                let zone = transport::passengers(w, f)
-                    .first()
-                    .and_then(|&p| w.obj(p))
-                    .and_then(|p| w.rules().unit(p.kind, p.type_index))
-                    .map(|u| u.zone);
-                if let Some(c) = self.land_cell(w, f, goal, (DROP_NEAR, DROP_FAR), at, zone) {
+                if let Some(c) = to_goal() {
                     out.push(go(c));
                 }
                 continue;
