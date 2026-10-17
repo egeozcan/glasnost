@@ -2031,6 +2031,11 @@ pub struct BuildingType {
     /// `Strength`.
     #[serde(default)]
     pub strength: Option<i32>,
+    /// `TurretCount`: above 0 makes a multi-weapon type (S-0308 claim 1
+    /// and Import mapping, a type section key; S-0609 Terms for a gattling
+    /// building).
+    #[serde(default)]
+    pub turret_count: Option<i32>,
     /// Art `Foundation`, width and height in cells.
     // nocite: a pair of numbers (width, height), our format's shape
     #[serde(default)]

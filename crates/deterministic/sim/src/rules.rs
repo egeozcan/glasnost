@@ -1682,7 +1682,8 @@ fn building_rules(
     let mut combat = crate::combat::data::type_combat(
         &bt.combat,
         [bt.primary.as_ref(), bt.secondary.as_ref(), None, None],
-        0,
+        // spec: S-0308 Import mapping (TurretCount of a type section, buildings included; absent: 0) and S-0609 Terms (a gattling building that is a multi-weapon type reads its stage)
+        bt.turret_count.unwrap_or(0),
         false,
         (&[], &[]),
         cx.coefficients,
