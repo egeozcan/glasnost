@@ -2,11 +2,11 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 41
+revision: 42
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560]
 supersedes: []
@@ -1647,8 +1647,8 @@ Ordering stated as consequences:
 
 ## Measurement scenarios
 
-All run under the *measurement setup*, game speed index 2, director and mods off apart from the
-named test data, on purpose-made flat maps of clear terrain, with one human player and one
+All run under the *measurement setup*, game speed index 2, no engine add-on and no mods (the named test files of a scenario excepted),
+on purpose-made flat maps of clear terrain, with one human player and one
 bystander computer player whose start position is far away, unless stated. The observed area is
 the corridor, bridge or other test site and its approach cells. Void a run if an unnamed bystander
 object enters that area or acts on a test object, or the bystander is defeated before observation
@@ -2773,8 +2773,8 @@ Edge cases).**
 
 **C22 extensions for claim 15 (Q-0560).**
 - *Setup:* the same stock walking infantry and high bridge over flat ground, with banks at deck
-  level, human owner and one distant bystander computer player. Game speed index 2, director and
-  mods off. Keep the bridge, banks and their neighbouring cells as the observed area. In (e),
+  level, human owner and one distant bystander computer player. Game speed index 2, no engine add-on and no mods
+  (the named test files of a scenario excepted). Keep the bridge, banks and their neighbouring cells as the observed area. In (e),
   order a walk from one bank across the bridge to the other, then reverse it. In (f), use map
   placement at different side positions and nearby allied infantry to make the straight line to
   a diagonal target pass through a third cell; test a third cell carrying a high bridge and one
@@ -3158,7 +3158,7 @@ That moment is called the *window*. Common setup:
   the flag stays set after *U* is gone.
 
 **Scenario C29: aircraft listing during flight (claim 13).**
-- *Setup:* a tiny flat skirmish map, game speed index 2, stock data, director and mods off, with
+- *Setup:* a tiny flat skirmish map, game speed index 2, stock data, no engine add-on and no mods (the named test files of a scenario excepted), with
   one human player and one bystander computer player kept outside the observed area. The observed
   area contains an empty, explored and buildable foundation site within adjacency of the human
   player's buildings, and an ordinary transport aircraft belonging to that player. Prepare a
@@ -3189,7 +3189,7 @@ That moment is called the *window*. Common setup:
 
 - *Setup:* use S-0207 D22 run 14's named test map and teleporting aircraft, high
   bridge over traversable level ground, human house and distant bystander computer
-  player, game speed index 2, director and mods off except that named test data.
+  player, game speed index 2, no engine add-on and no mods (the named test files of a scenario excepted).
   Keep the landing cell free of all other flag writers. Void unrelated bystander
   interference in the bridge and probe area, or its defeat.
 - *Procedure:* repeat the accepted-next-destination and destruction branches three
