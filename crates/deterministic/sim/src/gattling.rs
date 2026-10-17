@@ -65,17 +65,17 @@ pub struct SpinType {
 impl SpinType {
     /// The settings the imported fields give.
     pub fn from_fields(c: &CombatFields) -> Self {
-        // spec: S-0609 Import mapping (WeaponStages absent: 0) and Edge cases (a count above 6 is used as 6); Q-1220 interim (a negative count is used as 0)
+        // spec: S-0609 Import mapping (WeaponStages absent: 0) and Edge cases (a count above 6 is used as 6; revision 4: a negative stage count is used as 0)
         let stages = c.weapon_stages.unwrap_or(0).clamp(0, MAX_STAGES as i32);
-        // spec: S-0609 Import mapping (RateUp and RateDown absent: 0); Q-1220 interim (a negative amount is used as 0)
+        // spec: S-0609 Import mapping (RateUp and RateDown absent: 0) and Edge cases (revision 4: a negative spin-up or spin-down amount is used as 0)
         let up = c.rate_up.unwrap_or(0).max(0);
         let down = c.rate_down.unwrap_or(0).max(0);
         let row = |v: &Option<Vec<i32>>| {
             let mut out = [0; MAX_STAGES];
-            // spec: S-0609 Edge cases (stage count 0 or 1: the thresholds stay 0); Q-1220 interim (a layered reduction below 2 stages: the held thresholds are not used)
+            // spec: S-0609 Edge cases (stage count 0 or 1: the thresholds stay 0); Q-1151 interim (a layered reduction below 2 stages: the held thresholds are not used)
             if stages >= 2 {
                 for (i, t) in v.iter().flatten().take(stages as usize).enumerate() {
-                    // spec: S-0609 Import mapping (absent thresholds: 0, the elite ones not the normal ones); Q-1220 interim (a negative threshold is used as 0)
+                    // spec: S-0609 Import mapping (absent thresholds: 0, the elite ones not the normal ones); Edge cases (revision 4: a negative threshold is used as 0)
                     out[i] = (*t).max(0);
                 }
             }
@@ -148,7 +148,7 @@ fn cap(st: &SpinType, thr: &[i32; MAX_STAGES]) -> i32 {
 /// F1 on a value and stage: the new value and stage, and whether the stage
 /// rose.
 pub fn f1(st: &SpinType, thr: &[i32; MAX_STAGES], v: i32, s: i32, m: i32) -> (i32, i32, bool) {
-    // spec: S-0609 claim 2 and F1 (v′ = v + u × m when v < T_N, else v; no clamp to the cap); Q-1220 interim (saturating arithmetic)
+    // spec: S-0609 claim 2 and F1 (v′ = v + u × m when v < T_N, else v; no clamp to the cap) and Edge cases (revision 4: the product and the sum saturate at 2³¹ − 1, nothing wraps)
     let v2 = if v < cap(st, thr) {
         v.saturating_add(st.up.saturating_mul(m))
     } else {
@@ -162,7 +162,7 @@ pub fn f1(st: &SpinType, thr: &[i32; MAX_STAGES], v: i32, s: i32, m: i32) -> (i3
 /// F2 on a value and stage: the new value and stage. `empties` is
 /// `quirks.gattling_zero_spin_down_empties`.
 pub fn f2(st: &SpinType, thr: &[i32; MAX_STAGES], v: i32, s: i32, m: i32, empties: bool) -> (i32, i32) {
-    // spec: S-0609 claim 3 and F2 (a = d × m); Q-1220 interim (saturating arithmetic)
+    // spec: S-0609 claim 3 and F2 (a = d × m) and Edge cases (revision 4: the product saturates at 2³¹ − 1)
     let a = st.down.saturating_mul(m);
     let v2 = if a != 0 {
         // spec: S-0609 F2 (v′ = max(v − a, 0))
@@ -333,7 +333,7 @@ pub fn building_guard(w: &mut World, id: ObjectId) {
 /// the object's behaviour may be processed.
 pub fn elapse(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0609 Terms (the elapsed-tick count grows by 1 every tick just before the behaviour may be processed); Q-1220 interim (saturating)
+        // spec: S-0609 Terms (the elapsed-tick count grows by 1 every tick just before the behaviour may be processed) and Edge cases (revision 4: the count saturates at 2³¹ − 1 and stays there until its next reset)
         ob.beh.elapsed = ob.beh.elapsed.saturating_add(1);
     }
 }

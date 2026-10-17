@@ -2366,10 +2366,10 @@ impl Builder<'_> {
             let n = int_as_of(t, "WeaponStages", r, 0);
             if !(flag && n >= 2) {
                 if populated && flag && n < 2 {
-                    // spec: S-0609 Edge cases and Questions for the project lead (a layered reduction below 2 stages after thresholds were populated); Q-1220 interim (the held thresholds are not used)
+                    // spec: S-0609 Edge cases and Questions for the project lead item 3 (a layered reduction below 2 stages after thresholds were populated: no result established); Q-1151 interim (the held thresholds are not used)
                     if let Some((_, layer, line)) = sets(key(t, "WeaponStages")).into_iter().rfind(|e| e.1 == r) {
                         self.warn(layer, line, format!(
-                            "{} {}: WeaponStages falls below 2 after an earlier layer set the stage thresholds; no result is specified, and our engine uses no thresholds while the count is below 2 (S-0609 Edge cases, request Q-1220)",
+                            "{} {}: WeaponStages falls below 2 after an earlier layer set the stage thresholds; no result is specified, and our engine uses no thresholds while the count is below 2 (S-0609 Edge cases, request Q-1151)",
                             kind.key(),
                             show(&t.name)
                         ));
@@ -2400,7 +2400,7 @@ impl Builder<'_> {
         self.each_int(key(t, "WeaponStages"), |n| n > SPIN_STAGES as i32, |v| {
             format!("{name} WeaponStages {v} is above 6; our engine uses 6 stages and reads only Stage1 … Stage6 and EliteStage1 … EliteStage6 (S-0609 Edge cases)")
         });
-        // spec: S-0609 Edge cases (negative stage count, amounts or thresholds: no result is established, the importer warns); Q-1220 interim (our engine uses 0)
+        // spec: S-0609 Edge cases (revision 4: a negative stage count, spin-up or spin-down amount or threshold is used as 0, and the importer warns for each such imported value)
         let mut negative: Vec<String> = ["WeaponStages", "RateUp", "RateDown"]
             .iter()
             .map(|k| (*k).to_owned())
@@ -2411,7 +2411,7 @@ impl Builder<'_> {
         }
         for k in negative {
             self.each_int(key(t, &k), |n| n < 0, |v| {
-                format!("{name} {k} {v} is negative; no result is specified, and our engine uses 0 (S-0609 Edge cases, request Q-1220)")
+                format!("{name} {k} {v} is negative; our engine uses 0 (S-0609 Edge cases)")
             });
         }
     }

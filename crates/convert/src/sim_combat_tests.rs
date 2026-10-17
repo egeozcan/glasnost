@@ -1586,7 +1586,7 @@ fn absent_fate_marks_warn() {
     assert_eq!((count(&w, low), count(&w, wounded)), (0, 0));
 }
 
-/// spec: S-0609 Import mapping (WeaponStages, RateUp, RateDown; Stage1 … StageN and EliteStage1 … EliteStageN read per layer only while the gattling flag and a stage count of at least 2 hold as of that layer, else held; absent elite thresholds stay 0) and Edge cases (more than 6 stages, negative values and empty stage slots warn); Q-1220 interim (a reduction below 2 stages after thresholds were set warns)
+/// spec: S-0609 Import mapping (WeaponStages, RateUp, RateDown; Stage1 … StageN and EliteStage1 … EliteStageN read per layer only while the gattling flag and a stage count of at least 2 hold as of that layer, else held; absent elite thresholds stay 0) and Edge cases (more than 6 stages, negative values and empty stage slots warn); S-0609 revision 4 Edge cases (negative values are used as 0, with a warning for each); Q-1151 interim (a reduction below 2 stages after thresholds were set warns)
 #[test]
 fn gattling_spin_settings() {
     let base = "[VehicleTypes]\n1=Gat\n2=Plain\n3=Many\n4=Neg\n5=Late\n[BuildingTypes]\n1=GTower\n\
