@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1770,13 +1770,13 @@ and the scenario stream's draw count come from a recorder (a read-only memory re
 lead allowed. Unless a scenario says otherwise, the harvester is the human
 house's, the refinery has stock art, there is one harvester, and resource cells do not grow (growth
 and spread fractions 0). Unless stated otherwise, use game-speed index 2 at 800 × 600,
-with director and mods off except for the scenario's named test data.
+with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
 
 **H27. Final field track to the first load step (claim 3b, F1a; Q-0900).**
 - *Setup:* a tiny level skirmish map with an isolated resource patch, one ordinary
   stock-data driving harvester of the human house and its dock-type building,
   and the bystander kept outside the observed area. Use stock rules and art,
-  game-speed index 2, 800 × 600, director and mods off. Choose a patch with
+  game-speed index 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Choose a patch with
   enough resource for a first bale. No approach destinations, teleporting,
   slave group, combat or replacement orders during each observed arrival.
 - *Procedure:* from at least six different starting distances, issue harvest
@@ -2297,7 +2297,7 @@ is wrong). *Runs:* 3.
   the failure from an ordinary step-off. On our engine only, the quirk off expects no
   destination instead, with all the other outcomes unchanged.
 - *Runs:* 1 per blocking step in b, 2 for each of a and c, 5 start ticks for d; 3 blocked and
-  3 freed runs for e. Use game-speed index 2, 800 × 600, director and mods off for e,
+  3 freed runs for e. Use game-speed index 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted) for e,
   with only its purpose-made map and any named override sections active.
 
 **H12. Contact lost and orders while unloading (claim 11).**
@@ -2364,7 +2364,7 @@ is wrong). *Runs:* 3.
 
 **H14. Track-completion route to unloading (claim 10; Q-0197).**
 - *Setup:* H10's human house and ordinary driving harvester, game-speed index 2 at 800 × 600,
-  director and mods off. A named test map/art variant gives the refinery a rectangular
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). A named test map/art variant gives the refinery a rectangular
   foundation 3 cells along map x and 1 along map y, retains its dock-unload flag and has no
   absorbing, repair or reload flags. The cell immediately map west of its docking cell is
   then immediately map south of a refinery foundation cell. Lengthen the *enter* standard
@@ -2407,7 +2407,7 @@ is wrong). *Runs:* 3.
   map override sections give a stock slave miner 3 slaves and give the slaves scoring and
   ownership-count flags suitable for observing both counts. Provide a factory and an isolated
   clear test area. Keep the miner stopped without any working-group transition during the
-  initial observation. Director and mods are off apart from these named test overrides.
+  initial observation. There is no engine add-on and there are no mods (the named test files of a scenario and the purpose-made test maps excepted).
 - *Procedure:* produce a miner and record from production start, before release. Repeat with a
   map-created miner, a starting miner, and a grand-opening free unit whose type is the miner.
   Separately create a deployed building of the slave-miner type. Record creation counts,
@@ -2529,8 +2529,7 @@ is wrong). *Runs:* 3.
 
 **H20. Friendly harvester on the docking cell (claims 3a and 10a; Q-0371).**
 - *Setup:* tiny flat skirmish map, stock refinery and two ordinary harvesters of one
-  human house, reachable ore field, speed index 2, remote bystander; director and
-  mods off. Keep the test refinery powered on. Use the normal measurement setup.
+  human house, reachable ore field, speed index 2, remote bystander; no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Keep the test refinery powered on. Use the normal measurement setup.
 - *Procedure:* while B unloads, move A to the docking cell and stop it after B leaves.
   Order B to enter the refinery again. Record for 2000 ticks, then give A a harvest
   order. Repeat three times; repeat with the field reachable only past the refinery,
@@ -2557,7 +2556,7 @@ is wrong). *Runs:* 3.
   assume that every movement failure leaves *harvest* current.
 
 **H21. Slave-place ordering, two clocks, facing and scan tests (claims 21, 26).**
-- *Setup:* common skirmish setup, speed 2, 800 × 600, director and mods off. Named map
+- *Setup:* common skirmish setup, speed 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Named map
   overrides give a stock miner three slaves, harvest interval 37 ticks and regeneration
   and reload delays 13 ticks. Use a rectangular deployed foundation whose reference,
   top-left and unloading cells differ. Mark slaves by identity and initial creation order.
@@ -2601,7 +2600,7 @@ is wrong). *Runs:* 3.
   lacking the arranged overlap is inconclusive for ordering.
 
 **H22. Busy slave masters (claim 27).**
-- *Setup:* common setup, speed 2, stock slave miner near a field, director and mods off.
+- *Setup:* common setup, speed 2, stock slave miner near a field, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
   Named map overrides lengthen build-up/build-down enough to contain several group
   updates, and set known reload and regeneration delays. Observe all its slaves.
 - *Procedure:* deploy with slaves outside and returning, create a building master with
@@ -2622,8 +2621,7 @@ is wrong). *Runs:* 3.
 
 **H23. Harvest processing and manual packing (claims 22, 28).**
 - *Setup:* common setup, speed 2, two isolated fields and a human slave miner. Named map
-  data lengthens the harvest behaviour's standard delay; no engine add-ons, director or
-  other mods. Observe its destinations, current/queued behaviours, group state and slaves.
+  data lengthens the harvest behaviour's standard delay; no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Observe its destinations, current/queued behaviours, group state and slaves.
 - *Procedure:* release a miner whose initial harvest has no destination, then give two
   successive harvest orders on different fields during travel. Record every processing,
   search and random draw. Manually pack a deployed miner by a move click once to clear
@@ -2645,7 +2643,7 @@ is wrong). *Runs:* 3.
   recorder. Factory release supplies destination-free harvest without an injected order.
 
 **H24. Temporary pack-up slaves and draw order (claim 19a).**
-- *Setup:* a tiny stock-data skirmish map, game speed 2, director and mods off,
+- *Setup:* a tiny stock-data skirmish map, game speed 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
   with a human-owned deployed slave miner and one bystander computer player
   kept outside the observed area. Use a control with a free return cell and
   a second run with that cell blocked. Include old slaves both inside and outside.
@@ -2667,8 +2665,7 @@ is wrong). *Runs:* 3.
   The quirk-off result is an engine conformance test, not an oracle measurement.
 
 **H25. Deployment-state boundaries and shared guard spot (claims 27, 28).**
-- *Setup:* a tiny purpose-made stock-data skirmish map at speed 2, director and
-  mods off, human-owned slave miners and one distant bystander computer player.
+- *Setup:* a tiny purpose-made stock-data skirmish map at speed 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), human-owned slave miners and one distant bystander computer player.
   Provide one distant field with a valid deployment site and a separate exhausted
   field that induces automatic relocation. Observe only these miners and slaves.
 - *Procedure:* with scripted input and a read-only state recorder, manually deploy
@@ -2726,7 +2723,7 @@ is wrong). *Runs:* 3.
 - *Setup:* a small, level purpose-made skirmish map with a human-owned ordinary miner,
   a chrono miner and a slave miner, their appropriate unloading buildings and separate
   ore and gem fields. Keep the observed vehicles free of attackers. Use stock data,
-  speed index 2, 800 × 600, director and mods off. Run each vehicle separately so its
+  speed index 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Run each vehicle separately so its
   images are not covered by other objects. Use a read-only recorder and tick-labelled
   frame capture; log position, body facing, behaviour, harvest phase, step counter,
   walk-animation counter, load and scenario random-stream state alongside each drawn frame.
