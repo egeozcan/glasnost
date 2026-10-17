@@ -35,7 +35,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0510](infantry/S-0510-spies-infiltration.md) | Spies and infiltration | infantry | 3 | approved | — |
 | [S-0310](combat/S-0310-turrets-facing-for-fire.md) | Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving) | combat | 5 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 13 | approved | — |
-| [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 1 | approved | — |
 | [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 1 | approved | — |
 | [S-0612](superweapons/S-0612-psychic-dominator.md) | Psychic Dominator superweapon | superweapons | 1 | approved | — |
 | [S-0615](combat/S-0615-special-hit-effects.md) | Special-hit effects (death-kind animations, the burning walker and the disc laser) | combat | 1 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0519](combat/S-0519-terror-attack-animals.md) | Terror and attack animals | combat | 5 | approved | — |
 | [S-0606](structures/S-0606-vehicle-bunker.md) | Vehicle bunker | structures | 3 | approved | — |
 | [S-0609](combat/S-0609-gattling-spin-up.md) | Gattling spin-up | combat | 6 | approved | — |
+| [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 2 | approved | — |

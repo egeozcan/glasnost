@@ -2,11 +2,11 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -529,7 +529,7 @@ Life of a seized unit:
 ## Measurement scenarios
 
 Use a purpose-made small skirmish map with clear land, water, beach, a bridge and a tree cell,
-with director and other mods off, speed index 2 and 800×600. One human house owns the magnetic
+with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), speed index 2 and 800×600 pixels. One human house owns the magnetic
 lifter and, unless a test says otherwise, its victims: force-fire supplies friendly hits without
 a second human player. One bystander computer player stays outside the observed test area.
 Apply the glossary's bystander void rule. Named test map overrides below are removed afterwards.
@@ -538,9 +538,9 @@ record the initial random state, rather than writing a fixed seed into the game.
 
 Use screen capture, scripted input and a read-only per-tick recorder for position, height,
 health, facing, current and queued behaviour, destination, owner, kill counts, selection and
-passenger counts. Record random-stream positions for L3's draw comparison. The bench
-(`spawner/bench.py`) may supply recording/input only if it can run the hash-checked stock
-executable without its patched launcher; otherwise use a standalone recorder and scripted input.
+passenger counts. Record random-stream positions for L3's draw comparison. A project test bench
+may supply recording and input only if it can run the hash-checked stock executable without a
+patched launcher; otherwise use a standalone recorder and scripted input.
 Request any missing recorder capability rather than patching the executable or harness.
 
 - **L1 Eligibility (claims 3, 4).**
