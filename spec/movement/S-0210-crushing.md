@@ -2,11 +2,11 @@
 id: S-0210
 title: Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing)
 topic: movement
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0020, Q-0036, Q-0684]
 supersedes: []
@@ -1173,7 +1173,7 @@ cell-centre crushing.
 - *Runs:* one each.
 
 **K12 part c: building-list origin and dropped wall buildings (Q-0684).**
-- *Setup:* purpose-made skirmish maps, stock wall and building types, director and mods off,
+- *Setup:* purpose-made skirmish maps, stock wall and building types, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
   game speed index 2, one human and one bystander computer player. Choose two distinct
   non-human houses *A* and *B* that resolve under S-0009 claim 27, with the wall-owner flag
   enabled. A map building-list entry places a wall of *A* on an otherwise empty cell *w*.
@@ -1196,7 +1196,7 @@ cell-centre crushing.
 - *Runs:* one per case. The recorder is sufficient; no harness changes are required.
 
 **Scenario K13: disguise blocks automatic choice, not a drive-through (claim 11).**
-- *Setup:* the measurement setup, director and mods off, game speed index 2. On a purpose-made
+- *Setup:* the measurement setup, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game speed index 2. On a purpose-made
   flat map, place a human-owned unarmed crusher without the omni-crusher flag, its auto-crush flag
   enabled through the named test map's override section, and an enemy crushable spy within half
   the crush range. The spy has copied an infantry unit of the crusher's house. Keep the spy in
@@ -1217,7 +1217,7 @@ cell-centre crushing.
   a valid drive-through solely because it appears disguised.
 
 **Scenario K14: object crushing uncloaks, passage alone does not (claims 4, 5 and 8).**
-- *Setup:* the measurement setup, director and mods off, game speed index 2, one human
+- *Setup:* the measurement setup, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game speed index 2, one human
   player and one bystander computer player outside the test area. A named test map gives
   an unarmed human-owned crusher self-cloaking without the cloak-stop flag. Keep it at
   full health, outside sensor coverage and cloak fields, with no attacks or other uncloak
