@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 42
+revision: 43
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -63,7 +63,7 @@ not rules for implementing them.
   draft in this batch is likewise a plain pointer. S-0501, S-0504, S-0506 and S-0614 are approved. S-0503,
   S-0507, S-0511, S-0512, S-0513, S-0516, S-0522 and S-0524 are approved.
   S-0508, S-0509, S-0510, S-0515, S-0502, S-0514, S-0517 and S-0525 are approved.
-  S-0608, S-0611, S-0612 and S-0615 are drafts in this batch and own the terms attributed to them below. Sign-off checks every cross-spec
+  S-0608, S-0611, S-0612 and S-0615 are approved and own the terms attributed to them below. Sign-off checks every cross-spec
   change against the versions handed off together.
 - Open questions are questions about the original's behaviour that a spec leaves open. They need
   no Q-ID: Q-IDs number the implementers' spec requests only, and a spec's `requests` field lists
@@ -1937,7 +1937,7 @@ They are not the on-map vehicle, infantry and aircraft counts used for defeat by
 S-0414 claims 3 and 4; in particular, buildings that count as vehicles enter the crate vehicle
 count, not defeat's on-map vehicle count.
 
-**crate places.** The scenario's 256 crate places, each holding at most one crate cell and its
+**crate places.** The game's 256 crate places, each holding at most one crate cell and its
 lifetime timer (S-0520 claim 1).
 
 **credit balance.** A house's own stock of credits, not counting resources held in storage (see
@@ -2217,7 +2217,8 @@ including the update at which its fixed 60-tick wait expires. The 60 ticks are t
 not the full leaving stage; the member remains at its old position in the expiry update and
 departs on the following update. It counts as being erased throughout the leaving stage
 (S-0513 claim 39). S-0513 owns the stage and its length; the stage starts at the first update
-after launch, not at departure. Departure is its end.
+after launch, not at departure. Departure is its end. Other specs (for example S-0610) use
+this sense, including the wait-expiry update.
 
 **manual-charge superweapon.** A type whose record is granted with its clock stopped at the
 full charge time and charges only when a trigger sets its charge (S-0512 claim 20).
@@ -2457,7 +2458,7 @@ G3. **Game speed and timings counted in ticks (skirmish).** In a skirmish game t
     number of frozen cycles depends on the game speed (S-0201, claim 10). A chrono flash in force
     takes one step in every cycle, frozen cycles included, and its own freeze starts at a fixed step
     (S-0201, claim 11). So when a timed freeze falls within a chrono flash, the number of ticks that
-    run before the chrono flash's own freeze, and whether the two freezes merge into one hold,
+    run before the chrono flash's own freeze, and whether the two freezes merge into one hold (here *hold* has the sense of S-0201, an unbroken stretch of frozen cycles, not the countdown of *hold, held*),
     depend on the game speed (S-0201, Formulas F4; in its scenario T6, part G, the second hold
     begins at tick number 365 at index 6 and at 315 at index 1). Every rule of game state that
     waits on that freeze, or on the end of the chrono flash's order block, inherits the dependence.
@@ -2660,7 +2661,7 @@ generically (see *measurement setup*).
   positions.
 - *Falsified if:* in a run set with *N*₀ > 1.01 × *N*₁,
   *N*ₛ > 1.01 × *N*ₛ₋₁ for some *s* from 2 to 6 (part a); or a lobby position's
-  count is not within 1 % of the index it is expected to match (part c). A run of the first set
+  count is not within 1 % of the index it is expected to match (part c), unless that pair of positions is recorded as inconclusive under *Expected*. A run of the first set
   whose control did not start at the position of its index tests S-0201 claim 7, not this claim,
   and is void here. Parts (b) and (b′) are not judged by this scenario; both are `unmeasured`
   for the reasons in claim G2.
