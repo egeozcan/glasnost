@@ -53,7 +53,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0504](movement/S-0504-naval-units.md) | Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards) | movement | 18 | approved | — |
 | [S-0507](combat/S-0507-transports.md) | Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers) | combat | 8 | approved | — |
 | [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 9 | approved | — |
-| [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 8 | approved | — |
 | [S-0211](movement/S-0211-land-types-passability.md) | Land types and passability | movement | 18 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 32 | approved | — |
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 20 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0501](movement/S-0501-aircraft.md) | Aircraft flight, attack runs and pads | movement | 17 | approved | — |
 | [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 7 | approved | — |
 | [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 12 | approved | — |
+| [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 9 | approved | — |
