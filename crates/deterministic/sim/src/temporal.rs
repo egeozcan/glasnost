@@ -408,6 +408,8 @@ fn complete(w: &mut World, x: ObjectId) {
     // spec: S-0514 claim 12 and S-0508 claim 15 (a building's occupants are removed with it)
     if o.kind == Kind::Building {
         crate::structures::garrison::erased(w, x);
+        // spec: S-0605 claim 14 and S-0514 claim 12 (an erased absorbing building deletes its passengers)
+        crate::structures::absorb::erased(w, x);
     }
     let hit = Hit {
         amount: 0,

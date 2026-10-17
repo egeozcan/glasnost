@@ -17,11 +17,8 @@
 //! mark, takes the draw and plays the sound. Passive spin-down (claim 9)
 //! and the numeric reset (claim 11) report nothing; leaving the map reports
 //! [`SpinEvent::Left`].
-//!
-//! Seams:
-//! - S-0605 (absorbing buildings, not built): an object entering a building
-//!   that absorbs it resets its spin (claim 11). [`reset`] is the call the
-//!   absorption path will make; nothing absorbs yet.
+//! An object entering a building that absorbs it resets its spin (claim
+//! 11): [`reset`], called by `structures::absorb` (S-0605 claims 7 and 8).
 
 use glasnost_rules::sim::CombatFields;
 use serde::{Deserialize, Serialize};
@@ -365,7 +362,8 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
 
 /// The reset of claim 11: spin value, stage and elapsed-tick count become
 /// 0 (boarding a transport, S-0507 claim 6; entering an absorbing building,
-/// S-0605, a seam). No sound effect: leaving the map is [`leaving_map`].
+/// S-0605 claims 7 and 8). No sound effect: leaving the map is
+/// [`leaving_map`].
 pub fn reset(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         // spec: S-0609 claim 11 (boarding or absorption: the spin value, the stage and the elapsed-tick count become 0)

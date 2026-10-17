@@ -1018,6 +1018,16 @@ impl Audio {
                 let s = self.names.building_repaired.clone();
                 self.play_in(w, s.as_deref(), at);
             }
+            // spec: S-0605 claim 7 (the rules-wide entry sound at the entrant's position)
+            Sound::EnterBioReactor => {
+                let s = self.names.enter_bio_reactor.clone();
+                self.play_in(w, s.as_deref(), at);
+            }
+            // spec: S-0605 claim 13 (the rules-wide exit sound at the building)
+            Sound::LeaveBioReactor => {
+                let s = self.names.leave_bio_reactor.clone();
+                self.play_in(w, s.as_deref(), at);
+            }
             // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
             Sound::LowFunds if house.is_some() && house == self.local => {
                 self.announce(Announcement::LowFunds);

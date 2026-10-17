@@ -271,10 +271,10 @@ pub fn chargers(w: &World, id: ObjectId) -> i32 {
 }
 
 /// *n*<sub>a</sub>, the passengers an absorbing building holds (S-0312
-/// Terms). Seam.
+/// Terms, S-0605 Terms).
 pub fn absorbed(w: &World, id: ObjectId) -> i32 {
-    let _ = (w, id);
-    0
+    // spec: S-0605 Terms and claim 9 (the passenger count n is S-0405's n_a)
+    crate::structures::absorb::count(w, id)
 }
 
 /// Whether a building is manned (glossary; S-0515 claim 2): it has had

@@ -593,6 +593,22 @@ fn building_count(w: &World, h: HouseId) -> i32 {
     crate::econ::victory::counted_buildings(w, h)
 }
 
+/// The crate infantry count of a house (Terms): its infantry in existence,
+/// off the map included, without insignificant or unscored types, nominal
+/// survivors and absorbed infantry (S-0605 claims 7, 13 and 14). No crate
+/// rule reads it yet (the squad crate gives money whatever the count).
+pub fn infantry_count(w: &World, h: HouseId) -> i32 {
+    w.objects
+        .values()
+        .filter(|o| o.owner == Some(h) && o.kind == Kind::Infantry)
+        .filter(|o| {
+            let (ds, ins) = crate::econ::victory::flags(w, o.kind, o.type_index);
+            // spec: S-0520 Terms (the infantry count excludes nominal survivors and absorbed infantry, S-0312 claim 24, S-0605 claim 7)
+            !(ds || ins || o.econ.counted.nominal_survivor || o.structure.absorbed_in.is_some())
+        })
+        .count() as i32
+}
+
 fn vehicle_count(w: &World, h: HouseId) -> i32 {
     let r = &w.rules().econ.victory;
     w.objects

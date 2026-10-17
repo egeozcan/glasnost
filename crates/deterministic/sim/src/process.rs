@@ -691,6 +691,12 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         {
             crate::transport::process_enter(w, id)
         }
+        // spec: S-0605 claim 5 and S-0215 claim 29 (enter toward an absorbing building: the loading request at each processing)
+        (Some(Behaviour::Enter), Kind::Infantry | Kind::Vehicle)
+            if crate::structures::absorb::entering_absorber(w, id) =>
+        {
+            crate::structures::absorb::process_enter(w, id)
+        }
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
             crate::econ::harvest::process_enter(w, id)
         }
@@ -717,6 +723,12 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
                     NO_RULE_DELAY
                 }
             }
+        }
+        // spec: S-0605 claim 11 (unload of an absorbing building: occupants first, then the front passenger)
+        (Some(Behaviour::Unload), Kind::Building)
+            if crate::structures::absorb::is_absorber(w, id) =>
+        {
+            crate::structures::absorb::process_unload(w, id)
         }
         // spec: S-0508 claim 13 (a deploy order given to a garrisonable building: its occupants are evicted without hunting or inside fallback)
         (Some(Behaviour::Unload), Kind::Building)
