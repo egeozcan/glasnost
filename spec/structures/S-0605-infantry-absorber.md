@@ -2,7 +2,7 @@
 id: S-0605
 title: Infantry absorber (who may enter an absorbing building, entry, holding, release)
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -65,9 +65,10 @@ S-0312 and S-0408 are made in the current drafts of those specs):
   claim 16's *Found* step to a unit already waiting in line for it. S-0215 claim 24 states the same
   widening; its confidence there stays low (Q-1154 question 2, scenario B21 (d)).
 - S-0212 (claim 25 and table T5): the waiting-line approach of claim 4 is a single-cell user of the
-  nearby-cell search, with the settings of the idle harvester step-off row and the tick *N* taken as the
-  tick of the *enter* processing. S-0212 lists neither the user nor that tick. Add a T5 row and a
-  tick-list entry.
+  nearby-cell search, with the settings of the T5 row for the waiting absorber approach, and the tick *N*
+  is the tick of the *enter* processing (S-0212 lists that tick). The approach to the building uses the
+  same path computation as other moves, so it can fail where S-0212's short-line case (Q-1280) makes
+  that computation fail: a short line of buildings across the route with open ground round it.
 - S-0214's rows x and q, and row I13, are read here as "above 0" and "equal to 0" respectively. S-0214
   uses one phrase, "carries passengers" (rows x and q) and its negation "carries no passengers" (I13),
   and does not give a number. Confirm the reading.
@@ -185,7 +186,7 @@ S-0312 and S-0408 are made in the current drafts of those specs):
      while it holds no contact and remembers no object it is entering (an enter order on a
      building does not make an actor remember one), finds the building still
      in the game. The search is S-0212 claim 25's nearby-cell search, with the settings that its table
-     T5 row for the idle harvester step-off gives. Its centre is the cell of the building's reference
+     T5 row for the waiting absorber approach gives. Its centre is the cell of the building's reference
      point (the centre of its foundation, S-0204 claim 4), not its top-left cell and not S-0507
      claim 10's exit ring. The actor is judged by its own locomotion class, with *winged* counted as
      *track*, and the movement zone is its type's own, not *normal* and not simplified. The cell test
@@ -201,7 +202,9 @@ S-0312 and S-0408 are made in the current drafts of those specs):
      If a cell is found, the actor assigns it as its destination, queues *move* and starts it at
      once. If none is found (no cell qualifies within the search radius), the actor falls back to
      rest in that same processing, as in claim 5 (its destination was cleared when the wait began,
-     so nothing is kept): it stays where it is. The wait itself goes on: the building is still
+     so nothing is kept): it stays where it is. If the path to the found cell cannot be made (S-0212
+     claim 23: the unit does not move and its destination is cleared), the actor is in the same
+     position as when none is found and does the same. The wait itself goes on: the building is still
      remembered, the retry below still runs in each of the actor's turns, and the approach is not
      tried again, because no further *enter* processing follows while the wait lasts.
      So a unit waiting in line walks to a cell next to the building, then rests there by S-0215
@@ -223,7 +226,8 @@ S-0312 and S-0408 are made in the current drafts of those specs):
    capacity is checked again for every entrant that had to wait. The first entrant's capacity was
    checked only by the order's docking answer (claim 1, S-0214).
    - Backing: `measurable` (scenario A2, including an alliance ending during the wait). The
-     approach phase and the retry's start moment are `measurable` in scenario A2c.
+     approach phase and the retry's start moment are `measurable` in scenario A2c. The path-failure
+     outcome of the approach is `unmeasured`: no scenario here blocks the route to a found cell.
    - Confidence: high (re-check, order, retry position); medium (the approach phase, which rests
      on the actor having no remembered entry object; waiting after an owner change; the settings
      and tie choice of the search, which the original shares with the harvester step-off
