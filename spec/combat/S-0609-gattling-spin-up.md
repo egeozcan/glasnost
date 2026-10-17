@@ -2,7 +2,7 @@
 id: S-0609
 title: Gattling spin-up
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -465,8 +465,8 @@ Ordering consequences:
 
 ## Measurement scenarios
 
-All scenarios use a purpose-made test map, stock data otherwise, a scripted-input director and mods
-off, skirmish, game-speed index 2, 800 × 600, and one bystander computer player kept outside the
+All scenarios use a purpose-made test map, stock data otherwise, scripted input, no engine add-on and no mods
+(the named test files of a scenario excepted), skirmish, game-speed index 2, 800 × 600, and one bystander computer player kept outside the
 observed test area under the glossary's void rule. Use scripted normal input and a read-only
 recorder of tick, health, spin value, stage, behaviour and elapsed count. Request any needed
 recorder support from the user; do not alter the running game. Repeat each deterministic variant
