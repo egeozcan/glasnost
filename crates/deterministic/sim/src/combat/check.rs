@@ -307,6 +307,17 @@ pub fn check(
         // spec: S-0301 claim 9 rank 4 (most target tests give illegal)
         return Answer::Illegal;
     }
+    // spec: S-0301 claim 9 rank 4 and S-0610 claims 3 and 6 (a berserk-causing warhead against a psionics-immune type or a bunkered vehicle; a berserk firer against a berserk-friendly type: illegal)
+    if let Some(t) = target
+        && crate::psychic::firing_refused(
+            w,
+            firer,
+            r.combat.warhead_of(weapon).is_some_and(|h| h.psychedelic),
+            t,
+        )
+    {
+        return Answer::Illegal;
+    }
     if let Some(Target::Object(x)) = target
         && crate::superweapons::protected(w, x)
     {

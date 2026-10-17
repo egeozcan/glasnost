@@ -1796,3 +1796,21 @@ fn infiltration_announcement_lines() {
     );
     assert!(!announced(&mut a, 1000));
 }
+
+// spec: S-0610 claim 13 (the psychic reveal's activation sound plays at the target cell's centre for every player, the launching house's or not)
+#[test]
+fn psychic_reveal_sound() {
+    let mut r = ruleset();
+    r.sim.general.superweapons.psychic_reveal_activate_sound = Some("Whisper".into());
+    let w = testkit::game_with(&r, SIZE, 5);
+    let mut a = audio(&w, &["Whisper"]);
+    let mut u = Rng::new(1);
+    let fx = [Effect::Superweapon {
+        event: SwEvent::RevealSound,
+        house: Some(HouseId(1)),
+        sw: None,
+        pos: Some(Pos::centre(testkit::mid(SIZE, 0, 0), 0)),
+    }];
+    a.tick(&w, &fx, &mut u);
+    assert_eq!(heard(&mut a, 0), ["Whisper"]);
+}

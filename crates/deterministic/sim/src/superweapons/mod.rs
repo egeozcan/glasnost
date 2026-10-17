@@ -8,13 +8,14 @@
 //! is carried out by [`launch::fire`]. The effects are in [`protect`]
 //! (invulnerability and the force shield), [`nuke`], [`storm`], [`warp`]
 //! and [`planes`] (spy plane and the paradrop launch; the delivery is
-//! [`crate::paradrop`]).
+//! [`crate::paradrop`]); the psychic reveal is [`crate::psychic::reveal`].
 //!
 //! Seams to specs that are not built (each named where it is used):
 //! - S-0514 (chrono weapons): built in `crate::temporal`; [`being_erased`]
 //!   reads its locks. Units that cannot be teleported: [`warp::chrono_seam`];
-//! - S-0610, S-0611 and S-0612 (psychic reveal, genetic mutation, psychic
-//!   domination): [`launch::yuri_seam`];
+//! - S-0611 and S-0612 (genetic mutation, psychic domination):
+//!   [`launch::yuri_seam`]. The psychic reveal (S-0610 claims 13 to 15) is
+//!   [`crate::psychic::reveal`];
 //! - S-0510 (spy infiltration resetting the first superweapon):
 //!   [`charge::spy_reset`];
 //! - S-0601 (mind control refused by protection): [`protected`] is the
@@ -66,7 +67,7 @@ pub enum SwKind {
     Genetic,
     /// Force shield.
     ForceShield,
-    /// Psychic reveal (S-0610; not built).
+    /// Psychic reveal (S-0610 claims 13 to 15).
     PsychicReveal,
 }
 
@@ -249,6 +250,14 @@ pub struct SwRules {
     pub parachute: Option<String>,
     /// The parachute sound (S-0522 claim 9), when the rules name one.
     pub chute_sound: Option<String>,
+    /// The psychic reveal's radius in cells (S-0610 claim 14).
+    pub reveal_radius: i32,
+    /// The psychic reveal's activation sound (S-0610 claim 13), when the
+    /// rules name one.
+    pub reveal_sound: Option<String>,
+    /// The berserk tint's colour-adjustment table position (S-0610 claim
+    /// 7); presentation.
+    pub berserk_color: i32,
 }
 
 /// The fixed paradrop plane type name (S-0522 Import mapping).
@@ -574,6 +583,12 @@ impl SwRules {
             parachute: g.parachute.clone(),
             // spec: S-0522 Import mapping (ChuteSound absent: no sound)
             chute_sound: g.chute_sound.clone(),
+            // spec: S-0610 Import mapping and Constants (PsychicRevealRadius absent: 3 cells)
+            reveal_radius: g.psychic_reveal_radius.unwrap_or(3),
+            // spec: S-0610 Import mapping (PsychicRevealActivateSound absent: none)
+            reveal_sound: g.psychic_reveal_activate_sound.clone(),
+            // spec: S-0610 Import mapping and Constants (BerserkColor absent: table position 0)
+            berserk_color: g.berserk_color.unwrap_or(0),
         }
     }
 
@@ -1028,6 +1043,11 @@ pub enum SwEvent {
     Radar,
     /// The spy plane's camera sound.
     Camera,
+    /// The psychic reveal's activation sound at the target cell's centre,
+    /// positional, for every player (S-0610 claim 13). The launching
+    /// player's aiming mode ends and its pending ready announcement for the
+    /// record is cancelled with it (interface).
+    RevealSound,
     /// The teleport source marker over a picked source, for the launching
     /// player only (S-0513 claim 33).
     SourceMarker,

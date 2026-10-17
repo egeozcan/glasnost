@@ -46,6 +46,7 @@ pub mod parasite;
 pub mod passability;
 pub mod path;
 pub mod process;
+pub mod psychic;
 pub mod radiation;
 pub mod refresh;
 pub mod regions;

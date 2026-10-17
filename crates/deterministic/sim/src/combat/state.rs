@@ -90,8 +90,12 @@ pub struct CombatState {
     pub delay_kill_until: Option<i32>,
     /// Has a damage particle effect (S-0302 claim 13).
     pub damage_effect: bool,
-    /// Berserk until this tick (seam: no berserk warhead's start rule).
-    pub berserk_until: Option<i32>,
+    /// The berserk state and its remaining berserk time in countdown
+    /// updates (S-0610 claims 4 and 5, F2): `Some(t)` while berserk, even
+    /// when `t` is 0 or less (a hit with *T* ≤ 0 under
+    /// `quirks.berserk_zero_duration` stays berserk until the unit's next
+    /// countdown update); `None` when not berserk.
+    pub berserk: Option<i32>,
     /// The turret was turning at the end of the previous tick (S-0310
     /// claim 3).
     pub turret_was_turning: bool,
@@ -146,7 +150,7 @@ impl CombatState {
             killed: false,
             delay_kill_until: None,
             damage_effect: false,
-            berserk_until: None,
+            berserk: None,
             turret_was_turning: false,
             last_shot_target: None,
             hostile_hit: false,

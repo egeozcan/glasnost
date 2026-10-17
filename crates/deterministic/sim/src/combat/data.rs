@@ -536,6 +536,9 @@ pub struct TypeCombat {
     pub immune_poison: bool,
     /// Immune to psionics.
     pub immune_psionics: bool,
+    /// Berserk-friendly: a berserk unit may not fire at objects of this
+    /// type (S-0610 claim 6).
+    pub berserk_friendly: bool,
     /// Self-damage flag.
     pub damage_self: bool,
     /// Eligible damage particle systems (smoke), in list order.
@@ -1338,6 +1341,8 @@ pub fn type_combat(
         immune_psionic_weapons: b(c.immune_to_psionic_weapons),
         immune_poison: b(c.immune_to_poison),
         immune_psionics: b(c.immune_to_psionics),
+        // spec: S-0610 Import mapping (BerserkFriendly absent: no)
+        berserk_friendly: b(c.berserk_friendly),
         damage_self: b(c.damage_self),
         smoke_systems: c.damage_smoke_systems.clone().unwrap_or_default(),
         // spec: S-0312 Import mapping (MaxDebris, MinDebris absent: 0, 0)

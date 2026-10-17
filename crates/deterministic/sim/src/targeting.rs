@@ -487,9 +487,9 @@ fn infiltrator_entry(w: &World, actor: ObjectId, t: ObjectId) -> bool {
 // special-abilities topics: these seams keep the rows that read them in
 // place, and evaluate as the state is never present.
 
-/// Berserk (S-0213 Terms): no berserk-causing warhead before M4.
-fn berserk(_w: &World, _id: ObjectId) -> bool {
-    false
+/// Berserk (S-0213 Terms; S-0610 claims 4 and 5).
+fn berserk(w: &World, id: ObjectId) -> bool {
+    crate::psychic::berserk(w, id)
 }
 
 /// Melee-linked while the type lacks the keep-acting flag (S-0214 Terms,

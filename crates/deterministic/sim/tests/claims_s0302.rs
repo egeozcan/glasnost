@@ -1202,7 +1202,7 @@ fn berserk_world() -> (World, WarheadId, WarheadId) {
 }
 
 fn berserk_left(w: &World, id: ObjectId) -> Option<i32> {
-    w.obj(id).unwrap().combat.berserk_until.map(|u| u - w.tick)
+    w.obj(id).unwrap().combat.berserk
 }
 
 // spec: S-0302 claim 10 and Formulas (berserk duration: T is F3 at r = 0 of the defended amount; the hit changes no health and reports unchanged; a further hit sets the new T, even when shorter)

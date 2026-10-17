@@ -82,6 +82,12 @@ pub struct Uses {
     pub strikes: u32,
     /// Units sent to run over a crate (S-0520).
     pub crates: u32,
+    /// Units with a berserk weapon sent at an enemy group (S-0610).
+    pub berserks: u32,
+    /// Psychic sensors ordered (S-0610 claim 9).
+    pub sensors: u32,
+    /// Psychic reveals fired (S-0610 claims 13 to 15).
+    pub reveals: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -131,6 +137,7 @@ impl Special {
         self.linked(script, &own, w, out);
         self.terror(script, &own, w, out);
         self.crates(script, &own, w, out);
+        self.berserk(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -159,6 +166,21 @@ impl Special {
     /// Counts one charger sent at a building (S-0518, `linked`).
     pub(crate) fn count_charge(&mut self) {
         self.uses.charges += 1;
+    }
+
+    /// Counts one berserk-weapon unit sent at an enemy (S-0610, `psychic`).
+    pub(crate) fn count_berserk(&mut self) {
+        self.uses.berserks += 1;
+    }
+
+    /// Counts one psychic sensor ordered (S-0610, `psychic`).
+    pub(crate) fn count_sensor(&mut self) {
+        self.uses.sensors += 1;
+    }
+
+    /// Counts one psychic reveal fired (S-0610, `psychic`).
+    pub(crate) fn count_reveal(&mut self) {
+        self.uses.reveals += 1;
     }
 
     /// Counts one unit sent to a crate (S-0520, `crates`).

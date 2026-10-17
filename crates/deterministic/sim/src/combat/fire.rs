@@ -182,7 +182,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     crate::econ::shroud::fired(w, firer, &wr.name, target);
     let t = w.tick;
     let j = k + 1;
-    let berserk = o.combat.berserk_until.is_some_and(|u| t < u);
+    let berserk = o.combat.berserk.is_some();
     // spec: S-0301 claim 2 (the order of the delay kinds: 1-tick building, bare rate, in-burst, full)
     let d = if o.kind == Kind::Building && o.combat.ammo > 1 && q.building_ammo_fast_rearm {
         1 // spec: S-0301 claim 10 (a building holding more than 1 round: 1 tick, no draw)

@@ -774,3 +774,29 @@ fn zero_jumpjet_speed_and_turn_rate_warn() {
     assert_eq!(hits("JumpjetSpeed=0"), 1);
     assert_eq!(hits("JumpjetTurnRate=0"), 1);
 }
+
+// spec: S-0610 Import mapping (HasRadialIndicator, a building boolean, absent no; PsychicDetectionRadius, cells, absent 0; PsychicRevealRadius and BerzerkAllowed in [CombatDamage], PsychicRevealActivateSound and BerserkColor in [AudioVisual]; absent: no value)
+#[test]
+fn psychic_keys() {
+    let base = "[BuildingTypes]\n1=EYE\n2=HUT\n\
+                [EYE]\nPsychicDetectionRadius=7\nHasRadialIndicator=yes\n[HUT]\nStrength=10\n\
+                [CombatDamage]\nPsychicRevealRadius=4\nBerzerkAllowed=no\n\
+                [AudioVisual]\nPsychicRevealActivateSound=Hum\nBerserkColor=3\n";
+    let (s, _) = import(base, "");
+    assert_eq!(s.buildings["EYE"].econ.psychic_detection_radius, Some(7));
+    assert_eq!(s.buildings["EYE"].econ.has_radial_indicator, Some(true));
+    assert_eq!(s.buildings["HUT"].econ.psychic_detection_radius, None);
+    assert_eq!(s.buildings["HUT"].econ.has_radial_indicator, None);
+    let g = &s.general.superweapons;
+    assert_eq!(g.psychic_reveal_radius, Some(4));
+    assert_eq!(g.berzerk_allowed, Some(false));
+    assert_eq!(g.psychic_reveal_activate_sound.as_deref(), Some("Hum"));
+    assert_eq!(g.berserk_color, Some(3));
+    let (s, _) = import("[CombatDamage]\nBallisticScatter=1\n", "");
+    let g = &s.general.superweapons;
+    assert_eq!(
+        (g.psychic_reveal_radius, g.berzerk_allowed, g.berserk_color),
+        (None, None, None)
+    );
+    assert_eq!(g.psychic_reveal_activate_sound, None);
+}
