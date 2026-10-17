@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1350,7 +1350,7 @@ Absent rules defaults are `unmeasured`: T16/T21 use the stock imported fields, n
 ## Measurement scenarios
 
 **Common setup.** Unless a scenario says otherwise: standard skirmish mode, game speed index 3,
-800 × 600 pixels, director and mods off, no engine add-ons, and the measurement setup of the
+800 × 600 pixels, no engine add-on and no mods (the named test files of a scenario excepted), and the measurement setup of the
 glossary, with a purpose-made test map as named test data, removed after the run. The map is small and flat with two
 start waypoint markers. It is played as a skirmish of one human player at position A and one computer
 player at position B. The computer player is a bystander kept away from the observed area (the
@@ -1559,7 +1559,7 @@ or V is destroyed. Variant D (berserk protection): use the main-run setup, but m
 
 T9 variant E (cell attempts): on a small test map, put a cell tag on an intact high-bridge
 section, with entered-by −1 and the destroy-attached-objects action. No object carries
-that tag. Use stock data, director and mods off, one human and a bystander computer player
+that tag. Use stock data, no engine add-on and no mods (the named test files of a scenario excepted), one human and a bystander computer player
 kept outside the bridge and approach cells, game speed 2, and the bridge-destruction option
 off. Move a human vehicle onto the tagged deck cell. Record its arrival tick and the
 section's state with video and a read-only recorder; repeat three fresh runs.
@@ -1660,7 +1660,7 @@ before C's). Variant: W never. *Falsified if:* W drops only once, outside that r
 **Scenario T13 (claim 20).** *Setup:* small test maps with a low bridge and a high bridge,
 separately, along each axis. Tag the centre row and four neighbouring rows with distinct
 one-time bridge-destroyed tags and calibrated count actions; keep counters outside all
-collapse and weapon effects. Use stock data, director and mods off, game speed 2,
+collapse and weapon effects. Use stock data, no engine add-on and no mods (the named test files of a scenario excepted), game speed 2,
 one human and a bystander computer player kept outside the bridge and counters, with
 the glossary's void rule. Turn bridge destruction on. *Procedure:* destroy one interior
 low strip, or one high section. Repeat each layout three times with scripted input,
@@ -1932,7 +1932,7 @@ using named test maps removed afterwards.
   *Falsified if:* the extra comma disables it or prevents loading.
 
 **Scenario T25 (claim 19; Q-0510).**
-- *A, tagged passenger control:* common skirmish setup, speed index 3, director and mods off.
+- *A, tagged passenger control:* common skirmish setup, speed index 3, no engine add-on and no mods (the named test files of a scenario excepted).
   Pre-place one ordinary infantry unit with a fresh repeating tag whose only event is
   destroyed-by-anything and whose action counts on the calibrated durable counter. Its
   trigger owner country is unplayed; it has no timer or polling event. Load it into an
