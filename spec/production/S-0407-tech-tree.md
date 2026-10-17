@@ -2,11 +2,11 @@
 id: S-0407
 title: Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs)
 topic: production
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0191, Q-0196]
 supersedes: []
@@ -831,7 +831,7 @@ of the scenarios.
   sections set no tech level for any naval yard type. Verify that absence for all
   three yard types before selecting the map. Use standard skirmish mode,
   launched from the stock setup screen, with no setup-tool override. Use speed index 2,
-  800×600, crates off, director off and mods off. Run three fresh games, one human house
+  800×600, crates off, no engine add-on and no mods (the named test files of a scenario excepted). Run three fresh games, one human house
   from each side in turn, with a distant bystander computer player. Keep power sufficient
   and the relevant tab below capacity; use no captured override building or secret lab.
 - Procedure: build the imported prerequisites of that side's naval yard. After the next
