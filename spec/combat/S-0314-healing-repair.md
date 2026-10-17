@@ -2,11 +2,11 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794]
 supersedes: []
@@ -81,7 +81,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 - **Building repair.** The repair state of a building that its owner turns on and off with the
   repair order (S-0213, claim 13). It is separate from the repair steps of claims 3 to 7 (claim 8).
 - **Terms owned elsewhere.** *Radar event* (S-0011, claim 32), *rally point* (S-0213, claim 20),
-  *rate delay* and *processing* (S-0215, F1) are used as those specs define them.
+  *rate delay* and *processing* (S-0215, F1), and *overload pulse* and *unlimited controller* (S-0601,
+  Terms), are used as those specs define them.
 - **Automatic-repair hold.** A house-wide block on starting another building's repair, initially
   clear. An automatic start sets it; claim 15 gives its release. It does not stop repair already on.
 - **Repair reserve.** A game-wide integer number of credits (Import mapping), separate from the
@@ -377,7 +378,14 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    of the building repair period *P*<sub>b</sub> (Formulas F1), provided its health is not 0 and
    not equal to its strength. This holds for infantry, vehicles, aircraft and buildings while
    they take their ordinary object updates, and uses the same game-wide rate as building repair.
-   It is free. A vehicle, infantry unit or landed aircraft still in the superweapon warp's
+   It is free. Berserk plays no part: a berserk object heals as any other (S-0610 claim 6). For a berserk unit with
+   no overload pulse, the order of this healing against the berserk countdown within an update has no
+   observable effect, because self-healing reads no berserk state and the countdown reads no health
+   (S-0610 claim 6), so an engine may run them in either order. For an unlimited controller, the place of
+   the countdown step against its overload pulse and its heal is S-0601 claim 16's, and this claim adds no
+   order of its own. Backing for the order: `unmeasured` for a unit with no overload pulse, since no
+   observable depends on it, for the reason given; for an unlimited controller, as S-0601 claim 16 gives it.
+   Confidence: high for a unit with no overload pulse. A vehicle, infantry unit or landed aircraft still in the superweapon warp's
    leaving stage after its warp update skips this healing in that turn (S-0513 claim 48).
    In the original, pending alone does not establish that exclusion; other warp-turn
    continuation boundaries retain S-0513 claim 48's unresolved status.
@@ -415,6 +423,13 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       same way at multiples of the infantry self-heal interval *n*<sub>i</sub>, with the infantry
       total *T*<sub>i</sub>,
     - aircraft and buildings are not healed this way.
+
+    A berserk unit receives this healing like any other. For a berserk unit with no overload pulse, the
+    order of this healing against the berserk countdown within an update has no observable effect (S-0610
+    claim 6: none of the healing conditions reads the berserk state, and the countdown reads no health).
+    For an unlimited controller, the place of the countdown step is S-0601 claim 16's, as claim 9 says.
+    Backing: `unmeasured` for a unit with no overload pulse, for that reason; for an unlimited controller,
+    as S-0601 claim 16 gives it.
 
     This healing requires reaching ordinary update work too: the still-leaving-stage
     exclusion of claim 9 and S-0513 claim 48 applies equally to it. In our engine,
