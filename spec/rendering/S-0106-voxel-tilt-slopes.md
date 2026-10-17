@@ -2,11 +2,11 @@
 id: S-0106
 title: Slope shapes, terrain surface height and voxel tilt on slopes
 topic: rendering
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -625,8 +625,8 @@ All run under the glossary's measurement setup with stock data, on purpose-made 
 theater whose tileset data includes slope tiles of every shape used (the tilesets of the theater's
 ramp roles, S-0010 claims 4 and 11). A test cell's slope shape is the one it holds after the map is
 loaded, that is, after the ramp smoothing of S-0010 claims 11 and 12. A *recorder* that reads an object's world position (x, y, height) is used where stated.
-Game speed 2, resolution 800 × 600, director and mods off except for the explicitly named
-test data. The observed area is the test cells and routes; one bystander computer player is kept
+Game speed index 2, resolution 800 × 600 pixels, director and mods off except for the explicitly named test data and the purpose-made test maps.
+The observed area is the test cells and routes; one bystander computer player is kept
 outside it, with the glossary's void rule. Manual play or scripted input and tick-indexed image
 capture are used.
 *Runs:* one per scenario part and control, except T6 uses one per named locomotor,
