@@ -2,13 +2,13 @@
 id: S-0605
 title: Infantry absorber (who may enter an absorbing building, entry, holding, release)
 topic: structures
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
-requests: [Q-1260, Q-1261, Q-1262, Q-1263, Q-1264, Q-1265, Q-1266, Q-1267]
+requests: [Q-1260, Q-1261, Q-1262, Q-1263, Q-1264, Q-1265, Q-1266, Q-1267, Q-1152]
 supersedes: []
 ---
 
@@ -63,6 +63,10 @@ S-0312 and S-0408 are made in the current drafts of those specs):
   (claim 15 below).
 - S-0215 claim 24's "already bound" test (for *enter*: in contact with that building) is widened by
   claim 16's *Found* step to a unit already waiting in line for it. S-0215 names contact only.
+- S-0212 (claim 25 and table T5): the waiting-line approach of claim 4 is a single-cell user of the
+  nearby-cell search, with the settings of the idle harvester step-off row and the tick *N* taken as the
+  tick of the *enter* processing. S-0212 lists neither the user nor that tick. Add a T5 row and a
+  tick-list entry.
 - S-0214's rows x and q, and row I13, are read here as "above 0" and "equal to 0" respectively. S-0214
   uses one phrase, "carries passengers" (rows x and q) and its negation "carries no passengers" (I13),
   and does not give a number. Confirm the reading.
@@ -97,6 +101,9 @@ S-0312 and S-0408 are made in the current drafts of those specs):
   variant (f), tests it. Claim 16 reads the list.
 - **Contact, enter-nearest instruction.** As in S-0215 (Terms). An actor in contact with a
   building holds one of its link places (claim 3, F2).
+- **Search terms.** *Reach region*, *deck mode*, *preferred cell*, *height condition*, *further test*
+  and *no-overlay condition* are used here as S-0212 (Terms and claim 25) defines them. None is a glossary
+  term, and this spec does not restate them.
 
 ## Behaviour
 
@@ -176,9 +183,26 @@ S-0312 and S-0408 are made in the current drafts of those specs):
    - *Approach.* The actor's first processing of *enter* (S-0215 claim 29) after the wait began,
      while it holds no contact and remembers no object it is entering (an enter order on a
      building does not make an actor remember one), finds the building still
-     in the game. It chooses a free location near the building's centre cell, of the kind the
-     actor's own movement class can stand on (the nearby-location search of claim 12; its exact
-     tie-breaks are open), assigns it as its destination, queues *move* and starts it at once.
+     in the game. The search is S-0212 claim 25's nearby-cell search, with the settings that its table
+     T5 row for the idle harvester step-off gives. Its centre is the cell of the building's reference
+     point (the centre of its foundation, S-0204 claim 4), not its top-left cell and not S-0507
+     claim 10's exit ring. The actor is judged by its own locomotion class, with *winged* counted as
+     *track*, and the movement zone is its type's own, not *normal* and not simplified. The cell test
+     uses the reach region of the centre cell for that zone. When the actor is on a bridge deck, that
+     reach region is read for the deck and the search runs in deck mode. No height condition, no further
+     test and no no-overlay condition applies, and bridge cells may serve. There is no reference cell, so
+     the result is the preferred cell at zero-based position *N* mod *n* (S-0212 claim 25), in exact
+     integer arithmetic, where *N* is the tick number of the *enter* processing that makes the search and
+     *n* is the preferred-sequence length, a centre collected twice taking two positions. The cells of the
+     building itself, and every cell whose occupancy record is not empty (a unit, a building, or a standing
+     position taken by another actor, S-0212 claim 25), never qualify. The search takes no random draw.
+
+     If a cell is found, the actor assigns it as its destination, queues *move* and starts it at
+     once. If none is found (no cell qualifies within the search radius), the actor falls back to
+     rest in that same processing, as in claim 5 (its destination was cleared when the wait began,
+     so nothing is kept): it stays where it is. The wait itself goes on: the building is still
+     remembered, the retry below still runs in each of the actor's turns, and the approach is not
+     tried again, because no further *enter* processing follows while the wait lasts.
      So a unit waiting in line walks to a cell next to the building, then rests there by S-0215
      claims 13 and 14. The waiting itself does not end.
    - *Retry.* In each of its own turns, after its behaviour processing and its movement, an actor
@@ -200,7 +224,9 @@ S-0312 and S-0408 are made in the current drafts of those specs):
    - Backing: `measurable` (scenario A2, including an alliance ending during the wait). The
      approach phase and the retry's start moment are `measurable` in scenario A2c.
    - Confidence: high (re-check, order, retry position); medium (the approach phase, which rests
-     on the actor having no remembered entry object; waiting after an owner change)
+     on the actor having no remembered entry object; waiting after an owner change; the settings
+     and tie choice of the search, which the original shares with the harvester step-off
+     (S-0212 table T5), and are not yet separately measured; the no-result outcome)
 
 5. **Refused loading and missing contact at an *enter* processing.** At each processing of
    *enter* (S-0215 claim 29) an actor that holds contact, or remembers an object it is entering,
@@ -527,7 +553,8 @@ serving direction is 5: the passenger appears in (*x*₀ − 1, *y*₀ + 1) and 
 | same | grant, loading refused (switched off) | contact given up; destination kept; no contact |
 | same | contact not granted | no waiting; destination kept; no contact |
 | *enter* current, no contact, no remembered entry object, not waiting | processing | falls back to rest at once, destination kept, *move* queued; never goes in |
-| waiting in line | first *enter* processing | free cell near the building as destination, *move* queued and started |
+| waiting in line | first *enter* processing, cell found | free cell near the building as destination, *move* queued and started |
+| waiting in line | first *enter* processing, no cell found | falls back to rest in that processing; stays where it is; still waiting, and the retry goes on |
 | waiting in line | own turn, contact granted, acceptance test accepts | *enter* queued with immediate start, destination = the building, waiting ends |
 | waiting in line | own turn, contact granted, acceptance test refuses | contact given up, none queued, destination cleared, waiting ends |
 | waiting in line | own turn, contact not granted | keeps waiting, asks again next turn |
@@ -702,7 +729,13 @@ current. *Expected:* the second walks to a free cell next to the building and re
 In the first turn after the place is free it queues *enter* with an immediate start, and *enter*
 is current in that turn or the next ready moment. Staying where it was ordered until the place is
 free falsifies the approach phase. *enter* starting only one or more turns after readiness
-falsifies the start moment. Repeat with a vehicle and a vehicle absorber or a depot (S-0314
+falsifies the start moment. *Search variants* (Q-1152): (i) surround the building so that exactly
+one cell next to it is free, and start the waiting unit on each side in turn: it walks to that cell
+whichever side it starts on (a different or farther choice falsifies the centre or settings); (ii)
+leave two equally near free cells, repeat over several ordering ticks: the cell chosen varies
+with the tick as *N* mod *n* of S-0212 claim 25 (always the same cell falsifies the tie rule); (iii)
+block every cell within the search radius: the unit stays where it is, rests, and still goes in when
+the place is free (walking, or an end of the wait, falsifies the no-result outcome). Repeat with a vehicle and a vehicle absorber or a depot (S-0314
 claim 23).
 
 **A3. Entry tick** (claims 6 and 7). A map trigger "entered by" on the building. Order one infantry
@@ -876,9 +909,6 @@ about situations that nothing in the game reaches.
 - Does target-only entry leave a mission target that opens foundation cells on release (claim 12)?
 - Exact vehicle placement-search ties and combinations with other loading or unload features
   remain unspecified.
-- The nearby-location search (claims 4 and 12, and S-0507's settling): which free cell it picks near
-  the building's centre cell, and its ties, are not specified by any approved spec. Which spec owns it
-  is a lead decision.
 - Where an entrant's walk ends after it lost its contact (claim 5), and whether *move* or the
   per-tick start takes over before the walk ends: S-0215 claims 8 and 11 decide, and scenario A6
   records it.
