@@ -9,7 +9,10 @@
 //! Scenes now (S-0610, psychic weapons): a unit with a berserk weapon turns
 //! an enemy vehicle berserk among its fellows; a psychic sensor shows the
 //! hostile-intent line of an enemy heading into its reach; a psychic reveal
-//! uncovers an area of a shrouded map.
+//! uncovers an area of a shrouded map. S-0601 (mind control): a
+//! controller takes an enemy vehicle over (the link line and the ring),
+//! then a second, and its death releases both; an unlimited controller
+//! taken past its overload counts pulses.
 //!
 //! Run with `cargo test --release -p glasnost-app --test m7a_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -43,6 +46,8 @@ const SCENES: &[Scene] = &[
     ("berserk", berserk_spreads),
     ("sensor", sensor_shows_intent),
     ("reveal", psychic_reveal),
+    ("mind", mind_control),
+    ("overload", mind_overload),
 ];
 
 #[test]
@@ -315,6 +320,164 @@ fn psychic_reveal(lane: &mut Lane) {
     lane.save("reveal-after");
     lane.ticks(60);
     println!("explored cells 60 ticks later: {}", explored(lane.world()));
+}
+
+/// The first unit type (infantry, then vehicles) whose primary weapon has a
+/// takeover warhead and whose unlimited-control flag is `unlimited`.
+fn controller_type(w: &World, unlimited: bool) -> Option<(Kind, String)> {
+    let r = w.rules();
+    (0..r.infantry.len())
+        .map(|i| (Kind::Infantry, i as u32))
+        .chain((0..r.vehicles.len()).map(|i| (Kind::Vehicle, i as u32)))
+        .find(|&(k, i)| {
+            r.unit(k, i).is_some_and(|u| {
+                u.combat.slots[0].is_some_and(|p| {
+                    let wr = r.combat.weapon(p);
+                    wr.infinite_mind_control == unlimited
+                        && wr.warhead.is_some_and(|h| r.combat.warhead(h).mind_control)
+                })
+            })
+        })
+        .map(|(k, i)| (k, r.unit(k, i).map(|u| u.name.clone()).unwrap_or_default()))
+}
+
+/// S-0601 claims 1 to 7, 9, 17 and 18: a controller of the local house is
+/// ordered (by the click a person gives) at an enemy vehicle; the vehicle
+/// changes sides and shows its ring; a second enemy vehicle is put beside
+/// it and taken (a capacity-1 controller lets the first go, claim 7); with
+/// the controller selected the link line is drawn; the controller is
+/// removed and its victim goes back to its owner.
+fn mind_control(lane: &mut Lane) {
+    let w = lane.world();
+    let ctrl = controller_type(w, false);
+    let victim = plain_vehicle(w);
+    println!(
+        "controller type found: {}, enemy vehicle type found: {}",
+        ctrl.is_some(),
+        victim.is_some()
+    );
+    let (Some((kind, cname)), Some(vname)) = (ctrl, victim) else {
+        return;
+    };
+    let local = lane.local();
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let c = lane.spawn(kind, &cname, local, CellXY::new(spot.x - 3, spot.y));
+    // One enemy vehicle at a time, so the controller lives to take the next.
+    let mut vs: Vec<ObjectId> = vec![lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(spot.x + 1, spot.y))];
+    let rec = glasnost_sim::mind::controller(lane.world(), c).map(|r| (r.capacity, r.unlimited));
+    println!("controller record (capacity, unlimited): {rec:?}");
+    lane.look_at(spot);
+    lane.ticks(4);
+    lane.save("mind-before");
+    let mut taken = Vec::new();
+    for n in 0..2 {
+        if n == 1 {
+            let v = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(spot.x + 1, spot.y + 2));
+            vs.push(v);
+        }
+        let v = vs[n];
+        let sent = lane.order(local, c, ClickOn::Object(v));
+        println!("click on enemy vehicle {n}: {sent} orders");
+        for t in 0..600 {
+            lane.ticks(1);
+            if glasnost_sim::mind::controlled_by(lane.world(), v) == Some(c) {
+                println!("vehicle {n} taken after {t} ticks; owner is the local house {}", lane.world().obj(v).is_some_and(|o| o.owner == Some(local)));
+                taken.push(v);
+                break;
+            }
+        }
+        lane.ticks(3);
+        if let Some(at) = lane.world().obj(v).map(|o| o.pos.cell()) {
+            lane.look_at(at);
+            lane.ticks(1);
+        }
+        if n == 0 {
+            lane.save("mind-taken");
+        } else {
+            lane.save("mind-second");
+        }
+    }
+    println!(
+        "controller alive {} (health per mille {})",
+        lane.world().obj(c).is_some(),
+        lane.permille(c)
+    );
+    for (n, &v) in vs.iter().enumerate() {
+        let w = lane.world();
+        println!(
+            "vehicle {n}: exists {}, local {}, controlled by the controller {}",
+            w.obj(v).is_some(),
+            w.obj(v).is_some_and(|o| o.owner == Some(local)),
+            glasnost_sim::mind::controlled_by(w, v) == Some(c)
+        );
+    }
+    let lines = glasnost_sim::mind::link_lines(lane.world()).len();
+    let rings = vs.iter().filter(|&&v| glasnost_sim::mind::ring(lane.world(), v).is_some()).count();
+    println!("link lines {lines}; rings {rings}; taken in turn {}", taken.len());
+    lane.c.session.as_mut().unwrap().play.selection = vec![c];
+    if let Some(at) = lane.world().obj(c).map(|o| o.pos.cell()) {
+        lane.look_at(at);
+    }
+    lane.ticks(1);
+    lane.save("mind-link-selected");
+    glasnost_sim::objects::remove(lane.world_mut(), c);
+    lane.ticks(3);
+    let back = taken
+        .iter()
+        .filter(|&&v| lane.world().obj(v).is_some_and(|o| o.owner == Some(enemy)))
+        .count();
+    println!("controller removed: {back} of {} back with their owner", taken.len());
+    lane.save("mind-released");
+}
+
+/// S-0601 claim 16: an unlimited controller is given (by the takeover
+/// itself) more victims than its overload counts allow; the pulses are
+/// counted and its health followed.
+fn mind_overload(lane: &mut Lane) {
+    let w = lane.world();
+    let ctrl = controller_type(w, true);
+    let victim = plain_vehicle(w);
+    println!(
+        "unlimited controller type found: {}, enemy vehicle type found: {}",
+        ctrl.is_some(),
+        victim.is_some()
+    );
+    let (Some((kind, cname)), Some(vname)) = (ctrl, victim) else {
+        return;
+    };
+    let local = lane.local();
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let c = lane.spawn(kind, &cname, local, CellXY::new(spot.x - 4, spot.y));
+    let counts = lane.world().rules().combat.general.mind.overload_count.clone();
+    let n = counts.iter().copied().max().unwrap_or(0).max(0) as usize + 2;
+    let n = n.min(12);
+    let mut held = 0;
+    for i in 0..n {
+        let at = lane.open_land(CellXY::new(spot.x + (i % 4) as i32 * 2, spot.y + (i / 4) as i32 * 2));
+        let v = lane.spawn(Kind::Vehicle, &vname, enemy, at);
+        held += usize::from(glasnost_sim::mind::take(lane.world_mut(), c, v));
+    }
+    println!("victims taken directly: {held} (overload counts list length {})", counts.len());
+    lane.c.session.as_mut().unwrap().play.selection = vec![c];
+    lane.look_at(spot);
+    let start = lane.permille(c);
+    lane.ticks(2);
+    lane.save("mind-overload");
+    let mut low = start;
+    for _ in 0..300 {
+        lane.ticks(1);
+        if lane.world().obj(c).is_none() {
+            println!("the controller died of overload at tick {}", lane.world().tick);
+            break;
+        }
+        low = low.min(lane.permille(c));
+    }
+    println!("controller health per mille: start {start}, lowest {low}");
+    lane.save("mind-overload-later");
 }
 
 // ---------------------------------------------------------------------------
