@@ -2,11 +2,11 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707]
 supersedes: []
@@ -764,8 +764,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     it places after the hit follow the hit's death effects. In particular, death debris is not
     the same ordering milestone as incoming-warhead debris.
 
-    For infantry, aircraft and buildings, a known attacker gives three raises with codes
-    outside S-0011's subset before the destroyed-by-anything raise. Without an attacker those
+    For infantry, aircraft and buildings, a known attacker gives three raises before the
+    destroyed-by-anything raise; the first of them, code 6, is inside S-0011's subset and the
+    other two, codes 4 and 7, are outside it. Without an attacker those
     three are absent, but destroyed-by-anything still occurs. If the object still carries the
     tag, one further raise with a code outside that subset follows. S-0011 owns each raise's
     evaluation, latches, actions and tag detachment; a raise that detaches the tag prevents
