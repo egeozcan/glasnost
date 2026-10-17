@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 34
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -76,6 +76,9 @@ phases. Their backing, confidence and proposed measurements remain those of the 
   S-0213, claim 11). The combat specs own its countdown and its damage.
 - **Kamikaze.** An aircraft enrolled for the shared repeated attack orders of S-0506 claim 26.
   The shared cycle is distinct from a spawn controller's launch pass in its spawner's turn.
+- **Unlimited mind controller.** An unlimited controller as S-0601 defines it: a controller whose
+  primary weapon has the unlimited-control flag. Its overload countdown counts its overload updates,
+  which are its own updates, not ticks (S-0601 claim 16).
 - **Storm bolt.** One lightning bolt of the storm that the weather superweapon calls down around
   its target. The superweapon specs own where and when bolts fall and what they damage.
 - **Disc laser.** The ring of laser beams that a weapon with that property in the rules data forms
@@ -383,7 +386,9 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    processing, movement, firing, turret turning, ordinary cloak updates, ammunition
    reload updates and firing-frame advancement, attached parasite steps, the member's
    economy and power work, depot queued-entry retries, expected-health turn bookkeeping,
-   protection-brightness phase processing and the berserk countdown (S-0610 claim 5). In arrival hold, including its expiry turn, the hold-end test precedes all these ordinary opportunities, each still subject
+   protection-brightness phase processing, the berserk countdown (S-0610 claim 5) and the
+   overload update of an unlimited mind controller (S-0601 claim 16), whose countdown and
+   pulse timing stay as they are through the warp, because they count the controller's overload updates, not ticks (S-0601 claim 16). No step is made up later. In arrival hold, including its expiry turn, the hold-end test precedes all these ordinary opportunities, each still subject
    to its own eligibility. No deferred ordinary updates are replayed in a catch-up burst.
    Launch immediately clears the old path, queued destinations and driving step; none
    resumes after the warp. Target and current destination retain claim 48's leaving-stage
@@ -404,6 +409,7 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    - Backing for this contract: `measurable` in our engine (S-0513 scenario SW23 part f). For
      the berserk countdown in warp, which S-0513 does not mention, the backing is S-0610
      scenario P9 part e, also measurable in our engine (S-0610 claim 5).
+     The overload update in warp is a design rule of our engine, `measurable` in our engine (SW23 part f, which the Measurement scenarios extend to the overload countdown).
      The original-side gaps retain claim 48's `unmeasured` backing. The original's behaviour
      in the warp updates other than the leaving stage is an open question of S-0610
    - Confidence for this contract: high as design; low for matching the original's
@@ -892,7 +898,7 @@ immediate route clearing, the whole-ordinary-turn exclusion through arrival effe
 preserved intrinsic warp effects and elapsed clocks, and ordinary eligibility after the
 hold-end test without catch-up updates. This includes the additional operations in claim 4,
 not only healing, behaviour, movement, firing and turret turning. A contrary event falsifies the engine contract,
-not claim 48's explicitly unresolved original-side continuation.
+not claim 48's explicitly unresolved original-side continuation. For an unlimited mind controller in the warp (a named test type whose remaining overload countdown is smaller than the warp's ticks, so that a countdown counted in ticks would reach zero during the warp), record its overload countdown and each pulse check per tick from the first pending update through the first ordinary update after the hold-end test. Expected: the countdown and pulse timing do not change during the warp, and countdown steps and pulse checks resume with the first ordinary update after the hold-end test, with no step made up later. Falsified if a countdown step or pulse check occurs before the hold-end test, or a step is made up later.
 
 **Shared kamikaze boundary (claim 1, row 17).** S-0506 scenario R21 supplies the setup,
 procedure, sub-tick observables and falsifiers for same-tick aircraft access to the assigned
