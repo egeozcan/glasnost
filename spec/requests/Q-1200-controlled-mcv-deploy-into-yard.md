@@ -1,9 +1,9 @@
 ---
 id: Q-1200
 title: May a mind-controlled construction vehicle deploy into a construction yard
-status: open
+status: answered
 related: [S-0601, S-0214, S-0415]
-answered-by: []
+answered-by: [S-0601]
 ---
 
 ## Need

@@ -259,3 +259,33 @@ fn the_protection_envelope_waits_for_the_hold_but_its_duration_elapses() {
     });
     assert!(rose_in_hold, "the hold permits the phase processing");
 }
+
+#[test]
+fn berserk_countdown_is_ordinary_work_of_the_warp_turn() {
+    // spec: S-0610 claim 5 (warp-only updates: no countdown step from the first pending update through arrival effects, none made up later, the remaining time kept; in arrival hold one step in each update after the hold-end test) and F2; S-0203 claim 4 (revision 34: the berserk countdown is among the suppressed ordinary work); S-0513 claims 39 and 51 (revision 15: the leaving stage, wait-expiry update included, takes no step)
+    let (mut w, a) = launched();
+    warp(&mut w, at(0, 0), at(5, 5));
+    assert_eq!(stage(&w, a), Some(Stage::Pending));
+    w.obj_mut(a).unwrap().combat.berserk = Some(1000);
+    let mut last = 1000;
+    let mut hold_ticks = 0;
+    let mut saw_expired = false;
+    each_tick(&mut w, a, |w, a, s| {
+        let left = w.obj(a).unwrap().combat.berserk.expect("still berserk");
+        match s {
+            Some(Stage::Hold(_)) => {
+                hold_ticks += 1;
+                assert_eq!(left, last - 1, "one step per hold update");
+            }
+            Some(st) => {
+                saw_expired |= st == Stage::Expired;
+                assert_eq!(left, last, "no step in {st:?}");
+            }
+            None => unreachable!(),
+        }
+        last = left;
+    });
+    assert!(saw_expired, "the wait-expiry update was a warp-only update");
+    assert!(hold_ticks >= 2, "the hold lasts several turns");
+    assert_eq!(last, 1000 - hold_ticks, "no catch-up");
+}

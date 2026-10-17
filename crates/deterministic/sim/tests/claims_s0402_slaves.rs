@@ -1059,6 +1059,8 @@ fn claim_26_slave_processing_capacity() {
         let s = on_map(&w, b)[0];
         if let Some(o) = w.obj_mut(s) {
             o.dest = None;
+            // A slave in harvest (the emerged slave's queued guard may already be current through the late start, S-0215 claim 11 revision 57, and queuing the current behaviour changes nothing, claim 7).
+            o.beh.current = Some(Behaviour::Harvest);
             o.beh.queued = None;
         }
         let c = w.obj(s).unwrap().pos.cell();
@@ -1108,7 +1110,11 @@ fn s0312_claim_31_removed_master() {
         assert!(!slaves::is_slave(&w, s));
         assert_eq!(o.target, None);
         assert_eq!(o.dest, None);
-        assert_eq!(o.beh.queued, Some(Behaviour::Guard));
+        // Guard queued; S-0215 claim 7: a slave whose current behaviour is already guard (the late start of its emerging update, claim 11 revision 57) keeps it with nothing queued.
+        assert!(
+            o.beh.queued == Some(Behaviour::Guard)
+                || (o.beh.current == Some(Behaviour::Guard) && o.beh.queued.is_none())
+        );
         assert_eq!(
             o.infantry.as_ref().unwrap().seq,
             Some(glasnost_sim::infantry::Seq::Cheer)

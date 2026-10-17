@@ -144,9 +144,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     crate::combat::acquire::expected_health_turn(w, id);
     // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
     crate::superweapons::protect::tint_turn(w, id);
-    // spec: S-0610 claim 5 and F2 (a berserk unit's remaining time goes down by 1 in each of its own updates; its place in the turn is an interim rule of Q-1180: after the bookkeeping, before self-healing and behaviour processing)
-    crate::psychic::countdown_turn(w, id);
-    // spec: S-0601 claim 16 (an unlimited controller's overload update in its own turn; its place in the turn is an interim rule of Q-1201: right after the berserk countdown)
+    // The berserk countdown (S-0610 claim 5) runs in the behaviour part, after the first per-tick start (`process::turn`).
+    // spec: S-0601 claim 16 (an unlimited controller's overload update in its own turn; its place in the turn is an interim rule of Q-1201: after the bookkeeping, before self-healing)
     crate::mind::overload_turn(w, id);
     // spec: S-0504 claim 4 (a sinking vessel's own update first descends, and may leave play at once)
     if crate::naval::sinking_turn(w, id) {
@@ -264,6 +263,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     };
     // spec: S-0507 claim 15 (whenever the transport moves to a new position, its passengers' positions become its position at once); S-0314 claim 23 (with the position change, before the queued-entry retry)
     crate::transport::sync(w, id);
+    // spec: S-0215 claim 11 (the late start of an infantry unit or vehicle: after this update's movement, before its separate firing; a tunnel, erasing, leaving-stage or warp-only update never gets here, claim 2 and S-0513 claim 51)
+    process::late_start(w, id);
     if kind == Kind::Vehicle && !crate::teleport::phasing_in(w, id) {
         // spec: S-0314 claim 23 (the queued-entry retry, once per ordinary living vehicle turn, after that turn's locomotor movement, self-healing and due behaviour processing; not before movement and not an extra behaviour processing; skipped, the queued entry kept, only while chrono phase-in is still active, not for a hold, pulse disable, deactivation, lift or locomotor replacement; before the attached parasite's step)
         crate::depot::vehicle_turn(w, id);
