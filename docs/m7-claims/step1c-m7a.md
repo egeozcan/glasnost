@@ -1,17 +1,17 @@
 # M7a step 1c claim ledger (spec revisions that landed on main after f368516)
 
-This is part 3 of M7a step 1. Each spec is compared with the revision the code had taken in. The old state is the spec file at f368516 (`git diff f368516 96cf909 -- spec/<path>`); the intermediate revisions are listed for each spec. Every changed claim gets one class, as in [step1b-m7a.md](step1b-m7a.md):
+This is part 3 of M7a step 1. Each spec is compared with the revision the code had taken in. The old state is the spec file at f368516 (`git diff f368516 96cf909 -- spec/<path>`; the three later hand-offs S-0601 revision 10, S-0011 revision 24 and S-0609 revision 4 came in with a merge of main at 8f5b743, `git diff 96cf909 8f5b743 -- spec/<path>`); the intermediate revisions are listed for each spec. Every changed claim gets one class, as in [step1b-m7a.md](step1b-m7a.md):
 - *satisfied*: already true, with the test that shows it;
 - *changed*: code changed, with the test;
 - *pointer*: the claim only points at another spec's claim;
 - *not built*: with the reason (a claim for a part not built yet);
 - *(c)*: editorial (front matter, scenario text, rewording, backing and confidence).
 
-Per-spec ledgers: [S-0601.md](S-0601.md), [S-0610.md](S-0610.md), [../m6-claims/S-0509.md](../m6-claims/S-0509.md), [../m6-claims/S-0513.md](../m6-claims/S-0513.md), [../m4-claims/S-0312.md](../m4-claims/S-0312.md) and [../m4-claims/S-0314.md](../m4-claims/S-0314.md). S-0011, S-0203, S-0214, S-0215, S-0701 and the glossary have no ledger of their own.
+Per-spec ledgers: [S-0601.md](S-0601.md), [S-0610.md](S-0610.md), [../m6-claims/S-0509.md](../m6-claims/S-0509.md), [../m6-claims/S-0513.md](../m6-claims/S-0513.md), [../m4-claims/S-0312.md](../m4-claims/S-0312.md) and [../m4-claims/S-0314.md](../m4-claims/S-0314.md), [S-0609.md](S-0609.md). S-0011, S-0203, S-0214, S-0215, S-0701 and the glossary have no ledger of their own.
 
 | Spec | Revision | Commits | Answers |
 |---|---|---|---|
-| S-0601 mind control | 9 (from 5; 6 f46469c, 7 db03e3b, 8 aa32cfa, 9 96cf909) | f368516 | Q-1200, Q-1201, Q-1202, Q-1203 |
+| S-0601 mind control | 10 (from 5; 6 f46469c, 7 db03e3b, 8 aa32cfa, 9 96cf909, 10 79ea771) | f368516 | Q-1200, Q-1201, Q-1202, Q-1203 |
 | S-0610 psychic weapons | 9 (from 8, ea2fdab) | f368516 | Q-1166 question 2 |
 | S-0215 behaviours | 59 (from 57; 58 a75a9ac, 59 dd1a9a9) | f368516 | Q-1166 question 1 |
 | S-0203 tick order | 35 (from 34, 9e8a158) | f368516 | (with S-0601) |
@@ -20,7 +20,8 @@ Per-spec ledgers: [S-0601.md](S-0601.md), [S-0610.md](S-0610.md), [../m6-claims/
 | S-0312 death and destruction | 30 (from 29, da73feb) | f368516 | (with S-0011) |
 | S-0314 healing and repair | 23 (from 22, 3a4729b) | f368516 | (with S-0610) |
 | S-0513 superweapon effects | 17 (from 15; 16 9ae47f5, 17 313a784) | f368516 | (with S-0601) |
-| S-0011 map triggers (MP subset) | 23 (from 21; 22 924e86d, 23 016cbd3) | f368516 | (with S-0601, Q-1203) |
+| S-0011 map triggers (MP subset) | 24 (from 21; 22 924e86d, 23 016cbd3, 24 93dbe6b) | f368516 | (with S-0601, Q-1203) |
+| S-0609 gattling spin-up | 4 (from 3, 8f5b743) | f3d24e1 | Q-1220 (in part) |
 | S-0701 sound selection | 17 (from 15; 16 1d760c8, 17 1cfca36) | f368516 | (with S-0601) |
 | Glossary | 44 (from 43, b5bb9e7) | f368516 | none |
 
@@ -30,6 +31,8 @@ Requests:
 - **Q-1201** (answered by S-0601 revision 9 claim 16). Interim: after the bookkeeping, before self-healing, also while being erased. Now after the first per-tick start and the berserk countdown, before self-healing, behaviour, movement and firing, in the countdown's updates only.
 - **Q-1202** (answered by S-0601 revision 9 claim 8). The interim (an absent mark never selects its table) becomes the design rule; the importer warning is new.
 - **Q-1203** (answered by S-0601 revision 9 claim 5 and S-0509 revision 6 claim 12). Interim: events 6 and 44 were raised but not judged (only an any-event trigger fired), and a taken building made no announcement. Now both events are judged (S-0011 claim 8) and the building announces on takeover and release.
+- **Q-1220** (answered by S-0609 revision 4, items 1 and 2). The interim rules (negative settings used as 0, saturating spin arithmetic and elapsed-tick count) become the spec's Edge cases rules, which the spec still marks as proposed pending the lead's decision; the code already did this, so only the citations and warning texts change, plus a saturation test. Item 3 (a later layer lowering the stage count below 2) stays open in the spec: filed as Q-1151.
+- **Q-1151** (new, filed here). Interim rule, kept from Q-1220's: while the stage count in force is below 2 the held thresholds are not used (all 0), and the importer warns.
 - **Q-1150** (new, filed here). The default position of `quirks.removed_tag_attack_event` is the original's fault, which our engine cannot reproduce. Interim rule: in both positions event 44 is raised only if the target still carries a tag after the event-6 raise, and then on that tag.
 
 Save format: unchanged (no new state). AI game format: unchanged. Hashes: the turn order of unlimited controllers, their erasure exclusion and the late start's fall-back change the course of games, so the sim-gate goldens are regenerated on this branch.
@@ -71,6 +74,12 @@ Save format: unchanged (no new state). AI game format: unchanged. Hashes: the tu
 | Edge cases (three new bullets) | changed | as claims 5, 8 and 15. |
 | Import mapping, the two marks' absent default | changed | as claim 8. |
 | MC1, MC3, MC7, MC8, MC9, MC11, MC12, MC13 wording; MC14 (new); Open questions; Changes named for other specs; Questions for the project lead | (c) | MC14 parts a and b are mirrored by the claim 5 and claim 16 tests above. The lead's question on the quirk is Q-1150's subject. |
+
+## S-0601 revision 10
+
+| Claim | Class | Notes |
+|---|---|---|
+| Terms, *house-order position* replaced by *house number* (S-0009 Terms, from 0); MC14 wording | (c) | The code already uses the house number (`HouseId.0`). |
 
 ## S-0610 revision 9
 
@@ -164,3 +173,22 @@ Save format: unchanged (no new state). AI game format: unchanged. Hashes: the tu
 | *freeze, timed freeze, stand-still* (new) | pointer | S-0201; no code change. |
 | *vehicle thief*: may also take a vehicle-like building as any infantry | pointer | S-0509 claim 17; no code change. |
 | Questions for the project lead (*director*) | (c) | |
+
+## S-0011 revision 24
+
+| Claim | Class | Notes |
+|---|---|---|
+| Open questions: the hand-off of the attack-event judging removed | (c) | |
+
+## S-0609 revision 4 (answers Q-1220 items 1 and 2)
+
+| Claim | Class | Notes |
+|---|---|---|
+| Header (`requests` gains Q-1220), approval date | (c) | |
+| Formulas preamble: under the Edge cases rules F1, F2 and F4 see non-negative inputs and every product, sum and elapsed count lies in 0 … 2³¹ − 1 | satisfied | `gattling::f1`, `f2` and `elapse` use saturating arithmetic on clamped settings. `saturation_at_the_32_bit_bound`. |
+| Constants, the saturation bound 2³¹ − 1 | satisfied | `i32::MAX` through `saturating_*`. |
+| Edge cases, *Stage count 0 or 1 from creation*: a layered reduction below 2 after thresholds were populated, no result established | not built (open) | Q-1151 interim: the thresholds are not used; the importer warns (`gattling_spin_settings`). |
+| Edge cases, *Negative settings are used as 0*, with an importer warning for each; a wrapped integer likewise; the clamp applies to the imported value, so an omitting later layer keeps 0 | satisfied | `SpinType::from_fields` clamps the stage count, amounts and thresholds at 0; the importer warns for each negative value. Clamping the value in force rather than the imported value gives the same result, because an omitting layer keeps the held value and the held value is clamped when used. `spin_type_from_fields`, `gattling_spin_settings`. |
+| Edge cases, *Saturation* (products, sums, the elapsed-tick count; a saturated value stays; the count stays until its reset) | satisfied | `saturation_at_the_32_bit_bound` (new test). |
+| Import mapping: negative values used as 0 with a warning; the layered reduction is an open question | satisfied / not built (open) | as above. |
+| Questions for the project lead | (c) | Items 1 and 2 restate the proposed rules; item 3 is Q-1151. |
