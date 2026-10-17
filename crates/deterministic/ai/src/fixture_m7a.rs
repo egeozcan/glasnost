@@ -19,8 +19,9 @@
 //! - Alpha only (S-0609, S-0601): GATV (a gattling vehicle whose six
 //!   stage slots hold the weapons SPIN0 … SPIN2, built at the war
 //!   factory), GATB (a gattling defence building) and TAKER (a rifleman
-//!   whose weapon THRALL has the takeover warhead MIND, capacity 4). Its
-//!   victims are Beta's units, none psionics-immune. A skirmish drops
+//!   whose weapon THRALL has the takeover warhead MIND, capacity 4,
+//!   range 2). Its victims are Beta's units, none psionics-immune. A
+//!   skirmish drops
 //!   the structures a map gives a player's house (S-0009 claim 27), so the
 //!   houses start with units only.
 //!
@@ -241,7 +242,7 @@ pub fn ruleset() -> Ruleset {
         WeaponType {
             damage: Some(4),
             rof: Some(60),
-            range: Some(d("3")),
+            range: Some(d("2")),
             speed: Some(100),
             projectile: Some("Bullet".into()),
             warhead: Some("MIND".into()),
@@ -251,7 +252,7 @@ pub fn ruleset() -> Ruleset {
     let mut taker = r.sim.infantry["WALKER"].clone();
     taker.primary = Some("THRALL".into());
     taker.secondary = None;
-    taker.cost = Some(300);
+    taker.cost = Some(200);
     taker.econ.required_houses = only("Alphaland");
     register(&mut r, "infantry", "TAKER");
     r.sim.infantry.insert("TAKER".into(), taker);

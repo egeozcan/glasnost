@@ -75,12 +75,12 @@ pub const M6C_TICKS: i32 = 12_000;
 /// Seed of the M7a duel. Moved from 1 at M7a step 3.3 (S-0609), when the
 /// Yuri-style house was given a gattling vehicle and defence and a mind
 /// controller: over the sweep of seeds 1 to 16 (`m7a_seed_sweep`) every
-/// counter but one is then at least 4 in every seed (the psychic sensor
-/// orders stay 2 in every seed, one per house, as the AI orders a sensor
-/// only when the house has none), but the Yuri-style house wins 7 of the
-/// 16 games before the full run ends, seed 1 among them, and the full run
-/// must play all its ticks. Seed 2 is the first that does, so it is kept,
-/// and nothing more (see `docs/development.md`, *Determinism gate*).
+/// counter but one is then at least 3 in every seed (the psychic sensor
+/// orders stay 2, one per house, as the AI orders a sensor only when the
+/// house has none), but the Yuri-style house wins 7 of the 16 games
+/// before the full run ends (seed 1 among them with an earlier tuning),
+/// and the full run must play all its ticks. Seed 2 does in every tuning
+/// tried, so it is kept, and nothing more (see `docs/development.md`, *Determinism gate*).
 pub const M7A_SEED: u32 = 2;
 
 /// Ticks of the full run of the M7a duel.
