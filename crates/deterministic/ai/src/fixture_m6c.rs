@@ -7,23 +7,34 @@
 //! the abilities' behaviour comes from the specs the sim crate cites, and
 //! this file only supplies the types and the places.
 //!
-//! - Infantry (none of them can be built; each house starts with them on the
-//!   map, in a row south of its start): GARRI (occupier), ENGI (engineer),
-//!   SPYU (spy), JETI (an armed jumpjet unit), DEPI (deploys to fire), RADI
-//!   (the same, immune to radiation, with a radiation weapon in its second
-//!   slot), ERAS (a temporal beam), ZAPR (an electric charger), PLNT (plants
-//!   bombs), DISA (disarms them), KAMI (a suicide weapon), SABO (explosive
-//!   charges); DECOY, an unarmed unit of the *other* house on an islet.
+//! - Infantry (each house starts with them on the map, in rows south of its
+//!   start; the barracks builds the armed ones too): GARRI (occupier), ENGI
+//!   (engineer), SPYU (spy), JETI and JET2 (armed jumpjet units, built
+//!   only), DEPI (deploys to fire), RADI (the same, immune to radiation,
+//!   with a radiation weapon in its second slot), ERAS (a temporal beam),
+//!   ZAPR (an electric charger), PLNT (plants bombs), DISA (disarms them),
+//!   KAMI (a suicide weapon), SABO (explosive charges); DECOY, an unarmed
+//!   unit of the *other* house on an islet.
 //! - Vehicles: DEPT (deploys in place), FIRE (deploys to fire), DESIG (an
-//!   air-strike designator); STRK, its strike aircraft.
+//!   air-strike designator), DISV (a disarmer that deploys into a
+//!   building); STRK, the strike aircraft; HULK, an unarmed, sturdy, costly
+//!   vehicle of the *other* house near each start whose armour only the
+//!   temporal, bomb and disarm warheads touch, so that the erasers and bomb
+//!   planters have a target from the start, the house that owns it a bomb
+//!   to disarm, and the armies leave it alone.
 //! - Buildings: PRSM (the prism type, also overpowerable, built by the AI),
 //!   HUT (a civilian garrison building), DERR (a tech building that pays,
-//!   held by the neutral house); the fixture's POWR, PILL and FACT are
-//!   spyable, and an infantry unit of the house may enter them.
+//!   held by the neutral house), SPYB (a spyable neutral power building);
+//!   the fixture's POWR, PILL, FACT and PROC are spyable.
 //! - Map: [`fixture::map`]'s flat ground with the starts at ±[`START_DX`], an
 //!   islet of three by three land cells ringed by water two cells wide
 //!   north of each start (a walking unit cannot reach it), holding the other
-//!   house's DECOY, and the neutral house's HUT and DERR near each start.
+//!   house's DECOY, the other house's two HULKs toward the middle, and the
+//!   neutral house's two HUTs, two DERRs and two SPYBs near each start.
+//!
+//! The counts of each start unit and the HULKs were chosen (M7a step 2b)
+//! so that every counter of the gate's M6c duel has a margin over a seed
+//! sweep (`m6c_seed_sweep` in `crates/sim-gate/tests/m6c.rs`).
 //! - Crates: the setting is on, with the power-up table of money only.
 
 use std::sync::Arc;
@@ -204,6 +215,11 @@ pub fn ruleset() -> Ruleset {
         t.jumpjet = Some(true);
         t.jumpjet_height = Some(300);
     });
+    // A second jumpjet type, so that the army builder (fewest on the map
+    // first) builds another one while the first still flies.
+    let jet2 = r.sim.infantry["JETI"].clone();
+    register(&mut r, "infantry", "JET2");
+    r.sim.infantry.insert("JET2".into(), jet2);
     infantry(&mut r, "DEPI", |t| {
         t.deployer = Some(true);
         t.deploy_fire = Some(true);
@@ -404,6 +420,35 @@ pub fn ruleset() -> Ruleset {
         },
     );
 
+    // The hulk: an unarmed, sturdy and costly vehicle of each house that
+    // stands near the other's start (pre-placed buildings of a player's
+    // house are dropped in a skirmish, S-0009 claim 27, units are kept).
+    // Its own house has no use for it (unarmed, it is no army unit); the
+    // other house sees it from the start.
+    let mut hulk = r.sim.vehicles["GUNR"].clone();
+    hulk.primary = None;
+    hulk.secondary = None;
+    hulk.strength = Some(2000);
+    hulk.cost = Some(1000);
+    hulk.speed = Some(1);
+    hulk.tech_level = Some(99);
+    hulk.owner = None;
+    // Its armour class (the last) is one that only a temporal beam, a
+    // bomb planter and a disarmer affect: every other warhead has a versus
+    // value of zero there, so no other weapon may fire at it (S-0304
+    // claim 1) and the armies leave it to the special units.
+    hulk.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special2);
+    veh(&mut r, "HULK", hulk);
+    for (n, h) in r.sim.warheads.iter_mut() {
+        if ["TICK", "IVAN", "DISARM"].contains(&n.as_str()) {
+            continue;
+        }
+        let v = h.verses.get_or_insert_with(|| vec![d("1"); 11]);
+        if let Some(last) = v.get_mut(10) {
+            *last = d("0");
+        }
+    }
+
     // The decoy: an unarmed infantry unit.
     infantry(&mut r, "DECOY", |t| t.primary = None);
 
@@ -414,7 +459,7 @@ pub fn ruleset() -> Ruleset {
     // order them. The jumpjet unit is built and leaves its barracks by its
     // ascent (S-0417 claim 15, which answers Q-1070).
     for n in [
-        "GARRI", "JETI", "DEPI", "RADI", "ERAS", "ZAPR", "PLNT", "DISA", "KAMI", "SABO",
+        "GARRI", "JETI", "JET2", "DEPI", "RADI", "ERAS", "ZAPR", "PLNT", "DISA", "KAMI", "SABO",
     ] {
         if let Some(t) = r.sim.infantry.get_mut(n) {
             t.tech_level = Some(1);
@@ -480,11 +525,12 @@ fn placed(owner: &str, ty: &str, c: CellXY, key: usize) -> Placed {
 
 /// The infantry each house starts with, in placement order, then the
 /// vehicles.
-const INFANTRY: [&str; 16] = [
-    "GARRI", "GARRI", "ENGI", "SPYU", "JETI", "DEPI", "RADI", "ERAS", "ZAPR", "ZAPR", "PLNT",
-    "PLNT", "DISA", "KAMI", "KAMI", "SABO",
+const INFANTRY: [&str; 27] = [
+    "GARRI", "GARRI", "GARRI", "GARRI", "ENGI", "ENGI", "ENGI", "SPYU", "SPYU", "SPYU", "DEPI",
+    "RADI", "RADI", "ERAS", "ERAS", "ERAS", "ZAPR", "ZAPR", "PLNT", "PLNT", "PLNT", "PLNT", "DISA",
+    "DISA", "KAMI", "KAMI", "SABO",
 ];
-const VEHICLES: [&str; 4] = ["DEPT", "FIRE", "DESIG", "DISV"];
+const VEHICLES: [&str; 5] = ["DEPT", "FIRE", "DESIG", "DESIG", "DISV"];
 
 /// The scenario's map.
 pub fn map() -> Map {
@@ -543,13 +589,22 @@ pub fn map() -> Map {
             sub_cell: 2,
         });
         key += 1;
-        // The neutral house's buildings, either side of the start.
         let side = dx.signum();
+        // The other house's hulks on this start's side toward the middle.
+        for oy in [-3, 0] {
+            m.objects.units.push(Unit {
+                placed: placed(other, "HULK", at(dx - side * 6, oy), key),
+            });
+            key += 1;
+        }
+        // The neutral house's buildings, either side of the start.
         for (ty, (ox, oy)) in [
             ("HUT", (side * 5, -2)),
             ("HUT", (side * 5, 1)),
             ("DERR", (side * 7, 4)),
+            ("DERR", (side * 9, 1)),
             ("SPYB", (side * 8, -2)),
+            ("SPYB", (side * 8, 7)),
         ] {
             m.objects.structures.push(Structure {
                 placed: placed("Neutral", ty, at(dx + ox, oy), key),

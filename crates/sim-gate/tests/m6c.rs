@@ -58,3 +58,52 @@ fn try_seeds() {
         );
     }
 }
+
+/// The margins of the M6c duel over a range of seeds
+/// (`GLASNOST_SWEEP=1-16 cargo test --release -p glasnost-sim-gate --test m6c m6c_seed_sweep -- --ignored --nocapture`):
+/// per counter of `Exercise::counters` the minimum, median and maximum over
+/// the seeds, and per seed the counters below 3. Runs eight seeds at a time.
+#[test]
+#[ignore = "a sweep of whole games; set GLASNOST_SWEEP=<from>-<to>"]
+#[allow(clippy::disallowed_methods, clippy::disallowed_macros)] // a local diagnostic: reads the host environment and prints, no simulation
+fn m6c_seed_sweep() {
+    let range = std::env::var("GLASNOST_SWEEP").unwrap_or_else(|_| "1-16".into());
+    let (a, b) = range.split_once('-').expect("GLASNOST_SWEEP=<from>-<to>");
+    let (a, b): (u32, u32) = (a.parse().expect("from"), b.parse().expect("to"));
+    let seeds: Vec<u32> = (a..=b).collect();
+    let mut runs: Vec<(u32, usize, m6c::Exercise)> = Vec::new();
+    for chunk in seeds.chunks(8) {
+        let hs: Vec<_> = chunk
+            .iter()
+            .map(|&s| std::thread::spawn(move || (s, m6c::play(s, M6C_TICKS))))
+            .collect();
+        for h in hs {
+            let (s, (hashes, _, ex)) = h.join().expect("the run finished");
+            runs.push((s, hashes.len(), ex));
+        }
+    }
+    for (s, n, ex) in &runs {
+        let low: Vec<String> = ex
+            .counters()
+            .iter()
+            .filter(|&&(_, v)| v < 3)
+            .map(|&(name, v)| format!("{name} = {v}"))
+            .collect();
+        let least = ex.counters().iter().map(|&(_, v)| v).min().unwrap_or(0);
+        println!("seed {s}: {n} ticks, smallest counter {least}, below 3: {low:?}");
+    }
+    let names = runs[0].2.counters().map(|(name, _)| name);
+    let mut worst = u32::MAX;
+    for (i, name) in names.iter().enumerate() {
+        let mut v: Vec<u32> = runs.iter().map(|(_, _, ex)| ex.counters()[i].1).collect();
+        v.sort_unstable();
+        worst = worst.min(v[0]);
+        println!(
+            "{name}: min {} median {} max {}",
+            v[0],
+            v[v.len() / 2],
+            v[v.len() - 1]
+        );
+    }
+    println!("smallest minimum over {} seeds: {worst}", runs.len());
+}
