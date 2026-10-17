@@ -167,10 +167,10 @@ pub fn plain_pitch(p: F32, tau: F32, mode: Rounding) -> F32 {
 pub fn raw_atan(u: F64, mode: Rounding) -> F64 {
     // spec: S-0204 F3 (σ = 3276705 / 2^27)
     let sigma = F64::from_parts(false, 3276705, -27, Rounding::TowardZero);
-    // spec: S-0506 F6 (i = |trunc(RZ₅₃(u / σ))|; the sign from RZ₂₄(u); T(i) for i ≤ 4096, else the single π/2)
+    // spec: S-0506 F6 (the entry numbered by |trunc(RZ₅₃(u / σ))|, selected before the sign is narrowed; the sign from RZ₂₄(u); past the last entry of S-0204 claim 13's 4097-entry table, the single π/2)
     let i = u.div(sigma, mode).trunc_i128().map(i128::unsigned_abs);
     let mag = match i {
-        Some(i) if i <= 4096 => F32(glasnost_num::tables::RAW_ATAN[i as usize]).to_f64(), // spec: S-0506 F6 and S-0204 claim 13 (the exact raw T(i) for i ≤ 4096)
+        Some(i) if i <= 4096 => F32(glasnost_num::tables::RAW_ATAN[i as usize]).to_f64(), // spec: S-0506 F6 and S-0204 claim 13 (the exact raw entry; the table's 4097 entries are numbered 0 to 4096)
         _ => half_pi().to_f32(mode).to_f64(),
     };
     if u.to_f32(mode).to_f64().is_sign_negative() {
