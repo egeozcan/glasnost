@@ -2,11 +2,11 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 19
+revision: 20
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0061, Q-0079, Q-0162]
 supersedes: []
@@ -1816,7 +1816,7 @@ set in the test map's override sections.
   *X* while *X* is in the air within its range, or has no target after that search.
 - *Part n (uncontested arrival, Q-0162 questions 1 to 3):* a tiny flat skirmish map, one
   human-owned ordinary armed infantry unit and one ordinary armed vehicle, tested separately,
-  plus one bystander computer player kept away. Stock types, director and mods off, game speed
+  plus one bystander computer player kept away. Stock types, no engine add-on and no mods (the named test files of a scenario excepted), game speed
   6, no routes, guard spot, contact, deployment or enemy within the traversed search area.
   Script an attack move to an empty cell. Record position, movement, current destination,
   target, memory, engaged mark, current and queued behaviour, processing timer and targeting
@@ -2078,7 +2078,7 @@ set in the test map's override sections.
   flags without changing anything else. *Expected:* *Y*, because current slot 0 now suppresses
   *X*. Candidate-specific suppression predicts the opposite pair. *Falsified if:* either
   qualifying pick differs; a search after firing or a stage or number change does not decide.
-  Parts c and d use game speed 6, director and mods off except named test-map overrides,
+  Parts c and d use game speed 6, no engine add-on and no mods (the named test files of a scenario excepted),
   the common bystander void rule, and three fresh runs per setting.
 
 **A11: map-wide search (claims 1, 7, 11, 22).**
@@ -2247,7 +2247,7 @@ range; the part says which object.
 - *Part o (0 health, row "exists"):* on a tiny flat skirmish test map, put a stock building
   whose type has the explodes flag in the human house, and an armed ground searcher of the
   neutral house in *guard* nearby. Keep the bystander computer player's objects away from the
-  observed area. Use game speed 6, with director and mods off, and target, health and tick
+  observed area. Use game speed 6, with no engine add-on and no mods (the named test files of a scenario excepted), and target, health and tick
   recorders. The neutral searcher avoids the human owner's harmless-building rejection; choose
   positions where the living building passes every other candidate row and is picked in a
   control run. In the test run, destroy the building by a separate human-owned unit's
@@ -2353,12 +2353,12 @@ claims give for a human-controlled owner. Target recorder in every part.
   Run 3 (draining without a target): let a neutral-house drainer, placed over an enemy drainable building of the human house, acquire it automatically and form a drain link (S-0608 claims 1 and 2). Once the attempt clears its target and it is in *guard*, have a
   human-owned anti-air attacker damage it from beyond its weapon range but within its sight.
   Record the link, target, behaviour and attacker's distance at the hit and the target after
-  it. Void and repeat if the Disc has acquired any target before the hit, its link has ended,
+  it. Void and repeat if the drainer has acquired any target before the hit, its link has ended,
   or another retaliation condition of claim 18 or S-0215 claim 18 fails. Control: the same
-  targetless Disc in *guard*, not draining, attacked from the same distance. Run each three
-  times under the general setup. *Expected:* the draining Disc keeps no target and does not
+  targetless drainer in *guard*, not draining, attacked from the same distance. Run each three
+  times under the general setup. *Expected:* the drainer, while draining, keeps no target and does not
   retaliate; the control takes the attacker as its target. With no held target, the threat-sum
-  comparison does not apply. *Falsified if:* the draining Disc retaliates or the control does
+  comparison does not apply. *Falsified if:* the drainer, while draining, retaliates or the control does
   not, with the stated conditions satisfied.
 - *Part g (enemy walls, (i)):* the test rules set the destroy-walls flag in every difficulty row
   (so the result does not depend on the house's row). A vehicle of the neutral house in *guard*,
@@ -2447,7 +2447,7 @@ different health ratios; for distance use different distances.
   replaces 0 by the default then in force. Control: omit that later section and ensure no other
   intermediate section reads it; the pick follows 0.
 - *Observable/tool:* record the first chosen target with the read-only recorder, using scripted
-  hunt orders, game speed 2, director and mods off except the named test files. Keep bystander
+  hunt orders, game speed 2, no engine add-on and no mods (the named test files of a scenario excepted). Keep bystander
   activity away from the test area under the common void rule. *Falsified if:* any valid run's
   first target differs from F4 with the coefficient stated above. On our engine repeat with
   `quirks.coefficient_zero_replaced` off: runs 1 to 4 all retain 0 unless a layer explicitly
@@ -2456,7 +2456,7 @@ different health ratios; for distance use different distances.
 
 **A17: charging break-off search and targeting timer (claim 1).** Use S-0518 scenario TC3's
 infantry charging setup on a tiny flat skirmish map, one human house and one bystander computer
-player kept away. Game speed 6, director and mods off except named test-map overrides. Use an
+player kept away. Game speed 6, no engine add-on and no mods (the named test files of a scenario excepted). Use an
 ordinary, non-distributed-fire infantry charger that passes claims 2 and 3, with no attack-move
 memory. Give the normal targeting delay a large test value so that several attack processings
 occur before it expires. Record current behaviour, charging mark, target, targeting timer and
