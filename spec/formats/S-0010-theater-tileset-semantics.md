@@ -2,7 +2,7 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1288,8 +1288,8 @@ Keys of other files that this spec uses:
 
 ## Measurement scenarios
 
-All run under the glossary's measurement setup, with the director and mods off, with stock data
-on purpose-made test maps (one
+All run under the glossary's measurement setup, with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
+with stock data on purpose-made test maps (one
 theater, stated per scenario, chosen by the measurer from the theaters whose data has the roles the
 scenario needs). Where a scenario names test files, they are loose files (S-0005) documented with
 the scenario, and everything else stays stock. Screenshots are compared with the stock tile images,
@@ -2041,8 +2041,9 @@ tileset decides.
   type using a stock sprite, enough passes to remain visible throughout the test, and no
   damaging or terrain-changing effects. Add the local-area resize action of S-0524 claim 8
   at tick 30, enlarging the area while leaving the observed tile well inside both rectangles.
-  Use game speed 6, one human house and one bystander computer player kept away; director
-  and mods off except these named test data. Run once with the action and once without it.
+  Use game speed 6, one human house and one bystander computer player kept away; no engine
+  add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
+  Run once with the action and once without it.
   *Procedure and observable:* capture video with tick numbers around tick 30, tracking the
   animation's image frame and pass count, not its screen position if the view moves.
   *Expected:* its playback continues across the resize as in the control, without an extra
@@ -2124,7 +2125,7 @@ inconclusive.
 
 ## Cross-spec changes to confirm
 
-No cross-spec changes remain to confirm against the approved revisions reviewed for this scrub. S-0211 claim 5 includes the game-start recalculation and the relevant move trigger; S-0202 claim 14 states the game-start animation-draw ordering; S-0410 scenario R6 part D uses S-0010 claim 13's ordinary variant pattern; S-0103 defines terrain animations to include those started when terrain is set up or a cell is recalculated in play; and S-0009 claims 6 and 8 defer the picture rule to S-0010 claim 24.
+Named change to confirm: the approved specs whose measurement-setup sentence uses the older wording of the condition are reworded to this spec's wording ("no engine add-on and no mods, the named test files of a scenario and the purpose-made test maps excepted") in the lead's round-114 sweep (lead decision 2026-10-17); this spec makes no change to them. The statements below confirm unchanged claims: S-0211 claim 5 includes the game-start recalculation and the relevant move trigger; S-0202 claim 14 states the game-start animation-draw ordering; S-0410 scenario R6 part D uses S-0010 claim 13's ordinary variant pattern; S-0103 defines terrain animations to include those started when terrain is set up or a cell is recalculated in play; and S-0009 claims 6 and 8 defer the picture rule to S-0010 claim 24.
 
 ## Questions for the project lead
 
