@@ -1,9 +1,9 @@
 ---
 id: Q-1265
 title: Does an absorbing building count as carrying passengers for the transport cursor rows
-status: open
+status: answered
 related: [S-0605, S-0214]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need

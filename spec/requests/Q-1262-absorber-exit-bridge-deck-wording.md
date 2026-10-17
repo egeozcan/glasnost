@@ -1,9 +1,9 @@
 ---
 id: Q-1262
 title: Which bridge-deck neighbour at the eighth direction ends an absorbing building's exit search
-status: open
+status: answered
 related: [S-0605, S-0507]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need

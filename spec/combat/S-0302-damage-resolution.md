@@ -2,11 +2,11 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648]
 supersedes: []
@@ -632,7 +632,7 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       number of elapsed ticks. S-0610 claim 5 owns expiry's target loss and queued behaviour.
       Such a hit
       reports *unchanged*, but it sets off none of the reactions that claim 12 ties to a result: no
-      trigger event of the target's tag, no damage effect or removal of one (claim 13), no loss of a
+      trigger event of the target's tag, no damage effect or marking of one (claim 13), no loss of a
       disguise (D23, part f). In the three excepted cases nothing happens and the hit reports
       *unaffected*. A further berserk hit on a target that is already berserk sets the remaining
       time to the new *T*, even when that is shorter. A berserk hit is not stopped by the stage 4
@@ -734,7 +734,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     −10 leptons (the glossary's surface includes a bridge deck when the object is on it).
     The eligible entries are the particle system types of the list whose behaviour is *smoke* (Import mapping); a draw of *k* picks the (*k* + 1)-th eligible
     entry counted from the end of the list, so a draw of 0 picks the last one. After a hit that
-    leaves the health ratio above the yellow ratio, an existing damage particle effect is removed.
+    leaves the health ratio above the yellow ratio, an existing damage particle effect is marked (S-0616 claims 1 and 22): the object keeps it, and
+    makes no new one, until that system leaves play.
     This includes healing hits and hits that the stage 4 rows of claim 8 stop (no health on a target
     that is not a building, immune to all damage, zero amount), but not hits that its stage 1 to 3
     rows stop, and not berserk hits.
@@ -771,14 +772,15 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     - Backing: `measurable` (scenario D11 for the damage effect; D22 for the draw, the eligibility
       by behaviour and the counting from the end of the list, by replay of the recorded
       stream; scenario D18 for the building fires and their draws, by replay of the recorded stream and by
-      counts, with the zero-size foundation in its fourth run; D27 for the removal of an effect by a
+      counts, with the zero-size foundation in its fourth run; D27 for the marking of an effect by a
       healing hit); `unmeasured` (the depth limit of
       10 leptons below the surface: which objects can be that deep while they take a hit that
-      crosses a threshold is not known, so no scenario can set the case up; the removal of an
-      effect by a hit that its stage 4 rows stop, and the absence of removal for hits that its
+      crosses a threshold is not known, so no scenario can set the case up; the marking of an
+      effect by a hit that its stage 4 rows stop, and the absence of marking for hits that its
       stage 1 to 3 rows stop and for berserk hits: these differ from the plain case only for an
-      object whose health ratio is above the yellow ratio while it still has the effect, which a
-      hit never leaves behind (a healing hit removes the effect itself), so only something that
+      object whose health ratio is above the yellow ratio while it still has an unmarked effect,
+      which no hit not stopped by stage 1 to 3 rows leaves behind, since such a hit marks the
+      effect itself, so only something that
       raises health without a hit, such as the repair of S-0314, could set it up, and what that
       does to the effect is not known; cell lists and draw order for foundation words other
       than the 2 × 2, 8-cell 3 × 3 and zero-size words: D18 supplies no run for them. Also unmeasured is
@@ -791,8 +793,8 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
       the counting from the end of the list; the building fires and their draws, including the
       position of the loop draws and the cells of every non-zero foundation word and their order,
       row by row and within a row by increasing map *x*; the zero-size foundation's lack of
-      cells; the removal by a healing hit); low (the depth limit,
-      the removal and non-removal by the hits listed as unmeasured, and the original's
+      cells; the marking by a healing hit); low (the depth limit,
+      the marking and non-marking by the hits listed as unmeasured, and the original's
       short-list outcome). Which of *W* and *H* is
       which does not matter to the range.
 
@@ -1929,12 +1931,14 @@ parts use their stated replay checks and rejection thresholds instead.
   to its own type, healed by another unit of that type of the same owner: +20; the invulnerable
   vehicle of D6: healed (as D6 already says). *Falsified if* any heal happens in (a) to (d)
   where none is expected, or none in the expected cases of (b), (c) and (e).
-- **D27 (claim 13: removal of the damage effect).** D11 part a's test map (yellow ratio 0.75, red ratio
+- **D27 (claim 13: marking of the damage effect).** D11 part a's test map (yellow ratio 0.75, red ratio
   0.25) and a stock vehicle type whose list has exactly one smoke particle system (so the draw's
   outcome is fixed; strength set to 1000). Hits of 100 take it to 400 (the effect appears, D11).
   A healing weapon of damage −100 (versus 100 %) then raises it to 700 in three hits: the effect is
-  still there. A fourth healing hit takes it to 800 (ratio 0.8, above the yellow ratio): the effect disappears at that hit.
-  *Falsified if* the effect disappears at 700, or is still there at 800.
+  still there. A fourth healing hit takes it to 800 (ratio 0.8, above the yellow ratio): the effect is marked at that hit,
+  so it emits no more particles and no new effect starts; the system leaves play only once it holds no
+  particle, which the recorder reads over the following ticks. *Falsified if* the effect is marked at 700,
+  or still emits after the hit to 800, or a new effect appears.
 
 - **D28 (claim 20: terrain objects).** A test map with test terrain types of strength 100 and
   the armour class *wood*, standing in open cells, and a test vehicle of strength 1000 next to

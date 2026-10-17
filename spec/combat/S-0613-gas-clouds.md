@@ -2,7 +2,7 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -40,8 +40,12 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 
 - **Particle system.** A world object that owns an ordered list of particles and takes one turn per
   tick (S-0203 claim 2). It has a *held type* (the particle type its warhead-made first particle
-  has), a *behaviour kind*, an owner house (possibly none) and a *system lifetime* in ticks, where
+  has; see *Empty-named type*), a *behaviour kind*, an owner house (possibly none) and a *system lifetime* in ticks, where
   −1 means it never times out.
+- **Empty-named type.** The particle type whose name is the empty string. A particle system type
+  section read without a held-type key names it as its held type (S-0616 claim 21; the absent-key
+  rule of S-0004 claim 2). It has no behaviour kind and the absent-key defaults of any particle
+  type. A system type that is never read has no held type at all.
 - **Gas particle.** A particle whose type has the gas behaviour kind. Its state is a position
   (integer leptons), an integer velocity (*v*ₓ, *v*ᵧ, *v*_z) in leptons per tick, a stored
   horizontal *deflection* (*d*ₓ, *d*ᵧ) in single-precision leptons, a remaining lifetime *E* in
@@ -119,13 +123,16 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 
 4. **First particle of a warhead's particle system.** When a detonation creates a particle system
    (S-0303 claim 20), one particle of the system's held type, when named, is created in it at once,
-   at the detonation point *P* (subject to claim 5's terrain floor). Without a held type no first
-   particle appears. This initial request holds for every system behaviour kind, not just gas.
+   at the detonation point *P* (subject to claim 5's terrain floor). A system type section that is
+   read without the held-type key names the empty-named type (Terms), so it does get a first
+   particle, of that type (S-0616 claim 21). Only a system type whose section is never read has no
+   held type and gets no first particle. This initial request holds for every system behaviour kind,
+   not just gas.
    A system takes the lifetime of its type, which is −1 unless the rules give one. A gas-behaviour
    system with unlimited lifetime stays inert after its last particle is gone.
    Every system, whatever its kind, takes a turn each tick, and claim 17 gives what is common
    to all kinds: the system lifetime and when a system leaves play. How the smoke, fire, spark
-   and railgun kinds emit and move their particles is outside this spec (Open questions).
+   and railgun kinds emit and move their particles is given by S-0616 (claims 5 to 18).
    - Backing: `measurable` (scenario G3 for the first particle; scenario G13, part b, for the turns
      of each kind)
    - Confidence: high
@@ -273,8 +280,11 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 
 17. **System lifetime and leaving play.** This holds for every system, whatever its behaviour
     kind (also none). After the kind's own turn work (for a gas system: both passes of claim 6),
-    the system lifetime, a signed integer count of turns, goes down by 1, whatever its value. The
-    system is marked to end in the turn in which the result is exactly 0. Then, still in the same
+    the system lifetime, a signed integer count of turns, goes down by 1, whatever its value.
+    The system is marked to end in the turn in which the result is exactly 0. Removal of the
+    system's owner object (S-0616 claim 4) is a second, separate cause of the mark, for every kind
+    and at any lifetime; it sets the mark at the moment of removal, not at the next count-down.
+    Then, still in the same
     turn and after that count-down, a marked system that holds no particles leaves play. So:
     - A lifetime *N* ≥ 1 marks the system in its *N*-th turn. If it is empty by the end of that
       turn (its last particle was removed in that turn's second pass or earlier) it leaves play in
@@ -282,7 +292,12 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     - A lifetime of 0 goes to −1 on the first turn and so never again equals 0: it never ends. Every
       negative lifetime, −1 included, likewise never ends (its count comes back to 0 only after
       2³² + *L* turns, *L* being the lifetime, once it has wrapped round: far beyond any game).
-      Only a positive lifetime ever ends a system.
+      Only a positive lifetime ever sets the mark through the count-down; owner removal (above) is
+      the only other way a system is marked here, and S-0616 claim 22 lists the marks of the other kinds.
+    - A system marked by owner removal leaves play like any marked system: in the first turn,
+      after that turn's count-down, in which it holds no particle. Removal in the middle of a tick
+      therefore leaves an empty system in play until its own turn comes, in that same tick if its
+      turn is still to come, else in the next tick.
     - A marked system that still holds particles keeps taking turns, and its particles keep moving
       and expiring under claim 6.
     - A system with no behaviour kind does no kind work, so its particles are never updated or
@@ -296,10 +311,14 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
       shared system's lifetime is positive.
     - Backing: `measurable` (scenario G13, parts a and b: the lifetime 1, 0, −2 and 3 runs, the
       same-turn removal, the systems of each kind, and the shared system's positive-lifetime
-      departure). The behaviour after removal is `unmeasured`: the original stops there, so there
+      departure). The owner-removal mark and its departure turn are `measurable` through S-0616's
+      scenario P4 (a smoke system whose owner is removed), which falsifies a mark placed at a later
+      count-down or a departure in another turn. For a gas-kind system the owner-removal rule is
+      `unmeasured` here: no stock data path gives a gas system an owner object, so no scenario can
+      vary it. The behaviour after removal is `unmeasured`: the original stops there, so there
       is no original behaviour to compare. The 2³² + *L* turns to the first return to 0 is
       `unmeasured`: no run here is that long.
-    - Confidence: high (count-down placement, lifetime 0, negatives, same-turn removal); medium
+    - Confidence: high (count-down placement, lifetime 0, negatives, same-turn removal, owner removal); medium
       for the no-behaviour-kind line, which follows from the kind work being absent.
 
 18. **Order inside one gas particle's update.** The countdown and hits, the stage step and the
@@ -447,6 +466,7 @@ follows S-0205 claim 3 with its importer warning.
 | live | second pass | moves (F5) |
 | dead | second pass | successor created if named (claim 7); removed |
 | system, lifetime reaches 0 | any turn | marked to end |
+| system, owner object removed | at the removal | marked to end |
 | system, marked, no particles | any turn | removed |
 
 Ordering consequences:
@@ -487,8 +507,10 @@ Ordering consequences:
   table, so its result is undefined. When a type with a wind effect exists, this is a departure:
   our importer warns, and no wind push is applied. There is no quirk switch.
 - **Non-gas particle types in the shared gas system** (claim 2). Such a particle updates and moves
-  by the rules of its own behaviour kind, which other specs own. Only the turn order of claim 6
-  comes from its system. This spec makes no claim about whether the data supplies such a particle.
+  by the rules of its own behaviour kind, not its system's (S-0616 claim 3 gives each kind's
+  update and move rules). Its remaining lifetime goes down by 1 per update and sets its dead mark at 0, as in claim 6
+  (S-0616 claim 3 gives the same rule for every kind); only the turn order of claim 6 comes from
+  its system. This spec makes no claim about whether the data supplies such a particle.
 - **Signed magnitude** (F1): an extreme raw value gives a drift step of −3 before the clamp.
   F2 clamps the resulting velocity, not the step itself.
 - **Damage interval 0** (F7): one hit per 65536 updates rather than one per tick.
@@ -498,7 +520,7 @@ Ordering consequences:
 | Concept | Source | Parse form | Default when absent |
 |---|---|---|---|
 | Shared gas system type | Particle-system type named `GasCloudSys`; registered through `[ParticleSystems]` or a creating reference (S-0004 claims 2, 3 and 13); its rules section supplies properties only on a section read | type name, fixed by the engine | created at game start with no section read: lifetime −1 ticks, no behaviour kind, no held particle type (claim 1) |
-| System held type | particle-system type `HoldsWhat` | particle type name | none |
+| System held type | particle-system type `HoldsWhat` | particle type name | the empty-named type (Terms) when the section is read; none when the section is never read |
 | System behaviour kind | particle-system type `BehavesLike` | name: Smoke, Gas, Fire, Spark, Railgun | none (no update) |
 | System lifetime | particle-system type `Lifetime` | integer, ticks | −1 |
 | Particle behaviour kind | particle type `BehavesLike` | name: Gas, Smoke, Fire, Spark, Railgun | none (no update) |
@@ -580,9 +602,13 @@ position, count or draw mismatch. Named test rules/art files are removed after e
 - **G3. Warhead first particle.** Test rules file: give a test weapon's warhead the shared gas
   system's type as its particle system. Fire once at empty ground. Expected: one cloud at the
   impact point in the detonation tick (raised to terrain if needed), and none appearing later
-  from that gas system. Named test rules file G3-system varies the held type between present
-  and absent, and the system kind across the imported kinds: absence gives no initial particle,
-  presence gives exactly one initial particle before any kind-specific emissions. For gas,
+  from that gas system, with the system's section giving a held type. Named test rules file
+  G3-system varies the held type between named, key absent from a section that is read, and a
+  system type with no section at all, and the system kind across the imported kinds: a named type
+  and an absent key each give exactly one initial particle (of the named type, respectively of the
+  empty-named type) before any kind-specific emissions; a system type with no section gives none.
+  *Falsified if* an absent key in a read section gives no initial particle, or a never-read system
+  type gives one. For gas,
   compare unlimited lifetime with a short positive lifetime: the positive case is marked at
   that turn count, survives while particles remain, and disappears when empty; unlimited stays
   empty until game clear. Record system existence as well as particles.
@@ -721,9 +747,10 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   (b) *Kinds and no behaviour kind.* Test rules file G13-kinds gives a warhead a test system of each
   behaviour kind (smoke, fire, spark, railgun, gas) with lifetime 1 and a particle field of 1 tick,
   and a further test system with no behaviour kind, lifetime 1 and a held particle type. Emissions of
-  the smoke, fire, spark and railgun kinds are outside this spec, so for those four count only each
+  the smoke, fire, spark and railgun kinds are S-0616's (G13 checks only the common rules), so for those four count only each
   system's existence and marks, not its particles. *Expected:* each system is marked in its first
-  turn and leaves play in that turn once it holds no particle. The no-kind system keeps its held
+  turn; for the gas system it leaves play in that turn once it holds no particle (the other four
+  kinds' departure is checked by S-0616's scenarios P1 and P14). The no-kind system keeps its held
   particle, which neither moves nor expires by lifetime, so it never leaves play while the particle
   exists. *Falsified if* a no-kind system's particle moves or expires, a no-kind system leaves play
   while it holds a particle, or a system is marked or removed in a turn other than claim 17 gives.
@@ -737,17 +764,14 @@ position, count or draw mismatch. Named test rules/art files are removed after e
 - **Chaos drone.** A chaos-drone weapon that creates an animation and an area berserk effect but
   names no particle system leaves no gas particles under claim 4. S-0610 should not rely on this
   spec to assert whether the chaos drone's weapon names a particle system.
-- **Non-gas particles in the shared system** (claim 2). Only other data can do this. Should the
-  importer warn?
 - **Adaptive drawing cutoff.** Claim 16 establishes the suppression test, but the settings and
   complete tuning of the shared performance-cutoff mechanism are not specified here; their
   import mapping remains untraced. This omission is `unmeasured` in this draft because no
   scenario yet varies those settings independently; it must not be treated as a fixed lowest-detail rule.
-- **Non-gas system kinds** (claim 4, Q-1243). The smoke, fire, spark and railgun system kinds
-  each have their own emission and particle-motion rules, not specified here. What this spec
-  gives them is claim 17 (lifetime, leaving play) and the creation of their first particle
-  (claim 4). A warhead-made system of such a kind takes a turn every tick, so keeping it inert
-  and out of the update order differs from the original. Particle updates of those kinds
-  (smoke, fire, spark, railgun) are an open item for a later revision.
 - **Other creators of gas.** The original also has a leftover monster type, absent from the stock
   data, that puts gas into the shared system. It is out of scope here.
+
+## Questions for the project lead
+
+- Should the importer warn when other data gives a non-gas particle to the shared gas system
+  (claim 2)?

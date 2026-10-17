@@ -1,9 +1,9 @@
 ---
 id: Q-1267
 title: Whether an entrant's contact with an absorbing building ends when its enter ends otherwise
-status: open
+status: answered
 related: [S-0605, S-0215, S-0213]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-1260
 title: How the bio-reactor fate of a released unit finds and keeps its building
-status: open
+status: answered
 related: [S-0601, S-0605, S-0215]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need

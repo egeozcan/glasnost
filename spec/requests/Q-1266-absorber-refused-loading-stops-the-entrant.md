@@ -1,9 +1,9 @@
 ---
 id: Q-1266
 title: What stops an entrant whose loading request an absorbing building refuses
-status: open
+status: answered
 related: [S-0605, S-0215]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need
