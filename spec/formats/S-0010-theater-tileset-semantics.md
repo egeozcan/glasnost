@@ -2,11 +2,11 @@
 id: S-0010
 title: Theater data, tilesets and the terrain values of a cell
 topic: formats
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0009, Q-0018, Q-0041, Q-0046, Q-0055]
 supersedes: []
@@ -681,6 +681,10 @@ in our engine is a design rule, not a claim of an oracle measurement.
       A local-area resize in play (S-0524 claim 8) preserves this once-only state: an existing
       tile animation is not removed or restarted by the resize. A cell that has started none
       may start one only when the ordinary eligibility conditions above hold.
+      A tile animation started while the map loads is subject to the same creation-time rule as
+      any other animation: if its middle image frame μ is 0 (μ is ⌊*N* / 2⌋ of the sprite that
+      S-0109 claim 25 names), its middle event happens at creation, not at its first update
+      (S-0109 claim 14).
     - **Where.** The animation is placed at the world position (X, Y, *z*) of the formula *Tile
       animation position* (Formulas): the cell's centre, moved by the ground displacement that S-0101's
       screen-to-ground formula (F6) gives for the world pixel (*dx*, *dy*), at the height of the
@@ -723,6 +727,7 @@ in our engine is a design rule, not a claim of an oracle measurement.
       | The creation parameters: the start event at creation, at the displaced position, with the chain reaction in the cell under that position; passes from the type's loop count | `measurable` (scenario G4 part F, named test data) |
       | The start events of first-pass animations keep their effects | `measurable` (scenario G4 part F, run 2) |
       | Immediate crater timing relative to the overlay data stream and recalculation passes | S-0202 claim 15 owns the rule, confidence and `measurable` backing (its scenario R14 part C) |
+      | A tile animation's middle event at creation, when its middle image frame μ is 0, during map loading | S-0109 claim 14 owns the rule, its confidence and its backing |
 
     - Confidence: high for when an animation starts at map load and at the game-start pass, for the
       position formula and for the creation parameters, medium for a start in play after smoothing (part C) and for the displacement far larger than

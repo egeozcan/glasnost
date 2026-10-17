@@ -2,13 +2,13 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
-requests: [Q-0662]
+requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244]
 supersedes: []
 ---
 
@@ -64,10 +64,20 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 ### Where gas comes from
 
 1. **Shared gas system.** When a game starts, the engine creates the shared gas system from the
-   particle-system type whose rules name is fixed by the engine (Import mapping). It has no owner
+   particle-system type whose rules name is fixed by the engine (Import mapping). **When it
+   enters play:** it is the last object of the game-start step to enter play, apart from the
+   ore-twinkle animations below. The map is read
+   first, so every map-placed object (S-0203 claim 3), the skirmish starting units and every
+   tile animation or cell animation started while loading enter play before it, and the shared
+   system is appended to the update order after all of them (S-0203 claim 3, appending). Only the
+   ore-twinkle animations of the same game-start step, when the rules name one, come after it.
+   So within a tick the shared system's turn, and with it every cloud hit and draw of claims 6
+   to 15, comes after the turn of every map-placed object and of every starting unit that is
+   still in play, and before any object created later (for example by a production or a
+   death in play). It has no owner
    house, no target and the system lifetime of its type. Its own position has no observable effect.
    With an unlimited system lifetime it lasts until the game is cleared and is never removed merely
-   for being empty. A positive system lifetime instead marks it to end after that many turns (claim 6).
+   for being empty. A positive system lifetime instead marks it to end after that many turns (claim 17).
    When no type of that name exists after all rules layers, the original creates it at game
    start and reads no rules section, as S-0004 claim 3 states. The game is not rejected. This
    newly created type has unlimited system lifetime (−1 ticks), no behaviour kind and no held
@@ -76,7 +86,8 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    updates nor moves particles later delivered into it, so those particles do not deal gas damage
    or expire through claims 5 to 15. Those claims' gas-system turns require gas behaviour.
    - Backing: `measurable` (G1 for creation, ownership, target and empty persistence,
-     G1-missing for the missing-type case and its defaults, G3 for finite system lifetime). The statement that its own position has no effect is
+     G1-missing for the missing-type case and its defaults, G3 for finite system lifetime, G12 for
+     its place in the update order). The statement that its own position has no effect is
      `unmeasured`: these scenarios do not independently vary that position.
    - Confidence: high
 
@@ -111,20 +122,30 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    at the detonation point *P* (subject to claim 5's terrain floor). Without a held type no first
    particle appears. This initial request holds for every system behaviour kind, not just gas.
    A system takes the lifetime of its type, which is −1 unless the rules give one. A gas-behaviour
-   system with unlimited lifetime stays inert after its last particle is gone. Other system
-   behaviour kinds may emit further particles and are outside this spec.
-   - Backing: `measurable` (scenario G3)
+   system with unlimited lifetime stays inert after its last particle is gone.
+   Every system, whatever its kind, takes a turn each tick, and claim 17 gives what is common
+   to all kinds: the system lifetime and when a system leaves play. How the smoke, fire, spark
+   and railgun kinds emit and move their particles is outside this spec (Open questions).
+   - Backing: `measurable` (scenario G3 for the first particle; scenario G13, part b, for the turns
+     of each kind)
    - Confidence: high
 
 5. **Creating a particle.** A new particle is added at the end of its system's list. Its remaining
-   lifetime *E* is drawn from its type's lifetime field as S-0202 claim 15 sets. Its damage
+   lifetime *E* is the type's lifetime field *E*ₘₐₓ **plus** one lifetime variation
+   *u* (F9), which is the draw of S-0202 claim 15: *u* = |*r* rem *E*ₘₐₓ| for one raw value *r*
+   (|*r* rem 10| for railgun behaviour, which a gas particle type does not have). For a positive
+   field, before the reduction below, *E* lies in *E*ₘₐₓ … 2*E*ₘₐₓ − 1, and the default field of 1
+   gives *E* = 1. *E* is kept as an unsigned 16-bit count: the sum is reduced modulo 65536. Its damage
    countdown *C* starts at its type's damage interval field reduced modulo 65536 and its stage at
-   its type's start-stage field. The lifetime is also reduced modulo 65536; an initial zero
-   expires by lifetime after 65536 updates, not immediately, unless another cause removes it earlier. If its height is at or below *H* at its position, it is raised to *H*. Its velocity and
+   its type's start-stage field. A sum that reduces to zero expires by lifetime after 65536
+   updates, not immediately, unless another cause removes it earlier. That needs a positive field
+   of at least 32769 or a negative field of at most −65536, with a draw that makes the sum a
+   multiple of 65536; the other way is a field of 0 with a raw value whose low 16 bits are zero. If its height is at or below *H* at its position, it is raised to *H*. Its velocity and
    deflection start at zero.
    - Backing: `measurable` (G4 and G5 for initial cadence, stage, motion and lifetime,
      S-0202 claim 15 for creation draws). The initial-zero lifetime's full 65536-update life is
      `unmeasured`: no practical setup here guarantees that creation draw without writing random state.
+     The sum *E*ₘₐₓ + *u* (F9) is `measurable` by G5's lifetime comparison.
    - Confidence: high
 
 ### The system's turn
@@ -137,9 +158,8 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
      updated that tick, but it is moved in the second pass. One created later in the tick, for
      example by an animation's middle event, waits for the next turn.
    - A successor is neither updated nor moved in the tick it appears.
-   - The system lifetime goes down by 1 each turn. A system whose lifetime reaches exactly 0 is
-     marked to end, and a marked system with no particles left is removed. A lifetime of −1 never
-     reaches 0.
+   - The system lifetime and the removal of an ended system come after both passes of the
+     turn (claim 17).
    - Backing: `measurable` (G5 for lifetime, successor and turn timing; G6 for draw order).
    - Confidence: high
 
@@ -251,6 +271,50 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
       varied, so no fixed cutoff is claimed (Open questions).
     - Confidence: medium
 
+17. **System lifetime and leaving play.** This holds for every system, whatever its behaviour
+    kind (also none). After the kind's own turn work (for a gas system: both passes of claim 6),
+    the system lifetime, a signed integer count of turns, goes down by 1, whatever its value. The
+    system is marked to end in the turn in which the result is exactly 0. Then, still in the same
+    turn and after that count-down, a marked system that holds no particles leaves play. So:
+    - A lifetime *N* ≥ 1 marks the system in its *N*-th turn. If it is empty by the end of that
+      turn (its last particle was removed in that turn's second pass or earlier) it leaves play in
+      that same turn; otherwise it leaves in the turn in which its last particle is removed.
+    - A lifetime of 0 goes to −1 on the first turn and so never again equals 0: it never ends. Every
+      negative lifetime, −1 included, likewise never ends (its count comes back to 0 only after
+      2³² + *L* turns, *L* being the lifetime, once it has wrapped round: far beyond any game).
+      Only a positive lifetime ever ends a system.
+    - A marked system that still holds particles keeps taking turns, and its particles keep moving
+      and expiring under claim 6.
+    - A system with no behaviour kind does no kind work, so its particles are never updated or
+      moved and never die by lifetime; it counts down and is marked as above but, holding
+      particles, never leaves play. One without particles leaves play like any other.
+    - When the shared gas system leaves play (positive lifetime), the game has no shared system
+      for the rest of the play: it is not created again. The original then fails on the next virus
+      death or the next middle event that requests a particle (it uses the missing system without
+      a check). **Departure** (no switch: the original stops): our engine takes every draw of those
+      particle requests (S-0202 claim 15) and creates no particle; the importer warns when the
+      shared system's lifetime is positive.
+    - Backing: `measurable` (scenario G13, parts a and b: the lifetime 1, 0, −2 and 3 runs, the
+      same-turn removal, the systems of each kind, and the shared system's positive-lifetime
+      departure). The behaviour after removal is `unmeasured`: the original stops there, so there
+      is no original behaviour to compare. The 2³² + *L* turns to the first return to 0 is
+      `unmeasured`: no run here is that long.
+    - Confidence: high (count-down placement, lifetime 0, negatives, same-turn removal); medium
+      for the no-behaviour-kind line, which follows from the kind work being absent.
+
+18. **Order inside one gas particle's update.** The countdown and hits, the stage step and the
+    lifetime count-down all run on every tick. On even ticks the particle also runs its drift, its
+    slope deflection and its vertical speed (claims 8 to 10); the deflection and the vertical speed
+    read the particle's position and the terrain and take no draw. Those even-tick effects change
+    only the particle's velocity and deflection, which move nothing until the second pass, so their
+    order among themselves has no observable effect. What is observable: a particle's drift draws
+    precede the draws of every death its own hits cause; its hits precede its own stage step
+    (claim 15); and its lifetime count-down comes last and only sets the dead mark that the turn's
+    second pass reads (claim 6).
+    - Backing: `measurable` (scenario G13, part c: the draw order of a virus cloud whose hit kills a
+      unit on an even tick)
+    - Confidence: high
+
 ## Formulas
 
 **F1. Signed magnitude.** For a raw value *r* read as a signed 32-bit integer (S-0202 Terms):
@@ -326,6 +390,16 @@ to this horizontal sum as if it were a height. Its integer pixel result is used 
 S-0302's lepton distance, without unit conversion; its floating-point precision and truncation
 are those of S-0409 F2.
 
+**F9. Initial lifetime.** With *E*ₘₐₓ the integer lifetime field and *r* the raw value of the lifetime
+draw (a signed 32-bit value, S-0202 Terms), the remainder signed and truncated toward zero:
+*u* = |*r* rem *E*ₘₐₓ| (the remainder is taken first, so its magnitude is below |*E*ₘₐₓ| and the wrap
+of F1 does not arise), and
+
+> *E* = (*E*ₘₐₓ + *u*) mod 65536  (unsigned 16-bit result).
+
+With *E*ₘₐₓ = 0 the original stops; our engine follows S-0205 claim 3 (remainder equal to the
+dividend, so *u* = |*r*|, reduced modulo 65536) with its importer warning. Integers throughout.
+
 **F8. Particle stage advance.** Let *n* be the particle's object number, *A* the type's stage-advance field,
 *E*_max its integer lifetime field and *E* its unsigned 16-bit remaining lifetime before this
 update's decrement. Integer sums use signed 32-bit wraparound (S-0205 claim 1). The
@@ -393,6 +467,15 @@ Ordering consequences:
   Our object number (Terms) has a different sequence, so which clouds advance with period *A* and which with
   *A* + 1 can differ from the original. This is a known departure of the same kind as S-0306's
   missile phase. It decides how long a particle with the delete-at-stage-limit flag lives.
+- **Particle requested before the shared system exists** (loading). The original creates the
+  shared system in the game-start step, after the map and the starting units and before any
+  ore-twinkle animation (claim 1). A tile animation or cell animation with μ = 0 that is created
+  during loading and requests a particle (S-0010 claim 19, S-0109 claim 14) therefore meets no
+  shared system, and the original stops.
+  **Departure** (no switch): our engine takes the particle's creation draws (S-0202 claim 15) in
+  the same order and creates no particle; the importer warns when such an animation exists.
+  The engine must not create the system early merely to receive these particles: claim 1 fixes
+  its place in the update order.
 - **Missing shared gas type.** Creation without a rules-section read is original behaviour,
   not a departure: S-0004 claim 3 and claim 1 here apply. Missing the type is not a reason for
   importer rejection or a warning. Without a behaviour kind, the resulting system cannot run
@@ -547,7 +630,8 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   every update; odd identifiers give division by zero. An advance field of zero with an even
   identifier likewise stops the original on its
   update; our engine must instead apply S-0205 claim 3, not be compared with continued oracle
-  play. Vary the lifetime field above 65535 and compare the recorded creation draw and
+  play. Compare each particle's removal tick with F9 (the field plus the drawn variation, not the variation
+  alone), and vary the lifetime field above 65535 and compare the recorded creation draw and
   remaining lifetime with reduction modulo 65536, without assuming an initial zero will occur.
   Capture frames while varying the start-frame field: the selected frame
   must remain the stage itself. Include an odd-tick
@@ -604,6 +688,50 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   these gas clouds use opaque drawing when otherwise visible. Wrong suppression, blending
   fraction or signed-byte reduction falsifies the corresponding part of claim 16.
 
+- **G12. Place in the update order.** A skirmish map with a building that fires at an enemy
+  infantry unit every tick it can, and a virus sniper that kills a second infantry unit so that
+  the cloud hits in the same tick. Use the recorder to log the random state at each object's turn.
+  Expected: the shared system's draws (claim 8's drift draws) come after the last map-placed
+  object's and the last starting unit's turn and before the turn of a unit built after the start.
+  Variant: the test art file G2-zero-middle on a tile animation at loading, with a gas particle
+  type. The original stops at that request (Edge cases and quirks), so on the original this variant
+  records only the stop. Our engine's observable is no cloud and the request's creation draws taken
+  at loading. *Falsified if* the shared system's draws precede any map-placed object's turn, or the
+  loading-time request makes a cloud in our engine.
+- **G13. System lifetime, leaving play and draw order.** Each part runs three times. Named test
+  rules files add test particle-system types, which are not the shared system's type, so that the
+  shared system stays as the game gives it. Test types have a particle type whose lifetime field is
+  30 ticks and no damage, unless a part says otherwise. A warhead fires once at empty ground, as in
+  G3.
+  (a) *Lifetime.* Test rules file G13-life gives the warhead a test gas system with lifetime 1, then
+  with 0, then with −2, then with 3, one variant each, plus a fifth variant with lifetime 1 whose
+  particle field is 1 tick. Record every tick for 60 turns: whether the system exists, its lifetime
+  count, whether it is marked to end, and its particles. *Expected:* with lifetime 1 the system is
+  marked in its first turn and leaves play in the turn its last particle is removed (about 30 ticks
+  later); in the fifth variant it leaves play in its first turn, since it is empty by then. With
+  lifetime 3 it is marked in its third turn and stays until its particles are gone. With lifetime 0
+  or −2 it is never marked within the 60 turns. *Falsified if* a system is marked or removed in a
+  turn other than claim 17 gives, or a lifetime 0 or −2 system is marked in these runs.
+  (a′) *Shared system departure.* Test rules file G13-shared registers the shared system's type with
+  lifetime 3. The shared system exists from game start and is empty. *Expected:* it is marked in its
+  third turn and leaves play in that turn. A virus death after that makes no cloud, and the original
+  stops there; our engine makes no cloud and takes the request's creation draws. *Falsified if* the
+  shared system leaves play in any other turn, or a request after its removal makes a cloud in our
+  engine.
+  (b) *Kinds and no behaviour kind.* Test rules file G13-kinds gives a warhead a test system of each
+  behaviour kind (smoke, fire, spark, railgun, gas) with lifetime 1 and a particle field of 1 tick,
+  and a further test system with no behaviour kind, lifetime 1 and a held particle type. Emissions of
+  the smoke, fire, spark and railgun kinds are outside this spec, so for those four count only each
+  system's existence and marks, not its particles. *Expected:* each system is marked in its first
+  turn and leaves play in that turn once it holds no particle. The no-kind system keeps its held
+  particle, which neither moves nor expires by lifetime, so it never leaves play while the particle
+  exists. *Falsified if* a no-kind system's particle moves or expires, a no-kind system leaves play
+  while it holds a particle, or a system is marked or removed in a turn other than claim 17 gives.
+  (c) *Draw order.* A virus cloud, on an even tick, whose hit kills a unit (the G12 recorder).
+  *Expected:* its drift draws precede the draws of the death its hit causes, and its stage step
+  follows the hit. *Falsified if* the death draws come before the drift draws, or the stage step
+  comes before the hit.
+
 ## Open questions
 
 - **Chaos drone.** A chaos-drone weapon that creates an animation and an area berserk effect but
@@ -615,5 +743,11 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   complete tuning of the shared performance-cutoff mechanism are not specified here; their
   import mapping remains untraced. This omission is `unmeasured` in this draft because no
   scenario yet varies those settings independently; it must not be treated as a fixed lowest-detail rule.
+- **Non-gas system kinds** (claim 4, Q-1243). The smoke, fire, spark and railgun system kinds
+  each have their own emission and particle-motion rules, not specified here. What this spec
+  gives them is claim 17 (lifetime, leaving play) and the creation of their first particle
+  (claim 4). A warhead-made system of such a kind takes a turn every tick, so keeping it inert
+  and out of the update order differs from the original. Particle updates of those kinds
+  (smoke, fire, spark, railgun) are an open item for a later revision.
 - **Other creators of gas.** The original also has a leftover monster type, absent from the stock
   data, that puts gas into the shared system. It is out of scope here.

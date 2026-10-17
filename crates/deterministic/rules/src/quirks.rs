@@ -1643,10 +1643,6 @@ pub struct Quirks {
     // spec: S-0601 claim 15 and Edge cases
     #[serde(default = "on")]
     pub deploy_makes_control_permanent: bool,
-    /// A takeover hit whose event-6 raise takes a one-time or all-carriers tag off its target still raises event 44 at the target; the original faults there. Our engine cannot fault, so in this position it skips the raise, as the off position does (Q-1150 interim); off: event 44 is raised only if the target still carries a tag, on that tag (`glasnost_sim::mind::detonation`).
-    // spec: S-0601 claim 5 and Edge cases
-    #[serde(default = "on")]
-    pub removed_tag_attack_event: bool,
     /// A spin-down update whose amount d × m is 0 sets the spin value to 0 at once; off: an amount of 0 leaves the value unchanged (`glasnost_sim::gattling::spin_down`).
     // spec: S-0609 claims 3 and 9, F2 and Edge cases
     #[serde(default = "on")]
@@ -2236,7 +2232,6 @@ impl Default for Quirks {
             mind_control_owner_change_keeps_victims: true,
             dying_victim_holds_slot: true,
             deploy_makes_control_permanent: true,
-            removed_tag_attack_event: true,
             gattling_zero_spin_down_empties: true,
             berserk_zero_duration: true,
             psychic_intent_ignores_visibility: true,
@@ -3309,7 +3304,6 @@ impl Quirks {
                 "deploy_makes_control_permanent",
                 self.deploy_makes_control_permanent,
             ),
-            ("removed_tag_attack_event", self.removed_tag_attack_event),
             (
                 "gattling_zero_spin_down_empties",
                 self.gattling_zero_spin_down_empties,

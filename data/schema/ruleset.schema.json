@@ -9251,11 +9251,6 @@
           "type": "boolean",
           "default": true
         },
-        "removed_tag_attack_event": {
-          "description": "A takeover hit whose event-6 raise takes a one-time or all-carriers tag off its target still raises event 44 at the target; the original faults there. Our engine cannot fault, so in this position it skips the raise, as the off position does (Q-1150 interim); off: event 44 is raised only if the target still carries a tag, on that tag (`glasnost_sim::mind::detonation`).",
-          "type": "boolean",
-          "default": true
-        },
         "repair_consumes_engineer_always": {
           "description": "An engineer entering a hut whose bridge needs no repair is used up; off: it is refused entry.",
           "type": "boolean",

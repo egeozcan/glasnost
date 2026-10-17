@@ -2,11 +2,11 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0046, Q-0418, Q-0770, Q-0771]
 supersedes: []
@@ -350,7 +350,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     update. The event requests the type's particle count of its named particle type when a particle
     type is given and the count is positive, otherwise none. These particles are created in the
     shared gas system of S-0613 claim 1, regardless of their type's behaviour kind, as in
-    S-0613 claim 2. Particle creation is not gated by height. The particle requests precede any random choice between a scorch mark and a crater,
+    S-0613 claim 2. During map loading that system does not exist yet, so a loading-time
+    μ = 0 request meets no shared system and the original stops; our engine's departure is in
+    S-0613's edge cases. Particle creation is not gated by height. The particle requests precede any random choice between a scorch mark and a crater,
     so their creation draws change the stream state used by that choice. S-0202 claim 15 owns
     the particle creation draw groups during loading and play, including their conditional speed,
     lifetime and colour draws. Its R14 A and D test their composition, including trigger-created
@@ -1530,9 +1532,10 @@ building that can cloak), it sets them in the test map's override section, which
     absent. Read stream state immediately before and after the scorch-or-crater choice, separately
     from smudge placement. Expected: only both flags below the height boundary take the choice
     ranged draw. Apply S-0202's range rule to the recorded incoming state: the predicted result
-    below 1073741824 requests scorch, otherwise crater. Repeat with a positive particle count,
-    recording the state after particle creation and before the choice: that later state must
-    predict the choice. A choice draw in another flag/height case, a different request from the
+    below 1073741824 requests scorch, otherwise crater. Repeat with a positive particle count, created by a play-time creator (a weapon-impact animation, or a
+    trigger-played animation) and not by a map-placed tile or cell animation. At map load the original stops
+    at the particle request (claim 14), so that repeat is not a map-load observation. Record the state after
+    particle creation and before the choice: that later state must predict the choice. A choice draw in another flag/height case, a different request from the
     predicted result, or particle creation after that choice falsifies the rule. Do not infer the
     full event's draw count from the choice alone. S-0202 scenario R14 A to E supplies the
     complementary full-composition tests during loading and play: per-particle draw groups,

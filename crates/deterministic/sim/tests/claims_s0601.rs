@@ -643,36 +643,48 @@ mod tags {
         }
     }
 
-    // spec: S-0601 claim 5 and Edge cases (quirks.removed_tag_attack_event: a one-time event-6 trigger takes the tag off the target; off, event 44 is not raised because no tag is attached; on, the original faults, and our engine does the same as off, Q-1150 interim)
+    // spec: S-0601 claim 5 and Edge cases (revision 12, tag removed by the first raise: a one-time tag, or an all-carriers tag, that the event-6 raise takes off the target gets no event-44 raise, since no tag is attached; a repeating tag stays and hears event 44; a departure with no switch, lead decision on Q-1150) and S-0011 claim 10 (repeat-type table)
     #[test]
-    fn removed_tag_attack_event_both_positions() {
-        for on in [true, false] {
-            let mut r = rules();
-            r.globals.quirks.removed_tag_attack_event = on;
+    fn claim_5_removed_tag_skips_event_44() {
+        // (repeat type, carriers of the tag, the event-6 trigger fires, the target keeps the tag)
+        for (repeat, carriers, fires, kept) in [
+            (0, 1, true, false),
+            (1, 1, true, false),
+            (1, 2, false, false),
+            (2, 1, true, true),
+        ] {
             let tr = tagged(
-                0,
+                repeat,
                 vec![
                     trig("T6", vec![ev(6, 0)], vec![set_var(1)]),
                     trig("T44", vec![ev(44, i32::from(BETA))], vec![set_var(2)]),
                 ],
             );
-            let mut w = testkit::game_with_triggers(&r, SIZE, 1, tr);
+            let mut w = testkit::game_with_triggers(&rules(), SIZE, 1, tr);
             let c3 = veh(&mut w, "CTRL3", BETA, 0, 0);
             let t = veh(&mut w, "BOX", ALPHA, 3, 0);
             glasnost_sim::triggers::object_tag(&mut w, t, Some(b"TAG"));
+            if carriers == 2 {
+                let other = veh(&mut w, "BOX", ALPHA, 5, 5);
+                glasnost_sim::triggers::object_tag(&mut w, other, Some(b"TAG"));
+            }
             mind::detonation(&mut w, Some(c3), Some(Target::Object(t)));
-            assert!(w.triggers.variables[1], "event 6 fires ({on})");
-            assert!(
-                !w.triggers.variables[2],
-                "no event-44 raise without a tag ({on})"
+            let case = format!("repeat {repeat}, {carriers} carriers");
+            assert_eq!(w.triggers.variables[1], fires, "event 6 ({case})");
+            assert_eq!(w.triggers.objects.contains_key(&t), kept, "tag ({case})");
+            assert_eq!(
+                w.triggers.variables[2], kept,
+                "event 44 only on a tag still attached ({case})"
             );
-            assert!(!w.triggers.objects.contains_key(&t));
             assert_eq!(
                 owner(&w, t),
                 Some(BETA),
-                "the takeover still happens ({on})"
+                "the takeover still happens ({case})"
             );
         }
+        // The old switch must not survive: the departure has none.
+        let names = rules().globals.quirks.named();
+        assert!(!names.iter().any(|(n, _)| *n == "removed_tag_attack_event"));
     }
 }
 

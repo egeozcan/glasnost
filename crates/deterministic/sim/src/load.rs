@@ -434,8 +434,8 @@ pub fn new_game(
         game_speed: setup.game_speed,
         houses,
         objects: Default::default(),
-        // The shared gas system takes object number 0 (Q-1240), so map objects start at 1.
-        next_id: 0,
+        // Map objects start at object number 1.
+        next_id: 1,
         update: UpdateOrder::default(),
         cells: Cells {
             // spec: S-0202 table (before the second pass a tile animation starts at a cell's first recalculation)
@@ -478,12 +478,6 @@ pub fn new_game(
     };
     // spec: S-0409 claim 3 (the states at game start, before any object is placed)
     crate::econ::shroud::start(&mut w);
-    // spec: S-0613 claim 1 (the shared gas system is created when the game starts; Q-1240: before the map is read)
-    crate::gas::create_shared(&mut w);
-    if w.next_id == 0 {
-        // No shared system: map objects still start at object number 1.
-        w.next_id = 1;
-    }
     // spec: S-0011 claim 4 and S-0009 claim 32 (the trigger definitions, the difficulty position and the variables)
     crate::triggers::begin(&mut w, map);
     for h in &mut w.houses {
@@ -642,6 +636,9 @@ pub fn new_game(
 
     // spec: S-0524 claim 9 (before the first tick, after tag setup and the game-start terrain pass: the starting-building record)
     crate::mp_triggers::record_starting_buildings(&mut w);
+
+    // spec: S-0613 claim 1 (the shared gas system is the last object of the game-start step to enter play: after the map-placed objects, the starting units and every tile or cell animation started while loading, before only the ore-twinkle animations; appended to the update order, S-0203 claim 3)
+    crate::gas::create_shared(&mut w);
 
     // spec: S-0202 claim 14 and table *Load-time draw order* (resource-glint setup after the game-start recalculation and before tick 0)
     resource_glints(&mut w, &order);

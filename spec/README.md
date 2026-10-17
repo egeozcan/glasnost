@@ -44,7 +44,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 11 | approved | — |
 | [S-0204](simulation/S-0204-coordinates-distance-facing.md) | Coordinates, distance and facing | simulation | 8 | approved | — |
 | [S-0101](rendering/S-0101-isometric-projection.md) | Isometric projection, height lift, view position and scroll limits | rendering | 12 | approved | — |
-| [S-0010](formats/S-0010-theater-tileset-semantics.md) | Theater data, tilesets and the terrain values of a cell | formats | 17 | approved | — |
 | [S-0411](ui/S-0411-sidebar-behaviour.md) | Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement) | ui | 19 | approved | — |
 | [S-0315](combat/S-0315-suppression-panic.md) | Suppression and panic (infantry fear, prone and panic in combat; parasite suppression) | combat | 8 | approved | — |
 | [S-0510](infantry/S-0510-spies-infiltration.md) | Spies and infiltration | infantry | 3 | approved | — |
@@ -64,13 +63,11 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0603](structures/S-0603-grinder.md) | Grinder (recycling units into credits) | structures | 2 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 2 | approved | — |
 | [S-0606](structures/S-0606-vehicle-bunker.md) | Vehicle bunker | structures | 2 | approved | — |
-| [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 4 | approved | — |
 | [S-0407](production/S-0407-tech-tree.md) | Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs) | production | 19 | approved | — |
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 16 | approved | — |
 | [S-0206](movement/S-0206-turn-rates.md) | Turn rates and turning | movement | 14 | approved | — |
 | [S-0306](combat/S-0306-projectiles.md) | Projectiles (launch, flight, homing, scatter, detonation) | combat | 12 | approved | — |
 | [S-0408](economy/S-0408-sell-repair.md) | Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired) | economy | 20 | approved | — |
-| [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 28 | approved | — |
 | [S-0410](ui/S-0410-radar-minimap.md) | Radar and minimap (when radar is available, what the radar map shows and how it is coloured) | ui | 20 | approved | — |
 | [S-0210](movement/S-0210-crushing.md) | Crushing (who crushes whom, when, the outcome, walls, warnings, slowdown and automatic crushing) | movement | 21 | approved | — |
 | [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 6 | approved | — |
@@ -95,7 +92,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0007](rules-import/S-0007-art-lookup.md) | Art lookup (image indirection, sprite or voxel, companion files, theater substitution) | rules-import | 13 | approved | — |
 | [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 8 | approved | — |
 | [S-0211](movement/S-0211-land-types-passability.md) | Land types and passability | movement | 18 | approved | — |
-| [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 28 | approved | — |
 | [S-0313](combat/S-0313-firing-positions.md) | Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack) | combat | 9 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 32 | approved | — |
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 20 | approved | — |
@@ -123,7 +119,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 37 | approved | — |
 | [S-0515](structures/S-0515-tech-buildings.md) | Tech buildings (manned state, acquisition bonus, periodic income, ownership changes) | structures | 4 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 39 | approved | — |
-| [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 35 | approved | — |
 | [S-0509](structures/S-0509-engineers-capture.md) | Engineers and capture | structures | 6 | approved | — |
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 9 | approved | — |
 | [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 59 | approved | — |
@@ -134,3 +129,8 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 24 | approved | — |
 | [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 12 | approved | — |
 | [S-0609](combat/S-0609-gattling-spin-up.md) | Gattling spin-up | combat | 5 | approved | — |
+| [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 5 | approved | — |
+| [S-0202](simulation/S-0202-random-streams.md) | Random streams (generator, seeding, ranged draws, which systems draw from which stream) | simulation | 29 | approved | — |
+| [S-0010](formats/S-0010-theater-tileset-semantics.md) | Theater data, tilesets and the terrain values of a cell | formats | 18 | approved | — |
+| [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 29 | approved | — |
+| [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 36 | approved | — |

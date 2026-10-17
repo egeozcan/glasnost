@@ -2390,23 +2390,25 @@ impl Builder<'_> {
         let mut rows = [[0i32; SPIN_STAGES]; 2];
         let mut given = [false; 2];
         let mut populated = false;
+        // The layer and line of the WeaponStages that took a populated type below 2 stages, while the count stays below 2.
+        let mut reduced = None;
+        let mut last = (false, 0);
         for &r in &t.reads {
             // spec: S-0609 Import mapping (the gattling flag and the stage count as that layer leaves them; absent: no and 0)
             let flag = bool_as_of(t, "IsGattling", r, false);
             let n = int_as_of(t, "WeaponStages", r, 0);
+            last = (flag, n);
             if !(flag && n >= 2) {
-                if populated && flag && n < 2 {
-                    // spec: S-0609 Edge cases and Questions for the project lead item 3 (a layered reduction below 2 stages after thresholds were populated: no result established); Q-1151 interim (the held thresholds are not used)
-                    if let Some((_, layer, line)) = sets(key(t, "WeaponStages")).into_iter().rfind(|e| e.1 == r) {
-                        self.warn(layer, line, format!(
-                            "{} {}: WeaponStages falls below 2 after an earlier layer set the stage thresholds; no result is specified, and our engine uses no thresholds while the count is below 2 (S-0609 Edge cases, request Q-1151)",
-                            kind.key(),
-                            show(&t.name)
-                        ));
-                    }
+                if populated && flag && n < 2 && reduced.is_none() {
+                    // The WeaponStages in force at this layer, which may come from an earlier layer that also cleared the flag.
+                    reduced = sets(key(t, "WeaponStages"))
+                        .into_iter()
+                        .rfind(|e| e.1 <= r)
+                        .map(|e| (e.1, e.2));
                 }
                 continue;
             }
+            reduced = None;
             // spec: S-0609 Import mapping and Edge cases (k = 1 … N, at most 6 in our engine)
             let top = n.min(SPIN_STAGES as i32) as usize;
             for (row, prefix) in [(0, "Stage"), (1, "EliteStage")] {
@@ -2426,11 +2428,19 @@ impl Builder<'_> {
             }
         }
         let name = format!("{} {}", kind.key(), show(&t.name));
+        // spec: S-0609 Edge cases (revision 5, answering Q-1151: a type whose stage count, as the layers finally leave it, is below 2 after an earlier layer populated its thresholds uses no thresholds, and the importer warns about the layer that reduced the count) and Import mapping
+        if let (Some((layer, line)), (true, n)) = (reduced, last)
+            && n < 2
+        {
+            self.warn(layer, line, format!(
+                "{name}: WeaponStages falls below 2 after an earlier layer set the stage thresholds; our engine uses no thresholds for a type with fewer than 2 stages (S-0609 Edge cases)"
+            ));
+        }
         // spec: S-0609 Edge cases (more than 6 stages: our engine reads at most six, a larger count is used as 6, and the importer warns)
         self.each_int(key(t, "WeaponStages"), |n| n > SPIN_STAGES as i32, |v| {
             format!("{name} WeaponStages {v} is above 6; our engine uses 6 stages and reads only Stage1 … Stage6 and EliteStage1 … EliteStage6 (S-0609 Edge cases)")
         });
-        // spec: S-0609 Edge cases (revision 4: a negative stage count, spin-up or spin-down amount or threshold is used as 0, and the importer warns for each such imported value)
+        // spec: S-0609 Edge cases (a negative stage count, spin-up or spin-down amount or threshold is used as 0, and the importer warns for each such imported value)
         let mut negative: Vec<String> = ["WeaponStages", "RateUp", "RateDown"]
             .iter()
             .map(|k| (*k).to_owned())
@@ -3399,7 +3409,9 @@ impl Builder<'_> {
     /// Warnings that look at several records' values in force.
     /// The gas-cloud checks (S-0613 Edge cases): a virus-death animation
     /// without a particle type, a wind direction outside the table while a
-    /// particle type has a wind effect, and a wind divisor of 0.
+    /// particle type has a wind effect, a wind divisor of 0, a shared gas
+    /// system with a positive lifetime (claim 17), and a cell animation that
+    /// requests particles while loading, before the shared system exists.
     pub(super) fn gas_checks(&mut self) {
         let outcome = self.i.outcome;
         let empty = Vec::new();
@@ -3438,6 +3450,72 @@ impl Builder<'_> {
             // spec: S-0613 Edge cases (a wind direction outside 0–7 while a type has a wind effect: the original reads outside its table; our engine applies no push and the importer warns)
             self.warn_at(wind.as_ref(), format!(
                 "[General] WindDirection {direction} is outside 0–7 while a particle type has a wind effect: the original's result is undefined, our engine applies no wind push (S-0613 Edge cases, a departure)"
+            ));
+        }
+        let systems = outcome.registries.get(&Kind::ParticleSystems).unwrap_or(&empty);
+        // spec: S-0613 Import mapping (the shared gas system's type is the particle-system type named GasCloudSys)
+        if let Some(t) = systems.iter().find(|t| value::type_name_eq(&t.name, b"GasCloudSys")) {
+            let lifetime = int_of(key(t, "Lifetime"));
+            if let Some(l) = lifetime.filter(|&l| l > 0) {
+                // spec: S-0613 claim 17 (the shared system leaves play after a positive lifetime and is not created again; the original then stops on the next particle request, our engine creates no particle; the importer warns when its lifetime is positive)
+                self.warn_at(key(t, "Lifetime"), format!(
+                    "particle system {} Lifetime {l}: the shared gas system leaves play after {l} turns and is not created again; the original then stops on the next virus death or particle request, our engine creates no gas particle (S-0613 claim 17, a departure)",
+                    show(&t.name)
+                ));
+            }
+        }
+        self.loading_particle_checks();
+    }
+
+    /// A cell animation that requests particles at its creation while the
+    /// map loads (μ = 0, S-0109 claim 14, S-0009 claim 12) meets no shared
+    /// gas system (S-0613 claim 1 and Edge cases). μ is known only when the
+    /// art lookup ran. Theater tile animations are not seen here (a seam).
+    fn loading_particle_checks(&mut self) {
+        let outcome = self.i.outcome;
+        let Some(arts) = self.i.arts else {
+            return;
+        };
+        let empty = Vec::new();
+        let anims = outcome.registries.get(&Kind::Animations).unwrap_or(&empty);
+        let overlays = outcome.registries.get(&Kind::Overlays).unwrap_or(&empty);
+        let mut seen: Vec<usize> = Vec::new();
+        for o in overlays {
+            let Some(name) = text_of(key(o, "CellAnim")).filter(|n| !n.is_empty() && !value::is_no_type(n)) else {
+                continue;
+            };
+            let Some(i) = anims.iter().position(|a| value::type_name_eq(&a.name, &name)) else {
+                continue;
+            };
+            if seen.contains(&i) {
+                continue;
+            }
+            // spec: S-0109 claims 14 and 25 (μ = ⌊n / 2⌋ of the last sprite found; 0 when none was found)
+            let mu = arts.get(&(Kind::Animations, i)).and_then(|a| match (&a.middle_sprite, a.middle_sprite_frames) {
+                (None, _) => Some(0),
+                (Some(_), n) => n.map(|n| n / 2),
+            });
+            if mu != Some(0) {
+                continue;
+            }
+            let Some(sec) = self.art_section(&anims[i].name) else {
+                continue;
+            };
+            let spawns = sec
+                .value(b"SpawnsParticle")
+                .map(<[u8]>::to_vec)
+                .and_then(|v| self.particle_ref(&v, crate::refs::NEXT_PARTICLE_LIMIT));
+            // spec: S-0202 Import mapping (NumParticles: an integer count; absent 0)
+            let count = sec.value(b"NumParticles").and_then(value::integer).unwrap_or(0);
+            if spawns.is_none() || count <= 0 {
+                continue;
+            }
+            seen.push(i);
+            // spec: S-0613 Edge cases (a particle requested before the shared system exists, at loading: the original stops; our engine takes the creation draws and creates no particle; the importer warns when such an animation exists)
+            self.warn_at(key(o, "CellAnim"), format!(
+                "overlay {} CellAnim {}: the animation requests particles when it is created while the map loads, before the shared gas system exists; the original stops there, our engine takes the draws and creates no particle (S-0613 Edge cases, a departure)",
+                show(&o.name),
+                show(&anims[i].name)
             ));
         }
     }
