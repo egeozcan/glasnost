@@ -2,11 +2,11 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: []
 supersedes: []
@@ -68,6 +68,7 @@ Cross-spec changes required at hand-off:
 - **Recycle payout.** The credits the building's owner receives at a consumption (claim 8,
   Formulas F1). It uses S-0408's sale refund formula but differs in whose factors are used and
   who is paid.
+- **Path computation, level-2 sector.** S-0212's terms (claims 13 and 13a); not in the glossary.
 - **Link places.** As S-0605 (Terms): the building's imported dock count, at least 1.
 - **Yellow ratio.** The rules-wide health ratio at or below which an object counts as damaged
   for its slot animations (S-0108 F3 and Import mapping).
@@ -121,13 +122,31 @@ Cross-spec changes required at hand-off:
    rest by S-0215 claim 14, and a vehicle entrant by S-0215 claim 15, which queues nothing for a
    vehicle in *eaten*, so the vehicle stays in *eaten*. An entrant on a cell that holds a building
    is then sent S-0215 claim 28's scatter request.
-   - Backing: `measurable` (scenario G9)
-   - Confidence: high
+
+   The approach does not always succeed. A unit ordered to a recycling building that stands behind
+   a short line of buildings, with open ground round the line, can fail at once: the path
+   computation fails, the unit does not move and its destination is cleared (S-0212 claims 13, 13a
+   and 23, edge case "short line of buildings", scenario P12 run S). The failure follows from the
+   corridor rules of S-0212 as written (claims 13, 13a and 23). Which alignments of the line against
+   the level-2 sectors of S-0212 claim 13 fail depends on `quirks.corridor_split_probe` (default on,
+   the original; with it off the failure is expected at fewer alignments, S-0212 claim 13a). A unit whose search failed this way, more than 1 cell from
+   the building, is not handled by the no-destination fall-back above: it gives up as S-0212
+   claim 23 row 2 gives (it leaves its team and queues *guard*; an AI house's unit is treated as
+   human-controlled there). Whether that queued *guard* ever starts while *eaten* is current is
+   S-0215's rule and not established (S-0215 claims 14 and 15 queue nothing from their own
+   fall-back tables during *eaten*, but those tables are not the queue of S-0212 claim 23). The
+   unit therefore may stay in *eaten* with *guard* queued, or may start *guard*.
+   - Backing: `measurable` (scenario G9, approach-failure test; S-0212 scenario P12, run S, sets up
+     the same order). Which shifts fail is not predicted by this claim and is tracked in Open questions.
+   - Confidence: high (no contact; the destination is cleared on a failed search); medium (that a
+     short line makes the approach fail at once); low (which lengths and alignments fail; whether the
+     queued *guard* starts in *eaten*)
 
 4. **Onto the foundation.** The entrant may move onto the building's foundation cells: an infantry
    unit because the building is its mission target (S-0209 claim 4 row WP3), a vehicle by S-0209
    claim 5 rows VP6 and VP7. It is consumed on the first foundation cell it arrives in (claim 5),
-   so it does not need to reach the centre.
+   so it does not need to reach the centre. This presumes the approach is not cut short as
+   described in claim 3 (a short line of buildings in the way).
    - Backing: `measurable` (scenario G1, positions)
    - Confidence: medium (which foundation cell, for a large building)
 
@@ -290,7 +309,7 @@ Cross-spec changes required at hand-off:
       for it. Switching off refuses new vehicle orders through claim 2; low power alone does not,
     - a change of the building's owner (capture, test data) does not affect entrants: at
       consumption the new owner is paid (claim 8). S-0509 claim 14 concerns contacts only,
-    - a blocked route is handled by claim 3's processing, which keeps the destination (S-0215 claim 28).
+    - a blocked route is handled by claim 3's processing, which keeps the destination (S-0215 claim 28); a search that fails and leaves the unit more than 1 cell from the building (S-0212 claim 23, row 2, which includes the immediate failure of S-0212 claim 14) clears it (claim 3).
     - Backing: `measurable` (scenarios G7 and G8)
     - Confidence: high (sale, switch, destruction), medium (owner change)
 
@@ -476,6 +495,22 @@ on a different building's cell: verify the scatter request and the infantry/vehi
 claim 3. A held link, intake delay, wrong balance at the later raise, or missing fall-back falsifies
 the corresponding expectation.
 
+In a separate test, the approach failure of claim 3. The setup is that of S-0212 scenario P12 run S:
+open clear ground, a straight north-south line of 1 x 1 buildings of house A, of lengths 3, 5, 7 and 9,
+with the line's middle at each of eight shifts of 0 to 7 cells along the line. A recycling building with
+a 2 x 2 cell footprint stands just behind the line. House A gives two orders from 20 cells west of the
+line's middle, with the goal 2 cells east of it: one to a vehicle, and one to a non-jumpjet infantry unit.
+Each order is the recycle order into that building (no target). Each unit is also given a plain move to
+the same cell on the same map, for comparison. Observable, for each order: whether the unit moves in the
+tick of the order or its destination is cleared in that tick, and then, over about 10 processings after
+the failure, its current behaviour, its queued behaviours and its destination on each tick. The
+observable settles whether the queued *guard* of claim 3 starts. *Expected:* a recycle order and a plain
+move pass or fail on the same placements; lengths 3 and 5 are passed; at least one 7-line and one 9-line
+placement fails at once; the vehicle and the infantry agree on each map; the failed unit has *guard*
+queued. *Falsified by:* any 3- or 5-line placement failing, every 7- and 9-line placement passing, a recycle
+order and a plain move differing on one placement, the vehicle and the infantry differing on one map, or
+nothing queued after a failure.
+
 **G10. Sounds and animation** (claims 7, 12). With the building's *active-1* running, send in an
 infantry unit of the local player's house; use G11's fate fixture separately for a non-local
 entrant with both sound lists non-empty. *Expected:* the local
@@ -511,3 +546,4 @@ respective prediction.
   the parasite is released by S-0614 claim 15. Low confidence.
 - Whether the harvester load really pays nothing (claim 8) should be confirmed by a measurement:
   recycle a full harvester and an empty one (scenario G1 variant).
+- Which lengths and alignments of a short line of buildings make the approach fail, and whether the queued *guard* of claim 3 starts while *eaten* is current (claim 3). Low confidence. Tracked by Q-1280.
