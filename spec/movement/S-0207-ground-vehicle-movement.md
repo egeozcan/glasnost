@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 37
+revision: 38
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -3588,7 +3588,7 @@ are not covered by this scenario.
 **D27. Stored heading height (claim 24; Q-0676 questions 1 and 2).**
 *Setup:* a tiny skirmish map with level ground, a drivable slope and a high bridge
 with a traversable ground lane below it, game speed index 2, stock units and rules,
-director and mods off. Use the read-only recorder with scripted move orders; record
+no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use the read-only recorder with scripted move orders; record
 world position, heading point including its stored height, current track and path.
 Keep one human house and a bystander house outside the lanes. Run each case once
 for a driving vehicle and once for a ship on a legal water route; if a ship cannot
@@ -3619,7 +3619,7 @@ No oracle run is claimed here.
 **D28. Factory exit heading height (claim 24; Q-0793).**
 Use a tiny skirmish map at speed index 2 with a stock ground-vehicle factory on
 nonzero-height terrain, a produced stock driving vehicle and a remote bystander
-house. Director and mods are off. Script three productions and record each exit
+house. No engine add-on and no mods are used (the named test files of a scenario and the purpose-made test maps excepted). Script three productions and record each exit
 instruction, vehicle world height, apron terrain height, heading point and locomotor
 destination point each tick using the read-only recorder. Expected: the exit heading
 height is 0 leptons from installation to completion, and a successful exit instruction
@@ -3633,7 +3633,7 @@ primary discriminator and does not require that optional bridge setup.
 
 **D29. Separate locomotor goal lifetime (claim 25; Q-0794 questions 1 and 2).**
 Use tiny land and water skirmish lanes, a stock driving vehicle and stock ship,
-speed index 2, a remote bystander house, director and mods off. Record order-level
+speed index 2, a remote bystander house, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Record order-level
 destination, locomotor destination, heading point, world position, track completion,
 path-search outcome and movement report with the read-only recorder and scripted
 orders. Run each control three times for each locomotor. Assign an ordinary reachable
@@ -3662,7 +3662,7 @@ boundary remains unmeasured in practice; no oracle run or boundary observation i
 
 **D30. Cell goal versus building goal at rest (claim 26; Q-0797).** Use D29's tiny
 land and water lanes, stock driving vehicle and ship, speed index 2, one distant
-bystander computer player, director and mods off. Use scripted orders and a read-only
+bystander computer player, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use scripted orders and a read-only
 recorder at 800 × 600. Record each vehicle's order-level destination kind and presence,
 locomotor destination point, heading, world point, active track, current and queued
 behaviour, behaviour-processing ticks, path-search events and cell-arrival reports.
@@ -3704,7 +3704,7 @@ case three times for each locomotor, excluding unrelated orders, enemies and sca
 
 **D31. Goals naming units (claim 26; Q-0830).** Use D30's stock-data land and
 water lanes, driving and ship movers, game speed index 2, distant bystander computer
-player, director and mods off, scripted input and a read-only recorder at 800 × 600.
+player, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), scripted input and a read-only recorder at 800 × 600.
 Repeat each qualifying case three times. Record immediately before and after locomotion:
 order-level destination identity and kind, supplied movement point, retained locomotor
 point, mover world point, active track, resting state, behaviour, approach destinations,
@@ -3739,7 +3739,7 @@ or report it as measured. No memory-writing oracle tool is proposed.
 
 **D32. Destination refresh and dock-transition diagnostic (claim 27).**
 
-Use a tiny flat skirmish map, stock data, speed index 2, director and mods off,
+Use a tiny flat skirmish map, stock data, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
 one human house and one distant bystander computer player. Record placement,
 initial idle setup, effective destination assignments, the order-level destination,
 current locomotor, locomotor destination point and the two pending states with a
@@ -3802,7 +3802,7 @@ an unlisted bystander object affects the test area.
 
 **D33. Immobilization identity (claim 27; Q-1110).**
 
-Use a tiny flat revealed skirmish map, stock data, speed index 2, director and mods off,
+Use a tiny flat revealed skirmish map, stock data, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
 one human house and one distant bystander computer player. Use an ordinary ground
 vehicle eligible for a superweapon warp, an own-locomotor teleporting non-harvester,
 and a factory-produced chrono miner. With a read-only recorder, log the warp-pending
