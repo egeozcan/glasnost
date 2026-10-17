@@ -2,11 +2,11 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 36
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530]
 supersedes: []
@@ -1566,7 +1566,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
   part is inconclusive.
 
 **Scenario O4 part ii b: recall exclusions (claims 5 and 8).**
-- *Setup:* the preamble's flat stock-data skirmish map, speed 6, director and mods off.
+- *Setup:* the preamble's flat stock-data skirmish map, speed 6, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
   Use a human-owned mobile slave miner and, in a separate run, a deployed slave-miner
   building, each with slaves outside mining. Place a durable enemy target in the master's
   weapon range, unable to damage it during observation.
@@ -1908,7 +1908,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
   with the aim moved.
 
 **Scenario O17: orders and repeated destinations (claim 21, Q-0087 and Q-0072).**
-- *Setup:* stock data, director and mods off, game speed 6, on the flat skirmish map of
+- *Setup:* stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game speed 6, on the flat skirmish map of
   the preamble. Use a human-owned ordinary crawling infantry unit whose type is neither a
   fraidycat nor a cyborg, and cause it to become prone by a nonlethal enemy hit. Place two
   open destination cells A and B well away, an enterable friendly transport, a capturable
@@ -1942,7 +1942,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
   from later approach; this test records no expected approach radius or stopping rule.
 
 **Scenario O18: orders during factory release (claims 5, 8 and 9).**
-- *Setup:* the preamble's flat skirmish map, game speed 6, director and mods off. Produce
+- *Setup:* the preamble's flat skirmish map, game speed 6, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Produce
   an ordinary armed drive vehicle at a human-owned ground vehicle factory K. Use a named
   test map override setting K's door time to 1 game minute solely to extend the pre-exit
   observation window; this is test data, not a stock value. Separate runs set K's
@@ -1984,7 +1984,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
 
 **Scenario O19: default command, options and view keys (claims 22 and 23).**
 - *Setup:* a fresh keyboard profile, a small purpose-made flat skirmish map with an open test
-  area and the bystander isolated as in the preamble. Stock data, director and mods off,
+  area and the bystander isolated as in the preamble. Stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
   speed 2, 800 × 600. Pre-place a selected armed vehicle, an infantry unit and a deploy-capable
   unit of stock types. For scrolling use a map large enough to keep the view away from its
   limits. Record the key-binding screen and a video, with the tick and order recorder of
@@ -2023,7 +2023,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
 
 **Scenario O20: edge-scroll presentation (claim 24, table E).**
 - *Setup:* a large flat stock-data skirmish test map at 800 × 600, speed 6,
-  director and mods off, with no selected units and the view away from all scroll limits.
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), with no selected units and the view away from all scroll limits.
 - *Procedure:* hold the pointer at the eight outer-edge sectors, then repeat at the
   corresponding map scroll limits. At the top and bottom edges also test positions just
   inside, exactly at, and just outside the 16-percent horizontal boundaries. Repeat
@@ -2037,7 +2037,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
   classification falsifies the corresponding part of claim 24.
 
 **Scenario O21: route status messages (claim 25).**
-- *Setup:* O8 game B, stock data, director and mods off, at speeds 1 and 6.
+- *Setup:* O8 game B, stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), at speeds 1 and 6.
   use screen/audio capture with a real-time clock and tick recorder. Repeat three times
   per speed. A separate named test string table replaces each of the two refusal entries
   with a distinct short invented text, then with text long enough to wrap; remove it after
@@ -2066,7 +2066,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
   carriage returns, line feeds, paired breaks and an empty message. Use a named
   test font copy with
   changed glyph widths for a separate font-dependency control. Restore both assets
-  afterwards. Director and mods remain off except these named test assets.
+  afterwards. There is no engine add-on and there are no mods, except these named test assets and the purpose-made test maps.
 - *Procedure:* show each message from fresh starts. Construct text whose advance
   is exactly the initial budget, then exceeds it by one character. Include a word
   longer than that budget, several spaces at the break, a 112-character narrow
@@ -2094,7 +2094,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
 
 **Scenario O21 c: status glyph selection and foreground (claim 25; Q-0501).**
 - *Setup:* O21's tiny skirmish fixture, speed 6, 800 × 600, isolated bystander
-  and its void rule, director and unrelated mods off. Use named valid test font,
+  and its void rule, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use named valid test font,
   string-table and colour-definition copies, restoring them afterwards. Keep a
   mapped capital X. Choose an invented HSV definition for the local player's
   slot whose direct packed RGB differs from shaded/ramp alternatives. Capture
@@ -2128,8 +2128,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
   S-0014 claims 1–3 own the binary file-layout contract.
 
 **Scenario O21 d: fixed line spacing, pitch clipping and glyph top (claim 25; Q-0530).**
-- *Setup:* O21's skirmish fixture and void rule, speed 6, 800 × 600, director and
-  unrelated mods off. Named test assets are a string table with short invented
+- *Setup:* O21's skirmish fixture and void rule, speed 6, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Named test assets are a string table with short invented
   refusal text and structurally valid font copies under S-0014 claims 1–3, all
   with mapped X. Use positive-width synthetic glyphs with distinguishable set
   pixels in their first, middle and final rows. Keep text comfortably below the
@@ -2160,7 +2159,7 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
 **Scenario O22: arrows during order blocks (claim 23, Q-0391).**
 - *Setup:* a large flat skirmish map, no scroll limits near the observed view,
   speed 6, 800 × 600, fresh unconflicted arrow bindings, pointer in the interior.
-  Director and mods off. Use S-0201 claim 11's map-triggered chrono flash late
+  No engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use S-0201 claim 11's map-triggered chrono flash late
   enough to hold an arrow beforehand. Its early unfrozen blocked interval must
   contain the input tests. Use scripted normal key events and a read-only
   cycle/tick/view recorder, with video of pointer hiding and the flash.
