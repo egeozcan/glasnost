@@ -265,12 +265,21 @@ fn edge_loading_request_makes_no_cloud() {
     let mut map = testkit::empty_map(SIZE);
     let c = testkit::mid(SIZE, 0, 0);
     map.cells.get_mut(c).expect("a map cell").overlay = index;
-    let plain = game(&r);
-    let rules = Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-gas"));
-    let w = glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(7))
-        .expect("loads");
+    let load = |r: &Ruleset| {
+        let rules = Arc::new(glasnost_sim::rules::SimRules::new(r, "synthetic-gas"));
+        glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(7))
+            .expect("loads")
+    };
+    let w = load(&r);
     assert!(w.gas.systems[&shared(&w)].particles.is_empty(), "no cloud from loading");
-    assert_ne!(w.rng, plain.rng, "the request's creation draws are taken");
+    // The same map and overlay with no particle requested: only the two
+    // requests' creation draws (one raw value each, S-0202 claim 15) differ.
+    let mut none = r.clone();
+    none.sim.animations.get_mut("SEEP").unwrap().num_particles = Some(0);
+    let mut expected = load(&none).rng;
+    expected.raw();
+    expected.raw();
+    assert_eq!(w.rng, expected, "the requests' creation draws are taken");
 }
 
 /// spec: S-0613 claim 17 (a positive lifetime marks the shared system in that turn; empty, it leaves play in the same turn and is not created again; a later virus death makes no cloud but takes the request's creation draws, a departure)
