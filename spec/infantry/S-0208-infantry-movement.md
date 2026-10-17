@@ -2,11 +2,11 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 32
+revision: 33
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295]
 supersedes: []
@@ -2152,7 +2152,7 @@ cases).**
     separate the exception from the main rule, which can clear the destination first on an arrival
     tick in range (Open questions); it checks only the state once firing has begun.
   - (d) No target: a move order to an empty cell eight cells away.
-  - (e) Separate stock-data runs, no weapon overrides, director and mods off, game speed
+  - (e) Separate stock-data runs, no weapon overrides, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game speed
     index 2. A tiny map has a straight high bridge over flat enterable clear ground, with
     approaches at deck level and a ground route beneath it. For e2, shape the access route
     so that the only route from the ground start to a bridge approach passes through *C*
@@ -2212,8 +2212,8 @@ cases).**
 
 **Scenario W11: teleporting infantry landing (claims 19 and 20; Q-0181, Q-0235).**
 - *Setup:* a tiny flat clear skirmish map, a human player's stock teleporting infantry, one
-  bystander computer player kept outside the observed area, game speed index 2, director and
-  mods off. Use scripted orders and a read-only recorder for positions, destinations, occupancy
+  bystander computer player kept outside the observed area, game speed index 2, no engine add-on and
+  no mods (the named test files of a scenario and the purpose-made test maps excepted). Use scripted orders and a read-only recorder for positions, destinations, occupancy
   and scenario stream state. Repeat each part with three recorded seeds. Void runs in which
   an unnamed bystander acts on a test object or enters the observed area.
 - *Procedure:* (a) Order empty cell centres, then cells with one, two and three allied infantry
@@ -2294,7 +2294,7 @@ cases).**
 
 **Scenario W12: candidate factory tether damage test (claim 15).**
 - *Setup:* a tiny clear skirmish map, human-owned infantry factory and stock infantry, a
-  bystander computer player far away, game speed index 2, director and mods off. Produce
+  bystander computer player far away, game speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Produce
   infantry with no rally point and then with a rally point, three recorded seeds each.
 - *Procedure:* use scripted production and a read-only recorder as in S-0417 U10. Record
   contact, tether, current and queued behaviour, target, destination and movement in progress
@@ -2316,7 +2316,7 @@ cases).**
 **Scenario W13: close-range movement within the current cell (claim 21).**
 
 - *Setup:* a tiny flat clear skirmish map, one human-controlled house and one bystander
-  computer player, game speed index 2, stock data, director and mods off. Use ordinary walking
+  computer player, game speed index 2, stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use ordinary walking
   infantry with the close-range property described by S-0307. Pre-place the attacker at the
   top position and a legal enemy target in a neighbouring cell. Keep the observed area free
   of other actors. Use S-0307 RG23(b)'s successful-shortcut geometry and repeat with each side
@@ -2340,7 +2340,7 @@ cases).**
 
 **Scenario W14: infantry entered-by timing (claim 22; Q-0268 part 1).**
 - *Setup:* a tiny clear skirmish map with human-owned stock walking infantry and one
-  bystander computer player kept away, speed index 2, director and mods off. Attach
+  bystander computer player kept away, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Attach
   independent one-time any-house entered-by tags to successive intermediate and
   final cells. Each tag's action sets a distinct map variable. Include a level high
   bridge with tagged ground/deck passage. Repeat each arrangement three times.
@@ -2370,7 +2370,7 @@ cases).**
 **Scenario W15: walking factory clear-report timing (claim 23; Q-0295).**
 - *Setup:* a tiny flat clear skirmish map with a human-owned stock infantry factory,
   enough credits and prerequisites to produce ordinary walking infantry, one
-  bystander computer player kept away, game speed index 2, director and mods off.
+  bystander computer player kept away, game speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
   Set a rally point beyond the exit cell. Observe the factory, its foundation and
   the full route to the rally point. Use S-0417 U10(a)'s ordinary release setup.
   If stock release geometry gives only one walking-target arrival before the exit,
