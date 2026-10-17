@@ -2,11 +2,11 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0110, Q-0111, Q-0460, Q-0649]
 supersedes: []
@@ -1014,7 +1014,7 @@ belongs to S-0214.
 
 **Common setup.** The glossary's *measurement setup*, a skirmish with one human player and one
 bystander computer player (glossary) on a purpose-made map of one theater, flat ground at level 0 unless stated, fog of
-war off, regrowth off unless a part enables it, any game speed. The director and mods are off,
+war off, regrowth off unless a part enables it, any game speed. There is no engine add-on and no mods,
 except for each scenario's explicitly named test data. Explored cells are read from screenshots (S-0110 claims 1 and 2; the test
 shroud sprite of S-0110's scenarios may be used so that each cell's state can be read from its own
 diamond). Tick numbers come from a *recorder* that reads the number of ticks run. The test map's
@@ -1416,7 +1416,7 @@ mean an allied and an enemy bystander computer player.
   purpose-made map with a border visible inside the usable area. Use named test rules enabling
   regrowth at a period of 900 ticks and lengthening the end delay to 1800 ticks (S-0414 claim 8).
   Keep lobby shroud on and ally reveal off, and place no allied or reveal-to-all building.
-  Director and mods are off apart from this named test data. In run A, give the human an active
+  There is no engine add-on and no mods apart from this named test data. In run A, give the human an active
   satellite after tick 200. Stop one powered enemy border gap field while the satellite works,
   with no other field touching non-legal cells, as in V8 H. Confirm that outside-neighbour edge
   pieces vanish. Destroy the satellite and wait for its loss recheck, with no running border
