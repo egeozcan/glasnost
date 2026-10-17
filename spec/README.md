@@ -131,6 +131,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 38 | approved | — |
 | [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 7 | approved | — |
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 37 | approved | — |
-| [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 5 | approved | — |
 | [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 15 | approved | — |
 | [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 34 | approved | — |
+| [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 6 | approved | — |

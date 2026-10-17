@@ -2,7 +2,7 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -44,6 +44,9 @@ skirmish only; network games and campaigns are out of scope.
 - **Permanent and temporary mind control** use the psionics immunity of claim 1.
   Their eligibility rules are S-0601 claims 3 and 13. Psychic-domination eligibility is
   S-0612 claim 13.
+- **Healing itself:** S-0314 (healers, self-healing, house-wide totals, repair depot, hospital,
+  building repair), and the heal-all crate, which is S-0520 claim 14. Claim 6 says only how a
+  berserk unit stands in them.
 
 ## Terms
 
@@ -237,6 +240,17 @@ skirmish only; network games and campaigns are out of scope.
      keeps attacking its allies. In our engine that rule holds only for units of the neutral and
      special houses (glossary, *AI house*). S-0215 claim 33a owns the clearing rule and
      its other exceptions.
+   - **Healing is unaffected.** A berserk unit regains health exactly as an ordinary unit does:
+     self-healing, the house-wide healing totals, healers, a repair depot and a hospital are
+     S-0314's, and the heal-all crate is S-0520 claim 14's. None of their conditions asks whether
+     the unit is berserk. A healing hit from a warhead that is not berserk-causing leaves the
+     remaining time unchanged. A hit with a negative amount from a berserk-causing warhead is still
+     a berserk hit (S-0302 claim 10): it changes no health, and its effects are those of claims 4
+     and 5, so its place in the update relative to the countdown step can be observable (Open
+     questions).
+     Healing backing: `unmeasured`: no scenario here records the health of a berserk unit, and no
+     setup covers the healers, the repair depot, the hospital or the crates.
+     Healing confidence: medium.
    - Backing: `measurable` (scenario P4)
    - Confidence: high (berserk-friendly refusal); medium (the exception to the computer-owner rule)
 
@@ -643,9 +657,10 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
 - Whether the original runs the countdown of a landed aircraft being erased. S-0514 claim 17 and
   S-0215 claim 2 exclude its movement, turning, firing and behaviour processing, and say nothing of the
   countdown. Until a measurement settles it, claim 5 takes no countdown step there.
-- Whether healing of a berserk unit differs from an ordinary unit's, and whether it falls before or
-  after the countdown step (Q-1180's healing question). The draft states nothing about it; it is
-  unmeasured and no scenario here covers it.
+- Whether healing of a berserk unit falls before or after the countdown step (Q-1180's healing
+  question). Healing does not read the berserk state (claim 6), so the order matters only for a hit with
+  a negative amount from a berserk-causing warhead (claim 6; S-0302 claim 10). No scenario here
+  measures it.
 - (Low) Whether a psychic sensor that leaves the map but is not destroyed stays a sensor of its
   owner (claim 9). It cannot be in operation then, so no observable depends on it as far as known.
 - Exact line-colour animation, and whether its cosmetic appearance needs a separate rendering
