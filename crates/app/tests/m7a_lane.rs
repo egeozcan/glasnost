@@ -455,8 +455,8 @@ fn mind_control(lane: &mut Lane) {
 }
 
 /// S-0601 claim 16: an unlimited controller is given (by the takeover
-/// itself) more victims than its overload counts allow; the pulses are
-/// counted and its health followed.
+/// itself) more victims than its overload counts allow; its health is
+/// followed until it dies or 300 ticks pass.
 fn mind_overload(lane: &mut Lane) {
     let w = lane.world();
     let ctrl = controller_type(w, true);
@@ -493,10 +493,17 @@ fn mind_overload(lane: &mut Lane) {
         let v = lane.spawn(Kind::Vehicle, &vname, enemy, at);
         held += usize::from(glasnost_sim::mind::take(lane.world_mut(), c, v));
     }
-    println!(
-        "victims taken directly: {held} (overload counts list length {})",
-        counts.len()
-    );
+    println!("victims taken directly: {held}");
+    let lethal = {
+        let w = lane.world();
+        let m = &w.rules().combat.general.mind;
+        let level = glasnost_sim::mind::overload_level(&m.overload_count, held as i64);
+        let dmg = level
+            .and_then(|i| m.overload_damage.get(i).copied())
+            .unwrap_or(0);
+        dmg >= lane.strength(c)
+    };
+    println!("one pulse at this level is at least the controller's strength: {lethal}");
     lane.c.session.as_mut().unwrap().play.selection = vec![c];
     lane.look_at(spot);
     let start = lane.permille(c);
