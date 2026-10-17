@@ -2,11 +2,11 @@
 id: S-0606
 title: Vehicle bunker
 topic: structures
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -495,7 +495,7 @@ damage and range keys of being bunkered are imported by the specs of claim 9.
 
 ## Measurement scenarios
 
-General setup: stock data, director off and mods off, except for the explicitly named test-map
+General setup: stock data, no engine add-on and no mods (the named test files of a scenario excepted), except for the explicitly named test-map
 fixtures below under the glossary's measurement-setup allowance. Use a tiny flat clear map, game
 speed index 2, 800 × 600, one human house and one bystander computer player. The observed area
 is the bunker and its approach lanes. Apply the glossary's bystander void rule, not an assumption
