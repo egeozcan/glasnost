@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 51
+revision: 52
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -176,7 +176,7 @@ control: a patched executable, an injected library, a launcher that alters the g
 a third-party extension of the rules language. Data-only changes are *mods*, not engine add-ons. A
 presentation-only display compatibility layer is not an engine add-on either, although it may be an
 injected library: it changes only how finished drawn frames reach the screen, never the game's logic
-or the pixels it draws (see *measurement setup*).
+or the pixels it draws (see *measurement setup*). A *director* is an engine add-on on the measuring machine (the project lead's decision of 2026-10-17).
 
 **engine constant.** A number fixed inside the original's program rather than read from data, such as
 the number of leptons per cell, a table size, a hard-coded multiplier or an absent-key default. Specs
@@ -251,8 +251,8 @@ expected result and the result that would falsify the claim.
 
 **measurement setup.** The conditions every measurement runs under, unless a scenario says
 otherwise. The original is installed unmodified: its files match the release's published file list.
-Only stock data is used. No loose files override shipped data, and no engine add-on is active. In
-short: no engine add-on and no mods (the named test files of a scenario and the purpose-made test
+Only stock data is used. No loose files override shipped data, and no engine add-on or director is active. In
+short: no engine add-on, no director and no mods (the named test files of a scenario and the purpose-made test
 maps excepted). This is the
 condition of the measuring machine, not a setting of the original.
 Purpose-made test maps are allowed. Game speed and screen resolution are free unless the scenario
@@ -547,8 +547,8 @@ behaviour name in italics means the behaviour, never the sequence kind of the sa
 See S-0215; orders that set a behaviour are S-0213's.
 
 **capacity (transport).** The imported passenger count of a vehicle, aircraft or building type, an integer
-(S-0507 claim 1; S-0214 reads the same count for buildings, where a count of 0 or below carries no
-passengers). S-0507 itself covers only vehicle and aircraft transports. Not a harvester's resource
+(S-0507 claim 1; S-0214 reads the same count for buildings: a count of exactly 0 means no passengers in
+row I13; a count below 0 meets neither that row nor the transport verdicts x and q of S-0214). S-0507 itself covers only vehicle and aircraft transports. Not a harvester's resource
 capacity.
 
 **computer-controlled.** A house of the original that its computer player plays rather than a
@@ -2765,16 +2765,5 @@ scenario T6, part G.
 
 ## Questions for the project lead
 
-- Should the glossary define *director*? Approved specs' measurement scenarios say "director and mods
-  off" (S-0404 and S-0522 cite the glossary's measurement setup for that condition), and use the
-  word without defining it. The glossary's measurement setup states that no engine add-on and no mods are
-  active, and says nothing about a director, so it does not give the director
-  condition those specs cite. The glossary also
-  does not know what *director* denotes: whether it is an outside component of the measuring machine
-  or a setting of the original. The two readings give different meanings to "off".
-- The lead decides one of two things, and the owner then applies it and drops this question:
-  either the glossary gains a definition of *director* (with the meaning the lead supplies) and states
-  the condition in the measurement setup, or the specs stop citing the glossary for it and say the
-  condition themselves. If the word turns out to name an outside tool or source, the lead also decides
-  how the scenarios that use it are reworded. Until then the term is used as the approved specs use
-  it. The decision is needed before sign-off.
+None. (The lead decided *director* on 2026-10-17: it named an engine add-on on the measuring machine, not a setting of the original; every measurement setup says "no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted)", as the measurement setup here does.)
+
