@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 40
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -713,7 +713,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     nothing new is selected. With force-select, eligible objects are added, not toggled:
     already-selected objects remain selected. Force-move and force-fire do not otherwise
     change this ordinary box selection; holding force-fire with force-select still adds,
-    regardless of the counted-modifier rule for actions. A type-select drag instead expands
+    regardless of the counted-modifiers rule (Terms) that governs actions. A type-select drag instead expands
     the types encountered through claim 12's type-selection rule, and is silent (S-0701
     claim 17).
 
@@ -956,7 +956,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
     cell at which the pointer was released. For integer cell coordinates (*x*, *y*), its
     horizontal position is (256*x* + 128, 256*y* + 128) leptons, using exact integer arithmetic
     with no rounding. Its world height is the terrain surface height at that centre
-    (S-0106 claim 2), plus 416 leptons for an intact high-bridge deck cell. Thus a click on
+    (S-0106 claim 2), plus 416 leptons (four height levels of 104 leptons, S-0204 Constants; an engine constant derived
+    from the projection, not a data value) for an intact high-bridge deck cell. Thus a click on
     the deck shows the marker at deck height, never beneath it; the actor's own height and
     current cell layer do not set the marker height. The original adds the deck lift only
     on cells carrying the deck-entry mark of S-0212 claim 10, so an unmarked deck cell can
@@ -1056,7 +1057,7 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 > toward zero. Drag begins exactly when *d* > 4. For press (*a*, *b*) and final endpoint
 > (*c*, *e*), an integer box point (*x*, *y*) is inside exactly when
 > min(*a*, *c*) ≤ *x* ≤ max(*a*, *c*) and min(*b*, *e*) ≤ *y* ≤ max(*b*, *e*).
-> Endpoint limiting and these comparisons are exact integer operations, without rounding.
+> The limiting of the moving endpoint to the battlefield view (claim 18) and these comparisons are exact integer operations, without rounding.
 
 > **F7 (screen-candidate point bounds).** Coordinates are integer pixels relative to
 > the battlefield view's top-left corner; *W* and *H* are its width and height in pixels,
@@ -1078,16 +1079,17 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
+|---|---|---|---|
 | Left-drag threshold | 4 | pixels of truncated table-root distance | Claim 18, F6; strictly greater starts the band box |
 | Right-drag metric factor | 2 | dimensionless | Claim 27, F8; applied separately to each host drag metric |
 | Right-drag metric (ours) | 4 | pixels per axis | Claim 27, F8; fixed by lead decision in place of the host setting |
 | Screen candidates | 500 | objects per drawn frame | Claims 20, 24 and 25; not the selected-object limit |
 | Mobile candidate margin | 32 | pixels on each axis | F7; independent of image dimensions |
 | Cursor frame interval | 4 | 16-millisecond presentation-clock units | Claim 22; nominally 64 milliseconds per advance, checked only on updates |
-| Type-select double press | 500 | milliseconds | Claim 12. Press times are whole milliseconds; a second press counts when its time minus the first press's time is at most 500. Input only. |
+| Type-select double press | 500 | milliseconds | Claim 12; an engine constant of the original, not a host setting. Press times are whole milliseconds; a second press counts when its time minus the first press's time is at most 500. Input only. |
 | Full health | 1 | health ratio | Tables I and V. The original fixes the threshold at 1 and does not read it from data. |
 | Attackable height limit | −20 | leptons of height above the surface | F3; a target must be strictly above it |
-| Passenger land-speed limit | 0.01 | land multiplier (a factor; 1 = unchanged speed) | Row VD7 and Formulas F4; a first passenger whose multiplier on the cell's land type is strictly below it counts as unable to move there (not on water). A data value of exactly 0.01 counts as below it, because the original stores the multiplier in single precision (Formulas F4) |
+| Passenger land-speed limit | 0.01 | land multiplier (a factor; 1 = unchanged speed) | Row VD7 and Formulas F4; a first passenger whose multiplier on the cell's land type is strictly below it counts as unable to move there, except that the test is not applied where the land is water. A data value of exactly 0.01 counts as below it, because the original stores the multiplier in single precision (Formulas F4) |
 
 ## State and ordering
 
@@ -1105,8 +1107,11 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 | Right press accepted, no scroll drag | Right-button release | Cancel targeting mode under claim 28, otherwise clear selection |
 
 **Table C: battlefield cursor frames** (claims 21 and 22). These are frame numbers in the
-imported cursor image, not action numbers. All multi-frame rows animate with claim 22's interval.
-“Arrow” means static frame 0, hot spot (0, 0).
+imported cursor image, not action numbers. The frame range of each action and its length are
+engine constants of the original, not read from the imported cursor file, which supplies only the
+pixels of the frames (confidence high, backing measurable, Scenario T16's fixed-mapping step).
+All multi-frame rows animate with claim 22's interval, itself an engine constant (Constants).
+“Arrow” means static frame 0, hot spot (0, 0) (pixels from the image's top-left corner).
 
 | Action | Revealed target | Shrouded target |
 |---|---|---|
@@ -1352,8 +1357,10 @@ second vehicle click with *b* = *select* keeps *select* through n4: it does not 
 enter order or enqueue a waiting vehicle. This is not automatically *no-enter*. Claim 3
 then makes it a selection click. Enter orders issued in the same tick before any contact is
 reserved, including a group click under claim 2's shared-state rule, instead follow S-0314
-claim 23 when executed: the first vehicle takes contact, and a damaged second vehicle waits
-with queued entry. A full-health second vehicle does not queue. This does not grant an enter
+claim 23 when executed: the vehicle whose enter order comes first in event order (S-0213) takes
+contact, and a damaged second vehicle waits with queued entry. For a group click, event order is
+selection order (claim 2; S-0213's rule for orders issued for a selection), so the first selected
+vehicle takes contact. A full-health second vehicle does not queue. This does not grant an enter
 order to a later click on an already-full depot.
 
 | Row | Condition | *n* |
@@ -1365,7 +1372,7 @@ order to a later click on an already-full depot.
 
 *Transport verdict q.* Rows q1 to q3 apply only when *n* is none of attack, repair vehicle, area guard and
 no-enter, and the target is an allied unit or building other than the actor, not being erased and
-not phasing in, whose type carries passengers (its imported passenger count is above 0, for a building type as for a vehicle type; an absorbing building of count 1 or more reaches rows q1 to q3, one of count 0 or below does not).
+not phasing in, whose type carries passengers (its imported passenger count is above 0, for a building type as for a vehicle type; an absorbing building of count 1 or more reaches rows q1 to q3, one of count 0 or below does not). Row I13 for a healing actor uses a different test for a building target (a count of exactly 0 means no passengers), so a building with a negative count meets neither this condition nor I13's no-passengers condition.
 
 | Row | Condition | *q* |
 |---|---|---|
@@ -1631,12 +1638,15 @@ Ordering consequences:
   type and the truce setting, a vehicle thief gets *capture* on another house's harvester.
   `quirks.hijack_truce_harvester_check` (default: the original, no exception). With the switch
   off, a harvester whose type is in the harvester list gives *select* instead while the truce
-  setting is on.
+  setting is on. Confidence: medium; backing `unmeasured` in a skirmish. The approved S-0412 fixes
+  the harvester truce off in every skirmish (claim 1, its table row "always off in a skirmish"),
+  and its scenario K2 checks that a truce setting turned on in a test file has no effect. So this
+  switch's truce branch cannot be reached in a skirmish (see Open questions).
 - **Permanently disguised targets pass the disguise rule** (claim 6). A target whose type is
   permanently disguised passes the disguise rule as if it were not disguised at all, while a
   temporarily disguised one does not. `quirks.permadisguise_attack_cursor` (default: the
   original). With the switch off, a permanently disguised target is treated like any other
-  disguised one.
+  disguised one. Confidence: medium; backing `measurable` (Scenario T4, the enemy spy whose type keeps the permanent-disguise flag).
 - **Berserk actors show actions they cannot use** (claim 15).
   `quirks.berserk_action_cursor` (default: original). A berserk infantry or vehicle
   representative shows the cursor for its resolved action even though it can receive no order.
@@ -1658,15 +1668,20 @@ Ordering consequences:
   G7). Tables AC and B therefore have no rows for those inputs. Three further combinations are
   reached by no known input, and this spec does not fix a final action for them: the *Otherwise*
   rows of tables I, V and BC (rows I29, V7 and BC7) are not meant to cover them. Each is written as
-  the input, then the result the original would give were it reached:
+  the input, then the result that a literal reading of this spec's tables gives for it. That
+  reading is not a fixed final action of this spec, and it is unmeasured (no known input reaches
+  it, so no scenario can observe it):
   - an *area guard* on an enemy building by a charge planter gives *sabotage* (row G6 gives *area
     guard* only on an allied object).
   - the action *select* (value *b* of table V) by a vehicle on a repair depot or tank bunker that is
-    not allied and answers *accepts* gives *move* (rows n1 to n3 take every allied accepting
-    building, a building that is being erased never gets *select* from row G10, and no non-allied
-    building is known to answer *accepts*).
-  - a building whose cell result is *move* and that is not movable gives *nothing* (every such
-    building is rally-capable, and row BC5 takes it first).
+    not allied and answers *accepts*: rows n1 to n3 take every allied accepting building, a
+    building that is being erased never gets *select* from row G10, and no non-allied building is
+    known to answer *accepts*. Read literally, table V passes *select* through rows n4, q4 and V7,
+    so a literal reading gives *select*; whether the original gives something else here is not
+    known.
+  - a building whose cell result is *move* and that is not movable: a literal reading gives *move*
+    through row BC5 (every such building is rally-capable), and part 3 of table M gives that
+    building its guard-spot order.
 
   If a measurement finds an input that reaches one of them, a revision adds it. No unarmed actor has a generic
   *attack*, on an object or on a cell, except an infiltrating infantry type (claim 6 (c), rows GC4
@@ -1683,12 +1698,15 @@ Ordering consequences:
   carrier aircraft can still pick up an allied vehicle. This is probably an oversight of the
   original. `quirks.berserk_carrier_tote` (default: the original, the exception applies). With the
   switch off, a berserk carrier aircraft gets no order from any click, like every other berserk
-  object, and shows no *tote* (low).
+  object, and shows no *tote* (confidence low; backing `measurable`, the berserk carrier aircraft line of Scenario T6, which expects tote with the move order when the switch is on and no order when it is off).
 - **Building cell attack without a weapon** (row BC3). A building with no weapon in its first slot
   gets *attack* over a cell on which its generic result is *attack*, an action it cannot carry out
   (it can only concern a type that switches between weapons). `quirks.building_cell_attack_no_weapon`
   (default: the original). With the switch off, such a building gets *nothing*, as a building with a
-  weapon that cannot be used does (row BC6) (low).
+  weapon that cannot be used does (row BC6). Confidence low; backing `measurable`: Scenario T10's
+  line *empty first slot* tries a named test type with no weapon in its first slot. If the original
+  does not let such a type fire at all, the record says so and the row stays `unmeasured` (Open
+  questions).
 - **Representative distance.** Formulas F1. Ties between selected objects are rare. Our engine
   computes the same value with the table square root of S-0204 (`quirks.table_root_distance`
   there).
@@ -1910,8 +1928,7 @@ or the cursor does not follow the selection order in the tie-break.
   tank and repeat: first tank, engineer, medic. Falsified by any other order. S-0701 D3 separately
   tests selection responses for enslaved and deactivated objects, including silence without
   fallback.
-- *Part B, acknowledgement choice (claim 14; F5).* At speed index 6, director and unrelated
-  mods off, use the isolated map above and a named test map override with distinguishable
+- *Part B, acknowledgement choice (claim 14; F5).* At speed index 6, no engine add-on and no mods (the named test files of a scenario excepted), use the isolated map above and a named test map override with distinguishable
   selection and special-attack lists. Give two own unit types nonempty special-attack lists of
   different lengths and a third an empty one. Use an area-guard cell click (force-move and
   force-fire together) to produce an order without its own response kind. Script one click
@@ -2116,7 +2133,7 @@ barracks without force-move (row BC5), an order for the berserk unit (claim 15),
 for the garrisoned building with the flag on (Terms, *armed*).
 
 **Scenario T6 part B: unusable berserk cursors (claims 15 and 21).** Use the isolated
-flat skirmish setup at speed 6 and 800×600, director and unrelated mods off. Reuse T5's
+flat skirmish setup at speed 6 and 800×600, no engine add-on and no mods (the named test files of a scenario excepted). Reuse T5's
 named test-map capture-threshold override. Place an own engineer, an own armed tank, an
 enemy capturable repairable building below that threshold, an enemy tank and a stock
 berserk-causing attacker. Select each own actor alone before berserk starts, in separate
@@ -2242,7 +2259,7 @@ on the same objects before the state starts (or, in part C, with the flag named 
 - *Part B, phasing in (row GC1).* On a flat, revealed test map, a named test map override
   gives an own armed tank the teleporting locomotor of S-0207 Import mapping, without the
   harvester flag. An enemy tank is in weapon range of its landing cell. At game speed 2,
-  with director and mods off except this named test data, order an own jump far enough that
+  with no engine add-on and no mods (the named test files of a scenario excepted; here this named test data), order an own jump far enough that
   S-0207 F9 gives *D* ≥ 4 ticks. In separate runs, scripted input clicks an empty cell or
   the enemy tank on the first tick after the jump. Record the jump tick, phasing-in state,
   selection, orders and destination on every tick through the end of phasing in. Repeat
@@ -2354,7 +2371,7 @@ alliance of the special house with the actor's house, and not the reverse, decid
 record says so and the side stays `unmeasured` (Open questions).
 
 **Scenario T12: selection after destruction (claim 16, Q-0081 parts 3 and 4).**
-- Setup: the usual stock-data skirmish map and bystander isolation, director and mods off,
+- Setup: the usual stock-data skirmish map and bystander isolation, no engine add-on and no mods (the named test files of a scenario excepted),
   speed index 6, one own
   visible selectable building of an exploding type, one own visible selectable sellable
   building, and an enemy attacker in the observed area. Use scripted input and a read-only
@@ -2377,7 +2394,7 @@ record says so and the side stays `unmeasured` (Open questions).
   evidence of refusal. The measurement procedure supplies the specified input and records the listed state and selection observables under the measurement setup.
 
 **Scenario T13: non-producing factory categories (claim 17).** Use the usual isolated test map,
-stock executable, speed index 6, director and unrelated mods off, and named test data as in
+stock executable, speed index 6, no engine add-on and no mods (the named test files of a scenario excepted), and named test data as in
 T10 and S-0003 V16. The test data gives
 an own visible selectable building a recognised non-producing factory category from S-0003
 C19, no weapon, no passengers and no other deployment ability. Select it alone and click it
@@ -2395,7 +2412,7 @@ applied, a primary order from the no-factory control, loss of the guard-spot ord
 independently rally-capable variant, or a rally order from the category alone. The measurement procedure supplies the specified input and records the listed orders and imported category under the measurement setup. These named-data variants are not stock-data measurements.
 
 **Scenario T14: band boxes (claims 18 and 19, Q-0278).** Use the usual isolated stock-data
-map, 800×600, speed 6, director and mods off. Place own infantry, ordinary tanks, harvesters,
+map, 800×600, speed 6, no engine add-on and no mods (the named test files of a scenario excepted). Place own infantry, ordinary tanks, harvesters,
 aircraft on the ground and in flight, an ordinary building and a vehicle-like building, plus
 an enemy tank. Use scripted input and video plus a read-only selection/order recorder. One
 run per sub-case; repeat ambiguous input samples.
@@ -2430,7 +2447,7 @@ shroud-only refusal falsifies the corresponding claim. Record press and motion s
 the threshold can be crossed between displayed frames.
 
 **Scenario T15: selection capacity (claim 20, Q-0278 part 4).** At speed 6 and 800×600 on
-an isolated map, director and mods off, pre-place 520 own selectable mobile units in two
+an isolated map, no engine add-on and no mods (the named test files of a scenario excepted), pre-place 520 own selectable mobile units in two
 non-overlapping groups that can be viewed separately. Select 300 in one view, scroll, then
 add 220 in the other with force-select. Record selection count, not how many obey a move
 click. Expected: 520 can be selected. In a separate run show all 520 at once and box the
@@ -2467,7 +2484,7 @@ falsifies the corresponding claim. Unrecorded flight re-entry makes that compari
 inconclusive, not evidence for a new tie-break.
 
 **Scenario T18: frame membership at the view edges (claim 24, F7; Q-0392).** Use an
-isolated purpose-made skirmish map, speed 6, 800×600, director and mods off, with one
+isolated purpose-made skirmish map, speed 6, 800×600, no engine add-on and no mods (the named test files of a scenario excepted), with one
 bystander computer player kept outside the observed area under the glossary's void
 rule. With scripted scrolling, put an ordinary stationary mobile unit's recorded box
 point successively at −33, −32, −1, 0, the view dimension, the dimension + 32 and the
@@ -2529,7 +2546,7 @@ screen-point record to distinguish displacement from refusal. A consistent diffe
 across the three runs supplies the state-specific formula for a follow-up revision.
 
 **Scenario T17: physical gestures and mode entry (claims 5 and 23, Q-0286).** Use the
-usual isolated flat skirmish map at 800×600, speed 6, director and mods off, with two
+usual isolated flat skirmish map at 800×600, speed 6, no engine add-on and no mods (the named test files of a scenario excepted), with two
 own armed tanks, an enemy tank and an own unarmed engineer. Start with fresh keyboard
 preferences. With one tank selected, try left and right Alt separately while clicking
 the enemy tank: expect move, not attack. Try left and right Ctrl while clicking the
@@ -2556,7 +2573,7 @@ If the profile supplies no command bar, record the button cases as inconclusive 
 than substituting a guessed keyboard shortcut.
 
 **Scenario T16: cursor images (claims 21 and 22, Q-0277).** Use the usual 800×600 isolated
-map with speed indices 2 and 6 in separate runs, director and mods off. Reuse T3–T10's
+map with speed indices 2 and 6 in separate runs, no engine add-on and no mods (the named test files of a scenario excepted). Reuse T3–T10's
 actor/target pairs to obtain every table C action; named test-map overrides are only those
 already needed by those scenarios. Hover without clicking, capture the pointer including
 its input pixel, and compare each displayed image to the user's cursor-image frames.
@@ -2571,7 +2588,10 @@ video timestamp and presentation-update times. Expected: one frame per qualifyin
 4-unit clock interval, wrap at the range end, no restart on unchanged hover, first frame
 on kind change, and no game-speed scaling. A deliberately delayed display update advances
 only one frame. Any frame outside its range, wrong hot spot, simulation-tick pacing or
-multi-frame catch-up falsifies the corresponding rule. Unreachable table C cases remain
+multi-frame catch-up falsifies the corresponding rule. *Fixed mapping:* with a loose copy of the
+cursor file whose frame count is changed at its end (named test data, removed after the run), the
+attack and move cursors still show the frame ranges of table C. A range that follows the file's
+frame count falsifies the claim that the mapping is fixed. Unreachable table C cases remain
 `unmeasured`, with the reason given in claim 21, rather than being forced with modified
 executable behaviour.
 
@@ -2617,7 +2637,7 @@ Rows with no step, `unmeasured`, each for a reason.
   disguise and the disguise as scenery (reasons in claim 6).
 
 **Scenario T19: mouse buttons and drag classification (claims 26 and 27).** Use an
-isolated, large flat stock-data skirmish map, 800×600, speed 6, director and mods off,
+isolated, large flat stock-data skirmish map, 800×600, speed 6, no engine add-on and no mods (the named test files of a scenario excepted),
 with own tanks and infantry, an enemy tank, an own transport and one bystander computer
 player kept outside the observed area. Use scripted press, motion and release events,
 video and a read-only recorder of selection, issued orders and view origin. Record the
@@ -2631,7 +2651,8 @@ between each motion and release.
 - Left-drag using T14's (4, 0), (3, 3), (5, 0) and (4, 4) samples: expect its F6
   click/box distinction, with no right-drag scrolling substituted.
 - With a unit selected and the view far from limits, right-press at an interior pixel.
-  Move by (2*h*ₓ, 0), (0, 2*h*ᵧ), and (2*h*ₓ, 2*h*ᵧ) in separate runs, then release:
+  Let *D*ₓ and *D*ᵧ be twice the recorded horizontal and vertical drag metrics (the F8
+  thresholds). Move by (*D*ₓ, 0), (0, *D*ᵧ), and (*D*ₓ, *D*ᵧ) in separate runs, then release:
   expect no scroll drag and ordinary deselection. Increase just one axis by one pixel:
   expect scroll drag and selection retained at release. In another run cross, return to
   the anchor, then release: selection still retained. Repeat at a view limit: a classified
@@ -2669,7 +2690,7 @@ Unavailable targeting modes are inconclusive; do not force otherwise unreachable
 mode combinations by changing the game's state.
 
 **Scenario T21: box addition and type-expansion order (claim 29, Q-0452).** Use an
-isolated revealed flat skirmish map, speed 6, 800×600, stock data, director and mods off,
+isolated revealed flat skirmish map, speed 6, 800×600, stock data, no engine add-on and no mods (the named test files of a scenario excepted),
 with one bystander computer player kept outside the test area under the glossary's void
 rule. Use scripted input, tick-labelled video with sound, and a read-only recorder of
 candidate identities, successful additions and the resulting selection order. Run each
@@ -2711,7 +2732,7 @@ or gives a selection response falsifies its corresponding type-expansion rule.
 - *Setup:* a tiny purpose-made skirmish map with open flat ground, a slope, elevated flat
   ground and an intact high bridge with accessible deck cells across its width. Use stock
   types and art, one human player and one enemy bystander computer player, game-speed index 2,
-  800 × 600, director and mods off. The observed area contains the bridge and these ground
+  800 × 600, no engine add-on and no mods (the named test files of a scenario excepted). The observed area contains the bridge and these ground
   patches, own infantry, a tank, an aircraft, a rally-capable factory and a harmless target
   object. Keep combat away from the observed area. Capture tick-labelled video and use a
   read-only recorder for the resolved input cell, marker world position, actor order and
@@ -2747,7 +2768,7 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   not evidence that all object clicks create markers.
 
 **Scenario T23: superweapon aim images (claim 31, Q-0742).**
-- *Setup:* tiny purpose-made skirmish maps with stock rules and art, director and mods off,
+- *Setup:* tiny purpose-made skirmish maps with stock rules and art, no engine add-on and no mods (the named test files of a scenario excepted),
   800×600, speed indices 2 and 5, one distant bystander computer player under the usual
   void rule. Across separate runs obtain each stock superweapon targeting mode in table CS
   through its ordinary grant/charge route. Provide working radar, own and enemy buildings,
@@ -2781,21 +2802,9 @@ or gives a selection response falsifies its corresponding type-expansion rule.
 
 ## Open questions
 
-- Q-0742 questions 1–3 are answered by claim 31 and table CS, with radar behaviour already
-  owned by S-0410 claims 12 and 13. Protection tint and sidebar charge/state-label drawing
-  are companion parts owned by S-0513 and S-0512 respectively, not cursor-image rules.
-- Q-0278 is answered by claims 18–20, with the remaining explicitly unmeasured qualification
-  of state-specific transient box points (claim 19, T14 part B). Claims 24 and 25 answer
-  Q-0392's four candidate questions and replace the earlier overflow-order uncertainty:
-  priority follows buildings first, then current mobile drawing order. The precise
-  flight re-entry moments remain S-0102 claim 4's open detail.
-- Q-0286 question 2 is answered by claims 5 and 23 and T17. S-0213 claims 22 and 23
-  already answer questions 1 and 3. Its companion request text should name both specs
-  at the coordinated hand-off.
-- Q-0277's edge-scroll cursors and radar's choice of cursor are companion-spec parts
-  (S-0213 and S-0410). Building-placement hover images belong with S-0406's placement
-  display. Claims 21 and 22 answer this spec's ordinary battlefield and sidebar-mode parts.
-  Route-point editing cursor substitutions are not covered by table C.
+- The state-specific transient box points of claim 19 stay `unmeasured` beyond T14 part B.
+- Route-point editing cursor substitutions are not covered by table C, and building-placement
+  hover images belong to the placement display's spec.
 
 - Tables AC and B, and the building cell table BC, are low confidence throughout. Their steps are
   in Scenarios T6 and T10 (the list after Scenario T10 gives the rows that are `unmeasured`, each
@@ -2854,9 +2863,7 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   power drain of row B4 is derived from the type's extra-power field ("the drain part of a negative
   value", Import mapping).
 
-## Questions for the project lead
-
-- **Coordinated hand-off checks.** Confirm S-0212 claim 25 and P16 runs (u) and (r)
+- **Coordinated hand-off checks (verifications for the hand-off, not decisions).** Confirm S-0212 claim 25 and P16 runs (u) and (r)
   preserve claim 11's direct-destination bypass, unrestricted free-mover no-move search
   and distinction from rally-point searches. The current companion passage already agrees.
   Confirm S-0213 claims 22 and 23 cite claims 5 and 23 here for Q-0286 question 2, and
