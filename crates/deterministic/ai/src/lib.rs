@@ -20,6 +20,7 @@
 //!   another goal instead of the same click every think (PLAN §4.7).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
+pub mod absorber;
 pub mod brain;
 pub mod chrono;
 pub mod crates;

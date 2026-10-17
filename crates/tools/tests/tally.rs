@@ -312,3 +312,71 @@ fn counts_virus_units_and_gas_clouds() {
     assert_eq!(tally.clouds, 1, "{tally:?}");
     assert_eq!(tally.gas_max, 1, "{tally:?}");
 }
+
+// An entry into an absorbing building is counted once, when the passenger
+// goes in; a passenger let out beside the standing building counts as a
+// release; the most passengers a house holds at once and its absorbing
+// buildings are kept per house (S-0605 claims 7, 11 and 13).
+#[test]
+fn counts_absorber_entries_and_releases() {
+    use glasnost_rules::sim::Decimal;
+    let mut r = fixture::ruleset();
+    let mut b = fixture::building(2, 2, 600, 50);
+    b.infantry_absorb = Some(true);
+    b.passengers = Some(3);
+    b.size_limit = Some(Decimal("1".into()));
+    b.econ.extra_power = Some(20);
+    b.tech_level = Some(99);
+    r.sim.buildings.insert("BIOR".into(), b);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("BIOR".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-tally"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut tally = Tally::default();
+    g.step();
+    let bio = testkit::spawn(&mut g.world, Kind::Building, "BIOR", 0, fixture::at(0, 6), 0);
+    let u = testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, fixture::at(4, 6), 0);
+    for _ in 0..3 {
+        g.step();
+    }
+    tally.observe(&g.world);
+    assert_eq!(tally.absorbers[0].len(), 1, "{tally:?}");
+    g.world.houses[0].pending.clear();
+    glasnost_sim::orders::issue(
+        &mut g.world,
+        HouseId(0),
+        Order::Behaviour {
+            actor: u,
+            behaviour: glasnost_sim::rules::Behaviour::Enter,
+            attack_move: false,
+            target: None,
+            dest: Some(glasnost_sim::world::Target::Object(bio)),
+        },
+    );
+    for _ in 0..900 {
+        glasnost_sim::tick::step(&mut g.world);
+        tally.observe(&g.world);
+        if glasnost_sim::structures::absorb::absorbed_in(&g.world, u).is_some() {
+            break;
+        }
+    }
+    tally.observe(&g.world);
+    assert_eq!(tally.absorbed, 1, "{tally:?}");
+    assert_eq!(tally.passengers_max[0], 1, "{tally:?}");
+    glasnost_sim::orders::issue(&mut g.world, HouseId(0), Order::Deploy { actor: bio });
+    for _ in 0..300 {
+        glasnost_sim::tick::step(&mut g.world);
+        tally.observe(&g.world);
+    }
+    assert_eq!(tally.absorbed, 1, "{tally:?}");
+    assert_eq!(tally.absorber_releases, 1, "{tally:?}");
+}

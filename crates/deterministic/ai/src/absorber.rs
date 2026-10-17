@@ -1,0 +1,201 @@
+//! The own AI and absorbing buildings (S-0605; PLAN §4.7).
+//!
+//! An infantry absorber takes the house's infantry in, and each passenger
+//! adds the building type's extra power to its owner (S-0605 claims 7 and
+//! 10, S-0405 claim 1). A person who knows this:
+//!
+//! - **builds the absorber.** In the stock data the absorber is a side's
+//!   power plant, so the plan's power role (`scripted`, the cheapest power
+//!   plant the house can build) already builds it; no change is needed
+//!   there;
+//! - **puts mind-controlled enemy infantry in.** A controlled entrant is
+//!   released by its controller on the way in and stays inside as its
+//!   original owner's unit, yet its power goes to the building's owner
+//!   (claims 7 and 10): a captured enemy foot soldier turns into power and
+//!   frees the controller for another victim. Every idle controlled enemy
+//!   infantry unit is sent;
+//! - **puts spare infantry in.** Idle infantry of the house's own at home
+//!   are sent while the house is short of power, or while more than
+//!   [`KEEP`] idle infantry stand at home, the cheapest first, so the
+//!   waves keep their better soldiers. Engineers and spies are kept for
+//!   their own work;
+//! - **fills one place at a time.** No building gets more entrants than it
+//!   has room for, counting the ones already on their way or waiting in
+//!   line (claims 3 and 4), and the order is the click a person gives on
+//!   the building (the *enter* cursor, S-0214 rows x3 and x4), so a full,
+//!   switched-off or unfinished building is never chosen.
+//!
+//! It reads only the house's own objects and the rules a person may read,
+//! and draws no random value. The numbers are tuning of our own opponent,
+//! not game behaviour.
+
+use glasnost_map::CellXY;
+use glasnost_sim::econ::{production, tech};
+use glasnost_sim::orders::Order;
+use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::structures::absorb;
+use glasnost_sim::targeting::{self, Action};
+use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::{mind, psychic};
+
+use crate::scripted::{self, Script, dist2};
+use crate::special::{Special, click_if};
+
+/// Cells from the house's home within which idle infantry count as at home.
+pub const HOME_REACH: i64 = 16; // nocite: tuning of our own opponent
+
+/// The idle own infantry at home a house keeps out of its absorbers while
+/// its power is sufficient.
+pub const KEEP: usize = 4; // nocite: tuning of our own opponent
+
+/// The most entrants sent in one think.
+const PER_THINK: usize = 3; // nocite: tuning of our own opponent
+
+/// The house's infantry absorbers on the map, live and finished.
+pub fn absorbers(w: &World, house: HouseId) -> Vec<ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| {
+            o.owner == Some(house)
+                && o.kind == Kind::Building
+                && o.on_map
+                && o.health > 0
+                && absorb::infantry_absorber(w, o.id)
+        })
+        .map(|o| o.id)
+        .collect()
+}
+
+/// The house's units on their way into absorbing building `b`: in contact
+/// with it, waiting in line for it, or in *enter* with it as destination.
+pub fn en_route(w: &World, b: ObjectId) -> usize {
+    w.objects
+        .values()
+        .filter(|o| {
+            o.on_map
+                && o.id != b
+                && (o.contact == Some(b)
+                    || absorb::waiting_for(w, o.id) == Some(b)
+                    || (o.beh.current == Some(Behaviour::Enter)
+                        || o.beh.queued == Some(Behaviour::Enter))
+                        && o.dest == Some(Target::Object(b)))
+        })
+        .count()
+}
+
+/// The room left in `b` for this think: its capacity less its passengers
+/// and the ones on their way.
+fn room(w: &World, b: ObjectId) -> usize {
+    let cap = w
+        .obj(b)
+        .and_then(|o| w.rules().buildings.get(o.type_index as usize))
+        .map_or(0, |r| r.absorb.capacity);
+    let taken = absorb::count(w, b) as usize + en_route(w, b);
+    usize::try_from(cap).unwrap_or(0).saturating_sub(taken)
+}
+
+/// Whether the house is short of power: output not above drain.
+fn short_of_power(w: &World, house: HouseId) -> bool {
+    let (output, drain) = glasnost_sim::econ::power::totals(w, house);
+    output <= drain
+}
+
+/// Whether infantry unit `id` is free to be sent: idle, selectable, not
+/// berserk, neither an engineer nor a spy.
+fn free_infantry(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind != Kind::Infantry || !o.on_map || psychic::berserk(w, id) {
+        return false;
+    }
+    let special = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.engineer || u.raw.agent.unwrap_or(false));
+    !special && scripted::idle(w, id) && targeting::selectable(w, id)
+}
+
+impl Special {
+    /// Absorbing buildings: idle controlled enemy infantry, then spare own
+    /// infantry at home (cheapest first), each to the nearest own infantry
+    /// absorber with room, by the *enter* click.
+    pub(crate) fn absorbers(
+        &mut self,
+        script: &Script,
+        own: &[ObjectId],
+        w: &World,
+        out: &mut Vec<Order>,
+    ) {
+        let house = script.house;
+        let buildings = absorbers(w, house);
+        if buildings.is_empty() {
+            return;
+        }
+        let mut rooms: Vec<(ObjectId, usize)> =
+            buildings.iter().map(|&b| (b, room(w, b))).collect();
+        if rooms.iter().all(|&(_, r)| r == 0) {
+            return;
+        }
+        let free: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| free_infantry(w, id))
+            .collect();
+        // Controlled enemy infantry anywhere; own infantry only at home.
+        let controlled: Vec<ObjectId> = free
+            .iter()
+            .copied()
+            .filter(|&id| mind::mind_controlled(w, id))
+            .collect();
+        let home = script.home(w);
+        let at_home = |id: ObjectId| {
+            home.is_some_and(|h| {
+                w.obj(id)
+                    .is_some_and(|o| dist2(o.pos.cell(), h) <= HOME_REACH * HOME_REACH)
+            })
+        };
+        let mut spare: Vec<ObjectId> = free
+            .iter()
+            .copied()
+            .filter(|&id| !mind::mind_controlled(w, id) && at_home(id))
+            .collect();
+        let cost = |id: ObjectId| {
+            w.obj(id)
+                .map_or(0, |o| production::cost_field(w, tech::type_of(o)))
+        };
+        spare.sort_by_key(|&id| (cost(id), id));
+        let surplus = if short_of_power(w, house) {
+            spare.len()
+        } else {
+            spare.len().saturating_sub(KEEP)
+        };
+        spare.truncate(surplus);
+        let mut sent = 0;
+        for id in controlled.into_iter().chain(spare) {
+            if sent >= PER_THINK {
+                break;
+            }
+            let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
+                continue;
+            };
+            let pick = rooms
+                .iter()
+                .filter(|&&(b, r)| r > 0 && self.memory.ok(w, id, Target::Object(b)))
+                .map(|&(b, _)| (distance(w, b, at), b))
+                .min()
+                .map(|(_, b)| b);
+            let Some(b) = pick else { continue };
+            if let Some(orders) = click_if(w, house, id, b, &[Action::Enter]) {
+                out.extend(orders);
+                if let Some(r) = rooms.iter_mut().find(|(x, _)| *x == b) {
+                    r.1 -= 1;
+                }
+                sent += 1;
+                self.count_absorb();
+            }
+        }
+    }
+}
+
+fn distance(w: &World, b: ObjectId, at: CellXY) -> i64 {
+    w.obj(b).map_or(i64::MAX, |o| dist2(o.pos.cell(), at))
+}
