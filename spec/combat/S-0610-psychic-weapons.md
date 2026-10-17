@@ -2,7 +2,7 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -490,7 +490,7 @@ skirmish only; network games and campaigns are out of scope.
 
 ## Measurement scenarios
 
-All scenarios: stock data except the explicitly named test data below, director off, mods off
+All scenarios: stock data except the explicitly named test data below, no engine add-on and no mods (the named test files of a scenario excepted)
 apart from that named test data, a small purpose-made skirmish map, normal game
 speed, 800 × 600 presentation. Use scripted input and a read-only recorder when needed to deliver and observe the stated setup on the stock executable. Record the seed rather
 than assuming it can be set. Repeat each deterministic part three times. Include one bystander

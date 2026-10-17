@@ -1202,6 +1202,7 @@ impl Live {
                 }
                 Effect::Sound { .. }
                 | Effect::Mind { .. }
+                | Effect::Consumed { .. }
                 | Effect::Spin { .. }
                 | Effect::Trigger { .. }
                 | Effect::Hit { .. }

@@ -2,11 +2,11 @@
 id: S-0101
 title: Isometric projection, height lift, view position and scroll limits
 topic: rendering
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0279, Q-0450, Q-0460, Q-0570]
 supersedes: []
@@ -679,7 +679,8 @@ All scenarios use the glossary's measurement setup: an unmodified install with n
 files and no engine add-ons, and stock data apart from the purpose-made test maps named here. Any
 game speed, 800×600 unless stated. Each skirmish has the local human-controlled player and one
 bystander computer player, kept outside the observed map area under the glossary's void rule.
-The director and mods are off. Keep the test objects visible and unshrouded throughout each
+Run with no engine add-on and no mods (the named test files of a scenario and the
+purpose-made test maps excepted). Keep the test objects visible and unshrouded throughout each
 observation; fog and shroud are not culling outcomes of claim 6. The observable is a screenshot or a recording of the battlefield
 view. Departure portions explicitly run on our engine and are tested against this spec rather
 than the original; all other portions measure the original. "Pixel position" is read relative to
@@ -793,7 +794,8 @@ A second run otherwise serves to rule out a reading mistake.
     Any axis coupling, jump or different fixed centre falsifies claim 8. Oversized outcomes
     test this spec, not the original.
     For each shape, also capture the battlefield pixel colours on our engine at speed 2,
-    using stock terrain and object types with the director and mods off. Make the map size
+    using stock terrain and object types with no engine add-on and no mods (the named test
+    files of a scenario and the purpose-made test maps excepted). Make the map size
     larger than its local area, with terrain and visible objects whose images would extend
     into the bands without clipping. Test unrevealed play and whole-map reveal (S-0409
     claim 15), and both explored and unexplored shared off-map states using S-0110
@@ -829,7 +831,8 @@ A second run otherwise serves to rule out a reading mistake.
     Record tile pixels to recover the view origin and capture the radar border before and
     after the action. Expected: subsequent requests obey F5 with the replacement area's
     four integers, and the radar uses that same area. Repeat with a shrink of an empty strip.
-    One run per enlargement/shrink condition, director and mods off, using scripted input
+    One run per enlargement/shrink condition, no engine add-on and no mods (the named test
+    files of a scenario and the purpose-made test maps excepted), using scripted input
     and frame capture. A limit still derived from the initial area, or a radar rectangle that
     remains unchanged, falsifies the runtime rule. This does not assert whether resizing alone
     immediately repositions a stationary view before another scroll or centring request.
@@ -951,7 +954,8 @@ A second run otherwise serves to rule out a reading mistake.
 - **M7 — edge and keyboard scrolling** (claims 12 to 15). Setup: a large flat purpose-made
   skirmish map with a revealed, distinctive tile grid throughout the observation area; begin
   far from scroll limits. Use 800×600, speed 2 unless varied, one isolated bystander computer
-  player, director and mods off. Scripted input and a screen recording identify every drawn
+  player, no engine add-on and no mods (the named test files of a scenario and the
+  purpose-made test maps excepted). Scripted input and a screen recording identify every drawn
   frame and the view origin from tile pixels. Re-centre before each sub-run and leave the pointer
   inside the client for at least 16 cycles to exhaust momentum. One run per condition, with a
   repeat only to resolve capture ambiguity. Count game-drawn frames, not monitor refreshes.

@@ -2,11 +2,11 @@
 id: S-0311
 title: Veterancy (experience from kills, ranks, abilities, elite weapons, starting experience)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0660]
 supersedes: []
@@ -593,7 +593,7 @@ one tick that credit the same recipient add their gains one after another, each 
 | Rules, `[General]`, `VeteranCap` | veteran cap *c* (F3) | decimal, double | 1.0; keeps |
 | Rules, `[General]`, `VeteranSight` | veteran sight factor *f* (F4) | decimal, double | 1.0; keeps |
 | Rules, `[General]`, `VeteranCombat`, `VeteranArmor`, `VeteranSpeed`, `VeteranROF` | the factors of claim 4 (owned by S-0302, S-0207, S-0208, S-0301) | decimal, double | 1.0; keeps |
-| Rules, type section, `VeteranAbilities`, `EliteAbilities` | veteran list and elite list (claim 3) | text cut to 127 bytes (S-0003 claim 1), split at commas with empty items skipped, each item compared ignoring letter case and without trimming while `quirks.list_items_untrimmed` is on (trimmed as S-0003 claim 12 when off) with the names `faster`, `stronger`, `firepower`, `scatter`, `rof`, `sight`, `cloak`, `tiberium_proof`, `vein_proof`, `self_heal`, `explodes`, `radar_invisible`, `sensors`, `fearless`, `c4`, `tiberium_heal`, `guard_area`, `crusher` (written here in lower case, since case does not matter; our names in Terms, same order); a non-empty value replaces the whole list | empty list; an empty or missing value keeps the list in force |
+| Rules, type section, `VeteranAbilities`, `EliteAbilities` | veteran list and elite list (claim 3) | text cut to the list text limit of S-0003 claim 1, split at commas with empty items skipped, each item compared ignoring letter case and without trimming while `quirks.list_items_untrimmed` is on (trimmed as S-0003 claim 12 when off) with the names `faster`, `stronger`, `firepower`, `scatter`, `rof`, `sight`, `cloak`, `tiberium_proof`, `vein_proof`, `self_heal`, `explodes`, `radar_invisible`, `sensors`, `fearless`, `c4`, `tiberium_heal`, `guard_area`, `crusher` (written here in lower case, since case does not matter; our names in Terms, same order); a non-empty value replaces the whole list | empty list; an empty or missing value keeps the list in force |
 | Rules, type section, `Trainable` | trainable flag | boolean (S-0003) | yes |
 | Rules, type section, `DontScore` | unscored flag | boolean | no |
 | Rules, type section, `MissileSpawn` | missile-spawn flag | boolean | no |
@@ -617,7 +617,7 @@ the rank insignia that the game draws on a selected object and from the promotio
 Where insignia alone cannot distinguish the result, record exact experience, rank, health and
 tick numbers under the glossary's measurement setup. Use a skirmish at game speed 2, 800 × 600 pixels,
 with one human observer and one enemy bystander computer player, plus an allied bystander for
-X2. Director and other mods are off, crates off, no superweapon use. Test objects and their
+X2. No engine add-on and no mods (the named test files of a scenario excepted), crates off, no superweapon use. Test objects and their
 firing/production area are the observed area. Keep all unnamed bystander objects outside it,
 and void and repeat a run if one affects it or a bystander is defeated before observation ends.
 Give each house survival buildings outside the test area. Unless a part specifies otherwise,
@@ -792,7 +792,7 @@ are explicitly 1 unless a part names another value.
   expected experience: 0 for the untrainable infantry, untrainable ground vehicles and naval
   vehicles; 1 for the building that undeploys and 0 for the other. Repeat the undeployable
   building variant with its trainable flag off, then with its naval flag on: both start at 0.
-  Perform one valid fresh-game run per variant at game speed 2 with director and mods off,
+  Perform one valid fresh-game run per variant at game speed 2 with no engine add-on and no mods (the named test files of a scenario excepted),
   using the read-only recorder for experience where insignia is insufficient.
   *Falsified if:* any experience or rank differs from these predictions.
 
@@ -832,7 +832,7 @@ rises at any time (resource healing would exist, and claim 5 would be wrong).
 **X12: delayed-kill credit and expiry (claim 9).** Reuse S-0302 D13 parts c1, c2 and d
 for repeated lethal hits, and part e for ordinary expiry: their named test map, one-cell and
 multi-cell buildings, human-owned trainable attacker and enemy-owned victims, with no planted
-charge. Run as a skirmish at game speed 2 with the director and mods off, under the measurement
+charge. Run as a skirmish at game speed 2 with no engine add-on and no mods (the named test files of a scenario excepted), under the measurement
 setup. Perform one valid run per sub-test.
 Record the attacker's experience, house score and kill count, the victim house's loss bookkeeping,
 and destroyed-object events at each lethal hit and expiry. Expected: the repeated lethal hits
@@ -877,8 +877,8 @@ reoccupation, with *A* costing 100, victim cost 500, ratio 4 and cap 2.5 as inve
 inputs. Record occupant experience at destruction. Expected: *A* gains 1.25, *B* and *C*
 stay at 0, since the disc-laser shot retains index 0. No other shot or occupant change may
 intervene. A different first shooter, muzzle, recipient or experience delta falsifies the
-corresponding reset/selection prediction. Use one valid fresh skirmish per run, director
-and mods off. This tests complete evacuation only, not individual removal.
+corresponding reset/selection prediction. Use one valid fresh skirmish per run, no engine add-on and no mods (the named test files of a scenario excepted).
+  This tests complete evacuation only, not individual removal.
 
 **X16: engine experience selection after death inside (claims 8 and 15).** This is an
 engine-only design check, not an unsafe oracle continuation. Reuse S-0508 G18's fixture,

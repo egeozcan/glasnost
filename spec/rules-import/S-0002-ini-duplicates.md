@@ -2,11 +2,11 @@
 id: S-0002
 title: INI duplicates and name resolution
 topic: rules-import
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0004, Q-0183]
 supersedes: []
@@ -725,7 +725,7 @@ one run per variant is enough, and a second run only guards against operator err
   - Setup: the earlier file of row D-l with exactly the two mission sections and no filler
     sections, plus the loose mission information file of row D-o. Variant (a) has no filler
     section in the later file; (b) adds its first filler section only; (c) adds both. Use the
-    measurement setup, director and mods off, any game speed, no engine add-ons. This retains
+    measurement setup, no engine add-on and no mods (the named test files of a scenario excepted), any game speed. This retains
     D10's original-game diagnostic route only; campaign implementation remains deferred.
   - Procedure: start the first Allied mission, open its briefing, and capture the text as in
     D8. One run per variant suffices because no random choice affects the result. Remove both

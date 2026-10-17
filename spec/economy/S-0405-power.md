@@ -2,7 +2,7 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -695,7 +695,7 @@ All scenarios run under the measurement setup, in a skirmish on a flat purpose-m
 named test files where a scenario sets fields or defines test types. Power output and drain are
 read from a recorder of the house's power values, or from the sidebar's power meter where it shows
 them; health and credits from a recorder or the interface; ticks with a recorder of the tick
-number. Any game speed, held fixed within a comparison. Director and unrelated mods are off.
+number. Any game speed, held fixed within a comparison. No engine add-on and no mods (the named test files of a scenario excepted).
 Only the named test data for the scenario are enabled. One human player owns the test buildings.
 One bystander computer player is kept outside the observed area (the test buildings and all
 units acting on them), under the glossary's void rule. Enemy spies and other acting test units
@@ -1031,7 +1031,7 @@ switched off the house has full power (W3's second pair).
   Pre-place each with switched-on field 0. Control runs use field 1 and an absent field.
   Use the map-owner setup of S-0009 to give the human player the test objects. Keep enough
   other generation for full power; the observed area is these buildings. Game speed 2,
-  director and unrelated mods off, one distant bystander under the common void rule.
+  no engine add-on and no mods (the named test files of a scenario excepted), one bystander computer player, kept away from the test buildings, under the glossary's void rule.
 - *Procedure:* record switch states and totals from the first visible tick. Click each
   building in power mode after setup, then record its switch and the next house totals.
 - *Runs:* three for each field variant.
@@ -1050,7 +1050,7 @@ switched off the house has full power (W3's second pair).
 - *Setup:* a named test map defines own test plants and consumers with base output 500
   and base drain 300 in total, hence *B* = 800, and no upgrades or passengers. A second
   variant has base output 500 and base drain 500, hence *B* = 1000. Use game speed 2,
-  stock data except these named overrides, director and unrelated mods off, and the
+  stock data except these named overrides, no engine add-on and no mods (the named test files of a scenario excepted), and the
   distant bystander under the common void rule. The observed area is these buildings
   and the local player's meter. A third variant has no buildings and both totals 0.
 - *Procedure:* capture the settled meter at full health. In the first variant damage

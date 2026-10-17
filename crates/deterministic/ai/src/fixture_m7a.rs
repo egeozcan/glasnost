@@ -29,8 +29,11 @@
 //!   barracks from the other abilities' units.
 //! - Alpha only (S-0605): BIOP, an infantry absorber, is Alpha's power
 //!   plant in place of the fixture's POWR (which only Beta builds); the AI
-//!   sends spare and controlled infantry in. A
-//!   skirmish drops
+//!   sends spare and controlled infantry in.
+//! - Alpha only (S-0603): GRND, a recycling building, built by the AI,
+//!   and HULK, an unarmed vehicle nobody can build: Alpha starts with
+//!   [`HULKS`] of them, badly damaged, which a person would recycle.
+//!   A skirmish drops
 //!   the structures a map gives a player's house (S-0009 claim 27), so the
 //!   houses start with units only.
 //!
@@ -336,6 +339,24 @@ pub fn ruleset() -> Ruleset {
     biop.econ.required_houses = only("Alphaland");
     register(&mut r, "buildings", "BIOP");
     r.sim.buildings.insert("BIOP".into(), biop);
+
+    // Alpha's grinder (S-0603): GRND, a 2 × 2 recycling building with no
+    // power of its own; the AI builds one and recycles controlled enemy
+    // units, badly damaged units and surplus infantry in it.
+    let mut grnd = fixture::building(2, 2, 400, 0);
+    grnd.grinding = Some(true);
+    grnd.econ.required_houses = only("Alphaland");
+    register(&mut r, "buildings", "GRND");
+    r.sim.buildings.insert("GRND".into(), grnd);
+    // HULK: an unarmed vehicle no house can build (tech level -1); Alpha
+    // starts with a few of them, badly damaged ([`HULKS`]).
+    let mut hulk = r.sim.vehicles["TRUK"].clone();
+    hulk.passengers = None;
+    hulk.size_limit = None;
+    hulk.econ.prerequisite = None;
+    hulk.tech_level = Some(-1);
+    register(&mut r, "vehicles", "HULK");
+    r.sim.vehicles.insert("HULK".into(), hulk);
     r
 }
 
@@ -366,6 +387,10 @@ fn placed(owner: &str, ty: &str, c: CellXY, key: usize) -> Placed {
 pub const INFANTRY: [&str; 6] = ["MADMAN", "MADMAN", "MADMAN", "MADMAN", "MADMAN", "MADMAN"];
 /// The vehicles each house starts with, in a row south of its infantry.
 pub const VEHICLES: [&str; 0] = [];
+/// The badly damaged HULKs Alpha starts with, in a row north of its start,
+/// and their health on the map's scale of 256 (about a fifth).
+pub const HULKS: usize = 4;
+const HULK_HEALTH: i32 = 51;
 
 /// The scenario's map: the fixture's flat ground and resource fields with
 /// the starts at ±[`START_DX`] and each house's start objects.
@@ -404,6 +429,15 @@ pub fn map() -> Map {
                 placed: placed(name, ty, c, key),
             });
             key += 1;
+        }
+        if name == "Alpha" {
+            for i in 0..HULKS {
+                let c = at(dx + 2 * i as i32 - 3, -6);
+                let mut p = placed(name, "HULK", c, key);
+                p.health = HULK_HEALTH;
+                m.objects.units.push(Unit { placed: p });
+                key += 1;
+            }
         }
     }
     m

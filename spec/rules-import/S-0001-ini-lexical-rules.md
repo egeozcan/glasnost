@@ -2,11 +2,11 @@
 id: S-0001
 title: INI lexical rules
 topic: rules-import
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0478]
 supersedes: []
@@ -271,9 +271,16 @@ Line classification during a fresh load. "Current section" starts as *none*.
   Formulas. Off: trimming removes all leading and trailing whitespace. Only text with deep
   indentation is affected; stock data never triggers it.
 - Byte-order mark: not a quirk switch. With the mark directly before the first header on the
-  same line, that header is lost (claim 1).
+  same line, that header is lost (claim 1). No switch because stock data never carries the mark and
+  the importer warns on every file that does (Importer warnings). That stock data never carries the
+  mark is `unmeasured`: it is a property of the input files, not an outcome of the original that a
+  measurement isolates. Whether a switch is wanted is a question for the project lead (see
+  Questions for the project lead).
 - CR-only line endings: not a quirk switch. The whole file is one line (cut at 511 bytes) with no line
-  feed after it, so nothing loads (claims 2, 3 and 5).
+  feed after it, so nothing loads (claims 2, 3 and 5). No switch for the same reason: stock data
+  never uses CR-only endings and the importer warns. That stock data never uses CR-only endings is
+  `unmeasured`: it is a property of the input files, not an outcome isolated by a measurement.
+  Whether a switch is wanted is a question for the project lead (see Questions for the project lead).
 
 These behaviours apply to every INI-format input, stock data, user maps and mods alike, and both
 quirk switches stay on by default for all of them.
@@ -334,7 +341,8 @@ lexical consequences inherit claims 5, 11 and 13's backing.
   loose override files and no engine add-ons, using stock data only.
 - *Map:* a tiny purpose-made two-player multiplayer map, played as a skirmish against one computer
   house, kept away from the player's base and test buildings under the glossary's bystander
-  computer player void rule. Director and mods are off. Its INI part carries an override section
+  computer player void rule. No engine add-on and no mods (the named test files of a scenario and
+  the purpose-made test maps excepted). Its INI part carries an override section
   for one buildable infantry type of the player's side, the *test type*. The section is named
   exactly as the test type is spelled in the rules file. Select a country and type whose sidebar
   price equals its cost field, confirmed by a normal test-line control. Any game speed.
@@ -446,3 +454,8 @@ owned by S-0413 claim 4.
 
 - Whether any stock loader reads a file that relies on the final-line quirk, other than the art file.
   Maps edited by hand often lack a final newline. This doesn't block the spec.
+
+## Questions for the project lead
+
+- Should the byte-order mark (claim 1) and CR-only line endings get a quirk switch? The draft proposes
+  none. The reasons are given in Edge cases and quirks.

@@ -2,11 +2,11 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 16
+revision: 17
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0020, Q-0060, Q-0061, Q-0614]
 supersedes: []
@@ -968,8 +968,8 @@ and quirks.
 
 ## Measurement scenarios
 
-All scenarios run under the glossary's *measurement setup*, with director and mods off except
-for the named test files, on purpose-made flat test maps unless a bridge or shore is named. Each
+All scenarios run under the glossary's *measurement setup*, with no engine add-on and no mods (the named test files of a scenario excepted),
+on purpose-made flat test maps unless a bridge or shore is named. Each
 skirmish has one human player and one bystander computer player kept outside the observed area
 (the test objects and all cells within reach of their effects), with the glossary's void rule.
 Use game speed 2 unless stated otherwise. Test warheads and weapons are given in the test map's
@@ -1346,7 +1346,7 @@ file with both fields removed, and no language, mode or map layer giving either 
 the program before each run. Use A12's single-test low-bridge cell, a wall-capable test warhead
 and damage 501, and separately A13's exploding overlay with a test demolition warhead of edge
 fraction 1 and versus 100 %, and vehicles of armour 1 at recorded positions inside its spread.
-Use the measurement setup, director and mods off, game speed 2, one human player and one bystander
+Use the measurement setup, no engine add-on and no mods (the named test files of a scenario excepted), game speed 2, one human player and one bystander
 computer player kept outside the test area. *Procedure:* cause one bridge detonation or one barrel
 detonation per run. *Observable:* bridge destructions and vehicle health loss, using the recorder.
 *Runs:* 400 bridge runs and 3 barrel runs, each at a fresh program start. *Expected:* bridge
@@ -1422,7 +1422,7 @@ fires an elevated test detonation reaching both with lethal damage, edge fractio
 other effects. Use the recorder to verify positions, tracking periods and the outer detonation
 point; both objects must qualify for claim 6 and neither may appear in a scanned cell layer.
 Void runs where either lands, takes an unrelated hit, or moves out of reach. Use game speed 2,
-the measurement setup, director and mods off except that named map, and a bystander computer
+the measurement setup, no engine add-on and no mods (the named test files of a scenario excepted), and a bystander computer
 player outside the test area. *Procedure:* make *A* become tracked first in an adjacent sector,
 then make *B* become tracked in the destination sector, then fly *A* across into *B*'s sector.
 Detonate after the crossing. *Observable:* whether *B*'s destruction is credited to *F*, read

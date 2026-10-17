@@ -2,11 +2,11 @@
 id: S-0204
 title: Coordinates, distance and facing
 topic: simulation
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0077, Q-0610]
 supersedes: []
@@ -597,7 +597,7 @@ with their keys, parse forms and defaults in that spec's Import mapping.
 ## Measurement scenarios
 
 All scenarios run under the *measurement setup* of the glossary, at game speed index 2 and
-800 × 600 resolution, with director and mods off except the named test data. C1 to C3 use a
+800 × 600 resolution, with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). C1 to C3 use a
 bystander computer player: the observed area contains only the named test objects, and any
 unnamed bystander object entering it or acting on a test object, or the bystander's defeat,
 voids the run. Where a scenario needs a turn rate
@@ -794,8 +794,8 @@ arithmetic is S-0206's (F1 there).
   alone, whose integer truncation can conceal a one-unit pitch difference.
 
 **C5. Raw angles through rocket pitch (claim 13; Q-0610).**
-- *Setup:* the glossary's measurement setup, game speed index 2, 800 × 600, director and
-  mods off. Use S-0506's rocket-flight scenario R10 with a set-A lazy-curve missile and
+- *Setup:* the glossary's measurement setup, game speed index 2, 800 × 600, no engine add-on
+  and no mods (the named test files of a scenario excepted). Use S-0506's rocket-flight scenario R10 with a set-A lazy-curve missile and
   a set-B descent missile, a stationary target and one bystander computer player kept
   outside the observed flight area. Named test maps vary firing distance and terrain
   height; any named parameter changes are limited to R10's test rules data. A read-only

@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 36
+revision: 37
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -933,7 +933,7 @@ orders or an unresolved event boundary make the corresponding comparison inconcl
 Run counts and settings remain those of T19.
 
 **Common setup.** All scenarios run under the glossary's *measurement setup*, as skirmish games on
-purpose-made maps, at game speed index 6, with director and mods off except the named test data.
+purpose-made maps, at game speed index 6 unless the scenario states another index, with no engine add-on and no mods (the named test files of a scenario excepted).
 The slowest speed makes manual orders easiest. The ordering rules do not depend on speed.
 Sequence durations can depend on it under the glossary's speed-normalised-delay rules, so the
 scenarios' timing expectations use the stated index.
@@ -1454,7 +1454,7 @@ scenarios' timing expectations use the stated index.
 **Scenario O14: slave groups against repair, movement and power effects (claim 12).**
 - *Common setup and tool:* a flat purpose-made skirmish map, one human player with a
   slave miner and one distant bystander computer player, game speed index 6, crates off,
-  director and mods off. Stock data except explicitly named map overrides and, in
+  no engine add-on and no mods (the named test files of a scenario excepted). Stock data except explicitly named map overrides and, in
   part C, a temporary test art file. Extend the read-only recorder to record group
   state, due-update tick, slave places, creation samples, inside/on-map state,
   destinations, loads, building repair state, body construction state and animation
@@ -1539,7 +1539,7 @@ scenarios' timing expectations use the stated index.
 
 **Scenario O15: vehicle behaviour before the slave group (claim 12; Q-0430).**
 - *Setup:* O14's quiet skirmish setup at game speed index 6, with a human vehicle slave
-  master, a distant bystander computer player, director and mods off. Use stock data
+  master, a distant bystander computer player, no engine add-on and no mods (the named test files of a scenario excepted). Use stock data
   except named map overrides for the slave replacement delay and the harvest behaviour
   rate. Lose one emerged slave through ordinary combat, then remove the attacker from
   the test area and wait for all combat and death effects to end. Keep the remaining
@@ -1574,7 +1574,7 @@ scenarios' timing expectations use the stated index.
   area during the counted tick. This proposes a recorder extension, not a harness change.
 
 **Scenario O16: cross-part labelled draw allocation (claim 1).**
-- *Setup and tool:* O13's flat skirmish, game speed index 6, director and mods off, with
+- *Setup and tool:* O13's flat skirmish, game speed index 6, no engine add-on and no mods (the named test files of a scenario excepted), with
   a distant bystander. Use named map overrides and a temporary test art file for the
   probes below; a temporary rules file may select the blast-ring animations and crate
   settings. Remove these files afterward. Use O13's read-only random-state recorder
@@ -1694,7 +1694,7 @@ V15 part a and V13. Reversed timing or a missing eligible raise falsifies the co
 rule; V15 specifies controls separating the ordinary poll from the owner-house raise.
 
 - **O17 (claims 2 and 10; ending animation).** Use S-0109 scenario AN26's tiny
-  skirmish, game speed index 4, director and unrelated mods off, with one non-damaging sprite
+  skirmish, game speed index 4, no engine add-on and no mods (the named test files of a scenario excepted), with one non-damaging sprite
   animation having an explicit finite end, no follow-up and no creation effects.
   Create it by pre-pass trigger polling. While it plays, have one existing firer launch
   exactly one long-flight projectile with no shot animation or trailer, then stop firing.

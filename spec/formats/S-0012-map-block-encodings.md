@@ -2,11 +2,11 @@
 id: S-0012
 title: Map block encodings
 topic: formats
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -238,7 +238,7 @@ Section and key parsing, including ignored empty-value lines, remain S-0001 and 
 
 ## Measurement scenarios
 
-All game tests use the stock program and stock rules and art, director and mods off, a purpose-made skirmish map with fixed starts for one human and one bystander computer player, game speed index 2, and a fresh program launch per variant. Keep the observed area away from the bystander; apply the glossary's void rule. File-only checks operate on the user's installed map data without changing it. Such checks identify encoding structure but do not alone confirm what the original consumes; game-output comparisons below supply the behavioural discriminators. Any output mismatch in a valid equivalent encoding falsifies the corresponding rule; failures of intentionally unsafe variants are exploratory, not formula confirmations. Test maps change only the named map bytes and their necessary re-encoding, not rule values. No test requires a network game. The scenarios require observations of encoded bytes, selection, and the first battlefield view, together with controlled test inputs. Any means used to produce the test maps or make those observations is outside this spec.
+All game tests use the stock program and stock rules and art, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), a purpose-made skirmish map with fixed starts for one human and one bystander computer player, game speed index 2, and a fresh program launch per variant. Keep the observed area away from the bystander; apply the glossary's void rule. File-only checks operate on the user's installed map data without changing it. Such checks identify encoding structure but do not alone confirm what the original consumes; game-output comparisons below supply the behavioural discriminators. Any output mismatch in a valid equivalent encoding falsifies the corresponding rule; failures of intentionally unsafe variants are exploratory, not formula confirmations. Test maps change only the named map bytes and their necessary re-encoding, not rule values. No test requires a network game. The scenarios require observations of encoded bytes, selection, and the first battlefield view, together with controlled test inputs. Any means used to produce the test maps or make those observations is outside this spec.
 
 ### T1 — joining, limits and normal base-64 (claims 1 and 2)
 

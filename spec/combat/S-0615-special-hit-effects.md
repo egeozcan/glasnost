@@ -2,11 +2,11 @@
 id: S-0615
 title: Special-hit effects (death-kind animations, the burning walker and the disc laser)
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -530,7 +530,7 @@ counts are outside claim 4's verified scope.
 
 **Common setup.** Use tiny purpose-made skirmish maps, one human-controlled house and one enemy
 bystander computer player kept away under the glossary's void rule. Use game speed index 4,
-800 × 600, director and mods off, and stock data except each scenario's named test-map overrides
+800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and stock data except each scenario's named test-map overrides
 or test art file. Remove named test data afterwards. Run each case 10 times unless stated
 otherwise. Use video, scripted input and read-only recording of ticks, positions, health,
 animation types, stages, owners and both random streams. Endpoint and beam-setting recording,

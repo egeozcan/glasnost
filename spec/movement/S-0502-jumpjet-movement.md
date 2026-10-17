@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1202,7 +1202,7 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 ## Measurement scenarios
 
 **Common setup.**
-- Stock data, director off and mods off; game-speed index 2; 800 × 600.
+- Stock data, no engine add-on and no mods (the named test files of a scenario excepted); game-speed index 2; 800 × 600 pixels.
 - One human test house, and one computer bystander outside the test area under the glossary's
   void rule.
 - A purpose-made flat map with:

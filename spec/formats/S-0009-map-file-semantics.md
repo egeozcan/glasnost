@@ -2,11 +2,11 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046, Q-0419]
 supersedes: []
@@ -2399,7 +2399,7 @@ from the data files.
 ## Measurement scenarios
 
 All scenarios run under the measurement setup (glossary): an unmodified install with no engine
-add-ons, director off and mods off, stock data, and tiny purpose-made test maps
+add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), stock data, and tiny purpose-made test maps
 (e.g. a 20 × 20 flat clear map) with format
 version 4, unless stated otherwise. No loose file overrides shipped data, except a named test file
 that a scenario lists (M4c, M16 variant F2, M16b variant C, M26 variants F and H, and M19
@@ -3312,8 +3312,8 @@ that the stream can be computed by S-0202 and compared with what the game shows 
     faces another way.
   - (F) Pre-place a stock refinery whose type grants a free unit, and a stock superweapon
     building with visible charge-slot artwork. Disable starting units and keep a distant
-    bystander computer house alive. Use speed index 2, 800 × 600, stock data, director and
-    mods off. With a read-only recorder, capture slot names, health and nearby unit counts
+    bystander computer player alive. Use speed index 2, 800 × 600 pixels, stock data, no engine add-on and
+    no mods (the named test files of a scenario and the purpose-made test maps excepted). With a read-only recorder, capture slot names, health and nearby unit counts
     at the end of loading and before and after each building's first turn. *Expected:* the
     refinery has both its set-up idle slot and its fill-level slot, but grants no free unit.
     The superweapon building has the charge slot selected by S-0108 claim 11, subject to
@@ -3561,7 +3561,7 @@ that the stream can be computed by S-0202 and compared with what the game shows 
 - **M27, map-house identity and unresolved owners (claims 47–48; Q-0419).**
   - *Setup:* S-0103 scenario PM's isolated single-player map-entry probe, not a campaign-play
     test or a skirmish. Tiny purpose-made map, separated visible stock infantry and ordinary
-    buildings, neutral test lighting, speed index 2, 800×600, director and unrelated mods off.
+    buildings, neutral test lighting, speed index 2, 800×600 pixels, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
     Named test data: PM's loose base-rules copy with three countries C0, C1 and C2 assigned
     distinct existing colour definitions, C0 at registration index 0. Keep the colour registry
     valid. Remove the test files afterwards. Each variant is one fresh program run.

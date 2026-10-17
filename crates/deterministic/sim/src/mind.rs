@@ -20,11 +20,11 @@
 //! - S-0612 (psychic domination, M7b): [`dominate`] sets the permanent state
 //!   of claim 13; no superweapon calls it yet. Its own-house switch
 //!   `quirks.dominator_marks_own_objects` is S-0612's and is wired there.
-//! - S-0603 (grinders): the grinder fate of claim 8 ([`grinder_fate`])
-//!   fails, so it falls back to *hunt*, as claim 8 says for a failed
-//!   assignment. The bio-reactor fate ([`bio_reactor_fate`]) is S-0605
-//!   claim 16's search; accepted absorption (S-0605 claim 7) calls
-//!   [`release_one`].
+//! - The grinder fate of claim 8 ([`grinder_fate`]) is S-0603 claim 14's
+//!   search (`structures::grinder`); none found falls back to *hunt*, as
+//!   claim 8 says for a failed assignment. The bio-reactor fate
+//!   ([`bio_reactor_fate`]) is S-0605 claim 16's search; accepted absorption
+//!   (S-0605 claim 7) calls [`release_one`].
 //! - S-0606 (tank bunkers): [`bunkered`]; no vehicle is in one yet.
 //! - Teams: our engine has no scripted teams, so the team fate falls back to
 //!   *hunt* and leaving a team is nothing (claim 6).
@@ -510,11 +510,12 @@ pub enum Fate {
     Hunt,
 }
 
-/// Seam: S-0603 (grinders) is not built. The grinder fate of claim 8 asks
-/// this; it fails, so the fate falls back to *hunt*.
+/// The grinder fate of claim 8: go to the nearest recycling building of
+/// the object's owner, S-0603 claim 14's search. None held: the assignment
+/// fails and the fate falls back to *hunt*.
 pub fn grinder_fate(w: &mut World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    // spec: S-0601 claim 8 (go to the nearest grinder; a failed assignment falls back to hunt) and S-0603 claim 14 (the search)
+    crate::structures::grinder::grinder_fate(w, id)
 }
 
 /// The bio-reactor fate of claim 8: enter the nearest absorbing building,

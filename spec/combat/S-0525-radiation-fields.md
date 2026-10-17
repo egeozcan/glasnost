@@ -2,11 +2,11 @@
 id: S-0525
 title: Radiation fields
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -511,7 +511,7 @@ The theater of claim 15 is the map's theater (S-0010).
 ## Measurement scenarios
 
 Every scenario uses the glossary's measurement setup, game speed index 4 and 800×600 capture,
-with the director, ordinary mods and engine add-ons off. The named test map
+with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). The named test map
 *radiation-verification.map* supplies the explicit test overrides below (invented, not stock values).
 Use one human-controlled test house and one bystander computer player kept away from the observed
 area, the field and all its probe cells; the glossary's void rule applies. Use a test

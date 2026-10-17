@@ -2,7 +2,7 @@
 id: S-0509
 title: Engineers and capture
 topic: structures
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -454,8 +454,8 @@ retains the value already in force (S-0006 claim 1).
 
 ## Measurement scenarios
 
-General setup: glossary measurement setup, stock data, director and mods off except the explicitly
-named test-map overrides, a tiny purpose-made skirmish map, one human house and one bystander
+General setup: glossary measurement setup, stock data, no engine add-on and no mods (the named test files of a
+scenario excepted), a tiny purpose-made skirmish map, one human house and one bystander
 computer player kept away from the test area, standard mode, game speed index 2, 800 × 600.
 The observed area includes the named test buildings and the entrants' approach paths. Apply the
 bystander void rule. Record ticks, owners, health, positions, removals and visible trigger effects

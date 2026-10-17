@@ -2,11 +2,11 @@
 id: S-0522
 title: Parachutes and drops
 topic: movement
-revision: 5
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0736, Q-0750, Q-0751, Q-0752, Q-0753, Q-0754]
 supersedes: []
@@ -576,8 +576,7 @@ is an open question; a house without a named edge uses its computed edge (claim 
 
 ## Measurement scenarios
 
-Common setup: the glossary's measurement setup, stock data as the baseline, director and mods
-off, skirmish, a small purpose-made map, speed index 1, bench at 800×600. Use one bystander computer
+Common setup: the glossary's measurement setup, stock data as the baseline, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), skirmish, a small purpose-made map, speed index 1, bench at 800×600. Use one bystander computer
 player isolated from the observed area, with the glossary's void rule. Run each case at three
 recorded seeds and record launch ticks. Give the launching player access to the paradrop and
 wait for readiness. Named test-map overrides below are explicit exceptions to the stock baseline,

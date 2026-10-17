@@ -32,7 +32,7 @@ This is part 8 of M7a step 1. It covers the approved revisions that reached main
 
 **Quirk switches.** Five new ones, all default on (the original): `fire_particle_no_house`, `smoke_ignores_particle_cap`, `spark_double_gravity`, `smoke_deck_extra_update`, each tested both ways, and `flame_sweep_facing`, a seam (the effect-weapon emitter). Its default is tested, the importer and loader read it in both positions, and it changes nothing until the seam is filled. All five load from rules in both positions (`particle_quirks_load_in_both_positions`). `glasnost_rules` `every_spec_quirk_has_a_switch` passes. The schema is regenerated.
 
-**Formats.** Save format 51 to 52 (the particles of the other kinds are now kept, with the speed, direction, velocity, step, emission timer, spark counter, target point, owner object and the own stage-advance value; an object's damage smoke is a system; the depot's `walked` mark). The AI game format stays 20: the AI makes no new decision. The gate figures and the M7a seed are in the gas section of [development.md](../development.md).
+**Formats.** Save format 51 to 52 (the particles of the other kinds are now kept, with the speed, direction, velocity, step, emission timer, spark counter, target point, owner object and the own stage-advance value; an object's damage smoke is a system; the depot's `walked` mark). The AI game format is unchanged (21 after merging main with S-0603): the AI makes no new decision. The gate figures and the M7a seed are in the gas section of [development.md](../development.md).
 
 ## S-0616 revision 4 (new)
 
@@ -152,3 +152,7 @@ See [S-0616.md](S-0616.md) for the claim-by-claim ledger. In summary:
 | Header, Terms (*natural smoke system*) | (c) | |
 | Cloaking state changes: the natural smoke system removed at full cloak, a new one at full uncloak | seam `natural_smoke` | Building cloaking and natural smoke are not built. |
 | Scenario 18 | (c) | |
+
+## Merge of main (S-0603 grinder)
+
+main (cfde12f) was merged into this branch before the report, at the coordinator's request. It brings S-0603 (AI game format 21, the HULK fixture, the grinder counters) and a later batch of spec revisions (S-0616 revision 5 and most other specs one revision on). That batch is not taken in here; it is for the next intake. The save format stays 52. The goldens were regenerated after the merge, and the gate figures are in the particle-systems section of [development.md](../development.md).

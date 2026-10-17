@@ -2,11 +2,11 @@
 id: S-0404
 title: Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion)
 topic: production
-revision: 19
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0122, Q-0190, Q-0120, Q-0195, Q-0226]
 supersedes: []
@@ -850,9 +850,8 @@ and 14. Q-0195 changes an engine quirk's off state, not a data-file field.
 
 ## Measurement scenarios
 
-Measurement setup (glossary), director and mods off, game speed 6; a small purpose-made skirmish
-map, one human house, one bystander computer player, named test rules files in the map's override
-sections as the only data exceptions, scripted input for exact order ticks,
+Measurement setup (glossary), no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game speed 6; a small purpose-made skirmish
+map, one human house, one bystander computer player, named test data of the scenario (a test map's override section, a test rules file or a named test art file) as the only data exceptions, scripted input for exact order ticks,
 and slow items (*R* of 100 ticks or more, S-0403) so that the credits display (S-0416) settles
 between steps. "Credits" means the settled display value, which is the house's available credits.
 The display shows a negative value as 0 (S-0416, claim 1), so a scenario that needs a negative *A*

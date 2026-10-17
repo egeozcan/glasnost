@@ -108,7 +108,7 @@ fn refund_at(w: &World, house: HouseId, t: TypeRef, whole: bool) -> i32 {
 
 /// Pays `amount` credits to a house (a negative refund lowers its
 /// credits, S-0408 Edge cases).
-fn credit(w: &mut World, house: HouseId, amount: i32) {
+pub(crate) fn credit(w: &mut World, house: HouseId, amount: i32) {
     if let Some(h) = w.houses.get_mut(usize::from(house.0)) {
         h.credits = h.credits.wrapping_add(amount);
     }

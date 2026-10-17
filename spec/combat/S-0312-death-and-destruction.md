@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1278,7 +1278,7 @@ test types given in the test map's override sections (named test files) and inve
 and each object's current behaviour. The read-only recorder of the scenario random stream (glossary,
 *recorder*) gives the stream's state before and after a kill, and so how many raw values the kill
 took; replaying the claims' draw rules from the recorded start state predicts every outcome.
-Use game speed 6 and 800 × 600 pixels, director off and mods off except for named test data.
+Use game speed 6 and 800 × 600 pixels, no engine add-on and no mods (the named test files of a scenario excepted).
 Unless a part fixes another count, run each deterministic part once and each random part over
 30 independent deaths, restoring the test area between deaths. Issue normal attack, boarding,
 absorption or planting orders as needed, then kill the named object with the named source and
@@ -1422,7 +1422,7 @@ S-0614 scenario P6 separately tests culling-induced sinking without a killing hi
 unchanged health; the killing-hit expectations above do not apply to that cull.
 
 *First-hit crashable variant (claims 10 and 15; Q-0652).* Use named map override
-"sinking-first-crashable" on the tiny water map, speed 6, 800×600, director and mods off
+"sinking-first-crashable" on the tiny water map, speed 6, 800×600, no engine add-on and no mods (the named test files of a scenario excepted)
 apart from this test data. Compare two otherwise identical surface vessels at height 0,
 meeting every sinking condition, with death image frames absent and crashability on for
 one and off for the other. Give both distinguishable nonempty explosion and destruction
@@ -1444,7 +1444,7 @@ Remove the named override after the test.
 
 *Marked-water variant (claim 11).* Use S-0503 claim 11's scenario H7 for a stock hover switched
 off over flat water, and S-0511 claims 9 and 10's scenario B3 for a stock vehicle dropped from
-a bridge deck over water. Use stock data, director and mods off, at a fixed game speed. Record
+a bridge deck over water. Use stock data, no engine add-on and no mods (the named test files of a scenario excepted), at a fixed game speed. Record
 heights, death ticks and animations with tick-aligned capture and a read-only recorder. Expect
 a fall followed by wake and the last splash animation at low-water death, without the ordinary
 debris, death weapon or vehicle explosion/destruction animations. Ordinary death effects in
@@ -1479,7 +1479,7 @@ notifications, the attacker's kill count and experience: removal cleanup gives n
 credit or passenger death effects; an attacker-credited passenger death at ground removal
 falsifies this result. For the aircraft counterpart use S-0507 scenario T14.
 
-Variant g (Q-0707): on a tiny flat skirmish map at speed index 2, director and mods off, kill a
+Variant g (Q-0707): on a tiny flat skirmish map at speed index 2, no engine add-on and no mods (the named test files of a scenario excepted), kill a
 stationary stock transport carrying one infantry unit on otherwise empty enterable ground.
 Record the passenger's entry outcome and survival with the read-only recorder before scatter.
 Expect *clear* and escape despite the dying vehicle's presence until its removal. As an ordinary
@@ -1790,7 +1790,7 @@ spaces follow the literal item, and list lengths are those after truncation and 
 Different retained entries, lengths or subsequent draw outcomes falsify these syntax cases.
 
 **D20. Destruction-trigger timing and retained infantry carriers (claim 29; Q-0268 parts 2
-and 3).** Use the common measurement setup at speed 6 with the director and mods off.
+and 3).** Use the common measurement setup at speed 6 with no engine add-on and no mods (the named test files of a scenario excepted).
 The observed area is within 10 cells of the test objects and action waypoint cells. Named test-map
 objects carry tags whose one-time destroyed-by-anything action starts a distinguishable
 animation at a remote waypoint. Choose a named test animation with known scenario-stream
@@ -1851,7 +1851,7 @@ the tag must not make change-owner act on dying infantry. Perform five runs of e
 variant. Q-0268 part 1 is owned by the movement specs, not by this death scenario.
 
 **D21. Slaves after master destruction (claim 30; Q-0270 part 3, Q-0413 part 4).** Use the common
-measurement setup, speed 6, director and mods off, with stock slave miners on a tiny flat
+measurement setup, speed 6, no engine add-on and no mods (the named test files of a scenario excepted), with stock slave miners on a tiny flat
 resource-field map and the bystander kept outside the observed area (within 10 cells of the
 master and its slaves). Use ordinary harvesting to obtain a mixture of slaves outside and
 inside; log that state before the kill rather than assuming every slave has emerged. Destroy
@@ -1913,8 +1913,8 @@ by this civilian-recipient setup; that path remains unmeasured, rather than bein
 from successful transfers. No release draw-count prediction is asserted.
 
 **D23. Repeated sinking deaths and culled hosts (claim 32).** Use the common setup at
-speed 6 on a tiny water map, director and mods off except a named map override
-"sinking-repeat". Use a surface vessel meeting claim 10 as a control, and two cullable
+speed 6 on a tiny water map, no engine add-on and no mods (the named test files of a scenario excepted),
+apart from a named map override "sinking-repeat". Use a surface vessel meeting claim 10 as a control, and two cullable
 naval vehicle variants, one below the sinking weight and one underwater. Keep death image
 frames absent and crashability off initially. Begin the variants' sinking with S-0614
 scenario P6's cull. Confirm unchanged health at cull, then deliver a lethal area hit from

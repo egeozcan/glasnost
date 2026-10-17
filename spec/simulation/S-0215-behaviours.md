@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 60
+revision: 62
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1166]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1166]
 supersedes: []
 ---
 
@@ -123,7 +123,7 @@ Q-1166 question 1 is answered by claim 11: the late start also performs the fall
 is settled in S-0610 claim 6 for a berserk unit with no overload pulse: there the order has no
 observable effect (backing `unmeasured`, confidence high). For an unlimited controller, whose overload
 pulse is involved, the place of the countdown step is S-0601 claim 16's, as S-0610 claim 6 states.
-This spec states no order of its own in either case.
+This spec states no order of its own in either case. Q-1154 question 1 is answered by the Terms entry *enter-nearest instruction* and by claim 24: in our engine a unit of a neutral or special house holds the absorbing-building instruction, from the fate of S-0605 claim 16, and claim 26 row 3 applies to it. Question 2, whether a unit already waiting in line for the building is "already bound", is not answered here; it is listed under Open questions.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -4382,7 +4382,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   (e) Timing control for Q-0983: on a small clear flat skirmish map, deploy a stock
   radiation-immune infantry unit that deploys to fire, with negative undeploy delay,
   on a cell without a centred field. Keep enemies out of its acquisition range and
-  hold game speed fixed, with director and mods off. Use the measurement setup's
+  hold game speed fixed, with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use the measurement setup's
   read-only recorder and tick-aligned capture to record the deciding processing tick,
   shot, target before and after processing, sequence start and field creation or top-up.
   Expected: the secondary shot occurs in that processing, the own-cell target is absent
@@ -5403,6 +5403,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   per-tick drop of claim 37 a, the only way an actor in those behaviours reaches the step, so they
   stay unmeasured; the *attack*, *area guard* and human-controlled *hunt* rows are backed by
   scenario B32 (c and c2).
+- **Q-1154, question 2.** Whether a unit already waiting in line for the absorbing building that the enter-nearest search has found is "already bound", so that its *guard* or *area guard* processing does not send it again (claim 24), or only a unit in contact with that building is. Claim 24 currently counts waiting in line; its confidence is low until scenario B21 (d) settles it.
 
 ### Cross-spec changes to confirm
 

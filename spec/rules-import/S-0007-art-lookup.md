@@ -2,11 +2,11 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0008, Q-0083, Q-0951]
 supersedes: []
@@ -1178,8 +1178,8 @@ explicitly adds a type in the map. For weapons and projectiles, establish the re
 base rules instead. Later sections contain an unrelated valid entry as well, so omitting or
 emptying a tested key does not remove the section itself (S-0001).
 
-Every run is a skirmish at game speed 2 and 800×600, director off and mods off except the named
-test data. Invented names use ASCII bytes, so the scenarios' character counts equal byte counts.
+Every run is a skirmish at game speed 2 and 800×600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps
+excepted). Invented names use ASCII bytes, so the scenarios' character counts equal byte counts.
 One human player owns the observed objects; one bystander computer player stays
 outside the observed map patch or firing corridor, with the glossary's void rule. All observed
 objects are in view unless fog is explicitly tested. Start a fresh session for each variant to
@@ -1633,8 +1633,8 @@ theater flag or the new-theater flag is.
 
 - **A24 — art-file trailer sections (claim 33; Q-0083).**
   - Setup: named test data, an art database copy in the test expansion archive. Tiny temperate
-    and snow skirmish maps, game speed 2, 800×600, director and mods off except the named test
-    files; one human player and one bystander computer player kept outside the observed firing
+    and snow skirmish maps, game speed 2, 800×600, no engine add-on and no mods (the named test files of
+    a scenario and the purpose-made test maps excepted); one human player and one bystander computer player kept outside the observed firing
     and flight corridor. Add an aircraft and a visible long-flight projectile first in the map
     layer, each with an explicit image name different from its type name and the arctic flag set.
     Supply distinct, already listed visible trailer animations in the type-name art section,
@@ -1673,7 +1673,8 @@ theater flag or the new-theater flag is.
     use a test building with normal and damaged slot variants, plus an independent test effect
     animation placed away from it. List all test animations in the base rules. Each own section
     names a different image section, and the archive supplies a compatible sprite with visibly
-    distinguishable image frames. Use game speed 2, director off, other mods off. First hold the
+    distinguishable image frames. Use game speed 2, no engine add-on and no mods (the named test files of
+    a scenario and the purpose-made test maps excepted). First hold the
     building in its damaged condition before creating its slot, so slot replacement continuity
     does not obscure the creation frame. A separate normal-condition control uses the normal
     variant. Keep the effects and building in view.

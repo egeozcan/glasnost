@@ -2,11 +2,11 @@
 id: S-0408
 title: Selling and building repair (refund, what a sale releases, selling vehicles and walls, which buildings can be sold or repaired)
 topic: economy
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0130, Q-0131, Q-0225, Q-0282, Q-0284, Q-0440]
 supersedes: []
@@ -808,7 +808,7 @@ tick number. Any game speed.
 
 **S4 count variants (claim 5, Q-0131).**
 - *Setup:* named test data on the same flat skirmish map, one distant bystander computer player,
-  director and mods off apart from the named test data. Country factors 1 and no cost bonuses.
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Country factors 1 and no cost bonuses.
   (c) A target with limit 2 and two level-less non-turret upgrades.
   (d) An empty target with limit 3 and one non-turret level-3 upgrade.
   (e) A wall tower target with limit 1 and one non-turret level-3 upgrade.
@@ -954,7 +954,7 @@ tick number. Any game speed.
 
 **S10: exact removal timing (claim 17).**
 - *Setup:* flat purpose-made skirmish map, one distant bystander computer player kept outside
-  the observed area; director and mods off except named test data. Use crew-less own buildings
+  the observed area; no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use crew-less own buildings
   without contacts, country cost factors 1 and no cost bonuses. Test ordinary ranges with
   invented stage counts 6 and 30 and positive delays 2 and 3 ticks, a gate with a known gate
   range, and theater-flag ordinary and gate types with 30 whole sprite frames after refresh
@@ -1009,7 +1009,7 @@ tick number. Any game speed.
 **S11: wall-sale input cell and cover (claim 12a, Q-0284).**
 - *Setup:* a tiny flat skirmish map with isolated own and enemy stock walls, an ownerless
   map wall, an empty cell and a non-wall overlay. One distant bystander computer player,
-  director and mods off, stock data, speed index 2, 800 × 600. The observed area is the wall
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), stock data, speed index 2, 800 × 600. The observed area is the wall
   test patch. Include a completed own sellable ordinary building away from the walls.
   For the cover variants, a purpose-made map trigger re-covers an own wall cell; use a
   separate named test-map fog setting for the fog variant. Keep each wall isolated so selling
@@ -1043,7 +1043,7 @@ tick number. Any game speed.
   control gives a wall-sale order instead of an object sale.
 
 **S12: sell/repair clicks do not add text (claim 18, Q-0282).**
-- *Setup:* tiny flat skirmish map, stock data, director and mods off, speed index 2,
+- *Setup:* tiny flat skirmish map, stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), speed index 2,
   800 × 600, one distant bystander computer player kept outside the observed patch.
   Place own completed sellable buildings, an own damaged repairable building, a full-health
   building, enemy buildings, own walls and empty cells. For an application-refused wall
@@ -1068,7 +1068,7 @@ tick number. Any game speed.
 **S13: slave fate after true sale (claim 10a).**
 - *Setup:* flat purpose-made skirmish map, stock slave-miner types and a resource patch, one
   distant bystander computer player kept outside the patch, speed index 2, 800 × 600,
-  director and mods off. Use named map overrides only for variants: a long slave reload delay
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use named map overrides only for variants: a long slave reload delay
   to keep some slaves inside, and a deployed master with its packing conversion absent so
   sell mode gives a true sale. Keep other own buildings so the sale cannot defeat the player.
   A second variant keeps the packing conversion and uses a move click for successful packing-up.

@@ -2,11 +2,11 @@
 id: S-0412
 title: Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings)
 topic: simulation
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0045, Q-0192, Q-0281]
 supersedes: []
@@ -693,7 +693,7 @@ bases setting), `TechLevel` (the game's tech level) and `AlliesAllowed` and `All
 | superweapon type section, `DisableableFromShell` | disableable superweapon (claim 9 b; S-0407 claim 7) | boolean | no |
 | building type section, `SuperWeapon`, `SuperWeapon2` | first and second superweapon of the building type (claim 9 b; S-0407 claim 7) | superweapon type name | none |
 | `[AI]` `BuildTech` | tech-lab list (S-0407 claim 7, which owns it; claim 9 only points) | list of building type names | empty |
-| `[General]` `MultiplayerAICM` | the original's extra-credit percentage list (claim 3, original only): entry *i* is for difficulty index *i* | decimal-prefix signed 32-bit integer percentages, S-0003 claim 23 and row C22; 511-byte text limit, empty comma items skipped, unreadable non-empty items give 0; no scalar hexadecimal or percentage conversion | initially empty; missing or empty keeps the whole list in force, present non-empty replaces it |
+| `[General]` `MultiplayerAICM` | the original's extra-credit percentage list (claim 3, original only): entry *i* is for difficulty index *i* | decimal-prefix signed 32-bit integer percentages, S-0003 claim 23 and row C22; the text limit of row C22, empty comma items skipped, unreadable non-empty items give 0; no scalar hexadecimal or percentage conversion | initially empty; missing or empty keeps the whole list in force, present non-empty replaces it |
 | `[General]` `AIHateDelays` | the original's computer-player timer list (claim 3, original only; no effect in our engine): entry *i* is for difficulty index *i* | decimal-prefix signed 32-bit integer durations in ticks, S-0003 claim 23 and row C23; same text limit and item rules as row C22 | initially empty; missing or empty keeps the whole list in force, present non-empty replaces it |
 | `[AI]` `CompEasyBonus` | computer easy-bonus flag (claim 4, the original only) | boolean | yes |
 | mode list file, section `Unholy` | the all-base-units family (claim 13): every mode listed under this section has the rule; the section name is fixed by the program | mode entries | no family, no mode |
@@ -923,7 +923,7 @@ setup.
   Repeat this part in the all-base-units family with the test base-unit list of K8: its
   starting-unit group follows claim 13 and can take different draws, but these three groups
   must retain the same order. A different group order falsifies claim 14 for that family.
-  Use game speed 2, director and mods off, and record five runs of each variant without
+  Use game speed 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and record five runs of each variant without
   giving orders before tick 0. For the later groups, also run S-0202 R10 and its variants A
   and B, using that scenario's named theater fixtures and recorder checkpoints. Record the
   lab choices, tag-creation draws, and tile animations' cells and initial stage delays.
@@ -1006,7 +1006,7 @@ survives (the maximum level). Falsified if either non-player house's infantry su
 then has the maximum level when non-passive), or if the control is crushed (then the provisions do
 not hold and the run says nothing).
 
-**K11: choices offered by the lobby.** Use 800 × 600, director and mods off, standard
+**K11: choices offered by the lobby.** Use 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), standard
 skirmish mode, speed index 2 saved in the setup. Record screenshots or scripted-input logs of
 all choices before starting a game. Repeat each variant three times after a fresh program start.
 - *Part a (countries).* Name a loose test copy of the base rules, installed before program

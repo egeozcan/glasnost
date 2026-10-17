@@ -2,7 +2,7 @@
 id: S-0515
 title: Tech buildings (manned state, acquisition bonus, periodic income, ownership changes)
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -246,7 +246,7 @@ read-with-current-default rule). No other key feeds this spec's claims.
 ## Measurement scenarios
 
 Common setup: a small purpose-made test map, stock rules plus the named test file that the
-scenario gives, the bench (exact tick numbers, scripted input), with the director and mods off,
+scenario gives, the bench (exact tick numbers, scripted input), with no engine add-on and no mods (the named test files of a scenario excepted),
 and game speed index 2 at 800 × 600. Each scenario's named test file is
 *tech-buildings-test.map*, whose override sections supply only the test fields described there.
 Remove it after the run. Run each deterministic variant once and repeat any failed run. The

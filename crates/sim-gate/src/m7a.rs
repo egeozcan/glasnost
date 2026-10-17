@@ -4,7 +4,7 @@
 //! both have the psychic weapons of S-0610; the Yuri-style side also has a
 //! gattling vehicle and defence (S-0609) whose top-stage weapon leaves gas
 //! clouds (S-0613) and a mind controller (S-0601), and its power plant
-//! absorbs infantry (S-0605).
+//! absorbs infantry (S-0605); it also builds a grinder (S-0603).
 //! The run counts, per ability, the
 //! orders the AI gave (`glasnost_ai::special::Uses`) and the events the
 //! simulation then showed ([`Exercise`]), so that the gate cannot go on
@@ -64,11 +64,14 @@ pub struct Exercise {
     /// Infantry that went into an absorbing building (S-0605 claims 1
     /// and 7; Alpha's power plant BIOP is one).
     pub absorbed: u32,
+    /// Units a recycling building consumed (S-0603 claims 5 and 8; only
+    /// Alpha builds one, GRND).
+    pub ground: u32,
 }
 
 impl Exercise {
     /// Every counter the full run asserts on, by name.
-    pub fn counters(&self) -> [(&'static str, u32); 16] {
+    pub fn counters(&self) -> [(&'static str, u32); 18] {
         let u = &self.uses;
         [
             ("berserk weapon orders (S-0610)", u.berserks),
@@ -99,6 +102,8 @@ impl Exercise {
             ("gas hits (S-0613 claim 13)", self.gas_hits),
             ("absorber entry orders (S-0605)", u.absorbs),
             ("infantry absorbed (S-0605 claims 1 and 7)", self.absorbed),
+            ("grinder entry orders (S-0603)", u.grinds),
+            ("units ground (S-0603 claims 5 and 8)", self.ground),
         ]
     }
 
@@ -262,6 +267,20 @@ impl Exercise {
         self.absorbed += began(&watch.absorbed, &inside);
         first |= watch.first(!inside.is_empty(), "absorbed");
         watch.absorbed = inside;
+        // Recycling buildings: units bound for one and units consumed.
+        let ground = w
+            .effects
+            .iter()
+            .filter(|e| matches!(e, Effect::Consumed { .. }))
+            .count();
+        self.ground += u32::try_from(ground).unwrap_or(u32::MAX);
+        first |= watch.first(ground > 0, "ground");
+        let bound = w.objects.values().any(|o| {
+            o.on_map
+                && o.beh.current == Some(glasnost_sim::rules::Behaviour::Eaten)
+                && matches!(o.dest, Some(glasnost_sim::world::Target::Object(b)) if glasnost_sim::structures::grinder::is_recycler(w, b))
+        });
+        first |= watch.first(bound, "bound for a grinder");
         first
     }
 }
@@ -270,7 +289,8 @@ impl Exercise {
 /// over). The game is saved and loaded halfway and at the first tick each
 /// kind of M7a state appears (a psychic reveal, a berserk unit, a sensed
 /// intent line, a slave-miner building, a slave at work, a gattling at its
-/// top stage, a controlled object, a gas particle, an absorbed passenger); the loaded game
+/// top stage, a controlled object, a gas particle, an absorbed passenger, a unit bound for a grinder,
+/// a consumption); the loaded game
 /// must hash alike and goes on from there. Returns the state hash after
 /// every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {

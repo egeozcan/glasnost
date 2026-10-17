@@ -2,11 +2,11 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 20
+revision: 21
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950]
 supersedes: []
@@ -2033,8 +2033,7 @@ flat clear purpose-made map with neutral map lighting, the game paused for captu
 screenshots saved losslessly. Each game is a skirmish with one human player owning the test
 objects unless a scenario names another owner, and one distant bystander computer player.
 The observed area is the visible test objects and their routes; apply the glossary's bystander
-void rule. Use game speed 6 unless a scenario says otherwise, director off, and mods off except
-the named test data. A screen recorder with read-only tick counts supplies captures; any
+void rule. Use game speed 6 unless a scenario says otherwise, with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). A screen recorder with read-only tick counts supplies captures; any
 scripted input acts only through normal mouse and keyboard controls. Record the display path
 used (glossary, *display path* and *measurement setup*).
 
@@ -2464,7 +2463,7 @@ lead-confirmed departure, not a comparison with the original bug.
   direction. Revisit W's earlier facings. Repeat with V's shadow suppressed. Fire a
   stock voxel-model projectile from a non-depth shooter. Start a second game in the
   same program session with only W visible at an uncached facing. One run per variant,
-  lossless tick-labelled captures, director and other mods off.
+  lossless tick-labelled captures, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
 - *Observable:* W/projectile pixel width and section overlap against claims 21–24's
   renders; U/V part images as positive controls.
 - *Expected:* W and projectiles always have their ordinary non-depth look, including
@@ -3141,7 +3140,7 @@ The universal arbitrary-count relation remains unmeasured.
 - *Setup:* Common setup, speed index 2, one human-owned parked stock turretless vehicle
   and one distant bystander computer player. Named test VXL/HVA files and an art database
   copy give the vehicle five or six sections, disable part caching and suppress shadows.
-  All other data is stock; director and other mods are off. Use the pairwise and common
+  All other data is stock; no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use the pairwise and common
   marker construction of MS-25, with different nontransparent colours for every section.
   Bounds set exact finite nearest-depth equality groups independently of the markers.
   In depth mode all coincident left marker contributions at each probe have identical
@@ -3201,7 +3200,7 @@ conformance for lead-confirmed departures, not an oracle experiment.
 - *Setup:* Use an engine rendering fixture with named sparse VXL/HVA models on a
   stock turreted vehicle type, neutral lighting and fixed flat-ground poses. Render
   part images and unmasked shadows separately, then together. Use the common skirmish
-  houses, speed 6, director off and all other mods off; a direct rendering fixture
+  houses, speed 6, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted); a direct rendering fixture
   supplies the poses without advancing simulation. Place enough isolated, distinct
   nontransparent markers to identify each retained edge. Choose bounds and poses whose
   F6 copy widths and heights independently equal 4095, 4096, 4097, 4098 and one million
@@ -3243,7 +3242,7 @@ conformance for lead-confirmed departures, not an oracle experiment.
 **MS-30 — Aircraft surface anchors (claim 40; Q-0799).**
 
 - *Setup:* the common skirmish measurement setup, speed index 2, 800×600,
-  director and mods off, one human house and one bystander computer player outside
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), one human house and one bystander computer player outside
   the observed area. Use a tiny purpose-made map with flat ground at two levels,
   a slope, an intact high bridge in each axis with visible terrain beneath, and
   a stock landing pad. Observe a stock voxel plane and a stock rotor aircraft that
@@ -3301,7 +3300,7 @@ conformance for lead-confirmed departures, not an oracle experiment.
   variants that cannot be created in the original remain conformance tests only.
 
 **MS-31 — Rocket body pitch, shadow and reuse (claims 26, 30, 41; Q-0950).**
-Use the common skirmish setup, stock data, director and mods off, speed index 2,
+Use the common skirmish setup, stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), speed index 2,
 800×600 captures and one bystander computer player outside the observed area.
 On a tiny flat test map, launch each stock rocket kind toward a distant stationary
 legal target, with eight launch headings, then repeat over a slope. Capture every

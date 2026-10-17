@@ -2,7 +2,7 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -150,16 +150,15 @@ stands alone. This spec adds the terms after them.
      When the building becomes yellow its emission timer *T* is multiplied by the dimensionless factor 1.5 (once; repair does
      not undo it). Nothing ends it when the building is sold or destroyed; it ends by its lifetime, by its
      emission cut-off (claim 9, which marks a smoke system whose timer passes the cut-off), by full
-     cloaking (below) or by the trigger action of this claim. S-0516 gives only that a building's natural particle effects *stop* at full cloaking and
-     *restart* at full uncloaking. This spec gives how: reaching full cloaking removes the system at
+     cloaking (below) or by the trigger action of this claim. S-0516 claim 18 states the same rule from the cloaking side: reaching full cloaking removes the system at
      once, with its particles (no lingering particles), and reaching full uncloaking makes a new
-     system by the placement rule, but only when the type's natural-smoke displacement is not (0, 0, 0). This narrows S-0516's "restart" and adds the removal at once (scenario P1, parts b and c).
+     system by the placement rule, but only when the type's natural-smoke displacement is not (0, 0, 0) (scenario P1, parts b and c).
    - **Effect weapons.** The emitter is made at the weapon's fire point, or at the firer's
      position for a dropping projectile. While it is held, S-0301 claim 5's gate applies. A fire
      emitter is marked and let go when its firer takes a new target that is not within reach (outside the weapon's range, the test of S-0307 claim 12), is given a move order, or dies. A spark or railgun emitter is not let go by any of these; it is marked only by claim 4's owner removal, and otherwise ends by its own counter or line (claim 22).
      Creating the emitter takes no draw. The railgun's beam is the shot itself (S-0306).
    - **Electric bolt.** Each electric-bolt shot makes one system of the game-wide spark type at
-     the bolt's end.
+     the bolt's end. When the game-wide spark type is absent, nothing is created. This is a departure for an absent key, with no switch and an importer warning (Import mapping; Open questions).
    - **Trigger actions.** Two actions touch particle systems. The first names a particle system
      type by its index and makes one system of that type, with no owner object, no owner house and
      no first particle, at the centre of the cell of the action's waypoint, at the ground surface height of that cell (not raised on a bridge, unlike the glossary's waypoint point; confidence medium). The
@@ -200,8 +199,8 @@ stands alone. This spec adds the terms after them.
    - **Deactivated vehicle sparks.** A deactivated vehicle makes one system of the game-wide spark
      type on the ticks for which (⌊*x* / 10⌋ + ⌊*y* / 10⌋ × 65536 + *t* + its object number) is a
      multiple of 30, where (*x*, *y*) is its position and *t* the tick number (integer, truncation
-     toward zero). Two ranged draws R(−100, 100) give the *y* and then the *x* displacement, in leptons.
-     This row is a **departure** (no switch, no importer warning), of the kind S-0306 claim 13 records for
+     toward zero). Two ranged draws R(−100, 100) give the *y* and then the *x* displacement, in leptons. With no game-wide spark type, nothing is created and no draw is taken. This absent-key case is a departure with an importer warning (Import mapping; Open questions).
+     The cadence in this row is a **departure** (no switch, no importer warning), of the kind S-0306 claim 13 records for
      its object-number phase: the original's object numbers come from its own scenario-wide
      creation counter, which our engine does not reproduce, so the phase of the 30-tick cadence can
      differ from the original's. The period of 30 ticks, the position terms and the displacement
@@ -845,8 +844,8 @@ velocity draws, then the light draw, then one draw per live spark, oldest first.
 
 ## Import mapping
 
-Every value in an *Absent* column below is the original's own fallback for a missing key, not a
-value taken from the stock rules files, so it is an engine constant. The refinery smoke lifetime
+Every value in an *Absent* column below is an engine constant, not a value taken from the stock rules
+files. Except for the `DefaultSparkSystem` row, which says otherwise in its own cell, it is the original's own fallback for a missing key. The refinery smoke lifetime
 and the two sparking probabilities hold their absent-key defaults from program start, before any
 file is read; the spark particle cap, the railgun particles-per-lepton field and the other per-type
 fallbacks are the absent-key defaults of the fields named below. Confidence high, except the `DamageSmokeOffset` row, which is medium (claim 1).
@@ -907,7 +906,7 @@ Rules file, other sections (claim 1's creators):
 | object type `DamageSmokeOffset` | damage-smoke displacement (claim 1: damage smoke position, damage sparks) | three integers, leptons | 0, 0, 0 (medium) |
 | object type `DamSmkOffScrnRel` | screen-relative flag of that displacement (claim 1; Open questions) | boolean | no |
 | `[General]` `ConditionRedSparkingProbability`, `ConditionYellowSparkingProbability` | game-wide sparking probabilities of claim 1's damage sparks | decimal, held as a double (no `%` form is claimed) | red 0.02, yellow 0.01 |
-| `[CombatDamage]` `DefaultSparkSystem` | game-wide spark type (electric bolt, deactivated vehicle; also the overload sparks of S-0601 claim 16 and the drone parasite's spark effect of S-0614 claim 9) | name | none |
+| `[CombatDamage]` `DefaultSparkSystem` | game-wide spark type (electric bolt, deactivated vehicle; also the overload sparks of S-0601 claim 16 and the drone parasite's spark effect of S-0614 claim 9) | name | none. The original's result for an absent key is not established (Open questions). Our engine departs here, with no switch: no system is created, nothing is drawn, and the importer warns, as in S-0601 claim 16. |
 
 Rules file, `[AudioVisual]`: `Gravity` (integer, leptons per tick per tick) for F11, absent value
 as S-0613 gives it. `[General]`: `WindDirection` (integer 0 … 7) for F2, absent value −1 (claim 7).
@@ -935,7 +934,7 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   Part b: a trigger action that marks the systems of one cell (a smoke, a fire, a spark and a gas system
   in it, each holding particles; a second run with the waypoint in the cell of the shared gas system), and a natural-smoke building that reaches full cloaking. Expected:
   each marked system makes no new particle and leaves in the first turn in which it holds none; the
-  cloaked building's system is removed at once, with its particles. Falsified by a marked system that emits, by one that leaves at another tick, by a removal that keeps its particles, or (second run) by a shared gas system that is not marked by an action on a waypoint in cell (10, 10), or that is marked by one in another cell. Part c: two natural-smoke building types that differ only in the natural-smoke displacement, one (0, 0, 0) and one not, each cloaked fully and then uncloaked. Expected: after the uncloak the second building has a new natural-smoke system and the first has none. Falsified by a new system for the first type or none for the second (if the first also gets one, claim 1's condition and the S-0516 change are dropped).
+  cloaked building's system is removed at once, with its particles. Falsified by a marked system that emits, by one that leaves at another tick, by a removal that keeps its particles, or (second run) by a shared gas system that is not marked by an action on a waypoint in cell (10, 10), or that is marked by one in another cell. Part c: two natural-smoke building types that differ only in the natural-smoke displacement, one (0, 0, 0) and one not, each cloaked fully and then uncloaked. Expected: after the uncloak the second building has a new natural-smoke system and the first has none. Falsified by a new system for the first type or none for the second (if the first also gets one, claim 1's condition and S-0516 claim 18's displacement condition are revised).
 - **P2. Kinds that change play.** Two runs that differ only in a smoke system's slow-down field.
   Observable: the recorder. Expected: draw counts differ from the first tick in which the
   emission count differs, and later draws of other objects shift. No unit's health differs except
@@ -1084,6 +1083,7 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   and draw). This spec relies only on the shot having an end point.
 - **Deactivation sparks** (claim 1): which events deactivate a vehicle is other specs' business.
   The spark row is reached only through them.
-- **Shared gas system's position** (claim 1, Constants): S-0613 claim 1 says the system's own position has no observable effect. The second trigger action of claim 1 makes it observable, so S-0613 claim 1 must be revised to say so (cross-spec change). P1 part b decides the position.
+- **Absent game-wide spark type** (claim 1; Import mapping, game-wide spark type row): the original's result when that key is absent is not established. Our engine creates no spark system and takes no draw there, as a departure. S-0601 claim 16 has the same key and case. No measurement is proposed yet; a test rules file with the key absent, and an electric-bolt shot, would show the original's result.
+- **Shared gas system's position** (claim 1, Constants): the second trigger action of claim 1 makes the system's own position observable (S-0613 claim 1 says so). P1 part b decides the position.
 - **Rounding of a negative radius** (claim 20): the original's rounding is not known. Our engine rounds down, as F3 says. No measurement is proposed yet.
-- **Cross-spec change to S-0516** (claim 1, natural smoke): S-0516 says a building's natural particle effects stop at full cloaking and restart at full uncloaking (its test row 18: particles restart at 0). This spec removes the system at full cloaking, and makes a new one at full uncloaking only when the natural-smoke displacement is not (0, 0, 0). S-0516 must be revised in the same round; sign-off confirms it.
+- **Natural smoke and cloaking** (claim 1): S-0516 claim 18 states the removal at full cloaking and the displacement condition at full uncloaking; both specs agree. Scenario P1 parts b and c decide it.

@@ -2,11 +2,11 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0083, Q-0970]
 supersedes: []
@@ -616,8 +616,8 @@ moment (for example the gattling stage and the deployed state of the same tick).
 ## Measurement scenarios
 
 All scenarios run under the measurement setup with named test files: a test map whose override
-sections give the test types and weapons named in each scenario. Director and all other mods
-are off. Use a tiny flat skirmish map, one human observer and one bystander computer player
+sections give the test types and weapons named in each scenario. No engine add-on and no mods
+(the named test files of a scenario excepted). Use a tiny flat skirmish map, one human observer and one bystander computer player
 kept outside the observed area; a run is void if an unnamed bystander object affects that area.
 Targets and firers named below are the observed area. Unless a part says otherwise, the
 two weapons of a test firer are made distinguishable by giving their warheads 100 % against every
@@ -878,7 +878,7 @@ unless stated: no random draw enters the choice (claim 3), so repeated runs give
   predicts no deterministic original result. In our engine excess counts must use at most
   three positions and the ordinary fallbacks, with the importer warning.
 - *Part i (engine death-removal checks):* share S-0508 claim 23's G18 deterministic engine
-  fixtures, three fresh runs each, game-speed index 2, director and mods off. Use three
+  fixtures, three fresh runs each, game-speed index 2, no engine add-on and no mods (the named test files of a scenario excepted). Use three
   occupants U, V, W in entry order with distinguishable weapons, no upgrades and index 1.
   Kill V inside during an independent death event. Record survivor order, count, index,
   resolved weapon and successful launches. Expect U, W, count 2, index 1: W's weapon is
@@ -920,8 +920,8 @@ not retaliate when attacked (S-0309, claim 18), with primary −1 and secondary 
 
 **W11: registration beyond usable slots (claim 16; S-0004 K6).**
 - *Setup:* named test files: a loose base-rules copy and art copy, tiny skirmish map, one human
-  observer and one bystander computer player kept outside the test area. Director and mods off
-  apart from the named test files. Any fixed game speed. A vehicle type has positive turret count
+  observer and one bystander computer player kept outside the test area. No engine add-on and no mods
+  (the named test files of a scenario excepted). Any fixed game speed. A vehicle type has positive turret count
   and weapon count 19. Only its nineteenth normal weapon reference names a new weapon *W*.
   No other field names *W*. Its section names a new firing animation *A*, not listed elsewhere.
   The art section of *A* uses stock artwork and names a new decorative spawned overlay. Give the

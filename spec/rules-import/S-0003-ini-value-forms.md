@@ -2,11 +2,11 @@
 id: S-0003
 title: INI value forms
 topic: rules-import
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0061, Q-0075, Q-0100, Q-0171, Q-0234]
 supersedes: []
@@ -975,8 +975,7 @@ spec's scenario use that scenario's named test data.
   time value is first converted is not established.
 
 - **V13 (single-first health ratios, Q-0075).** Use S-0302 D11d's purpose-made skirmish
-  map, one human player and one distant bystander computer player, game speed 2, director
-  and mods off. Named map overrides give a test vehicle strength 1000, starting health 601,
+  map, one human player and one distant bystander computer player, game speed 2, no engine add-on and no mods (the named test files of a scenario excepted). Named map overrides give a test vehicle strength 1000, starting health 601,
   red ratio written `0.6`, yellow ratio `0.75`, one smoke damage effect, and an attacking
   weapon that delivers exactly 1 damage per hit. Record health and the first tick of smoke
   with video and a read-only recorder, over one run of two hits. Expected: smoke begins
@@ -985,7 +984,7 @@ spec's scenario use that scenario's named test data.
   (S-0302 D11d). The yellow ratio's original-game storage precision remains unmeasured
   here for claim 7's stated reason.
 - **V14 (no-type omissions, Q-0061).** Common setup, game speed 2, one human player and
-  one distant bystander computer player, director and mods off. Named map overrides use
+  one distant bystander computer player, no engine add-on and no mods (the named test files of a scenario excepted). Named map overrides use
   two existing, visibly distinct animation types, called `Alpha` and `Beta` here, and two
   visibly distinct voxel-debris types. Compare each C15/C16/C18 list written with the corresponding
   two names against the same list with `none`, `<NONE>` and repeated empty comma-separated
@@ -1001,8 +1000,7 @@ spec's scenario use that scenario's named test data.
   of an empty slot, changed list-selection range, shifted entry-0 animation, or retained prior
   list in the all-no-type run falsifies claim 19. Observe only the test objects and their effects.
   Void the run under the bystander's rule if it interferes.
-- **V15 (decimal-prefix maxima, Q-0061).** Common setup at game speed 2 with director and
-  mods off; use S-0303 A19's warhead-debris test and a killed test vehicle under S-0312 F1.
+- **V15 (decimal-prefix maxima, Q-0061).** Common setup at game speed 2 with no engine add-on and no mods (the named test files of a scenario excepted); use S-0303 A19's warhead-debris test and a killed test vehicle under S-0312 F1.
   Named map overrides supply two distinct voxel-debris types and enough requested debris
   to distinguish the per-deal maxima through recorded random draws. Run each role ten times per maxima spelling `2,abc,3`,
   `2,,3`, `$10,3`, `10h,3`, a `0x` prefix followed by `10,3`, and `none,3`; also insert a no-type name before
@@ -1018,7 +1016,7 @@ spec's scenario use that scenario's named test data.
   and apply the bystander's void rule.
 
 - **V16 (factory-kind words, Q-0100).** Tiny purpose-made skirmish map, game speed 2,
-  one human player and one distant bystander computer player, director and mods off.
+  one human player and one distant bystander computer player, no engine add-on and no mods (the named test files of a scenario excepted).
   Named map overrides change the factory-kind entry of one pre-placed factory building.
   remove every other factory of that kind from the observed house. Keep prerequisites,
   power, tech level and credits sufficient. Test each of C19's four producing words on a
@@ -1038,8 +1036,7 @@ spec's scenario use that scenario's named test data.
   release area. No claim that unrelated orders are unchanged is tested here.
 
 - **V17 (auto-deploy integer items, Q-0171).** Tiny purpose-made skirmish map,
-  game speed 2, one human and one distant bystander computer player, director and
-  mods off. Use S-0215 B19's auto-deploy setup with an undeployed neutral-house
+  game speed 2, one human and one distant bystander computer player, no engine add-on and no mods (the named test files of a scenario excepted). Use S-0215 B19's auto-deploy setup with an undeployed neutral-house
   infantry unit meeting claim 31's last-row conditions, no enemy or radiation in
   its test area. The neutral house uses difficulty index 1. Named map overrides
   set row C20's list; one run per spelling below. Record the standing-order start
@@ -1070,7 +1067,7 @@ spec's scenario use that scenario's named test data.
   run if the bystander interferes in the test area or is defeated.
 
 - **V18 (economy and computer-timer integer items, Q-0234).** Purpose-made
-  skirmish test maps, game speed 2, 800 × 600, director and mods off. Named test
+  skirmish test maps, game speed 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario excepted). Named test
   data are the maps' override sections and, for the layering controls, a loose
   base-rules copy removed after each test. One human and one normal-difficulty
   bystander computer player, whose difficulty index is 1 (S-0412 claim 4).

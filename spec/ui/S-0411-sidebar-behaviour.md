@@ -2,11 +2,11 @@
 id: S-0411
 title: Sidebar behaviour (build icons, clicks and the orders they give, icon states, queue counts, ready and placement)
 topic: ui
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0121, Q-0123, Q-0196, Q-0275, Q-0276, Q-0282, Q-0283, Q-0339]
 supersedes: []
@@ -738,7 +738,7 @@ Measurement setup (glossary); a small purpose-made skirmish map; one human house
 house) and one bystander computer player, whose void rule applies with the observed house's base as
 the observed area; scripted input for exact click ticks; screen and audio capture of the sidebar at
 every drawn frame; a recorder (Terms) where a scenario names it. Game speed 6, resolution
-800 × 600, director off and mods off, except the named test map overrides. The test map is
+800 × 600, no engine add-on and no mods (the named test files of a scenario excepted), except the named test map overrides. The test map is
 named “sidebar probe map” and contains the test types, limits, prerequisites and timing overrides each
 part needs; its chosen field values are recorded with the measurement. No predicted outcome
 depends on random draws, although production starts do take creation draws (S-0404 claim 11).
@@ -1109,7 +1109,7 @@ the time the script sent a button event, dates a click.
   asymmetric frame displacement and one negative displacement. Also name a test
   darkening-mask copy with alternating zero and nonzero indices. Remove test files
   after each run. Start a fresh program session for each changed file configuration
-  so retained art cannot hide it. Director and mods other than these named files remain off.
+  so retained art cannot hide it. Engine add-ons and mods other than these named files remain off.
 - Procedure: show each icon idle, unavailable, running, held and done; repeat for
   each theater and side and two house colours. In a separate run make the mask
   unavailable through a named test archive omitting its member, with no other copy
@@ -1143,7 +1143,7 @@ the time the script sent a button event, dates a click.
 - Expected: none of these sidebar actions adds a battlefield text message. The
   two labels resolve the entries of Import mapping and remain for the entire
   corresponding state, including across pause, ending at state change rather
-  than at 90 or 300 ticks. Decimal counts follow claim 7. Busy-line refusal is
+  than after any set number of ticks. Decimal counts follow claim 7. Busy-line refusal is
   announcement-only. A placement-failure control uses S-0406's separately owned
   feedback, not a generic client-invented “refused build” notice.
 - String-entry controls: in fresh program sessions use a named loose “sidebar-label
@@ -1157,7 +1157,7 @@ the time the script sent a button event, dates a click.
   missing-entry result lacks its identifier.
 
 **S13. Scroll dispatch and end feedback (claim 18, Q-0339).**
-- Setup: common sidebar probe skirmish, speed 6, 800 × 600, director and mods off.
+- Setup: common sidebar probe skirmish, speed 6, 800 × 600, no engine add-on and no mods (the named test files of a scenario excepted).
   Named map overrides offer enough types for two extra rows on one tab and fewer
   than one page on another. Count complete visible rows rather than assuming a
   shell size. Screen/audio capture and a read-only recorder log scroll positions,

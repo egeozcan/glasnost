@@ -2,11 +2,11 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872]
 supersedes: []
@@ -1520,8 +1520,8 @@ absent stays unset (−1), which means "use the game-wide value", not a height o
 
 ## Measurement scenarios
 
-**Common setup and falsification rule.** Use a purpose-made skirmish map, game speed 6,
-800 × 600, stock data, director off and mods off. Include one bystander computer player at the
+**Common setup and falsification rule.** Use a purpose-made skirmish map, game speed index 6,
+800 × 600 pixels, stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Include one bystander computer player at the
 farthest start, isolated from the observed area; apply the glossary's bystander void rule.
 Run each variant five times unless stated otherwise. Use scripted normal input and a read-only
 per-tick recorder for positions, heights, facings, current and queued behaviours, ammunition,

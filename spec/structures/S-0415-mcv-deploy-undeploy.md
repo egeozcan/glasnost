@@ -2,11 +2,11 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0132, Q-0220]
 supersedes: []
@@ -576,7 +576,7 @@ Claim 4 gives the original's *hunt* replacement for non-human-controlled owners.
 
 ## Measurement scenarios
 
-Measurement setup (glossary): game speed index 2, 800 × 600 pixels, director and mods off.
+Measurement setup (glossary): game speed index 2, 800 × 600 pixels, no engine add-on and no mods (the named test files of a scenario excepted).
 a tiny purpose-made skirmish map, one human house and one bystander computer player (glossary),
 named test rules files in the map's override sections, scripted input,
 and a recorder (glossary) logging per tick each object's type, owner, cell, body facing, health and
@@ -952,8 +952,7 @@ are repetitions that guard against void runs.
   hypothesis; its recorded facing settles Open question 4.
 
 **D14. Return-cell refusal and no alternative cell (Q-0132).**
-- Setup: the standard measurement setup above, game speed index 2, 800 × 600 pixels, director
-  and mods off. A tiny map has a packing yard with the redeploy setting on and a guard spot,
+- Setup: the standard measurement setup above, game speed index 2, 800 × 600 pixels, no engine add-on and no mods (the named test files of a scenario excepted). A tiny map has a packing yard with the redeploy setting on and a guard spot,
   and all eight neighbours of its return cell are clear. Use named map overrides for a second
   packing building with a zero-size foundation, so that the return cell can contain the test
   occupant or overlay without that building's own foundation displacing it. The yard run covers
@@ -998,7 +997,7 @@ are repetitions that guard against void runs.
   scenario tests admission, not the later crushing effects owned by S-0210.
 
 **D15. Building insertion facing.**
-- Setup: the common measurement setup, game speed index 2, director and mods off. Named map
+- Setup: the common measurement setup, game speed index 2, no engine add-on and no mods (the named test files of a scenario excepted). Named map
   overrides give an ordinary, non-gate deployed building deploy facing 64 and then 192 in separate
   variants. The deploying vehicle begins already at the required facing on clear ground, with
   no target; no enemy is in range of the building. Repeat each variant with turreted and
@@ -1015,7 +1014,7 @@ are repetitions that guard against void runs.
   inheritance of the vehicle facing or a result that changes with the deploy-facing field. Construction timing is measured separately by S-0406 PL11.
 
 **D16. First turn and construction processing after deployment.**
-- Setup: the common skirmish measurement setup, game speed index 2, director and mods off.
+- Setup: the common skirmish measurement setup, game speed index 2, no engine add-on and no mods (the named test files of a scenario excepted).
   Named test overrides give a non-gate deployed building a range of at least 2 stages with a
   positive stage delay longer than 2 ticks, no target and no opening-effect units. In variant
   (a), use a vehicle already on the map and an own building that entered play after it and
@@ -1042,7 +1041,7 @@ are repetitions that guard against void runs.
   construction formula in its uninterrupted domain.
 
 **D17. Failed slave-master conversion keeps no old slaves.**
-- Setup: the common skirmish setup, game speed index 2, director and mods off. A named test-map
+- Setup: the common skirmish setup, game speed index 2, no engine add-on and no mods (the named test files of a scenario excepted). A named test-map
   packing slave-master building has a guard spot, a long positive build-down and a return type
   that creates two hidden slaves. Obtain both hidden and on-map old slaves through harvesting,
   logging their identities and master links. Keep a factory or other qualifying building so

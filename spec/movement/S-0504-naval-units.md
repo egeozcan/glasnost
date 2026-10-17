@@ -2,11 +2,11 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0600, Q-0640, Q-0642, Q-0643, Q-0644, Q-0646]
 supersedes: []
@@ -589,7 +589,7 @@ eligibility remain S-0314 claims 9 and 10's import mapping.
 
 ## Measurement scenarios
 
-Stock data, director and mods off, a small purpose-made skirmish water map unless stated.
+Stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), a small purpose-made skirmish water map unless stated.
 Use game-speed index 2 and one run per deterministic sub-test, with the glossary's isolated
 bystander computer player and void rule. Repeat N5 four times to vary first-descent tick modulo 4.
 Use tick-labelled frame capture and a read-only object recorder for positions, health, targets
@@ -625,8 +625,7 @@ change or height refresh at a qualified chain falsifies the rule. N1 and N2 alon
 isolate these alternatives. S-0511 B6 separately tests the bridge-loss consequences.
 
 **Locomotor destination lifetime (claim 1).** Use S-0207 D29's water-lane controls
-at speed index 2 with a stock ship, a remote bystander computer player, director and
-mods off; repeat each control three times. Record order destination, locomotor destination,
+at speed index 2 with a stock ship, a remote bystander computer player, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted); repeat each control three times. Record order destination, locomotor destination,
 heading point, world position, search outcome, track completion and arrival report.
 Include reachable and temporarily blocked goals, a retained-goal retry, an intermediate
 completion, entry into the goal cell, final completion, mid-track stop, replacement and
@@ -640,7 +639,7 @@ if legal ship approaches cannot be established, that boundary control is inconcl
 N1 and N2 alone do not isolate destination-point presence.
 
 **Order-level cleanup (claim 1).** Use S-0207 D30's water-lane ship controls at
-speed index 2, director and mods off, three repetitions per case and an isolated
+speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), three repetitions per case and an isolated
 bystander computer player. Record destination kind and presence, locomotor point,
 world point, active track, approach destinations, behaviour processing, searches and
 arrival reports immediately before and after locomotion. Test an accepted same-cell
@@ -832,7 +831,7 @@ stops descent, or sinking freezes an already progressing body-facing update. An 
 misses, ineligible healing, no due healing tick before removal or a turn already complete is
 inconclusive. Radiation can be probed on stock water beside an irradiated shore only if the
 recorder confirms an applicable radiation exposure before removal; absence of such exposure does
-not test that claim. This requires read-only health/facing/event recording in the arena or bench,
+not test that claim. This requires read-only health/facing/event recording under the measurement setup,
 not modification of the oracle. No effect is claimed measured yet.
 
 **N11. Ship search cadence (claim 9).** *Setup:* a winding open-water route exceeding 24 steps,
@@ -856,7 +855,7 @@ the retained-old-step quirk when old and new first steps agree; that subclaim re
 The refresh distance and chase-cut distance use claim 9's spatial table root. This setup tests
 refresh timing well beyond 512 leptons, not the exact boundary or table-root distinction.
 Those remain unmeasured without a qualifying lepton-scale separation.
-Read-only search/timer recording is a proposed harness capability, not assumed present.
+Read-only search/timer recording is a proposed recorder capability, not assumed present.
 
 **N12. Absent weight and stock death (claim 11).** *Setup:* a stock naval surface vehicle whose
 type omits its weight, on water, with a stock enemy able to kill it. Inspect its imported weight
@@ -929,8 +928,8 @@ permission-refused later click creates no queue. *Falsified if:* a recorded elig
 violates any of these shared outcomes. A refused click does not test an executed enter order.
 After a post-settling yard loss, try moving the ship in several directions and record whether
 propulsion remains off; this last probe is exploratory for the stranding question below,
-not a prediction that ships share the hovering failure. Use the arena or bench with read-only
-event recording; this proposes recording capability, not an oracle modification.
+not a prediction that ships share the hovering failure. Record events read-only under the
+measurement setup; this proposes recording capability, not an oracle modification.
 
 ## Open questions
 

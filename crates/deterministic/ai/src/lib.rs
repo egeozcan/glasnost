@@ -18,6 +18,8 @@
 //! - [`jumpjets`]: jumpjet units sent over obstacles to reach the enemy (S-0502).
 //! - [`memory`]: the orders a unit did not take, so that the brain tries
 //!   another goal instead of the same click every think (PLAN §4.7).
+//! - [`grinder`]: the recycling building built and fed with controlled
+//!   enemy units, badly damaged units and surplus infantry (S-0603).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod absorber;
@@ -30,6 +32,7 @@ pub mod fixture_m6c;
 pub mod fixture_m7a;
 pub mod game;
 pub mod gattling;
+pub mod grinder;
 pub mod jumpjets;
 pub mod linked;
 pub mod memory;

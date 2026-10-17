@@ -2,11 +2,11 @@
 id: S-0413
 title: Country bonuses (what each country field does, which spec owns it, and the fields with no effect)
 topic: simulation
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0478]
 supersedes: []
@@ -326,8 +326,8 @@ The last column is the absent-key default, the value when no layer gives the key
 ## Measurement scenarios
 
 All scenarios run under the glossary's *measurement setup* in a skirmish on a purpose-made flat
-map of clear ground, at game speed index 2 and 800 × 600 resolution, with the director and mods
-off apart from the named test rules file and map overrides. Their changed values are invented
+map of clear ground, at game speed index 2 and 800 × 600 resolution, with no engine add-on and no
+mods (the named test files of a scenario excepted). Their changed values are invented
 test values; no stock value is needed. No expected
 result depends on a random draw, so each variant runs once. Every variant is a separate run of the
 whole game. The *recorder* reads each tick the positions of the test objects. "Cell *k*" and

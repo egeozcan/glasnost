@@ -2,7 +2,7 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1382,7 +1382,7 @@ is omitted. Claim 38 and A5 own the initial defaults.
 
 ## Measurement scenarios
 
-All runs: the measurement setup (glossary), with the director and mods off, skirmish,
+All runs: the measurement setup (glossary), with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), skirmish,
 800 × 600, normal game speed unless stated, sound effects volume at full. Use a small flat
 purpose-made map with the named test objects in an isolated observed area and one bystander
 computer player kept away from it; apply the glossary's void rule. Unless a count is given, run

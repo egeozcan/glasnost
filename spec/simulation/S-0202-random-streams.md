@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1344,8 +1344,7 @@ game seed is a game-setup value (claim 8). Map-generator seeding has no rules or
 ## Measurement scenarios
 
 All scenarios use the measurement setup: skirmish at speed 4 unless a part explicitly
-names a deferred network or campaign test, with director and mods off except the named
-test data. Scenarios R2, R3, R5, R6, R7, R8 and R9 use the glossary's *random-state
+names a deferred network or campaign test, with no engine add-on and no mods (the named test files of a scenario excepted). Scenarios R2, R3, R5, R6, R7, R8 and R9 use the glossary's *random-state
 recorder*, which here means a read-only program that reads, without changing anything, the running original's seed of the current
 game and the current state of the scenario random stream: the 250 values x<sub>N−250</sub> …
 x<sub>N−1</sub>, seed values included, where *N* is the number of raw values taken since the
@@ -1605,7 +1604,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
     chain-reaction flag on, particles and smudge effects absent, and no resource in any cell
     containing an animation's position (for the overlay animations these are the cells two steps
     along +x and +y, not the overlay cells). Use a sprite with more than one image frame so μ
-    is positive. 5 runs at speed 4, director and mods off except this named test data.
+    is positive. 5 runs at speed 4, no engine add-on and no mods (the named test files of a scenario excepted).
     *Expected:* the shift is still exactly the stage-delay draws' *k*, with no chain-reaction
     draws. *Falsified if* the shift needs any extra raw value. Repeat using tile animations on
     resource-free displaced cells in R10; each creation must have the same no-extra-draw result.
@@ -1635,7 +1634,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   - (I) *Cell animation before tile animation.* Reuse S-0009 M6e parts A to C for the displaced
     position and chain-reaction cell, and part D for draw order: its named cell and tile animation
     types have distinguishable non-singleton random-rate ranges and no other creation effects.
-    Skirmish at speed 4, director and mods off except the named test data, 5 runs with the
+    Skirmish at speed 4, no engine add-on and no mods (the named test files of a scenario excepted), 5 runs with the
     random-state recorder. Record the stream state and each animation's initial stage delay
     at the overlay placement, before later passes replace the tile animation. *Expected:* the
     cell animation is at the top corner of cell (*x* + 2, *y* + 2); the recorded incoming stream
@@ -1674,8 +1673,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   x<sub>*k*</sub>. A seed of 0 is allowed when the predicted draw gives 0.
   (f) *In-play low repair.* Use S-0511 claim 20's low-bridge fixture and repair procedure:
   a small stock-data test map with a damaged or destroyed low bridge, its hut, a human
-  engineer and a distant bystander computer player, at a recorded fixed speed, director
-  and mods off. Include several strips needing random intact pieces and an intact end
+  engineer and a distant bystander computer player, at a recorded fixed speed, no engine add-on and no mods (the named test files of a scenario excepted). Include several strips needing random intact pieces and an intact end
   piece needing no random choice. Sample the map-generator state immediately before and
   after engineer entry, and record each resulting overlay position. Repeat three times,
   including bridges along both axes. Compute successive raw values from the pre-entry
@@ -1685,7 +1683,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   strip order or stream advancement. Void a run if unrelated actors affect the bridge.
   This does not promise to encounter the rare rejection endpoint.
   (g) *Ordinary-map initialization (Q-0711).* Use the same low-bridge stock-data
-  fixture, speed 4, director and mods off, with the human engineer and distant computer
+  fixture, speed 4, no engine add-on and no mods (the named test files of a scenario excepted), with the human engineer and distant computer
   player. Make three fresh launches, never opening random-map generation. Record each
   game's naturally selected game seed and the map-generator state at the first tick,
   before repair, and after repair. Also record repaired piece positions. Expected:
@@ -1709,7 +1707,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   named theater fixtures: run 1 starts an animation only in the game-start pass, and run 2 starts
   one in the second pass and must not start another in the game-start pass. Give the test types
   distinguishable non-singleton random-rate ranges, no bouncing motion and no start-event
-  effects. Skirmish at speed 4, director and mods off except the named test data, 5 runs per
+  effects. Skirmish at speed 4, no engine add-on and no mods (the named test files of a scenario excepted), 5 runs per
   fixture. Use the read-only random-state recorder to record each creation's incoming and
   outgoing scenario-stream states, initial stage delay and cell, plus the states at starting-unit
   completion (including its final R(0, 65535) when present), initial crate placement,
@@ -1740,7 +1738,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   no computer player that reaches cleanup and permits the conditional-animation control.
 
 - **R12, low-bridge writes do not start cell animations (claim 14; Q-0101 Q4).** Use R8 A's
-  bridge geometry and recorder, speed 4, director and mods off except named test data.
+  bridge geometry and recorder, speed 4, no engine add-on and no mods (the named test files of a scenario excepted).
   Give the end-marker types, their end-row types and all four piece types a cell animation
   with a non-singleton random-rate pair, no bouncing and no start-event effects. The terrain
   names no tile animation. Add one ordinary overlay of a separate type naming the same
@@ -1756,7 +1754,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
 
 - **R13, resource-glint setup (claim 14).** Small purpose-made skirmish map, one human
   and one bystander computer player isolated from the observed resource area; speed 4,
-  director and mods off except named test data. Put at least eight isolated resource cells
+  no engine add-on and no mods (the named test files of a scenario excepted). Put at least eight isolated resource cells
   with nonzero contained value in known visiting order, plus empty-cell and zero-value
   resource controls. Configure a glint type with a distinguishable non-singleton random-rate
   range, no bouncing motion and no start-event effects. Use frequency 2, then 1, then 0, then repeat
@@ -1781,8 +1779,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
 
 - **R14, middle-event composition at map load and during play (claim 15; Q-0182, Q-0217).** Small purpose-made skirmish
   map, speed 4, one human and one bystander computer player on an isolated remote start island.
-  Keep the observed area away from starting units. Director and mods off except named test
-  map overrides, a test art file, one-frame test sprites (μ = 0), and a test smudge list.
+  Keep the observed area away from starting units. No engine add-on and no mods (the named test files of a scenario excepted); these are map overrides, a test art file, one-frame test sprites (μ = 0), and a test smudge list.
   Use the random-state recorder to compare incoming and outgoing load-time states with the
   predicted sequence from each recorded seed, and a read-only cell/particle recorder for the
   resulting types, starting velocities, lifetime variations, colours and resource levels.
@@ -1898,7 +1895,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   replacement with an order-boundary start. S-0701 E1/F1 test sound-instance draw groups
   and the feedback chance from recorded unsynchronised states; F6 tests lightning's
   scenario-stream choice with audible/silent and empty-list controls. For repeated points,
-  use S-0513 SW7's storm fixture with its named test data, director and mods off, speed 4,
+  use S-0513 SW7's storm fixture with its named test data, no engine add-on and no mods (the named test files of a scenario excepted), speed 4,
   800 × 600 pixels and the read-only random-state recorder. Make two trigger clouds over
   the same flat cell, with no other clouds and no terrain-height change between strikes.
   Repeat for 20 strike pairs at exactly the same point, accounting separately for bolt,
@@ -1912,7 +1909,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   from them are claimed here, and none measures the between-house design extension.
 
 - **R15, post-game winner-score requests (claim 16).** Use S-0414 V18's purpose-made
-  skirmish fixture with stock data except its named map overrides, director and mods off,
+  skirmish fixture with stock data except its named map overrides, no engine add-on and no mods (the named test files of a scenario excepted),
   speed 4 and 800 × 600 pixels. Run ten naturally recorded seeds with scripted input,
   screen capture and read-only running-score, defeat-state and random-state recorders.
   Include multiple undefeated listed houses with distinct positive scores, a zero-score

@@ -35,7 +35,9 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 /// W5 of damage 1 and rate 1, stage count 3, spin-up 7, spin-down 1,
 /// thresholds 10, 30 and 60) and TGT (an unarmed vehicle of strength
 /// 30000), and for the absorber pairs BIO (a 2 × 2 infantry absorber for
-/// three, size limit 1, power 10, extra power 25).
+/// three, size limit 1, power 10, extra power 25), and for the grinder pairs
+/// GRND (a 2 × 2 recycling building), GRUNT's cost 400, a refund percentage
+/// of 0.5 and Betaland's infantry cost factor 0.5.
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     r.sim.warheads.insert(
@@ -116,6 +118,17 @@ fn rules() -> Ruleset {
     bio.econ.extra_power = Some(25);
     register(&mut r, "buildings", "BIO");
     r.sim.buildings.insert("BIO".into(), bio);
+    let grnd = BuildingType {
+        strength: Some(1000),
+        foundation: Some([2, 2]),
+        grinding: Some(true),
+        ..Default::default()
+    };
+    register(&mut r, "buildings", "GRND");
+    r.sim.buildings.insert("GRND".into(), grnd);
+    r.sim.infantry.get_mut("GRUNT").unwrap().cost = Some(400);
+    r.sim.general.economy.refund_percent = Some(dec("0.5"));
+    r.sim.countries.get_mut("Betaland").unwrap().econ.cost_infantry_mult = Some(dec("0.5"));
     r
 }
 
@@ -437,4 +450,139 @@ fn a_released_neutral_unit_takes_the_bio_reactor_fate() {
     let h = save::state_hash(&w);
     let l = save::load(&save::save(&w), w.rules_arc(), testkit::catalogue()).unwrap();
     assert_eq!(save::state_hash(&l), h);
+}
+
+fn credits(w: &World, h: u8) -> i32 {
+    w.houses[usize::from(h)].credits
+}
+
+fn round_trip(w: &World) {
+    let h = save::state_hash(w);
+    let l = save::load(&save::save(w), w.rules_arc(), testkit::catalogue()).unwrap();
+    assert_eq!(save::state_hash(&l), h);
+}
+
+// Pair: a controlled unit and a recycling building.
+// spec: S-0603 claims 1, 5, 6, 8, 9 and 11 and F1 (the controlling house recycle-clicks its victim into its own grinder: consumed as the controlling house's object, valued with that house's factors and paid to it; the original owner gets nothing back; removal, not death)
+// spec: S-0601 claims 5 and 12 (the takeover by fire; a victim leaving the game leaves its controller's list silently, no release sound, the slot free for a new takeover)
+// spec: S-0214 table I row I26 (recycle cursor on the house's own recycling building)
+#[test]
+fn a_controlled_enemy_is_ground_for_its_controllers_house() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::econ::{TypeRef, sell};
+    use glasnost_sim::mind::MindSound;
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, 0, 0);
+    let grnd = put(&mut w, Kind::Building, "GRND", BETA, -5, -5);
+    let grunt = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 6, 0);
+    testkit::run(&mut w, 5);
+    attack(&mut w, BETA, clone, grunt);
+    assert!(
+        run_until(&mut w, 900, |w| mind::mind_controlled(w, grunt)),
+        "taken by fire"
+    );
+    assert_eq!(owner(&w, grunt), Some(BETA));
+    let recycle = targeting::cursor(
+        &w,
+        HouseId(BETA),
+        &[grunt],
+        ClickOn::Object(grnd),
+        Modifiers::default(),
+    );
+    assert_eq!(recycle, Action::Recycle);
+    click(&mut w, BETA, &[grunt], grnd);
+    testkit::run(&mut w, 2);
+    assert_eq!(w.obj(grunt).unwrap().dest, Some(Target::Object(grnd)));
+    // Save and load while it is bound for the grinder.
+    round_trip(&w);
+    let t = TypeRef {
+        kind: Kind::Infantry,
+        index: w.rules().index_of(Kind::Infantry, "GRUNT").unwrap(),
+    };
+    let beta_value = sell::refund(&w, HouseId(BETA), t);
+    // Beta's infantry factor: trunc(trunc(400 × 0.5) × 0.5) = 100, not Alpha's 200.
+    assert_eq!(beta_value, 100);
+    assert_eq!(sell::refund(&w, HouseId(ALPHA), t), 200);
+    let (ca, cb) = (credits(&w, ALPHA), credits(&w, BETA));
+    let stats = |w: &World| {
+        [ALPHA, BETA].map(|h| {
+            let s = &w.houses[usize::from(h)].econ.result.stats;
+            (s.kills, s.losses)
+        })
+    };
+    let s0 = stats(&w);
+    let mut fx = Vec::new();
+    for _ in 0..900 {
+        if w.obj(grunt).is_none() {
+            break;
+        }
+        w.effects.clear();
+        tick::step(&mut w);
+        fx.extend(w.effects.iter().cloned());
+    }
+    assert!(w.obj(grunt).is_none(), "consumed");
+    assert_eq!(credits(&w, BETA) - cb, beta_value, "the controller's house is paid");
+    assert_eq!(credits(&w, ALPHA), ca, "the original owner gets nothing");
+    assert_eq!(stats(&w), s0, "no kill, no loss");
+    assert!(mind::controller(&w, clone).is_none_or(|r| r.victims.is_empty()));
+    assert!(
+        !fx.iter().any(|e| matches!(e, Effect::Mind { sound: MindSound::Cleared, .. })),
+        "no release sound"
+    );
+    assert!(fx.iter().any(|e| matches!(e, Effect::Consumed { grinding: true, .. })));
+    // The freed slot takes a new victim.
+    let next = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 4, 3);
+    testkit::run(&mut w, 2);
+    attack(&mut w, BETA, clone, next);
+    assert!(
+        run_until(&mut w, 900, |w| mind::mind_controlled(w, next)),
+        "takes again"
+    );
+    round_trip(&w);
+}
+
+// Pair: the release fate and a recycling building.
+// spec: S-0601 claims 8 and 10 (the controller's destruction releases its victim; the neutral house's fate decision draws and selects the grinder)
+// spec: S-0603 claims 3, 5, 8 and 14 and F1 (the released unit walks to its own owner's nearest recycling building and is consumed; the neutral house is paid P without the refund percentage)
+#[test]
+fn a_released_neutral_unit_takes_the_grinder_fate() {
+    let mut r = rules();
+    let g = &mut r.sim.general;
+    g.ai_capture_normal = Some(vec![0, 100, 0, 0]);
+    g.ai_capture_wounded = Some(vec![0, 0, 0, 0]);
+    g.ai_capture_low_power = Some(vec![0, 0, 0, 0]);
+    g.ai_capture_low_money = Some(vec![0, 0, 0, 0]);
+    let mut w = testkit::game_with_non_players(&r, SIZE, 1);
+    let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, -6, 0);
+    let grnd = put(&mut w, Kind::Building, "GRND", 2, 6, -4);
+    let civ = put(&mut w, Kind::Infantry, "GRUNT", 2, 1, 0);
+    testkit::run(&mut w, 5);
+    attack(&mut w, BETA, clone, civ);
+    assert!(
+        run_until(&mut w, 900, |w| mind::mind_controlled(w, civ)),
+        "taken by fire"
+    );
+    damage::apply(
+        &mut w,
+        clone,
+        Hit {
+            amount: 100_000,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: false,
+        },
+    );
+    testkit::run(&mut w, 2);
+    assert_eq!(owner(&w, civ), Some(2));
+    assert_eq!(w.obj(civ).unwrap().dest, Some(Target::Object(grnd)), "the grinder fate");
+    round_trip(&w);
+    let c0 = credits(&w, 2);
+    assert!(
+        run_until(&mut w, 900, |w| w.obj(civ).is_none()),
+        "consumed"
+    );
+    assert_eq!(credits(&w, 2) - c0, 400, "P for the neutral house");
 }

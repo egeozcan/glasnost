@@ -1915,3 +1915,42 @@ fn spin_sound_draws() {
     assert_eq!(u.taken(), 0);
     assert!(heard(&mut a, 0).is_empty());
 }
+
+/// spec: S-0603 claim 7 (a consumption: the local player's entrant gives a death response and then a death sound, one raw draw each; another house's only the death sound; the enter-grinder sound at the entrant when the building grinds)
+#[test]
+fn grinder_consumption_sounds() {
+    let w = world();
+    let t = tref(&w, Kind::Vehicle, "CRUSHER");
+    let mut n = SoundNames::default();
+    n.set_type(
+        Kind::Vehicle,
+        index(&w, Kind::Vehicle, "CRUSHER"),
+        TypeSounds {
+            voice_die: strings(&["Last"]),
+            die_sound: strings(&["Boom0"]),
+            ..TypeSounds::default()
+        },
+    );
+    n.enter_grinder = Some("Crunch".into());
+    let fx = |owner: u8, grinding: bool| Effect::Consumed {
+        of: t,
+        owner: Some(HouseId(owner)),
+        pos: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
+        grinding,
+    };
+    let mut a = audio(&w, &["Boom0", "Last", "Crunch"]);
+    a.set_names(n.clone());
+    let mut u = Rng::new(9);
+    let before = u.taken();
+    a.tick(&w, &[fx(0, true)], &mut u);
+    assert_eq!(u.taken(), before + 2, "one choice for each list");
+    let mut got = heard(&mut a, 0);
+    got.sort();
+    assert_eq!(got, ["Boom0", "Crunch", "Last"]);
+    let mut b = audio(&w, &["Boom0", "Last", "Crunch"]);
+    b.set_names(n);
+    let before = u.taken();
+    b.tick(&w, &[fx(1, false)], &mut u);
+    assert_eq!(u.taken(), before + 1, "another house: the death sound only");
+    assert_eq!(heard(&mut b, 0), ["Boom0"], "no enter-grinder sound without the flag");
+}

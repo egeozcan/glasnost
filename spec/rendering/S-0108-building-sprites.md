@@ -2,11 +2,11 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0540]
 supersedes: []
@@ -884,7 +884,7 @@ files and no engine add-ons, stock data, a tiny purpose-made map, one player wit
 one bystander computer player kept outside the observed area unless a scenario needs its named
 objects. The observed area is the test buildings, their nearby cells, and any route or units the
 scenario uses. Apply the glossary's bystander void rule. Use standard skirmish, 800 × 600 pixels,
-game speed 4 unless stated, high detail, director and mods off, and no unrelated trigger effects. Record per tick, from a screen capture that keeps every drawn frame or a
+game speed 4 unless stated, high detail, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and no unrelated trigger effects. Record per tick, from a screen capture that keeps every drawn frame or a
 read-only recorder's tick-labelled log of the game state, the body sprite and image-frame index in use, bib and shadow
 visibility, and the slot animations present (slot, variant, image frame). One run per variant
 is enough unless a scenario says otherwise. Use deterministic animation playback in named test art

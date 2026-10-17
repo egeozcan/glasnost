@@ -2,11 +2,11 @@
 id: S-0511
 title: Bridges (destruction, collapse, falling and repair)
 topic: structures
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0676, Q-0677, Q-0678, Q-0710, Q-0712, Q-0713, Q-0714, Q-0715, Q-0716, Q-0717, Q-0718, Q-0719]
 supersedes: []
@@ -978,7 +978,7 @@ warns when a required bound type is missing or is not a bridge piece. Backing: `
 ## Measurement scenarios
 
 All scenarios use stock data except for the explicitly named test-data variants below,
-with the director and unrelated mods off. Named overrides are removed after their sub-test.
+with no engine add-on and no mods (the named test files of a scenario excepted). Named overrides are removed after their sub-test.
 The bridge-destruction option is on unless stated, at any fixed, recorded game speed. Except for the ion-cannon warhead, attempts
 from area damage need a chance draw (S-0303 claim 18), so scenarios never count ordinary shots. They fire until the bridge's
 look changes and record each change, with its tick, in order. The harness should record per tick:
@@ -1150,8 +1150,8 @@ weapon itself kills a watched unit before the bridge changes, or an unrelated ac
     corresponding branch. Void runs without the intended track, endpoint or nonempty
     record, or with an earlier killing hit. For a mover dropped during that exit, record
     reservation clearing separately: claim 9 uses the stored zero, not its current height.
-    Repeat each realized fixture three times at the same recorded speed, director and mods
-    off; the read-only recorder supplies the points and marks, not altered game state.
+    Repeat each realized fixture three times at the same recorded speed, with no engine add-on and no mods (the named test files of a scenario excepted), and
+    the read-only recorder supplies the points and marks, not altered game state.
   - *Falsified by:* a heading vehicle surviving with the nonempty-record condition satisfied,
     a heading hit despite the empty-record condition, the third vehicle dying, or reversed
     death ordering.

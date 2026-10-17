@@ -2,11 +2,11 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0982]
 supersedes: []
@@ -544,7 +544,7 @@ All keys are in the vehicle's or infantry's type section of the rules file unles
 
 ## Measurement scenarios
 
-Measurement setup (glossary): game speed index 2, 800 × 600 pixels, director and mods off, stock data
+Measurement setup (glossary): game speed index 2, 800 × 600 pixels, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), stock data
 unless a named test rules file is stated. The map is a tiny purpose-made skirmish map with one human
 house and two bystander computer players (glossary), one owning the named enemy targets and one
 kept entirely away from the observed area. Their unnamed objects must not interfere; neither is

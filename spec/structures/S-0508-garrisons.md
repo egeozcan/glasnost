@@ -2,11 +2,11 @@
 id: S-0508
 title: Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing)
 topic: structures
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0660, Q-0972, Q-0973, Q-0970, Q-0971, Q-0990]
 supersedes: []
@@ -665,7 +665,7 @@ and medium confidence. S-0011 claim 33 and its Import mapping own the correspond
 ## Measurement scenarios
 
 All scenarios use the glossary's measurement setup: the stock executable and stock data, no
-engine add-ons, director disabled and no mods except the named test maps below. Use game-speed
+engine add-on and no mods (the named test files of a scenario excepted). Use game-speed
 index 2, a tiny flat test area, the local player's house A, and one bystander computer player B
 isolated from that area. Name B's test units explicitly where used; other interference voids the
 run under the glossary's bystander rule. Keep both contenders alive throughout. "Civilian building"
@@ -1032,8 +1032,8 @@ index, removed-place shot/award/placement, or incorrect abandonment falsifies th
 No unsafe original firing, credit or eviction continuation is proposed as a control.
 
 **G19. Assault animation safety departure (claim 25, our engine only).** Use G10's named
-assault fixture on our engine at game-speed index 2, with its isolated bystander, director
-and mods disabled except named test data. In `garrison-assault-large.map`, give the building
+assault fixture on our engine at game-speed index 2, with its isolated bystander, no engine
+add-on and no mods (the named test files of a scenario excepted). In `garrison-assault-large.map`, give the building
 an invented occupant capacity of 21 and enter identified occupiers individually. Use G17's
 named test-art file with distinguishable pixel pairs for all ten points and a visible
 occupant animation. Test counts 10, 11, 12 and 21 in three fresh games each. Transfer only
