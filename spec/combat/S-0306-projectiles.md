@@ -2,11 +2,11 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160]
 supersedes: []
@@ -2208,7 +2208,7 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - The exceptions here concern only the building-band test. Except in run h, use a target cell beyond
   the obstacle and accept a crossing only when no other detonation row applies, in particular no
   nearest-object proximity, arrival or same-building row. Use named test-map overrides for the projectile and
-  exceptional building types, with director and mods off, at game speed 2.
+  exceptional building types, with no engine add-on and no mods (the named test files of a scenario excepted), at game speed 2.
 - Setup: a straight, not inaccurate test projectile with ρ = 0, fired across a cell holding an enemy
   building so that it is about 100 leptons above the terrain there (run a) or 200 above it (run b),
   run c: the building is allied with the firer; run d: a wall segment of the wall overlay in that
@@ -2371,8 +2371,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 
 **P40. Trigger nuclear descent (claim 26).**
 - Setup: a tiny flat purpose-made skirmish map, one human player and one bystander computer
-  player kept away from the test area, standard mode, game-speed index 2, 800 × 600, director
-  and mods off except the named test data. Fire one trigger action 95 at an empty waypoint
+  player kept away from the test area, standard mode, game-speed index 2, 800 × 600, no engine
+  add-on and no mods (the named test files of a scenario excepted). Fire one trigger action 95 at an empty waypoint
   cell. A named test-map override selects a vertical payload projectile with turn rate 0,
   detonation altitude 40000 leptons, and the flags excluded by claim 26 off; it has no trailer,
   is not airburst, inaccurate or subject to cliffs or walls, and does not degenerate. Keep the
