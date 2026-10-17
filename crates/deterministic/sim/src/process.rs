@@ -534,26 +534,35 @@ pub fn turn(w: &mut World, id: ObjectId) {
 
 /// The late start of an infantry unit or vehicle (S-0215 claim 11): one
 /// more ready-and-start chance in its update, after its movement, so that
-/// readiness counts this update's movement. It only makes a queued
-/// behaviour current; no fall-back to rest (claim 11 does not assert one;
-/// interim rule of Q-1166). A behaviour made current here is first
-/// processed on the unit's next update (claim 3b), and the drop rule and
-/// the per-tick search of this update have already run (claim 33 b).
+/// readiness counts this update's movement. It makes a queued behaviour
+/// current; a ready infantry unit with neither a current nor a queued
+/// behaviour first falls back to rest, as at the first per-tick start
+/// (revision 59, which answers Q-1166 question 1). A behaviour made
+/// current here is first processed on the unit's next update (claim 3b),
+/// and the drop rule and the per-tick search of this update have already
+/// run (claim 33 b).
 pub fn late_start(w: &mut World, id: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let Some(o) = w.obj(id) else { return };
+    let kind = o.kind;
     // spec: S-0215 claim 11 (infantry and vehicles have a late start; buildings and aircraft do not)
-    if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) || o.health <= 0 {
+    if !matches!(kind, Kind::Infantry | Kind::Vehicle) || o.health <= 0 {
         return;
     }
-    if o.beh.queued.is_none() {
+    let empty = o.beh.current.is_none() && o.beh.queued.is_none();
+    if o.beh.queued.is_none() && !(kind == Kind::Infantry && empty) {
         return;
     }
     // spec: S-0215 claim 11 (the late start: ready under the readiness rules, with this update's movement counted)
-    if ready(w, id)
-        && let Some(ob) = w.obj_mut(id)
-    {
+    if !ready(w, id) {
+        return;
+    }
+    if kind == Kind::Infantry && empty {
+        // spec: S-0215 claim 11 (revision 59: an infantry unit ready at the late start with neither a current nor a queued behaviour falls back to rest in that update; what the fall-back queues becomes current at that same late start)
+        fall_back(w, id, false);
+    }
+    if let Some(ob) = w.obj_mut(id) {
         ob.beh.start_next(t, stale);
     }
 }
