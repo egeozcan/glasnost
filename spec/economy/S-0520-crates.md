@@ -2,11 +2,11 @@
 id: S-0520
 title: Crates (placement, replacement, pickup and power-up effects)
 topic: economy
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0987, Q-1033]
 supersedes: []
@@ -340,7 +340,7 @@ Ordering consequences:
 
 ## Measurement scenarios
 
-Use the glossary's measurement setup: stock data, director and mods off except the named test data below, a purpose-made skirmish map, one human and one bystander computer player, standard mode, 800 × 600, game-speed index 6. The observed area is the whole map for placement, shroud and heal-all tests; otherwise it is the test enclosure and its crate destinations. Keep the bystander separated, and apply its void rule. Use normal input or scripted mouse and keyboard input, tick-labelled captures, and read-only recording of credits, health, positions and random-stream state. Do not write a seed into the oracle. Repeat deterministic variants twice; use 30 independently started games for random variants unless a larger count is stated, recording each observed seed and state.
+Use the glossary's measurement setup: stock data, no engine add-on and no mods (the named test files of a scenario excepted), a purpose-made skirmish map, one human and one bystander computer player, standard mode, 800 × 600, game-speed index 6. The observed area is the whole map for placement, shroud and heal-all tests; otherwise it is the test enclosure and its crate destinations. Keep the bystander separated, and apply its void rule. Use normal input or scripted mouse and keyboard input, tick-labelled captures, and read-only recording of credits, health, positions and random-stream state. Do not write a seed into the oracle. Repeat deterministic variants twice; use 30 independently started games for random variants unless a larger count is stated, recording each observed seed and state.
 
 **Named test data.** A test copy of `rulesmd.ini`, removed after each run, may change only the fields a scenario names by role: crate weights, arguments, animations, water flags, lifetime and count settings, the forced unit type, type eligibility flags and lists, and explicitly stated test-unit or warhead properties. CR19 may additionally supply animation-list entries, creating animation references and a named test copy of the art file defining a harmless visible animation for its reserved-name controls. A purpose-made map supplies trigger crates with fixed contents (S-0524 claim 4) and separated test enclosures. Prefer those fixed crates with the crate setting off to isolate effects. Keep a counted building and a base unit unless the scenario tests their absence, to prevent claim 9 masking the intended effect. Named data is an explicit exception to stock-data-only tests, not an engine modification.
 
