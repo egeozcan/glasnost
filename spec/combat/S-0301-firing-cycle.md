@@ -2,11 +2,11 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0060, Q-0798]
 supersedes: []
@@ -76,8 +76,13 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   *berserk-friendly* have the meanings of S-0610 Terms.
 - **Effect weapon.** A weapon whose shot keeps a lasting effect attached to the firer: a sonic
   wave, a spark-particle or fire-particle emitter, or a railgun particle trail (each an imported
-  weapon flag). The effect is *alive* from the shot until the effect ends (the combat and rendering
-  specs own its duration).
+  weapon flag). A sonic wave is *alive* from the shot until it ends (the combat and rendering specs
+  own its duration). A particle emitter is alive from the shot until it is let go (below). A fire
+  emitter is let go on a retarget to a target not within reach (what counts as within reach is
+  S-0616 claim 1's; the measurement in F4 reads it as the weapon's range), a move order or death. A spark or railgun emitter is let go when it leaves play, which it does by its
+  own counter or line and not by anything the firer does (S-0616 claims 1 and 22). So a spark or
+  railgun emitter is not alive for as long as its firer is in play; a fire emitter is, when its
+  firer keeps its target, stays put and lives.
 - **Disc laser weapon.** A weapon with the imported disc-laser flag (S-0203, Terms).
 - **Magnetic-beam weapon.** A weapon with the imported magnetic-beam flag. Its shot can make a
   *magnetic wave* attached to the firer (S-0607 claim 21). The firer's *held target* is its
@@ -260,8 +265,13 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | the asked weapon's own kind | *rearming* (rank 5) |
    | the kind of the asked weapon's other weapon, whatever the asked weapon's own kind | *impossible* (rank 4) |
 
-   So an effect weapon fires again after max(*R*′, the effect's lifetime) ticks, where *R*′ is *R*
-   (trunc(*R* / 2) for a berserk firer, claim 8), and no draw is taken for its delay. For a
+   So an effect weapon fires again at the first attempt that is both at least *R*′ ticks after the
+   shot and after the effect has ended, where *R*′ is *R*
+   (trunc(*R* / 2) for a berserk firer, claim 8), and no draw is taken for its delay. For a sonic
+   weapon the effect ends when the wave does, so the interval is max(*R*′, the wave's lifetime). For
+   a particle emitter it ends when the emitter is let go (Terms): a spark or railgun
+   weapon fires again once its emitter has left play, and a fire weapon whose firer keeps its
+   target, stays put and lives fires only once until the emitter is let go. For a
    building that holds more than 1 round, *R*′ is 1 instead (0 if berserk, claim 8), so
    the live-effect gate can still hold it back (claim 10).
 
@@ -281,8 +291,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      L9 and L10 for magnetic firing, grip independence and wave creation)
    - Confidence: high (the bare rate, the missing draw, *rearming* for an effect weapon's own
      kind, and the magnetic conditional gate and absence of a general own-wave block),
-     medium (*impossible* for the other weapon, and that the effect's lifetime can lengthen the
-     interval, which depends on the effect specs); low for the shared slot of magnetic and sonic
+     medium (*impossible* for the other weapon, that the effect's lifetime can lengthen the
+     interval, which depends on the effect specs, and the fire emitter's let-go events, including
+     what counts as within reach, which this spec leaves to S-0616 claim 1: scenario F4, particle
+     part); low for the shared slot of magnetic and sonic
      waves (a firer needs both weapons, so test data must supply the case)
 
 6. **Veteran factor.** If the firer is veteran and its type has the veteran rate-of-fire ability,
@@ -649,11 +661,11 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     standing-position and parachute draws of a drop attempt (S-0522 claims 9, 11 and 13).
     A drop attempt takes no ordinary-shot draws, whether successful or refused. A shot takes, from the scenario random stream and in this order:
     the spray pick of S-0313 (only for the first shot of a burst of a spray-attack type), the
-    projectile's own draws (S-0306), the draws of creating an effect weapon's particle system
-    (S-0202, claim 10, when this shot starts the effect), then the one delay draw (R(0, 2) of claim 2 or R(3, 5) of claim 4) if
+    projectile's own draws (S-0306), then the one delay draw (R(0, 2) of claim 2 or R(3, 5) of claim 4) if
     the delay kind chosen by claim 2's order takes one, and after it the draws of the effects the shot creates last: its
     muzzle-flash animation, a sonic wave or a laser (S-0202, claim 10, and the specs of those
-    effects). A refused attempt takes no draw at all. A delay without a draw (a burst-delay field of claim 4, the bare
+    effects). Creating an effect weapon's particle system is not a draw: its draws come in the
+    system's own turns (S-0616 claims 10 to 18). A refused attempt takes no draw at all. A delay without a draw (a burst-delay field of claim 4, the bare
     rate of claim 5, the 1-tick delay of claim 10) takes no delay draw. A void shot as in claim 15 takes the projectile's draws but no delay draw.
     - Backing: `measurable` (scenario F14, with the random-state recorder; the void-shot rule through
       S-0306 scenario P5 run d; S-0608 scenario D1 part a for drain attempts and link effects,
@@ -946,12 +958,26 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   change of target resets it, or the carried count does not decide the second weapon's delay.
 
 **F4. Effect weapons.**
-- Setup: a stock vehicle with a sonic weapon; a stock unit with a fire-particle or spark-particle
-  weapon; a stock railgun weapon if available, else a test rules file.
+- Setup: a stock vehicle with a sonic weapon; a stock railgun weapon if available, else a test rules file.
 - Observable: shot ticks; draws.
-- Expected: no delay draw is taken; intervals are max(*R*, effect lifetime).
+- Expected (sonic weapon): no delay draw is taken; intervals are max(*R*, wave lifetime).
 - Falsified if: a draw is taken for the delay, or an interval differs from
-  max(*R*, effect lifetime) when facing, range and all other firing gates remain satisfied.
+  max(*R*, wave lifetime) when facing, range and all other firing gates remain satisfied.
+- Particle part: a test rules file gives three firers one weapon each, with *R* shorter than every
+  emitter's life: a spark-particle weapon, a railgun weapon and a fire-particle weapon (each firer
+  with a stationary durable target building in range, all other gates satisfied). Record
+  shot ticks, and the tick at which each emitter leaves play (S-0616 scenario P1). Expected: the
+  spark and railgun firers shoot again at the first attempt after their emitter has left play, and
+  not earlier; the fire firer shoots once and not again while it keeps the target and stays put.
+  Falsified if a spark or railgun firer shoots before its emitter has left play or never shoots a
+  second time, or if the fire firer shoots a second time with its target kept.
+- Fire let-go part: as the fire firer above, then, in separate runs, (a) retarget it to a
+  target outside its weapon's range, (b) give it a move order, (c) kill it, (d) retarget it to a
+  second target that is within range. Expected: in (a) and (b), a shot at the first attempt after
+  the firer again has a target in range; in (c) none; in (d) no second shot. Falsified if a shot
+  comes in (c) or (d), or none comes in (a) or (b) while all gates hold. This part reads "within
+  reach" as the weapon's range. Where (a) and (d) disagree with that, the measurement replaces the
+  reading and S-0616 claim 1 is revised.
 - Burst part (claim 2's order): with a test rules file, the sonic vehicle's weapon gets burst count
   2, and its *R* is longer than the wave's lifetime. Expected: after every shot, including the
   first of a burst, the interval is *R* and the recorder shows no R(3, 5) draw. Falsified if the
@@ -959,8 +985,8 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   for the weapon's own kind, so the shot ticks show it) or a draw appears.
 - Building part: with a test rules file, a building defence that cannot be garrisoned, with a sonic weapon
   (or a spark-particle weapon), *R* far longer than the effect's lifetime, and 3 rounds. Expected:
-  the second shot comes when the first wave ends, not *R* ticks after the first (a 1-tick delay
-  with the effect gate holding it); the delay after the shot made with the last round is *R*, so,
+  the second shot comes when the first wave ends (for a spark-particle weapon, when its emitter has
+  left play), not *R* ticks after the first (a 1-tick delay with the effect gate holding it); the delay after the shot made with the last round is *R*, so,
   as in scenario F9, the building keeps its target and turns (S-0215, claim 32, second row) until
   *R* ticks after that shot, and drops it at its first processing after that. Falsified if the
   second shot comes *R* ticks after the first, or the building drops its target before *R* ticks
@@ -1199,8 +1225,8 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 - Falsified if: a second delay draw appears, or the delay draw comes before the projectile's.
 - Spray and particle part: a spray-attack type's first shot of a burst (test data), and a
   fire-particle weapon's first shot. Expected: the spray pick comes before the projectile's draws
-  and its delay draw follows them. For the fire-particle weapon, the particle system's draws
-  come after the projectile's draws, with no delay draw at all (claim 5). Falsified if either
+  and its delay draw follows them. For the fire-particle weapon, creating the emitter takes no draw
+  (its draws come in the system's own turns, S-0616 claims 10 to 18), and there is no delay draw at all (claim 5). Falsified if either
   ordering differs, if a delay draw appears for the fire-particle shot, or if the spray pick
   appears for any shot other than the first of a burst.
 - Refusal part: an attempt refused by the firing check while the countdown runs, in each of the
