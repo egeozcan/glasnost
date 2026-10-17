@@ -69,6 +69,19 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
         "S-0302, S-0610",
     ),
     ("berserk_friendly", "BerserkFriendly", Bool, "S-0610"),
+    ("mind_cleared_sound", "MindClearedSound", Text, "S-0601"),
+    (
+        "lepton_mind_control_offset",
+        "LeptonMindControlOffset",
+        Int,
+        "S-0601",
+    ),
+    (
+        "mind_control_ring_offset",
+        "MindControlRingOffset",
+        Int,
+        "S-0601",
+    ),
     ("damage_self", "DamageSelf", Bool, "S-0302, S-0303"),
     ("max_debris", "MaxDebris", Int, "S-0312"),
     ("min_debris", "MinDebris", Int, "S-0312"),
@@ -267,6 +280,12 @@ const UNSET_STRENGTH: i32 = -1; // spec: S-0102 claim 23 (writing −1 unsets th
 
 /// Combat fields of weapons.
 const WEAPON_COMBAT: &[Row] = &[
+    (
+        "infinite_mind_control",
+        "InfiniteMindControl",
+        Bool,
+        "S-0601",
+    ),
     ("rof", "ROF", Int, "S-0301"),
     ("burst", "Burst", Int, "S-0301"),
     // The imported speed field as read (−1 is a "not given" value, S-0306 Import mapping).
@@ -827,6 +846,69 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         "S-0614",
     ),
     (
+        "mind_cleared_sound",
+        AUDIO_VISUAL,
+        "MindClearedSound",
+        Text,
+        "S-0601",
+    ),
+    (
+        "yuri_mind_control_sound",
+        AUDIO_VISUAL,
+        "YuriMindControlSound",
+        Text,
+        "S-0601",
+    ),
+    (
+        "master_mind_overload_death_sound",
+        AUDIO_VISUAL,
+        "MasterMindOverloadDeathSound",
+        Text,
+        "S-0601",
+    ),
+    (
+        "controlled_animation_type",
+        COMBAT_DAMAGE,
+        "ControlledAnimationType",
+        Ref(Kind::Animations),
+        "S-0601",
+    ),
+    (
+        "perma_controlled_animation_type",
+        COMBAT_DAMAGE,
+        "PermaControlledAnimationType",
+        Ref(Kind::Animations),
+        "S-0601",
+    ),
+    (
+        "mind_control_attack_line_frames",
+        COMBAT_DAMAGE,
+        "MindControlAttackLineFrames",
+        Int,
+        "S-0601",
+    ),
+    ("overload_count", COMBAT_DAMAGE, "OverloadCount", Maxima, "S-0601"),
+    ("overload_damage", COMBAT_DAMAGE, "OverloadDamage", Maxima, "S-0601"),
+    ("overload_frames", COMBAT_DAMAGE, "OverloadFrames", Maxima, "S-0601"),
+    ("ai_capture_normal", GENERAL, "AICaptureNormal", Maxima, "S-0601"),
+    ("ai_capture_wounded", GENERAL, "AICaptureWounded", Maxima, "S-0601"),
+    ("ai_capture_low_power", GENERAL, "AICaptureLowPower", Maxima, "S-0601"),
+    ("ai_capture_low_money", GENERAL, "AICaptureLowMoney", Maxima, "S-0601"),
+    (
+        "ai_capture_low_money_mark",
+        GENERAL,
+        "AICaptureLowMoneyMark",
+        Int,
+        "S-0601",
+    ),
+    (
+        "ai_capture_wounded_mark",
+        GENERAL,
+        "AICaptureWoundedMark",
+        Dec,
+        "S-0601",
+    ),
+    (
         "wake",
         GENERAL,
         "Wake",
@@ -1337,6 +1419,9 @@ const FLH_KEYS: [(&str, &str); 4] = [
 /// A muzzle position no layer gives (S-0313 Import mapping: 0, 0, 0).
 const FLH_ABSENT: [i32; 3] = [0, 0, 0]; // spec: S-0313 Import mapping (muzzle positions absent: 0, 0, 0)
 
+/// The alternate link anchors read (S-0601 Import mapping, F5).
+const ALTERNATE_FLH: usize = 5; // spec: S-0601 Import mapping (AlternateFLH0 through AlternateFLH4)
+
 /// The burst-delay and firing-sync value no layer gives (S-0301 Import
 /// mapping: −1).
 const NO_DELAY: i32 = -1; // spec: S-0301 Import mapping (BurstDelay0 … 3 and FiringSyncFrame0, 1 absent: −1)
@@ -1674,6 +1759,17 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     keyed(
         &["art"],
         &s(&[
+            "AlternateFLH0",
+            "AlternateFLH1",
+            "AlternateFLH2",
+            "AlternateFLH3",
+            "AlternateFLH4",
+        ]),
+        "S-0601",
+    );
+    keyed(
+        &["art"],
+        &s(&[
             "FiringFrames",
             "FiringSyncFrame0",
             "FiringSyncFrame1",
@@ -1901,6 +1997,24 @@ impl Builder<'_> {
                     ),
                 );
             }
+        }
+        // spec: S-0601 Import mapping (AlternateFLH0 to AlternateFLH4: integer triples of the type's art section; absent: the zero triple)
+        let alt: Vec<Option<[i32; 3]>> = (0..ALTERNATE_FLH)
+            .map(|n| self.art_tuple::<3>(kind, index, t, &format!("AlternateFLH{n}")))
+            .collect();
+        if let Some(last) = alt.iter().rposition(Option::is_some) {
+            combat.put(
+                "alternate_flh",
+                jsonc::array(
+                    alt[..=last]
+                        .iter()
+                        .map(|f| {
+                            let f = f.unwrap_or(FLH_ABSENT);
+                            jsonc::array(f.iter().map(|&x| int_node(x)).collect())
+                        })
+                        .collect(),
+                ),
+            );
         }
         // spec: S-0313 Import mapping (TurretOffset: an integer of the type's image section)
         if let Some(v) = self.art_int(kind, index, t, "TurretOffset") {
@@ -3046,6 +3160,27 @@ impl Builder<'_> {
                 ));
             }
         }
+        // spec: S-0601 Import mapping (the three overload lists: the importer warns when damage or frames is shorter than count, or when count is empty while the others are given)
+        let untrimmed = self.i.ini_quirks.list_items_untrimmed;
+        let lists: Vec<(&str, Option<KeyState>)> = ["OverloadCount", "OverloadDamage", "OverloadFrames"]
+            .iter()
+            .map(|k| (*k, self.global(COMBAT_DAMAGE, k)))
+            .collect();
+        let len = |st: &Option<KeyState>| {
+            list_of(st.as_ref(), untrimmed).map_or(0, |l| l.iter().filter(|x| !x.is_empty()).count())
+        };
+        let n = len(&lists[0].1);
+        for (k, st) in &lists[1..] {
+            if st.is_some() && n == 0 {
+                self.warn_at(st.as_ref(), format!(
+                    "[CombatDamage] {k} is given but OverloadCount is empty: our engine gives no overload pulses (S-0601 Import mapping, a design fallback)"
+                ));
+            } else if n > 0 && len(st) < n {
+                self.warn_at(st.as_ref().or(lists[0].1.as_ref()), format!(
+                    "[CombatDamage] {k} is shorter than OverloadCount: our engine uses 0 for a missing entry (S-0601 Import mapping, a design fallback)"
+                ));
+            }
+        }
         for k in ["RepairPercent", "CrewEscape"] {
             let state = self.global(GENERAL, k);
             // spec: S-0003 claim 18, Import mapping row C9 (a percentage field without `%` above 1 in magnitude)
@@ -3085,6 +3220,59 @@ impl Builder<'_> {
                     ));
                 }
             }
+        }
+        // spec: S-0601 claim 4 and Import mapping (a takeover weapon whose firer gets no control record from its rookie primary; a takeover primary with damage 0 or below that is not unlimited: the importer warns)
+        let takeover = |n: Option<Vec<u8>>| -> Option<(i32, bool)> {
+            let w = n
+                .filter(|n| !n.is_empty() && !value::is_no_type(n))
+                .and_then(|n| find_in(outcome, Kind::Weapons, &n))?;
+            let h = text_of(key(w, "Warhead")).and_then(|n| find_in(outcome, Kind::Warheads, &n))?;
+            (bool_of(key(h, "MindControl")) == Some(true)).then(|| {
+                (
+                    int_of(key(w, "Damage")).unwrap_or(0),
+                    bool_of(key(w, "InfiniteMindControl")) == Some(true),
+                )
+            })
+        };
+        let mut mind_warnings = Vec::new();
+        for kind in [
+            Kind::Infantry,
+            Kind::Vehicles,
+            Kind::Aircraft,
+            Kind::Buildings,
+        ] {
+            for t in outcome.registries.get(&kind).unwrap_or(&empty) {
+                let primary = takeover(text_of(key(t, "Primary")));
+                let mut others: Vec<String> = ["Secondary", "ElitePrimary", "EliteSecondary"]
+                    .iter()
+                    .map(|k| (*k).to_owned())
+                    .collect();
+                others.extend((1..=SLOTS).map(|n| format!("Weapon{n}")));
+                others.extend((1..=SLOTS).map(|n| format!("EliteWeapon{n}")));
+                let other = others
+                    .iter()
+                    .find(|k| takeover(text_of(key(t, k))).is_some());
+                match (primary, other) {
+                    (None, Some(k)) => mind_warnings.push((
+                        key(t, k).cloned(),
+                        format!(
+                            "{} carries a takeover weapon in {k} but its rookie Primary gives it no control record: our engine never fires that weapon (S-0601 claim 4, a departure)",
+                            show(&t.name)
+                        ),
+                    )),
+                    (Some((d, false)), _) if d <= 0 => mind_warnings.push((
+                        key(t, "Primary").cloned(),
+                        format!(
+                            "{} has a takeover Primary with damage {d} and no unlimited control: it can take nothing (S-0601 Import mapping)",
+                            show(&t.name)
+                        ),
+                    )),
+                    _ => {}
+                }
+            }
+        }
+        for (at, text) in mind_warnings {
+            self.warn_at(at.as_ref(), text);
         }
         for w in weapons {
             let name = format!("weapons {}", show(&w.name));

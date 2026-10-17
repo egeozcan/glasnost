@@ -1631,15 +1631,15 @@ pub struct Quirks {
     // spec: S-0519 claim 18
     #[serde(default = "on")]
     pub airstrike_recharge_same_target_only: bool,
-    /// A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does. Not implemented yet (wave 2).
+    /// A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does (`glasnost_sim::mind::owner_changed`).
     // spec: S-0601 claim 11 and Edge cases
     #[serde(default = "on")]
     pub mind_control_owner_change_keeps_victims: bool,
-    /// A dying victim holds its controller slot for as long as it still exists as the same object (a sinking ship, a building awaiting delayed destruction); off: a victim leaves its controller's list at its killing hit. Not implemented yet (wave 2).
+    /// A dying victim holds its controller slot for as long as it still exists as the same object (a sinking ship, a building awaiting delayed destruction); off: a victim leaves its controller's list at its killing hit (`glasnost_sim::mind::killed`).
     // spec: S-0601 claim 12 and Edge cases
     #[serde(default = "on")]
     pub dying_victim_holds_slot: bool,
-    /// A controlled vehicle that deploys into a building leaves its controller's list silently and the owner change becomes permanent; off: the new object inherits the control link, the original owner and the list place, and is released as the old object would have been. Not implemented yet (wave 2).
+    /// A controlled vehicle that deploys into a building leaves its controller's list silently and the owner change becomes permanent; off: the new object inherits the control link, the original owner and the list place, and is released as the old object would have been (`glasnost_sim::mind::converted`).
     // spec: S-0601 claim 15 and Edge cases
     #[serde(default = "on")]
     pub deploy_makes_control_permanent: bool,

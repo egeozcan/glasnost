@@ -1454,3 +1454,111 @@ fn psychic_type_flags() {
         (Some(false), Some(false), None)
     );
 }
+
+// spec: S-0601 Import mapping (InfiniteMindControl of a weapon; MindClearedSound, LeptonMindControlOffset and MindControlRingOffset of a type; AlternateFLH0 to AlternateFLH4 of the art section, a missing one the zero triple; absent: no value, so the simulation's defaults apply)
+#[test]
+fn mind_control_type_and_weapon_fields() {
+    let base = "[VehicleTypes]\n1=Master\n2=Cart\n[WeaponTypes]\n1=Ray\n2=Pea\n[Warheads]\n1=Mind\n\
+                [Mind]\nMindControl=yes\n[Ray]\nDamage=3\nWarhead=Mind\nInfiniteMindControl=yes\n\
+                [Pea]\nDamage=3\nWarhead=Mind\n\
+                [Master]\nImage=MASTART\nPrimary=Ray\nMindClearedSound=Bye\nLeptonMindControlOffset=33\n\
+                MindControlRingOffset=-4\n[Cart]\nSpeed=2\nPrimary=Pea\n";
+    let art = "[MASTART]\nAlternateFLH0=1,2,3\nAlternateFLH2=7,8,9\n";
+    let (s, _) = sim(base, "", art);
+    assert_eq!(s.weapons["Ray"].infinite_mind_control, Some(true));
+    assert_eq!(s.weapons["Pea"].infinite_mind_control, None);
+    let m = &s.vehicles["Master"].combat;
+    assert_eq!(m.mind_cleared_sound.as_deref(), Some("Bye"));
+    assert_eq!(
+        (m.lepton_mind_control_offset, m.mind_control_ring_offset),
+        (Some(33), Some(-4))
+    );
+    assert_eq!(
+        m.alternate_flh,
+        Some(vec![[1, 2, 3], [0, 0, 0], [7, 8, 9]])
+    );
+    let c = &s.vehicles["Cart"].combat;
+    assert_eq!(
+        (
+            c.mind_cleared_sound.clone(),
+            c.lepton_mind_control_offset,
+            c.mind_control_ring_offset,
+            c.alternate_flh.clone()
+        ),
+        (None, None, None, None)
+    );
+}
+
+// spec: S-0601 Import mapping (the rules-wide sounds of [AudioVisual]; the rings, line frames and overload lists of [CombatDamage]; the fate tables and marks of [General]; absent: no value)
+#[test]
+fn mind_control_game_wide_values() {
+    let base = "[Animations]\n1=Ring\n2=Perma\n\
+                [AudioVisual]\nMindClearedSound=Free\nYuriMindControlSound=Mine\nMasterMindOverloadDeathSound=Pop\n\
+                [CombatDamage]\nControlledAnimationType=Ring\nPermaControlledAnimationType=Perma\n\
+                MindControlAttackLineFrames=12\nOverloadCount=2,4\nOverloadDamage=0,5\nOverloadFrames=6,3\n\
+                [General]\nAICaptureNormal=1,2,3,4\nAICaptureWounded=5,6,7,8\nAICaptureLowPower=0,0,0,100\n\
+                AICaptureLowMoney=9,9,9,9\nAICaptureLowMoneyMark=750\nAICaptureWoundedMark=0.25\n";
+    let (s, w) = sim(base, "", "");
+    let g = &s.general;
+    assert_eq!(
+        (
+            g.mind_cleared_sound.as_deref(),
+            g.yuri_mind_control_sound.as_deref(),
+            g.master_mind_overload_death_sound.as_deref()
+        ),
+        (Some("Free"), Some("Mine"), Some("Pop"))
+    );
+    assert_eq!(
+        (
+            g.controlled_animation_type.as_deref(),
+            g.perma_controlled_animation_type.as_deref()
+        ),
+        (Some("Ring"), Some("Perma"))
+    );
+    assert_eq!(g.mind_control_attack_line_frames, Some(12));
+    assert_eq!(g.overload_count, Some(vec![2, 4]));
+    assert_eq!(g.overload_damage, Some(vec![0, 5]));
+    assert_eq!(g.overload_frames, Some(vec![6, 3]));
+    assert_eq!(g.ai_capture_normal, Some(vec![1, 2, 3, 4]));
+    assert_eq!(g.ai_capture_wounded, Some(vec![5, 6, 7, 8]));
+    assert_eq!(g.ai_capture_low_power, Some(vec![0, 0, 0, 100]));
+    assert_eq!(g.ai_capture_low_money, Some(vec![9, 9, 9, 9]));
+    assert_eq!(g.ai_capture_low_money_mark, Some(750));
+    assert_eq!(dec(&g.ai_capture_wounded_mark), Some("25e-2"));
+    assert!(!warned(&w, "Overload"));
+    let (s, _) = sim("", "", "");
+    let g = &s.general;
+    assert_eq!(
+        (
+            g.mind_cleared_sound.clone(),
+            g.mind_control_attack_line_frames,
+            g.overload_count.clone(),
+            g.ai_capture_low_money_mark,
+            g.ai_capture_wounded_mark.clone()
+        ),
+        (None, None, None, None, None)
+    );
+}
+
+// spec: S-0601 claim 4 and Import mapping (warnings: a takeover weapon whose firer's rookie primary gives no control record, an elite primary takeover weapon included; a takeover primary with damage 0 or below without unlimited control; overload lists shorter than the count list, or given with an empty count list)
+#[test]
+fn mind_control_warnings() {
+    let base = "[VehicleTypes]\n1=Side\n2=Elite\n3=Weak\n4=Fine\n5=Free\n\
+                [WeaponTypes]\n1=Ray\n2=Nil\n3=Gun\n4=NilU\n[Warheads]\n1=Mind\n2=Ap\n\
+                [Mind]\nMindControl=yes\n[Ap]\nVerses=100%\n\
+                [Ray]\nDamage=3\nWarhead=Mind\n[Nil]\nDamage=0\nWarhead=Mind\n[Gun]\nDamage=10\nWarhead=Ap\n\
+                [NilU]\nDamage=0\nWarhead=Mind\nInfiniteMindControl=yes\n\
+                [Side]\nPrimary=Gun\nSecondary=Ray\n[Elite]\nPrimary=Gun\nElitePrimary=Ray\n\
+                [Weak]\nPrimary=Nil\n[Fine]\nPrimary=Ray\nSecondary=Ray\n[Free]\nPrimary=NilU\n\
+                [CombatDamage]\nOverloadCount=1,2,3\nOverloadDamage=1,2\nOverloadFrames=4,5,6\n";
+    let (_, w) = sim(base, "", "");
+    assert!(warned(&w, "Side carries a takeover weapon in Secondary"));
+    assert!(warned(&w, "Elite carries a takeover weapon in ElitePrimary"));
+    assert!(warned(&w, "Weak has a takeover Primary with damage 0"));
+    assert!(!warned(&w, "Fine "));
+    assert!(!warned(&w, "Free "));
+    assert!(warned(&w, "OverloadDamage is shorter than OverloadCount"));
+    assert!(!warned(&w, "OverloadFrames is shorter"));
+    let (_, w) = sim("[CombatDamage]\nOverloadDamage=1\n", "", "");
+    assert!(warned(&w, "OverloadDamage is given but OverloadCount is empty"));
+}
