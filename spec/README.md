@@ -67,7 +67,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0517](combat/S-0517-deployable-units.md) | Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing) | combat | 8 | approved | — |
 | [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 5 | approved | — |
 | [S-0417](structures/S-0417-factory-unloading.md) | Factory unloading (doors, exit movement and rally destinations) | structures | 20 | approved | — |
-| [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 11 | approved | — |
 | [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 7 | approved | — |
 | [S-0515](structures/S-0515-tech-buildings.md) | Tech buildings (manned state, acquisition bonus, periodic income, ownership changes) | structures | 4 | approved | — |
 | [S-0509](structures/S-0509-engineers-capture.md) | Engineers and capture | structures | 6 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0416](ui/S-0416-credit-display.md) | Credit display (the ticking credits counter on the sidebar) | ui | 3 | approved | — |
 | [S-0501](movement/S-0501-aircraft.md) | Aircraft flight, attack runs and pads | movement | 17 | approved | — |
 | [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 7 | approved | — |
+| [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 12 | approved | — |
