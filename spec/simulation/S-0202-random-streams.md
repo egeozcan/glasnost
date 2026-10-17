@@ -2,11 +2,11 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327, Q-0711]
 supersedes: []
@@ -909,7 +909,7 @@ original's recording modes are retained as deferred context, not implementation 
     | Condition | Draw and form |
     |---|---|
     | Smoke particle behaviour | One raw value, signed remainder modulo 2, for a starting-speed variation. |
-    | Every particle | One raw value for its lifetime variation: magnitude after signed remainder, modulo 10 for railgun behaviour, otherwise modulo the imported lifetime field. |
+    | Every particle | One raw value for its lifetime variation: magnitude after signed remainder, modulo 10 for railgun behaviour, otherwise modulo the imported lifetime field. With a nonzero modulus the variation lies in 0 … \|modulus\| − 1; with a zero lifetime field the zero-divisor case below applies instead. The variation is added to the lifetime field to give the particle's initial lifetime, in ticks (S-0613 F9). |
     | The colour list is nonempty and at least one component of either starting colour is nonzero | One ranged draw R(0, 2147483646) for the starting-colour interpolation. |
 
     There are no other scenario-stream creation draws for these requests. A nonempty colour
