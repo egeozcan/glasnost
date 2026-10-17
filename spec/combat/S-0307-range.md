@@ -2,11 +2,11 @@
 id: S-0307
 title: Weapon range test
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0172, Q-0230, Q-0237]
 supersedes: []
@@ -868,8 +868,8 @@ values in force for keys it omits. The other keys keep the value in force when a
 
 ## Measurement scenarios
 
-All scenarios run under the glossary's *measurement setup*, at game speed index 2, with director
-and mods off apart from the named test data, and with a named test rules file (a loose copy of
+All scenarios run under the glossary's *measurement setup*, at game speed index 2, with no engine add-on
+and no mods (the named test files of a scenario excepted), and with a named test rules file (a loose copy of
 the rules file changing only the fields named) removed after each run. The observable is
 the one of S-0204 scenario C2: an attacker ordered to attack a pre-placed, unarmed enemy target
 either fires its first shot without leaving its cell ("fires") or moves first ("moves"), watched
@@ -1049,7 +1049,7 @@ attacked by the transport itself.
 **RG10. Open-ground approach destination (claim 15, Q-0072 question 2).** Use a tiny flat
 level-0 map, game speed index 2, one human house's attacker and one unarmed enemy target. Include
 one bystander computer player kept outside the observed strip; the glossary's void rule applies.
-Director and mods are off. Use named test data to give one ordinary ground infantry type and one
+No engine add-on and no mods (the named test files of a scenario excepted). Use named test data to give one ordinary ground infantry type and one
 ordinary turreted vehicle type a weapon with range 5 cells, zero minimum range, no elevation,
 cliff or wall properties, and no close-range property. The target is on a cell centre ten cells
 along a map axis from the attacker. Keep every F4 candidate cell empty and inside the usable area.
@@ -1153,7 +1153,7 @@ vehicle ten cells away. The observed area contains the pair and all possible app
   and target distance; this tests limit wrap separately from F2's squared-sum wrap.
 
 **RG16. Current passenger weapon, not primary (claim 13; pending, unmeasured).** Use RG10's map, houses,
-speed and recorder, with director and mods off. Named test map data gives an open-topped
+speed and recorder, with no engine add-on and no mods (the named test files of a scenario excepted). Named test map data gives an open-topped
 vehicle its own range of 8 cells and a multi-weapon infantry passenger two slots, of ranges
 3 and 6 cells. The passenger's current weapon-number slot must be recorded, not inferred
 from its target. Observe the first approach destination for an enemy object ten cells away.
@@ -1227,7 +1227,7 @@ makes one infantry type and one vehicle type able to force-attack it and gives e
 
 **RG20. Outside-area clearance and the winged exception (claim 21; Q-0230).** Use RG11's
 houses, speed and recorder on a named flat map with legal cells beyond its usable area.
-Director and mods are off except the named test map data. Keep the bystander away. Observe
+No engine add-on and no mods (the named test files of a scenario excepted). Keep the bystander away. Observe
 one attacker, its unarmed enemy target, and all F4 cells. Record the range results, cell
 categories, reach-region comparisons, occupancy, locomotor, class and first destination.
 - Run a: ordinary wheeled ground vehicle inside a ground reach region. Arrange a blocked
