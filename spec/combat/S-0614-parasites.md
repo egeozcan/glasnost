@@ -6,7 +6,7 @@ revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0620, Q-0621, Q-0622, Q-0623, Q-1032]
 supersedes: []
@@ -208,7 +208,7 @@ addition:
    established exact reconstruction of the original rocking point. The side is drawn: one draw from the
    scenario random stream with range 0 … 1, 1 meaning one side and 0 the other (Formulas F2). The
    draw happens after the effects are created and before the hit. The visible effects are a
-   game-wide spark effect at the host's position and one animation from the weapon's animation list:
+   game-wide spark effect at the host's position (creating it takes no draw, S-0616 claim 1) and one animation from the weapon's animation list:
    the entry indexed directly by the host's 8-direction (S-0204). An empty list makes no animation.
    No modulo reduction is performed. Nonempty lists shorter than eight entries have unestablished
    results (Open questions). The rocking is
@@ -1014,7 +1014,7 @@ For every part, a result different from its stated expectation falsifies that pa
 
 ## Open questions
 
-- Whether creating the spark effect, the delivery animation, the wakes or the splash animations draws
+- Whether creating the delivery animation, the wakes or the splash animations draws
   from the scenario random stream besides the draws listed in claims 9 and 10.
 - A weapon with the parasite flag on its warhead but without the launch-inside flag.
 - Building-targeted detonations with parasite attachment selected: no parasite-specific firing
