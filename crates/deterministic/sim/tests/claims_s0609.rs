@@ -353,7 +353,7 @@ fn thresholds_out_of_order_apply_as_written() {
     assert_eq!(gattling::f2(&t, &thr, 21, 2, 1, true), (20, 2));
 }
 
-// spec: S-0609 Import mapping and Edge cases (a stage count above 6 is used as 6; stage count 0 or 1: the thresholds stay 0, the value never grows) and revision 4 (negative settings are used as 0)
+// spec: S-0609 Import mapping and Edge cases (a stage count above 6 is used as 6; stage count 0 or 1: the thresholds stay 0, the value never grows; negative settings are used as 0)
 #[test]
 fn spin_type_from_fields() {
     let mut c = glasnost_rules::sim::CombatFields::default();
@@ -378,7 +378,37 @@ fn spin_type_from_fields() {
     assert_eq!(SpinType::from_fields(&c).stages, 0);
 }
 
-// spec: S-0609 Edge cases and Constants (revision 4, answering Q-1220: every spin product and sum and the elapsed-tick count saturate at 2³¹ − 1, nothing wraps; a saturated value is left unchanged by F1)
+// spec: S-0609 Edge cases (revision 5, answering Q-1151: a stage count lowered below 2 by a later layer, after an earlier layer populated the thresholds: the final count governs, the thresholds in force are all 0 even though they are held as imported, the spin cap is 0, the value never grows and the stage stays 0) and Import mapping
+#[test]
+fn layered_reduction_below_2_uses_no_thresholds() {
+    // As the importer writes such a type: the held rows of the earlier layer, the final count 1.
+    let c = glasnost_rules::sim::CombatFields {
+        is_gattling: Some(true),
+        weapon_stages: Some(1),
+        rate_up: Some(7),
+        rate_down: Some(1),
+        stage_thresholds: Some(vec![10, 30, 60, 0, 0, 0]),
+        elite_stage_thresholds: Some(vec![5, 15, 30, 0, 0, 0]),
+        ..Default::default()
+    };
+    let s = SpinType::from_fields(&c);
+    assert_eq!((s.stages, s.normal, s.elite), (1, [0; 6], [0; 6]));
+    let (mut v, mut stage) = (0, 0);
+    for _ in 0..20 {
+        let (v2, s2, raised) = gattling::f1(&s, &s.normal, v, stage, 1);
+        assert!(!raised);
+        (v, stage) = (v2, s2);
+    }
+    assert_eq!((v, stage), (0, 0), "the value never grows and the stage stays 0");
+    // The same rows with a final count of 3 are used as imported.
+    let s3 = SpinType::from_fields(&glasnost_rules::sim::CombatFields {
+        weapon_stages: Some(3),
+        ..c
+    });
+    assert_eq!(s3.normal, [10, 30, 60, 0, 0, 0]);
+}
+
+// spec: S-0609 Edge cases and Constants (engine rule, answering Q-1220: every spin product and sum and the elapsed-tick count saturate at 2³¹ − 1, nothing wraps; a saturated value is left unchanged by F1)
 #[test]
 fn saturation_at_the_32_bit_bound() {
     let (t, thr) = st([10, 30, i32::MAX], i32::MAX, i32::MAX);

@@ -1586,10 +1586,10 @@ fn absent_fate_marks_warn() {
     assert_eq!((count(&w, low), count(&w, wounded)), (0, 0));
 }
 
-/// spec: S-0609 Import mapping (WeaponStages, RateUp, RateDown; Stage1 … StageN and EliteStage1 … EliteStageN read per layer only while the gattling flag and a stage count of at least 2 hold as of that layer, else held; absent elite thresholds stay 0) and Edge cases (more than 6 stages, negative values and empty stage slots warn); S-0609 revision 4 Edge cases (negative values are used as 0, with a warning for each); Q-1151 interim (a reduction below 2 stages after thresholds were set warns)
+/// spec: S-0609 Import mapping (WeaponStages, RateUp, RateDown; Stage1 … StageN and EliteStage1 … EliteStageN read per layer only while the gattling flag and a stage count of at least 2 hold as of that layer, else held; absent elite thresholds stay 0) and Edge cases (more than 6 stages, negative values and empty stage slots warn); S-0609 Edge cases (negative values are used as 0, with a warning for each; revision 5, answering Q-1151: a final stage count below 2 after thresholds were set warns about the reducing layer, and a count raised back to 2 or more keeps the held thresholds without a warning)
 #[test]
 fn gattling_spin_settings() {
-    let base = "[VehicleTypes]\n1=Gat\n2=Plain\n3=Many\n4=Neg\n5=Late\n[BuildingTypes]\n1=GTower\n\
+    let base = "[VehicleTypes]\n1=Gat\n2=Plain\n3=Many\n4=Neg\n5=Late\n6=Back\n[BuildingTypes]\n1=GTower\n\
                 [Gat]\nIsGattling=yes\nWeaponStages=3\nRateUp=7\nRateDown=1\nStage1=10\nStage2=30\n\
                 Stage3=60\nStage4=99\nEliteStage1=5\nTurretCount=1\nWeaponCount=6\n\
                 Weapon1=A\nWeapon2=B\nWeapon3=C\nWeapon4=D\nWeapon5=E\nWeapon6=F\n\
@@ -1598,10 +1598,11 @@ fn gattling_spin_settings() {
                 Stage5=5\nStage6=6\nStage7=7\nTurretCount=1\nWeaponCount=2\nWeapon1=A\n\
                 [Neg]\nIsGattling=yes\nWeaponStages=2\nRateUp=-1\nStage1=-5\nPrimary=A\n\
                 [Late]\nWeaponStages=3\nStage1=10\nPrimary=A\n\
+                [Back]\nIsGattling=yes\nWeaponStages=2\nStage1=3\nStage2=9\nPrimary=A\n\
                 [GTower]\nIsGattling=yes\nWeaponStages=2\nTurretCount=1\nWeaponCount=4\n\
                 Weapon1=A\nWeapon2=B\nWeapon3=C\nWeapon4=D\nStage1=4\nStage2=8\n";
-    let mode = "[Gat]\nStage2=31\n[Late]\nIsGattling=yes\n";
-    let map = "[Gat]\nWeaponStages=1\nStage1=11\n";
+    let mode = "[Gat]\nStage2=31\n[Late]\nIsGattling=yes\n[Back]\nWeaponStages=1\n";
+    let map = "[Gat]\nWeaponStages=1\nStage1=11\n[Back]\nWeaponStages=2\n";
     let (s, w) = {
         let (s, w, _) = import(base, mode, map, "", &ImportOptions::default());
         (s, w)
@@ -1615,6 +1616,10 @@ fn gattling_spin_settings() {
     assert_eq!(gat.stage_thresholds, Some(vec![10, 31, 60, 0, 0, 0]));
     assert_eq!(gat.elite_stage_thresholds, Some(vec![5, 0, 0, 0, 0, 0]));
     assert!(warned(&w, "vehicles Gat: WeaponStages falls below 2"));
+    // Lowered below 2 and raised back: the final count governs, the held thresholds stay, no warning.
+    let back = &s.vehicles["Back"].combat;
+    assert_eq!((back.weapon_stages, back.stage_thresholds.clone()), (Some(2), Some(vec![3, 9, 0, 0, 0, 0])));
+    assert!(!warned(&w, "vehicles Back: WeaponStages falls below 2"));
     assert!(!warned(&w, "vehicles Gat: a gattling type with an empty"));
     // No gattling flag: no thresholds.
     let plain = &s.vehicles["Plain"].combat;
