@@ -203,6 +203,19 @@ fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) -> Option<i32> {
 /// taken, for the drawing's playback (presentation only, never read by the
 /// simulation).
 pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) -> Option<i32> {
+    anim_created(w, name, at, false)
+}
+
+/// [`anim_created_at`], with `played` set when the caller models the
+/// animation's later playback itself or removes it at once (the virus-death
+/// animation of S-0613 claims 2 and 3), so a later middle event is not
+/// noted as missing.
+pub(crate) fn anim_created(
+    w: &mut World,
+    name: &str,
+    at: Option<(i32, i32, i32)>,
+    played: bool,
+) -> Option<i32> {
     let rules = w.rules_arc();
     let a = rules.animation(name)?;
     let delay = creation_draws(w, a);
@@ -210,6 +223,7 @@ pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) -
     match a.mu {
         // spec: S-0109 claim 13 (the start event produces the middle event at once when μ = 0)
         Some(0) => middle_event(w, a, at),
+        Some(_) if played => {}
         // spec: S-0202 claim 15 and S-0109 claim 14 (with μ > 0 the same composition comes at the middle event later in playback)
         Some(_) if effects => w.note("S-0109 claim 14: an animation's middle event later in playback (μ > 0) is not modelled (animations have no playback clock in the simulation), so its particle, scorch-or-crater and crater draws are not taken"),
         None if effects => w.note("S-0109 claim 25: an animation type's μ is unknown (the import found no art for it), so its start event's middle-event draws are not taken"),
@@ -249,12 +263,16 @@ const CRATER_BALES: i32 = 6; // spec: S-0401 Constants (bales a crater takes: 6)
 /// causes), then the smudge selection of S-0312 claim 26, which is not
 /// modelled: smudge types and the smudges of cells are not carried, so no
 /// type fits and it takes no draw, as for destructions.
-fn middle_event(w: &mut World, a: &crate::rules::AnimRules, at: Option<(i32, i32, i32)>) {
+pub(crate) fn middle_event(
+    w: &mut World,
+    a: &crate::rules::AnimRules,
+    at: Option<(i32, i32, i32)>,
+) {
     let q = w.rules().quirks;
     if let Some((p, n)) = a.particles {
-        // spec: S-0109 claim 14 (particles requested when a type is given and the count is positive; not gated by height)
+        // spec: S-0109 claim 14 (particles requested when a type is given and the count is positive; not gated by height; created in the shared gas system of S-0613 claim 1)
         for _ in 0..n.max(0) {
-            particle_draws(w, p, q.ranged_draw_half_span);
+            crate::gas::middle_event_particle(w, p, at);
         }
     }
     if !a.scorch && !a.crater {
@@ -286,24 +304,6 @@ fn middle_event(w: &mut World, a: &crate::rules::AnimRules, at: Option<(i32, i32
     }
     // spec: S-0202 claim 15 and S-0312 claim 26 (the smudge-type draw comes last: R(0, n − 1), no draw for n ≤ 1)
     w.note("S-0312 claim 26: smudge types, the smudges of cells and the morphable flag of tilesets are not modelled, so no smudge type fits a middle event's scorch mark or crater: n = 0, no draw and no smudge");
-}
-
-/// One requested particle's creation draws (S-0202 claim 15), in table
-/// order: a smoke particle's starting-speed raw value, the lifetime raw
-/// value, then the starting-colour draw R(0, 2147483646) when the colour
-/// list is nonempty and a starting colour is not black. The values are not
-/// kept: particles hold no simulation state in our engine.
-fn particle_draws(w: &mut World, p: crate::rules::ParticleRules, half_span: bool) {
-    if p.smoke {
-        // spec: S-0202 claim 15 (smoke: one raw value for a starting-speed variation)
-        let _ = w.rng.raw();
-    }
-    // spec: S-0202 claim 15 (every particle: one raw value for its lifetime variation; a zero lifetime field keeps the draw)
-    let _ = w.rng.raw();
-    if p.colour_draw {
-        // spec: S-0202 claim 15 (one ranged draw R(0, 2147483646) for the starting-colour interpolation)
-        let _ = w.rng.ranged(0, 2147483646, half_span);
-    }
 }
 
 /// The resource-glint setup of S-0202 claim 14. With a glint animation
@@ -434,7 +434,8 @@ pub fn new_game(
         game_speed: setup.game_speed,
         houses,
         objects: Default::default(),
-        next_id: 1,
+        // The shared gas system takes object number 0 (Q-1240), so map objects start at 1.
+        next_id: 0,
         update: UpdateOrder::default(),
         cells: Cells {
             // spec: S-0202 table (before the second pass a tile animation starts at a cell's first recalculation)
@@ -450,6 +451,7 @@ pub fn new_game(
         cloak: Default::default(),
         sw: Default::default(),
         radiation: Default::default(),
+        gas: Default::default(),
         temporal: Default::default(),
         mind: Default::default(),
         acquisitions: 0,
@@ -476,6 +478,12 @@ pub fn new_game(
     };
     // spec: S-0409 claim 3 (the states at game start, before any object is placed)
     crate::econ::shroud::start(&mut w);
+    // spec: S-0613 claim 1 (the shared gas system is created when the game starts; Q-1240: before the map is read)
+    crate::gas::create_shared(&mut w);
+    if w.next_id == 0 {
+        // No shared system: map objects still start at object number 1.
+        w.next_id = 1;
+    }
     // spec: S-0011 claim 4 and S-0009 claim 32 (the trigger definitions, the difficulty position and the variables)
     crate::triggers::begin(&mut w, map);
     for h in &mut w.houses {

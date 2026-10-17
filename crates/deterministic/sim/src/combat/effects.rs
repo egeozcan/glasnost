@@ -65,6 +65,14 @@ pub enum Effect {
         /// The attacker, if any.
         attacker: Option<ObjectId>,
     },
+    /// A gas particle hit an object (S-0613 claim 13); the hit itself is
+    /// ordinary damage, reported as for any other.
+    GasHit {
+        /// The object hit.
+        id: ObjectId,
+        /// The particle's position.
+        pos: Pos,
+    },
     /// An object was killed (S-0312).
     Killed {
         /// The object.

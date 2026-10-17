@@ -414,6 +414,9 @@ pub struct World {
     /// Radiation fields and cell radiation (S-0525).
     #[serde(default)]
     pub radiation: crate::radiation::RadWorld,
+    /// Particle systems and virus-death animations (S-0613).
+    #[serde(default)]
+    pub gas: crate::gas::GasWorld,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.

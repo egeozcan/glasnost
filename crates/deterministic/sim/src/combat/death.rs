@@ -459,6 +459,18 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
     }
     // Row 3 (the type's own death animations) needs a field no spec maps yet.
     let not_human = u.raw.not_human.unwrap_or(false);
+    let virus = |k: i32| k == 8; // spec: S-0107 claim 17 (death kind 8: the virus death of S-0613)
+    let warhead_kind = hit.warhead.map_or(0, |h| rules.combat.warhead(h).inf_death);
+    // spec: S-0107 claim 17 (row 4 with w = 8, and a parachutist killed by a kind-8 warhead when rows 1 and 2 do not apply: the extra virus-death animation and particle of S-0613 claim 3)
+    let extra = (not_human && virus(kind)) || (seq == Some(Seq::Parachute) && virus(warhead_kind));
+    // spec: S-0613 claim 2 (the animation's owner: the attacker's house, else the hit's attacking house)
+    let owner = hit
+        .attacker
+        .and_then(|a| w.obj(a))
+        .map_or(hit.house, |a| a.owner);
+    if extra {
+        crate::gas::virus_death(w, o.pos, owner, true);
+    }
     // spec: S-0107 claim 17 rows 4 to 7 (not human: die-1; w = 1: die-1; w = 2 or 9: die-2)
     let request = if not_human {
         Some(Seq::Die1)
@@ -470,6 +482,10 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
         }
     };
     let Some(q) = request else {
+        if virus(kind) {
+            // spec: S-0107 claim 17 row 8 (w = 8: the virus-death animation and particle delivery of S-0613 claim 2)
+            crate::gas::virus_death(w, o.pos, owner, false);
+        }
         // spec: S-0107 claim 17 row 8 (other kinds: no sequence, removed at once)
         leave_play(w, id);
         return;

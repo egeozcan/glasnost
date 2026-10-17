@@ -272,3 +272,43 @@ fn counts_gattling_types_and_top_stage_ticks() {
     tally.observe(&g.world);
     assert_eq!(tally.top_ticks, [2, 0], "{tally:?}");
 }
+
+// spec: S-0613 claims 2 to 4 (gas clouds: a warhead's particle system and a virus death's animation appear), S-0107 claim 17 (the virus death, infantry-death kind 8): the lane counts virus units per house, clouds that appear and the most gas particles at once.
+#[test]
+fn counts_virus_units_and_gas_clouds() {
+    use glasnost_ai::fixture_m7a as kit;
+    // A rifleman whose weapon fires the duel's virus-death warhead.
+    let mut r = kit::ruleset();
+    let mut gun = r.sim.weapons["SPIN2"].clone();
+    gun.range = Some(glasnost_rules::sim::Decimal("4".into()));
+    r.sim.weapons.insert("VENOMGUN".into(), gun);
+    let mut virus = r.sim.infantry["WALKER"].clone();
+    virus.primary = Some("VENOMGUN".into());
+    r.sim.infantry.insert("VIRUS".into(), virus);
+    r.registries
+        .entry("infantry".into())
+        .or_default()
+        .push("VIRUS".into());
+    let mut g = Game::new(
+        std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, kit::MAP_NAME)),
+        &kit::map(),
+        kit::MAP_NAME,
+        fixture::catalogue(),
+        kit::setup(2),
+    )
+    .expect("the synthetic M7a duel loads");
+    let mut tally = Tally::default();
+    g.step();
+    tally.observe(&g.world);
+    assert_eq!(tally.clouds, 0, "the shared gas system is not a new cloud");
+    assert_eq!(tally.virus_armed[0].len(), 0);
+    testkit::spawn(&mut g.world, Kind::Infantry, "VIRUS", 0, fixture::at(4, 4), 0);
+    let p = glasnost_sim::world::Pos::centre(fixture::at(6, 6), 0);
+    glasnost_sim::gas::warhead_system(&mut g.world, "VAPOUR", p, Some(HouseId(0)));
+    tally.observe(&g.world);
+    tally.observe(&g.world);
+    assert_eq!(tally.virus_armed[0].len(), 1, "{tally:?}");
+    assert_eq!(tally.virus_armed[1].len(), 0, "{tally:?}");
+    assert_eq!(tally.clouds, 1, "{tally:?}");
+    assert_eq!(tally.gas_max, 1, "{tally:?}");
+}

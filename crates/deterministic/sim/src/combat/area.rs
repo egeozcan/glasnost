@@ -481,7 +481,11 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
     }
     // spec: S-0303 claim 19 (an exploding overlay in the centre cell)
     exploding_overlay(w, centre, &det);
-    // The warhead's particle system and rocking (claim 20) are presentation.
+    if let Some(name) = h.particle.clone() {
+        // spec: S-0303 claim 20 and S-0613 claim 4 (a warhead that names a particle system creates it at P at the end of the detonation, owned by the source house, with its first particle)
+        crate::gas::warhead_system(w, &name, p, det.house);
+    }
+    // The warhead's rocking (claim 20) is presentation.
     if any {
         DetonationResult::Hit
     } else {

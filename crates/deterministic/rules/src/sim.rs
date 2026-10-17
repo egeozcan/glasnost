@@ -206,9 +206,14 @@ pub struct SimData {
     /// Animation types by type name (their art sections, S-0109).
     #[serde(default)]
     pub animations: BTreeMap<String, AnimationType>,
-    /// Particle types by type name (S-0202 claim 15).
+    /// Particle types by type name (S-0202 claim 15, S-0613 Import
+    /// mapping).
     #[serde(default)]
     pub particles: BTreeMap<String, ParticleType>,
+    /// Particle-system types by type name (S-0613 Import mapping); the
+    /// registry `particle_systems` gives their order.
+    #[serde(default)]
+    pub particle_systems: BTreeMap<String, ParticleSystemType>,
     /// The difficulty rows by our name (`easy`, `normal`, `difficult`;
     /// S-0302 Terms, glossary *difficulty skill block*).
     #[serde(default)]
@@ -415,6 +420,68 @@ pub struct ParticleType {
     /// `StartColor2`, components 0 … 255 (absent black).
     #[serde(default)]
     pub start_color2: Option<[i32; 3]>, // spec: S-0202 Import mapping (an RGB triple)
+    /// `MaxDC`, the damage interval in ticks (S-0613 Import mapping;
+    /// absent 0).
+    #[serde(default)]
+    pub max_dc: Option<i32>,
+    /// `Damage`, health points per hit before damage resolution (S-0613
+    /// Import mapping; absent 0).
+    #[serde(default)]
+    pub damage: Option<i32>,
+    /// `Warhead`, a warhead name (S-0613 Import mapping; absent none).
+    #[serde(default)]
+    pub warhead: Option<String>,
+    /// `StartFrame` (S-0613 Import mapping; absent 0; not added for gas
+    /// drawing, claim 15).
+    #[serde(default)]
+    pub start_frame: Option<i32>,
+    /// `StartStateAI`, the start stage as written (S-0613 Import mapping;
+    /// absent 0; the simulation reduces it to a signed byte).
+    #[serde(default)]
+    pub start_state_ai: Option<i32>,
+    /// `EndStateAI`, the end stage as written (S-0613 Import mapping;
+    /// absent 0; reduced to a signed byte).
+    #[serde(default)]
+    pub end_state_ai: Option<i32>,
+    /// `StateAIAdvance`, the stage-advance period in ticks as written
+    /// (S-0613 Import mapping; absent 4; reduced to a signed byte).
+    #[serde(default)]
+    pub state_ai_advance: Option<i32>,
+    /// `DeleteOnStateLimit` (S-0613 Import mapping; absent no).
+    #[serde(default)]
+    pub delete_on_state_limit: Option<bool>,
+    /// `NextParticle`, a particle type name (S-0613 Import mapping; absent
+    /// or `<none>`: none).
+    #[serde(default)]
+    pub next_particle: Option<String>,
+    /// `NextParticleOffset`, leptons per axis (S-0613 Import mapping;
+    /// absent 0, 0, 0).
+    #[serde(default)]
+    pub next_particle_offset: Option<[i32; 3]>, // spec: S-0613 Import mapping (three integers, leptons)
+    /// `WindEffect`, the wind cadence divisor (S-0613 Import mapping;
+    /// absent 0).
+    #[serde(default)]
+    pub wind_effect: Option<i32>,
+    /// `Translucency`, percentage points as written (S-0613 Import mapping;
+    /// absent 0; reduced to a signed byte for drawing, claim 16).
+    #[serde(default)]
+    pub translucency: Option<i32>,
+}
+
+/// A particle-system type's fields (S-0613 Import mapping).
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ParticleSystemType {
+    /// `BehavesLike`: `gas`, `smoke`, `fire`, `spark` or `railgun`; absent
+    /// for no behaviour kind (no update).
+    #[serde(default)]
+    pub behaves_like: Option<String>,
+    /// `HoldsWhat`, the held particle type name; absent: none.
+    #[serde(default)]
+    pub holds_what: Option<String>,
+    /// `Lifetime`, ticks; absent −1 (never times out).
+    #[serde(default)]
+    pub lifetime: Option<i32>,
 }
 
 /// Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,
@@ -954,6 +1021,14 @@ pub struct General {
     /// `[AudioVisual] Gravity` (S-0306 Terms; *g* of S-0503 F6).
     #[serde(default)]
     pub gravity: Option<i32>,
+    /// `[General] InfantryVirus`, the virus-death animation name (S-0613
+    /// claims 2 and 3).
+    #[serde(default)]
+    pub infantry_virus: Option<String>,
+    /// `[General] WindDirection`, the wind table index 0 … 7 (S-0613 claim
+    /// 12); absent −1.
+    #[serde(default)]
+    pub wind_direction: Option<i32>,
     /// `[General] HoverHeight` *H*ₕ, leptons (S-0503 F6).
     #[serde(default)]
     pub hover_height: Option<i32>,

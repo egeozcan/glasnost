@@ -533,6 +533,23 @@ const OVERLAY_FIELDS: &[(&str, &str, Form)] = &[
     ("cell_anim", "CellAnim", Ref(Kind::Animations)),
 ];
 
+/// Particle-type fields of gas clouds (S-0613 Import mapping): integers,
+/// a boolean and the warhead name; the reduction of stage fields to signed
+/// bytes is the simulation's.
+// spec: S-0613 Import mapping (MaxDC, Damage, StartFrame, StartStateAI, EndStateAI, StateAIAdvance, WindEffect and Translucency integers; DeleteOnStateLimit a boolean; Warhead a warhead name)
+const PARTICLE_GAS_FIELDS: &[(&str, &str, Form)] = &[
+    ("max_dc", "MaxDC", Int),
+    ("damage", "Damage", Int),
+    ("warhead", "Warhead", Ref(Kind::Warheads)),
+    ("start_frame", "StartFrame", Int),
+    ("start_state_ai", "StartStateAI", Int),
+    ("end_state_ai", "EndStateAI", Int),
+    ("state_ai_advance", "StateAIAdvance", Int),
+    ("delete_on_state_limit", "DeleteOnStateLimit", Bool),
+    ("wind_effect", "WindEffect", Int),
+    ("translucency", "Translucency", Int),
+];
+
 /// Terrain-object fields (S-0211 Import mapping).
 // spec: S-0211 Import mapping (occupation patterns)
 const TERRAIN_OBJECT_FIELDS: &[(&str, &str, Form)] = &[
@@ -909,6 +926,23 @@ fn fold<T>(
     held
 }
 
+/// The behaviour kind of a particle or particle-system type, lower-case
+/// (S-0202 and S-0613 Import mapping: Gas, Smoke, Fire, Spark or Railgun,
+/// case-insensitive, at most 31 text bytes; an unrecognised name gives no
+/// recognised behaviour).
+fn behaves_like(t: &TypeRec) -> Option<String> {
+    fold(t.keys.get(&b"BehavesLike"[..]), None, |v, _| {
+        let name = value::text(v, BEHAVES_LIKE_LIMIT);
+        Some(
+            PARTICLE_BEHAVIOURS
+                .iter()
+                .find(|b| b.as_bytes().eq_ignore_ascii_case(name))
+                .map(|b| b.to_ascii_lowercase()),
+        )
+    })
+    .flatten()
+}
+
 fn int_node(v: i32) -> Node {
     jsonc::integer(i128::from(v))
 }
@@ -1110,6 +1144,7 @@ impl Builder<'_> {
             Kind::Warheads,
             Kind::Animations,
             Kind::Particles,
+            Kind::ParticleSystems,
             Kind::Tiberiums,
             Kind::Superweapons,
         ] {
@@ -1119,6 +1154,7 @@ impl Builder<'_> {
         let difficulty = self.difficulty();
         root.push(("difficulty".to_owned(), difficulty));
         self.cross_checks();
+        self.gas_checks();
         (jsonc::object(root), self.warnings)
     }
 
@@ -1410,13 +1446,14 @@ impl Builder<'_> {
                 }
                 Kind::Animations => self.animation(&mut rec, i, t),
                 Kind::Particles => self.particle(&mut rec, t),
+                Kind::ParticleSystems => self.particle_system(&mut rec, t),
                 Kind::Tiberiums => self.tiberium(&mut rec, t),
                 Kind::Superweapons => self.superweapon(&mut rec, t),
                 _ => {}
             }
-            // A weapon, projectile, warhead, animation or particle type that read no section still
-            // exists with the engine defaults of its kind (S-0004 claims 6 and 13), and other
-            // records name it.
+            // A weapon, projectile, warhead, animation, particle or particle-system type that read
+            // no section still exists with the engine defaults of its kind (S-0004 claims 6 and 13;
+            // S-0613 claim 1 for the shared gas system), and other records name it.
             let always = matches!(
                 kind,
                 Kind::Weapons
@@ -1424,6 +1461,7 @@ impl Builder<'_> {
                     | Kind::Warheads
                     | Kind::Animations
                     | Kind::Particles
+                    | Kind::ParticleSystems
             );
             if always || !rec.0.is_empty() {
                 out.push((key.clone(), rec.node()));
@@ -1877,16 +1915,7 @@ impl Builder<'_> {
     /// 15 and Import mapping), from its rules sections.
     fn particle(&mut self, rec: &mut Rec, t: &TypeRec) {
         // spec: S-0202 Import mapping (BehavesLike: Gas, Smoke, Fire, Spark or Railgun, case-insensitive, at most 31 text bytes; an unrecognised name gives no recognised behaviour)
-        let behaves = fold(t.keys.get(&b"BehavesLike"[..]), None, |v, _| {
-            let name = value::text(v, BEHAVES_LIKE_LIMIT);
-            Some(
-                PARTICLE_BEHAVIOURS
-                    .iter()
-                    .find(|b| b.as_bytes().eq_ignore_ascii_case(name))
-                    .map(|b| b.to_ascii_lowercase()),
-            )
-        })
-        .flatten();
+        let behaves = behaves_like(t);
         if let Some(b) = &behaves {
             rec.put("behaves_like", jsonc::string(b.clone()));
         }
@@ -1941,6 +1970,103 @@ impl Builder<'_> {
                 );
             }
         }
+        self.particle_gas(rec, t);
+    }
+
+    /// A particle type's gas-cloud fields (S-0613 Import mapping), with the
+    /// importer's warnings for a stage period that divides by zero.
+    fn particle_gas(&mut self, rec: &mut Rec, t: &TypeRec) {
+        self.fields(rec, t, Kind::Particles, PARTICLE_GAS_FIELDS);
+        let line = t.reads.last().copied().unwrap_or(t.created_in);
+        let advance = fold(t.keys.get(&b"StateAIAdvance"[..]), None, |v, _| value::integer(v));
+        if let Some(a) = advance {
+            // spec: S-0613 Import mapping (StateAIAdvance reduced to signed 8-bit) and F8 (the divisor is the object-number parity plus A)
+            let reduced = i32::from(a as i8);
+            if reduced == 0 || reduced == -1 {
+                // spec: S-0613 F8 and S-0205 claim 3 (a zero divisor: the original fails; our engine takes the remainder as the dividend and the importer warns)
+                self.warn(line, 0, format!(
+                    "particle {}: StateAIAdvance {a} makes the stage period 0 for some particles, which divides by zero in the original; our engine takes the remainder as the dividend (S-0613 F8, S-0205 claim 3)",
+                    show(&t.name)
+                ));
+            }
+        }
+        // spec: S-0613 Import mapping (NextParticle: a particle type name, <none> for none) and S-0004 claims 2 and 13 (31 bytes; none a name while quirks.particle_none_is_a_name is on)
+        let next = fold(t.keys.get(&b"NextParticle"[..]), None, |v, _| {
+            Some(self.particle_ref(v, crate::refs::NEXT_PARTICLE_LIMIT))
+        })
+        .flatten();
+        if let Some(n) = next {
+            rec.put("next_particle", jsonc::string(n));
+        }
+        // spec: S-0613 Import mapping (NextParticleOffset: three integers, leptons; absent 0, 0, 0) and S-0003 claim 9 (unread components keep the value in force, our engine; the importer warns)
+        let mut held: Option<[i32; 3]> = None;
+        let mut unread_at = None;
+        for e in t
+            .keys
+            .get(&b"NextParticleOffset"[..])
+            .into_iter()
+            .flat_map(|s| &s.history)
+        {
+            match &e.what {
+                What::Set(v) => {
+                    let (out, unread) = value::int_tuple_or::<3>(v, held.unwrap_or([0; 3]));
+                    if unread {
+                        unread_at = Some((e.layer, e.line, v.clone()));
+                    }
+                    held = Some(out);
+                }
+                What::Reset => held = None,
+                _ => {}
+            }
+        }
+        if let Some((layer, l, v)) = unread_at {
+            self.warn(layer, l, format!(
+                "particles {} NextParticleOffset {:?} has fewer than 3 readable integers; the others keep the value in force (S-0003 claim 9)",
+                show(&t.name),
+                show(&v)
+            ));
+        }
+        if let Some(o) = held {
+            rec.put(
+                "next_particle_offset",
+                jsonc::array(o.iter().map(|&x| int_node(x)).collect()),
+            );
+        }
+    }
+
+    /// A particle-system type's fields (S-0613 Import mapping).
+    fn particle_system(&mut self, rec: &mut Rec, t: &TypeRec) {
+        // spec: S-0613 Import mapping (BehavesLike: Smoke, Gas, Fire, Spark or Railgun; absent none)
+        if let Some(b) = behaves_like(t) {
+            rec.put("behaves_like", jsonc::string(b));
+        }
+        // spec: S-0613 Import mapping (HoldsWhat: a particle type name; absent none) and S-0004 claims 2 and 13 (63 bytes)
+        let holds = fold(t.keys.get(&b"HoldsWhat"[..]), None, |v, _| {
+            Some(self.particle_ref(v, crate::refs::EMITTED_PARTICLE_LIMIT))
+        })
+        .flatten();
+        if let Some(h) = holds {
+            rec.put("holds_what", jsonc::string(h));
+        }
+        // spec: S-0613 Import mapping (Lifetime: an integer, ticks; absent −1)
+        if let Some(l) = fold(t.keys.get(&b"Lifetime"[..]), None, |v, _| value::integer(v)) {
+            rec.put("lifetime", int_node(l));
+        }
+    }
+
+    /// A particle type name (S-0004 claims 2 and 13): `<none>` names no
+    /// type; `none` names a type called none while
+    /// `quirks.particle_none_is_a_name` is on.
+    fn particle_ref(&self, v: &[u8], limit: usize) -> Option<String> {
+        let name = value::text(v, limit);
+        // spec: S-0004 claim 2 (<none> names no type; none names a type called none while quirks.particle_none_is_a_name is on)
+        let no_type = name.is_empty()
+            || name.eq_ignore_ascii_case(b"<none>")
+            || (!self.i.quirks.particle_none_is_a_name && value::is_no_type(name));
+        (!no_type).then(|| {
+            self.type_key(Kind::Particles, name)
+                .unwrap_or_else(|| encode(name))
+        })
     }
 
     /// The image name after each type read (S-0007 claim 1: the image key
@@ -2286,3 +2412,7 @@ mod terror_tests;
 #[cfg(test)]
 #[path = "sim_crate_tests.rs"]
 mod crate_tests;
+
+#[cfg(test)]
+#[path = "sim_gas_tests.rs"]
+mod gas_tests;

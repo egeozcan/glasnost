@@ -2,7 +2,8 @@
 //! itself on the synthetic M7a map of `glasnost_ai::fixture_m7a`, where a
 //! Yuri-style side (slave miners for its economy) meets a fixture side, and
 //! both have the psychic weapons of S-0610; the Yuri-style side also has a
-//! gattling vehicle and defence (S-0609) and a mind controller (S-0601).
+//! gattling vehicle and defence (S-0609) whose top-stage weapon leaves gas
+//! clouds (S-0613) and a mind controller (S-0601).
 //! The run counts, per ability, the
 //! orders the AI gave (`glasnost_ai::special::Uses`) and the events the
 //! simulation then showed ([`Exercise`]), so that the gate cannot go on
@@ -52,11 +53,18 @@ pub struct Exercise {
     pub building_spin_ticks: u32,
     /// Takeovers: control links that formed (S-0601 claim 6).
     pub takeovers: u32,
+    /// Gas clouds that appeared: a warhead's particle system or a virus
+    /// death's animation (S-0613 claims 2 to 4). The gas weapon is an
+    /// ordinary weapon to the AI, which gives its carriers attack orders
+    /// like any other, so there is no gas order to count in [`Uses`].
+    pub gas_clouds: u32,
+    /// Hits that gas clouds dealt (S-0613 claim 13).
+    pub gas_hits: u32,
 }
 
 impl Exercise {
     /// Every counter the full run asserts on, by name.
-    pub fn counters(&self) -> [(&'static str, u32); 12] {
+    pub fn counters(&self) -> [(&'static str, u32); 14] {
         let u = &self.uses;
         [
             ("berserk weapon orders (S-0610)", u.berserks),
@@ -83,6 +91,8 @@ impl Exercise {
             ),
             ("takeover orders (S-0601)", u.takeovers),
             ("takeovers (S-0601 claim 6)", self.takeovers),
+            ("gas clouds (S-0613 claims 2 to 4)", self.gas_clouds),
+            ("gas hits (S-0613 claim 13)", self.gas_hits),
         ]
     }
 
@@ -107,6 +117,7 @@ struct Watch {
     slave_bases: BTreeSet<ObjectId>,
     victims: BTreeSet<(ObjectId, ObjectId)>,
     stages: BTreeMap<ObjectId, i32>,
+    clouds: BTreeSet<ObjectId>,
     seen: BTreeSet<&'static str>,
 }
 
@@ -213,6 +224,27 @@ impl Exercise {
             u32::try_from(victims.difference(&watch.victims).count()).unwrap_or(u32::MAX);
         first |= watch.first(!victims.is_empty(), "takeover");
         watch.victims = victims;
+        // Gas clouds: warhead-made systems and virus-death animations that
+        // appeared (the shared system is there from the start), and the
+        // hits clouds dealt.
+        let clouds: BTreeSet<ObjectId> = w
+            .gas
+            .systems
+            .keys()
+            .chain(w.gas.anims.keys())
+            .copied()
+            .filter(|&id| Some(id) != w.gas.shared)
+            .collect();
+        self.gas_clouds += began(&watch.clouds, &clouds);
+        watch.clouds = clouds;
+        let hits = w
+            .effects
+            .iter()
+            .filter(|e| matches!(e, Effect::GasHit { .. }))
+            .count();
+        self.gas_hits += u32::try_from(hits).unwrap_or(u32::MAX);
+        let floating = glasnost_sim::gas::particles(w).next().is_some();
+        first |= watch.first(floating, "gas cloud");
         first
     }
 }
@@ -221,7 +253,7 @@ impl Exercise {
 /// over). The game is saved and loaded halfway and at the first tick each
 /// kind of M7a state appears (a psychic reveal, a berserk unit, a sensed
 /// intent line, a slave-miner building, a slave at work, a gattling at its
-/// top stage, a controlled object); the loaded game
+/// top stage, a controlled object, a gas particle); the loaded game
 /// must hash alike and goes on from there. Returns the state hash after
 /// every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {

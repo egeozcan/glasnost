@@ -1659,7 +1659,7 @@ pub struct Quirks {
     // spec: S-0610 claim 10 and Edge cases
     #[serde(default = "on")]
     pub psychic_intent_ignores_visibility: bool,
-    /// Wind direction 3 pushes a gas particle 1 lepton in x instead of 2, unlike its mirror direction 5; off: Δx = 2 for direction 3. Not implemented yet (wave 2).
+    /// Wind direction 3 pushes a gas particle 1 lepton in x instead of 2, unlike its mirror direction 5; off: Δx = 2 for direction 3.
     // spec: S-0613 claim 12, Constants and Edge cases
     #[serde(default = "on")]
     pub wind_southeast_short: bool,

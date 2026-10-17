@@ -1196,6 +1196,10 @@ impl Live {
                     self.counts.kills += 1;
                     continue;
                 }
+                Effect::GasHit { .. } => {
+                    self.counts.gas_hits += 1;
+                    continue;
+                }
                 Effect::Sound { .. }
                 | Effect::Mind { .. }
                 | Effect::Spin { .. }
@@ -1216,6 +1220,10 @@ impl Live {
         }
         self.transients.retain(|t| t.marker(now).is_some());
         self.counts.most_in_flight = self.counts.most_in_flight.max(self.world.projectiles.len());
+        self.counts.most_gas = self
+            .counts
+            .most_gas
+            .max(glasnost_sim::gas::particles(&self.world).count());
     }
 
     /// Brings the ground layer's members and keys up to date with the game
@@ -1620,6 +1628,13 @@ impl Live {
             // spec: S-0101 F1, F2 (the projected point of the position with its height)
             let at = project_lifted(p.pos.x, p.pos.y, p.pos.z);
             let item = self.cache.marker_item(scene, m, at);
+            scene.items.push(item);
+        }
+        // S-0613: every gas particle, a green cloud at its position (our placeholder for its picture).
+        for (p, _) in glasnost_sim::gas::particles(&self.world) {
+            // spec: S-0101 F1, F2 (the projected point of the position with its height)
+            let at = project_lifted(p.pos.x, p.pos.y, p.pos.z);
+            let item = self.cache.marker_item(scene, Marker::Gas, at);
             scene.items.push(item);
         }
         // S-0525: the reach of every radiation field, as a ring (our placeholder for the field's light).
