@@ -2,11 +2,11 @@
 id: S-0013
 title: voxel lighting table file layout
 topic: formats
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0022]
 supersedes: []
@@ -177,7 +177,7 @@ warnings and claim 38.
 
 No M-ID is claimed. L1 is file inspection only. L2–L4 use named test copies, the exception in the
 measurement setup, never a changed executable. Run each oracle variant from a fresh program start,
-with director and mods off except the named test data; remove that data afterwards. Use a tiny flat
+with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted); remove that data afterwards. Use a tiny flat
 skirmish map, one human player and one distant bystander computer player, game speed 2, 800×600.
 The observed area is the parked test vehicle's cell and the surrounding three-cell margin.
 Apply the bystander's void rule. Use S-0105 MS-23's colour/normal probe model with separated pixels,
