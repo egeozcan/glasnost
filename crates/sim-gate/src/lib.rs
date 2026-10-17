@@ -31,8 +31,14 @@
 //! the full run asserts that each ability's order and event counters are
 //! above zero, and is saved and loaded at the first tick each kind of M6c
 //! state appears.
+//!
+//! M7a step 4: a fifth duel (`golden/duel-m7a.txt`) plays the own AI against
+//! itself on the synthetic M7a map (`glasnost_ai::fixture_m7a`), where a
+//! Yuri-style side with slave miners meets a fixture side and both have the
+//! psychic weapons of S-0610 (module [`m7a`]); the same checks as M6c's.
 
 pub mod m6c;
+pub mod m7a;
 
 use glasnost_ai::{fixture, game::Game, skirmish};
 use glasnost_sim::{save, testkit};
@@ -64,6 +70,17 @@ pub const M6C_SEED: u32 = 1;
 /// games: every ability is exercised well before it).
 pub const M6C_TICKS: i32 = 12_000;
 
+/// Seed of the M7a duel. Over the sweep of seeds 1 to 16 (`m7a_seed_sweep`)
+/// every seed plays the full run and every counter but one is at least 4
+/// (that minimum is the slave-miner buildings'); the psychic
+/// sensor orders are 2 in every seed, one per house, as the AI orders a
+/// sensor only when the house has none (see `docs/development.md`,
+/// *Determinism gate*). So the first seed is kept, and nothing more.
+pub const M7A_SEED: u32 = 1;
+
+/// Ticks of the full run of the M7a duel.
+pub const M7A_TICKS: i32 = 12_000;
+
 /// Ticks of the full gate run.
 pub const TICKS: i32 = 3000;
 
@@ -94,11 +111,13 @@ pub enum Scenario {
     DuelNaval,
     /// Our own AI against itself on the synthetic M6c map (M6c).
     DuelM6c,
+    /// Our own AI against itself on the synthetic M7a map (M7a).
+    DuelM7a,
 }
 
 impl Scenario {
     /// Every scenario, in gate order.
-    pub const ALL: [Scenario; 7] = [
+    pub const ALL: [Scenario; 8] = [
         Scenario::Scripted,
         Scenario::Combat,
         Scenario::Skirmish,
@@ -106,6 +125,7 @@ impl Scenario {
         Scenario::DuelDiagonal,
         Scenario::DuelNaval,
         Scenario::DuelM6c,
+        Scenario::DuelM7a,
     ];
 
     /// The scenario's name, also its golden file's stem.
@@ -118,6 +138,7 @@ impl Scenario {
             Scenario::DuelDiagonal => "duel-diagonal",
             Scenario::DuelNaval => "duel-naval",
             Scenario::DuelM6c => "duel-m6c",
+            Scenario::DuelM7a => "duel-m7a",
         }
     }
 
@@ -133,6 +154,7 @@ impl Scenario {
                 SKIRMISH_TICKS
             }
             Scenario::DuelM6c => M6C_TICKS,
+            Scenario::DuelM7a => M7A_TICKS,
             _ => TICKS,
         }
     }
@@ -144,7 +166,8 @@ impl Scenario {
             | Scenario::Duel
             | Scenario::DuelDiagonal
             | Scenario::DuelNaval
-            | Scenario::DuelM6c => SKIRMISH_STRIDE,
+            | Scenario::DuelM6c
+            | Scenario::DuelM7a => SKIRMISH_STRIDE,
             _ => 1,
         }
     }
@@ -332,6 +355,17 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
             }
             return out;
         }
+        Scenario::DuelM7a => {
+            let (out, _, ex) = m7a::play(M7A_SEED, ticks);
+            if ticks >= M7A_TICKS {
+                assert!(
+                    ex.missing().is_empty(),
+                    "duel-m7a: the full run did not exercise {:?} ({ex:?})",
+                    ex.missing()
+                );
+            }
+            return out;
+        }
         Scenario::DuelNaval => {
             return duel(
                 &fixture::map_naval(),
@@ -374,7 +408,8 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
         | Scenario::Duel
         | Scenario::DuelDiagonal
         | Scenario::DuelNaval
-        | Scenario::DuelM6c => {
+        | Scenario::DuelM6c
+        | Scenario::DuelM7a => {
             unreachable!("handled above")
         }
     };
@@ -401,6 +436,7 @@ pub fn golden_text(scenario: Scenario, ticks: i32) -> String {
     let seed = match scenario {
         Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => DUEL_SEED,
         Scenario::DuelM6c => M6C_SEED,
+        Scenario::DuelM7a => M7A_SEED,
         _ => SEED,
     };
     let mut s = format!(

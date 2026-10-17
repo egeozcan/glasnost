@@ -11,3 +11,4 @@ crates/deterministic/num/src/tablegen.rs cite # test-only generator (compiled un
 crates/deterministic/sim/src/testkit.rs cite # synthetic test scenario (invented rules, map and scripted orders for tests, the headless runner and the determinism gate); its numbers are test data, not game behaviour
 crates/deterministic/ai/src/fixture.rs cite # synthetic skirmish (invented rules and map for the scripted skirmish tests and the determinism gate); its numbers are test data, not game behaviour
 crates/deterministic/ai/src/fixture_m6c.rs cite # synthetic M6c skirmish (invented rules, map and pre-placed objects for the determinism gate); its numbers are test data, not game behaviour
+crates/deterministic/ai/src/fixture_m7a.rs cite # synthetic M7a skirmish (invented rules and map for the determinism gate); its numbers are test data, not game behaviour
