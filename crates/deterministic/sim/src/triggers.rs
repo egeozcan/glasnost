@@ -43,6 +43,8 @@ const LEVEL: i32 = 104; // spec: S-0011 Constants (height level: 104 leptons)
 
 // Event codes (S-0011 I3).
 const ENTERED_BY: i32 = 1; // spec: S-0011 I3 (1: entered-by)
+const ATTACKED: i32 = 6; // spec: S-0011 I3 (6: attacked, tagged object)
+const ATTACKED_BY_HOUSE: i32 = 44; // spec: S-0011 I3 (44: attacked by house)
 const CRATE_PICKED_UP: i32 = 49; // spec: S-0520 claim 7 (event 49: a crate is picked up)
 const ANY_EVENT: i32 = 8; // spec: S-0011 I3 (8: any event)
 const ELAPSED: i32 = 13; // spec: S-0011 I3 (13: elapsed time)
@@ -768,6 +770,10 @@ fn judge(w: &World, inst: &Instance, e: &glasnost_map::triggers::Event, r: &Rais
         }
         return match e.code {
             ENTERED_BY => entered_by(w, e.value, r.causer),
+            // spec: S-0011 claim 8 (event 6, attacked: judged true in any raise carrying its code)
+            ATTACKED => true,
+            // spec: S-0011 claim 8 (event 44, attacked by house: only with a causing object, and only when the value equals the house number of the causing object's owner at that raise)
+            ATTACKED_BY_HOUSE => attacked_by_house(w, e.value, r.causer),
             // spec: S-0011 claims 19 and 20 (satisfied in every such raise)
             DESTROYED_BY | BRIDGE_DESTROYED | CRATE_PICKED_UP => true,
             // Code-matched events outside the subset are never raised by this engine.
@@ -788,6 +794,18 @@ fn judge(w: &World, inst: &Instance, e: &glasnost_map::triggers::Event, r: &Rais
         // Condition events outside the subset (deferred): never judged true here.
         _ => false,
     }
+}
+
+/// The attacked-by-house condition (S-0011 claim 8): the raw value is the
+/// house number of the causing object's owner (S-0009 Terms: the place in
+/// the creation order, from 0, which is the house's index here). −1 and
+/// the player-position values equal no house number, so they never match.
+fn attacked_by_house(w: &World, v: i32, causer: Option<ObjectId>) -> bool {
+    let Some(owner) = causer.and_then(|c| w.obj(c)).and_then(|o| o.owner) else {
+        return false;
+    };
+    // spec: S-0011 claim 8 and Constants (event 44's value: a house number counted from 0; neither a country index nor a player-position value)
+    v == i32::from(owner.0)
 }
 
 /// The entered-by condition (S-0011 claim 18).

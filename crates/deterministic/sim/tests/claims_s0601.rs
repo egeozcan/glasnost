@@ -489,59 +489,179 @@ mod tags {
     use super::*;
     use glasnost_map::triggers::{Action, Event, TagDef, TriggerDef, Triggers};
 
-    /// Tag `TAG` (repeating) over one trigger on the any-event code 8
-    /// (S-0011 claim 17), satisfied in every raise: each raise of the tag
-    /// fires it once. Events 6 and 44 themselves are not judged by this
-    /// engine yet (S-0011's subset; Q-1203).
-    fn triggers() -> Triggers {
-        let trig = |name: &[u8], code: i32| TriggerDef {
-            events: vec![Event {
-                code, // spec: S-0011 I3 (8: any event)
-                kind: 0,
-                value: 0,
-                type_name: None,
-            }],
-            actions: vec![Action {
-                code: 99,
-                kind: 7,
-                name: b"Bell".to_vec(),
-                number: -1,
-                waypoint: 0,
-                ..Default::default()
-            }],
-            ..TriggerDef::created(name.to_vec())
-        };
+    fn ev(code: i32, value: i32) -> Event {
+        Event {
+            code,
+            kind: 0,
+            value,
+            type_name: None,
+        }
+    }
+
+    /// Sets variable `v` (S-0011 claim 22, action 56).
+    fn set_var(v: i32) -> Action {
+        Action {
+            code: 56,
+            number: v,
+            ..Default::default()
+        }
+    }
+
+    /// Change owner (S-0011 claim 24, action 14) to the house value `h`.
+    fn change_owner(h: i32) -> Action {
+        Action {
+            code: 14,
+            number: h,
+            ..Default::default()
+        }
+    }
+
+    fn trig(name: &str, events: Vec<Event>, actions: Vec<Action>) -> TriggerDef {
+        TriggerDef {
+            events,
+            actions,
+            ..TriggerDef::created(name.as_bytes().to_vec())
+        }
+    }
+
+    /// One tag `TAG` with repeat type `repeat` over every trigger, in chain
+    /// order.
+    fn tagged(repeat: i32, triggers: Vec<TriggerDef>) -> Triggers {
+        let n = triggers.len() as u32;
         Triggers {
-            triggers: vec![trig(b"TANY", 8)],
+            triggers,
             tags: vec![TagDef {
                 id: b"TAG".to_vec(),
-                repeat: 2,
+                repeat,
                 name: Vec::new(),
                 first: Some(0),
-                chain: vec![0],
+                chain: (0..n).collect(),
             }],
             ..Default::default()
         }
     }
 
-    // spec: S-0601 claim 5 (a live tagged target hears attack events 6 and 44 whether or not the takeover then succeeds; a firer without a record raises nothing)
+    /// The attack-event triggers of MC14 part a, on a repeating tag:
+    /// event 6 sets variable 1 (and runs `extra`); event 44 with Beta's
+    /// house number (1) that also needs variable 1 set sets variable 2, so
+    /// it fires only after the event-6 actions; event 44 with the values
+    /// 0, 2, −1, 4475 (position A), 1 + the country count of a country
+    /// index, set variables 3 to 6; any event (8) sets variable 7.
+    fn attack_events(extra: Vec<Action>) -> Triggers {
+        let mut a6 = vec![set_var(1)];
+        a6.extend(extra);
+        let mut list = vec![
+            trig("T6", vec![ev(6, 0)], a6),
+            trig("T44", vec![ev(44, i32::from(BETA)), ev(36, 1)], vec![set_var(2)]),
+        ];
+        for (k, v) in [0, 2, -1, 4475].into_iter().enumerate() {
+            list.push(trig("TX", vec![ev(44, v)], vec![set_var(3 + k as i32)]));
+        }
+        list.push(trig("TANY", vec![ev(8, 0)], vec![set_var(7)]));
+        tagged(2, list)
+    }
+
+    fn vars(w: &World) -> Vec<bool> {
+        w.triggers.variables[..8].to_vec()
+    }
+
+    // spec: S-0601 claim 5 (revision 9: event 6, then event 44, both before the takeover test, whether or not the takeover then succeeds; the firer is the causing object; a firer without a record raises nothing) and S-0011 claim 8 (revision 23: event 6 is judged true in any raise of its code; event 44 only when its value equals the house number, from 0, of the causing object's owner; −1, a player-position value and the house numbers one above and one below never match; every action of the event-6 raise has completed before event 44 is judged)
     #[test]
-    fn claim_5_tag_events() {
-        let mut w = testkit::game_with_triggers(&rules(), SIZE, 1, triggers());
+    fn claim_5_attack_events_order_cause_and_judging() {
+        let mut w = testkit::game_with_triggers(&rules(), SIZE, 1, attack_events(Vec::new()));
         let c3 = veh(&mut w, "CTRL3", BETA, 0, 0);
         let tank = veh(&mut w, "TANK", BETA, 0, 2);
+        let t = veh(&mut w, "BOX", ALPHA, 3, 0);
+        glasnost_sim::triggers::object_tag(&mut w, t, Some(b"TAG"));
+        mind::detonation(&mut w, Some(tank), Some(Target::Object(t)));
+        assert_eq!(vars(&w), vec![false; 8], "no record: no notification");
+        mind::detonation(&mut w, Some(c3), Some(Target::Object(t)));
+        assert_eq!(
+            vars(&w),
+            vec![false, true, true, false, false, false, false, true],
+            "event 6, then event 44 with Beta's house number; no other value matches"
+        );
+        assert_eq!(owner(&w, t), Some(BETA), "the takeover follows the raises");
+        // A refused landing: both events still fire.
+        let mut w = testkit::game_with_triggers(&rules(), SIZE, 1, attack_events(Vec::new()));
+        let c3 = veh(&mut w, "CTRL3", BETA, 0, 0);
         let stoic = veh(&mut w, "STOIC", ALPHA, 3, 0);
         glasnost_sim::triggers::object_tag(&mut w, stoic, Some(b"TAG"));
-        let f0 = w.triggers.fired;
-        mind::detonation(&mut w, Some(tank), Some(Target::Object(stoic)));
-        assert_eq!(w.triggers.fired, f0, "no record: no notification");
         mind::detonation(&mut w, Some(c3), Some(Target::Object(stoic)));
-        assert_eq!(
-            w.triggers.fired - f0,
-            2,
-            "two raises (6 and 44), the takeover failing"
-        );
+        assert_eq!(&vars(&w)[1..3], &[true, true]);
         assert_eq!(owner(&w, stoic), Some(ALPHA));
+    }
+
+    // spec: S-0601 claim 5 (revision 9: an event-6 action that changes the target's owner to the controller's house is seen by the takeover test, which then refuses; event 44 is still judged against the causing object's owner, not the target's)
+    #[test]
+    fn claim_5_event_6_action_seen_by_event_44_and_the_test() {
+        // House value 1: the first house playing country 1 (Beta), S-0011 claim 23.
+        let tr = attack_events(vec![change_owner(1)]);
+        let mut w = testkit::game_with_triggers(&rules(), SIZE, 1, tr);
+        let c3 = veh(&mut w, "CTRL3", BETA, 0, 0);
+        let t = veh(&mut w, "BOX", ALPHA, 3, 0);
+        glasnost_sim::triggers::object_tag(&mut w, t, Some(b"TAG"));
+        mind::detonation(&mut w, Some(c3), Some(Target::Object(t)));
+        assert_eq!(owner(&w, t), Some(BETA), "changed by the action");
+        assert_eq!(mind::controlled_by(&w, t), None, "the takeover is refused");
+        assert_eq!(
+            &vars(&w)[1..7],
+            &[true, true, false, false, false, false],
+            "event 44 with Beta's house number still fires, and no other"
+        );
+    }
+
+    // spec: S-0011 claim 19 and S-0312 claim 29 (revisions 23 and 30: the first attacker-dependent raise of the common destruction group, code 6, is inside the subset and judges event-6 triggers; without an attacker it is absent)
+    #[test]
+    fn s0011_claim_19_code_6_death_raise() {
+        for attacker in [true, false] {
+            let tr = tagged(2, vec![trig("T6", vec![ev(6, 0)], vec![set_var(1)])]);
+            let mut w = testkit::game_with_triggers(&rules(), SIZE, 1, tr);
+            let tank = veh(&mut w, "TANK", BETA, 0, 0);
+            let g = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 3, 0);
+            glasnost_sim::triggers::object_tag(&mut w, g, Some(b"TAG"));
+            // The demolition warhead BOOM (versus 1 everywhere).
+            let wh = w.rules().combat.general.c4_warhead;
+            damage::apply(
+                &mut w,
+                g,
+                Hit {
+                    amount: 100_000,
+                    warhead: wh,
+                    distance: 0,
+                    attacker: attacker.then_some(tank),
+                    house: attacker.then_some(HouseId(BETA)),
+                    ignore_defences: false,
+                    no_escape: false,
+                },
+            );
+            assert_eq!(w.triggers.variables[1], attacker, "attacker {attacker}");
+        }
+    }
+
+    // spec: S-0601 claim 5 and Edge cases (quirks.removed_tag_attack_event: a one-time event-6 trigger takes the tag off the target; off, event 44 is not raised because no tag is attached; on, the original faults, and our engine does the same as off, Q-1150 interim)
+    #[test]
+    fn removed_tag_attack_event_both_positions() {
+        for on in [true, false] {
+            let mut r = rules();
+            r.globals.quirks.removed_tag_attack_event = on;
+            let tr = tagged(
+                0,
+                vec![
+                    trig("T6", vec![ev(6, 0)], vec![set_var(1)]),
+                    trig("T44", vec![ev(44, i32::from(BETA))], vec![set_var(2)]),
+                ],
+            );
+            let mut w = testkit::game_with_triggers(&r, SIZE, 1, tr);
+            let c3 = veh(&mut w, "CTRL3", BETA, 0, 0);
+            let t = veh(&mut w, "BOX", ALPHA, 3, 0);
+            glasnost_sim::triggers::object_tag(&mut w, t, Some(b"TAG"));
+            mind::detonation(&mut w, Some(c3), Some(Target::Object(t)));
+            assert!(w.triggers.variables[1], "event 6 fires ({on})");
+            assert!(!w.triggers.variables[2], "no event-44 raise without a tag ({on})");
+            assert!(!w.triggers.objects.contains_key(&t));
+            assert_eq!(owner(&w, t), Some(BETA), "the takeover still happens ({on})");
+        }
     }
 }
 
@@ -594,9 +714,49 @@ fn claim_6_building_taken() {
     let mut w = game();
     let c3 = veh(&mut w, "CTRL3", BETA, 0, 0);
     let hut = put(&mut w, Kind::Building, "HUTOFF", ALPHA, 4, 4);
+    w.effects.clear();
     assert!(mind::take(&mut w, c3, hut));
     assert_eq!(owner(&w, hut), Some(BETA));
     assert!(mind::ring(&w, hut).unwrap().building);
+    // spec: S-0601 claim 6 and S-0509 claim 12 (revision 9: the owner change of a taken building requests the capture or loss announcement, as an engineer capture does)
+    assert_eq!(captured(&w), vec![(hut, Some(ALPHA), Some(BETA), true)]);
+}
+
+/// The building ownership changes of the tick: building, old, new and
+/// whether an announcement is requested.
+fn captured(w: &World) -> Vec<(ObjectId, Option<u8>, Option<u8>, bool)> {
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Captured {
+                building,
+                old,
+                new,
+                announce,
+                ..
+            } => Some((*building, old.map(|h| h.0), new.map(|h| h.0), *announce)),
+            _ => None,
+        })
+        .collect()
+}
+
+// spec: S-0601 claim 9 and S-0509 claim 12 (revision 9: the release of a building requests the announcement too, with the controlling house as the old owner and the original owner as the new one); S-0601 claim 5 (the announcement of a takeover follows the trigger events: it is requested at the owner change)
+#[test]
+fn claim_9_released_building_announces() {
+    let mut w = game();
+    let c3 = veh(&mut w, "CTRL3", BETA, 0, 0);
+    let hut = put(&mut w, Kind::Building, "HUTOFF", ALPHA, 4, 4);
+    assert!(mind::take(&mut w, c3, hut));
+    w.effects.clear();
+    glasnost_sim::objects::remove(&mut w, c3);
+    assert_eq!(owner(&w, hut), Some(ALPHA));
+    assert_eq!(captured(&w), vec![(hut, Some(BETA), Some(ALPHA), true)]);
+    // A mobile victim's owner change is no building ownership change.
+    let c = veh(&mut w, "CTRL3", BETA, 0, 2);
+    let v = veh(&mut w, "BOX", ALPHA, 3, 2);
+    w.effects.clear();
+    assert!(mind::take(&mut w, c, v));
+    assert!(captured(&w).is_empty());
 }
 
 // ---------------------------------------------------------------------------
