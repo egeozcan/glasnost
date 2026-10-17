@@ -1,9 +1,9 @@
 ---
 id: Q-1243
 title: What a warhead-created particle system of a non-gas kind does after its first particle
-status: open
+status: answered
 related: [S-0613, S-0303, S-0203]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need
