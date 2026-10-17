@@ -2,11 +2,11 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580, Q-0742]
 supersedes: []
@@ -1533,7 +1533,7 @@ override files other than a scenario's named test files and no engine add-ons; s
 test maps. Where a scenario changes a
 type's field, it does so through the test map's override section, or, for art data, through a
 named loose copy of the art file (the glossary's named test files; test data, removed afterwards).
-Skirmish only, with the director and mods off. Use one bystander computer player at the farthest
+Skirmish only, with no engine add-on and no mods (the named test files of a scenario excepted). Use one bystander computer player at the farthest
 start position, unreachable from the observed test area during the run, and void the run if it
 enters that area, affects a test object or is defeated before observation ends. Reveal the test
 area to the local player before recording; no shroud covers the compared pixels. Screen resolution
@@ -1702,7 +1702,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   answers the open question on layer re-evaluation in flight, and claims 3 and 4 then get a new
   revision.
   **(b) Exact height predicate.** Use the stock-data ascent, descent and crash recorder of
-  S-0502 claim 4's J3 scenario on flat land and over a high bridge, with director and mods off
+  S-0502 claim 4's J3 scenario on flat land and over a high bridge, with no engine add-on and no mods (the named test files of a scenario excepted)
   at game speed index 2. Record surface height, on-deck state, bridge/parachute falling state
   separately from crash state, and the evaluated layer at each actual placement. Expect ground
   exactly when *r* < 208 leptons or *r*′ = 0 leptons. A positive low flat-land height evaluating
@@ -2458,7 +2458,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     with the same inputs. Any different recovery, warning or depth effect falsifies
     the departure, not an original-game prediction. Use lossless screen capture and
     computed F2 probe acceptance to distinguish plain upright depth from a constant
-    zero-valued companion anchor. Director and mods remain off except the named files.
+    zero-valued companion anchor. There is no engine add-on and there are no mods (the named test files of a scenario excepted).
 
 - **D43, harvesting sprite depth (claims 12 and 13; Q-0580 question 3).**
   Common setup, one stock vehicle harvester loading in a resource cell; capture all
@@ -2485,7 +2485,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   S-0402 claim 5a's shadow-order scenario separately checks shadow darkening.
 
 - **D44 — protection pixels (claim 34, Q-0742 question 4).** Use SW10 part g of
-  S-0513: tiny flat skirmish map, speed index 2, director and mods off, stationary
+  S-0513: tiny flat skirmish map, speed index 2, no engine add-on and no mods (the named test files of a scenario excepted), stationary
   objects, no damage flash or air-strike marking, and lossless captures at 800 × 600.
   Keep facing, palette index, light-alpha and background fixed. Record each tick's
   ordinary brightness and phase factor with the read-only recorder, and compare the
