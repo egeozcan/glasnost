@@ -835,7 +835,7 @@
           ]
         },
         "grinding": {
-          "description": "`Grinding`.",
+          "description": "`Grinding`: a recycling building (S-0603 Terms and Import mapping;\nabsent: no).",
           "type": [
             "boolean",
             "null"
@@ -5199,6 +5199,14 @@
           ],
           "default": null
         },
+        "enter_grinder_sound": {
+          "description": "`[AudioVisual] EnterGrinderSound`, the rules-wide sound at a\nrecycling building's consumption (S-0603 claim 7 and Import mapping;\nabsent: none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "fire_supress": {
           "description": "`FireSupress`, cells (S-0309 F6; lepton form).",
           "anyOf": [
@@ -5469,6 +5477,14 @@
         },
         "leave_bio_reactor_sound": {
           "description": "`[AudioVisual] LeaveBioReactorSound`, the exit sound at an infantry\nabsorber (S-0605 claim 13 and Import mapping; absent: none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "leave_grinder_sound": {
+          "description": "`[AudioVisual] LeaveGrinderSound`, read and not played during a\nconsumption (S-0603 claim 7 and Import mapping; absent: none).",
           "type": [
             "string",
             "null"
