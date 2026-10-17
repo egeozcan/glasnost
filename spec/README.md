@@ -133,4 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 17 | approved | — |
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 23 | approved | — |
 | [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 17 | approved | — |
-| [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 8 | approved | — |
+| [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 9 | approved | — |

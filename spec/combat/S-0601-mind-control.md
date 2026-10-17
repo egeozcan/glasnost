@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -201,8 +201,10 @@ The glossary also defines *trigger*, used here.
      Except for a change made by an action of the event-6 raise, the target's owner in both raises
      is still its owner from before the takeover.
    - *Judging.* S-0011 claim 8 owns how events 6 and 44 are judged, including the base of event 44's
-     value, which counts houses from zero. Neither event records a triggering house. This claim
-     supplies only the raises' order and cause above.
+     value, which counts houses from zero. Neither event records a triggering house. S-0011
+     claim 8 covers only raises on a tagged target; a raise of event 44 after a one-time or all-carriers tag has left the
+     target is governed by `quirks.removed_tag_attack_event` (next item). This claim supplies only the
+     raises' order and cause above.
    - *Tag removed by the first raise.* When a raise of a one-time or all-carriers trigger on event 6
      takes the tag off the target, as the repeat-type table of S-0011 (State and ordering) gives, the
      tag leaves the target. The original then still raises event 44 at the target, although the tag
