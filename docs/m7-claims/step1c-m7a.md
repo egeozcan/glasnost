@@ -35,7 +35,7 @@ Requests:
 - **Q-1151** (new, filed here). Interim rule, kept from Q-1220's: while the stage count in force is below 2 the held thresholds are not used (all 0), and the importer warns.
 - **Q-1150** (new, filed here). The default position of `quirks.removed_tag_attack_event` is the original's fault, which our engine cannot reproduce. Interim rule: in both positions event 44 is raised only if the target still carries a tag after the event-6 raise, and then on that tag.
 
-Save format: unchanged (no new state). AI game format: unchanged. Hashes: the turn order of unlimited controllers, their erasure exclusion and the late start's fall-back change the course of games, so the sim-gate goldens are regenerated on this branch.
+Save format: unchanged (no new state). AI game format: unchanged. Hashes: the turn order of unlimited controllers, their erasure exclusion and the late start's fall-back can change the course of games, but the regenerated sim-gate goldens came out unchanged (no gate scenario reaches these paths).
 
 ## S-0601 revisions 6 to 9 (answer Q-1200 to Q-1203)
 
