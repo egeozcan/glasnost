@@ -923,6 +923,35 @@ fn claim_23_queued_entry() {
     assert!(run_until(&mut w, 6000, |w| health(w, b) == 600));
 }
 
+// spec: S-0314 claim 23 (a queued vehicle with no contact walks once to a free cell near the depot's centre cell, move started at once, and rests there with its queued entry kept); Q-1156 interim (in its first queued-entry turn whose retry finds no place) and Q-1152 interim (the nearby search)
+#[test]
+fn claim_23_queued_walk() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "DEPOT");
+    let a = truck(&mut w, 0, 6, 1, 590);
+    let b = truck(&mut w, 0, 9, 9, 300);
+    open(&mut w);
+    for o in [enter(a, d), enter(b, d)] {
+        assert!(orders::issue(&mut w, ALPHA, o));
+    }
+    assert!(run_until(&mut w, 3, |w| w.obj(b).unwrap().dest.is_some()));
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.depot.queued, Some(d));
+    assert!(o.depot.walked);
+    let Some(Target::Cell(c)) = o.dest else {
+        panic!("a cell destination: {:?}", o.dest)
+    };
+    assert_eq!(o.beh.current, Some(Behaviour::Move), "started at once");
+    let centre = w.reference_point(d).cell();
+    assert!((c.x - centre.x).abs() <= 3 && (c.y - centre.y).abs() <= 3, "{c:?} near {centre:?}");
+    let start = w.obj(b).unwrap().pos.cell();
+    assert!(run_until(&mut w, 1500, |w| w.obj(b).unwrap().pos.cell() == c && w.obj(b).unwrap().dest.is_none()) || contact(&w, b) == Some(d));
+    assert_ne!(w.obj(b).unwrap().pos.cell(), start, "it walked");
+    // It still enters by itself when the place frees.
+    assert!(run_until(&mut w, 6000, |w| health(w, b) == 600));
+}
+
 // spec: S-0314 claims 20 and 23 (any later order clears a queued entry)
 #[test]
 fn claim_23_later_order_clears_queued_entry() {
