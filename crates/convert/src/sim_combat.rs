@@ -2400,7 +2400,11 @@ impl Builder<'_> {
             last = (flag, n);
             if !(flag && n >= 2) {
                 if populated && flag && n < 2 && reduced.is_none() {
-                    reduced = sets(key(t, "WeaponStages")).into_iter().rfind(|e| e.1 == r).map(|e| (e.1, e.2));
+                    // The WeaponStages in force at this layer, which may come from an earlier layer that also cleared the flag.
+                    reduced = sets(key(t, "WeaponStages"))
+                        .into_iter()
+                        .rfind(|e| e.1 <= r)
+                        .map(|e| (e.1, e.2));
                 }
                 continue;
             }

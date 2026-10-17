@@ -399,7 +399,11 @@ fn layered_reduction_below_2_uses_no_thresholds() {
         assert!(!raised);
         (v, stage) = (v2, s2);
     }
-    assert_eq!((v, stage), (0, 0), "the value never grows and the stage stays 0");
+    assert_eq!(
+        (v, stage),
+        (0, 0),
+        "the value never grows and the stage stays 0"
+    );
     // The same rows with a final count of 3 are used as imported.
     let s3 = SpinType::from_fields(&glasnost_rules::sim::CombatFields {
         weapon_stages: Some(3),

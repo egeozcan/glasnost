@@ -676,7 +676,11 @@ mod tags {
                 w.triggers.variables[2], kept,
                 "event 44 only on a tag still attached ({case})"
             );
-            assert_eq!(owner(&w, t), Some(BETA), "the takeover still happens ({case})");
+            assert_eq!(
+                owner(&w, t),
+                Some(BETA),
+                "the takeover still happens ({case})"
+            );
         }
         // The old switch must not survive: the departure has none.
         let names = rules().globals.quirks.named();
