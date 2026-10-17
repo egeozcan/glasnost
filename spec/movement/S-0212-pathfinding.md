@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 48
+revision: 49
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -779,11 +779,14 @@ Terms specific to this spec:
       | cell search inside a corridor | it fails, and fewer than 5 cell searches have been made | the retry table above applies at each level |
       | retry made, corridor abandoned at some level | — | one cell search without a corridor, whose result is final |
       | retry made, no level abandoned | — | a new coarse search, which does not use closed connections |
-      | new coarse search | it fails at any level | the path computation fails |
+      | new coarse search | it fails at any level | with `quirks.corridor_retry_no_fallback` on (the default, original): the path computation fails. With it off: one more cell search without a corridor, whose result is final |
       | new coarse search | it succeeds at every level | a cell search inside the new corridor |
 
       So a path computation makes at most 5 cell searches, and the search without a corridor that
-      follows an abandoned corridor counts towards the 5. When the first coarse search fails, the
+      follows an abandoned corridor counts towards the 5. The extra search of the table's last-but-one
+      row (the switch off) counts too: a retry is made only after fewer than 5 cell searches, so it
+      is at most the 5th. Like every cell search it ends as failed at the expansion limit of the
+      search (`quirks.path_search_10000_failure`), and it is deterministic (no draw). When the first coarse search fails, the
       single search without a corridor is the only cell search made, so the limit plays no part.
     - Backing: `measurable` through path shape and failure (scenarios P1, P10, P12). `unmeasured`
       for the internal ordering of the coarse search, its end rule and for the limit of 9999 pending routes, which
@@ -2327,6 +2330,11 @@ Ordering consequences:
   parity of each cell's count, so a cell counted twice is left unmarked, and a cell that already
   carried the congestion mark loses it during the search when its count is odd. Off: during the search a
   cell carries the mark when it carried it before or its count is at least 1.
+- **`quirks.corridor_retry_no_fallback`** (default: on). When the new coarse search that follows a
+  corridor retry (claim 13) fails at any level, except the chain-length failure of departure D2 (Edge cases and quirks), the path computation fails, and a unit can stop at
+  once at a short line of buildings across an open route (Edge cases below, Run S). Off: one more
+  cell search without a corridor is made, with the same limits as the other cell searches, and the
+  computation fails only if that fails too.
 - **`quirks.corridor_split_probe`** (default: on). Whether the progress sector counts as split
   (claim 13a) is decided at the probe cell, which need not lie in that sector at all, and a sector
   that does not fill its block counts as split whenever the probe cell is in it. Off: *S* counts as
@@ -2398,14 +2406,20 @@ Ordering consequences:
   stays the same through every retry. A new coarse search can then fail at level 1 because the
   remaining way round lies outside that corridor, and the path computation fails (claim 13's
   last-but-one row); the unit does not move and its destination is cleared (claim 23). This follows
-  from the rules of claims 13 and 13a as written, and Run S (below) tests it on the original; the engine must not add
-  a corridor-free search after a failed repeated coarse search. Whether a given line fails depends
+  from the rules of claims 13 and 13a as written, and Run S (below) tests it on the original.
+  This failure has gameplay impact (a unit refuses an order although an open way round exists), so
+  it gets a switch, **`quirks.corridor_retry_no_fallback`** (default: on, the original).
+  Off: when the new coarse search after a retry fails, one more cell search is made without a
+  corridor, bounded by the same limits as the other cell searches (it counts towards the 5 of claim
+  13 and ends as failed at the expansion limit) and deterministic; the path computation fails only
+  if that search fails too. With it off (our engine's alternative, which the original does not have), an open way round a short line is expected at every
+  alignment. This is an engine check, not a claim about the original, so no oracle measurement backs it. With it on, whether a given line fails depends
   on its alignment with the sector grid and on the probe cell. With `quirks.corridor_split_probe`
   on (the default), the probe reads the level-2 sector as split only when the probe cell lies in
   that sector and the free part does not fill its block; a block that holds line cells never has a
   full free part, so the reading is split exactly when the probe cell falls in the sector and inside the usable area, and then
   the connection to the next corridor sector is closed and a new level-2 corridor may go round.
-  With the switch off, a sector reads as split whenever any usable cell of it lies outside the
+  With `quirks.corridor_split_probe` off, a sector reads as split whenever any usable cell of it lies outside the
   free part, so every block that holds a line cell reads as split whatever the probe cell, and the
   failure is expected to occur at fewer alignments. The rule alone does not settle the lengths: its
   failing case is stated for a line inside one level-2 sector, and a line of 9 cannot lie inside one.
@@ -2413,7 +2427,7 @@ Ordering consequences:
   alignment, are measurement expectations, not consequences of the rule. Q-1280 predicts the 7-line
   failure from claims 13 and 13a; that is an analysis, not an observation of the original. This spec does not
   predict which of Run S's shifts is that alignment (it depends on the progress cell, which
-  depends on the order of candidate cells, claim 11); Run S records the result for every shift so
+  depends on the order of candidate cells, claim 11); Run S (with the switch on) records the result for every shift so
   the failing shifts can be named, and the claim stays at "some shift fails". The same path
   computation serves infantry, vehicles and the approach of a recycling or absorbing building
   (S-0603, S-0605), whose own destination cell then decides the outcome. Backing: `measurable`
@@ -2421,6 +2435,14 @@ Ordering consequences:
   placements; `unmeasured` until Run S has been run for which shifts fail, because the progress
   cell is not predicted. Confidence: high that the rules as written produce the failure whenever
   the level-2 corridor is unchanged, low for the exact line lengths and alignments.
+  **Answer to Q-1280** (the original's behaviour with `quirks.corridor_retry_no_fallback` on, as the analysis above gives it; not yet observed). (1) A vehicle 20
+  cells from a straight north–south line of seven 1 × 1 buildings on open ground, ordered to a cell
+  just behind the line, stops at once without moving when the line sits in the failing alignment
+  described above; at other alignments it drives round. Lines of 3 and 5 are expected to be passed. (2) An
+  infantry unit behaves alike, and so does the approach of a recycling building just behind the
+  line, since all use this path computation. The outcome depends on the line's alignment against the
+  level-2 grid and on the probe cell, so which exact lengths and shifts fail is not established until Run S. (3) No step of claim 13 differs from the text; the other behaviour is
+  that quirk with `quirks.corridor_retry_no_fallback` off. Backing: `measurable` (P12, Run S) for claims (1) and (2); `unmeasured` for which lengths and shifts fail. Confidence: medium for claims (1) and (2), high for claim (3).
 - **Departure D1: unknown movement zone.** In the original a movement-zone value outside the
   vocabulary leaves the type with no movement zone. The gate then always passes, and the search
   reads the reach region of a non-existent movement zone, which is undefined. Our engine follows
@@ -2435,7 +2457,7 @@ Ordering consequences:
   search (claim 13) whose chosen chain has more than 500 sectors at some level has undefined results
   in the original. Our engine treats such a coarse search as failed, and the table of claim 13 then
   applies: after a first coarse search the cell search runs without a corridor, after a repeated one
-  the path computation fails (low confidence that such chains occur on legal map sizes).
+  the path computation fails, whatever `quirks.corridor_retry_no_fallback` is set to, because a departure takes no switch; confidence is low that such chains occur on legal map sizes.
 - **Departure D3: building destination with no substitute.** When the destination cell holds a
   building, its outcome is *blocked*, and the nearby-cell search of claim 24 finds no cell, the
   original replaces the unit's destination by one that names no cell, and what follows is
@@ -3079,7 +3101,7 @@ P16 run (u) checks this separately from other activity in the tick.
     are passed; at least one length-7 and one length-9 placement fails at once (which shifts fail is recorded; see the Q-1280 edge case), and the
     outcome is identical for the vehicle and infantry on the same map. Falsified if: every
     placement of the 7- and 9-lines is passed (the original then makes a corridor-free search after
-    a failed repeated coarse search, or re-searches level 2), or any placement of the 3- or 5-line
+    a failed repeated coarse search, or re-searches level 2; the switch's default would then be wrong), or any placement of the 3- or 5-line
     fails, or the vehicle and the infantry unit differ on one map.
 - **P13 (claims 7, 8, 12): base costs and the blocker chain, by route choice.**
   - Setup: a test map whose local area leaves a strip of legal cells outside it, as in P11, so that
@@ -3801,4 +3823,4 @@ proposed recorder runs, not completed measurements.
 - Decided (delegated sign-off, 2026-10-10): S-0209 owns the entry outcomes. Claim 27 now agrees
   with S-0209 claim 5 for allied units that count as moving, and points to it for the full table.
 
-No question for the project lead remains open.
+- Proposed in this revision (Edge cases and quirks, `quirks.corridor_retry_no_fallback`): a switch that turns the original's failure after a repeated coarse search into one extra cell search, default original. The project lead accepts or drops it before sign-off.
