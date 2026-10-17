@@ -287,7 +287,7 @@ fn object_turn(w: &mut World, id: ObjectId) {
     crate::transport::sync(w, id);
     // spec: S-0215 claim 11 (the late start of an infantry unit or vehicle: after this update's movement, before its separate firing; a tunnel, erasing, leaving-stage or warp-only update never gets here, claim 2 and S-0513 claim 51)
     process::late_start(w, id);
-    // spec: S-0605 claim 4 (each tick an actor waiting in line asks for contact); Q-1261 interim (in its own turn after its movement, where the depot retry is)
+    // spec: S-0605 claim 4 (in each of its own turns, after its behaviour processing and its movement, an actor waiting in line asks for contact: S-0314 claim 23's turn position) and claim 17 (quirks.absorber_stale_contact_kept off: the contact check at the same place)
     crate::structures::absorb::waiting_turn(w, id);
     if kind == Kind::Vehicle && !crate::teleport::phasing_in(w, id) {
         // spec: S-0314 claim 23 (the queued-entry retry, once per ordinary living vehicle turn, after that turn's locomotor movement, self-healing and due behaviour processing; not before movement and not an extra behaviour processing; skipped, the queued entry kept, only while chrono phase-in is still active, not for a hold, pulse disable, deactivation, lift or locomotor replacement; before the attached parasite's step)

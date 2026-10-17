@@ -579,7 +579,7 @@ fn damage_effect_reaction(
             building_fires(w, id);
         }
     } else if !at_or_below && o.combat.damage_effect {
-        // spec: S-0302 claim 13 (a hit that leaves the ratio above the yellow ratio removes the effect)
+        // spec: S-0302 claim 13 (a hit that leaves the ratio above the yellow ratio marks the effect); Q-1153 interim (when the marked system leaves play is not specified in spec/: the effect is let go at once, as in revision 27)
         if let Some(ob) = w.obj_mut(id) {
             ob.combat.damage_effect = false;
         }

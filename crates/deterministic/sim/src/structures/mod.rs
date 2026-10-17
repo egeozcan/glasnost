@@ -41,4 +41,9 @@ pub struct StructState {
     /// The absorbing building an actor is waiting in line to enter (S-0605
     /// claim 4).
     pub waiting: Option<ObjectId>,
+    /// The enter-nearest instruction for absorbing buildings (S-0215
+    /// Terms), which only the bio-reactor fate of S-0605 claim 16 gives:
+    /// while held, every *guard* and *area guard* processing searches again
+    /// (S-0215 claims 24 and 26 row 3).
+    pub enter_nearest: bool,
 }

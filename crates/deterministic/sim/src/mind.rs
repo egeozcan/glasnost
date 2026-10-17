@@ -22,9 +22,9 @@
 //!   `quirks.dominator_marks_own_objects` is S-0612's and is wired there.
 //! - S-0603 (grinders): the grinder fate of claim 8 ([`grinder_fate`])
 //!   fails, so it falls back to *hunt*, as claim 8 says for a failed
-//!   assignment. The bio-reactor fate ([`bio_reactor_fate`]) is S-0605's
-//!   one-shot search (Q-1260 interim); accepted absorption (S-0605 claim 7)
-//!   calls [`release_one`].
+//!   assignment. The bio-reactor fate ([`bio_reactor_fate`]) is S-0605
+//!   claim 16's search; accepted absorption (S-0605 claim 7) calls
+//!   [`release_one`].
 //! - S-0606 (tank bunkers): [`bunkered`]; no vehicle is in one yet.
 //! - Teams: our engine has no scripted teams, so the team fate falls back to
 //!   *hunt* and leaving a team is nothing (claim 6).
@@ -517,11 +517,10 @@ pub fn grinder_fate(w: &mut World, id: ObjectId) -> bool {
     false
 }
 
-/// The bio-reactor fate of claim 8: go to the nearest bio reactor, S-0215
-/// claim 24's search made once (Q-1260 interim). None found: the
-/// assignment fails and the fate falls back to *hunt*.
+/// The bio-reactor fate of claim 8: enter the nearest absorbing building,
+/// S-0605 claim 16. None found: the fate fails and falls back to *hunt*.
 pub fn bio_reactor_fate(w: &mut World, id: ObjectId) -> bool {
-    // spec: S-0601 claim 8 (go to the nearest bio reactor; a failed assignment falls back to hunt) and S-0215 claim 24 (the search)
+    // spec: S-0601 claim 8 (go to the nearest bio reactor; a failed assignment falls back to hunt) and S-0605 claim 16 (the search, the instruction and claim 3)
     crate::structures::absorb::bio_reactor_fate(w, id)
 }
 

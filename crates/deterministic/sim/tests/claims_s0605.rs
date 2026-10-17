@@ -71,7 +71,8 @@ fn vehicle(r: &mut Ruleset, name: &str, f: impl FnOnce(&mut UnitType)) {
 /// - BIO2: BIO with two docks (two link places);
 /// - BIO0: BIO with no extra power; BIOS: BIO with a drain of 10 (it can
 ///   be switched off, S-0405 claim 10);
-/// - BIOZ: BIO with capacity 0;
+/// - BIOZ: BIO with capacity 0; BIOM: BIO with capacity -1;
+/// - HEALER: infantry with the negative-damage weapon Fix;
 /// - VBIO: a 2 × 2 vehicle absorber, capacity 2, size limit 3; VBIO1D:
 ///   VBIO with capacity 1 and two docks;
 /// - infantry HEAVY (size 2), HALF (size 1.5); vehicle CAR (unarmed);
@@ -132,6 +133,20 @@ fn rules() -> Ruleset {
     absorber(&mut r, "BIO0", |t| t.econ.extra_power = None);
     absorber(&mut r, "BIOS", |t| t.econ.power = Some(-10));
     absorber(&mut r, "BIOZ", |t| t.passengers = Some(0));
+    absorber(&mut r, "BIOM", |t| t.passengers = Some(-1));
+    r.sim.weapons.insert(
+        "Fix".into(),
+        WeaponType {
+            damage: Some(-10),
+            rof: Some(30),
+            range: Some(dec("3")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("BOOM".into()),
+            ..Default::default()
+        },
+    );
+    infantry(&mut r, "HEALER", |t| t.primary = Some("Fix".into()));
     absorber(&mut r, "VBIO", |t| {
         t.infantry_absorb = None;
         t.unit_absorb = Some(true);
@@ -380,31 +395,99 @@ fn claim_3_4_waiting_in_line() {
     assert_eq!(absorb::passengers(&w, b), vec![c, a], "front first");
 }
 
-// spec: S-0605 claims 3 and 4; Q-1267 interim (an entrant that comes to rest without an order, here as after the approach step of S-0215 claim 37 replaced its destination, gives its contact up, and the one waiting in line gets it and goes in)
+// spec: S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept on: an entrant that leaves enter with its contact keeps its link place, and the one waiting in line is refused for good; off: the contact ends and the waiting one gets it and goes in)
 #[test]
-fn q1267_contact_ends_when_the_entrant_leaves_enter() {
+fn claim_17_stale_contact_both_positions() {
+    for kept in [true, false] {
+        let r = quirked(|q| q.absorber_stale_contact_kept = kept);
+        let mut w = game_on(&r);
+        let b = bio(&mut w, "BIO");
+        let a = walker(&mut w, 8, 0);
+        let c = walker(&mut w, 4, 2);
+        send(&mut w, a, b);
+        send(&mut w, c, b);
+        assert_eq!(absorb::waiting_for(&w, c), Some(b));
+        // Taken out of enter with its contact intact, as by a rule that does so.
+        {
+            let o = w.obj_mut(a).unwrap();
+            o.beh.current = Some(Behaviour::Guard);
+            o.beh.queued = None;
+            o.dest = None;
+            o.path.steps.clear();
+        }
+        assert_eq!(w.obj(a).unwrap().contact, Some(b));
+        if kept {
+            testkit::run(&mut w, 600);
+            assert_eq!(w.obj(a).unwrap().contact, Some(b), "contact kept");
+            assert_eq!(absorb::waiting_for(&w, c), Some(b), "still waiting");
+            assert!(!inside(&w, c, b) && !inside(&w, a, b));
+            round_trip(&w);
+        } else {
+            tick::step(&mut w);
+            assert_eq!(w.obj(a).unwrap().contact, None);
+            assert!(until(&mut w, 800, |w| inside(w, c, b)));
+            assert!(!inside(&w, a, b));
+        }
+    }
+}
+
+/// Houses Alpha and Beta of the sandbox game with Beta counting Alpha as
+/// allied and not the other way round.
+fn one_way_alliance(w: &mut World) {
+    let h = &mut w.houses[1].allies;
+    if let Err(i) = h.binary_search(&ALPHA) {
+        h.insert(i, ALPHA);
+    }
+}
+
+// spec: S-0605 claims 3 and 5 (contact not granted, an alliance missing in one direction: the actor does not wait in line and keeps the building as its destination; at its enter processing it falls back to rest at once and never goes in)
+// spec: S-0605 claim 6 and S-0524 claim 12 (the entry raise is not conditional on contact; without contact no entry)
+#[test]
+fn claim_3_5_6_not_granted() {
+    let mut w = testkit::game_with_triggers(&rules(), SIZE, 7, testkit::entry_triggers());
+    testkit::run(&mut w, 2);
+    one_way_alliance(&mut w);
+    let b = bio(&mut w, "BIO");
+    glasnost_sim::triggers::object_tag(&mut w, b, Some(b"ENT"));
+    let u = put(&mut w, Kind::Infantry, "WALKER", 1, 4, 0);
+    send(&mut w, u, b);
+    let o = w.obj(u).unwrap();
+    assert_eq!(o.contact, None);
+    assert_eq!(absorb::waiting_for(&w, u), None, "no wait");
+    assert_eq!(o.dest, Some(Target::Object(b)), "destination kept");
+    testkit::run(&mut w, 400);
+    assert!(!inside(&w, u, b), "never goes in");
+    assert_eq!(absorb::count(&w, b), 0);
+    assert_ne!(cur(&w, u), Some(Behaviour::Enter));
+    assert!(w.triggers.variables[0], "raised without contact");
+}
+
+// spec: S-0605 claim 4 (approach: the first enter processing of a waiting actor chooses a free location near the building's centre cell, assigns it and starts move at once, still waiting; retry: granted and accepted, enter queued with an immediate start and the building as its destination)
+#[test]
+fn claim_4_approach_and_retry() {
     let mut w = game();
     let b = bio(&mut w, "BIO");
-    let a = walker(&mut w, 8, 0);
-    let c = walker(&mut w, 4, 2);
+    let a = walker(&mut w, 4, 0);
+    let c = walker(&mut w, 8, 6);
     send(&mut w, a, b);
     send(&mut w, c, b);
     assert_eq!(absorb::waiting_for(&w, c), Some(b));
-    {
-        let o = w.obj_mut(a).unwrap();
-        o.beh.current = Some(Behaviour::Guard);
-        o.beh.queued = None;
-        o.dest = None;
-        o.path.steps.clear();
-    }
-    assert_eq!(w.obj(a).unwrap().contact, Some(b));
-    tick::step(&mut w);
-    assert_eq!(w.obj(a).unwrap().contact, None);
+    assert!(until(&mut w, 20, |w| matches!(w.obj(c).unwrap().dest, Some(Target::Cell(_)))));
+    assert_eq!(absorb::waiting_for(&w, c), Some(b), "the waiting goes on");
+    let Some(Target::Cell(k)) = w.obj(c).unwrap().dest else { unreachable!() };
+    let centre = w.reference_point(b).cell();
+    assert!((k.x - centre.x).abs() <= 2 && (k.y - centre.y).abs() <= 2, "near the centre cell");
+    assert!(cur(&w, c) == Some(Behaviour::Move));
+    // The retry once a has gone in.
+    assert!(until(&mut w, 800, |w| absorb::waiting_for(w, c).is_none()));
+    let o = w.obj(c).unwrap();
+    assert_eq!(o.contact, Some(b));
+    assert_eq!(o.dest, Some(Target::Object(b)));
+    assert!(cur(&w, c) == Some(Behaviour::Enter) || queued(&w, c) == Some(Behaviour::Enter));
     assert!(until(&mut w, 800, |w| inside(w, c, b)));
-    assert!(!inside(&w, a, b));
 }
 
-// spec: S-0605 claim 3 (switched off: the actor asks to load, is refused and gives up the contact)
+// spec: S-0605 claim 3 (switched off: the actor asks to load, is refused and gives up the contact; the destination assignment goes on, so it holds the building as its destination without contact)
 #[test]
 fn claim_3_switched_off_refuses_loading() {
     let mut w = game();
@@ -413,11 +496,13 @@ fn claim_3_switched_off_refuses_loading() {
     power_off(&mut w, b);
     send(&mut w, u, b);
     assert_eq!(w.obj(u).unwrap().contact, None);
+    assert_eq!(absorb::contacts(&w, b), vec![], "the link place is free again");
+    assert_eq!(w.obj(u).unwrap().dest, Some(Target::Object(b)));
     testkit::run(&mut w, 200);
     assert!(!inside(&w, u, b));
 }
 
-// spec: S-0605 claim 4 (granted after the wait but refused by the acceptance test: contact given up, behaviour none, destination cleared, waiting ends)
+// spec: S-0605 claim 4 (granted after the wait but refused by the acceptance test: contact given up, the none behaviour queued without a start so the current one goes on, destination cleared, waiting ends)
 #[test]
 fn claim_4_refused_after_waiting() {
     let mut w = game();
@@ -434,7 +519,10 @@ fn claim_4_refused_after_waiting() {
     let o = w.obj(c).unwrap();
     assert_eq!(o.contact, None);
     assert_eq!(o.dest, None);
-    assert_eq!((o.beh.current, o.beh.queued), (None, None));
+    assert_ne!(o.beh.current, Some(Behaviour::Enter));
+    assert_ne!(o.beh.queued, Some(Behaviour::Enter));
+    testkit::run(&mut w, 200);
+    assert!(!inside(&w, c, b));
     assert_eq!(absorb::count(&w, b), 3);
 }
 
@@ -468,7 +556,7 @@ fn claim_4_wait_ends() {
     assert_eq!(absorb::waiting_for(&w, d), None, "building gone");
 }
 
-// spec: S-0605 claim 5 (switched off while approaching: the entrant gives up the contact at its next processing and falls back to rest)
+// spec: S-0605 claim 5 (switched off while approaching: the entrant gives up the contact at its next processing and falls back to rest; its destination is not cleared, and it never goes in)
 #[test]
 fn claim_5_switched_off_while_approaching() {
     let mut w = game();
@@ -479,6 +567,7 @@ fn claim_5_switched_off_while_approaching() {
     testkit::run(&mut w, 2);
     power_off(&mut w, b);
     assert!(until(&mut w, 200, |w| w.obj(u).unwrap().contact.is_none()));
+    assert_eq!(w.obj(u).unwrap().dest, Some(Target::Object(b)), "destination kept");
     testkit::run(&mut w, 300);
     assert!(!inside(&w, u, b));
     assert_ne!(cur(&w, u), Some(Behaviour::Enter));
@@ -760,7 +849,7 @@ fn claim_12_second_round_rear_both_positions() {
     assert_eq!(w.obj(u).unwrap().pos.cell(), CellXY::new(x0.x, x0.y + 1), "rear first");
 }
 
-// spec: S-0605 claim 12 and Edge cases (quirks.absorber_release_bridge_ends_search on: a deck neighbour at the eighth first-round direction that passes both cell tests ends the search; off: the second round starts); Q-1262 interim
+// spec: S-0605 claim 12 and Edge cases (quirks.absorber_release_bridge_ends_search on: a deck neighbour at the eighth first-round direction that passes both cell tests ends the search; off: the second round starts)
 #[test]
 fn claim_12_deck_at_the_eighth_direction_both_positions() {
     // Facing 0: the first round runs 4, 5, 6, 7, 0, 1, 2, 3. Directions 4
@@ -883,37 +972,77 @@ fn claim_14_erasure_deletes() {
     assert_eq!(absorb::count(&w, b), 0);
 }
 
-// spec: S-0605 claim 15 (a passenger leaving the game inside lowers n); Q-1263 interim (power due)
+// spec: S-0605 claim 14 and S-0208 claim 3 (destruction: each infantry passenger placed in an open cell takes the sale's choice, the centre placement with one draw over 0 to 3; the same draws and positions as a sale)
 #[test]
-fn claim_15_removal_inside() {
+fn claim_14_destruction_draws_as_the_sale() {
     let mut w = game();
     let b = bio(&mut w, "BIO");
     let a = fill_one(&mut w, b);
     let c = fill_one(&mut w, b);
-    testkit::run(&mut w, 3);
-    let (out0, _) = glasnost_sim::econ::power::totals(&w, ALPHA);
-    glasnost_sim::objects::remove(&mut w, a);
-    assert_eq!(absorb::passengers(&w, b), vec![c]);
-    testkit::run(&mut w, 3);
-    let (out1, _) = glasnost_sim::econ::power::totals(&w, ALPHA);
-    assert_eq!(out1, out0 - 25);
-    round_trip(&w);
+    let h = lethal(&w, b, false);
+    let mut sale = w.clone();
+    let before = w.rng.taken();
+    absorb::destroyed(&mut w, b, &h);
+    let destruction = w.rng.taken() - before;
+    let before = sale.rng.taken();
+    absorb::sold(&mut sale, b);
+    assert_eq!(sale.rng.taken() - before, destruction, "the sale's choice");
+    assert_eq!(w.rng, sale.rng);
+    for p in [a, c] {
+        assert_eq!(w.obj(p).unwrap().pos, sale.obj(p).unwrap().pos);
+    }
+}
+
+// spec: S-0605 claim 15 and Edge cases (a passenger leaving the game inside lowers n at once; quirks.absorber_removal_keeps_stale_power on: nothing makes the owner's power due, the output keeps the removed passenger's share; off: power due, the output drops)
+#[test]
+fn claim_15_removal_inside_both_positions() {
+    for stale in [true, false] {
+        let r = quirked(|q| q.absorber_removal_keeps_stale_power = stale);
+        let mut w = game_on(&r);
+        let b = bio(&mut w, "BIO");
+        let a = fill_one(&mut w, b);
+        let c = fill_one(&mut w, b);
+        testkit::run(&mut w, 3);
+        let (out0, _) = glasnost_sim::econ::power::totals(&w, ALPHA);
+        glasnost_sim::objects::remove(&mut w, a);
+        assert_eq!(absorb::passengers(&w, b), vec![c]);
+        testkit::run(&mut w, 3);
+        let (out1, _) = glasnost_sim::econ::power::totals(&w, ALPHA);
+        if stale {
+            assert_eq!(out1, out0, "stale totals");
+        } else {
+            assert_eq!(out1, out0 - 25);
+        }
+        round_trip(&w);
+    }
 }
 
 // ---------------------------------------------------------------------------
-// The bio-reactor fate (S-0601 claim 8).
+// The bio-reactor fate (claim 16, S-0601 claim 8).
 
-// spec: S-0601 claim 8 and S-0215 claim 24 (the bio-reactor fate: the released unit of a computer-controlled house enters the nearest absorbing building of its own owner that accepts it); Q-1260 interim
-#[test]
-fn bio_reactor_fate_sends_the_released_unit_in() {
+/// The combat rules with the capture fate weights set so that a released
+/// unit of the neutral house takes the bio-reactor fate.
+fn fate_rules(f: impl FnOnce(&mut glasnost_rules::quirks::Quirks)) -> Ruleset {
     let mut r = rules();
     let g = &mut r.sim.general;
     g.ai_capture_normal = Some(vec![0, 0, 100, 0]);
     g.ai_capture_wounded = Some(vec![0, 0, 0, 0]);
     g.ai_capture_low_power = Some(vec![0, 0, 0, 0]);
     g.ai_capture_low_money = Some(vec![0, 0, 0, 0]);
-    let mut w = testkit::game_with_non_players(&r, SIZE, 1);
+    f(&mut r.globals.quirks);
+    r
+}
+
+fn neutral_game(r: &Ruleset) -> World {
+    let mut w = testkit::game_with_non_players(r, SIZE, 1);
     testkit::run(&mut w, 2);
+    w
+}
+
+// spec: S-0605 claim 16 and S-0601 claim 8 (the bio-reactor fate: the released unit of a house that is not human-controlled takes the instruction and enters the nearest absorbing building of its own owner that accepts it)
+#[test]
+fn bio_reactor_fate_sends_the_released_unit_in() {
+    let mut w = neutral_game(&fate_rules(|_| {}));
     let near = put(&mut w, Kind::Building, "BIO", 2, 6, 0);
     let _far = put(&mut w, Kind::Building, "BIO", 2, -9, -9);
     // Far beyond its weapon's range, so that it does not take the walker again.
@@ -924,9 +1053,69 @@ fn bio_reactor_fate_sends_the_released_unit_in() {
     mind::release(&mut w, ctrl, n);
     assert_eq!(w.obj(n).unwrap().owner, Some(HouseId(2)));
     assert_eq!(w.obj(n).unwrap().dest, Some(Target::Object(near)));
+    assert!(absorb::holds_instruction(&w, n));
     assert!(until(&mut w, 600, |w| inside(w, n, near)), "went in");
 }
 
+// spec: S-0605 claim 16 (equal ρ₃: the building later in the absorber list wins, the one placed most recently)
+#[test]
+fn claim_16_tie_goes_to_the_later_building() {
+    for left_first in [true, false] {
+        let mut w = neutral_game(&fate_rules(|_| {}));
+        let n = put(&mut w, Kind::Infantry, "WALKER", 2, 0, 0);
+        let (l, r) = if left_first {
+            let l = put(&mut w, Kind::Building, "BIO", 2, -5, 0);
+            (l, put(&mut w, Kind::Building, "BIO", 2, 4, 0))
+        } else {
+            let r = put(&mut w, Kind::Building, "BIO", 2, 4, 0);
+            (put(&mut w, Kind::Building, "BIO", 2, -5, 0), r)
+        };
+        testkit::run(&mut w, 3);
+        let (p, pl, pr) = (w.obj(n).unwrap().pos, w.reference_point(l), w.reference_point(r));
+        assert_eq!(pl.y, pr.y);
+        assert_eq!(p.x - pl.x, pr.x - p.x, "equal distances");
+        assert!(absorb::bio_reactor_fate(&mut w, n));
+        let later = if left_first { r } else { l };
+        assert_eq!(w.obj(n).unwrap().dest, Some(Target::Object(later)));
+        assert_eq!(w.obj(n).unwrap().contact, Some(later));
+    }
+}
+
+// spec: S-0605 claim 16 (none found: the instruction is cleared and the fate fails; a building that holds another contact can win)
+#[test]
+fn claim_16_none_found_and_held_contact() {
+    let mut w = neutral_game(&fate_rules(|_| {}));
+    let n = put(&mut w, Kind::Infantry, "WALKER", 2, 0, 0);
+    testkit::run(&mut w, 3);
+    assert!(!absorb::bio_reactor_fate(&mut w, n));
+    assert!(!absorb::holds_instruction(&w, n));
+    let b = put(&mut w, Kind::Building, "BIO", 2, 6, 0);
+    let m = put(&mut w, Kind::Infantry, "WALKER", 2, 3, 3);
+    testkit::run(&mut w, 3);
+    assert!(absorb::bio_reactor_fate(&mut w, m));
+    assert_eq!(w.obj(m).unwrap().contact, Some(b));
+    assert!(absorb::bio_reactor_fate(&mut w, n), "held contact does not count");
+    assert_eq!(absorb::waiting_for(&w, n), Some(b), "claim 3: waits in line");
+}
+
+// spec: S-0605 claim 16 and Edge cases (quirks.enter_nearest_survives_absorption on: entry keeps the instruction and a neutral passenger let out walks back in at its next guard processing; off: entry clears it and the passenger stays out)
+// spec: S-0215 claim 24 (the guard processing of an instruction holder searches again)
+#[test]
+fn claim_16_back_in_after_release_both_positions() {
+    for survives in [true, false] {
+        let mut w = neutral_game(&fate_rules(|q| q.enter_nearest_survives_absorption = survives));
+        let b = put(&mut w, Kind::Building, "BIO", 2, 0, 0);
+        let n = put(&mut w, Kind::Infantry, "WALKER", 2, 4, 0);
+        testkit::run(&mut w, 3);
+        assert!(absorb::bio_reactor_fate(&mut w, n));
+        assert!(until(&mut w, 600, |w| inside(w, n, b)), "went in");
+        assert_eq!(absorb::holds_instruction(&w, n), survives);
+        try_release(&mut w, b);
+        assert!(w.obj(n).unwrap().on_map, "let out");
+        let back = until(&mut w, 800, |w| inside(w, n, b));
+        assert_eq!(back, survives);
+    }
+}
 
 // spec: S-0605 claim 8 (the vehicle's full acceptance test on arrival: refused when full, its destination cleared, guard queued, a forced scatter request)
 #[test]
@@ -959,4 +1148,21 @@ fn table_i_x_rows_cursor() {
         fill_one(&mut w, b);
     }
     assert_ne!(cursor(&w, &[u], b), Action::Enter, "full");
+}
+
+// spec: S-0605 claim 1 (rows x and q test capacity above 0, row I13 equality with 0: no enter over capacity 0 or -1; a healer over capacity 0 takes I13's no-passenger answer, over -1 the row's test does not hold)
+// spec: S-0214 table I row I13
+#[test]
+fn claim_1_i13_capacity_zero_and_negative() {
+    let mut w = game();
+    let z = put(&mut w, Kind::Building, "BIOZ", 0, -6, -6);
+    let m = put(&mut w, Kind::Building, "BIOM", 0, 6, 6);
+    let u = walker(&mut w, 0, 4);
+    let h = put(&mut w, Kind::Infantry, "HEALER", 0, 4, 0);
+    testkit::run(&mut w, 3);
+    assert_ne!(cursor(&w, &[u], z), Action::Enter);
+    assert_ne!(cursor(&w, &[u], m), Action::Enter);
+    assert_eq!(absorb::carries_no_passengers(&w, z), Some(true));
+    assert_eq!(absorb::carries_no_passengers(&w, m), Some(false));
+    assert_eq!(cursor(&w, &[h], z), Action::Select, "I13");
 }
