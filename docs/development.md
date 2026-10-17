@@ -1331,7 +1331,7 @@ M7a is the first part of M7, the Yuri faction (session of 2026-10-17). Baseline:
 | 3.6 | S-0603 Grinder | open | |
 | 3.7 | S-0606 Vehicle bunker | open | |
 | 3.8 | S-0607 Magnetic lift | open | |
-| 4 | Yuri side: stock buildings and units build, the AI plays Yuri | open | |
+| 4 | Yuri side: stock buildings and units build, the AI plays Yuri | done (merged) for the specs built so far; re-checked at step 6 | Audit (`glasnost-headless side-audit`, map 0, side 2; counts only): 79 types name the Yuri country (53 buildings, 16 infantry, 10 vehicles); every offered type is covered by an approved spec (cloning is S-0404 claim 14, built), so no request. 31 types are offered and all 31 are built and placed or released. Jumpjet vehicle: no rule excludes it (money and a busy war-factory line); built in all 4 full games where it was offered. Fix: a driving slave miner counts as the house's refinery (S-0402 claim 14), so the plan no longer re-orders the slave-miner building while every miner packs up (test `a_moving_slave_miner_stands_for_the_refinery`). Lane (seed 7, full mode, replay and save true in all 6): Allied beats Yuri on maps 0 (13 998), 2 (21 228), 8 (18 333); Yuri beats Soviet on 0 (41 519) and 2 (51 707), Soviet wins map 8 (16 915). Baseline before M7a: `local-lane/m7a/baseline/`. Gate: new golden `duel-m7a` (step 6 row). No side's AI builds defences (general, not Yuri-specific). |
 | 5 | Interaction-pair scenario tests | open | |
 | 6 | Determinism gate with a Yuri AI-vs-AI replay; local lane; screenshots; README Status | open | |
 
