@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -200,15 +200,10 @@ The glossary also defines *trigger*, used here.
      event 44, the causing object's owner at the moment of that raise is the attacking house.
      Except for a change made by an action of the event-6 raise, the target's owner in both raises
      is still its owner from before the takeover.
-   - *Judging.* Event 6 is judged true by any raise carrying its code. Event 44 is judged true
-     only in a raise that has a causing object, and only when the event's value equals the
-     house-order position of the causing object's owner. This is not a country registration index,
-     unlike the entered-by event of S-0011 claim 18: two houses that play the same country have
-     different positions, and a country's index generally differs from any position. A value of −1 or a
-     player-position value (S-0011 claim 23) equals no house, so such an event is never judged
-     true; unlike an entered-by event, it does not read the value as a country. Neither event
-     records a triggering house for the trigger's actions. This judging of events 6 and 44 is
-     this spec's rule until S-0011 takes it over (Open questions, named changes).
+   - *Judging.* S-0011 claim 8 owns how events 6 and 44 are judged: event 6 by any raise carrying
+     its code; event 44 only when the raise has a causing object and the event's value equals the
+     house-order position (Terms) of that object's owner. Neither event records a triggering house
+     for the trigger's actions.
    - *Tag removed by the first raise.* When a raise of a one-time or all-carriers trigger on event 6
      takes the tag off the target, as the repeat-type table of S-0011 (State and ordering) gives, the
      tag leaves the target. The original then still raises event 44 at the target, although the tag
@@ -251,9 +246,8 @@ The glossary also defines *trigger*, used here.
    the local player is the old or the new owner and the new owner's country is not passive.
    S-0701 claim 39 owns which entry is chosen and played). A mind-control takeover requests the
    announcement, and the entry chosen does not depend on the cause, so it is the same as for an
-   engineer capture of that building. S-0509 claim 12 lists the causes that request one and
-   needs mind-control takeover and release of a building added (Open questions, named
-   changes). The announcement is requested at the owner change itself, after the trigger
+   engineer capture of that building. S-0509 claim 12 lists the mind-control takeover and release of a
+   building among the causes that request one. The announcement is requested at the owner change itself, after the trigger
    events of claim 5.
    - Backing: `measurable` (MC1 and MC3, MC9 for a building including the announcement,
      MC11 for the simple-deployer, temporal-attacker, passenger-target and construction-yard
@@ -454,8 +448,8 @@ The glossary also defines *trigger*, used here.
 
     **Which controlled vehicles can deploy.** A vehicle that is controlled by a controller (claim 6)
     is not deploy-ready when the building it would deploy into is a construction yard (S-0214
-    Terms, *deploy readiness*, which needs its wording narrowed to *controlled*, Open questions,
-    named changes). So a taken construction vehicle cannot deploy while it is
+    Terms, *deploy readiness*, whose approved wording already reads *controlled by a controlling
+    object*). So a taken construction vehicle cannot deploy while it is
     controlled:
     - the deploy cursor on it is the refusal one (S-0214 table VD) and the deploy command of S-0213 (the
       deploy rule) gives it no order because it fails deploy readiness, so a player's order never
@@ -538,8 +532,9 @@ The glossary also defines *trigger*, used here.
     timing are kept. In arrival hold the overload update runs in each update after that update's
     hold-end test.
     - Backing: `measurable` (MC8 and MC14 for the order against self-healing, firing, a lethal
-      pulse and the missed updates). The warp-time rule is a design rule of our engine and is
-      `unmeasured` here: no scenario sets up a superweapon warp.
+      pulse and the missed updates). The warp-time rule is a design rule of our engine, not a claim
+      about the original, and is `measurable` in our engine (S-0513 SW23 part f, which S-0203 claim 4
+      also cites for it).
     - Confidence: high for the order inside the update and for the set of updates; medium for
       the fate of the rest of the turn after a lethal pulse of a non-vehicle controller
 
@@ -968,7 +963,7 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   states of S-0215 claim 2 (a chrono jump's leaving stage, temporal erasure), into a transport that is not open-topped (expected: no step while it is inside), and into an open-topped transport where possible (expected: steps); record whether the pulse countdown steps in those updates
   (expected: no, in the excluded ones and while inside a transport that is not open-topped; yes in the open-topped transport). Falsified by a heal
   applied before the pulse, a shot that leaves before the pulse, a heal or a shot after a lethal
-  pulse, or a countdown step in an excluded update. Part b has no case for the superweapon warp.
+  pulse, or a countdown step in an excluded update. Part b has no case for the superweapon warp. The warp part of claim 16 is measured by S-0513 scenario SW23 part f, an engine-only contract test, not an oracle expectation: it arranges a due overload update of an unlimited controller in each row of S-0513 claim 51, for each applicable kind, and expects no overload step in those rows through arrival effects, with the hold-end test first. Any overload step there falsifies the warp rule.
 
 ## Open questions
 
@@ -981,22 +976,14 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
 - What the original's fate decision does for rules that omit the two marks: its result is not determined
   (claim 8). Our engine's never-select rule is a design choice, not a reproduction (Q-1202).
 
-**Changes named for other specs (same round).** Each is needed for this spec to agree with them, and
-none is decided here.
-- S-0214 Terms, *deploy readiness*: the construction-yard exclusion reads *controlled by a
-  controlling object* only. Permanently controlled and trigger-held vehicles are not refused
-  (claim 15; Q-1200). The other uses of *mind-controlled* there are unchanged.
-- S-0509 claim 12: mind-control takeover and release of a building request the capture or loss
-  announcement (claims 6 and 9; Q-1203 question 4). S-0701 claim 39 then covers those causes.
-- S-0011: judge attack events 6 and 44 as claim 5 gives, and note that the order of triggers in
-  the raise of claim 5 is claim 11's (Q-1203).
-- S-0513 claim 51 and S-0610 claim 5: the overload update of claim 16 joins the ordinary work
-  suppressed during a warp (Q-1201).
-- S-0203: its list of ordinary work suppressed from the first pending update through arrival
-  effects must name the overload update too.
-- S-0701 claim 39: its scope sentence ("Passive transfers and other ownership-change causes are
-  outside this claim's coverage") must admit mind-control takeover and release of a building, as
-  claims 6 and 9 of this spec and S-0509 claim 12 require.
+**Changes named for other specs.**
+- S-0214 Terms, *deploy readiness*: already as stated in the approved S-0214 (its construction-yard
+  exclusion reads *controlled by a controlling object*; permanently controlled and trigger-held
+  vehicles are not refused; claim 15; Q-1200). No further change. The other uses of
+  *mind-controlled* there are unchanged.
+- S-0701 claim 39: approved S-0509 claim 12 already lists the mind-control takeover and release of a
+  building. Revise S-0701 claim 39 to drop "which S-0509 claim 12 lists once the named change in
+  Changes for other specs is made", and the medium confidence that depends on that pending change.
 
 ## Questions for the project lead
 
