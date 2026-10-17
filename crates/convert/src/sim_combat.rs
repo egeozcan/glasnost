@@ -2390,23 +2390,25 @@ impl Builder<'_> {
         let mut rows = [[0i32; SPIN_STAGES]; 2];
         let mut given = [false; 2];
         let mut populated = false;
+        // The layer and line of the WeaponStages that took a populated type below 2 stages, while the count stays below 2.
+        let mut reduced = None;
+        let mut last = (false, 0);
         for &r in &t.reads {
             // spec: S-0609 Import mapping (the gattling flag and the stage count as that layer leaves them; absent: no and 0)
             let flag = bool_as_of(t, "IsGattling", r, false);
             let n = int_as_of(t, "WeaponStages", r, 0);
+            last = (flag, n);
             if !(flag && n >= 2) {
-                if populated && flag && n < 2 {
-                    // spec: S-0609 Edge cases and Questions for the project lead item 3 (a layered reduction below 2 stages after thresholds were populated: no result established); Q-1151 interim (the held thresholds are not used)
-                    if let Some((_, layer, line)) = sets(key(t, "WeaponStages")).into_iter().rfind(|e| e.1 == r) {
-                        self.warn(layer, line, format!(
-                            "{} {}: WeaponStages falls below 2 after an earlier layer set the stage thresholds; no result is specified, and our engine uses no thresholds while the count is below 2 (S-0609 Edge cases, request Q-1151)",
-                            kind.key(),
-                            show(&t.name)
-                        ));
-                    }
+                if populated && flag && n < 2 && reduced.is_none() {
+                    // The WeaponStages in force at this layer, which may come from an earlier layer that also cleared the flag.
+                    reduced = sets(key(t, "WeaponStages"))
+                        .into_iter()
+                        .rfind(|e| e.1 <= r)
+                        .map(|e| (e.1, e.2));
                 }
                 continue;
             }
+            reduced = None;
             // spec: S-0609 Import mapping and Edge cases (k = 1 … N, at most 6 in our engine)
             let top = n.min(SPIN_STAGES as i32) as usize;
             for (row, prefix) in [(0, "Stage"), (1, "EliteStage")] {
@@ -2426,11 +2428,19 @@ impl Builder<'_> {
             }
         }
         let name = format!("{} {}", kind.key(), show(&t.name));
+        // spec: S-0609 Edge cases (revision 5, answering Q-1151: a type whose stage count, as the layers finally leave it, is below 2 after an earlier layer populated its thresholds uses no thresholds, and the importer warns about the layer that reduced the count) and Import mapping
+        if let (Some((layer, line)), (true, n)) = (reduced, last)
+            && n < 2
+        {
+            self.warn(layer, line, format!(
+                "{name}: WeaponStages falls below 2 after an earlier layer set the stage thresholds; our engine uses no thresholds for a type with fewer than 2 stages (S-0609 Edge cases)"
+            ));
+        }
         // spec: S-0609 Edge cases (more than 6 stages: our engine reads at most six, a larger count is used as 6, and the importer warns)
         self.each_int(key(t, "WeaponStages"), |n| n > SPIN_STAGES as i32, |v| {
             format!("{name} WeaponStages {v} is above 6; our engine uses 6 stages and reads only Stage1 … Stage6 and EliteStage1 … EliteStage6 (S-0609 Edge cases)")
         });
-        // spec: S-0609 Edge cases (revision 4: a negative stage count, spin-up or spin-down amount or threshold is used as 0, and the importer warns for each such imported value)
+        // spec: S-0609 Edge cases (a negative stage count, spin-up or spin-down amount or threshold is used as 0, and the importer warns for each such imported value)
         let mut negative: Vec<String> = ["WeaponStages", "RateUp", "RateDown"]
             .iter()
             .map(|k| (*k).to_owned())

@@ -418,8 +418,7 @@ pub fn detonation(w: &mut World, attacker: Option<ObjectId>, target: Option<Targ
         // spec: S-0601 claim 5 (a live target's tag hears attack events 6 and then 44, both before the takeover test of the landing and whether or not the takeover then succeeds; both name the firer as causing object)
         for code in [6, 44] {
             // spec: S-0601 claim 5 and S-0011 claim 8 (every action of the event-6 raise has completed before event 44 is judged: the tag is looked up again, so an action that changed the target's tag or removed the target is seen)
-            // spec: S-0601 claim 5 and Edge cases (quirks.removed_tag_attack_event: off, event 44 is raised only if the target still carries a tag, on that tag; on, the original faults, and our engine does the same as off, Q-1150 interim)
-            let _fault = w.rules().quirks.removed_tag_attack_event;
+            // spec: S-0601 claim 5 and Edge cases (tag removed by the first raise: event 44 is raised only if the target still carries a tag, on that tag, whichever tag it is; a departure with no switch, the original faults there, lead decision on Q-1150)
             let Some(&tag) = w.triggers.objects.get(&t) else {
                 break;
             };
