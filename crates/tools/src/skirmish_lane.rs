@@ -122,6 +122,10 @@ struct Game {
     /// (claim 10).
     berserked: usize,
     intent_ticks: usize,
+    /// Per player house: the most psychic sensors it had at one tick, and
+    /// its distinct units with a berserk weapon (S-0610).
+    sensors_max: [usize; PLAYERS],
+    berserk_armed: [usize; PLAYERS],
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -596,6 +600,8 @@ fn play_ai(
     g.launches_by_kind = tally.launches_by_kind;
     g.berserked = tally.berserked;
     g.intent_ticks = tally.intent_ticks;
+    g.sensors_max = tally.sensors_max;
+    g.berserk_armed = tally.berserk_armed.map(|s| s.len());
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -702,6 +708,10 @@ pub struct Tally {
     /// House-ticks in which a player house's psychic sensors showed at least
     /// one hostile-intent line (S-0610 claim 10).
     pub intent_ticks: usize,
+    /// Per player house: the most psychic sensors it had at one tick.
+    pub sensors_max: [usize; PLAYERS],
+    /// Per player house: its units with a berserk weapon seen so far.
+    pub berserk_armed: [BTreeSet<u32>; PLAYERS],
     /// The units berserk after the last tick.
     berserk_before: BTreeSet<u32>,
     /// The (house, superweapon type) pairs ready after the last tick.
@@ -780,6 +790,19 @@ impl Tally {
             .collect();
         self.berserked += berserk.difference(&self.berserk_before).count();
         self.berserk_before = berserk;
+        for h in 0..PLAYERS {
+            let n = glasnost_sim::psychic::sensors(w, HouseId(h as u8)).len();
+            self.sensors_max[h] = self.sensors_max[h].max(n);
+        }
+        for o in w.objects.values() {
+            if let Some(h) = o.owner
+                && usize::from(h.0) < PLAYERS
+                && o.kind != glasnost_sim::rules::Kind::Building
+                && glasnost_ai::psychic::berserk_weapon(w, o.id)
+            {
+                self.berserk_armed[usize::from(h.0)].insert(o.id.0);
+            }
+        }
         self.intent_ticks += (0..PLAYERS)
             .filter(|&h| !glasnost_sim::psychic::intent_lines(w, HouseId(h as u8)).is_empty())
             .count();
@@ -1416,8 +1439,8 @@ fn report(
             );
             let _ = writeln!(
                 s,
-                "  psychic weapons: units gone berserk {}, house-ticks with a hostile-intent line {}",
-                g.berserked, g.intent_ticks
+                "  psychic weapons: units gone berserk {}, house-ticks with a hostile-intent line {}; most psychic sensors at once per house {:?}; units with a berserk weapon per house {:?}",
+                g.berserked, g.intent_ticks, g.sensors_max, g.berserk_armed
             );
         }
         let f: Vec<String> = g

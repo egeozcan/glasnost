@@ -823,3 +823,50 @@ fn claim_7_tint_query() {
         assert_eq!(psychic::tint(&w, i), Some(want));
     }
 }
+
+// spec: S-0610 claim 14 (the grid centre includes S-0409 claim 5's height shift: on a raised target cell the reveal covers the cells of an area reveal at the cell's surface point, not those of the unshifted cell)
+#[test]
+fn claim_14_centre_has_the_height_shift() {
+    let t = sw_common::at(6, 6);
+    let explored = |w: &World| -> Vec<CellXY> {
+        w.cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| shroud::explored(w, sw_common::ALPHA, c))
+            .collect()
+    };
+    let raise = |w: &mut World| w.cells.grid.get_mut(t).unwrap().level = 8;
+    let mut r = reveal_rules(None);
+    r.sim.general.superweapons.psychic_reveal_radius = Some(3);
+    let mut shifted = sw_common::game(&r);
+    raise(&mut shifted);
+    let p = glasnost_sim::superweapons::cell_point(&shifted, t, false);
+    assert!(p.z > 0, "the raised cell has a surface height");
+    let before = explored(&shifted);
+    shroud::area_reveal(&mut shifted, sw_common::ALPHA, p, 3);
+    let mut flat = sw_common::game(&r);
+    raise(&mut flat);
+    shroud::area_reveal(&mut flat, sw_common::ALPHA, Pos::centre(t, 0), 3);
+    let mut w = sw_common::game(&r);
+    raise(&mut w);
+    assert_eq!(explored(&w), before);
+    sw_common::spawn(&mut w, "MINDB", sw_common::ALPHA, -8, -8);
+    sw_common::ready_tick(&mut w, sw_common::ALPHA, REVEAL, 200);
+    let base = explored(&w);
+    sw_common::fire_now(&mut w, sw_common::ALPHA, REVEAL, t);
+    let got: Vec<CellXY> = explored(&w)
+        .into_iter()
+        .filter(|c| !base.contains(c))
+        .collect();
+    let want: Vec<CellXY> = explored(&shifted)
+        .into_iter()
+        .filter(|c| !before.contains(c) && !base.contains(c))
+        .collect();
+    let unshifted: Vec<CellXY> = explored(&flat)
+        .into_iter()
+        .filter(|c| !before.contains(c) && !base.contains(c))
+        .collect();
+    assert_eq!(got, want);
+    assert_ne!(want, unshifted, "the shift moves the area");
+}
