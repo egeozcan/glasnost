@@ -31,7 +31,7 @@ use crate::brain::Brain;
 /// Format version of a game save (the world's own save inside it carries
 /// the simulation's version).
 // nocite: version number of our own save format
-pub const GAME_FORMAT_VERSION: u32 = 16;
+pub const GAME_FORMAT_VERSION: u32 = 17;
 
 /// A running game.
 pub struct Game {

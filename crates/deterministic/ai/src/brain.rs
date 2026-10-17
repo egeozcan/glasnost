@@ -280,6 +280,16 @@ impl Brain {
             o.actor()
                 .is_none_or(|a| !glasnost_sim::psychic::berserk(w, a))
         });
+        // S-0601 claim 16: no attack order (from any part of the brain) to an unlimited controller one more victim would overload harmfully
+        out.retain(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                target: Some(Target::Object(_)),
+                ..
+            } => glasnost_sim::mind::controller(w, *actor).is_none() || crate::mind::safe_more(w, *actor),
+            _ => true,
+        });
         out
     }
 
