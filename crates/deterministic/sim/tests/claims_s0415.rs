@@ -242,6 +242,7 @@ fn claim_1_ranks() {
 }
 
 // spec: S-0415 claims 3 and 4 (the cell test fails: refused, the refusal announcement, guard queued and current by the next processing; the vehicle stays)
+// spec: S-0215 claim 11 (revision 57: the late start makes the queued guard current at the end of the refusing update)
 #[test]
 fn claim_4_refusal() {
     let mut w = game(&rules());
@@ -249,15 +250,9 @@ fn claim_4_refusal() {
     testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(1, 1), 0);
     order(&mut w, Order::Deploy { actor: v });
     w.effects.clear();
-    until(&mut w, 5, |w| {
-        w.obj(v).unwrap().beh.current == Some(Behaviour::Unload)
-    })
-    .expect("unload");
-    until(&mut w, 30, |w| {
-        w.obj(v).unwrap().beh.current == Some(Behaviour::Guard)
-    })
-    .expect("guard");
-    assert!(sounds(&w).contains(&Sound::CannotDeploy));
+    // The order queues unload; the refusal queues guard in the unload processing and the late start of the same update makes it current (S-0215 claim 11, revision 57), so unload is current only inside that update and is not seen between ticks.
+    until(&mut w, 30, |w| sounds(w).contains(&Sound::CannotDeploy)).expect("refused");
+    assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Guard));
     assert!(buildings(&w).is_empty());
     assert_eq!(w.obj(v).unwrap().pos.cell(), c(0, 0));
 }
@@ -270,14 +265,12 @@ fn claim_4_gatherer_silent() {
     testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(1, 1), 0);
     order(&mut w, Order::Deploy { actor: v });
     w.effects.clear();
-    until(&mut w, 5, |w| {
-        w.obj(v).unwrap().beh.current == Some(Behaviour::Unload)
-    })
-    .expect("unload");
-    until(&mut w, 30, |w| {
-        w.obj(v).unwrap().beh.current == Some(Behaviour::Guard)
-    })
-    .expect("guard");
+    // The order queues unload; the refusal queues guard in the unload processing and the late start of the same update makes it current (S-0215 claim 11, revision 57), so unload is current only inside that update and is not seen between ticks.
+    for _ in 0..10 {
+        step(&mut w);
+    }
+    assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Guard));
+    assert!(buildings(&w).is_empty(), "refused");
     assert!(!sounds(&w).contains(&Sound::CannotDeploy));
 }
 
