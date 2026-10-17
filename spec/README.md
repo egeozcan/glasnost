@@ -126,7 +126,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 39 | approved | — |
 | [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 35 | approved | — |
 | [S-0509](structures/S-0509-engineers-capture.md) | Engineers and capture | structures | 6 | approved | — |
-| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 16 | approved | — |
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 9 | approved | — |
 | [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 59 | approved | — |
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 23 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 17 | approved | — |
 | [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 7 | approved | — |
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 23 | approved | — |
+| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 17 | approved | — |

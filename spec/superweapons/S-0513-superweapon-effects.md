@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -106,7 +106,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
   S-0202 claim 4; it can consume zero, one or several raw values.
 - **Overload update.** The per-update step of an unlimited controller's overload countdown
   (S-0601 claim 16). When the countdown is nonpositive at the start of such an update, a pulse
-  check occurs. The countdown counts updates, not ticks. Claim 51 suppresses this step from the
+  check occurs. The countdown counts updates, not ticks. The warp turn contract (claim 51)
+  suppresses this step from the
   first pending update through arrival effects. It runs again in arrival hold, after the hold-end test.
 
 ## Behaviour
@@ -1176,7 +1177,7 @@ presentation and swept-layer rules below also apply where those specs cite them.
     not elapsed-tick clocks, so neither takes a step in a suppressed update, and no missed step of
     either is made up later. The elapsed-tick clocks below (protection duration, reload countdown,
     shot cooldown) keep running in suppressed updates. S-0203 claim 4's list of suppressed ordinary
-    work gains the overload update in the same round (see Cross-spec changes to confirm). In short,
+    work includes the overload update. In short,
     the warp update is the whole member turn before arrival
     hold, with the intrinsic exceptions below; it is not merely five disabled operations.
     No deferred ordinary updates are replayed in a burst on entering hold. The leaving row agrees
