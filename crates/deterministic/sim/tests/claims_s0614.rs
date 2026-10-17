@@ -722,6 +722,43 @@ fn claim_9_delivery_animation_and_draw() {
     assert_eq!(w.rng, expect);
 }
 
+// spec: S-0614 claim 9 and S-0616 claim 1 (each delivery to a non-infantry host makes one system of the game-wide spark type at the host's position, taking no draw; without the key none)
+#[test]
+fn claim_9_delivery_spark_system() {
+    for given in [true, false] {
+        let mut r = ruleset();
+        if given {
+            r.registries.entry("particle_systems".into()).or_default().push("FIZZ".into());
+            r.sim.particle_systems.insert(
+                "FIZZ".into(),
+                glasnost_rules::sim::ParticleSystemType {
+                    behaves_like: Some("spark".into()),
+                    ..Default::default()
+                },
+            );
+            r.sim.general.default_spark_system = Some("FIZZ".into());
+        }
+        let mut w = game_of(&r);
+        let host = spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(2, 0), 0);
+        let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+        shoot(&mut w, p, Target::Object(host));
+        let n = w.gas.systems.len();
+        let mut expect = w.rng.clone();
+        next_hit(&mut w, host, 5).unwrap();
+        let _ = expect.ranged(0, 1, w.rules().quirks.ranged_draw_half_span);
+        assert_eq!(w.rng, expect, "the spark system takes no draw (given {given})");
+        let at = w.obj(host).unwrap().pos;
+        let made: Vec<_> = w.gas.systems.values().skip(n).collect();
+        if given {
+            assert_eq!(made.len(), 1);
+            assert_eq!(made[0].pos, at);
+            assert!(made[0].owner_object.is_none() && made[0].particles.is_empty());
+        } else {
+            assert!(made.is_empty());
+        }
+    }
+}
+
 // spec: S-0614 claim 9 (an animation list shorter than the 8-direction makes no animation; no modulo reduction)
 #[test]
 fn claim_9_short_list_makes_no_animation() {

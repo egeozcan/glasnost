@@ -941,12 +941,16 @@ pub fn overload_turn(w: &mut World, id: ObjectId) {
             pos: Some(pos),
         });
     }
-    // spec: S-0601 claim 16 and F3 (five spark systems, even after a lethal hit; per system y then x in [−200, 200]; the systems themselves are a seam)
-    for _ in 0..SPARKS {
+    // spec: S-0601 claim 16 and Import mapping (the spark type key absent: no spark systems and no placement draws)
+    let sparks = if w.rules().gas.default_spark_given { SPARKS } else { 0 };
+    // spec: S-0601 claim 16 and F3 (five spark systems, even after a lethal hit; per system y then x in [−200, 200])
+    for _ in 0..sparks {
         let y = w.rng.ranged(-SPARK_SPREAD, SPARK_SPREAD, half);
         let x = w.rng.ranged(-SPARK_SPREAD, SPARK_SPREAD, half);
         // spec: S-0601 F3 (position = controller's position + (x, y, 100) leptons, exact integer additions)
-        let _at = Pos::new(pos.x + x, pos.y + y, pos.z + SPARK_HEIGHT);
+        let at = Pos::new(pos.x + x, pos.y + y, pos.z + SPARK_HEIGHT);
+        // spec: S-0601 claim 16 and S-0616 claim 1 (a system of the default spark type; making it takes no draw)
+        crate::particles::spark_system(w, at);
     }
     // spec: S-0601 claim 16 and F4 (when i > 0 and the controller survives, one rocking draw r in [0, 100]; the rate is a presentation input)
     if i > 0 && w.obj(id).is_some_and(|o| o.health > 0) {

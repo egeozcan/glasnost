@@ -1,9 +1,9 @@
 ---
 id: Q-1152
 title: The nearby-location search of an absorber's waiting-in-line approach
-status: open
+status: answered
 related: [S-0605, S-0212, S-0507]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need

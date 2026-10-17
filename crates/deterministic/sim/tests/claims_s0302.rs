@@ -48,6 +48,21 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 
 /// An unarmed test vehicle type of strength 1000, class *none* unless `f`
 /// says otherwise.
+/// Registers the invented smoke particle-system types PuffA, PuffB and
+/// PuffC (no held type) that the damage-smoke lists name.
+fn puffs(r: &mut Ruleset) {
+    for n in ["PuffA", "PuffB", "PuffC"] {
+        register(r, "particle_systems", n);
+        r.sim.particle_systems.insert(
+            n.into(),
+            glasnost_rules::sim::ParticleSystemType {
+                behaves_like: Some("smoke".into()),
+                ..Default::default()
+            },
+        );
+    }
+}
+
 fn vehicle(r: &mut Ruleset, name: &str, f: impl FnOnce(&mut UnitType)) {
     let mut t = r.sim.vehicles["BUGGY"].clone();
     t.strength = Some(1000);
@@ -1363,10 +1378,11 @@ fn yellow_state_at_half_off() {
 // Claim 13: the damage effect and building fires.
 // ---------------------------------------------------------------------------
 
-// spec: S-0302 claim 13 (after now yellow or now red at or below the yellow ratio, one ranged draw over 0 … n − 1 picks a damage effect; a later hit that leaves the ratio above it removes the effect)
+// spec: S-0302 claim 13 (after now yellow or now red at or below the yellow ratio, one ranged draw over 0 … n − 1 picks a damage effect; a later hit that leaves the ratio above it marks the effect, kept until it leaves play, S-0616 claims 1 and 22)
 #[test]
 fn damage_effect_draw_and_removal() {
     let mut r = testkit::combat_ruleset();
+    puffs(&mut r);
     vehicle(&mut r, "SMOKER", |t| {
         t.combat.damage_smoke_systems = Some(vec!["PuffA".into(), "PuffB".into(), "PuffC".into()]);
     });
@@ -1379,16 +1395,28 @@ fn damage_effect_draw_and_removal() {
     let half = w.rules().quirks.ranged_draw_half_span;
     let _ = expect.ranged(0, 2, half);
     assert_eq!(apply!(w, t, hit(600, h)), HitResult::NowYellow);
-    assert!(w.obj(t).unwrap().combat.damage_effect);
+    assert!(w.obj(t).unwrap().combat.damage_smoke.is_some());
     assert_eq!(w.rng.taken(), expect.taken());
     assert_eq!(w.rng.raw(), expect.raw());
     // A second threshold hit takes no draw: the object already has an effect.
     let before = w.rng.taken();
     assert_eq!(apply!(w, t, hit(200, h)), HitResult::NowRed);
     assert_eq!(w.rng.taken(), before);
-    // Healing above the yellow ratio removes it.
+    // The effect is a smoke system of the picked type at the object's
+    // position, owned by it (S-0616 claim 1).
+    let sys = w.obj(t).unwrap().combat.damage_smoke.unwrap();
+    let s = &w.gas.systems[&sys];
+    assert_eq!(s.owner_object, Some(t));
+    assert_eq!(s.pos, w.obj(t).unwrap().pos);
+    assert!(!s.ending);
+    // Healing above the yellow ratio marks it; the object keeps it until it
+    // leaves play (S-0616 claims 1 and 22), here in its next turn (empty).
     apply!(w, t, hit(-500, h));
-    assert!(!w.obj(t).unwrap().combat.damage_effect);
+    assert!(w.gas.systems[&sys].ending);
+    assert_eq!(w.obj(t).unwrap().combat.damage_smoke, Some(sys));
+    testkit::run(&mut w, 1);
+    assert!(!w.gas.systems.contains_key(&sys));
+    assert!(w.obj(t).unwrap().combat.damage_smoke.is_none());
 }
 
 // spec: S-0302 claim 13 (the −10-lepton test is on the height above the surface: a bridge deck is the surface of an object on it)
@@ -1396,6 +1424,7 @@ fn damage_effect_draw_and_removal() {
 fn damage_effect_height_above_the_deck() {
     for (deck, draws) in [(true, false), (false, true)] {
         let mut r = testkit::combat_ruleset();
+        puffs(&mut r);
         vehicle(&mut r, "SMOKER", |t| {
             t.combat.damage_smoke_systems = Some(vec!["PuffA".into(), "PuffB".into()]);
         });
@@ -1413,7 +1442,7 @@ fn damage_effect_height_above_the_deck() {
         let before = w.rng.taken();
         assert_eq!(apply!(w, t, hit(600, h)), HitResult::NowYellow);
         assert_eq!(w.rng.taken() != before, draws, "deck {deck}");
-        assert_eq!(w.obj(t).unwrap().combat.damage_effect, draws);
+        assert_eq!(w.obj(t).unwrap().combat.damage_smoke.is_some(), draws);
     }
 }
 
@@ -1422,6 +1451,7 @@ fn damage_effect_height_above_the_deck() {
 fn damage_effect_needs_a_list_and_a_low_ratio() {
     let mut r = testkit::combat_ruleset();
     vehicle(&mut r, "PLAINBOX", |_| {});
+    puffs(&mut r);
     vehicle(&mut r, "SMOKER", |t| {
         t.combat.damage_smoke_systems = Some(vec!["PuffA".into()]);
     });
@@ -1437,7 +1467,7 @@ fn damage_effect_needs_a_list_and_a_low_ratio() {
     // Ratio 0.4 > 0.25 after a now yellow: no effect.
     assert_eq!(apply!(w, b, hit(600, h)), HitResult::NowYellow);
     assert_eq!(w.rng.taken(), before);
-    assert!(!w.obj(b).unwrap().combat.damage_effect);
+    assert!(w.obj(b).unwrap().combat.damage_smoke.is_none());
 }
 
 // spec: S-0302 claim 13 (building fires: one draw over 0 … W + H + 5 per foundation cell, row by row; 1 to 5, 6 to 8 and 9 start the three fires, the first two each followed at once by a loop draw over 1 … 3)

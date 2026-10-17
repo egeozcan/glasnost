@@ -409,7 +409,7 @@ pub fn process_enter(w: &mut World, u: ObjectId) -> i32 {
 /// location near the building's centre cell, of the kind the actor's own
 /// movement class can stand on, as its destination, with *move* queued and
 /// started at once. The waiting goes on.
-fn approach(w: &mut World, u: ObjectId, b: ObjectId) {
+pub(crate) fn approach(w: &mut World, u: ObjectId, b: ObjectId) {
     let Some(uo) = w.obj(u).cloned() else { return };
     // spec: S-0605 claim 4 and S-0204 claim 4 (the building's centre cell: the cell of its reference point, the centre of its foundation)
     let centre = w.reference_point(b).cell();
@@ -985,7 +985,7 @@ fn search_and_go(w: &mut World, u: ObjectId) -> bool {
     let Some(o) = w.obj_mut(u) else { return false };
     // spec: S-0605 claim 16 (found: the unit takes the enter-nearest instruction for absorbing buildings)
     o.structure.enter_nearest = true;
-    // spec: S-0605 claim 16 and S-0215 claim 24 (unless already bound for it: in contact with it, or waiting in line for it); Q-1154 interim (S-0215 claim 24 names contact only)
+    // spec: S-0605 claim 16 and S-0215 claim 24 (unless already bound for it: in contact with it, or waiting in line for it)
     if o.contact == Some(b) || o.structure.waiting == Some(b) {
         return true;
     }

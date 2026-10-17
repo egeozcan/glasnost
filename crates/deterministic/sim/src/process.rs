@@ -1134,7 +1134,7 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
         // Row 3 (the weeder's rule) is left by S-0402 to a later revision; row 4 is the original's computer players' only.
     }
     if crate::structures::absorb::holds_instruction(w, id) {
-        // spec: S-0605 claim 16 and S-0215 claim 24 (a holder of the enter-nearest instruction carries it out and nothing else of the general rules: the search again, none found ends it); Q-1154 interim (S-0605's reading: the fate gives the instruction in our engine, and waiting in line for the found building counts as already bound)
+        // spec: S-0605 claim 16 and S-0215 claim 24 (a holder of the enter-nearest instruction carries it out and nothing else of the general rules: the search again, none found ends it) and Terms (in our engine only the absorbing-building instruction of a neutral or special house unit, given by the bio-reactor fate)
         crate::structures::absorb::instruction_turn(w, id);
         // spec: S-0215 claim 24 (D_r with no draw, the rate of the behaviour being processed: enter is queued without a start)
         return rate_delay(w, id);
@@ -1271,7 +1271,7 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
         return 1;
     }
     if crate::structures::absorb::holds_instruction(w, id) {
-        // spec: S-0605 claim 16 and S-0215 claim 26 row 3 (the enter-nearest instruction is carried out as in guard); Q-1154 interim
+        // spec: S-0605 claim 16 and S-0215 claim 26 row 3 (the enter-nearest instruction is carried out as in guard; in our engine only the absorbing-building one)
         crate::structures::absorb::instruction_turn(w, id);
         // spec: S-0215 claim 26 row 3 (D_r, no draw, with the rate of the behaviour then current: area guard's, enter being queued without a start)
         return rate_delay(w, id);

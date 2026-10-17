@@ -1484,6 +1484,20 @@
           ],
           "default": null
         },
+        "damage_smoke_offset": {
+          "description": "`DamageSmokeOffset`, the damage-smoke displacement in leptons per\naxis (S-0616 claim 1 and Import mapping; absent 0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
         "damage_smoke_systems": {
           "description": "`DamageParticleSystems`: the particle-system names that are\neligible (behaviour *smoke*, S-0302 claim 13), in list order.",
           "type": [
@@ -7332,6 +7346,96 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "particle_cap": {
+          "description": "`ParticleCap`, the spark particle cap κ (S-0616 Import mapping;\nabsent 50).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "particles_per_coord": {
+          "description": "`ParticlesPerCoord`, the railgun particles per lepton *p*, a double\n(S-0616 Import mapping; absent 0.1).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slowdown": {
+          "description": "`Slowdown`, the smoke emission timer's growth, a single-precision\ndecimal (S-0616 Import mapping; absent 0.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spark_spawn_frames": {
+          "description": "`SparkSpawnFrames`, the spark counter start *K* (S-0616 Import\nmapping; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spawn_cutoff": {
+          "description": "`SpawnCutoff`, the smoke spawn cut-off, a single-precision decimal\n(S-0616 Import mapping; absent 0.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spawn_direction": {
+          "description": "`SpawnDirection`, the spark spawn direction *s*, three\nsingle-precision decimals (S-0616 Import mapping; absent 0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Decimal"
+          }
+        },
+        "spawn_frames": {
+          "description": "`SpawnFrames`, the smoke spawn interval *T*₀ and the fire emission\ninterval, ticks (S-0616 Import mapping; absent 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spawn_radius": {
+          "description": "`SpawnRadius`, the smoke spawn radius σ in leptons (S-0616 Import\nmapping; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spawn_spark_percentage": {
+          "description": "`SpawnSparkPercentage`, the spark chance χ as a fraction, a double\n(S-0616 Import mapping; absent 0.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -7366,6 +7470,17 @@
           "format": "int32",
           "default": null
         },
+        "deacc": {
+          "description": "`Deacc`, the slowing field, a single-precision decimal (S-0616\nImport mapping; absent 0.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "delete_on_state_limit": {
           "description": "`DeleteOnStateLimit` (S-0613 Import mapping; absent no).",
           "type": [
@@ -7376,6 +7491,15 @@
         },
         "end_state_ai": {
           "description": "`EndStateAI`, the end stage as written (S-0613 Import mapping;\nabsent 0; reduced to a signed byte).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "final_damage_state": {
+          "description": "`FinalDamageState`, the last damaging stage as written (S-0616\nImport mapping; absent: the end stage's value; reduced to a signed\nbyte).",
           "type": [
             "integer",
             "null"
@@ -7394,6 +7518,15 @@
         },
         "max_ec": {
           "description": "`MaxEC`: the lifetime field (absent 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "min_z_velocity": {
+          "description": "`MinZVelocity`, the spark *Z*ₘ field (S-0616 F10; absent 0).",
           "type": [
             "integer",
             "null"
@@ -7422,6 +7555,23 @@
           },
           "maxItems": 3,
           "minItems": 3
+        },
+        "normalized": {
+          "description": "`Normalized`, the normalised flag (S-0616 claim 19; absent no).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "radius": {
+          "description": "`Radius`, the radius field ρ in leptons (S-0616 F3; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "start_color1": {
           "description": "`StartColor1`, components 0 … 255 (absent black).",
@@ -7487,6 +7637,17 @@
           "format": "int32",
           "default": null
         },
+        "velocity": {
+          "description": "`Velocity`, the speed field *S* in leptons per tick, a\nsingle-precision decimal (S-0616 Import mapping; absent 0.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "warhead": {
           "description": "`Warhead`, a warhead name (S-0613 Import mapping; absent none).",
           "type": [
@@ -7497,6 +7658,33 @@
         },
         "wind_effect": {
           "description": "`WindEffect`, the wind cadence divisor (S-0613 Import mapping;\nabsent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "x_velocity": {
+          "description": "`XVelocity`, the spark *X* field (S-0616 F10; absent 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "y_velocity": {
+          "description": "`YVelocity`, the spark *Y* field (S-0616 F10; absent 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "z_velocity_range": {
+          "description": "`ZVelocityRange`, the spark *Z*ᵣ field (S-0616 F10; absent 1).",
           "type": [
             "integer",
             "null"
@@ -8536,6 +8724,11 @@
           "type": "boolean",
           "default": true
         },
+        "fire_particle_no_house": {
+          "description": "A kill by a fire particle has no attacking house, though its system may have one; off: the hit's attacking house is the system's owner house, as for gas (`glasnost_sim::particles`).",
+          "type": "boolean",
+          "default": true
+        },
         "fire_reveal_expires": {
           "description": "The reveal on fire is a plain reveal that the next re-cover sweep undoes.",
           "type": "boolean",
@@ -8543,6 +8736,11 @@
         },
         "first_comment_only": {
           "description": "Only the type's first idle comment sound is used.",
+          "type": "boolean",
+          "default": true
+        },
+        "flame_sweep_facing": {
+          "description": "The flame sweep's facing constants are 16383 and 65534; off: 16384 and 65536. Seam: `effect_weapon_emitter` (`glasnost_sim::particles`); the switch loads in both positions and changes nothing until that seam is filled.",
           "type": "boolean",
           "default": true
         },
@@ -9561,6 +9759,16 @@
           "type": "boolean",
           "default": true
         },
+        "smoke_deck_extra_update": {
+          "description": "A smoke particle stopped at a bridge deck takes one more update with its draws and is removed (with its successors) in the next turn; off: it is removed in the pass that stops it, with no further update draws (`glasnost_sim::particles`).",
+          "type": "boolean",
+          "default": true
+        },
+        "smoke_ignores_particle_cap": {
+          "description": "A smoke system emits however many particles it holds, whatever its type's particle-cap field; off: while it holds as many particles as the cap, an emission takes its two raw values and grows the timer but makes no particle (`glasnost_sim::particles`).",
+          "type": "boolean",
+          "default": true
+        },
         "smudge_footprints_beyond_map_edge": {
           "description": "A smudge footprint cell beyond the map edge is tested as a\nplaceholder cell that holds nothing and has the theater's first tile\ntype; off: a footprint beyond the map edge does not fit.",
           "type": "boolean",
@@ -9568,6 +9776,11 @@
         },
         "sound_order_startup_draw": {
           "description": "Immediate-mode random ordering with no attack sample takes and discards one startup ordering draw; off: no discarded draw.",
+          "type": "boolean",
+          "default": true
+        },
+        "spark_double_gravity": {
+          "description": "A spark's vertical step counts gravity twice in a tick, its stored vertical velocity once; off: the step uses the stored vertical velocity (`glasnost_sim::particles`).",
           "type": "boolean",
           "default": true
         },

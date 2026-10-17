@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 52
+revision: 54
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: []
 supersedes: []
@@ -176,7 +176,7 @@ control: a patched executable, an injected library, a launcher that alters the g
 a third-party extension of the rules language. Data-only changes are *mods*, not engine add-ons. A
 presentation-only display compatibility layer is not an engine add-on either, although it may be an
 injected library: it changes only how finished drawn frames reach the screen, never the game's logic
-or the pixels it draws (see *measurement setup*). A *director* is an engine add-on on the measuring machine (the project lead's decision of 2026-10-17).
+or the pixels it draws (see *measurement setup*).
 
 **engine constant.** A number fixed inside the original's program rather than read from data, such as
 the number of leptons per cell, a table size, a hard-coded multiplier or an absent-key default. Specs
@@ -251,8 +251,8 @@ expected result and the result that would falsify the claim.
 
 **measurement setup.** The conditions every measurement runs under, unless a scenario says
 otherwise. The original is installed unmodified: its files match the release's published file list.
-Only stock data is used. No loose files override shipped data, and no engine add-on or director is active. In
-short: no engine add-on, no director and no mods (the named test files of a scenario and the purpose-made test
+Only stock data is used. No loose files override shipped data, and no engine add-on is active. In
+short: no engine add-on and no mods (the named test files of a scenario and the purpose-made test
 maps excepted). This is the
 condition of the measuring machine, not a setting of the original.
 Purpose-made test maps are allowed. Game speed and screen resolution are free unless the scenario
@@ -545,6 +545,11 @@ object) carries out, such as *move*, *attack*, *guard* or *area guard*. S-0215 n
 and gives each actor a current, a queued and a suspended behaviour (Terms, claim 1). In the specs a
 behaviour name in italics means the behaviour, never the sequence kind of the same name in S-0107.
 See S-0215; orders that set a behaviour are S-0213's.
+
+**bio-reactor fate.** Our descriptive name for one outcome of the original computer player's fate
+decision after a takeover or release: the object is sent to the nearest absorbing building of its new
+owner that accepts it (S-0601 claim 8; the order and its fallback are in S-0605 claim 16). It is not
+display text of the original.
 
 **capacity (transport).** The imported passenger count of a vehicle, aircraft or building type, an integer
 (S-0507 claim 1; S-0214 reads the same count for buildings: a count of exactly 0 means no passengers in
@@ -2765,5 +2770,5 @@ scenario T6, part G.
 
 ## Questions for the project lead
 
-None. (The lead decided *director* on 2026-10-17: it named an engine add-on on the measuring machine, not a setting of the original; every measurement setup says "no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted)", as the measurement setup here does.)
+None. (The lead's decision of 2026-10-17 dropped the word for a measuring-machine add-on from every setup. The measurement setup here says "no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted)".)
 

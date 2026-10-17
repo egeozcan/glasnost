@@ -36,6 +36,21 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 }
 
 /// An unarmed test vehicle type of strength 5000, class *none*.
+/// Registers the invented smoke particle-system types PuffA, PuffB and
+/// PuffC (no held type) that the damage-smoke lists name.
+fn puffs(r: &mut Ruleset) {
+    for n in ["PuffA", "PuffB", "PuffC"] {
+        register(r, "particle_systems", n);
+        r.sim.particle_systems.insert(
+            n.into(),
+            glasnost_rules::sim::ParticleSystemType {
+                behaves_like: Some("smoke".into()),
+                ..Default::default()
+            },
+        );
+    }
+}
+
 fn vehicle(r: &mut Ruleset, name: &str, f: impl FnOnce(&mut UnitType)) {
     let mut t = r.sim.vehicles["BUGGY"].clone();
     t.strength = Some(5000);
@@ -937,6 +952,7 @@ fn wall_draws_come_before_the_hits() {
     let mut told_apart = 0;
     for seed in 0..40 {
         let mut w = wall_world(|r| {
+            puffs(r);
             vehicle(r, "SMOKER", |t| {
                 t.strength = Some(1000);
                 t.combat.damage_smoke_systems = Some(vec!["PuffA".into(), "PuffB".into()]);
@@ -961,7 +977,7 @@ fn wall_draws_come_before_the_hits() {
         let r_second = hit_first.ranged(0, 100, half);
         boom!(w, centre(0, 0), 60, Some(wh(&w, "WALLER")), None, None);
         assert_eq!(health(&w, v), 460);
-        assert!(w.obj(v).unwrap().combat.damage_effect);
+        assert!(w.obj(v).unwrap().combat.damage_smoke.is_some());
         let stage = |r: i32| if 60 > r { 16 } else { 0 };
         assert_eq!(
             overlay_at(&w, at(1, 1)),

@@ -1,9 +1,9 @@
 ---
 id: Q-1154
 title: S-0215 says no rule of our engine gives an enter-nearest instruction; S-0605 claim 16 gives one
-status: open
+status: answered
 related: [S-0215, S-0605, S-0601]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need

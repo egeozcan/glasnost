@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 46
+revision: 49
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
-requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280]
 supersedes: []
 ---
 
@@ -54,7 +54,7 @@ Claim 25a completes the aircraft landing footprint search used by S-0501 claim 4
 S-0501 claim 41 owns building and fallback-object selection, including equal-distance
 fallback objects, and the unchecked no-result landing destination. Those caller rules are
 separate from the nearby search's candidate tie rule. Retain the coordinated texts at hand-off.
-At hand-off update the approved index to match this draft.
+At hand-off update the approved index to match this draft. The new table T5 row and the enter-processing tick for the waiting absorber approach (S-0605 claim 4) answer the request in the S-0212 entry of approved S-0605's cross-reference list (lines 66 to 69). S-0605's revision in the same hand-off drops that request.
 Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
 and absence of additional search draws. S-0215 claim 38 and F11–F12 supply the upstream
 centre geometry, base-record refresh, no-base usable-area correction and radius-then-direction
@@ -779,11 +779,14 @@ Terms specific to this spec:
       | cell search inside a corridor | it fails, and fewer than 5 cell searches have been made | the retry table above applies at each level |
       | retry made, corridor abandoned at some level | — | one cell search without a corridor, whose result is final |
       | retry made, no level abandoned | — | a new coarse search, which does not use closed connections |
-      | new coarse search | it fails at any level | the path computation fails |
+      | new coarse search | it fails at any level | with `quirks.corridor_retry_no_fallback` on (the default, original): the path computation fails. With it off: one more cell search without a corridor, whose result is final |
       | new coarse search | it succeeds at every level | a cell search inside the new corridor |
 
       So a path computation makes at most 5 cell searches, and the search without a corridor that
-      follows an abandoned corridor counts towards the 5. When the first coarse search fails, the
+      follows an abandoned corridor counts towards the 5. The extra search of the table's last-but-one
+      row (the switch off) counts too: a retry is made only after fewer than 5 cell searches, so it
+      is at most the 5th. Like every cell search it ends as failed at the expansion limit of the
+      search (`quirks.path_search_10000_failure`), and it is deterministic (no draw). When the first coarse search fails, the
       single search without a corridor is the only cell search made, so the limit plays no part.
     - Backing: `measurable` through path shape and failure (scenarios P1, P10, P12). `unmeasured`
       for the internal ordering of the coarse search, its end rule and for the limit of 9999 pending routes, which
@@ -1300,9 +1303,11 @@ Terms specific to this spec:
     nor goal-cell inequality substitutes for that presence test.
     Separately, a driving or ship vehicle with no active track removes an order-level
     cell destination when it occupies that cell, or falls back to rest when it has
-    approach destinations (S-0207 claim 26). This is locomotion cleanup, not search
+    approach destinations (S-0207 claim 26). For a cell destination this is locomotion cleanup, not search
     failure or give-up: it needs no successful search, exact point alignment or due
-    behaviour processing. Mere cell equality does not clear a building destination.
+    behaviour processing. For a destination that names a building, vehicle, infantry unit or
+    aircraft, mere cell equality does not clear it; a vehicle at rest in guard instead needs its
+    position to equal its locomotor destination point exactly (S-0207 claim 26).
     Final-track completion clears the locomotor point, not the order-level goal.
     Absent an intervening effect, the next no-track update clears that cell goal.
 
@@ -1334,7 +1339,7 @@ Terms specific to this spec:
       for the absence of the refresh in the walk locomotor; S-0504 N11 for ship refresh
       timing; S-0207 D29 for driving and ship destination presence before search and
       during retained-goal waits, including same-cell assignment; S-0207 D30 for
-      no-track cell-goal cleanup distinguished from search failure; S-0503 H12 and H15
+      no-track cell-goal cleanup distinguished from search failure; S-0207 D31 for a destination that names a building, vehicle, infantry unit or aircraft and for the guard exception; S-0503 H12 and H15
       for the hover movement/order-level destination split).
       The exact lepton-scale refresh boundary and the distinction between the
       table root and an exact Euclidean root are `unmeasured` for both driving and ships:
@@ -1351,7 +1356,7 @@ Terms specific to this spec:
       paths of their own, so the absence of the cut cannot be isolated
     - Confidence: high for the 24-step limit. Medium for the 512-lepton trigger, the chase cut, the
       train rule and their absence in the walk locomotor. High for destination presence
-      independent of search success and goal-cell inequality (S-0207 claim 25).
+      independent of search success and goal-cell inequality (S-0207 claim 25). High for the cell/object distinction and the cleanup conditions of the object and guard rows, as S-0207 claim 26 gives them.
       Low for the dropped first step
 
 21. **Retry delay.** The retry delay is *R* = trunc(*P* × 900) ticks (F3), where *P* is the
@@ -1642,7 +1647,7 @@ Terms specific to this spec:
     | Air-strike aircraft placement (S-0519 claim 17) | the strike's arrival cell | *winged* | *normal* | none | never | no | no | none |
     | Parasite exit (S-0614 claim 13) | the host's cell | the host's, *winged* counted as *track* | the host's own | that of the centre cell for that zone, read for its deck in deck mode | the host is on a bridge deck | no | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
-    | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
+    | Move order onto a cell, or no-move order by a unit that is not a free mover (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto a cell (S-0214 claim 11) by a free mover (S-0214 Terms: a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type with no ion storm active, or is an aircraft) | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean* that is below the ground surface when the search is made (below) | none |
     | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
@@ -1652,6 +1657,7 @@ Terms specific to this spec:
     | Aircraft factory edge entry without a rally point (S-0417 claim 14) | the cell of the factory's reference point | the aircraft's, *winged* counted as *track* | the aircraft's own | that of the centre cell for that zone, read for its deck in deck mode | the aircraft is on a bridge deck | no | no | none |
     | Harvester queueing (S-0402 claim 9) | the queueing cell of S-0402 | *wheel* | *normal* | none | never | no | no | the refinery's top-left cell |
     | Idle harvester step-off (S-0402 claim 13) | the cell of the building's reference point | the harvester's, *winged* counted as *track* | the harvester's own | that of the centre cell for that zone, read for its deck in deck mode | the harvester is on a bridge deck | no | no | none |
+    | Waiting absorber approach (S-0605 claim 4) | the cell of the building's reference point | the actor's, *winged* counted as *track* | the actor's own | that of the centre cell for that zone, read for its deck in deck mode | the actor is on a bridge deck | no | no | none |
     | Free unit, first search (S-0402 claim 18) | the building's top-left cell | *wheel* | the free unit type's own | that of the centre cell's ground for that zone | never | yes | no | the building's top-left cell |
     | Free unit, second search (S-0402 claim 18) | as in the preceding row | *wheel* | as in the preceding row | as in the preceding row | never | yes | no | the building's top-left cell |
 
@@ -1803,7 +1809,8 @@ Terms specific to this spec:
     passenger exit (S-0507 claims 8 and 10) and for bunker exit (S-0606 claim 12), launch tick for paradrop
     target adjustment (S-0522 claim 1), start tick for air-strike aircraft placement
     (S-0519 claim 17), exit-search tick for parasite exit (S-0614 claim 13), processing tick for idle
-    harvester step-off (S-0402 claim 13), release tick for
+    harvester step-off (S-0402 claim 13), *enter*-processing tick for the waiting absorber approach
+    (S-0605 claim 4), release tick for
     aircraft factory edge entry without a rally point (S-0417 claim 14), and failed-search
     tick for the house-selected destination after give-up (claim 23a). The base-record
     refresh uses the tick of its building entry, removal or owner-change event (S-0215
@@ -1816,7 +1823,7 @@ Terms specific to this spec:
     - Backing: `measurable` for the ring rule, the scan order and the distance choice (scenario P7,
       runs 1, 2, 4, 8 and 8b), for the occupancy condition (P7 runs 1, 2, 8 and 8b, P16), for the
       class rule with walls (P7 run 9, P16), for the harvester queueing and idle step-off
-      parameters (S-0402 scenario H11, part e for a proposed no-result search), for the
+      parameters (S-0402 scenario H11, part e for a proposed no-result search), for the waiting-absorber approach parameters, which are the step-off row's settings (S-0605 scenario A2c, search variants (i) to (iii)), for the
       aircraft factory edge-entry parameters on ordinary ground (S-0417 U13 c), for the
       parasite-exit host-mobility parameters (S-0614 scenario P4), for trigger-crate
       search settings and post-selection refusal (S-0524 scenario C4), for restoration
@@ -1839,7 +1846,9 @@ Terms specific to this spec:
       and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
-      cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the
+      cell, with the state that decides it (P16 run (t), test data). The no-move row for a unit
+      that is not a free mover has the move-order row's parameters and is tested by run (u2) below.
+      `unmeasured` for the
       transport shore approach and its unchecked no-result handling (S-0507 claim 8):
       S-0507 T9 has not yet established its ordinary-order/map witness. Vehicle-passenger
       exit settings and tick-modulo choice are `measurable` (S-0507 T13); its unchecked
@@ -2321,6 +2330,11 @@ Ordering consequences:
   parity of each cell's count, so a cell counted twice is left unmarked, and a cell that already
   carried the congestion mark loses it during the search when its count is odd. Off: during the search a
   cell carries the mark when it carried it before or its count is at least 1.
+- **`quirks.corridor_retry_no_fallback`** (default: on). When the new coarse search that follows a
+  corridor retry (claim 13) fails at any level, except the chain-length failure of departure D2 (Edge cases and quirks), the path computation fails, and a unit can stop at
+  once at a short line of buildings across an open route (Edge cases below, Run S). Off: one more
+  cell search without a corridor is made, with the same limits as the other cell searches, and the
+  computation fails only if that fails too.
 - **`quirks.corridor_split_probe`** (default: on). Whether the progress sector counts as split
   (claim 13a) is decided at the probe cell, which need not lie in that sector at all, and a sector
   that does not fill its block counts as split whenever the probe cell is in it. Off: *S* counts as
@@ -2378,6 +2392,57 @@ Ordering consequences:
   claim 1 both change regions and reach regions here too.
 - **Buildings do not separate regions** (claim 1). A destination enclosed by buildings passes the
   gate and costs a full search, up to 5 cell searches, before it fails. This is original behaviour.
+- **A short line of buildings across the route, with open ground round it** (claims 1, 13, 13a; Q-1280).
+  The coarse searches see through buildings, so the first cell search inside the corridor fails at
+  the line, exactly as for an enclosed destination. The way round is then found only if the retry
+  changes a corridor in a way that lets a new coarse search route round it. In the retry table, a
+  level at which the progress cell's sector is *whole* and whose free part borders every sector
+  connected to it closes no connection at that level. A new coarse search uses only the
+  connections of its own level and the corridor of the level above, so that level's corridor is
+  then found again unchanged (closures at other levels do not alter it). A sector below level 2
+  can be on a corridor only when its parent is, or its category is *crushable* (claim 13). When the
+  line lies inside one level-2 sector (blocks of 8 cells) whose free part borders every sector
+  connected to it, and the probe of claim 13a reads that sector as whole, the level-2 corridor
+  stays the same through every retry. A new coarse search can then fail at level 1 because the
+  remaining way round lies outside that corridor, and the path computation fails (claim 13's
+  last-but-one row); the unit does not move and its destination is cleared (claim 23). This follows
+  from the rules of claims 13 and 13a as written, and Run S (below) tests it on the original.
+  This failure has gameplay impact (a unit refuses an order although an open way round exists), so
+  it gets a switch, **`quirks.corridor_retry_no_fallback`** (default: on, the original).
+  Off: when the new coarse search after a retry fails, one more cell search is made without a
+  corridor, bounded by the same limits as the other cell searches (it counts towards the 5 of claim
+  13 and ends as failed at the expansion limit) and deterministic; the path computation fails only
+  if that search fails too. With it off (our engine's alternative, which the original does not have), an open way round a short line is expected at every
+  alignment. This is an engine check, not a claim about the original, so no oracle measurement backs it. With it on, whether a given line fails depends
+  on its alignment with the sector grid and on the probe cell. With `quirks.corridor_split_probe`
+  on (the default), the probe reads the level-2 sector as split only when the probe cell lies in
+  that sector and the free part does not fill its block; a block that holds line cells never has a
+  full free part, so the reading is split exactly when the probe cell falls in the sector and inside the usable area, and then
+  the connection to the next corridor sector is closed and a new level-2 corridor may go round.
+  With `quirks.corridor_split_probe` off, a sector reads as split whenever any usable cell of it lies outside the
+  free part, so every block that holds a line cell reads as split whatever the probe cell, and the
+  failure is expected to occur at fewer alignments. The rule alone does not settle the lengths: its
+  failing case is stated for a line inside one level-2 sector, and a line of 9 cannot lie inside one.
+  So the expectations that a line of 3 or 5 is passed, and that lines of 7 and 9 fail at some
+  alignment, are measurement expectations, not consequences of the rule. Q-1280 predicts the 7-line
+  failure from claims 13 and 13a; that is an analysis, not an observation of the original. This spec does not
+  predict which of Run S's shifts is that alignment (it depends on the progress cell, which
+  depends on the order of candidate cells, claim 11); Run S (with the switch on) records the result for every shift so
+  the failing shifts can be named, and the claim stays at "some shift fails". The same path
+  computation serves infantry, vehicles and the approach of a recycling or absorbing building
+  (S-0603, S-0605), whose own destination cell then decides the outcome. Backing: `measurable`
+  (P12, run S) for lengths 3 and 5 being passed and for the existence of failing 7- and 9-line
+  placements; `unmeasured` until Run S has been run for which shifts fail, because the progress
+  cell is not predicted. Confidence: high that the rules as written produce the failure whenever
+  the level-2 corridor is unchanged, low for the exact line lengths and alignments.
+  **Answer to Q-1280** (the original's behaviour with `quirks.corridor_retry_no_fallback` on, as the analysis above gives it; not yet observed). (1) A vehicle 20
+  cells from a straight north–south line of seven 1 × 1 buildings on open ground, ordered to a cell
+  just behind the line, stops at once without moving when the line sits in the failing alignment
+  described above; at other alignments it drives round. Lines of 3 and 5 are expected to be passed. (2) An
+  infantry unit behaves alike, and so does the approach of a recycling building just behind the
+  line, since all use this path computation. The outcome depends on the line's alignment against the
+  level-2 grid and on the probe cell, so which exact lengths and shifts fail is not established until Run S. (3) No step of claim 13 differs from the text; the other behaviour is
+  that quirk with `quirks.corridor_retry_no_fallback` off. Backing: `measurable` (P12, Run S) for claims (1) and (2); `unmeasured` for which lengths and shifts fail. Confidence: medium for claims (1) and (2), high for claim (3).
 - **Departure D1: unknown movement zone.** In the original a movement-zone value outside the
   vocabulary leaves the type with no movement zone. The gate then always passes, and the search
   reads the reach region of a non-existent movement zone, which is undefined. Our engine follows
@@ -2392,7 +2457,7 @@ Ordering consequences:
   search (claim 13) whose chosen chain has more than 500 sectors at some level has undefined results
   in the original. Our engine treats such a coarse search as failed, and the table of claim 13 then
   applies: after a first coarse search the cell search runs without a corridor, after a repeated one
-  the path computation fails (low confidence that such chains occur on legal map sizes).
+  the path computation fails, whatever `quirks.corridor_retry_no_fallback` is set to, because a departure takes no switch; confidence is low that such chains occur on legal map sizes.
 - **Departure D3: building destination with no substitute.** When the destination cell holds a
   building, its outcome is *blocked*, and the nearby-cell search of claim 24 finds no cell, the
   original replaces the unit's destination by one that names no cell, and what follows is
@@ -3026,6 +3091,18 @@ P16 run (u) checks this separately from other activity in the tick.
   - Falsified if: the vehicle reaches the goal at every length (which would mean no cap on the
     retries, or closures that free the route much faster than claim 13 says), or the result of a map
     changes between runs, or the train gives up in a map (which would mean trains use the corridor).
+  - **Run S (short line, Q-1280).** Setup: open clear ground; a straight north–south line of 1 × 1
+    buildings of the human house, lengths 3, 5, 7 and 9,
+    each map with the line's middle placed at eight shifts of 0 to 7 cells along the
+    line against the level-2 grid. A vehicle 20 cells west of the line's middle, goal 2 cells east
+    of it, and the same for one non-jumpjet infantry unit and for the recycle order to a recycling building that the scenario sets with a 2 × 2 cell footprint
+    just behind the line. Observable: whether the unit moves at all or its destination is cleared in
+    the tick of the order (claim 23), and the cells entered if it does. Expected: lengths 3 and 5
+    are passed; at least one length-7 and one length-9 placement fails at once (which shifts fail is recorded; see the Q-1280 edge case), and the
+    outcome is identical for the vehicle and infantry on the same map. Falsified if: every
+    placement of the 7- and 9-lines is passed (the original then makes a corridor-free search after
+    a failed repeated coarse search, or re-searches level 2; the switch's default would then be wrong), or any placement of the 3- or 5-line
+    fails, or the vehicle and the infantry unit differ on one map.
 - **P13 (claims 7, 8, 12): base costs and the blocker chain, by route choice.**
   - Setup: a test map whose local area leaves a strip of legal cells outside it, as in P11, so that
     the test unit, placed by the map in that strip, searches without a corridor (claim 14) and its
@@ -3164,7 +3241,7 @@ P16 run (u) checks this separately from other activity in the tick.
   - Run (u), a move order onto an unreachable cell (table T5, move-order row). Setup: open flat clear
     ground, and a test override that sets the wheel multiplier of one land type (say rough) to 0, so
     that its cells have the category *blocked* (S-0211 claim 11). The only cell of that land type is
-    (*x*, *y*). An unarmed wheeled vehicle of the human house (a test override removes its weapon if
+    (*x*, *y*), inside the usable area. An unarmed wheeled vehicle of the human house (a test override removes its weapon if
     its type has one) stands at (*x* − 6, *y*), no other object is within 3 cells of (*x*, *y*), and
     the area is not shrouded for the human house.
     Procedure: click a move order for the vehicle onto (*x*, *y*), 10 times, each time with the
@@ -3188,6 +3265,7 @@ P16 run (u) checks this separately from other activity in the tick.
     qualifying bracket among these ten runs. If the recorder cannot separate the search from
     other activity in the tick, report that check inconclusive; a whole-tick state difference
     alone is not a falsifier of the search's draw count.
+  - Run (u2), a no-move order by a unit that is not a free mover onto (*x*, *y*) (table T5, first row). Setup: as run (u), with the same wheeled vehicle (a wheeled vehicle is not a free mover as the draft's Terms define the term) and the same land-type override. Procedure: as run (u), with a no-move order in place of the move order, 10 times, each time with the vehicle placed afresh and the click in a different tick. Observable: the tick number *N* in force when the order is handled (recorder), and the vehicle's destination after the order. Expected: the destination is the cell at position (*N* mod 8) of run (u)'s ring list, in every run. Falsified if: the clicked cell itself is the destination in any run, or the destination differs from that cell. Void if the click does not give the vehicle the no-move action.
   - Run (r), a rally point (table T5, rally-point row). Setup: open flat clear ground with a
     barracks (a building that produces infantry) of the human house whose nearest cell is at least 3 cells from (*x*, *y*). An unarmed
     vehicle of the human house stands still with no destination on (*x*, *y*), wall sections of the
@@ -3727,6 +3805,7 @@ proposed recorder runs, not completed measurements.
   together.
 - For locomotors other than driving, ship and hovering, whether a unit of claim 23's third row
   keeps its destination, and when it starts moving towards it again (S-0215), is not established.
+- Which alignments of a straight line of buildings across a route fail, and whether lengths 3, 5, 7 and 9 behave as Run S expects (see the short-line entry in Edge cases and quirks): not established until Run S is run. Tracked by Q-1280.
 
 ## Questions for the project lead
 
@@ -3744,4 +3823,4 @@ proposed recorder runs, not completed measurements.
 - Decided (delegated sign-off, 2026-10-10): S-0209 owns the entry outcomes. Claim 27 now agrees
   with S-0209 claim 5 for allied units that count as moving, and points to it for the full table.
 
-No question for the project lead remains open.
+- Proposed in this revision (Edge cases and quirks, `quirks.corridor_retry_no_fallback`): a switch that turns the original's failure after a repeated coarse search into one extra cell search, default original. The project lead accepts or drops it before sign-off.
