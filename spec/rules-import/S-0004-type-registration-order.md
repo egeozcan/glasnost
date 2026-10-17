@@ -2,11 +2,11 @@
 id: S-0004
 title: Type registration order
 topic: rules-import
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0005, Q-0083]
 supersedes: []
@@ -251,7 +251,7 @@ Registration indices are non-negative integers. Indices are dense: the *n*-th ty
     - Confidence: high
 
 13. **Which fields create types by reference.** Every field that names a type is either *creating* or *find-only* (Terms). Import mapping lists each one with its kind, its form and its text limit, section by section.
-    - **When a field takes effect.** A field in a type's section takes effect when that type reads its section (claims 6 and 7); a field in a game-wide section takes effect when that section is read (claim 4). An absent key changes nothing and creates nothing. The one exception is the particle system's emitted particle type (claim 2).
+    - **When a field takes effect.** A field in a type's section takes effect when that type reads its section (claims 6 and 7); a field in a game-wide section takes effect when that section is read (claim 4). An absent key changes nothing and creates nothing. The one exception is the particle system's emitted particle type (claim 2): when a particle system's section is read without that key, the empty name is looked up with creation allowed, so a particle type with the empty name is registered by reference at that moment, at the end of the particle type list, unless one already exists (S-0616, claim 21). Being a particle type created during the pass of a later kind, it reads no section in that layer (claim 6).
     - **Creating fields.** A name that matches no type of the field's kind (compared as in claim 2, after the cut of claim 8) creates a new type with that name. It gets the next index of its kind by claim 4, and whether it reads its section in that layer follows claim 6. `none` and `<none>` mean "no type", except in the four fields of claim 2.
     - **List fields.** A list reference field is split into items as S-0003 claim 12 says. Each item is looked up in item order, and each item that names an unknown type creates it, so the items' new types get consecutive indices in item order (claim 4). Items that mean "no type" are skipped.
     - **Find-only fields.** These never create a type: a building's two superweapon fields; a type's prerequisite lists and the general settings' prerequisite-group lists (which also accept the generic prerequisite words, S-0003 Import mapping row C3); a type's country lists (owner, required, forbidden and secret countries; claim 3); and a voxel animation's share-source field, which can find an infantry type, a vehicle, an aircraft or a building. A name that matches no type of the kind finds nothing. For a type's prerequisite lists, the effect of an invalid entry follows S-0407 claim 8 (d) and `quirks.prerequisite_names_dropped` (default on = original): the entry is dropped with the switch on, but remains an unmet prerequisite with it off, even if a matching building is registered later. Neither setting creates a type by reference. For the other find-only fields, a failed lookup acts as if the field named no type. When types of several kinds have the share-source name, infantry win over vehicles, vehicles over aircraft and aircraft over buildings.
