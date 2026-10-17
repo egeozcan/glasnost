@@ -31,7 +31,8 @@
 //!   base, and the teleport takes a group of its armed vehicles (first
 //!   stage) to a free block next to the enemy base (second stage), each with
 //!   the order a person gives; a ready psychic reveal (S-0610) goes on the
-//!   enemy start cell nearest home that the house does not see; and once
+//!   enemy start cell nearest home that the house does not see (then on
+//!   the unexplored cell nearest an enemy start); and once
 //!   the harvesters are kept it builds a psychic sensor when it has none
 //!   (`psychic`);
 //! - **selling out**: a house with no income for a long while and too few

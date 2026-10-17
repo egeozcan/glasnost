@@ -85,17 +85,33 @@ pub(crate) fn build_sensor(script: &Script, w: &World) -> Option<TypeRef> {
 }
 
 /// The psychic reveal's cell: the enemy start cell nearest home that the
-/// house does not see now; none when it sees them all (it keeps the
-/// reveal for later).
+/// house does not see now; when it sees them all, the unexplored cell (on a
+/// lattice of [`LATTICE`] cells) nearest an enemy start, as a person
+/// scouts what the map still hides; none when nothing is unexplored (it
+/// keeps the reveal for later).
 pub(crate) fn reveal_cell(script: &Script, w: &World) -> Option<CellXY> {
     let home = script.home(w)?;
-    script
-        .enemy_starts()
+    let starts = script.enemy_starts();
+    if let Some(c) = starts
         .iter()
         .copied()
         .filter(|&c| !shroud::seen(w, script.house, c))
         .min_by_key(|&c| (dist2(c, home), c.y, c.x))
+    {
+        return Some(c);
+    }
+    let near = |c: CellXY| starts.iter().map(|&s| dist2(s, c)).min().unwrap_or_else(|| dist2(home, c));
+    w.cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|c| c.x % LATTICE == 0 && c.y % LATTICE == 0)
+        .filter(|&c| w.cells.usable(c) && !shroud::explored(w, script.house, c))
+        .min_by_key(|&c| (near(c), c.y, c.x))
 }
+
+/// The spacing of the cells the psychic reveal's scouting looks at.
+const LATTICE: i32 = 4; // nocite: tuning of our own opponent
 
 impl Special {
     /// Berserk weapons: every idle unit with a berserk weapon is sent at the

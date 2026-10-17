@@ -216,7 +216,7 @@ fn builds_one_psychic_sensor() {
     assert!(count(&g.world, 0, "EYE") <= 1);
 }
 
-// S-0610 claims 13 and 14, PLAN §4.7: a ready psychic reveal is fired at the enemy start cell the house does not see, and counted; with every start seen it is kept.
+// S-0610 claims 13 and 14, PLAN §4.7: a ready psychic reveal is fired at the enemy start cell the house does not see, and counted; with every start seen at an unexplored cell; with the whole map explored it is kept.
 #[test]
 fn fires_the_psychic_reveal_at_an_unseen_enemy_start() {
     let g = game(rules(false));
@@ -254,18 +254,26 @@ fn fires_the_psychic_reveal_at_an_unseen_enemy_start() {
     assert!(!glasnost_sim::econ::shroud::seen(&w, HouseId(0), fired[0]));
     assert!(dist(fired[0], enemy) <= 25, "{:?} near the enemy start {:?}", fired[0], enemy);
     assert_eq!(b.special_uses().reveals, 1);
-    // Every start seen: the reveal is kept.
+    // Every start seen: it scouts an unexplored cell instead.
     for c in testkit_starts(&w) {
         glasnost_sim::econ::shroud::area_reveal(&mut w, HouseId(0), Pos::centre(c, 0), 1);
     }
-    let mut b = brain(&w);
-    let orders = b.think(&w);
-    assert!(
-        !orders
-            .iter()
-            .any(|o| matches!(o, Order::FireSuperweapon { sw, .. } if *sw == i)),
-        "{orders:?}"
-    );
+    let fired = fires(&brain(&w).think(&w), i);
+    assert_eq!(fired.len(), 1);
+    assert!(!glasnost_sim::econ::shroud::explored(&w, HouseId(0), fired[0]));
+    // The whole map explored: the reveal is kept.
+    glasnost_sim::econ::shroud::crate_reveal(&mut w, HouseId(0));
+    assert!(fires(&brain(&w).think(&w), i).is_empty());
+}
+
+fn fires(orders: &[Order], i: u32) -> Vec<CellXY> {
+    orders
+        .iter()
+        .filter_map(|o| match *o {
+            Order::FireSuperweapon { sw, cell } if sw == i => Some(cell),
+            _ => None,
+        })
+        .collect()
 }
 
 fn dist(a: CellXY, b: CellXY) -> i32 {
