@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 58
+revision: 59
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -42,6 +42,9 @@ suppression* is S-0207 claim 27's point suppression that has not yet been consum
 skip of the next otherwise due nonempty point application. It is not the unchanged-destination
 suppression of S-0502. *Late start* is the further per-tick start of an infantry unit or vehicle that
 claim 11 defines.
+
+*Overload pulse* is the periodic self-damage of an unlimited controller, a mind controller whose
+primary weapon gives unlimited control. S-0601 owns it (its Terms and claim 16).
 
 Other specs cited: S-0001, S-0003, S-0006, S-0007, S-0009, S-0105, S-0107, S-0202 (random
 streams), S-0203 (tick order), S-0204 (coordinates, distance and facing), S-0205 (number domains),
@@ -117,7 +120,10 @@ shot from S-0107 claim 11's ordinary fire-frame shot. S-0525 claims 1 and 4 alre
 own radiation creation and top-up at detonation, not the decision to shoot.
 Q-1166 question 1 is answered by claim 11: the late start also performs the fall-back to rest
 (unmeasured, with the reason given there). Question 2 (self-healing against the berserk countdown)
-belongs to S-0610 and is not answered here.
+is settled in S-0610 claim 6 for a berserk unit with no overload pulse: there the order has no
+observable effect (backing `unmeasured`, confidence high). For an unlimited controller, whose overload
+pulse is involved, the place of the countdown step is S-0601 claim 16's, as S-0610 claim 6 states.
+This spec states no order of its own in either case.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
