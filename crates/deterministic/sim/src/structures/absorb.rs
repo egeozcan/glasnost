@@ -28,6 +28,9 @@
 //!   crew placement).
 //! - Q-1265: a building type carries passengers for S-0214 rows x and q
 //!   when it is absorbing and its capacity is above 0.
+//! - Q-1266: an entrant whose loading request is refused (claims 3 and 5)
+//!   also forgets the building as its destination and stops walking, so
+//!   that it stands (scenario A6).
 
 use glasnost_map::CellXY;
 use glasnost_num::F64;
@@ -230,6 +233,19 @@ fn give_up_contact(w: &mut World, u: ObjectId) {
     }
 }
 
+/// A refused loading request (claims 3 and 5): the actor gives up the
+/// contact and, under Q-1266's interim rule, forgets the building as its
+/// destination and stops walking, so that the fall-back to rest makes it
+/// stand (scenario A6) instead of walking on and going in under claim 6.
+fn loading_given_up(w: &mut World, u: ObjectId) {
+    give_up_contact(w, u);
+    // Q-1266 interim (S-0605 claim 5 and scenario A6: it stops and stands, it does not go in)
+    crate::econ::assign_destination(w, u, None);
+    if let Some(ob) = w.obj_mut(u) {
+        ob.path.steps.clear();
+    }
+}
+
 fn set_waiting(w: &mut World, u: ObjectId, b: Option<ObjectId>) {
     if let Some(ob) = w.obj_mut(u) {
         ob.structure.waiting = b;
@@ -259,7 +275,7 @@ fn seek_contact(w: &mut World, u: ObjectId, b: ObjectId) {
     }
     // spec: S-0605 claim 3 (with contact it asks to load; switched off: it gives up the contact)
     if loading_refused(w, b) {
-        give_up_contact(w, u);
+        loading_given_up(w, u);
     }
 }
 
@@ -348,7 +364,7 @@ pub fn process_enter(w: &mut World, u: ObjectId) -> i32 {
     };
     if loading_refused(w, b) {
         // spec: S-0605 claim 5 (switched off since then: it gives up the contact and falls back to rest)
-        give_up_contact(w, u);
+        loading_given_up(w, u);
         crate::process::fall_back(w, u, false);
     }
     // spec: S-0215 claims 6 and 29 (the processing ends with the standard delay)
