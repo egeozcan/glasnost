@@ -2,11 +2,11 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871]
 supersedes: []
@@ -1027,6 +1027,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
     Protection's elapsed duration still runs even on a turn that skips its brightness
     phase processing (claim 29).
 
+    On those leaving-stage turns of a vehicle or infantry unit, the berserk countdown (S-0610
+    claim 5) takes no step in the original. This is `measurable` (S-0610 scenario P9 part e, not
+    yet run), with medium confidence as S-0610 gives it. For a landed aircraft being erased on
+    those turns, the no-step rule is S-0610 claim 5's design choice and `unmeasured` here,
+    because the original's countdown for that case is not established. Our engine applies the
+    no-step rule to all three kinds (claim 51).
+
     For a vehicle, infantry unit or landed aircraft whose turn begins in arrival hold,
     the hold-end test precedes any ordinary healing, behaviour, movement, firing or turret
     work in that turn. This answers the ordering question, not whether each such operation
@@ -1159,8 +1166,9 @@ presentation and swept-layer rules below also apply where those specs cite them.
     the per-tick behaviour start (S-0215 claim 11), ordinary cloak update (S-0516 claim 42),
     ammunition reload update and firing-frame advancement (S-0301 claims 11 and 13),
     attached parasite step (S-0614 claim 18), the member's own economy and power work,
-    depot queued-entry retry, expected-health turn bookkeeping, and protection-brightness
-    phase processing. In short, the warp update is the whole member turn before arrival
+    depot queued-entry retry, expected-health turn bookkeeping, protection-brightness
+    phase processing, and the berserk countdown (S-0610 claim 5; an update count, not an
+    elapsed-tick clock, so it does not keep running as the clocks below do). In short, the warp update is the whole member turn before arrival
     hold, with the intrinsic exceptions below; it is not merely five disabled operations.
     No deferred ordinary updates are replayed in a burst on entering hold. The leaving row agrees
     with the confirmed exclusion, rather than replacing it. The hold row follows the
@@ -1186,7 +1194,8 @@ presentation and swept-layer rules below also apply where those specs cite them.
     These restrictions are not a missed turn under S-0203 claim 10. S-0203 claim 4,
     S-0215 claim 2 and S-0314 claims 9 and 10 must distinguish this engine contract
     from claim 48's original-side uncertainty.
-    - Backing: `measurable` in our engine (SW23 part f); original per-operation
+    - Backing: `measurable` in our engine (SW23 part f, and for the berserk countdown step,
+      S-0610 scenario P9 part e replayed on our engine); original per-operation
       continuation and immediate route clearing remain `unmeasured` under claim 48
       (SW23 parts a to e, incomplete per-kind continuation evidence)
     - Confidence: high for the design contract, low for matching the original's unresolved rows

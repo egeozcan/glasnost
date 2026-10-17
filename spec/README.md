@@ -91,7 +91,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 22 | approved | — |
 | [S-0406](structures/S-0406-building-placement.md) | Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades) | structures | 10 | approved | — |
 | [S-0501](movement/S-0501-aircraft.md) | Aircraft flight, attack runs and pads | movement | 16 | approved | — |
-| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 14 | approved | — |
 | [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 9 | approved | — |
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 20 | approved | — |
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 14 | approved | — |
@@ -134,3 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 7 | approved | — |
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 37 | approved | — |
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 5 | approved | — |
+| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 15 | approved | — |
