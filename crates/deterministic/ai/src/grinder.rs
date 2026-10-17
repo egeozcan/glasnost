@@ -194,7 +194,7 @@ impl Special {
                 let strength = i64::from(glasnost_sim::combat::damage::strength(w, id));
                 // A vehicle goes to a repair depot when the house has one (the brain's repair step).
                 !(depot && o.kind == Kind::Vehicle)
-                    && i64::from(o.health) * 100 <= strength * WOUNDED_PERCENT
+                    && i64::from(o.health) * 100 <= strength * WOUNDED_PERCENT // nocite: a percentage, tuning of our own opponent
             })
             .collect();
         let mut surplus: Vec<ObjectId> = Vec::new();
