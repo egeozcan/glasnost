@@ -75,6 +75,7 @@ pub fn total(uses: &[(glasnost_sim::world::HouseId, Uses)]) -> Uses {
         t.takeovers += u.takeovers;
         t.gattling_defences += u.gattling_defences;
         t.spins_kept += u.spins_kept;
+        t.absorbs += u.absorbs;
     }
     t
 }

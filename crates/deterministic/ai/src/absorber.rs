@@ -17,8 +17,8 @@
 //! - **puts spare infantry in.** Idle infantry of the house's own at home
 //!   are sent while the house is short of power, or while more than
 //!   [`KEEP`] idle infantry stand at home, the cheapest first, so the
-//!   waves keep their better soldiers. Engineers and spies are kept for
-//!   their own work;
+//!   waves keep their better soldiers. Engineers, spies and mind
+//!   controllers are kept for their own work;
 //! - **fills one place at a time.** No building gets more entrants than it
 //!   has room for, counting the ones already on their way or waiting in
 //!   line (claims 3 and 4), and the order is the click a person gives on
@@ -101,7 +101,8 @@ fn short_of_power(w: &World, house: HouseId) -> bool {
 }
 
 /// Whether infantry unit `id` is free to be sent: idle, selectable, not
-/// berserk, neither an engineer nor a spy.
+/// berserk, neither an engineer, a spy nor a mind controller, and not
+/// already on its way into a building.
 fn free_infantry(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     if o.kind != Kind::Infantry || !o.on_map || psychic::berserk(w, id) {
@@ -110,8 +111,12 @@ fn free_infantry(w: &World, id: ObjectId) -> bool {
     let special = w
         .rules()
         .unit(o.kind, o.type_index)
-        .is_some_and(|u| u.engineer || u.raw.agent.unwrap_or(false));
-    !special && scripted::idle(w, id) && targeting::selectable(w, id)
+        .is_some_and(|u| u.engineer || u.raw.agent.unwrap_or(false))
+        || mind::controller(w, id).is_some();
+    // Already on its way: waiting in line or in contact (a new order would
+    // end the wait and put it at the back again).
+    let going = absorb::waiting_for(w, id).is_some() || o.contact.is_some();
+    !special && !going && scripted::idle(w, id) && targeting::selectable(w, id)
 }
 
 impl Special {

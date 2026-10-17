@@ -206,3 +206,42 @@ fn a_controlled_enemy_is_sent_in() {
     assert_eq!(entered(&orders, foe), Some(b), "{orders:?}");
     assert_eq!(entered(&orders, u[0]), None, "a controller holding a victim is refused");
 }
+
+// S-0601 claims 1 and 2, PLAN §4.7: mind controllers are kept for their own work, even short of power.
+#[test]
+fn controllers_are_kept() {
+    let g = game(10);
+    let (w, b, u) = scene(&g, "BIOD", "CLONE", 3);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert!(u.iter().all(|&x| entered(&orders, x) != Some(b)), "{orders:?}");
+}
+
+// S-0605 claims 3 and 4, PLAN §4.7: a unit already waiting in line is not sent again (a new order would end its wait).
+#[test]
+fn a_unit_waiting_in_line_is_not_sent_again() {
+    let g = game(10);
+    let (mut w, b, u) = scene(&g, "BIOD", "WALKER", 2);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert_eq!(u.iter().filter(|&&x| entered(&orders, x) == Some(b)).count(), 2);
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    testkit::run(&mut w, 1);
+    let waiting: Vec<ObjectId> = u
+        .iter()
+        .copied()
+        .filter(|&x| glasnost_sim::structures::absorb::waiting_for(&w, x) == Some(b))
+        .collect();
+    assert_eq!(waiting.len(), 1, "one link place: the second waits");
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    // As seen in AI games: the one waiting rests in guard while it waits.
+    w.obj_mut(waiting[0]).unwrap().beh.current = Some(Behaviour::Guard);
+    assert_eq!(glasnost_sim::structures::absorb::waiting_for(&w, waiting[0]), Some(b));
+    // A fresh brain: no memory of the first order.
+    let orders = brain(&w).think(&w);
+    assert_eq!(entered(&orders, waiting[0]), None, "{orders:?}");
+}

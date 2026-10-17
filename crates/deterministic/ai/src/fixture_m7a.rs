@@ -26,7 +26,10 @@
 //!   kills and a gas cloud system VAPOUR at each hit. The virus death's
 //!   animation PLAGUE and the shared system GasCloudSys hold the gas
 //!   particle FOG. No new buildable type: one would take a share of the
-//!   barracks from the other abilities' units. A
+//!   barracks from the other abilities' units.
+//! - Alpha only (S-0605): BIOP, an infantry absorber, is Alpha's power
+//!   plant in place of the fixture's POWR (which only Beta builds); the AI
+//!   sends spare and controlled infantry in. A
 //!   skirmish drops
 //!   the structures a map gives a player's house (S-0009 claim 27), so the
 //!   houses start with units only.
@@ -315,6 +318,22 @@ pub fn ruleset() -> Ruleset {
     if let Some(top) = r.sim.weapons.get_mut("SPIN2") {
         top.warhead = Some("VENOM".into());
     }
+
+    // Alpha's power plant (S-0605): BIOP takes the fixture's POWR's place
+    // on Alpha's sidebar (POWR is Beta's only), with the same foundation,
+    // cost and power, and absorbs up to five infantry of size 1 or less,
+    // each adding 50 power.
+    if let Some(b) = r.sim.buildings.get_mut("POWR") {
+        b.econ.required_houses = only("Betaland");
+    }
+    let mut biop = fixture::building(2, 2, 600, 60);
+    biop.infantry_absorb = Some(true);
+    biop.passengers = Some(5);
+    biop.size_limit = Some(d("1"));
+    biop.econ.extra_power = Some(40);
+    biop.econ.required_houses = only("Alphaland");
+    register(&mut r, "buildings", "BIOP");
+    r.sim.buildings.insert("BIOP".into(), biop);
     r
 }
 
