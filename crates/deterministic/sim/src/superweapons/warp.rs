@@ -468,6 +468,8 @@ fn lift_off(w: &mut World, id: ObjectId) {
     // spec: S-0516 claim 22 (superweapon teleport: the member's removal and appearance are not ordinary leaving-play and entering-play sensor changes; its sensor disc stays at the old recorded cell through departure, landing retries and appearance, and moves at the arrival-effects update)
     let disc = w.obj_mut(id).and_then(|ob| ob.cloak.disc.take());
     crate::econ::events::leaving_map(w, id, false);
+    // spec: S-0609 claims 11 and 13 (leaving the map ends the spin sound's loop and clears the playing mark)
+    crate::gattling::leaving_map(w, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.cloak.disc = disc;
     }

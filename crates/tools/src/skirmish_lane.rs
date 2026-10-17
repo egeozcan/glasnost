@@ -134,6 +134,10 @@ struct Game {
     taken: usize,
     controlled_max: [usize; PLAYERS],
     controllers: [usize; PLAYERS],
+    /// Per player house: house-ticks with a gattling at its top stage, and
+    /// the distinct gattling types it had (S-0609).
+    top_ticks: [usize; PLAYERS],
+    gattling_types: [usize; PLAYERS],
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -625,6 +629,8 @@ fn play_ai(
     g.taken = tally.taken;
     g.controlled_max = tally.controlled_max;
     g.controllers = tally.controllers.map(|s| s.len());
+    g.top_ticks = tally.top_ticks;
+    g.gattling_types = tally.gattling_types.map(|s| s.len());
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -743,6 +749,12 @@ pub struct Tally {
     /// Per player house: its controllers (objects with a control record)
     /// seen so far.
     pub controllers: [BTreeSet<u32>; PLAYERS],
+    /// Per player house: the ticks in which at least one of its objects
+    /// stood at its type's top gattling stage (S-0609 claim 2).
+    pub top_ticks: [usize; PLAYERS],
+    /// Per player house: the gattling types (kind code, type index) it had
+    /// an object of (S-0609 Terms).
+    pub gattling_types: [BTreeSet<(u8, u32)>; PLAYERS],
     /// The (victim, controller) pairs after the last tick.
     victims_before: BTreeSet<(u32, u32)>,
     /// The units berserk after the last tick.
@@ -855,6 +867,20 @@ impl Tally {
         }
         for h in 0..PLAYERS {
             self.controlled_max[h] = self.controlled_max[h].max(held[h]);
+        }
+        let mut top = [false; PLAYERS];
+        for o in w.objects.values() {
+            let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
+                continue;
+            };
+            if !glasnost_sim::gattling::flagged(w, o.id) {
+                continue;
+            }
+            self.gattling_types[h].insert((kind_code(o.kind), o.type_index));
+            top[h] |= glasnost_sim::gattling::at_top(w, o.id);
+        }
+        for h in 0..PLAYERS {
+            self.top_ticks[h] += usize::from(top[h]);
         }
         self.intent_ticks += (0..PLAYERS)
             .filter(|&h| !glasnost_sim::psychic::intent_lines(w, HouseId(h as u8)).is_empty())
@@ -1737,8 +1763,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept
                     )
                 })
                 .collect();
@@ -1783,6 +1809,11 @@ fn report(
                 s,
                 "  mind control: takeovers {}; most objects controlled at once per house {:?}; controllers per house {:?}",
                 g.taken, g.controlled_max, g.controllers
+            );
+            let _ = writeln!(
+                s,
+                "  gattling: house-ticks at the top stage per house {:?}; gattling types per house {:?}",
+                g.top_ticks, g.gattling_types
             );
         }
         let f: Vec<String> = g

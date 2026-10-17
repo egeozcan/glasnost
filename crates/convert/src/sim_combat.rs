@@ -10,6 +10,9 @@ use glasnost_rules::sim::ArmourClass;
 use super::*;
 use crate::art::int_as_of;
 
+/// The largest gattling stage count our engine reads (S-0609 Constants).
+const SPIN_STAGES: usize = 6; // spec: S-0609 Constants (largest stage count supported: 6 stages)
+
 /// A table row: our field name, the INI key, the value form and the spec
 /// whose Import mapping maps the key.
 type Row = (&'static str, &'static str, Form, &'static str);
@@ -17,7 +20,11 @@ type Row = (&'static str, &'static str, Form, &'static str);
 /// Combat fields shared by infantry, vehicle, aircraft and building types
 /// (`glasnost_rules::sim::CombatFields`), written into `combat`.
 pub(super) const COMBAT_FIELDS: &[Row] = &[
-    ("is_gattling", "IsGattling", Bool, "S-0308"),
+    ("is_gattling", "IsGattling", Bool, "S-0308, S-0609"),
+    // spec: S-0609 Import mapping (WeaponStages, RateUp, RateDown: integers, held value, absent 0)
+    ("weapon_stages", "WeaponStages", Int, "S-0609"),
+    ("rate_up", "RateUp", Int, "S-0609"),
+    ("rate_down", "RateDown", Int, "S-0609"),
     ("is_charge_turret", "IsChargeTurret", Bool, "S-0301, S-0308"),
     ("land_targeting", "LandTargeting", Int, "S-0308"),
     ("naval_targeting", "NavalTargeting", Int, "S-0308"),
@@ -1749,6 +1756,10 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         weapons.push(format!("EliteWeapon{n}"));
     }
     keyed(&TYPES, &weapons, "S-0308");
+    let stages: Vec<String> = (1..=SPIN_STAGES)
+        .flat_map(|k| [format!("Stage{k}"), format!("EliteStage{k}")])
+        .collect();
+    keyed(&TYPES, &stages, "S-0609");
     let coefficients: Vec<String> = COEFFICIENTS.iter().map(|c| c.0.to_owned()).collect();
     keyed(&TYPES, &coefficients, "S-0309");
     let defaults: Vec<String> = COEFFICIENTS.iter().map(|c| c.1.to_owned()).collect();
@@ -2007,6 +2018,7 @@ impl Builder<'_> {
     /// S-0315), written into `combat`.
     fn shared_combat(&mut self, combat: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
         self.cfields(combat, t, kind, COMBAT_FIELDS);
+        self.spin_settings(combat, kind, t);
         if let Some(word) = self.armour(kind, t) {
             combat.put("armor", jsonc::string(word));
         }
@@ -2259,6 +2271,7 @@ impl Builder<'_> {
                 }
             }
         }
+        self.empty_stage_slots(kind, t, &slots);
         let name = format!("{} {}", kind.key(), show(&t.name));
         // spec: S-0308 claim 16 and Edge cases (a weapon count above 18: our engine fills only the first 18 slots and their elite slots, the higher references still register weapons; the importer warns)
         self.each_int(key(t, "WeaponCount"), |n| n > SLOTS as i32, |v| {
@@ -2334,6 +2347,101 @@ impl Builder<'_> {
             }
         }
         combat.put("damage_smoke_systems", jsonc::array(out));
+    }
+
+    /// The gattling thresholds and the warnings for the spin settings
+    /// (S-0609 Import mapping and Edge cases). At each reading of the
+    /// type's section, when the gattling flag and the stage count as that
+    /// layer leaves them are set and at least 2, the layer's `Stage`*k* and
+    /// `EliteStage`*k* for *k* = 1 … *N* (at most 6) replace the held
+    /// thresholds; any other layer keeps them (initially 0). The two rows
+    /// are written as six integers once a layer has populated them.
+    fn spin_settings(&mut self, combat: &mut Rec, kind: Kind, t: &TypeRec) {
+        let mut rows = [[0i32; SPIN_STAGES]; 2];
+        let mut given = [false; 2];
+        let mut populated = false;
+        for &r in &t.reads {
+            // spec: S-0609 Import mapping (the gattling flag and the stage count as that layer leaves them; absent: no and 0)
+            let flag = bool_as_of(t, "IsGattling", r, false);
+            let n = int_as_of(t, "WeaponStages", r, 0);
+            if !(flag && n >= 2) {
+                if populated && flag && n < 2 {
+                    // spec: S-0609 Edge cases and Questions for the project lead (a layered reduction below 2 stages after thresholds were populated); Q-1220 interim (the held thresholds are not used)
+                    if let Some((_, layer, line)) = sets(key(t, "WeaponStages")).into_iter().rfind(|e| e.1 == r) {
+                        self.warn(layer, line, format!(
+                            "{} {}: WeaponStages falls below 2 after an earlier layer set the stage thresholds; no result is specified, and our engine uses no thresholds while the count is below 2 (S-0609 Edge cases, request Q-1220)",
+                            kind.key(),
+                            show(&t.name)
+                        ));
+                    }
+                }
+                continue;
+            }
+            // spec: S-0609 Import mapping and Edge cases (k = 1 … N, at most 6 in our engine)
+            let top = n.min(SPIN_STAGES as i32) as usize;
+            for (row, prefix) in [(0, "Stage"), (1, "EliteStage")] {
+                for k in 1..=top {
+                    if let Some(v) = given_at(t, &format!("{prefix}{k}"), r).and_then(value::integer) {
+                        // spec: S-0609 Import mapping (integer each; a later layer's value replaces the held one)
+                        rows[row][k - 1] = v;
+                        given[row] = true;
+                    }
+                }
+            }
+            populated = true;
+        }
+        for (row, field) in [(0, "stage_thresholds"), (1, "elite_stage_thresholds")] {
+            if given[row] {
+                combat.put(field, jsonc::array(rows[row].iter().map(|&v| int_node(v)).collect()));
+            }
+        }
+        let name = format!("{} {}", kind.key(), show(&t.name));
+        // spec: S-0609 Edge cases (more than 6 stages: our engine reads at most six, a larger count is used as 6, and the importer warns)
+        self.each_int(key(t, "WeaponStages"), |n| n > SPIN_STAGES as i32, |v| {
+            format!("{name} WeaponStages {v} is above 6; our engine uses 6 stages and reads only Stage1 … Stage6 and EliteStage1 … EliteStage6 (S-0609 Edge cases)")
+        });
+        // spec: S-0609 Edge cases (negative stage count, amounts or thresholds: no result is established, the importer warns); Q-1220 interim (our engine uses 0)
+        let mut negative: Vec<String> = ["WeaponStages", "RateUp", "RateDown"]
+            .iter()
+            .map(|k| (*k).to_owned())
+            .collect();
+        for k in 1..=SPIN_STAGES {
+            negative.push(format!("Stage{k}"));
+            negative.push(format!("EliteStage{k}"));
+        }
+        for k in negative {
+            self.each_int(key(t, &k), |n| n < 0, |v| {
+                format!("{name} {k} {v} is negative; no result is specified, and our engine uses 0 (S-0609 Edge cases, request Q-1220)")
+            });
+        }
+    }
+
+    /// Warns for a gattling-flagged type whose ground slot 2*s* is empty
+    /// for a stage *s* it can reach (S-0609 Edge cases: the spin sound
+    /// reads that slot's report list; our engine plays nothing).
+    fn empty_stage_slots(&mut self, kind: Kind, t: &TypeRec, slots: &[String]) {
+        if !bool_of(key(t, "IsGattling")).unwrap_or(false) {
+            return;
+        }
+        // spec: S-0609 Edge cases (stage count 0 or 1: the stage stays 0 and the sound comes from slot 0; above 6: 6)
+        let n = int_of(key(t, "WeaponStages")).unwrap_or(0).clamp(1, SPIN_STAGES as i32) as usize;
+        let empty: Vec<String> = (0..n)
+            .filter(|s| slots.get(2 * s).is_none_or(String::is_empty))
+            .map(|s| (2 * s).to_string())
+            .collect();
+        if empty.is_empty() {
+            return;
+        }
+        let Some((_, layer, line)) = sets(key(t, "IsGattling")).into_iter().last() else {
+            return;
+        };
+        // spec: S-0609 Edge cases (an empty slot 2s: our engine treats it as an empty report list, no sound and no draw, with an importer warning)
+        self.warn(layer, line, format!(
+            "{} {}: a gattling type with an empty weapon slot {} for a stage it can reach; its spin sound there plays nothing (S-0609 Edge cases)",
+            kind.key(),
+            show(&t.name),
+            empty.join(", ")
+        ));
     }
 
     /// The combat fields of an infantry, vehicle or aircraft type.

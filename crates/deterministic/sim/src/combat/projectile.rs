@@ -1853,10 +1853,13 @@ pub fn kind_of(w: &World, pr: &Projectile) -> Option<ProjectileKind> {
 pub fn shot_effect(w: &mut World, firer: ObjectId, weapon: WeaponId, from: Pos) {
     // spec: S-0701 claims 21 and 32 (the report entry follows the firer's retained report value r)
     let report = w.obj(firer).map_or(0, |o| o.report_value);
+    // spec: S-0609 claim 13 (a gattling-flagged firer never plays the ordinary per-shot report)
+    let gattling = crate::gattling::flagged(w, firer);
     w.effects.push(Effect::Shot {
         firer,
         weapon,
         from,
         report,
+        gattling,
     });
 }

@@ -231,7 +231,7 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             let slot = u.raw.spawned == Some(true)
                 || u.raw.missile_spawn == Some(true)
                 || r.missiles.spawners.values().any(|s| s.spawned == t.index);
-            role == Role::Army && u.primary.is_some() && u.locomotor == Locomotor::Fly && !slot
+            role == Role::Army && armed(u) && u.locomotor == Locomotor::Fly && !slot
         }
         Kind::Vehicle | Kind::Infantry => {
             let list = if t.kind == Kind::Vehicle {
@@ -250,13 +250,20 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             match role {
                 Role::Harvester => (u.harvester || is_slave_miner(w, t)) && moves,
                 Role::Army => {
-                    u.primary.is_some() && !u.harvester && !is_slave_miner(w, t) && ground && moves
+                    armed(u) && !u.harvester && !is_slave_miner(w, t) && ground && moves
                 }
                 _ => false,
             }
         }
         _ => false,
     }
+}
+
+/// Whether unit type `u` is armed: it has a primary weapon, or it is a
+/// gattling type with a weapon in its stage slots (S-0609 Terms: its
+/// weapons are the slot list, often with no primary weapon set).
+pub(crate) fn armed(u: &glasnost_sim::rules::UnitRules) -> bool {
+    u.primary.is_some() || (u.combat.gattling && u.combat.slots[0].is_some())
 }
 
 /// Whether type `t` is listed in a paradrop payload (S-0522 claim 2): the

@@ -1,7 +1,9 @@
 //! The M7a AI-versus-AI game of the gate (`duel-m7a`): the own AI against
 //! itself on the synthetic M7a map of `glasnost_ai::fixture_m7a`, where a
 //! Yuri-style side (slave miners for its economy) meets a fixture side, and
-//! both have the psychic weapons of S-0610. The run counts, per ability, the
+//! both have the psychic weapons of S-0610; the Yuri-style side also has a
+//! gattling vehicle and defence (S-0609) and a mind controller (S-0601).
+//! The run counts, per ability, the
 //! orders the AI gave (`glasnost_ai::special::Uses`) and the events the
 //! simulation then showed ([`Exercise`]), so that the gate cannot go on
 //! passing after a change that makes an ability fall out of the game. The
@@ -13,7 +15,7 @@
 //! `Exercise::observe`; a kind of state whose first appearance deserves a
 //! save and load calls `first(..)` there with a new name.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_ai::fixture_m7a as kit;
 use glasnost_ai::game::Game;
@@ -41,11 +43,20 @@ pub struct Exercise {
     pub slave_bases: u32,
     /// Ticks in which a slave was out of its master (S-0402 claim 14).
     pub slave_ticks: u32,
+    /// Gattling stage rises (S-0609 claim 2).
+    pub stage_rises: u32,
+    /// Ticks in which a gattling stood at its top stage (S-0609 claim 2).
+    pub top_ticks: u32,
+    /// Ticks in which a gattling building had spun up (S-0609 claims 7
+    /// and 8; only the AI builds one).
+    pub building_spin_ticks: u32,
+    /// Takeovers: control links that formed (S-0601 claim 6).
+    pub takeovers: u32,
 }
 
 impl Exercise {
     /// Every counter the full run asserts on, by name.
-    pub fn counters(&self) -> [(&'static str, u32); 8] {
+    pub fn counters(&self) -> [(&'static str, u32); 12] {
         let u = &self.uses;
         [
             ("berserk weapon orders (S-0610)", u.berserks),
@@ -65,6 +76,13 @@ impl Exercise {
                 self.slave_bases,
             ),
             ("slaves at work (S-0402 claim 14)", self.slave_ticks),
+            ("gattling stage rises (S-0609 claim 2)", self.stage_rises),
+            (
+                "gattling at its top stage (S-0609 claim 2)",
+                self.top_ticks,
+            ),
+            ("takeover orders (S-0601)", u.takeovers),
+            ("takeovers (S-0601 claim 6)", self.takeovers),
         ]
     }
 
@@ -87,6 +105,8 @@ impl Exercise {
 struct Watch {
     berserk: BTreeSet<ObjectId>,
     slave_bases: BTreeSet<ObjectId>,
+    victims: BTreeSet<(ObjectId, ObjectId)>,
+    stages: BTreeMap<ObjectId, i32>,
     seen: BTreeSet<&'static str>,
 }
 
@@ -158,6 +178,41 @@ impl Exercise {
         });
         self.slave_ticks += u32::from(out);
         first |= watch.first(out, "slave out");
+        // Gattlings: stage rises, a tick in which one stands at its top
+        // stage, and a tick in which a gattling building has spun up.
+        let stages: BTreeMap<ObjectId, i32> = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && glasnost_sim::gattling::flagged(w, o.id))
+            .map(|o| (o.id, o.combat.gattling_stage))
+            .collect();
+        let rises = stages
+            .iter()
+            .filter(|&(id, &s)| s > watch.stages.get(id).copied().unwrap_or(0))
+            .count();
+        self.stage_rises += u32::try_from(rises).unwrap_or(u32::MAX);
+        watch.stages = stages;
+        let top = w
+            .objects
+            .values()
+            .any(|o| o.on_map && glasnost_sim::gattling::at_top(w, o.id));
+        self.top_ticks += u32::from(top);
+        first |= watch.first(top, "gattling top");
+        let building = w.objects.values().any(|o| {
+            o.on_map
+                && o.kind == Kind::Building
+                && o.combat.spin > 0
+                && glasnost_sim::gattling::flagged(w, o.id)
+        });
+        self.building_spin_ticks += u32::from(building);
+        first |= watch.first(building, "gattling building");
+        // Mind control: links that formed in this tick.
+        let victims: BTreeSet<(ObjectId, ObjectId)> =
+            w.mind.victims.iter().map(|(&v, r)| (v, r.controller)).collect();
+        self.takeovers +=
+            u32::try_from(victims.difference(&watch.victims).count()).unwrap_or(u32::MAX);
+        first |= watch.first(!victims.is_empty(), "takeover");
+        watch.victims = victims;
         first
     }
 }
@@ -165,7 +220,8 @@ impl Exercise {
 /// Plays the M7a duel for `ticks` ticks (it ends earlier when the game is
 /// over). The game is saved and loaded halfway and at the first tick each
 /// kind of M7a state appears (a psychic reveal, a berserk unit, a sensed
-/// intent line, a slave-miner building, a slave at work); the loaded game
+/// intent line, a slave-miner building, a slave at work, a gattling at its
+/// top stage, a controlled object); the loaded game
 /// must hash alike and goes on from there. Returns the state hash after
 /// every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {

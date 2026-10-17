@@ -266,7 +266,11 @@ impl Brain {
             self.send_for_repair(w, &mut out);
             self.ferry(w, &mut out);
             self.build_superweapon(w, &mut out);
+            let sensors = self.special_uses().sensors;
             self.build_sensor(w, &mut out);
+            if self.special_uses().sensors == sensors {
+                self.build_gattling_defence(w, &mut out);
+            }
         }
         if w.tick % THINK_PERIOD == 0 {
             self.special.think(&self.script, w, &mut out);
@@ -280,6 +284,24 @@ impl Brain {
             o.actor()
                 .is_none_or(|a| !glasnost_sim::psychic::berserk(w, a))
         });
+        // S-0609 claims 5 and 11: no attack order at another object (from any part of the brain) to a gattling unit firing at its target, so it keeps its spin
+        let before = out.len();
+        out.retain(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                target,
+                ..
+            } => {
+                !crate::gattling::engaged(w, *actor)
+                    || w.obj(*actor).is_some_and(|x| x.target == *target)
+            }
+            _ => true,
+        });
+        let kept = before - out.len();
+        if kept > 0 {
+            self.special.count_spins_kept(kept);
+        }
         // S-0601 claim 16: no attack order (from any part of the brain) to an unlimited controller one more victim would overload harmfully
         out.retain(|o| match o {
             Order::Behaviour {
@@ -318,6 +340,30 @@ impl Brain {
             out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
             out.push(Order::Build { what: t });
             self.special.count_sensor();
+        }
+    }
+
+    /// Builds a gattling defence (S-0609, [`crate::gattling::defence_type`])
+    /// as a person adds base defences: once it keeps its harvesters and is
+    /// not selling out, when no other building or placement was ordered in
+    /// this think (a tech-climb building aside, which it replaces), nor a
+    /// superweapon building or a psychic sensor.
+    fn build_gattling_defence(&mut self, w: &World, out: &mut Vec<Order>) {
+        let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
+        let giving = |t: &TypeRef| !Self::giving_kinds(w, t.index).is_empty();
+        if self.script.selling()
+            || !self.script.harvesters_kept(w)
+            || out.iter().any(|o| {
+                matches!(o, Order::Place { .. })
+                    || matches!(o, Order::Build { what } if what.kind == Kind::Building && (!climb(what) || giving(what)))
+            })
+        {
+            return;
+        }
+        if let Some(t) = crate::gattling::defence_type(&self.script, w) {
+            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            out.push(Order::Build { what: t });
+            self.special.count_gattling_defence();
         }
     }
 
@@ -823,7 +869,7 @@ impl Brain {
     fn suits(u: &glasnost_sim::rules::UnitRules, crossing: bool) -> bool {
         use glasnost_rules::sim::MovementZone as Z;
         u.passengers > 0
-            && u.primary.is_none()
+            && !scripted::armed(u)
             && u.locomotor != glasnost_sim::rules::Locomotor::None
             && u.zone != Z::Water
             && (!crossing

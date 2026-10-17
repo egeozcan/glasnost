@@ -454,6 +454,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
 /// is converted apart, by its category words (`sim_econ`, S-0003 claim 21).
 const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("strength", "Strength", Int),
+    // spec: S-0308 Import mapping (TurretCount of a type section, buildings included); S-0609 Terms (a gattling building)
+    ("turret_count", "TurretCount", Int),
     // spec: S-0311 F1 and Import mapping, S-0314 claim 5 and Import mapping (the cost field, an integer)
     ("cost", "Cost", Int),
     ("bib", "Bib", Bool),

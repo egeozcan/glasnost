@@ -28,8 +28,16 @@ pub struct CombatState {
     pub expected_health: i32,
     /// Weapon number (S-0308 claim 5).
     pub weapon_number: i32,
-    /// Gattling stage (S-0308 Terms; no spec raises it yet).
+    /// Gattling stage (S-0308 Terms, S-0609 claims 1 to 4).
     pub gattling_stage: i32,
+    /// Gattling spin value (S-0609 Terms and claim 1).
+    #[serde(default)]
+    pub spin: i32,
+    /// The animation-frame counter (S-0105 claim 16; S-0609 claim 14 owns
+    /// its advances for gattling-flagged types). Presentation only: no
+    /// rule reads it.
+    #[serde(default)]
+    pub anim_frame: i32,
     /// Firing-frame counter (S-0301 claim 13): `None` idle.
     pub firing_frame: Option<i32>,
     /// A building's pending delayed shot: the tick of its turn (S-0301
@@ -127,7 +135,10 @@ impl CombatState {
             experience: F32::ZERO,
             expected_health: health,
             weapon_number: 0,
+            // spec: S-0609 claim 1 (created with spin value 0 and stage 0); S-0105 claim 16 (the animation-frame counter is 0 at creation)
             gattling_stage: 0,
+            spin: 0,
+            anim_frame: 0,
             firing_frame: None,
             delayed_shot: None,
             bomb: None,

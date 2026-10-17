@@ -36,6 +36,8 @@
 //! itself on the synthetic M7a map (`glasnost_ai::fixture_m7a`), where a
 //! Yuri-style side with slave miners meets a fixture side and both have the
 //! psychic weapons of S-0610 (module [`m7a`]); the same checks as M6c's.
+//! M7a step 3.3 gives the Yuri-style side a gattling vehicle and defence
+//! (S-0609) and a mind controller (S-0601), with their counters.
 
 pub mod m6c;
 pub mod m7a;
@@ -70,13 +72,16 @@ pub const M6C_SEED: u32 = 1;
 /// games: every ability is exercised well before it).
 pub const M6C_TICKS: i32 = 12_000;
 
-/// Seed of the M7a duel. Over the sweep of seeds 1 to 16 (`m7a_seed_sweep`)
-/// every seed plays the full run and every counter but one is at least 4
-/// (that minimum is the slave-miner buildings'); the psychic
-/// sensor orders are 2 in every seed, one per house, as the AI orders a
-/// sensor only when the house has none (see `docs/development.md`,
-/// *Determinism gate*). So the first seed is kept, and nothing more.
-pub const M7A_SEED: u32 = 1;
+/// Seed of the M7a duel. Moved from 1 at M7a step 3.3 (S-0609), when the
+/// Yuri-style house was given a gattling vehicle and defence and a mind
+/// controller: over the sweep of seeds 1 to 16 (`m7a_seed_sweep`) every
+/// counter but one is then at least 3 in every seed (the psychic sensor
+/// orders stay 2, one per house, as the AI orders a sensor only when the
+/// house has none), but the Yuri-style house wins 7 of the 16 games
+/// before the full run ends (seed 1 among them with an earlier tuning),
+/// and the full run must play all its ticks. Seed 2 does in every tuning
+/// tried, so it is kept, and nothing more (see `docs/development.md`, *Determinism gate*).
+pub const M7A_SEED: u32 = 2;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;

@@ -1643,7 +1643,7 @@ pub struct Quirks {
     // spec: S-0601 claim 15 and Edge cases
     #[serde(default = "on")]
     pub deploy_makes_control_permanent: bool,
-    /// A spin-down update whose amount d × m is 0 sets the spin value to 0 at once; off: an amount of 0 leaves the value unchanged. Not implemented yet (wave 2).
+    /// A spin-down update whose amount d × m is 0 sets the spin value to 0 at once; off: an amount of 0 leaves the value unchanged (`glasnost_sim::gattling::spin_down`).
     // spec: S-0609 claims 3 and 9, F2 and Edge cases
     #[serde(default = "on")]
     pub gattling_zero_spin_down_empties: bool,

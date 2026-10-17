@@ -43,6 +43,9 @@ pub enum Effect {
         /// The firer's creation-derived report value *r* (S-0701 claim 21,
         /// S-0202 claim 10), read when it fires.
         report: u16,
+        /// The firer's type has the gattling flag: it plays no per-shot
+        /// report (S-0609 claim 13).
+        gattling: bool,
     },
     /// A hit's damage-state result (S-0302 claim 12), for the sound
     /// reactions of S-0701 claims 20 and 28. Not reported for a hit that
@@ -94,6 +97,16 @@ pub enum Effect {
         // spec: S-0601 claim 5 (two houses: the controller's and the target's before)
         houses: [Option<crate::world::HouseId>; 2],
         /// Where.
+        pos: Option<Pos>,
+    },
+    /// A gattling spin update or a gattling-flagged object leaving the map
+    /// (S-0609 claim 13), for the spin sound the audio crate keeps.
+    Spin {
+        /// The object.
+        id: ObjectId,
+        /// What happened.
+        event: crate::gattling::SpinEvent,
+        /// Where it was.
         pos: Option<Pos>,
     },
     /// A presentation-only trigger action (S-0011 claim 32): text message

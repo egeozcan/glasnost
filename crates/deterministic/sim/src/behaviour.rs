@@ -33,6 +33,11 @@ pub struct Behaviours {
     pub allowance: bool,
     /// Tick of the last fall-back to rest's common effects (S-0215 claim 13).
     pub last_common_effects: Option<i32>,
+    /// The elapsed-tick count (S-0609 Terms): grows by 1 every tick just
+    /// before the behaviour may be processed and returns to 0 at every
+    /// behaviour start; only gattling buildings read it.
+    #[serde(default)]
+    pub elapsed: i32,
     /// A gate's door and close countdown (S-0215 claim 35); unused by
     /// every other object.
     pub gate: Gate,
@@ -91,6 +96,8 @@ impl Behaviours {
         self.start_tick = tick;
         self.progress = 0;
         self.allowance = false;
+        // spec: S-0609 Terms (the elapsed-tick count returns to 0 whenever a behaviour starts, queued and started or forced; an override does not reset it)
+        self.elapsed = 0;
     }
 
     /// A queue request (S-0215 claim 7). Returns whether the request was not

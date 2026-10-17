@@ -31,14 +31,39 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
     if o.kind != Kind::Vehicle || o.combat.killed {
         return false;
     }
-    let Some(t) = o.target else { return false };
     let rules = w.rules_arc();
     let Some(u) = rules.unit(o.kind, o.type_index) else {
+        return false;
+    };
+    let Some(t) = o.target else {
+        // spec: S-0609 claim 5 (a firing step with no target: spin-down)
+        crate::gattling::vehicle_step(w, id, None, false);
         return false;
     };
     // spec: S-0310 claim 9 (the firing check, range test included, for the weapon it would use)
     let slot = choose_slot(w, id, Some(t));
     let answer = check(w, id, Some(t), slot, true);
+    let (facing_error, unloads) = vehicle_reply(w, id, &o, u, t, slot, answer);
+    // spec: S-0609 claim 5 (one update after the step's own reply, so a shot of this step uses the stage before it; an empty slot 0 spins down)
+    let slot0 = slot_weapon(w, id, 0).is_some();
+    crate::gattling::vehicle_step(w, id, slot0.then_some(answer), unloads);
+    facing_error
+}
+
+/// The reply of a vehicle's firing step to the firing check's answer
+/// (S-0310 claim 9): whether the answer was a facing error, and whether a
+/// deploy-to-fire vehicle queued *unload* instead (S-0609 claim 5's early
+/// exit).
+fn vehicle_reply(
+    w: &mut World,
+    id: ObjectId,
+    o: &crate::world::Object,
+    u: &crate::rules::UnitRules,
+    t: Target,
+    slot: usize,
+    answer: Answer,
+) -> (bool, bool) {
+    let rules = w.rules_arc();
     // spec: S-0506 claim 11 (an impossible answer to an attempt with the spawner weapon resets the controller)
     crate::spawn::firing_answer(w, id, slot, answer);
     // spec: S-0516 claim 11 (a) (cloaked: a vehicle within range starts uncloaking)
@@ -50,11 +75,12 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
                 if let Some(ob) = w.obj_mut(id) {
                     ob.beh.queue(Some(Behaviour::Unload));
                 }
+                (false, true)
             } else {
                 // spec: S-0310 claim 9 (any other vehicle fires; a visceroid's animation stage is presentation)
                 crate::combat::fire::shot(w, id, slot, t);
+                (false, false)
             }
-            false
         }
         Answer::NotFacing => {
             if crate::econ::inplace::queues_unload(w, id) {
@@ -62,11 +88,11 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
                 if let Some(ob) = w.obj_mut(id) {
                     ob.beh.queue(Some(Behaviour::Unload));
                 }
-                return false;
+                return (false, true);
             }
             if u.turret {
                 // spec: S-0310 claim 9 (with the turret flag: the turret's target facing becomes the direction of the target)
-                true
+                (true, false)
             } else {
                 let moving = crate::occupancy::in_progress(w, id);
                 if o.dest.is_none() && !moving {
@@ -80,7 +106,7 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
                         ob.turret.turn_to(bt, tick, omega);
                     }
                 }
-                false
+                (false, false)
             }
         }
         Answer::Illegal => {
@@ -96,9 +122,9 @@ pub fn vehicle_step(w: &mut World, id: ObjectId) -> bool {
                     ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 }
             }
-            false
+            (false, false)
         }
-        _ => false,
+        _ => (false, false),
     }
 }
 
@@ -302,6 +328,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
     let b = &rules.buildings[o.type_index as usize];
     let armed = crate::combat::weapon::slot_weapon(w, id, 0).is_some();
     let cur = o.beh.current;
+    // spec: S-0609 claim 7 (the elapsed-tick count c of this processing, read before any behaviour start resets it)
+    let c = o.beh.elapsed;
     if cur == Some(Behaviour::Attack) {
         if b.building.sam {
             return sam_attack(w, id);
@@ -355,14 +383,12 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
             }
         };
         // spec: S-0215 claim 32 (the table of answers: fire 1; rotate 2; drop and guard 1; others rotate 1)
-        return match answer {
+        let delay = match answer {
             Answer::CanFire => {
                 let gate = upgrade_gate(w, id);
                 if gate == Some(false) && rules.quirks.upgrade_attack_weapon_gate {
                     // spec: S-0215 claim 32 and S-0301 claim 14 (a failed upgrade weapon gate: no firing attempt and no delayed shot, with the original quirk setting; target, attack and ready mark kept, 1 tick)
-                    return 1;
-                }
-                if gate.is_none() && crate::linked::master_path(w, id) {
+                } else if gate.is_none() && crate::linked::master_path(w, id) {
                     // spec: S-0518 claims 1 to 7 (a prism master recruits one supporter per processing, and when it finds none, or the count has reached the cap, starts its own delayed shot, slot 0)
                     if !crate::linked::recruit(w, id) {
                         crate::linked::start_shot(w, id);
@@ -399,11 +425,25 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
                 }
                 1
             }
-            _ => {
+            Answer::StillTurning
+            | Answer::Moving
+            | Answer::MustDeploy
+            | Answer::Cloaked
+            | Answer::Busy => {
                 rotate(w);
                 1
             }
         };
+        // spec: S-0609 claim 7 (the spin update after the processing's shot, by the final answer, with multiplier c; a SAM building makes none)
+        crate::gattling::building_attack(w, id, answer, c);
+        return delay;
+    }
+    // spec: S-0609 claim 8 (every guard, sticky and area guard processing of a gattling building starts with a spin-down by c, armed or unarmed)
+    if matches!(
+        cur,
+        Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard)
+    ) {
+        crate::gattling::building_guard(w, id);
     }
     // Guard, sticky and area guard (table T1: the same rule).
     if armed {

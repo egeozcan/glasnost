@@ -91,6 +91,13 @@ pub struct Uses {
     /// Mind controllers sent to take over an enemy (S-0601).
     #[serde(default)]
     pub takeovers: u32,
+    /// Gattling defence buildings ordered (S-0609).
+    #[serde(default)]
+    pub gattling_defences: u32,
+    /// Attack orders not given to a gattling unit firing at its target,
+    /// which keeps its spin (S-0609).
+    #[serde(default)]
+    pub spins_kept: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -180,6 +187,17 @@ impl Special {
     /// Counts one controller sent to take over an enemy (S-0601, `mind`).
     pub(crate) fn count_takeover(&mut self) {
         self.uses.takeovers += 1;
+    }
+
+    /// Counts one gattling defence building ordered (S-0609, `gattling`).
+    pub(crate) fn count_gattling_defence(&mut self) {
+        self.uses.gattling_defences += 1;
+    }
+
+    /// Counts attack orders dropped for gattling units that keep firing
+    /// at their targets (S-0609, `gattling`).
+    pub(crate) fn count_spins_kept(&mut self, n: usize) {
+        self.uses.spins_kept = self.uses.spins_kept.saturating_add(n as u32);
     }
 
     /// Counts one psychic sensor ordered (S-0610, `psychic`).

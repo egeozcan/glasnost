@@ -4,7 +4,7 @@
 use glasnost_ai::{fixture, fixture_m7a as kit, game::Game};
 use glasnost_sim_gate::{M7A_SEED, M7A_TICKS, m7a};
 
-// spec: S-0610 (berserk hits, the psychic sensor, the psychic reveal), S-0402 claim 14 (slave miners): the gate's M7a duel uses each of them, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
+// spec: S-0610 (berserk hits, the psychic sensor, the psychic reveal), S-0402 claim 14 (slave miners), S-0609 claim 2 (gattling stages), S-0601 claim 6 (takeovers): the gate's M7a duel uses each of them, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
 #[test]
 #[ignore = "long; run in release by `cargo xtask gate`"]
 fn every_m7a_ability_is_exercised_and_the_replay_reproduces_the_game() {
@@ -50,10 +50,11 @@ fn try_seeds() {
         .map(|&s| std::thread::spawn(move || (s, m7a::play(s, M7A_TICKS))))
         .collect();
     for h in hs {
-        let (s, (hashes, _, ex)) = h.join().expect("the run finished");
+        let (s, (hashes, g, ex)) = h.join().expect("the run finished");
         println!(
-            "seed {s}: {} ticks, missing {:?}",
+            "seed {s}: {} ticks, outcome {:?}, missing {:?}",
             hashes.len(),
+            g.outcome(),
             ex.missing()
         );
     }
@@ -71,18 +72,19 @@ fn m7a_seed_sweep() {
     let (a, b) = range.split_once('-').expect("GLASNOST_SWEEP=<from>-<to>");
     let (a, b): (u32, u32) = (a.parse().expect("from"), b.parse().expect("to"));
     let seeds: Vec<u32> = (a..=b).collect();
-    let mut runs: Vec<(u32, usize, m7a::Exercise)> = Vec::new();
+    let mut runs: Vec<(u32, usize, m7a::Exercise, String)> = Vec::new();
     for chunk in seeds.chunks(8) {
         let hs: Vec<_> = chunk
             .iter()
             .map(|&s| std::thread::spawn(move || (s, m7a::play(s, M7A_TICKS))))
             .collect();
         for h in hs {
-            let (s, (hashes, _, ex)) = h.join().expect("the run finished");
-            runs.push((s, hashes.len(), ex));
+            let (s, (hashes, g, ex)) = h.join().expect("the run finished");
+            let won = g.outcome().map_or("none".into(), |o| format!("{:?}", o.results));
+            runs.push((s, hashes.len(), ex, won));
         }
     }
-    for (s, n, ex) in &runs {
+    for (s, n, ex, won) in &runs {
         let low: Vec<String> = ex
             .counters()
             .iter()
@@ -90,12 +92,12 @@ fn m7a_seed_sweep() {
             .map(|&(name, v)| format!("{name} = {v}"))
             .collect();
         let least = ex.counters().iter().map(|&(_, v)| v).min().unwrap_or(0);
-        println!("seed {s}: {n} ticks, smallest counter {least}, below 3: {low:?}");
+        println!("seed {s}: {n} ticks, results {won}, smallest counter {least}, below 3: {low:?}");
     }
     let names = runs[0].2.counters().map(|(name, _)| name);
     let mut worst = u32::MAX;
     for (i, name) in names.iter().enumerate() {
-        let mut v: Vec<u32> = runs.iter().map(|(_, _, ex)| ex.counters()[i].1).collect();
+        let mut v: Vec<u32> = runs.iter().map(|(_, _, ex, _)| ex.counters()[i].1).collect();
         v.sort_unstable();
         worst = worst.min(v[0]);
         println!(

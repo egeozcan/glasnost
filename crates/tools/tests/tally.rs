@@ -223,3 +223,52 @@ fn counts_takeovers_and_controllers() {
     assert_eq!(tally.controlled_max[0], 1, "{tally:?}");
     assert_eq!(tally.controlled_max[1], 0, "{tally:?}");
 }
+
+// A house's gattling types are kept per house, and a tick counts once per
+// house however many of its gattlings stand at the top stage (S-0609
+// Terms and claim 2).
+#[test]
+fn counts_gattling_types_and_top_stage_ticks() {
+    let mut r = fixture::ruleset();
+    let mut c = r.sim.vehicles["GUNR"].clone();
+    c.primary = None;
+    c.tech_level = Some(99);
+    c.turret_count = Some(1);
+    c.weapon_count = Some(6);
+    c.combat.weapon_slots = Some(vec!["Gun".into(); 6]);
+    c.combat.is_gattling = Some(true);
+    c.combat.weapon_stages = Some(3);
+    c.combat.rate_up = Some(5);
+    c.combat.rate_down = Some(1);
+    c.combat.stage_thresholds = Some(vec![10, 30, 60]);
+    r.sim.vehicles.insert("GATG".into(), c);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("GATG".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-tally"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut tally = Tally::default();
+    g.step();
+    let a = testkit::spawn(&mut g.world, Kind::Vehicle, "GATG", 0, fixture::at(4, 4), 0);
+    let b = testkit::spawn(&mut g.world, Kind::Vehicle, "GATG", 0, fixture::at(5, 4), 0);
+    tally.observe(&g.world);
+    assert_eq!(tally.gattling_types[0].len(), 1, "{tally:?}");
+    assert_eq!(tally.gattling_types[1].len(), 0, "{tally:?}");
+    assert_eq!(tally.top_ticks, [0, 0]);
+    for id in [a, b] {
+        let o = g.world.obj_mut(id).unwrap();
+        o.combat.spin = 60;
+        o.combat.gattling_stage = 2;
+    }
+    tally.observe(&g.world);
+    tally.observe(&g.world);
+    assert_eq!(tally.top_ticks, [2, 0], "{tally:?}");
+}

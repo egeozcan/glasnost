@@ -1565,3 +1565,59 @@ fn mind_control_warnings() {
         "OverloadDamage is given but OverloadCount is empty"
     ));
 }
+
+/// spec: S-0609 Import mapping (WeaponStages, RateUp, RateDown; Stage1 … StageN and EliteStage1 … EliteStageN read per layer only while the gattling flag and a stage count of at least 2 hold as of that layer, else held; absent elite thresholds stay 0) and Edge cases (more than 6 stages, negative values and empty stage slots warn); Q-1220 interim (a reduction below 2 stages after thresholds were set warns)
+#[test]
+fn gattling_spin_settings() {
+    let base = "[VehicleTypes]\n1=Gat\n2=Plain\n3=Many\n4=Neg\n5=Late\n[BuildingTypes]\n1=GTower\n\
+                [Gat]\nIsGattling=yes\nWeaponStages=3\nRateUp=7\nRateDown=1\nStage1=10\nStage2=30\n\
+                Stage3=60\nStage4=99\nEliteStage1=5\nTurretCount=1\nWeaponCount=6\n\
+                Weapon1=A\nWeapon2=B\nWeapon3=C\nWeapon4=D\nWeapon5=E\nWeapon6=F\n\
+                [Plain]\nStage1=10\nWeaponStages=3\n\
+                [Many]\nIsGattling=yes\nWeaponStages=8\nStage1=1\nStage2=2\nStage3=3\nStage4=4\n\
+                Stage5=5\nStage6=6\nStage7=7\nTurretCount=1\nWeaponCount=2\nWeapon1=A\n\
+                [Neg]\nIsGattling=yes\nWeaponStages=2\nRateUp=-1\nStage1=-5\nPrimary=A\n\
+                [Late]\nWeaponStages=3\nStage1=10\nPrimary=A\n\
+                [GTower]\nIsGattling=yes\nWeaponStages=2\nTurretCount=1\nWeaponCount=4\n\
+                Weapon1=A\nWeapon2=B\nWeapon3=C\nWeapon4=D\nStage1=4\nStage2=8\n";
+    let mode = "[Gat]\nStage2=31\n[Late]\nIsGattling=yes\n";
+    let map = "[Gat]\nWeaponStages=1\nStage1=11\n";
+    let (s, w) = {
+        let (s, w, _) = import(base, mode, map, "", &ImportOptions::default());
+        (s, w)
+    };
+    let gat = &s.vehicles["Gat"].combat;
+    assert_eq!(
+        (gat.weapon_stages, gat.rate_up, gat.rate_down),
+        (Some(1), Some(7), Some(1))
+    );
+    // The mode layer replaces Stage2; the map layer's count of 1 reads no threshold.
+    assert_eq!(gat.stage_thresholds, Some(vec![10, 31, 60, 0, 0, 0]));
+    assert_eq!(gat.elite_stage_thresholds, Some(vec![5, 0, 0, 0, 0, 0]));
+    assert!(warned(&w, "vehicles Gat: WeaponStages falls below 2"));
+    assert!(!warned(&w, "vehicles Gat: a gattling type with an empty"));
+    // No gattling flag: no thresholds.
+    let plain = &s.vehicles["Plain"].combat;
+    assert_eq!((plain.stage_thresholds.clone(), plain.weapon_stages), (None, Some(3)));
+    // The flag set only in a later layer that names no threshold: none read.
+    assert_eq!(s.vehicles["Late"].combat.stage_thresholds, None);
+    // More than 6 stages: the first six thresholds, a warning, and empty stage slots.
+    let many = &s.vehicles["Many"].combat;
+    assert_eq!(many.stage_thresholds, Some(vec![1, 2, 3, 4, 5, 6]));
+    assert_eq!(many.elite_stage_thresholds, None);
+    assert!(warned(&w, "vehicles Many WeaponStages 8 is above 6"));
+    assert!(warned(
+        &w,
+        "vehicles Many: a gattling type with an empty weapon slot 2, 4, 6, 8, 10"
+    ));
+    // Negative values warn.
+    assert!(warned(&w, "vehicles Neg RateUp -1 is negative"));
+    assert!(warned(&w, "vehicles Neg Stage1 -5 is negative"));
+    assert!(warned(&w, "vehicles Neg: a gattling type with an empty weapon slot 2"));
+    assert_eq!(s.vehicles["Neg"].combat.stage_thresholds, Some(vec![-5, 0, 0, 0, 0, 0]));
+    // A building: turret count and thresholds.
+    let tower = &s.buildings["GTower"];
+    assert_eq!(tower.turret_count, Some(1));
+    assert_eq!(tower.combat.stage_thresholds, Some(vec![4, 8, 0, 0, 0, 0]));
+    assert_eq!(tower.combat.is_gattling, Some(true));
+}

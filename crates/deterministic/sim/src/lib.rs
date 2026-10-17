@@ -30,6 +30,7 @@ pub mod depot;
 pub mod drive;
 pub mod econ;
 pub mod fall;
+pub mod gattling;
 pub mod hover;
 pub mod infantry;
 pub mod jump;

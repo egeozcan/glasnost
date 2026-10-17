@@ -361,6 +361,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     // spec: S-0507 claim 15 (an open-topped transport leaving the map: its passengers lose their targets)
     crate::transport::leaving_map(w, id);
     crate::econ::events::leaving_map(w, id, false);
+    // spec: S-0609 claims 11 and 13 (leaving the map ends the spin sound's loop and clears the playing mark)
+    crate::gattling::leaving_map(w, id);
     // spec: S-0209 claim 1 (an aircraft going inside clears its object-present mark)
     crate::air::clear_mark(w, id);
     let skip = w.rules().quirks.update_order_removal_skip;
@@ -430,6 +432,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)
     crate::spawn::removing(w, id);
     crate::econ::events::leaving_map(w, id, true);
+    // spec: S-0609 claims 11 and 13 (leaving the map ends the spin sound's loop and clears the playing mark)
+    crate::gattling::leaving_map(w, id);
     // spec: S-0011 claim 2 (detaching a carrier removes one from its tag's count)
     crate::triggers::detach_object(w, id);
     let skip = w.rules().quirks.update_order_removal_skip;

@@ -68,7 +68,7 @@ impl Special {
                     && targeting::selectable(w, id)
                     && w.obj(id)
                         .and_then(|o| w.rules().unit(o.kind, o.type_index))
-                        .is_some_and(|u| u.primary.is_some())
+                        .is_some_and(scripted::armed)
             })
             .collect();
         for &id in &idle {
@@ -135,7 +135,7 @@ fn cheapest_armed_jumpjet(w: &World, house: glasnost_sim::world::HouseId) -> Opt
         .filter(|t| {
             w.rules()
                 .unit(t.kind, t.index)
-                .is_some_and(|u| u.jumpjet_locomotor && u.primary.is_some() && !u.harvester)
+                .is_some_and(|u| u.jumpjet_locomotor && scripted::armed(u) && !u.harvester)
         })
         .filter(|&t| tech::buildable(w, house, t))
         .min_by_key(|&t| (production::cost_field(w, t), t.index))
