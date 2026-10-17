@@ -744,12 +744,13 @@ pub struct General {
     /// `[General] AICaptureLowMoney` (S-0601 claim 8).
     #[serde(default)]
     pub ai_capture_low_money: Option<Vec<i32>>,
-    /// `[General] AICaptureLowMoneyMark`, credits (S-0601 claim 8); the
-    /// absent-key default is not determined (Q-1202).
+    /// `[General] AICaptureLowMoneyMark`, credits (S-0601 claim 8); absent:
+    /// none, which never selects the low-money table (claim 8's design rule).
     #[serde(default)]
     pub ai_capture_low_money_mark: Option<i32>,
     /// `[General] AICaptureWoundedMark`, a fraction read as a single
-    /// (S-0601 claim 8); the absent-key default is not determined (Q-1202).
+    /// (S-0601 claim 8); absent: none, which never selects the wounded table
+    /// (claim 8's design rule).
     #[serde(default)]
     pub ai_capture_wounded_mark: Option<Decimal>,
     /// `[CombatDamage] IvanWarhead`, the bomb warhead (S-0519 Import mapping).

@@ -3342,6 +3342,28 @@ impl Builder<'_> {
                 |v| format!("[General] {k} {v:?} has no `%`: it is taken as a fraction, not a percentage (S-0003 claim 18)"),
             );
         }
+        // spec: S-0601 claim 8 and Import mapping (revision 9: the importer warns once for each absent fate-table mark when at least one of the four tables is non-empty; an absent mark never selects its table, our engine's design rule)
+        let table = [
+            "AICaptureNormal",
+            "AICaptureWounded",
+            "AICaptureLowPower",
+            "AICaptureLowMoney",
+        ]
+        .iter()
+        .map(|k| self.global(GENERAL, k))
+        .find(|st| len(st) > 0);
+        if let Some(table) = table {
+            for (k, never) in [
+                ("AICaptureLowMoneyMark", "the low-money table"),
+                ("AICaptureWoundedMark", "the wounded table"),
+            ] {
+                if self.global(GENERAL, k).is_none() {
+                    self.warn_at(table.as_ref(), format!(
+                        "[General] {k} is absent while a capture fate table is given: our engine never selects {never} (S-0601 claim 8, a design rule)"
+                    ));
+                }
+            }
+        }
     }
 
     /// Warnings that look at several records' values in force.

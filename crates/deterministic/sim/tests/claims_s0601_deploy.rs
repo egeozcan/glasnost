@@ -231,7 +231,14 @@ fn dominated_mcv_deploys_for_the_dominating_house() {
     let r = rules();
     let mut w = testkit::game_with(&r, SIZE, 17);
     testkit::run(&mut w, 4);
-    let v = testkit::spawn(&mut w, Kind::Vehicle, "MCV", ALPHA, c(0, 0), (D * 256) as u16);
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "MCV",
+        ALPHA,
+        c(0, 0),
+        (D * 256) as u16,
+    );
     assert!(mind::dominate(&mut w, v, HouseId(BETA)));
     assert!(mind::mind_controlled(&w, v));
     deploy(&mut w, v);
@@ -248,7 +255,14 @@ fn queued_deploy_does_not_survive_the_takeover() {
     let mut w = testkit::game_with(&r, SIZE, 17);
     testkit::run(&mut w, 4);
     let ctrl = testkit::spawn(&mut w, Kind::Vehicle, "CTRL", BETA, c(-6, -6), 0);
-    let k = testkit::spawn(&mut w, Kind::Vehicle, "KIT", ALPHA, c(0, 0), (D * 256) as u16);
+    let k = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "KIT",
+        ALPHA,
+        c(0, 0),
+        (D * 256) as u16,
+    );
     // The deploy order's effect (S-0213 claim 10): unload queued, not yet started.
     w.obj_mut(k).unwrap().beh.queue(Some(Behaviour::Unload));
     assert!(mind::take(&mut w, ctrl, k));

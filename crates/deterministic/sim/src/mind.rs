@@ -529,7 +529,7 @@ pub fn bio_reactor_fate(w: &mut World, id: ObjectId) -> bool {
 fn fate_table(w: &World, h: HouseId, v: ObjectId) -> Vec<i32> {
     let m = &w.rules().combat.general.mind;
     let money = crate::econ::production::available_credits(w, h);
-    // spec: S-0601 claim 8 (low money first: the controlling house's money below the low-money mark; Q-1202: an absent mark never selects it)
+    // spec: S-0601 claim 8 (low money first: the controlling house's money below the low-money mark; revision 9 design rule: an absent mark never selects its table, the others keep their places)
     if m.low_money_mark.is_some_and(|mark| money < mark) {
         return m.fate[3].clone();
     }
@@ -537,7 +537,7 @@ fn fate_table(w: &World, h: HouseId, v: ObjectId) -> Vec<i32> {
     if crate::econ::power::low_power(w, h) {
         return m.fate[2].clone();
     }
-    // spec: S-0601 claim 8 (then wounded: health ratio strictly below the mark; Q-1202: an absent mark never selects it)
+    // spec: S-0601 claim 8 (then wounded: health ratio strictly below the mark; revision 9 design rule: an absent mark never selects its table, the others keep their places)
     if let Some(mark) = m.wounded_mark
         && wounded_ratio(w, v).is_some_and(|q| q.lt(mark))
     {

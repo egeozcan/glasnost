@@ -30,7 +30,10 @@ fn claim_11_late_start_falls_back_to_rest() {
     let u = emptied(&mut w, Kind::Infantry, "BYSTANDER");
     process::late_start(&mut w, u);
     let o = w.obj(u).unwrap();
-    assert!(o.beh.current.is_some(), "the fall-back's behaviour is current");
+    assert!(
+        o.beh.current.is_some(),
+        "the fall-back's behaviour is current"
+    );
     assert_eq!(o.beh.queued, None, "not left queued");
     assert!(o.beh.expired, "made current, not processed");
 }

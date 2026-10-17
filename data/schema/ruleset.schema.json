@@ -4312,7 +4312,7 @@
           }
         },
         "ai_capture_low_money_mark": {
-          "description": "`[General] AICaptureLowMoneyMark`, credits (S-0601 claim 8); the\nabsent-key default is not determined (Q-1202).",
+          "description": "`[General] AICaptureLowMoneyMark`, credits (S-0601 claim 8); absent:\nnone, which never selects the low-money table (claim 8's design rule).",
           "type": [
             "integer",
             "null"
@@ -4357,7 +4357,7 @@
           }
         },
         "ai_capture_wounded_mark": {
-          "description": "`[General] AICaptureWoundedMark`, a fraction read as a single\n(S-0601 claim 8); the absent-key default is not determined (Q-1202).",
+          "description": "`[General] AICaptureWoundedMark`, a fraction read as a single\n(S-0601 claim 8); absent: none, which never selects the wounded table\n(claim 8's design rule).",
           "anyOf": [
             {
               "$ref": "#/$defs/Decimal"

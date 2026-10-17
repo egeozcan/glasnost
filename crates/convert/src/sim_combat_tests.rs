@@ -1566,6 +1566,26 @@ fn mind_control_warnings() {
     ));
 }
 
+// spec: S-0601 claim 8 and Import mapping (revision 9: one warning for each absent fate-table mark when at least one of the four tables is non-empty; none when both marks are given or every table is empty; each mark judged on its own)
+#[test]
+fn absent_fate_marks_warn() {
+    let low = "AICaptureLowMoneyMark is absent";
+    let wounded = "AICaptureWoundedMark is absent";
+    let count = |w: &[Warning], m: &str| w.iter().filter(|x| x.message.contains(m)).count();
+    let (_, w) = sim("[General]\nAICaptureLowPower=0,0,0,1\n", "", "");
+    assert_eq!((count(&w, low), count(&w, wounded)), (1, 1));
+    let (_, w) = sim(
+        "[General]\nAICaptureNormal=1,0,0,0\nAICaptureWounded=0,1,0,0\nAICaptureWoundedMark=0.5\n",
+        "",
+        "",
+    );
+    assert_eq!((count(&w, low), count(&w, wounded)), (1, 0));
+    let (_, w) = sim("[General]\nAICaptureLowMoneyMark=10\n", "", "");
+    assert_eq!((count(&w, low), count(&w, wounded)), (0, 0));
+    let (_, w) = sim("", "", "");
+    assert_eq!((count(&w, low), count(&w, wounded)), (0, 0));
+}
+
 /// spec: S-0609 Import mapping (WeaponStages, RateUp, RateDown; Stage1 … StageN and EliteStage1 … EliteStageN read per layer only while the gattling flag and a stage count of at least 2 hold as of that layer, else held; absent elite thresholds stay 0) and Edge cases (more than 6 stages, negative values and empty stage slots warn); Q-1220 interim (a reduction below 2 stages after thresholds were set warns)
 #[test]
 fn gattling_spin_settings() {

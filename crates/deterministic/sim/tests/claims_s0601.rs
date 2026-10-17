@@ -552,7 +552,11 @@ mod tags {
         a6.extend(extra);
         let mut list = vec![
             trig("T6", vec![ev(6, 0)], a6),
-            trig("T44", vec![ev(44, i32::from(BETA)), ev(36, 1)], vec![set_var(2)]),
+            trig(
+                "T44",
+                vec![ev(44, i32::from(BETA)), ev(36, 1)],
+                vec![set_var(2)],
+            ),
         ];
         for (k, v) in [0, 2, -1, 4475].into_iter().enumerate() {
             list.push(trig("TX", vec![ev(44, v)], vec![set_var(3 + k as i32)]));
@@ -658,9 +662,16 @@ mod tags {
             glasnost_sim::triggers::object_tag(&mut w, t, Some(b"TAG"));
             mind::detonation(&mut w, Some(c3), Some(Target::Object(t)));
             assert!(w.triggers.variables[1], "event 6 fires ({on})");
-            assert!(!w.triggers.variables[2], "no event-44 raise without a tag ({on})");
+            assert!(
+                !w.triggers.variables[2],
+                "no event-44 raise without a tag ({on})"
+            );
             assert!(!w.triggers.objects.contains_key(&t));
-            assert_eq!(owner(&w, t), Some(BETA), "the takeover still happens ({on})");
+            assert_eq!(
+                owner(&w, t),
+                Some(BETA),
+                "the takeover still happens ({on})"
+            );
         }
     }
 }
@@ -875,6 +886,35 @@ fn claim_8_table_precedence() {
         w.obj(c).unwrap().beh.queued,
         Some(Behaviour::Hunt),
         "exactly at the mark is not wounded"
+    );
+}
+
+// spec: S-0601 claim 8 (revision 9, answers Q-1202: an absent low-money mark never selects the low-money table whatever the money, negative included; an absent wounded mark never selects the wounded table; each absent mark skips only its own table, the others keep their places)
+#[test]
+fn claim_8_absent_marks_never_select_their_table() {
+    // Both marks absent: negative money and a badly wounded victim still take the normal table (hunt).
+    let r = fate_rules(|_| {});
+    let mut w = testkit::game_with_non_players(&r, SIZE, 1);
+    w.houses[usize::from(NEUTRAL)].credits = -500;
+    let cn = veh(&mut w, "CTRL3", NEUTRAL, 0, 3);
+    let b = veh(&mut w, "BOX", ALPHA, 3, 3);
+    w.obj_mut(b).unwrap().health = 1;
+    w.obj_mut(b).unwrap().beh.queued = None;
+    assert!(mind::take(&mut w, cn, b));
+    assert_eq!(w.obj(b).unwrap().beh.queued, Some(Behaviour::Hunt));
+    // Low-money mark absent, wounded mark given: the wounded table still applies.
+    let r = fate_rules(|g| g.ai_capture_wounded_mark = Some(dec("0.5")));
+    let mut w = testkit::game_with_non_players(&r, SIZE, 1);
+    w.houses[usize::from(NEUTRAL)].credits = -500;
+    let cn = veh(&mut w, "CTRL3", NEUTRAL, 0, 3);
+    let b = veh(&mut w, "BOX", ALPHA, 3, 3);
+    w.obj_mut(b).unwrap().health = 1;
+    w.obj_mut(b).unwrap().beh.queued = None;
+    assert!(mind::take(&mut w, cn, b));
+    assert_ne!(
+        w.obj(b).unwrap().beh.queued,
+        Some(Behaviour::Hunt),
+        "the wounded table (all zero) keeps its place"
     );
 }
 
