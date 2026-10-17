@@ -3,7 +3,8 @@
 //! Yuri-style side (slave miners for its economy) meets a fixture side, and
 //! both have the psychic weapons of S-0610; the Yuri-style side also has a
 //! gattling vehicle and defence (S-0609) whose top-stage weapon leaves gas
-//! clouds (S-0613) and a mind controller (S-0601).
+//! clouds (S-0613) and a mind controller (S-0601), and its power plant
+//! absorbs infantry (S-0605).
 //! The run counts, per ability, the
 //! orders the AI gave (`glasnost_ai::special::Uses`) and the events the
 //! simulation then showed ([`Exercise`]), so that the gate cannot go on
@@ -60,11 +61,14 @@ pub struct Exercise {
     pub gas_clouds: u32,
     /// Hits that gas clouds dealt (S-0613 claim 13).
     pub gas_hits: u32,
+    /// Infantry that went into an absorbing building (S-0605 claims 1
+    /// and 7; Alpha's power plant BIOP is one).
+    pub absorbed: u32,
 }
 
 impl Exercise {
     /// Every counter the full run asserts on, by name.
-    pub fn counters(&self) -> [(&'static str, u32); 14] {
+    pub fn counters(&self) -> [(&'static str, u32); 16] {
         let u = &self.uses;
         [
             ("berserk weapon orders (S-0610)", u.berserks),
@@ -93,6 +97,8 @@ impl Exercise {
             ("takeovers (S-0601 claim 6)", self.takeovers),
             ("gas clouds (S-0613 claims 2 to 4)", self.gas_clouds),
             ("gas hits (S-0613 claim 13)", self.gas_hits),
+            ("absorber entry orders (S-0605)", u.absorbs),
+            ("infantry absorbed (S-0605 claims 1 and 7)", self.absorbed),
         ]
     }
 
@@ -118,6 +124,7 @@ struct Watch {
     victims: BTreeSet<(ObjectId, ObjectId)>,
     stages: BTreeMap<ObjectId, i32>,
     clouds: BTreeSet<ObjectId>,
+    absorbed: BTreeSet<ObjectId>,
     seen: BTreeSet<&'static str>,
 }
 
@@ -245,6 +252,16 @@ impl Exercise {
         self.gas_hits += u32::try_from(hits).unwrap_or(u32::MAX);
         let floating = glasnost_sim::gas::particles(w).next().is_some();
         first |= watch.first(floating, "gas cloud");
+        // Absorbing buildings: passengers that went in during this tick.
+        let inside: BTreeSet<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| glasnost_sim::structures::absorb::absorbed_in(w, o.id).is_some())
+            .map(|o| o.id)
+            .collect();
+        self.absorbed += began(&watch.absorbed, &inside);
+        first |= watch.first(!inside.is_empty(), "absorbed");
+        watch.absorbed = inside;
         first
     }
 }
@@ -253,7 +270,7 @@ impl Exercise {
 /// over). The game is saved and loaded halfway and at the first tick each
 /// kind of M7a state appears (a psychic reveal, a berserk unit, a sensed
 /// intent line, a slave-miner building, a slave at work, a gattling at its
-/// top stage, a controlled object, a gas particle); the loaded game
+/// top stage, a controlled object, a gas particle, an absorbed passenger); the loaded game
 /// must hash alike and goes on from there. Returns the state hash after
 /// every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {

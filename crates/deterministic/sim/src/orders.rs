@@ -601,6 +601,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
         // spec: S-0213 table T3 (h) and claim 5 (a mobile actor controlling slave units, resulting behaviour not attack: its slaves are sent back to guard it; buildings, a deployed slave miner included, are excluded; the mobile masters modelled are vehicles)
         crate::econ::slaves::recall(w, actor);
     }
+    // spec: S-0213 table T3 (b) and S-0605 claim 4 (the actor forgets any building it was waiting in line to enter)
+    crate::structures::absorb::order_applied(w, actor);
     let mut retained = false;
     let Some(m) = w.obj_mut(actor) else { return };
     if !keeps {
@@ -652,6 +654,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     crate::infantry::destination_assigned(w, actor, ob.dest);
     // spec: S-0314 claim 23 (an enter order on a depot that holds no contact asks for entry at once)
     crate::depot::order_entered(w, actor, b, dest);
+    // spec: S-0605 claim 3 (an enter order on an absorbing building: contact, or waiting in line); Q-1261 interim (when the order is applied)
+    crate::structures::absorb::order_entered(w, actor, b, dest);
     // spec: S-0213 table T3 (f) (an open-topped transport gives the same target to its passengers when the target is not nothing)
     crate::transport::hand_down_target(w, actor);
 }

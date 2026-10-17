@@ -6,7 +6,7 @@
 
 use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Decimal, UnitType, WarheadType, WeaponType};
+use glasnost_rules::sim::{BuildingType, Decimal, UnitType, WarheadType, WeaponType};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
@@ -34,7 +34,8 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 /// for the gattling pair GAT (a turreted gattling vehicle: six slots W0 …
 /// W5 of damage 1 and rate 1, stage count 3, spin-up 7, spin-down 1,
 /// thresholds 10, 30 and 60) and TGT (an unarmed vehicle of strength
-/// 30000).
+/// 30000), and for the absorber pairs BIO (a 2 × 2 infantry absorber for
+/// three, size limit 1, power 10, extra power 25).
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     r.sim.warheads.insert(
@@ -103,6 +104,18 @@ fn rules() -> Ruleset {
         register(&mut r, "vehicles", n);
         r.sim.vehicles.insert(n.into(), t);
     }
+    let mut bio = BuildingType {
+        strength: Some(1000),
+        foundation: Some([2, 2]),
+        infantry_absorb: Some(true),
+        passengers: Some(3),
+        size_limit: Some(dec("1")),
+        ..Default::default()
+    };
+    bio.econ.power = Some(10);
+    bio.econ.extra_power = Some(25);
+    register(&mut r, "buildings", "BIO");
+    r.sim.buildings.insert("BIO".into(), bio);
     r
 }
 
@@ -314,4 +327,114 @@ fn an_order_of_the_former_owner_still_applies_in_the_takeover_tick() {
         Some(Target::Object(tgt)),
         "Alpha's order reached Beta's new object"
     );
+}
+
+// Pair: a controlled unit and an absorbing building.
+// spec: S-0605 claims 1, 6, 7, 10 and 11 to 13 (a controlled enemy is accepted and goes in; its controller releases it first, so it is inside as its original owner's unit; the building's owner gains the power; deploy lets it out as an enemy)
+// spec: S-0601 claims 5 and 9 (the takeover by fire; the release on entry)
+// spec: S-0214 table I row x3 and row B5 (enter cursor on the absorbing building; deploy on it with a passenger)
+#[test]
+fn a_controlled_enemy_goes_into_an_absorber_and_comes_out_an_enemy() {
+    use glasnost_sim::structures::absorb;
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, 0, 0);
+    let bio = put(&mut w, Kind::Building, "BIO", BETA, -4, -4);
+    let grunt = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 6, 0);
+    testkit::run(&mut w, 5);
+    attack(&mut w, BETA, clone, grunt);
+    assert!(
+        run_until(&mut w, 900, |w| mind::mind_controlled(w, grunt)),
+        "taken by fire"
+    );
+    assert_eq!(owner(&w, grunt), Some(BETA));
+    let (out0, _) = glasnost_sim::econ::power::totals(&w, HouseId(BETA));
+
+    // The controller's house sends its victim into its own absorber.
+    let enter = targeting::cursor(
+        &w,
+        HouseId(BETA),
+        &[grunt],
+        ClickOn::Object(bio),
+        Modifiers::default(),
+    );
+    assert_eq!(enter, Action::Enter);
+    click(&mut w, BETA, &[grunt], bio);
+    assert!(
+        run_until(&mut w, 900, |w| absorb::absorbed_in(w, grunt) == Some(bio)),
+        "goes in"
+    );
+    assert_eq!(owner(&w, grunt), Some(ALPHA), "inside as its original owner's unit");
+    assert!(!mind::mind_controlled(&w, grunt));
+    assert!(mind::controller(&w, clone).is_none_or(|r| r.victims.is_empty()));
+    testkit::run(&mut w, 3);
+    let (out1, _) = glasnost_sim::econ::power::totals(&w, HouseId(BETA));
+    assert_eq!(out1, out0 + 25, "the building's owner gains the power");
+
+    // Save and load with the enemy inside.
+    let h = save::state_hash(&w);
+    let l = save::load(&save::save(&w), w.rules_arc(), testkit::catalogue()).unwrap();
+    assert_eq!(save::state_hash(&l), h);
+
+    // Deploy lets it out, still Alpha's.
+    let deploy = targeting::cursor(
+        &w,
+        HouseId(BETA),
+        &[bio],
+        ClickOn::Object(bio),
+        Modifiers::default(),
+    );
+    assert_eq!(deploy, Action::Deploy);
+    click(&mut w, BETA, &[bio], bio);
+    assert!(run_until(&mut w, 300, |w| absorb::count(w, bio) == 0));
+    let o = w.obj(grunt).unwrap();
+    assert!(o.on_map);
+    assert_eq!(owner(&w, grunt), Some(ALPHA));
+}
+
+// Pair: the release fate and an absorbing building.
+// spec: S-0601 claims 8 and 10 (the controller's destruction releases its victim; the neutral house's fate decision draws and selects the bio reactor)
+// spec: S-0605 claims 1, 3, 6 and 7 and S-0215 claim 24 (the released unit enters its own owner's nearest accepting absorbing building); Q-1260 interim
+#[test]
+fn a_released_neutral_unit_takes_the_bio_reactor_fate() {
+    use glasnost_sim::structures::absorb;
+    let mut r = rules();
+    let g = &mut r.sim.general;
+    g.ai_capture_normal = Some(vec![0, 0, 100, 0]);
+    g.ai_capture_wounded = Some(vec![0, 0, 0, 0]);
+    g.ai_capture_low_power = Some(vec![0, 0, 0, 0]);
+    g.ai_capture_low_money = Some(vec![0, 0, 0, 0]);
+    // House 2 is the neutral house of `game_with_non_players`.
+    let mut w = testkit::game_with_non_players(&r, SIZE, 1);
+    let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, -6, 0);
+    let bio = put(&mut w, Kind::Building, "BIO", 2, 6, -4);
+    let civ = put(&mut w, Kind::Infantry, "GRUNT", 2, 1, 0);
+    testkit::run(&mut w, 5);
+    attack(&mut w, BETA, clone, civ);
+    assert!(
+        run_until(&mut w, 900, |w| mind::mind_controlled(w, civ)),
+        "taken by fire"
+    );
+    // The controller dies: its victim goes home and the fate sends it in.
+    damage::apply(
+        &mut w,
+        clone,
+        Hit {
+            amount: 100_000,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: false,
+        },
+    );
+    testkit::run(&mut w, 2);
+    assert_eq!(owner(&w, civ), Some(2));
+    assert!(
+        run_until(&mut w, 900, |w| absorb::absorbed_in(w, civ) == Some(bio)),
+        "the bio-reactor fate"
+    );
+    let h = save::state_hash(&w);
+    let l = save::load(&save::save(&w), w.rules_arc(), testkit::catalogue()).unwrap();
+    assert_eq!(save::state_hash(&l), h);
 }

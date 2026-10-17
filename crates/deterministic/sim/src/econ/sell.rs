@@ -714,11 +714,12 @@ fn set_stage(w: &mut World, id: ObjectId, packs: bool, stage: Stage) {
 /// The releases of a sale (S-0408 claims 7 to 9): absorbed passengers,
 /// garrison and sale survivors, in that order.
 fn release_occupants(w: &mut World, id: ObjectId) {
-    // Absorbed passengers (claim 8) need the absorbing topic, which is not built.
+    // spec: S-0408 claim 8 and S-0605 claim 14 (absorbed passengers first, before the garrison)
+    crate::structures::absorb::sold(w, id);
     // spec: S-0408 claim 9 and S-0508 claim 13 (a sold garrisoned building puts out its occupants after the absorbed passengers and before the sale survivors: no hunting, with the inside fallback)
     crate::structures::garrison::sold(w, id);
     // spec: S-0408 claim 7 (C attempts, C of S-0312 F5; an owner without a side gives C = 0, as for a destroyed building)
-    w.note("S-0408 claims 7 to 9: sale survivors need sides (S-0312 F5 gives C = 0 without one); absorbed passengers are another topic's (the garrison is put out by S-0508)");
+    w.note("S-0408 claims 7 to 9: sale survivors need sides (S-0312 F5 gives C = 0 without one); absorbed passengers (S-0605) and the garrison (S-0508) are put out");
 }
 
 /// The end of a sale (S-0408 claim 6; S-0415 claims 9 to 11).

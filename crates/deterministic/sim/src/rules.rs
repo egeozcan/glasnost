@@ -314,6 +314,29 @@ pub struct BuildingRules {
     /// The naval flag (S-0403 Terms: a naval factory building of vehicles;
     /// S-0406 claim 3 d).
     pub naval: bool,
+    /// The absorbing-building fields (S-0605 Terms and Import mapping).
+    pub absorb: AbsorbRules,
+}
+
+/// An absorbing building type's fields (S-0605 Terms, F1 and Import
+/// mapping).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AbsorbRules {
+    /// The infantry-absorb flag: an infantry absorber.
+    pub infantry: bool,
+    /// The vehicle-absorb flag: a vehicle absorber.
+    pub vehicle: bool,
+    /// The capacity *c*, an integer.
+    pub capacity: i32,
+    /// The size limit *L*, a double.
+    pub size_limit: F64,
+}
+
+impl AbsorbRules {
+    /// An absorbing building: either flag (S-0605 Terms).
+    pub fn absorbing(&self) -> bool {
+        self.infantry || self.vehicle
+    }
 }
 
 /// A building's imported factory category (S-0003 claim 21): one of the
@@ -1771,10 +1794,20 @@ fn building_rules(
     // spec: S-0214 Import mapping (Factory: the imported category, including recognised non-producing ones; absent: no factory)
     let factory_category = bt.factory.as_deref().and_then(FactoryCategory::from_word);
     let naval = bt.naval.unwrap_or(false);
+    let absorb = AbsorbRules {
+        // spec: S-0605 Import mapping (InfantryAbsorb and UnitAbsorb absent: no)
+        infantry: b(bt.infantry_absorb),
+        vehicle: b(bt.unit_absorb),
+        // spec: S-0605 Import mapping (Passengers of a building type absent: 0)
+        capacity: bt.passengers.unwrap_or(0),
+        // spec: S-0605 Import mapping (SizeLimit of a building type absent: 0.0)
+        size_limit: dec(&bt.size_limit, mode).unwrap_or(F64::ZERO),
+    };
     BuildingRules {
         factory,
         factory_category,
         naval,
+        absorb,
         name: name.to_owned(),
         strength: bt.strength.unwrap_or(0),
         // spec: S-0108 Import mapping (Foundation absent: 1x1; the zero-size word is 0 × 0), S-0406 claim 2 and S-0009 claim 38 (a zero-size building has no foundation cells)

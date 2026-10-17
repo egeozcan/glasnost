@@ -98,6 +98,9 @@ pub struct Uses {
     /// which keeps its spin (S-0609).
     #[serde(default)]
     pub spins_kept: u32,
+    /// Infantry sent into an own absorbing building (S-0605).
+    #[serde(default)]
+    pub absorbs: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -149,6 +152,7 @@ impl Special {
         self.crates(script, &own, w, out);
         self.berserk(script, &own, w, out);
         self.mind_control(script, &own, w, out);
+        self.absorbers(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -187,6 +191,12 @@ impl Special {
     /// Counts one controller sent to take over an enemy (S-0601, `mind`).
     pub(crate) fn count_takeover(&mut self) {
         self.uses.takeovers += 1;
+    }
+
+    /// Counts one infantry unit sent into an absorbing building (S-0605,
+    /// `absorber`).
+    pub(crate) fn count_absorb(&mut self) {
+        self.uses.absorbs += 1;
     }
 
     /// Counts one gattling defence building ordered (S-0609, `gattling`).

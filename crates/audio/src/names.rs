@@ -246,6 +246,10 @@ pub struct SoundNames {
     pub building_garrisoned: Option<String>,
     /// `BuildingAbandonedSound` (S-0508 claim 8, S-0701 claim 28).
     pub building_abandoned: Option<String>,
+    /// `[AudioVisual] EnterBioReactorSound` (S-0605 claim 7).
+    pub enter_bio_reactor: Option<String>,
+    /// `[AudioVisual] LeaveBioReactorSound` (S-0605 claim 13).
+    pub leave_bio_reactor: Option<String>,
     /// `UpgradeVeteranSound` (S-0701 claim 23).
     pub upgrade_veteran: Option<String>,
     /// `UpgradeEliteSound` (S-0701 claim 23).
@@ -389,6 +393,9 @@ impl SoundNames {
             // spec: S-0509 Import mapping (`[AudioVisual] BuildingRepairedSound`: a sound name, none: silent)
             building_repaired: global("BuildingRepairedSound"),
             building_abandoned: global("BuildingAbandonedSound"),
+            // spec: S-0605 Import mapping (the rules-wide entry and exit sounds; none when absent; type sections do not choose them)
+            enter_bio_reactor: g.enter_bio_reactor_sound.clone(),
+            leave_bio_reactor: g.leave_bio_reactor_sound.clone(),
             upgrade_veteran: global("UpgradeVeteranSound"),
             upgrade_elite: global("UpgradeEliteSound"),
             base_under_attack: global("BaseUnderAttackSound"),

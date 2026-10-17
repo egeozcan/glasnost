@@ -558,6 +558,15 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             // spec: S-0209 claim 5 (row VP17: the vehicle it enters)
             over = true;
             v = Some(Outcome::Clear);
+        } else if o.kind == Kind::Building
+            && r.buildings[o.type_index as usize].absorb.vehicle
+            && m.beh.seen() == Some(Behaviour::Enter)
+            && m.dest == Some(Target::Object(oid))
+            && !crate::econ::power::being_erased(w, oid)
+        {
+            // spec: S-0209 claim 5 (row VP5: a building that absorbs units, the vehicle's behaviour enter and its destination that building, unless being erased: overrides, clear)
+            over = true;
+            v = Some(Outcome::Clear);
         } else if o.kind == Kind::Building {
             let b = &r.buildings[o.type_index as usize];
             if m.contact == Some(oid) && !blocking_cell(w, oid, c) {

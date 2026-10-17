@@ -144,6 +144,13 @@ struct Game {
     clouds: usize,
     gas_max: usize,
     virus_armed: [usize; PLAYERS],
+    /// Absorbing buildings (S-0605): entries, releases with the building
+    /// still standing, and per player house the most passengers its
+    /// absorbers held at once and its distinct absorbing buildings.
+    absorbed: usize,
+    absorber_releases: usize,
+    passengers_max: [usize; PLAYERS],
+    absorbers: [usize; PLAYERS],
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -641,6 +648,10 @@ fn play_ai(
     g.clouds = tally.clouds;
     g.gas_max = tally.gas_max;
     g.virus_armed = tally.virus_armed.map(|s| s.len());
+    g.absorbed = tally.absorbed;
+    g.absorber_releases = tally.absorber_releases;
+    g.passengers_max = tally.passengers_max;
+    g.absorbers = tally.absorbers.map(|s| s.len());
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -773,6 +784,20 @@ pub struct Tally {
     /// Per player house: its units whose first weapon kills with the virus
     /// death (infantry-death kind 8, S-0107 claim 17) seen so far.
     pub virus_armed: [BTreeSet<u32>; PLAYERS],
+    /// Entries into absorbing buildings (S-0605 claims 7 and 8: a
+    /// (passenger, building) pair now that was not there after the last
+    /// tick).
+    pub absorbed: usize,
+    /// Passengers that came out of an absorbing building still standing
+    /// (S-0605 claim 13).
+    pub absorber_releases: usize,
+    /// Per player house: the most passengers its absorbing buildings held
+    /// at once.
+    pub passengers_max: [usize; PLAYERS],
+    /// Per player house: its absorbing buildings seen so far.
+    pub absorbers: [BTreeSet<u32>; PLAYERS],
+    /// The (passenger, building) pairs after the last tick.
+    absorbed_before: BTreeSet<(u32, u32)>,
     /// The gas systems and animations after the last tick.
     clouds_before: BTreeSet<u32>,
     /// The (victim, controller) pairs after the last tick.
@@ -931,6 +956,37 @@ impl Tally {
             if virus && o.kind != glasnost_sim::rules::Kind::Building {
                 self.virus_armed[h].insert(o.id.0);
             }
+        }
+        let absorbed: BTreeSet<(u32, u32)> = w
+            .objects
+            .values()
+            .filter_map(|o| Some((o.id.0, o.structure.absorbed_in?.0)))
+            .collect();
+        self.absorbed += absorbed.difference(&self.absorbed_before).count();
+        self.absorber_releases += self
+            .absorbed_before
+            .difference(&absorbed)
+            .filter(|&&(p, b)| {
+                let on = |i| {
+                    w.obj(glasnost_sim::world::ObjectId(i))
+                        .is_some_and(|o| o.on_map && o.health > 0)
+                };
+                on(p) && on(b)
+            })
+            .count();
+        self.absorbed_before = absorbed;
+        let mut held = [0usize; PLAYERS];
+        for o in w.objects.values() {
+            let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
+                continue;
+            };
+            if glasnost_sim::structures::absorb::is_absorber(w, o.id) {
+                self.absorbers[h].insert(o.id.0);
+                held[h] += glasnost_sim::structures::absorb::count(w, o.id) as usize;
+            }
+        }
+        for h in 0..PLAYERS {
+            self.passengers_max[h] = self.passengers_max[h].max(held[h]);
         }
     }
 }
@@ -1810,8 +1866,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs
                     )
                 })
                 .collect();
@@ -1866,6 +1922,11 @@ fn report(
                 s,
                 "  gas: hits {}, clouds {}, most particles at once {}; virus units per house {:?}",
                 g.gas_hits, g.clouds, g.gas_max, g.virus_armed
+            );
+            let _ = writeln!(
+                s,
+                "  absorbers: entries {}, releases beside a standing building {}; most passengers at once per house {:?}; absorbing buildings per house {:?}",
+                g.absorbed, g.absorber_releases, g.passengers_max, g.absorbers
             );
         }
         let f: Vec<String> = g

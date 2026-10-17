@@ -762,12 +762,13 @@ fn remove_passengers_silently(w: &mut World, t: ObjectId) {
 }
 
 /// Seam: a retaining entry (S-0524 claims 12 and 14): garrison occupation
-/// (S-0508), infantry entering a hospital, training service or infantry
-/// absorber in ordinary *enter* (S-0314 claim 7, S-0605), and the sabotage
-/// entry raise the entered object's tag once, on arrival at the destination
-/// and before the entry's own effect `effect`; the entrant stays an object,
-/// so nothing is raised on its own tag. Infantry boarding a transport is
-/// built (`transport::arrival`). Vehicle boarding, vehicle docking at a
+/// (S-0508), infantry entering a hospital or training service in ordinary
+/// *enter* (S-0314 claim 7), and the sabotage entry raise the entered
+/// object's tag once, on arrival at the destination and before the entry's
+/// own effect `effect`; the entrant stays an object, so nothing is raised
+/// on its own tag. Infantry boarding a transport (`transport::arrival`) and
+/// infantry entering an infantry absorber (`structures::absorb::arrival`,
+/// S-0605 claim 6) are built and call [`entry_raise`] directly. Vehicle boarding, vehicle docking at a
 /// repair building or refinery, and aircraft pad landing raise nothing, so
 /// they never call this.
 pub fn retaining_entry_seam(

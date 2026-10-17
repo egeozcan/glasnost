@@ -292,6 +292,13 @@ pub enum Sound {
     /// top-left cell and, when the event is created, the announcement, for
     /// the owner that lost the building (`house`).
     Abandoned,
+    /// An infantry unit went into an infantry absorber (S-0605 claim 7):
+    /// the rules-wide entry sound at the entrant's position; `of` is the
+    /// entrant's type, `house` its owner.
+    EnterBioReactor,
+    /// A passenger came out of an infantry absorber (S-0605 claim 13): the
+    /// rules-wide exit sound at the building; `of` is the building's type.
+    LeaveBioReactor,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

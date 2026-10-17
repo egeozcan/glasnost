@@ -717,6 +717,8 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
         effects::anim(w, &name, o.pos);
     }
     // (f) destruction particle systems: which kinds are eligible belongs to the particle specs; none is created.
+    // spec: S-0312 claim 19 (g) and claim 24 (absorbed passengers come out, or die, before the survivors)
+    crate::structures::absorb::destroyed(w, id, hit);
     survivors(w, id, hit);
     // spec: S-0312 claim 21 (only the type's explodes flag counts, or the sale's behaviour at the destruction: the building awaits removal with 0 health)
     let selling = o.beh.seen() == Some(crate::rules::Behaviour::Selling);
@@ -745,7 +747,7 @@ pub fn removal_turn(w: &mut World, id: ObjectId) {
         // spec: S-0312 claim 21 (a second round of claims 18 and 19 (g), C worked out afresh by F5; absorbed passengers are already out)
         second_round(w, refund);
     }
-    // Passengers still inside die (claim 21): no building carries passengers in our engine.
+    // Passengers still inside die (claim 21): claim 24 has already let every absorbed passenger out or killed it in claim 19 (g), so none is left here (`absorb::destroyed`).
     // Rubble and crate of claim 20 are then placed: not modelled.
 }
 

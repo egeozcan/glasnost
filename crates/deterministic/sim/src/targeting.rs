@@ -676,8 +676,9 @@ fn has_undeploy_delay(w: &World, id: ObjectId) -> bool {
 }
 
 fn passengers(w: &World, id: ObjectId) -> bool {
-    // spec: S-0214 Import mapping (Passengers: a transport when more than 0)
+    // spec: S-0214 Import mapping (Passengers: a transport when more than 0); S-0605 claim 1 (an absorbing building's type carries passengers, Q-1265 interim: capacity above 0)
     unit(w, id).is_some_and(|u| u.passengers > 0)
+        || crate::structures::absorb::carries_passengers(w, id)
 }
 
 fn immune(w: &World, id: ObjectId) -> bool {
@@ -1177,7 +1178,13 @@ fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
 /// x4, table V rows q2 and q3): accepts gives enter, refuses no-enter,
 /// neither nothing.
 fn docking_verdict(w: &World, t: ObjectId, actor: ObjectId) -> Option<Action> {
-    match crate::transport::answer(w, t, actor) {
+    // spec: S-0605 claim 1 (the acceptance test is the docking answer rows x3, x4, q2 and q3 read for an absorbing building)
+    let answer = if crate::structures::absorb::is_absorber(w, t) {
+        crate::structures::absorb::answer(w, t, actor)
+    } else {
+        crate::transport::answer(w, t, actor)
+    };
+    match answer {
         // spec: S-0214 table I row x3 and table V row q2 (docking answer accepts: enter)
         crate::transport::Answer::Accepts => Some(Action::Enter),
         // spec: S-0214 table I row x4 and table V row q3 (docking answer refuses: no-enter)
@@ -1350,8 +1357,10 @@ fn building_on(w: &World, actor: ObjectId, t: ObjectId, g: Action) -> Action {
         Action::ToggleSelect => Action::ToggleSelect,
         // spec: S-0214 table B row B3 (factory-marked and already primary: nothing)
         Action::Deploy if factory_marked(w, actor) && primary(w, actor) => Action::Nothing,
-        // spec: S-0214 table B row B5 (a factory-marked building: deploy; absorbed units and garrison occupants are not modelled)
+        // spec: S-0214 table B row B5 (a factory-marked building: deploy; garrison occupants are not modelled)
         Action::Deploy if factory_marked(w, actor) => Action::Deploy,
+        // spec: S-0214 table B row B5 and S-0605 claim 11 (an absorbing building holding units it has absorbed: deploy)
+        Action::Deploy if crate::structures::absorb::count(w, actor) > 0 => Action::Deploy,
         // spec: S-0214 table B rows B4 and B6 (the gap generator's power and radius states are not modelled: nothing)
         Action::Deploy => Action::Nothing,
         // spec: S-0214 table B row B7 (a pulse cannon)
@@ -1978,6 +1987,10 @@ pub fn order(
             (Action::Detonate, _) => Some(Order::Detonate { actor: id }),
             // spec: S-0214 table M part 3 (deploy: a primary order if the building is factory-marked; the unload orders of gap generators, absorbing buildings and garrisons are not modelled)
             (Action::Deploy, _) if factory_marked(w, id) => Some(Order::Primary { actor: id }),
+            // spec: S-0214 table M part 3 and S-0605 claim 11 (deploy: an unload behaviour order for an absorbing building)
+            (Action::Deploy, _) if crate::structures::absorb::is_absorber(w, id) => {
+                Some(Order::Deploy { actor: id })
+            }
             (Action::Move, _) | (Action::Harvest, ClickOn::Cell(_)) if rally_capable(w, id) => {
                 let spot = match on {
                     // spec: S-0213 claim 20 (a) (a cell: the cell the nearby-cell search finds around it when the click is made; none found, no order)

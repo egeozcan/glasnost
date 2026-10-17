@@ -1019,7 +1019,7 @@ fn shore(w: &mut World, t: ObjectId) -> Option<CellXY> {
 
 /// Whether passenger `p` could enter cell `c` from the transport (claim
 /// 10): the entry outcome is clear.
-fn enters(w: &World, p: ObjectId, c: CellXY, reference: i32) -> bool {
+pub(crate) fn enters(w: &World, p: ObjectId, c: CellXY, reference: i32) -> bool {
     let Some(o) = w.obj(p) else { return false };
     if w.cells.cell(c).is_none() {
         return false;
@@ -1103,7 +1103,7 @@ fn let_out(w: &mut World, t: ObjectId) -> bool {
 /// Where passenger `p` is put on the map from serving neighbour `n` of a
 /// vehicle transport (claim 10), or `None` when an infantry unit finds no
 /// standing position.
-fn exit_position(w: &mut World, p: ObjectId, n: CellXY) -> Option<Pos> {
+pub(crate) fn exit_position(w: &mut World, p: ObjectId, n: CellXY) -> Option<Pos> {
     let po = w.obj(p)?.clone();
     let (x, y) = if po.kind == Kind::Infantry {
         // spec: S-0507 claim 10 and S-0208 claim 3 (the serving neighbour's centre as desired point: the centre class, one ranged draw over 0 … 3, right/left/bottom preferences; never centre or top; none available is a placement failure)

@@ -1696,6 +1696,32 @@ fn building_repaired_sound() {
     assert_eq!(heard(&mut a, 0), ["Fixed"]);
 }
 
+/// spec: S-0605 claims 7 and 13 (the rules-wide entry sound at the entrant, the exit sound at the building; none set: silent)
+#[test]
+fn bio_reactor_sounds() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let mut n = SoundNames::default();
+    n.enter_bio_reactor = Some("Gulp".into());
+    n.leave_bio_reactor = Some("Burp".into());
+    let fx = |sound| Effect::Sound {
+        sound,
+        of: None,
+        house: Some(HouseId(1)),
+        pos: Some(at),
+    };
+    for (sound, name) in [(Sound::EnterBioReactor, "Gulp"), (Sound::LeaveBioReactor, "Burp")] {
+        let mut a = audio(&w, &["Gulp", "Burp"]);
+        a.set_names(n.clone());
+        a.tick(&w, &[fx(sound)], &mut Rng::new(1));
+        assert_eq!(heard(&mut a, 0), [name]);
+    }
+    let mut b = audio(&w, &["Gulp"]);
+    b.set_names(SoundNames::default());
+    b.tick(&w, &[fx(Sound::EnterBioReactor)], &mut Rng::new(1));
+    assert!(heard(&mut b, 0).is_empty());
+}
+
 fn infiltration(
     rows: Vec<glasnost_sim::combat::effects::InfiltrationRow>,
     satellite: bool,
