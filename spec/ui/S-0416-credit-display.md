@@ -2,11 +2,11 @@
 id: S-0416
 title: Credit display (the ticking credits counter on the sidebar)
 topic: ui
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -162,8 +162,8 @@ Runs: 1 per scenario and sub-test, since no claim here involves a random draw.
   For the level comparison, use named test sound data assigning the same single sample to a
   credit tick entry and a selection response entry, each with volume percentage 100 and no
   pitch or volume shift. Set the sound volume option to full, game speed to index 6, and keep
-  the observed area quiet; use one bystander computer player kept outside it. Director and
-  other mods are off, apart from the named test data.
+  the observed area quiet; use one bystander computer player kept outside it. No engine add-on and
+  no mods (the named test files of a scenario and the purpose-made test maps excepted).
 - Procedure: make the counter rise and fall in each list test. In the comparison test, capture
   isolated ticks and a local unit's selection response separately, without overlapping sounds.
 - Observable: audio capture of the rising and falling sounds and the same sample's output level
