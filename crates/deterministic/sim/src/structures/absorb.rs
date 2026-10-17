@@ -606,7 +606,7 @@ fn let_out(w: &mut World, b: ObjectId) -> bool {
     };
     // spec: S-0605 claim 12 and F3 (the neighbouring cells of the building's top-left foundation cell)
     let c = bo.pos.cell();
-    let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+    let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128); // spec: S-0204 claim 3 (a cell centre: (256x + 128, 256y + 128))
     if let Some(ob) = w.obj_mut(p) {
         // The passenger is tested from the top-left cell (S-0507 claim 10's entry test).
         ob.pos = Pos::centre(c, z);
