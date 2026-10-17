@@ -2,11 +2,11 @@
 id: S-0315
 title: Suppression and panic (infantry fear, prone and panic in combat; parasite suppression)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0087]
 supersedes: []
@@ -582,7 +582,7 @@ comes out alive beside the host, stays attached, or is gone without coming out.
 - *Runs:* 3 per part (5 for part c's two timings), with different random seeds; all must agree.
 
 **P5: first move versus repeated destination (claim 3; Q-0087).** A small flat skirmish
-map, stock rules and art, director and mods off, game speed index 2. A human player's
+map, named in this scenario as a test file, stock rules and art, no engine add-on and no mods (the named test files of a scenario excepted), game speed index 2. A human player's
 ordinary crawl-capable soldier survives a hit and finishes lying down; a bystander computer
 player is kept outside the observed area (the soldier and its route). Script input to give
 it a move to a distant reachable cell while fear is still at least 50, then repeat that
