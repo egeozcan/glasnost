@@ -158,6 +158,8 @@ pub fn create_converted(
     veteran_at_creation(w, id);
     // spec: S-0516 claims 2 (a) and 32 (the own cloak flag and a permanent disguise at creation)
     crate::cloak::machine::created(w, id);
+    // spec: S-0601 claim 1 (a controller's record is made when it is created)
+    crate::mind::created(w, id);
     id
 }
 
@@ -407,6 +409,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     };
     // spec: S-0519 claims 7 and 8 (a removed carrier loses its bomb silently; a bomb whose planter leaves forgets it)
     crate::bomb::removed(w, id);
+    // spec: S-0601 claims 10 and 12 (a removed controller releases its victims; a removed victim leaves its controller's list silently)
+    crate::mind::removing(w, id);
     // spec: S-0519 claims 19 and 20 (a strike aircraft leaving play is unlinked, a designator ends its strike, a marked building cancels)
     crate::strike::leaving(w, id);
     // spec: S-0518 claim 12 (a charger that leaves play leaves every charger list at once)

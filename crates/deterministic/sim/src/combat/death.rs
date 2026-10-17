@@ -303,6 +303,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     crate::econ::slaves::lost(w, id);
     // spec: S-0506 claims 9 and 13 (a killed slot object is announced as lost; a killed spawner clears its slots)
     crate::spawn::killed(w, id);
+    // spec: S-0601 claim 10 (the controller's killing hit releases its victims in the same tick, as part of that hit)
+    crate::mind::killed(w, id);
     // spec: S-0312 table, step 1 (debris)
     debris(w, id);
     // spec: S-0312 table, step 2 and claim 5 (an exploding object: passengers die, in the order held, before the death weapon)

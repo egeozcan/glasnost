@@ -164,6 +164,10 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
     if !tc.retaliate {
         return;
     }
+    // spec: S-0309 claim 18 and S-0601 claim 2 (not a mind-controlling object at capacity)
+    if crate::mind::at_capacity(w, actor) {
+        return;
+    }
     // spec: S-0309 claim 18 (the attacker is not allied with it); S-0516 claim 36 (and does not appear disguised to its owner)
     if w.allied(o.owner, a.owner) || crate::cloak::appears_disguised(w, attacker, o.owner) {
         return;
@@ -517,8 +521,8 @@ fn search_ring(c: glasnost_map::CellXY, r: i32) -> Vec<glasnost_map::CellXY> {
 }
 
 /// The friendly-row exceptions of a searcher (S-0309 Terms): attacks
-/// friendlies, berserk (the permanent mark and mind-controlled transports
-/// are not modelled).
+/// friendlies, berserk, a passenger of a mind-controlled open-topped
+/// transport (the permanent mark is not modelled).
 fn friendly_exception(w: &World, a: ObjectId) -> bool {
     let Some(o) = w.obj(a) else { return false };
     let attacks = w
@@ -526,7 +530,26 @@ fn friendly_exception(w: &World, a: ObjectId) -> bool {
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.raw.attack_friendlies.unwrap_or(false));
     let berserk = o.combat.berserk.is_some();
-    attacks || berserk
+    // spec: S-0309 Terms (a passenger of a mind-controlled open-topped transport, S-0601 Terms)
+    attacks || berserk || controlled_carrier_house(w, a).is_some()
+}
+
+/// The house that controls the open-topped transport searcher `a` rides
+/// in, when that transport is mind-controlled (S-0309 Terms, claim 10,
+/// table C row "controller's allies").
+fn controlled_carrier_house(w: &World, a: ObjectId) -> Option<Option<HouseId>> {
+    let t = crate::transport::open_topped_carrier(w, a)?;
+    crate::mind::mind_controlled(w, t).then(|| w.obj(t).and_then(|o| o.owner))
+}
+
+/// A searcher whose type attacks friendlies or that is berserk (S-0309
+/// claim 10, the table's second row).
+fn attacks_or_berserk(w: &World, a: ObjectId) -> bool {
+    let Some(o) = w.obj(a) else { return false };
+    o.combat.berserk.is_some()
+        || w.rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.attack_friendlies.unwrap_or(false))
 }
 
 /// Whether T's kind is among the classes (table C row "class").
@@ -691,10 +714,17 @@ fn candidate(
     if passive && (player || !house_exception) {
         return false;
     }
-    // spec: S-0309 table C (insignificant: not a building of a non-passive owner, A's owner a player house; claim 25 part e for the neutral and special houses)
+    // spec: S-0309 table C (insignificant: T not mind-controlled, not a building of a non-passive owner, A's owner a player house; claim 25 part e for the neutral and special houses)
     if ttc.is_some_and(|x| x.insignificant)
+        && !crate::mind::mind_controlled(w, to.id)
         && !(to.kind == Kind::Building && !passive)
         && (player || !house_exception)
+    {
+        return false;
+    }
+    // spec: S-0309 table C (controller's allies: A a passenger of a mind-controlled open-topped transport and T allied with the house that controls the transport)
+    if let Some(h) = controlled_carrier_house(w, a)
+        && w.allied(h, to.owner)
     {
         return false;
     }
@@ -914,12 +944,18 @@ fn offered(w: &World, a: ObjectId, c: glasnost_map::CellXY) -> Option<ObjectId> 
         .collect();
     let healer = crate::combat::weapon::healer_for_acquisition(w, a);
     let any = friendly_exception(w, a);
+    let carrier = controlled_carrier_house(w, a);
     // spec: S-0309 claim 10 (the first object the searcher selects)
     let sel = units.iter().copied().find(|&x| {
         let Some(o) = w.obj(x) else { return false };
         let allied = w.allied(ao.owner, o.owner);
         if healer {
             allied && o.health < crate::combat::damage::strength(w, x)
+        } else if let Some(h) = carrier
+            && !attacks_or_berserk(w, a)
+        {
+            // spec: S-0309 claim 10 (a passenger of a mind-controlled open-topped transport selects an object allied with the house that controls the transport)
+            w.allied(h, o.owner)
         } else if any {
             true
         } else {
@@ -1237,7 +1273,8 @@ pub fn may_search_passively(w: &World, a: ObjectId) -> bool {
         }
     }
     let engineer = r.unit(o.kind, o.type_index).is_some_and(|u| u.engineer);
-    !(engineer && player_owned(w, a))
+    // spec: S-0309 claim 2 and S-0601 claim 2 (not a mind-controlling object that already controls as many objects as it can)
+    !(engineer && player_owned(w, a)) && !crate::mind::at_capacity(w, a)
 }
 
 /// The opportunity gate (S-0309 claim 3).

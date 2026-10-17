@@ -122,6 +122,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     crate::econ::shroud::owner_changed(w, id);
     // spec: S-0516 claims 20, 22 and 23 (a change of owner moves discs and fields)
     crate::cloak::owner_changed(w, id, old);
+    // spec: S-0601 claim 11 (a controller that changes owner keeps its victims; the switch off releases them)
+    crate::mind::owner_changed(w, id);
     if kind.is_mobile() && !w.rules().quirks.unit_changes_no_recheck {
         // spec: S-0407 claim 12 (n) and quirks.unit_changes_no_recheck (both houses)
         for h in [old, new].into_iter().flatten() {

@@ -166,6 +166,7 @@ async fn smoke_async(
                         Effect::Killed { .. } => fight[2] += 1,
                         Effect::Anim { .. }
                         | Effect::Sound { .. }
+                        | Effect::Mind { .. }
                         | Effect::Trigger { .. }
                         | Effect::Hit { .. }
                         | Effect::OverlayCrushed { .. }

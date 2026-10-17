@@ -505,10 +505,9 @@ fn being_erased(w: &World, id: ObjectId) -> bool {
     crate::econ::power::being_erased(w, id)
 }
 
-/// Mind-controlled (S-0214 Terms; the combat topic owns mind control).
-/// Seam: no object is under mind control in our engine yet.
-fn mind_controlled(_w: &World, _id: ObjectId) -> bool {
-    false
+/// Mind-controlled (S-0214 Terms; S-0601 Terms).
+fn mind_controlled(w: &World, id: ObjectId) -> bool {
+    crate::mind::mind_controlled(w, id)
 }
 
 /// The occupation test of S-0508 claim 1, row I8's "can garrison": the

@@ -411,6 +411,10 @@ pub fn check(
         {
             return Answer::OutOfRange;
         }
+        // spec: S-0301 claim 9 rank 9 and S-0601 claims 3 and 4 (a takeover warhead whose takeover test fails: illegal; a passing test goes on to the later tests, the zero-versus test included)
+        if crate::mind::firing_illegal(w, firer, weapon, tg) {
+            return Answer::Illegal;
+        }
         // spec: S-0304 claim 1 and S-0301 claim 9 rank 9 (a versus value of exactly zero makes a unit or building illegal)
         if let Target::Object(x) = tg
             && w.obj(x).is_some_and(|ob| ob.kind != Kind::Terrain)

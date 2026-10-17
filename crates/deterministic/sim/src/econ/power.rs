@@ -774,6 +774,8 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
         }
     }
     let op = in_operation(w, id);
+    // spec: S-0405 claim 9 and S-0601 claim 10 (a controller building not in operation releases its victims in its own turn; reconciled on every turn)
+    crate::mind::building_turn(w, id, op);
     if prev == Some(op) {
         // spec: S-0405 claim 9 (the effects are reconciled on a turn even without an in-operation transition: a charged gap building switched off can generate again)
         crate::econ::shroud::gap_refresh(w, id);
@@ -796,7 +798,7 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
                 make_due(w, h);
             }
         }
-        // S-0405 claim 9: the release of controlled and held units is a seam (special-abilities specs).
+        // S-0405 claim 9: the release of controlled units is `mind::building_turn` above; held units belong to other specs.
     }
     // spec: S-0405 claim 9 and S-0409 claim 11 (the gap starts and stops with the building's operation)
     crate::econ::shroud::gap_refresh(w, id);
@@ -898,7 +900,7 @@ fn set_disabled(w: &mut World, h: HouseId, unit: u32, disabled: bool) {
 
 /// The guard reset (S-0215 claim 9, Terms): *guard* is forced, and the
 /// target, the destination and the guard spot are cleared.
-fn guard_reset(w: &mut World, id: ObjectId) {
+pub(crate) fn guard_reset(w: &mut World, id: ObjectId) {
     let t = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     if let Some(ob) = w.obj_mut(id) {

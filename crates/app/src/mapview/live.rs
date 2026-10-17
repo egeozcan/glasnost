@@ -1197,6 +1197,7 @@ impl Live {
                     continue;
                 }
                 Effect::Sound { .. }
+                | Effect::Mind { .. }
                 | Effect::Trigger { .. }
                 | Effect::Hit { .. }
                 | Effect::OverlayCrushed { .. }

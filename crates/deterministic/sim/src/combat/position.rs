@@ -5,6 +5,7 @@ use glasnost_num::geom::n_step;
 use glasnost_num::trig::{cos_t, sin_t};
 use glasnost_num::{F64, Rounding};
 
+use glasnost_rules::sim::Flh;
 use crate::combat::veterancy::{self, Rank};
 use crate::rules::Kind;
 use crate::world::{ObjectId, Pos, World};
@@ -109,8 +110,6 @@ pub fn fire_point(w: &World, firer: ObjectId, slot: usize, k: i32) -> Pos {
         return Pos::default();
     };
     let r = w.rules();
-    let mode = r.mode;
-    let t = w.tick;
     let Some(tc) = veterancy::type_combat(w, firer) else {
         return o.pos;
     };
@@ -146,6 +145,58 @@ pub fn fire_point(w: &World, firer: ObjectId, slot: usize, k: i32) -> Pos {
         let (dx, dy) = pixel_to_leptons(w, px, py);
         return Pos::new(base.x + dx, base.y + dy, base.z);
     }
+    let mut p = claim1_point(w, firer, base, flh, k);
+    if let Some(bt) = b {
+        if let Some([px, py]) = bt.building.fire_pixel {
+            // spec: S-0313 claim 7 (with the dual-shift flag: the claim-1 fire point shifted)
+            let (dx, dy) = pixel_to_leptons(w, px, py);
+            p = Pos::new(p.x + dx, p.y + dy, p.z);
+        } else if bt.building.voxel_turret && !bt.building.voxel_barrel {
+            // spec: S-0313 claim 8 (a voxel turret and no voxel barrel: shifted by the turret anchor's pixel shift, x and y only)
+            let [px, py] = bt.building.turret_anim;
+            let (dx, dy) = pixel_to_leptons(w, px, py);
+            p = Pos::new(p.x + dx, p.y + dy, p.z);
+        }
+        // A voxel barrel's own rule is an open question of S-0313 (claim 8): the claim-1 point is used.
+    }
+    p
+}
+
+/// The point S-0601 claim 17 anchors a link line at (F5): S-0313 claim 1's
+/// firing-position transform of `firer` with the triple `flh` in place of
+/// the weapon's muzzle triple and burst counter `k`.
+pub fn transform_point(w: &World, firer: ObjectId, flh: Flh, k: i32) -> Pos {
+    let Some(o) = w.obj(firer) else {
+        return Pos::default();
+    };
+    let base = if o.kind == Kind::Building {
+        // spec: S-0313 Terms (a building's base point: the top corner of its foundation at its world height)
+        let c = o.pos.cell();
+        Pos::new(256 * c.x, 256 * c.y, o.pos.z)
+    } else {
+        // spec: S-0313 Terms (any other firer: its position)
+        o.pos
+    };
+    // spec: S-0601 F5 (anchor coordinates use the firing-position transform of S-0313 claim 1 with the imported anchor replacing the muzzle triple)
+    claim1_point(w, firer, base, flh, k)
+}
+
+/// S-0313 claim 1's transform of the triple `flh` from base point `base`
+/// (claims 1 to 3, F1 and F2).
+fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos {
+    let Some(o) = w.obj(firer) else {
+        return base;
+    };
+    let r = w.rules();
+    let mode = r.mode;
+    let t = w.tick;
+    let Some(tc) = veterancy::type_combat(w, firer) else {
+        return base;
+    };
+    let b = r
+        .buildings
+        .get(o.type_index as usize)
+        .filter(|_| o.kind == Kind::Building);
     // The angle θ (claim 3, F2).
     let f32_of = |f: u16| n_step(f, 32) as i64; // spec: S-0313 claim 3 (32-step facings)
     let body32 = f32_of(o.body.value(t));
@@ -209,24 +260,11 @@ pub fn fire_point(w: &World, firer: ObjectId, slot: usize, k: i32) -> Pos {
     };
     let (u, v, wz) = (tm.0[0][3], tm.0[1][3], tm.0[2][3]);
     // spec: S-0313 F1 (shift = (trunc u, trunc(−v), trunc w))
-    let mut p = Pos::new(
+    let p = Pos::new(
         base.x + u.to_i32_common(),
         base.y + v.negated().to_i32_common(),
         base.z + wz.to_i32_common(),
     );
-    if let Some(bt) = b {
-        if let Some([px, py]) = bt.building.fire_pixel {
-            // spec: S-0313 claim 7 (with the dual-shift flag: the claim-1 fire point shifted)
-            let (dx, dy) = pixel_to_leptons(w, px, py);
-            p = Pos::new(p.x + dx, p.y + dy, p.z);
-        } else if bt.building.voxel_turret && !bt.building.voxel_barrel {
-            // spec: S-0313 claim 8 (a voxel turret and no voxel barrel: shifted by the turret anchor's pixel shift, x and y only)
-            let [px, py] = bt.building.turret_anim;
-            let (dx, dy) = pixel_to_leptons(w, px, py);
-            p = Pos::new(p.x + dx, p.y + dy, p.z);
-        }
-        // A voxel barrel's own rule is an open question of S-0313 (claim 8): the claim-1 point is used.
-    }
     p
 }
 
