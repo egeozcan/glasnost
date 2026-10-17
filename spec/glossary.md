@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 44
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -16,10 +16,8 @@ supersedes: []
 
 ## Summary
 
-**Document identity.** This file, `glossary.md`, is the draft under review, not a supplementary
-copy of an approved glossary. Its spec ID is `glossary`; it deliberately has no S-number. Review
-its numbered claims G1 to G3 and its shared-term definitions under the same checklist as a
-numbered spec. Its front matter records the revision and draft status.
+**Document identity.** This file's spec ID is `glossary`; it deliberately has no S-number. Its
+numbered claims are G1 to G3.
 
 The shared vocabulary of the specs. A spec may use any term below without defining it again. A term
 used by one spec only stays in that spec's **Terms** section. Where a spec gives a term a narrower
@@ -149,7 +147,7 @@ should have an open question or a measurement scenario.
 
 **departure.** A documented place where our engine deliberately does not reproduce the original,
 and offers no quirk switch for it. The spec states the original's behaviour as behaviour and then
-our engine's result. Departures cover two cases.
+our engine's result. Departures cover three cases.
 - *Bad data.* Where bad data makes the original crash, stop with a program error, give an
   undefined result, never finish a computation (it hangs) or leave the game frozen for good, our
   engine uses a safe, deterministic result, such as treating the value as absent and using the
@@ -162,6 +160,11 @@ our engine's result. Departures cover two cases.
   files (our engine sorts by the bytes of the names), the host clock that seeds a skirmish
   (S-0202, claim 8), the real-time pacing of cycles, including index 0 (S-0201, claims 4 and 5),
   and the real-time length of a timed freeze (S-0201, claim 10).
+- *Fault of the original on legal data.* Where the original itself faults (it crashes or hangs) on
+  legal data, with no bad data needed, a switch would only reproduce the crash, so there is none.
+  The spec states the rule our engine follows instead, as the claim, and records the original's
+  fault in one sentence (Q-1150, 2026-10-17). The first case is the removed-tag attack event in
+  S-0601 (claim 5), where the rule is the one decided on Q-1150.
 
 A spec may also make a design choice of scope a departure, as S-0005 does for loose files (see
 *loose file*) and S-0205 (claim 8) does for the exponent range of intermediate floating-point
@@ -248,7 +251,10 @@ expected result and the result that would falsify the claim.
 
 **measurement setup.** The conditions every measurement runs under, unless a scenario says
 otherwise. The original is installed unmodified: its files match the release's published file list.
-Only stock data is used. No loose files override shipped data, and no engine add-on is active.
+Only stock data is used. No loose files override shipped data, and no engine add-on is active. In
+short: no engine add-on and no mods (the named test files of a scenario and the purpose-made test
+maps excepted). This is the
+condition of the measuring machine, not a setting of the original.
 Purpose-made test maps are allowed. Game speed and screen resolution are free unless the scenario
 fixes them. Five further allowances apply:
 - *Display compatibility layer.* A presentation-only layer may sit in the display path. It changes
@@ -301,8 +307,9 @@ database*). See S-0006.
 defective behaviour of the original. Its default is always the original behaviour. The spec that
 names a switch describes both the original behaviour and the alternative ("fixed") behaviour that the
 switch selects when turned off. Where the original crashes, stops with a program error, gives an
-undefined result, hangs or leaves the game frozen for good on bad data, or depends on the host
-machine or on real time, there is no switch: that is a *departure*. A switch shared by
+undefined result, hangs or leaves the game frozen for good on bad data, depends on the host
+machine or on real time, or itself faults (crashes or hangs) on legal data, there is no switch: that
+is a *departure*. A switch shared by
 several specs is named once in each of them; the glossary points to the shared ones (Edge cases and
 quirks).
 
@@ -2603,7 +2610,8 @@ Every other key belongs to the import mapping of the spec that owns its concept.
 ## Measurement scenarios
 
 All three run under the *measurement setup*: an unmodified install with no engine add-ons.
-Use the standard skirmish mode at 800 × 600 pixels, with the director and mods off, no superweapon
+Use the standard skirmish mode at 800 × 600 pixels, with no engine add-on and no mods (the named test files
+of a scenario and the purpose-made test maps excepted; see *measurement setup*), no superweapon
 use, and no trigger effects unless a referenced sub-test explicitly needs them.
 Their local tests need no extra data beyond their test maps. The finer-facing sub-test delegated
 by G1 to S-0206 R2 uses the named test rules file of that scenario. Observations are made with a
