@@ -1,9 +1,9 @@
 ---
 id: Q-1242
 title: How a particle's remaining lifetime is formed from its lifetime draw
-status: open
+status: answered
 related: [S-0613, S-0202]
-answered-by: []
+answered-by: [S-0613]
 ---
 
 ## Need

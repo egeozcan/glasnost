@@ -1,9 +1,9 @@
 ---
 id: Q-1240
 title: Where the shared gas system enters play at game start
-status: open
+status: answered
 related: [S-0613, S-0203, S-0109, S-0010]
-answered-by: []
+answered-by: [S-0613]
 ---
 
 ## Need

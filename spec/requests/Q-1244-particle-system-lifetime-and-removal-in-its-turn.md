@@ -1,9 +1,9 @@
 ---
 id: Q-1244
 title: When a particle system's lifetime counts down and when an ended system is removed
-status: open
+status: answered
 related: [S-0613, S-0203]
-answered-by: []
+answered-by: [S-0613]
 ---
 
 ## Need

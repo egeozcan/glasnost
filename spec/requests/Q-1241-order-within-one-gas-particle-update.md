@@ -1,9 +1,9 @@
 ---
 id: Q-1241
 title: Order of drift, damage, stage and lifetime within one gas particle's update
-status: open
+status: answered
 related: [S-0613, S-0202]
-answered-by: []
+answered-by: [S-0613]
 ---
 
 ## Need
