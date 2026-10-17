@@ -698,6 +698,60 @@ pub struct General {
     /// established.
     #[serde(default)]
     pub default_spark_system: Option<String>,
+    /// `[AudioVisual] MindClearedSound`, the rules-wide release sound
+    /// (S-0601 claim 9).
+    #[serde(default)]
+    pub mind_cleared_sound: Option<String>,
+    /// `[AudioVisual] YuriMindControlSound`, the take-over sound (S-0601
+    /// claim 5).
+    #[serde(default)]
+    pub yuri_mind_control_sound: Option<String>,
+    /// `[AudioVisual] MasterMindOverloadDeathSound`, the overload sound
+    /// (S-0601 claim 16).
+    #[serde(default)]
+    pub master_mind_overload_death_sound: Option<String>,
+    /// `[CombatDamage] ControlledAnimationType`, the control ring (S-0601
+    /// claim 18).
+    #[serde(default)]
+    pub controlled_animation_type: Option<String>,
+    /// `[CombatDamage] PermaControlledAnimationType`, the permanent control
+    /// ring (S-0601 claim 18).
+    #[serde(default)]
+    pub perma_controlled_animation_type: Option<String>,
+    /// `[CombatDamage] MindControlAttackLineFrames`, the link-line timer in
+    /// ticks (S-0601 claim 17); absent: 15.
+    #[serde(default)]
+    pub mind_control_attack_line_frames: Option<i32>,
+    /// `[CombatDamage] OverloadCount`, *count* of S-0601 F2; absent: empty.
+    #[serde(default)]
+    pub overload_count: Option<Vec<i32>>,
+    /// `[CombatDamage] OverloadDamage`, *damage* of S-0601 F2; absent: empty.
+    #[serde(default)]
+    pub overload_damage: Option<Vec<i32>>,
+    /// `[CombatDamage] OverloadFrames`, *frames* of S-0601 F2; absent: empty.
+    #[serde(default)]
+    pub overload_frames: Option<Vec<i32>>,
+    /// `[General] AICaptureNormal`, the normal fate table (S-0601 claim 8):
+    /// weights for team, grinder, bio reactor, hunt; absent: empty.
+    #[serde(default)]
+    pub ai_capture_normal: Option<Vec<i32>>,
+    /// `[General] AICaptureWounded` (S-0601 claim 8).
+    #[serde(default)]
+    pub ai_capture_wounded: Option<Vec<i32>>,
+    /// `[General] AICaptureLowPower` (S-0601 claim 8).
+    #[serde(default)]
+    pub ai_capture_low_power: Option<Vec<i32>>,
+    /// `[General] AICaptureLowMoney` (S-0601 claim 8).
+    #[serde(default)]
+    pub ai_capture_low_money: Option<Vec<i32>>,
+    /// `[General] AICaptureLowMoneyMark`, credits (S-0601 claim 8); the
+    /// absent-key default is not determined (Q-1202).
+    #[serde(default)]
+    pub ai_capture_low_money_mark: Option<i32>,
+    /// `[General] AICaptureWoundedMark`, a fraction read as a single
+    /// (S-0601 claim 8); the absent-key default is not determined (Q-1202).
+    #[serde(default)]
+    pub ai_capture_wounded_mark: Option<Decimal>,
     /// `[CombatDamage] IvanWarhead`, the bomb warhead (S-0519 Import mapping).
     #[serde(default)]
     pub ivan_warhead: Option<String>,
@@ -1917,6 +1971,22 @@ pub struct CombatFields {
     /// Art `TurretOffset` δ (S-0313).
     #[serde(default)]
     pub turret_offset: Option<i32>,
+    /// Art `AlternateFLH0` … `AlternateFLH4`, the five alternate link
+    /// anchors (S-0601 claim 17, F5), by index; a missing one is the zero
+    /// triple.
+    #[serde(default)]
+    pub alternate_flh: Option<Vec<Flh>>,
+    /// `MindClearedSound`, the type's release sound (S-0601 claim 9).
+    #[serde(default)]
+    pub mind_cleared_sound: Option<String>,
+    /// `LeptonMindControlOffset`, the link-line end height in leptons
+    /// (S-0601 claim 17); absent: 70.
+    #[serde(default)]
+    pub lepton_mind_control_offset: Option<i32>,
+    /// `MindControlRingOffset`, the mobile ring height in leptons (S-0601
+    /// claim 18); absent: 140.
+    #[serde(default)]
+    pub mind_control_ring_offset: Option<i32>,
 }
 
 /// A building type's simulation fields.
@@ -2301,6 +2371,10 @@ pub struct WeaponType {
     /// `DisguiseFakeBlinkTime`, ticks (S-0516 claim 39).
     #[serde(default)]
     pub disguise_fake_blink_time: Option<i32>,
+    /// `InfiniteMindControl`, the unlimited-control flag (S-0601 claim 1);
+    /// absent: no.
+    #[serde(default)]
+    pub infinite_mind_control: Option<bool>,
     /// `Damage`.
     #[serde(default)]
     pub damage: Option<i32>,

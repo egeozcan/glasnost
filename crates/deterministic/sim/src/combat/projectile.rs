@@ -1556,9 +1556,11 @@ fn detonation_inner(
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
         return DetonationResult::Missed;
     };
-    // spec: S-0514 claim 20 (one selected special hit: the first enabled row of the table wins, all later rows and ordinary damage are suppressed even when the selected effect cannot succeed; takeover and locomotor replacement are selected here and their effects are seams, S-0601 and the locomotor specs are not built)
+    // spec: S-0514 claim 20 (one selected special hit: the first enabled row of the table wins, all later rows and ordinary damage are suppressed even when the selected effect cannot succeed; locomotor replacement is selected here and its effect is a seam, the locomotor specs are not built)
     let special = special_of(w, weapon, target);
     match special {
+        // spec: S-0601 claim 5 (takeover replaces damage and every other special hit; only the projectile's target can change owner)
+        Some(Special::Takeover) => crate::mind::detonation(w, attacker, target),
         // spec: S-0518 claim 11 (an electric-charge detonation registers an infantry firer on the building it hit, whatever the building)
         Some(Special::Charge) => crate::linked::charge_hit(w, attacker, target),
         // spec: S-0519 claims 2 and 7 (a bomb-planting warhead plants on its target instead of area damage; a disarm warhead removes the target's bomb; the distance is not tested)
@@ -1630,7 +1632,7 @@ fn detonation_inner(
 /// the order of the claim's table: the first enabled row wins.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Special {
-    /// Row 1, takeover (S-0601 claim 5; the effect is a seam, S-0601 is not built).
+    /// Row 1, takeover (S-0601 claim 5).
     Takeover,
     /// Row 2, bomb planting (S-0519 claim 2).
     Bomb,

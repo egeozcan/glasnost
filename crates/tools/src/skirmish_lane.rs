@@ -129,6 +129,11 @@ struct Game {
     /// its distinct units with a berserk weapon (S-0610).
     sensors_max: [usize; PLAYERS],
     berserk_armed: [usize; PLAYERS],
+    /// Takeovers (S-0601 claim 6), and per player house the most objects
+    /// it controlled at once and its distinct controllers.
+    taken: usize,
+    controlled_max: [usize; PLAYERS],
+    controllers: [usize; PLAYERS],
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -617,6 +622,9 @@ fn play_ai(
     g.intent_ticks = tally.intent_ticks;
     g.sensors_max = tally.sensors_max;
     g.berserk_armed = tally.berserk_armed.map(|s| s.len());
+    g.taken = tally.taken;
+    g.controlled_max = tally.controlled_max;
+    g.controllers = tally.controllers.map(|s| s.len());
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -727,6 +735,16 @@ pub struct Tally {
     pub sensors_max: [usize; PLAYERS],
     /// Per player house: its units with a berserk weapon seen so far.
     pub berserk_armed: [BTreeSet<u32>; PLAYERS],
+    /// Takeovers (S-0601 claim 6: an object controlled now that was not
+    /// controlled after the last tick, or by another controller).
+    pub taken: usize,
+    /// Per player house: the most objects its controllers held at once.
+    pub controlled_max: [usize; PLAYERS],
+    /// Per player house: its controllers (objects with a control record)
+    /// seen so far.
+    pub controllers: [BTreeSet<u32>; PLAYERS],
+    /// The (victim, controller) pairs after the last tick.
+    victims_before: BTreeSet<(u32, u32)>,
     /// The units berserk after the last tick.
     berserk_before: BTreeSet<u32>,
     /// The (house, superweapon type) pairs ready after the last tick.
@@ -817,6 +835,26 @@ impl Tally {
             {
                 self.berserk_armed[usize::from(h.0)].insert(o.id.0);
             }
+        }
+        let victims: BTreeSet<(u32, u32)> = w
+            .mind
+            .victims
+            .iter()
+            .map(|(v, r)| (v.0, r.controller.0))
+            .collect();
+        self.taken += victims.difference(&self.victims_before).count();
+        self.victims_before = victims;
+        let mut held = [0usize; PLAYERS];
+        for (&c, r) in &w.mind.controllers {
+            if let Some(h) = w.obj(c).and_then(|o| o.owner)
+                && usize::from(h.0) < PLAYERS
+            {
+                held[usize::from(h.0)] += r.victims.len();
+                self.controllers[usize::from(h.0)].insert(c.0);
+            }
+        }
+        for h in 0..PLAYERS {
+            self.controlled_max[h] = self.controlled_max[h].max(held[h]);
         }
         self.intent_ticks += (0..PLAYERS)
             .filter(|&h| !glasnost_sim::psychic::intent_lines(w, HouseId(h as u8)).is_empty())
@@ -1699,8 +1737,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers
                     )
                 })
                 .collect();
@@ -1740,6 +1778,11 @@ fn report(
                 s,
                 "  psychic weapons: units gone berserk {}, house-ticks with a hostile-intent line {}; most psychic sensors at once per house {:?}; units with a berserk weapon per house {:?}",
                 g.berserked, g.intent_ticks, g.sensors_max, g.berserk_armed
+            );
+            let _ = writeln!(
+                s,
+                "  mind control: takeovers {}; most objects controlled at once per house {:?}; controllers per house {:?}",
+                g.taken, g.controlled_max, g.controllers
             );
         }
         let f: Vec<String> = g

@@ -564,6 +564,47 @@ impl Audio {
         self.house_announcements(w);
     }
 
+    /// A mind-control sound (S-0601 claims 5, 9 and 16).
+    fn mind(
+        &mut self,
+        w: &World,
+        sound: glasnost_sim::mind::MindSound,
+        of: Option<glasnost_sim::econ::TypeRef>,
+        houses: [Option<glasnost_sim::world::HouseId>; 2],
+        pos: Option<glasnost_sim::world::Pos>,
+    ) {
+        use glasnost_sim::mind::MindSound;
+        let m = &w.rules().combat.general.mind;
+        let at = pos.map_or(Where::Screen, Where::Fixed);
+        let name = match sound {
+            // spec: S-0601 claim 5 (the take-over sound at the target, when the local player owns the controller or owned the target before)
+            MindSound::Takeover => {
+                if self.local.is_none() || !houses.contains(&self.local) {
+                    return;
+                }
+                m.takeover_sound.clone()
+            }
+            // spec: S-0601 claim 9 (the release sound at the victim: its type's when set, otherwise the rules-wide one)
+            MindSound::Cleared => of
+                .and_then(|t| {
+                    let r = w.rules();
+                    match t.kind {
+                        glasnost_sim::rules::Kind::Building => r
+                            .buildings
+                            .get(t.index as usize)
+                            .and_then(|b| b.combat.mind_cleared_sound.clone()),
+                        k => r
+                            .unit(k, t.index)
+                            .and_then(|u| u.combat.mind_cleared_sound.clone()),
+                    }
+                })
+                .or_else(|| m.cleared_sound.clone()),
+            // spec: S-0601 claim 16 (the overload sound at the controller)
+            MindSound::Overload => m.overload_sound.clone(),
+        };
+        self.play_in(w, name.as_deref(), at);
+    }
+
     fn effect(&mut self, w: &World, e: &Effect, unsync: &mut Rng) {
         match e {
             // spec: S-0701 claim 22, S-0109 claim 13 (an animation's start sound, positional, any owner)
@@ -609,6 +650,12 @@ impl Audio {
                 self.play_in(w, Some(name), at);
             }
             Effect::Trigger { .. } => {}
+            Effect::Mind {
+                sound,
+                of,
+                houses,
+                pos,
+            } => self.mind(w, *sound, *of, *houses, *pos),
             Effect::Sound {
                 sound,
                 of,

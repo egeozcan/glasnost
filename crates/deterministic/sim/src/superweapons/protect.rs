@@ -6,9 +6,11 @@
 //! detonation (`combat::area`, S-0303 claim 15), the firing answers
 //! (`combat::check`, claims 27 and 28), crushing and the mission-target
 //! occupancy row (`occupancy`, S-0210 claim 2, S-0209 row WP3), and the
-//! warp (claims 34, 37 and 38). The refusals that belong to specs not built
-//! yet (mind control S-0601 and S-0612, erasure S-0514, locomotor seizing
-//! and flinging S-0607, charge planting S-0519) read the same test there.
+//! warp (claims 34, 37 and 38). The refusals of other specs read the same
+//! test there: mind control (S-0601, `crate::mind::can_take` and
+//! `crate::mind::dominate`), and those not built yet (psychic domination
+//! S-0612, erasure S-0514, locomotor seizing and flinging S-0607, charge
+//! planting S-0519).
 
 use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;

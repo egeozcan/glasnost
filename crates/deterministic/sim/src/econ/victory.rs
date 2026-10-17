@@ -627,9 +627,10 @@ fn swept_kind(k: Kind) -> bool {
 /// and one an earlier death created is. Under
 /// `quirks.defeat_cancellation_skip` a hit whose effects delete k objects
 /// at once (production cancellations) at or before its place skips the
-/// next max(k − 1, 0) objects of the four kinds, whoever owns them. Mind
-/// control is a seam (no object is under mind control yet); an erased
-/// victim's beams are detached first (S-0514 claim 15).
+/// next max(k − 1, 0) objects of the four kinds, whoever owns them.
+/// Controlled objects are judged by their original house (S-0601 claim
+/// 14, claim 5's table); an erased victim's beams are detached first
+/// (S-0514 claim 15).
 fn destroy_all(w: &mut World, h: HouseId) {
     let warhead = w.rules().combat.general.c4_warhead;
     let skip_quirk = w.rules().quirks.defeat_cancellation_skip;
@@ -653,8 +654,22 @@ fn destroy_all(w: &mut World, h: HouseId) {
             continue;
         }
         // spec: S-0414 claim 15 (eligibility at the object's place; an already dead object gets no second death)
-        if owner != Some(h) || health <= 0 {
+        if health <= 0 {
             continue;
+        }
+        // spec: S-0414 claim 5 table and S-0601 claim 14 (objects under mind control are treated by their original house: one of another house held by this house is not hit; a permanently controlled one by its current owner)
+        if crate::mind::original_owner(w, id) != Some(h) {
+            continue;
+        }
+        if owner != Some(h) && crate::mind::controlled_by(w, id).is_some() {
+            // spec: S-0414 claim 5 table (of this house, held by another house through a controlling unit: with a civilian-side house in the game, not hit and the first such house takes this house's place as its original house; otherwise hit)
+            let civ = (0..w.houses.len())
+                .map(|i| HouseId(i as u8))
+                .find(|&x| crate::econ::setup::civilian(w, x));
+            if let Some(c) = civ {
+                crate::mind::redirect_original_owner(w, id, Some(c));
+                continue;
+            }
         }
         // spec: S-0514 claim 15 (a destroy-all detaches the beams on each erased victim and idles their attackers before the destructive hit)
         crate::temporal::detach_for_destruction(w, id);

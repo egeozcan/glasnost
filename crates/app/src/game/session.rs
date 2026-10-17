@@ -1035,6 +1035,57 @@ impl Session {
                 }
             }
         }
+        // spec: S-0601 claim 17 (a link line from each controller to each victim in the controller house's colour, from the alternate anchor k mod 5 to the victim raised by its link height; drawn when the controller, a transport carrying it or the victim is selected, or the victim's timer runs; selecting only the carrying transport shows it too, the drawing bug fixed)
+        let selected = |id: ObjectId| self.play.selection.contains(&id);
+        for l in glasnost_sim::mind::link_lines(w) {
+            let carrier = glasnost_sim::transport::riding(w, l.controller);
+            if !(l.timer
+                || selected(l.controller)
+                || selected(l.victim)
+                || carrier.is_some_and(selected))
+            {
+                continue;
+            }
+            // Our own: no line into or out of cells the local player has not explored.
+            let seen = |p: glasnost_sim::world::Pos| {
+                glasnost_sim::econ::shroud::explored(w, self.play.local, p.cell())
+            };
+            if !(seen(l.from) && seen(l.to)) {
+                continue;
+            }
+            let screen = |p: glasnost_sim::world::Pos| {
+                let (qx, qy) = project_lifted(p.x, p.y, p.z);
+                world_to_screen(qx, qy)
+            };
+            let [r, g, bl] = l
+                .house
+                .and_then(|h| self.house_colours.get(usize::from(h.0)))
+                .copied()
+                .unwrap_or([255, 255, 255]);
+            let (a, b) = (screen(l.from), screen(l.to));
+            if m.contains(Point::new(a.0, a.1)) && m.contains(Point::new(b.0, b.1)) {
+                d.line(a, b, [r, g, bl, 255]);
+            }
+        }
+        // spec: S-0601 claim 18 (the control ring on a controlled object, the permanent ring on a permanently controlled one, raised by the ring height; on a building in front of it). Seam: the ring animations' art is not drawn yet; a marker stands in at the ring's place.
+        for o in w.objects.values() {
+            // Our own: no ring on objects in cells the local player has not explored.
+            if !o.on_map || !glasnost_sim::econ::shroud::explored(w, self.play.local, o.pos.cell())
+            {
+                continue;
+            }
+            let Some(ring) = glasnost_sim::mind::ring(w, o.id) else {
+                continue;
+            };
+            let (qx, qy) = project_lifted(ring.at.x, ring.at.y, ring.at.z);
+            let (x, y) = world_to_screen(qx, qy);
+            let ink = if ring.permanent {
+                PERMA_RING_INK
+            } else {
+                RING_INK
+            };
+            ring_marker(&mut d, x, y, ink, m);
+        }
         if let (Some(drag), Some(p)) = (self.drag, self.pointer)
             && drag.active
         {
@@ -1115,6 +1166,38 @@ const DASH_MS: i64 = 60;
 /// The intent line's ink (our own; S-0610 open question on the line colour).
 // nocite: our own line colour, S-0610 leaves its animation unspecified
 const INTENT_INK: [u8; 4] = [230, 60, 60, 255];
+
+/// The stand-in control ring's ink (our own; S-0601 claim 18's animation
+/// art is not drawn yet).
+// nocite: our own stand-in colour for the control ring
+const RING_INK: [u8; 4] = [200, 80, 230, 255];
+/// The stand-in permanent control ring's ink (our own).
+// nocite: our own stand-in colour for the permanent control ring
+const PERMA_RING_INK: [u8; 4] = [255, 120, 255, 255];
+
+/// A small flat ring (an ellipse outline, 12 × 6 pixels) centred at
+/// `(x, y)`: the stand-in for the control ring animations (S-0601 claim
+/// 18).
+fn ring_marker(d: &mut DrawList, x: i32, y: i32, rgba: [u8; 4], clip: Rect) {
+    // nocite: our own stand-in shape
+    const PTS: [(i32, i32); 8] = [
+        (6, 0),
+        (4, 2),
+        (0, 3),
+        (-4, 2),
+        (-6, 0),
+        (-4, -2),
+        (0, -3),
+        (4, -2),
+    ];
+    for i in 0..PTS.len() {
+        let (a, b) = (PTS[i], PTS[(i + 1) % PTS.len()]);
+        let (p, q) = ((x + a.0, y + a.1), (x + b.0, y + b.1));
+        if clip.contains(Point::new(p.0, p.1)) && clip.contains(Point::new(q.0, q.1)) {
+            d.line(p, q, rgba);
+        }
+    }
+}
 
 /// A dashed line from `a` to `b`: dashes of [`DASH`] pixels with gaps of the
 /// same length, shifted along the line by `phase` pixels; dashes outside

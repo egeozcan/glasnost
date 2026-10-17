@@ -26,6 +26,9 @@ pub enum Cause {
     /// The occupation rules of a civilian garrison building (S-0508 claims 7
     /// and 8): no announcement of this kind.
     Occupation,
+    /// Mind control (S-0601 claims 6 and 9): no announcement (S-0509 claim
+    /// 12 announces engineer captures and vehicle-like takeovers only).
+    MindControl,
 }
 
 impl Cause {

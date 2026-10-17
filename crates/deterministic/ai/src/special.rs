@@ -88,6 +88,9 @@ pub struct Uses {
     pub sensors: u32,
     /// Psychic reveals fired (S-0610 claims 13 to 15).
     pub reveals: u32,
+    /// Mind controllers sent to take over an enemy (S-0601).
+    #[serde(default)]
+    pub takeovers: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -138,6 +141,7 @@ impl Special {
         self.terror(script, &own, w, out);
         self.crates(script, &own, w, out);
         self.berserk(script, &own, w, out);
+        self.mind_control(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -171,6 +175,11 @@ impl Special {
     /// Counts one berserk-weapon unit sent at an enemy (S-0610, `psychic`).
     pub(crate) fn count_berserk(&mut self) {
         self.uses.berserks += 1;
+    }
+
+    /// Counts one controller sent to take over an enemy (S-0601, `mind`).
+    pub(crate) fn count_takeover(&mut self) {
+        self.uses.takeovers += 1;
     }
 
     /// Counts one psychic sensor ordered (S-0610, `psychic`).

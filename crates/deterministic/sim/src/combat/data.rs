@@ -126,6 +126,8 @@ pub struct WeaponRules {
     pub anim: Vec<String>,
     /// Fake-blink time in ticks (S-0516 claim 39).
     pub disguise_fake_blink: i32,
+    /// The unlimited-control flag (S-0601 claim 1).
+    pub infinite_mind_control: bool,
 }
 
 impl WeaponRules {
@@ -606,6 +608,14 @@ pub struct TypeCombat {
     pub elite_flh: [Flh; SLOTS],
     /// Turret displacement δ.
     pub turret_offset: i32,
+    /// The five alternate link anchors (S-0601 claim 17, F5).
+    pub alternate_flh: [Flh; crate::mind::ANCHORS],
+    /// The type's release sound (S-0601 claim 9).
+    pub mind_cleared_sound: Option<String>,
+    /// The link-line end height, leptons (S-0601 claim 17).
+    pub link_height: i32,
+    /// The mobile control-ring height, leptons (S-0601 claim 18).
+    pub ring_height: i32,
     /// Veteran abilities.
     pub veteran: Abilities,
     /// Elite abilities.
@@ -784,9 +794,41 @@ pub struct PrismRules {
     pub duration: i32,
 }
 
+/// The mind-control settings (S-0601 Import mapping).
+#[derive(Clone, Debug, Default)]
+pub struct MindRules {
+    /// The rules-wide release sound (claim 9).
+    pub cleared_sound: Option<String>,
+    /// The take-over sound (claim 5).
+    pub takeover_sound: Option<String>,
+    /// The overload sound (claim 16).
+    pub overload_sound: Option<String>,
+    /// The control ring animation (claim 18).
+    pub ring: Option<String>,
+    /// The permanent control ring animation (claim 18).
+    pub perma_ring: Option<String>,
+    /// The link-line timer, ticks (claim 17).
+    pub line_frames: i32,
+    /// *count* of F2.
+    pub overload_count: Vec<i32>,
+    /// *damage* of F2.
+    pub overload_damage: Vec<i32>,
+    /// *frames* of F2.
+    pub overload_frames: Vec<i32>,
+    /// The fate tables of claim 8: normal, wounded, low power, low money;
+    /// each the weights of team, grinder, bio reactor, hunt.
+    pub fate: [Vec<i32>; 4], // spec: S-0601 claim 8 (four fate tables)
+    /// The low-money mark, credits (claim 8; absent: none, Q-1202).
+    pub low_money_mark: Option<i32>,
+    /// The wounded mark, a single widened (claim 8; absent: none, Q-1202).
+    pub wounded_mark: Option<F64>,
+}
+
 /// Game-wide combat values.
 #[derive(Clone, Debug)]
 pub struct CombatGeneral {
+    /// The mind-control settings (S-0601).
+    pub mind: MindRules,
     /// The planted-bomb and charge settings (S-0519).
     pub ivan: IvanRules,
     /// The prism support settings (S-0518).
@@ -1199,6 +1241,8 @@ pub fn tables(
                 anim: w.anim.clone().unwrap_or_default(),
                 // spec: S-0516 Import mapping (DisguiseFakeBlinkTime absent: 0 ticks)
                 disguise_fake_blink: w.disguise_fake_blink_time.unwrap_or(0),
+                // spec: S-0601 Import mapping (InfiniteMindControl absent: no)
+                infinite_mind_control: b(w.infinite_mind_control),
             }
         })
         .collect();
@@ -1405,6 +1449,26 @@ pub fn type_combat(
         elite_flh,
         // spec: S-0313 Import mapping (TurretOffset absent: 0)
         turret_offset: c.turret_offset.unwrap_or(0),
+        alternate_flh: {
+            // spec: S-0601 Import mapping (AlternateFLH0 through AlternateFLH4 absent: the zero triple)
+            let mut a = [[0; 3]; crate::mind::ANCHORS];
+            for (i, f) in c
+                .alternate_flh
+                .iter()
+                .flatten()
+                .take(crate::mind::ANCHORS)
+                .enumerate()
+            {
+                a[i] = *f;
+            }
+            a
+        },
+        // spec: S-0601 Import mapping (MindClearedSound of the type absent: none)
+        mind_cleared_sound: c.mind_cleared_sound.clone(),
+        // spec: S-0601 Import mapping and Constants (LeptonMindControlOffset absent: 70 leptons)
+        link_height: c.lepton_mind_control_offset.unwrap_or(70),
+        // spec: S-0601 Import mapping and Constants (MindControlRingOffset absent: 140 leptons)
+        ring_height: c.mind_control_ring_offset.unwrap_or(140),
         veteran: Abilities::from_list(abilities.0),
         elite: Abilities::from_list(abilities.1),
     }
@@ -1530,6 +1594,31 @@ pub fn combat_rules(
     // spec: S-0314 Constants (repair rates absent: the double nearest 0.016)
     let rate = |d: &Option<Decimal>| dec(d, mode).unwrap_or_else(|| nearest_double("0.016"));
     let general = CombatGeneral {
+        mind: MindRules {
+            // spec: S-0601 Import mapping (the three sounds and the two ring animations absent: none)
+            cleared_sound: g.mind_cleared_sound.clone(),
+            takeover_sound: g.yuri_mind_control_sound.clone(),
+            overload_sound: g.master_mind_overload_death_sound.clone(),
+            ring: g.controlled_animation_type.clone(),
+            perma_ring: g.perma_controlled_animation_type.clone(),
+            // spec: S-0601 Import mapping (MindControlAttackLineFrames absent: 15 ticks)
+            line_frames: g.mind_control_attack_line_frames.unwrap_or(15),
+            // spec: S-0601 Import mapping (OverloadCount, OverloadDamage, OverloadFrames absent: empty)
+            overload_count: g.overload_count.clone().unwrap_or_default(),
+            overload_damage: g.overload_damage.clone().unwrap_or_default(),
+            overload_frames: g.overload_frames.clone().unwrap_or_default(),
+            // spec: S-0601 Import mapping (the four fate tables absent: empty, in the order normal, wounded, low power, low money)
+            fate: [
+                g.ai_capture_normal.clone().unwrap_or_default(),
+                g.ai_capture_wounded.clone().unwrap_or_default(),
+                g.ai_capture_low_power.clone().unwrap_or_default(),
+                g.ai_capture_low_money.clone().unwrap_or_default(),
+            ],
+            // Q-1202 (interim: an absent mark never selects its table)
+            low_money_mark: g.ai_capture_low_money_mark,
+            // spec: S-0601 claim 8 (the wounded mark is a binary32 threshold, compared without narrowing the quotient)
+            wounded_mark: single(&g.ai_capture_wounded_mark, mode),
+        },
         ivan: IvanRules {
             warhead: warhead(&g.ivan_warhead),
             // spec: S-0519 Import mapping (IvanDamage absent: 100; IvanTimedDelay 450; IvanIconFlickerRate 8; both permissions no)

@@ -451,6 +451,7 @@ pub fn new_game(
         sw: Default::default(),
         radiation: Default::default(),
         temporal: Default::default(),
+        mind: Default::default(),
         acquisitions: 0,
         strike: Default::default(),
         crates: Default::default(),

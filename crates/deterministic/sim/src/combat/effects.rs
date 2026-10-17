@@ -82,6 +82,20 @@ pub enum Effect {
         /// Where, for a sound played at a position.
         pos: Option<Pos>,
     },
+    /// A sound of mind control (S-0601 claims 5, 9 and 16). `houses` are
+    /// the controller's house and the target's owner before the takeover,
+    /// for the take-over sound only the local player of one of them hears.
+    Mind {
+        /// Which sound.
+        sound: crate::mind::MindSound,
+        /// The released object's type, whose own release sound is preferred.
+        of: Option<crate::econ::TypeRef>,
+        /// The houses that hear a take-over sound.
+        // spec: S-0601 claim 5 (two houses: the controller's and the target's before)
+        houses: [Option<crate::world::HouseId>; 2],
+        /// Where.
+        pos: Option<Pos>,
+    },
     /// A presentation-only trigger action (S-0011 claim 32): text message
     /// (11), play sound (19), play speech (21), radar event at a waypoint
     /// (55) or sound at a waypoint (99). How it is shown or heard is the

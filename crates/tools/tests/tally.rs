@@ -156,3 +156,70 @@ fn counts_berserk_units_and_intent_lines() {
     assert_eq!(tally.berserked, 1, "{tally:?}");
     assert_eq!(tally.intent_ticks, 3, "{tally:?}");
 }
+
+// A takeover is counted once, when the control link forms; the most
+// objects a house holds at once and its controllers are kept per house
+// (S-0601 claims 1, 5 and 6).
+#[test]
+fn counts_takeovers_and_controllers() {
+    use glasnost_rules::sim::{Decimal, WarheadType, WeaponType};
+    let mut r = fixture::ruleset();
+    r.sim.warheads.insert(
+        "MIND".into(),
+        WarheadType {
+            mind_control: Some(true),
+            verses: Some(vec![Decimal("1".into()); 11]),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.insert(
+        "RAY".into(),
+        WeaponType {
+            damage: Some(3),
+            rof: Some(40),
+            range: Some(Decimal("2".into())),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("MIND".into()),
+            ..Default::default()
+        },
+    );
+    let mut c = r.sim.vehicles["GUNR"].clone();
+    c.primary = Some("RAY".into());
+    c.secondary = None;
+    c.tech_level = Some(99);
+    r.sim.vehicles.insert("CTRL".into(), c);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("CTRL".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-tally"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut tally = Tally::default();
+    g.step();
+    let ctrl = testkit::spawn(&mut g.world, Kind::Vehicle, "CTRL", 0, fixture::at(4, 4), 0);
+    tally.observe(&g.world);
+    assert_eq!(tally.taken, 0);
+    assert_eq!(tally.controllers[0].len(), 1, "{tally:?}");
+    let unit = g
+        .world
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(1)) && o.kind != Kind::Building && o.on_map)
+        .map(|o| o.id)
+        .expect("a unit of house 1");
+    assert!(glasnost_sim::mind::take(&mut g.world, ctrl, unit));
+    for _ in 0..3 {
+        tally.observe(&g.world);
+    }
+    assert_eq!(tally.taken, 1, "{tally:?}");
+    assert_eq!(tally.controlled_max[0], 1, "{tally:?}");
+    assert_eq!(tally.controlled_max[1], 0, "{tally:?}");
+}

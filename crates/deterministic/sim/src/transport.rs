@@ -246,24 +246,20 @@ fn fits(w: &World, t: ObjectId, c: ObjectId) -> bool {
     load(w, t).add(s, mode).le(cap) && s.le(u.size_limit)
 }
 
-/// Mind-controlled (claim 4; glossary). Seam: mind control belongs to
-/// S-0601, which is not built, so no object is.
+/// Mind-controlled (claim 4; glossary; S-0601 Terms).
 pub fn mind_controlled(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    crate::mind::mind_controlled(w, id)
 }
 
 /// A mind controller that controls at least one object now (claim 4).
-/// Seam: mind control belongs to S-0601, which is not built.
 pub fn controls_objects(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    crate::mind::controls_objects(w, id)
 }
 
-/// Releases a boarding unit from any mind control that held it (claim 6).
-/// Seam: mind control belongs to S-0601, which is not built.
+/// Releases a boarding unit from any mind control that held it (claim 6,
+/// S-0601 claim 10).
 pub fn release_mind_control(w: &mut World, id: ObjectId) {
-    let _ = (w, id);
+    crate::mind::boarding(w, id);
 }
 
 /// Resets a boarding unit's gattling spin value (claim 6, S-0609 claim

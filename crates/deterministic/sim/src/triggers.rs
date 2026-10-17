@@ -1118,6 +1118,8 @@ fn action(
                     .map(|(&id, _)| id)
                     .collect();
                 for id in carriers {
+                    // spec: S-0601 claim 10 (a trigger action that changes a controller's house releases all its victims)
+                    crate::mind::trigger_owner_change(w, id);
                     let Some(o) = w.obj(id) else { continue };
                     if o.kind == Kind::Building {
                         crate::structures::ownership::change(

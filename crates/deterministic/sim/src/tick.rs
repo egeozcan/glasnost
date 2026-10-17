@@ -146,6 +146,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     crate::superweapons::protect::tint_turn(w, id);
     // spec: S-0610 claim 5 and F2 (a berserk unit's remaining time goes down by 1 in each of its own updates; its place in the turn is an interim rule of Q-1180: after the bookkeeping, before self-healing and behaviour processing)
     crate::psychic::countdown_turn(w, id);
+    // spec: S-0601 claim 16 (an unlimited controller's overload update in its own turn; its place in the turn is an interim rule of Q-1201: right after the berserk countdown)
+    crate::mind::overload_turn(w, id);
     // spec: S-0504 claim 4 (a sinking vessel's own update first descends, and may leave play at once)
     if crate::naval::sinking_turn(w, id) {
         return;

@@ -79,10 +79,9 @@ pub fn redeploys(w: &World) -> bool {
     crate::econ::setup::redeploy(w)
 }
 
-/// Mind-controlled (the mind-control specs own it). Seam: nothing is.
+/// Mind-controlled (S-0601 Terms).
 fn mind_controlled(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    crate::mind::mind_controlled(w, id)
 }
 
 /// Whether a sell order makes building `id` pack up (S-0213 claim 12,
@@ -109,11 +108,22 @@ pub fn packs_up(w: &World, id: ObjectId) -> bool {
 }
 
 /// Deploy readiness of a vehicle that deploys into a building (S-0214
-/// Terms). Being disabled, inside a tunnel and mind control are other
-/// topics' states and never hold yet.
+/// Terms). Being disabled and inside a tunnel are other topics' states and
+/// never hold yet.
 fn deploy_ready(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0214 Terms (not when it deploys into a construction yard while it is mind-controlled, S-0601 Terms)
+    let into_yard = deploys_into(w, o.kind, o.type_index).is_some_and(|b| {
+        w.rules().buildings[b as usize]
+            .raw
+            .construction_yard
+            .unwrap_or(false)
+    });
+    if into_yard && mind_controlled(w, id) {
+        return false;
+    }
     // spec: S-0214 Terms and S-0415 claim 2 (not when it deploys into a building while a parasite is on it, S-0614)
-    w.obj(id).is_some_and(|o| o.health > 0) && !crate::parasite::carries_parasite(w, id)
+    o.health > 0 && !crate::parasite::carries_parasite(w, id)
 }
 
 /// Rounded body facing (S-0415 F1).
@@ -398,6 +408,8 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> Option<ObjectId>
         ob.combat.experience = o.combat.experience;
         ob.target = o.target;
     }
+    // spec: S-0601 claim 15 (a controlled vehicle that deploys: the new building is the controlling house's; with the switch off it inherits the link)
+    crate::mind::converted(w, id, bid);
     // Leave the vehicle's cell before the building enters it.
     crate::objects::remove(w, id);
     // spec: S-0415 claim 6 and Constants (the centre of the anchor at the surface height, inserted facing 0, not the vehicle's facing or D × 256; construction begins; not a place order, S-0415 claim 7)

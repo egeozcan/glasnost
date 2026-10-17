@@ -196,7 +196,8 @@ fn side_effects(w: &mut World, x: ObjectId) {
     if w.obj(x).is_some_and(|o| o.spawn.is_some()) {
         crate::spawn::clear_slots(w, x);
     }
-    // spec: S-0514 claim 2 (and frees the units it mind-controls: S-0601 is not built, no object is controlled)
+    // spec: S-0514 claim 2 and S-0601 claim 10 (and frees the units it mind-controls)
+    crate::mind::erasing_hit(w, x);
 }
 
 /// The raw damage an attacker would deal by one update (claim 7).
@@ -523,8 +524,8 @@ pub fn hand_back(w: &mut World, vehicle: ObjectId, passenger: ObjectId) {
     let _ = passenger;
 }
 
-/// An object came under or out of mind control (S-0601, claim 14): its
-/// beam lets go. Seam for S-0601, which is not built.
+/// An object came under or out of mind control (S-0514 claim 14, S-0601
+/// claims 6 and 9): its beam lets go.
 pub fn control_changed(w: &mut World, id: ObjectId) {
     let_go(w, id);
 }
