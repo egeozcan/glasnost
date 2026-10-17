@@ -2,7 +2,7 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 35
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -92,6 +92,8 @@ phases. Their backing, confidence and proposed measurements remain those of the 
 - **Blast ring.** The expanding ring that the psychic dominator superweapon (its lighting effect is the glossary's
   global effect *psychic dominator*), and one
   trigger action, create at their target. The superweapon specs own it.
+- **Shared gas system.** The particle system that S-0613 (claim 1) creates at game start. Claim 3
+  uses it only for the place of game-start objects in the update order.
 - **Team.** A group of units under scripted control, created by a map trigger (S-0011, claim 30) or
   by the original's computer player. The specs of teams own what a team does.
 - **Current object, counting removal.** During the turn pass, the *current object* is the object
@@ -303,9 +305,17 @@ phases. Their backing, confidence and proposed measurements remain those of the 
      skirmish the players' starting units enter play after all of them. Because every kind is a
      block of its own, an object of one kind never stands between two map-placed objects of
      another kind. So at game start the last map-placed infantry unit is directly followed by the
-     first map-placed building, and as long as both stay in play, a counting removal (claim 10) in
-     that infantry unit's turn costs that building its turn, whatever terrain objects, vehicles or aircraft
-     the map holds.
+     first map-placed building, unless a game-start animation or the shared gas system stands
+     between them (see Other game-start objects below). As long as both stay in play, a counting
+     removal (claim 10) in that infantry unit's turn costs that building its turn, whatever terrain
+     objects, vehicles or aircraft the map holds.
+   - **Other game-start objects.** The animations and the shared gas system that are created at
+     game start are not map-placed, and this spec does not order them against the starting units.
+     Each enters play by the appending rule above, at the point its game-start event falls in the
+     order that S-0412 claim 14 owns (terrain animations also S-0010, cell animations S-0009). No
+     observable consequence of that place is claimed here. Only the block order above (map-placed
+     kinds, then the starting units) is claimed here. Whether one of these objects stands between
+     two map-placed objects is not claimed here either (see the adjacency sentence above).
    - **Open-topped transports.** A unit that boards an open-topped transport leaves play and enters
      play again at once: it is taken out of the update order, which is a removal for claim 10, and
      put back at its end. It then takes turns while inside, so it can, for example, fire
@@ -327,6 +337,8 @@ phases. Their backing, confidence and proposed measurements remain those of the 
      - `unmeasured` for which object loses its turn because of the removal that boarding causes.
        That depends on whose turn performs the boarding, which is not known (Open questions), so no
        setup can predict the object.
+     - `unmeasured` here for the game-start animations' turns against the starting units: no
+       scenario here isolates them (see the bullet above for the owning specs).
      - `unmeasured` for the place of terrain objects before the vehicles and of the aircraft between
        the vehicles and the infantry. Each of these places shows only through a removal in the turn
        of the last map-placed object before it (the last terrain object, vehicle or aircraft), and
@@ -336,7 +348,8 @@ phases. Their backing, confidence and proposed measurements remain those of the 
      - `unmeasured` for the starting units. The game places them itself and gives every player
        several, so a setup cannot fix which single starting unit faces a pre-placed one.
    - Confidence: high for appending and the kept order; medium for the order of the map's kinds,
-     the starting units and the open-topped rule
+     the starting units and the open-topped rule; low for the place of game-start animations and
+     the shared gas system
 
 4. **Objects that enter play during the turn pass.** An object that enters play during the turn pass
    of tick *n* (a projectile just fired, a unit just unloaded or produced, an animation just
