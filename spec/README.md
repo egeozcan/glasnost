@@ -62,7 +62,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0503](movement/S-0503-hover-amphibious.md) | Hover and amphibious movement | movement | 6 | approved | — |
 | [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 13 | approved | — |
 | [S-0409](visibility/S-0409-shroud-sight.md) | Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire) | visibility | 14 | approved | — |
-| [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 24 | approved | — |
 | [S-0512](superweapons/S-0512-superweapon-charge.md) | "Superweapons: charge and readiness" | superweapons | 8 | approved | — |
 | [S-0511](structures/S-0511-bridges.md) | Bridges (destruction, collapse, falling and repair) | structures | 7 | approved | — |
 | [S-0522](movement/S-0522-paradrops.md) | Parachutes and drops | movement | 5 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0013](formats/S-0013-voxel-lighting-table-layout.md) | voxel lighting table file layout | formats | 3 | approved | — |
 | [S-0105](rendering/S-0105-voxel-rendering.md) | Rendering of voxel models | rendering | 21 | approved | — |
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 15 | approved | — |
+| [S-0104](rendering/S-0104-lighting.md) | Lighting | rendering | 25 | approved | — |
