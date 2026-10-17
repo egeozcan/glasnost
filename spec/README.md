@@ -130,7 +130,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 25 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 40 | approved | — |
 | [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 17 | approved | — |
-| [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 14 | approved | — |
 | [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 7 | approved | — |
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 24 | approved | — |
 | [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 10 | approved | — |
+| [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 15 | approved | — |

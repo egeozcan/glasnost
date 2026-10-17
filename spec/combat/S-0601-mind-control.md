@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -493,7 +493,7 @@ The glossary also defines *trigger*, used here.
     | Pulse result | Observable effects |
     |---|---|
     | *d* < 1 | The overload sound mark is cleared. There is no pulse damage, highlight reset, sound, spark creation or rocking update. The ordinary highlight countdown still applies. |
-    | *d* ≥ 1 | The pip highlight is set to 10. The controller receives a hit of *d* with the demolition warhead (S-0303, Import mapping), with no attacker or attacking house and without ignoring defences. S-0302 resolves it like any other hit; a killing hit releases the victims under claim 10. The overload sound plays at the controller when its sound mark was clear, and the mark becomes set. Five spark particle systems of the rules' default spark type appear around the controller (F3), even after a lethal hit. Their positions consume 10 placement draws from the scenario random stream, taken at the pulse before the rocking draw. Creating a spark system takes no draw of its own; the draws of the sparks that each system later emits come in that system's turns (S-0616 claim 15). When *i* > 0 and the controller survives, its sideways body-rocking rate takes the F4 value, consuming one further draw. |
+    | *d* ≥ 1 | The pip highlight is set to 10. The controller receives a hit of *d* with the demolition warhead (S-0303, Import mapping), with no attacker or attacking house and without ignoring defences. S-0302 resolves it like any other hit; a killing hit releases the victims under claim 10. The overload sound plays at the controller when its sound mark was clear, and the mark becomes set. When the spark type key is present (Import mapping), five spark particle systems of the rules' default spark type appear around the controller (F3), even after a lethal hit, and their positions consume 10 placement draws from the scenario random stream, taken at the pulse before the rocking draw. When the key is absent, neither happens (Import mapping). Creating a spark system takes no draw of its own; the draws of the sparks that each system later emits come in that system's turns (S-0616 claim 15). When *i* > 0 and the controller survives, its sideways body-rocking rate takes the F4 value, consuming one further draw. |
 
     Thus the sound plays once per uninterrupted run of damaging checks. The hit's effects and
     draws precede the spark placement draws, and the rocking draw follows the sparks (F3, F4).
@@ -710,7 +710,7 @@ F3 uses exact integer additions and integer draws, with no rounding.
 | `OverloadDamage` | `[CombatDamage]` | integer list | empty | *damage* of F2 |
 | `OverloadFrames` | `[CombatDamage]` | integer list | empty | *frames* of F2 |
 | `C4Warhead` | `[CombatDamage]` | warhead name | (S-0303) | warhead of the overload hit (claim 16) |
-| `DefaultSparkSystem` | `[CombatDamage]` | particle-system name | none | overload sparks (claim 16) |
+| `DefaultSparkSystem` | `[CombatDamage]` | particle-system name | none (the original's result for an absent key is not established; as a safe design fallback, the overload pulse creates no spark systems and takes no spark placement draws, and the importer warns) | overload sparks (claim 16) |
 | `AICaptureNormal`, `AICaptureWounded`, `AICaptureLowPower`, `AICaptureLowMoney` | `[General]` | integer list of four weights | empty | fate tables of claim 8, in the order team, grinder, bio reactor, hunt |
 | `AICaptureLowMoneyMark` | `[General]` | integer, credits | none: never selects the table (engine rule; the original's result is not determined, claim 8) | below this the controlling house's money selects the low-money table (claim 8) |
 | `AICaptureWoundedMark` | `[General]` | decimal fraction | none: never selects the table (engine rule; the original's result is not determined, claim 8) | below this health ratio the wounded table is used (claim 8) |
