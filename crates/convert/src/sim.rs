@@ -468,6 +468,7 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("naval", "Naval", Bool),
     ("bunker", "Bunker", Bool),
     ("unit_repair", "UnitRepair", Bool),
+    // spec: S-0603 Import mapping (Grinding: a recycling building, boolean, absent no)
     ("grinding", "Grinding", Bool),
     ("unit_absorb", "UnitAbsorb", Bool),
     ("infantry_absorb", "InfantryAbsorb", Bool),
@@ -705,6 +706,9 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
     // spec: S-0605 Import mapping (absent: none)
     ("enter_bio_reactor_sound", b"AudioVisual", "EnterBioReactorSound", Text),
     ("leave_bio_reactor_sound", b"AudioVisual", "LeaveBioReactorSound", Text),
+    // spec: S-0603 Import mapping (the rules-wide enter-grinder and leave-grinder sounds; absent: none)
+    ("enter_grinder_sound", b"AudioVisual", "EnterGrinderSound", Text),
+    ("leave_grinder_sound", b"AudioVisual", "LeaveGrinderSound", Text),
     // spec: S-0213 Import mapping
     ("maximum_cheer_rate", b"General", "MaximumCheerRate", Int),
     // spec: S-0209, S-0215, S-0210 Import mapping ([IQ])
