@@ -413,3 +413,66 @@ fn counts_recycling_buildings() {
     assert_eq!(tally.grinders[0].len(), 1, "{tally:?}");
     assert!(tally.grinders[1].is_empty(), "{tally:?}");
 }
+
+// A vehicle that becomes bunkered is counted once; a link that ends with
+// the vehicle and the bunker standing counts as a release; tank bunkers are
+// kept per house (S-0606 claims 7 and 12).
+#[test]
+fn counts_bunkered_vehicles_and_releases() {
+    let mut r = fixture::ruleset();
+    let mut b = fixture::building(2, 2, 500, 0);
+    b.bunker = Some(true);
+    b.number_impassable_rows = Some(0);
+    b.tech_level = Some(99);
+    r.sim.buildings.insert("BUNK".into(), b);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("BUNK".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-tally"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut tally = Tally::default();
+    g.step();
+    let bunk = testkit::spawn(&mut g.world, Kind::Building, "BUNK", 0, fixture::at(0, 6), 0);
+    let v = testkit::spawn(&mut g.world, Kind::Vehicle, "GUNR", 0, fixture::at(5, 7), 0);
+    for _ in 0..3 {
+        g.step();
+    }
+    tally.observe(&g.world);
+    assert_eq!(tally.bunkers[0].len(), 1, "{tally:?}");
+    g.world.houses[0].pending.clear();
+    glasnost_sim::orders::issue(
+        &mut g.world,
+        HouseId(0),
+        Order::Behaviour {
+            actor: v,
+            behaviour: glasnost_sim::rules::Behaviour::Enter,
+            attack_move: false,
+            target: None,
+            dest: Some(glasnost_sim::world::Target::Object(bunk)),
+        },
+    );
+    for _ in 0..1500 {
+        glasnost_sim::tick::step(&mut g.world);
+        tally.observe(&g.world);
+        if glasnost_sim::structures::bunker::bunkered(&g.world, v) {
+            break;
+        }
+    }
+    tally.observe(&g.world);
+    assert_eq!(tally.bunkered, 1, "{tally:?}");
+    glasnost_sim::orders::issue(&mut g.world, HouseId(0), Order::Deploy { actor: v });
+    for _ in 0..100 {
+        glasnost_sim::tick::step(&mut g.world);
+        tally.observe(&g.world);
+    }
+    assert_eq!(tally.bunkered, 1, "{tally:?}");
+    assert_eq!(tally.bunker_releases, 1, "{tally:?}");
+}

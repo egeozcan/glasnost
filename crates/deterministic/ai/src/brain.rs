@@ -395,13 +395,15 @@ impl Brain {
     }
 
     /// Builds a tank bunker (S-0606, [`crate::bunker::build_type`]) as a
-    /// person adds base defences, under the same conditions as the gattling
-    /// defence (and not in a think that ordered one).
+    /// person adds base defences early: as for the gattling defence (not
+    /// while selling out, not in a think that places or orders another
+    /// building, and not in a think that ordered a gattling defence), but
+    /// without waiting for the harvesters, since the price reserve of
+    /// [`crate::bunker::build_type`] already keeps the economy fed.
     fn build_bunker(&mut self, w: &World, out: &mut Vec<Order>) {
         let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
         let giving = |t: &TypeRef| !Self::giving_kinds(w, t.index).is_empty();
         if self.script.selling()
-            || !self.script.harvesters_kept(w)
             || out.iter().any(|o| {
                 matches!(o, Order::Place { .. })
                     || matches!(o, Order::Build { what } if what.kind == Kind::Building && (!climb(what) || giving(what)))
@@ -1209,8 +1211,14 @@ impl Brain {
             }
             let busy = matches!(o.target, Some(Target::Object(t))
                 if intruders.iter().any(|&(e, _)| e == t));
-            // A unit on its way into a recycling building (S-0603) is left to go.
-            let bound = o.beh.current == Some(Behaviour::Eaten) || o.beh.queued == Some(Behaviour::Eaten);
+            // A unit on its way into a recycling building (S-0603) is left to go;
+            // so is a vehicle on its way into a tank bunker, and a bunkered one
+            // is left to the bunker part (`bunker`), which lets it out (S-0606).
+            let bound = o.beh.current == Some(Behaviour::Eaten)
+                || o.beh.queued == Some(Behaviour::Eaten)
+                || (o.beh.current == Some(Behaviour::Enter)
+                    && glasnost_sim::structures::bunker::entering_bunker(w, id))
+                || glasnost_sim::structures::bunker::bunkered(w, id);
             if busy || bound {
                 continue;
             }

@@ -122,6 +122,9 @@ pub struct Special {
     uses: Uses,
     /// The orders given and the ones that did not take (`memory`).
     pub(crate) memory: Memory,
+    /// What the tank bunkers remember between thinks (`bunker`).
+    #[serde(default)]
+    pub(crate) bunker: crate::bunker::Watch,
 }
 
 /// The click a person would give `unit` on `target`, as orders, when the

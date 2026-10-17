@@ -1,7 +1,7 @@
 //! The own AI and tank bunkers (S-0606, PLAN §4.7): the house builds
 //! bunkers near its base; an empty bunker gets the nearest suitable idle
 //! vehicle by the enter click, never a harvester; a bunkered vehicle is let
-//! out by a deploy click to repair, retreat or attack. The tests use
+//! out by a deploy click to repair, retreat, attack or join the army. The tests use
 //! invented types on the synthetic skirmish.
 
 use std::sync::Arc;
@@ -165,7 +165,10 @@ fn a_taken_bunker_gets_no_second_vehicle() {
     let mut br = brain(&w);
     let orders = br.think(&w);
     assert_eq!(entered(&orders, c), None, "{orders:?}");
-    assert!(!deployed(&orders, a), "a sound vehicle in a sound bunker stays");
+    assert!(
+        !deployed(&orders, a),
+        "a sound vehicle in a sound bunker stays"
+    );
 }
 
 // S-0606 claims 11 and 12 and S-0214 table VD row VD5, PLAN §4.7: a damaged bunkered vehicle is let out by the deploy click to be repaired; so is one whose bunker is badly damaged.
@@ -223,7 +226,9 @@ fn the_house_builds_bunkers() {
     let count = |w: &World| {
         w.objects
             .values()
-            .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Building && o.type_index == bunk)
+            .filter(|o| {
+                o.owner == Some(HouseId(0)) && o.kind == Kind::Building && o.type_index == bunk
+            })
             .count()
     };
     for _ in 0..8000 {
@@ -248,4 +253,40 @@ fn a_bunkered_vehicle_is_not_idle() {
     assert!(glasnost_ai::scripted::idle(&w, a));
     bunker_in(&mut w, a, b);
     assert!(!glasnost_ai::scripted::idle(&w, a));
+}
+
+// S-0606 claims 7 and 12, PLAN §4.7: a vehicle that has sat in its bunker for the join time with nothing to shoot and no enemy near is let out by the deploy click to join the army, and is sent back in only once the re-entry pause is over.
+#[test]
+fn let_out_to_join_after_a_long_sit() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let a = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 4, 9);
+    bunker_in(&mut w, a, b);
+    settle(&mut w);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert!(!deployed(&orders, a), "just in: it stays");
+    testkit::run(&mut w, bunker::JOIN_AFTER);
+    settle(&mut w);
+    w.obj_mut(a).unwrap().target = None;
+    let orders = br.think(&w);
+    let let_out = w.tick;
+    assert!(deployed(&orders, a), "{orders:?}");
+    assert_eq!(br.special_uses().bunker_exits, 1);
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    testkit::run(&mut w, 120);
+    assert!(!sim_bunker::bunkered(&w, a));
+    // Out and idle by the empty bunker: not sent back in during the pause.
+    let mut sent_back = None;
+    while sent_back.is_none() && w.tick - let_out < 2 * bunker::REENTRY_PAUSE {
+        settle(&mut w);
+        let orders = br.think(&w);
+        if entered(&orders, a) == Some(b) {
+            sent_back = Some(w.tick);
+        }
+    }
+    let t = sent_back.expect("sent back in after the pause");
+    assert!(t - let_out >= bunker::REENTRY_PAUSE, "the re-entry pause: {t}");
 }

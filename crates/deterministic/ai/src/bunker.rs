@@ -5,8 +5,8 @@
 //! hits on it may land on the bunker instead (S-0606 claim 9 and the specs
 //! it cites). A person who knows this:
 //!
-//! - **builds bunkers near the base.** Once the house keeps its harvesters,
-//!   it builds up to [`WANTED`] bunkers, the cheapest type it can build,
+//! - **builds bunkers near the base.** Early, without waiting for its
+//!   harvesters, it builds up to [`WANTED`] bunkers, the cheapest type it can build,
 //!   when it holds [`RESERVE`] times the price ([`build_type`]); the brain
 //!   places them by its ordinary placement, in the spiral around the
 //!   construction yard, so they stand in the base as defences;
@@ -24,14 +24,25 @@
 //!   - *retreat*: the bunker is down to [`RETREAT_PERCENT`] of its strength,
 //!     so the vehicle is not caught when it falls;
 //!   - *attack*: an enemy is seen within [`ATTACK_REACH`] cells of the
-//!     bunker and the vehicle has no target (it cannot reach it from where
-//!     it stands).
+//!     bunker or of another building of the house, and the vehicle has no
+//!     target (it cannot reach it from where it stands);
+//!   - *join*: the vehicle has sat in its bunker for [`JOIN_AFTER`] ticks,
+//!     has nothing to shoot and sees no enemy near the base: the bunker guards
+//!     nothing, so the vehicle comes out to go with the next wave, and an
+//!     idle vehicle may take its place. A vehicle let out is not sent back
+//!     in for [`REENTRY_PAUSE`] ticks.
+//!
+//! The brain's base defence leaves a vehicle on its way into a bunker, or
+//! in one, to this part.
 //!
 //! Every order is one a person gives with the mouse. It reads only the
 //! house's own objects, the enemies it has seen and the rules a person may
 //! read, and draws no random value. The numbers are tuning of our own
 //! opponent, not game behaviour.
 
+use std::collections::BTreeMap;
+
+use glasnost_map::CellXY;
 use glasnost_sim::econ::{TypeRef, production, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
@@ -39,6 +50,8 @@ use glasnost_sim::structures::bunker;
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use glasnost_sim::{mind, psychic, transport};
+
+use serde::{Deserialize, Serialize};
 
 use crate::scripted::{self, Script, all_types, dist2};
 use crate::special::{Special, click_if};
@@ -61,9 +74,25 @@ pub const REPAIR_PERCENT: i32 = 40; // nocite: tuning of our own opponent
 /// strength is let out.
 pub const RETREAT_PERCENT: i32 = 25; // nocite: tuning of our own opponent
 
-/// Cells from a bunker within which a seen enemy the vehicle has no target
-/// on lets it out to attack.
+/// Cells from a bunker, or from another building of the house, within
+/// which a seen enemy the vehicle has no target on lets it out to attack.
 pub const ATTACK_REACH: i64 = 10; // nocite: tuning of our own opponent
+
+/// Ticks a vehicle sits in its bunker with nothing to do before it is let
+/// out to join the army.
+pub const JOIN_AFTER: i32 = 1200; // nocite: tuning of our own opponent
+
+/// Ticks after being let out before a vehicle is sent into a bunker again.
+pub const REENTRY_PAUSE: i32 = 1500; // nocite: tuning of our own opponent
+
+/// What the bunker part of the brain remembers between thinks.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Watch {
+    /// The bunkered vehicles and the tick each was first seen inside.
+    inside_since: BTreeMap<ObjectId, i32>,
+    /// The vehicles let out and the tick of the deploy click.
+    let_out: BTreeMap<ObjectId, i32>,
+}
 
 /// Whether building type `t` is a tank bunker.
 pub fn bunker_type(w: &World, t: TypeRef) -> bool {
@@ -164,30 +193,54 @@ fn free(w: &World, id: ObjectId) -> bool {
 /// A percentage of an object's strength left.
 fn percent(w: &World, id: ObjectId) -> i32 {
     let s = glasnost_sim::combat::damage::strength(w, id);
-    w.obj(id)
-        .map_or(0, |o| if s > 0 { o.health.saturating_mul(100) / s } else { 100 })
+    w.obj(id).map_or(0, |o| {
+        if s > 0 {
+            o.health.saturating_mul(100) / s
+        } else {
+            100
+        }
+    })
 }
 
 /// Why bunkered vehicle `v` in bunker `b` is let out, if it is.
-fn exit_reason(script: &Script, w: &World, v: ObjectId, b: ObjectId) -> Option<&'static str> {
+fn exit_reason(
+    script: &Script,
+    w: &World,
+    v: ObjectId,
+    b: ObjectId,
+    joins: bool,
+) -> Option<&'static str> {
     if percent(w, v) <= REPAIR_PERCENT {
         return Some("repair");
     }
     if percent(w, b) <= RETREAT_PERCENT {
         return Some("retreat");
     }
-    let at = w.obj(b)?.pos.cell();
-    let near = script
-        .seen_enemies(w)
-        .iter()
-        .any(|&(_, c)| dist2(c, at) <= ATTACK_REACH * ATTACK_REACH);
-    (near && w.obj(v)?.target.is_none()).then_some("attack")
+    if w.obj(v)?.target.is_some() {
+        return None;
+    }
+    // An enemy near the bunker or near any other building of the house
+    // (the base is under attack where the vehicle cannot reach).
+    let base: Vec<CellXY> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(script.house) && o.kind == Kind::Building && o.on_map)
+        .map(|o| o.pos.cell())
+        .collect();
+    let near = script.seen_enemies(w).iter().any(|&(_, c)| {
+        base.iter()
+            .any(|&h| dist2(c, h) <= ATTACK_REACH * ATTACK_REACH)
+    });
+    if near {
+        return Some("attack");
+    }
+    joins.then_some("join")
 }
 
 impl Special {
     /// Tank bunkers: bunkered vehicles let out first (repair, retreat,
-    /// attack), then each empty bunker gets the nearest free vehicle by the
-    /// *enter* click.
+    /// attack, join the army), then each empty bunker gets the nearest free
+    /// vehicle by the *enter* click.
     pub(crate) fn bunkers(
         &mut self,
         script: &Script,
@@ -197,6 +250,18 @@ impl Special {
     ) {
         let house = script.house;
         let buildings = bunkers(w, house);
+        let now = w.tick;
+        self.bunker
+            .let_out
+            .retain(|_, &mut t| now - t < REENTRY_PAUSE);
+        let held: Vec<ObjectId> = buildings
+            .iter()
+            .filter_map(|&b| bunker::occupant(w, b))
+            .collect();
+        self.bunker.inside_since.retain(|v, _| held.contains(v));
+        for &v in &held {
+            self.bunker.inside_since.entry(v).or_insert(now);
+        }
         if buildings.is_empty() {
             return;
         }
@@ -210,10 +275,16 @@ impl Special {
             if w.obj(v).and_then(|o| o.owner) != Some(house) || !targeting::selectable(w, v) {
                 continue;
             }
-            if exit_reason(script, w, v, b).is_some()
+            let joins = self
+                .bunker
+                .inside_since
+                .get(&v)
+                .is_some_and(|&t| now - t >= JOIN_AFTER);
+            if exit_reason(script, w, v, b, joins).is_some()
                 && targeting::cursor(w, house, &[v], ClickOn::Object(v), mods) == Action::Deploy
             {
                 out.push(Order::Deploy { actor: v });
+                self.bunker.let_out.insert(v, now);
                 self.count_bunker_exit();
             }
         }
@@ -228,7 +299,9 @@ impl Special {
             let pick = own
                 .iter()
                 .copied()
-                .filter(|&id| !sent.contains(&id) && free(w, id))
+                .filter(|&id| {
+                    !sent.contains(&id) && !self.bunker.let_out.contains_key(&id) && free(w, id)
+                })
                 .filter(|&id| self.memory.ok(w, id, Target::Object(b)))
                 .filter_map(|id| {
                     let d = dist2(w.obj(id)?.pos.cell(), at);
