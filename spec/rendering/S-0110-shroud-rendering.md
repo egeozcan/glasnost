@@ -2,11 +2,11 @@
 id: S-0110
 title: Shroud and fog rendering
 topic: rendering
-revision: 11
+revision: 12
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0480]
 supersedes: []
@@ -425,7 +425,7 @@ importer warns. An image frame index that the sprite does not have draws nothing
 **Common setup.** The glossary's *measurement setup*, a tiny purpose-made map of one theater with flat
 ground except where stated, one human player and one bystander computer player far away unless a
 scenario states otherwise, no lighting effects (ambient neutral), game speed index 2, 800×600.
-Director and mods are off; named test data below are the only overrides and are removed afterwards.
+No engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted); named test data below are the only overrides and are removed afterwards.
 A run is void if an unnamed opponent object enters the observed area or acts on a test object.
 Fog is off in every run; SH2 also tests that attempts to enable it do not survive skirmish start.
 Screenshots are compared with the selected shroud sprite's image frames and S-0104 shade rows.
