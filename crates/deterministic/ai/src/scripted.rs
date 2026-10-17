@@ -1074,31 +1074,49 @@ impl Script {
         let patient = !waiting.is_empty() && w.tick - since >= WAVE_PATIENCE;
         if waiting.len() >= self.plan.wave.max(1) || patient {
             self.waiting_since = None;
-            // The nearest seen enemy, else the next enemy start cell.
+            // Each unit goes to the seen enemy nearest home that it can
+            // reach and attack (a person does not send riflemen to stand at
+            // the shore by a ship), else all go to the next enemy start cell.
             let home = self.home(w);
             let from = w.obj(waiting[0]).map(|o| o.pos.cell());
-            let goal = home
-                .and_then(|h| enemies.iter().min_by_key(|&&(_, c)| dist2(c, h)))
-                .map(|&(_, c)| c)
-                .or_else(|| {
-                    (self.next_target < self.targets.len()).then(|| {
-                        let c = self.targets[self.next_target];
-                        self.next_target += 1;
-                        c
-                    })
-                })
-                .or_else(|| from.and_then(|f| self.unseen_cell(w, f)))
-                .or_else(|| {
-                    (!self.targets.is_empty()).then(|| {
-                        let c = self.targets[self.next_target % self.targets.len()];
-                        self.next_target += 1;
-                        c
+            let mut by_home: Vec<(ObjectId, CellXY)> = enemies.clone();
+            if let Some(h) = home {
+                by_home.sort_by_key(|&(e, c)| (dist2(c, h), e));
+            }
+            let mut picks: BTreeMap<(Kind, u32, Option<u32>), Option<CellXY>> = BTreeMap::new();
+            let mut fallback: Option<Option<CellXY>> = None;
+            // The nearest region cells, kept per goal (`reachable`).
+            let mut near: BTreeMap<CellXY, BTreeMap<(u8, u32), CellXY>> = BTreeMap::new();
+            for &id in &waiting {
+                let Some(o) = w.obj(id) else { continue };
+                let region = self.reach_region(w, id);
+                let key = (o.kind, o.type_index, region);
+                let pick = *picks.entry(key).or_insert_with(|| {
+                    by_home
+                        .iter()
+                        .find(|&&(e, c)| self.reaches(w, id, region, c) && can_attack(w, id, e))
+                        .map(|&(_, c)| c)
+                });
+                let goal = pick.or_else(|| {
+                    *fallback.get_or_insert_with(|| {
+                        (self.next_target < self.targets.len())
+                            .then(|| {
+                                let c = self.targets[self.next_target];
+                                self.next_target += 1;
+                                c
+                            })
+                            .or_else(|| from.and_then(|f| self.unseen_cell(w, f)))
+                            .or_else(|| {
+                                (!self.targets.is_empty()).then(|| {
+                                    let c = self.targets[self.next_target % self.targets.len()];
+                                    self.next_target += 1;
+                                    c
+                                })
+                            })
                     })
                 });
-            if let Some(c) = goal {
-                let mut near: BTreeMap<(u8, u32), CellXY> = BTreeMap::new();
-                for &id in &waiting {
-                    let dest = self.reachable(w, id, c, &mut near);
+                if let Some(c) = goal {
+                    let dest = self.reachable(w, id, c, near.entry(c).or_default());
                     out.push(Order::Behaviour {
                         actor: id,
                         behaviour: Behaviour::Move,
@@ -1110,6 +1128,38 @@ impl Script {
             }
         }
         out
+    }
+
+    /// The reach region unit `id` stands in for its movement zone (S-0212
+    /// claim 4); `None` for a unit that flies (S-0502), has no zone or
+    /// stands outside every region.
+    fn reach_region(&self, w: &World, id: ObjectId) -> Option<u32> {
+        let o = w.obj(id)?;
+        if crate::jumpjets::flies(w, id) {
+            return None;
+        }
+        let zone = w.rules().unit(o.kind, o.type_index)?.zone;
+        match regions::reach_in(w, o.pos.cell(), zone) {
+            Reach::Region(r) => Some(r),
+            _ => None,
+        }
+    }
+
+    /// Whether unit `id`, in reach region `region` ([`Script::reach_region`]),
+    /// goes for an enemy at cell `c`: `c` lies in that region, or the unit
+    /// has none, or it is a ship (it fires from the water nearest the
+    /// enemy, as a person sends ships to the water off an enemy base).
+    fn reaches(&self, w: &World, id: ObjectId, region: Option<u32>, c: CellXY) -> bool {
+        let Some(r) = region else { return true };
+        let Some(zone) = w
+            .obj(id)
+            .and_then(|o| w.rules().unit(o.kind, o.type_index))
+            .map(|u| u.zone)
+        else {
+            return true;
+        };
+        zone == glasnost_rules::sim::MovementZone::Water
+            || regions::reach_in(w, c, zone) == Reach::Region(r)
     }
 
     /// Whether unit `id` is infantry that cannot walk to `goal`: it stands

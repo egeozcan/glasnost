@@ -955,10 +955,13 @@ impl Brain {
             // would only drop infantry that are gathered and boarded again:
             // it leaves for the goal instead.
             let near_home = dist2(at, home) <= 4 * FERRY_HOME * FERRY_HOME; // nocite: tuning (the gathering radius above)
-            if !at_home && aboard > 0 && near_home {
-                if let Some(c) = to_goal() {
-                    out.push(go(c));
-                }
+            // With no drop cell to go to, the ferry lets them out instead.
+            if !at_home
+                && aboard > 0
+                && near_home
+                && let Some(c) = to_goal()
+            {
+                out.push(go(c));
                 continue;
             }
             if !at_home {

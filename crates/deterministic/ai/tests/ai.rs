@@ -1358,3 +1358,69 @@ fn a_released_infantry_unit_frees_its_barracks() {
         "the place is free for the next unit"
     );
 }
+
+// A wave goes for an enemy it can reach (PLAN §4.7, S-0212 claim 4): on the
+// naval map an enemy ship stands off the house's own shore, nearer home
+// than the enemy base. A tank cannot drive to it, so it is sent toward the
+// enemy base it can reach instead of to the shore by the ship, where it
+// would stand for good.
+#[test]
+fn a_wave_goes_for_an_enemy_it_can_reach() {
+    let map = fixture::map_naval();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-naval",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the naval skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()
+        && !of(w, 1, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let mut w = g.world.clone();
+    let yard = w.obj(of(&w, 0, "YARD")[0]).unwrap().pos.cell();
+    let base = w.obj(of(&w, 1, "YARD")[0]).unwrap().pos.cell();
+    let sea = glasnost_map::CellXY::new(yard.x, fixture::at(0, fixture::SEA_DY).y - 3);
+    let boat = testkit::spawn(&mut w, Kind::Vehicle, "BOAT", 1, sea, 0);
+    let tank_at = free_cells(&w, glasnost_map::CellXY::new(yard.x, yard.y + 8), 1)[0];
+    let tank = testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, tank_at, 0);
+    for c in [sea, base] {
+        shroud::area_reveal(
+            &mut w,
+            HouseId(0),
+            glasnost_sim::world::Pos::centre(c, 0),
+            6,
+        );
+    }
+    let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+        i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
+    };
+    assert!(
+        d2(sea, yard) < d2(base, yard),
+        "the ship is the seen enemy nearest home"
+    );
+    assert!(
+        d2(sea, tank_at) > 100,
+        "the ship is out of the tank's engage radius"
+    );
+    let mut plan = glasnost_ai::brain::default_plan();
+    plan.wave = 1;
+    let mut brain = Brain::with_plan(&w, &map, HouseId(0), plan);
+    let dest = brain.think(&w).into_iter().find_map(|o| match o {
+        Order::Behaviour {
+            actor,
+            dest: Some(Target::Cell(c)),
+            ..
+        } if actor == tank => Some(c),
+        _ => None,
+    });
+    let dest = dest.expect("the tank is sent with a wave");
+    let ship = w.obj(boat).unwrap().pos.cell();
+    assert!(
+        d2(dest, base) < d2(dest, ship),
+        "the tank goes toward the enemy base, not to the shore by the ship ({dest:?})"
+    );
+}
