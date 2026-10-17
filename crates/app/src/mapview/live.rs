@@ -1353,6 +1353,8 @@ impl Live {
             turret: o.turret.value(w.tick),
             // spec: S-0105 claim 6 (placed level, then turned toward the fire angle since placement at tick 0)
             elevation: voxel::barrel_elevation_after(fire_angle, w.tick.max(0) as u32),
+            // spec: S-0105 claim 16 and S-0609 claim 14 (the animation-frame counter as the simulation keeps it; the bit pattern, taken modulo the frame count)
+            anim: o.combat.anim_frame as u32,
             infantry,
             object: sim_code(id),
             // spec: S-0402 claim 5a, F8 (ν: the walk-animation counter of S-0105 claim 16). The
@@ -1477,6 +1479,8 @@ impl Live {
                         owner,
                         health: (o.health, strength),
                         facing: o.turret.value(self.world.tick),
+                        // spec: S-0105 claim 16 and S-0609 claim 14 (the animation-frame counter as the simulation keeps it)
+                        anim: o.combat.anim_frame as u32,
                         // spec: S-0108 Terms and claim 2 (occupied: at least one occupant)
                         occupied: !o.structure.occupants.is_empty(),
                         object: sim_code(o.id),

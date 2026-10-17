@@ -2234,7 +2234,8 @@ impl Builder<'_> {
             let facing = facing_from_value(p.facing);
             // A map-placed building is not unloading when the scene is built.
             let items = self.building_items(
-                i, &art, p.cell, cell.level, &p.owner, condition, false, facing, object, None,
+                // spec: S-0105 claim 16 and S-0609 claim 14 (a map-placed building has not spun: counter 0)
+                i, &art, p.cell, cell.level, &p.owner, condition, false, facing, 0, object, None,
                 None, ground,
             );
             self.built.scene.items.extend(items);
@@ -2259,6 +2260,7 @@ impl Builder<'_> {
         condition: (bool, bool),
         occupied: bool,
         facing: u16,
+        anim: u32,
         object: u32,
         unloading: Option<Unloading>,
         gate_door: Option<unload::DoorView>,
@@ -2509,7 +2511,7 @@ impl Builder<'_> {
         // Voxel turret or barrel in the object pass (S-0105 claims 5, 9, 37; S-0102 claims 5, 13).
         let turret_voxel = rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
         if turret_voxel || art.voxels.contains_key("barrel") {
-            parts.extend(self.building_voxels(i, art, facing, anchor, lz, u, hsv, object));
+            parts.extend(self.building_voxels(i, art, facing, anim, anchor, lz, u, hsv, object));
         }
         if !parts.is_empty() {
             // spec: S-0102 F4 (key = 256·(c_x + c_y) + 32 for a voxel turret − 16 for a gate)
@@ -2901,6 +2903,7 @@ impl Builder<'_> {
         idx: usize,
         art: &glasnost_convert::art::TypeArt,
         facing: u16,
+        anim: u32,
         anchor: (i32, i32),
         lz: i32,
         brightness: i32,
@@ -2940,8 +2943,8 @@ impl Builder<'_> {
         let turret = model_of(self, "turret");
         let barrel = model_of(self, "barrel");
         let mut items = Vec::new();
-        // spec: S-0105 claim 16 (an animation-frame counter of 0 before any attack: frame 0)
-        let counter = 0;
+        // spec: S-0105 claim 16 (the animation-frame counter: 0 before any attack); S-0609 claim 14 (a gattling building's counter advances while it spins)
+        let counter = anim;
         let parts = match turret {
             Some(t) => {
                 let pose = voxel::building_turret_parts(facing, offset, elevation, &q);
@@ -3140,6 +3143,8 @@ impl Builder<'_> {
             turret: facing,
             // spec: S-0105 claim 6 (placed level, then turned toward the fire angle; no tick has run)
             elevation: voxel::barrel_elevation_after(fire_angle, 0),
+            // spec: S-0105 claim 16 (no attack before the scene: counter 0)
+            anim: 0,
             infantry,
             object,
             // spec: S-0402 claim 5a (shown only while a harvest is loading; no tick has run)
@@ -3837,8 +3842,14 @@ impl Builder<'_> {
         }
         // spec: S-0105 claims 4, 8 (a turret part only with the turret flag)
         if rule_bool(self.import, kind, idx, b"Turret", false) {
-            // spec: S-0105 claim 16 (body frame 0 and an animation-frame counter of 0 before any attack: turret frame 0)
-            let turret_frame = voxel::vehicle_turret_frame(body_frame, 0, None);
+            // spec: S-0105 claim 16 (body frame 0: the turret frame from the animation-frame counter, which S-0609 claim 14 advances while a gattling vehicle spins)
+            let frames = art
+                .voxels
+                .get("turret")
+                .cloned()
+                .and_then(|f| self.voxel_model(&f))
+                .map(|t| t.frame_count() as u32);
+            let turret_frame = voxel::vehicle_turret_frame(body_frame, m.anim, frames);
             // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
             let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
             // spec: S-0105 claim 26 (turret key; flat ground, no multi-turret models, the alternative-model state off)
@@ -4052,6 +4063,9 @@ pub struct Mobile {
     pub turret: u16,
     /// Raw barrel elevation (S-0105 claim 6).
     pub elevation: u16,
+    /// The animation-frame counter of S-0105 claim 16 (S-0609 claim 14):
+    /// 0 without a game state.
+    pub anim: u32,
     /// For infantry: the entry and stage to show.
     pub infantry: Option<InfantryFrame>,
     /// The object code its items carry ([`Item::object`]).
@@ -4372,6 +4386,7 @@ impl Painter {
                 condition,
                 d.occupied,
                 d.facing,
+                d.anim,
                 d.object,
                 d.unloading,
                 d.gate_door,
@@ -4422,6 +4437,8 @@ pub struct LiveBuilding {
     pub health: (i32, i32),
     /// Turret facing.
     pub facing: u16,
+    /// The animation-frame counter of S-0105 claim 16 (S-0609 claim 14).
+    pub anim: u32,
     /// It holds at least one garrison occupant (S-0108 Terms, claim 2).
     pub occupied: bool,
     /// Item object code.
