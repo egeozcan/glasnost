@@ -2,7 +2,7 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -67,11 +67,16 @@ skirmish only; network games and campaigns are out of scope.
   what that unit is attacking or where it is going (claims 10 and 11).
 - **Psychic reveal.** The superweapon kind that reveals an area of the map to the launching house
   (claims 13 to 15).
+- **Late start.** The second ready-and-start chance of an infantry unit or vehicle in its update.
+  A unit's readiness there counts the movement it made in that same update. The start makes current a
+  queued behaviour of a unit that is then ready (S-0215 claim 11), which also defines the start that
+  comes first in the update; the late start is separate from it.
 - **Countdown update.** An update of a berserk unit on which its remaining berserk time goes down by
   one: any update that is in play and is neither an excluded nor a warp-only update (claim 5).
 - **Excluded update, warp-only update.** An update of a berserk unit that is in play but on which the
   countdown does not run. An excluded update is one that S-0215 claim 2 excludes for an infantry unit
-  or vehicle (travelling through a tunnel, being erased, or in the leaving stage of a chrono move),
+  or vehicle (travelling through a tunnel, being erased, or in the leaving stage of a chrono move, in the sense of S-0513 claim 39: from the member's first
+  update after launch until departure, including the update where its wait expires),
   or a landed aircraft's update while it is being erased (S-0215 claim 2 excludes its behaviour
   processing; the countdown part of that exclusion is this spec's choice, claim 5). A warp-only update
   is one of a superweapon-warp member on which S-0513 claim 51 suppresses its ordinary work (claim 5).
@@ -165,7 +170,7 @@ skirmish only; network games and campaigns are out of scope.
      of an open-topped transport stays in play and does take updates (S-0203 claim 3), so its
      countdown continues.
    - **Excluded updates.** The updates of S-0215 claim 2 on which the unit is travelling through a
-     tunnel, is being erased by a temporal weapon or is in the leaving stage of a chrono move. Such
+     tunnel, is being erased by a temporal weapon or is in the leaving stage of a chrono move (S-0513 claim 39). Such
      an update takes no countdown step; the remaining time is kept. For a landed aircraft being
      erased, the countdown is not established: S-0514 claim 17 excludes its movement, turning and
      firing, and S-0215 claim 2 excludes its behaviour processing, but neither mentions the
@@ -185,9 +190,10 @@ skirmish only; network games and campaigns are out of scope.
 
    **Effects in the update where the countdown ends.** The expiry shows in that same tick, in the
    unit's firing, its target searches and its behaviour. The observable consequences are these.
-   Whether a per-tick start (S-0215 claim 11) that falls after the countdown step can make a queued
-   behaviour current in the same tick is open (see Open questions); the queued-behaviour bullet
-   below states the provisional rule and the test that decides it (P9 part b):
+   The unit's firing and target searches in that update already treat it as ordinary (the first
+   bullet below). Whether a queued behaviour that the expiry leaves can become current at the end of
+   that update, through the unit's late start (S-0215 claim 11), is open (see Open questions). The
+   queued-behaviour bullet below states what follows either way, and no measurement here decides it:
    - **No berserk shot in the expiry update.** The expiry therefore clears the target before any
      shot of that update. The last shot fired as
      berserk (halved rearm time, S-0301 claim 8; friendly targets allowed, S-0309) is in the
@@ -196,21 +202,26 @@ skirmish only; network games and campaigns are out of scope.
      follows the ordinary rules (no berserk exceptions, ordinary rearm) and may be fired at in that
      same update. A shot already in flight is not affected.
    - **The queued behaviour is not yet in charge.** The *guard* or *hunt* queued by expiry is only
-     queued in the expiry update, and it does not start there: no guard-mode search or guard hold
-     begins in the expiry update. A hunt move that the unit is carrying out as its current
+     queued when the countdown ends. If the expiry is already in effect when the unit's late start is
+     judged (see Effects), a unit that is then ready to change may have the queued behaviour made current
+     by that late start at the end of the same update (S-0215 claim 11). Either way, no guard-mode search,
+     guard hold or processing of the queued behaviour happens in the expiry update, and its first
+     processing is in the unit's next update. A hunt move that the unit is carrying out as its current
      behaviour continues through the expiry update. On the expiry tick, the behaviour that was
      current before the expiry still runs when its delay is due, now without the target it had and
      with ordinary, non-berserk searches. A vehicle that is moving under hunt is
      not ready (S-0215 claim 11), so it keeps hunting until it stops; an infantry unit under hunt is
-     ready. Whether a per-tick start that falls after the countdown step could make the queued
-     behaviour current within the expiry update is open (see Open questions); part b of P9 decides it.
+     ready, so, if the expiry is already in effect at its late start, that late start may make the queued
+     behaviour current at the end of the expiry update, without processing it (unmeasured, see Open
+     questions).
    - **A queued behaviour that never started.** Expiry queues *guard* or *hunt* by replacing
      whatever is queued, as claim 4 does. A unit that was never ready after the hit still has the
      hit's *hunt* queued; expiry replaces it by *guard* (human-controlled owner, AI house) and the
      unit never hunts. Where expiry queues the behaviour that is already current and nothing else
      is queued (a neutral-house unit under hunt), nothing changes.
    - Backing: `measurable` (P2; for *T* ≤ 0, P3 and S-0302 scenario D17 part i's named zero- and
-     negative-versus test setup; P9 parts a and b for the shot and the behaviour order; P9 part d for
+     negative-versus test setup; P9 part a for the shot, and P9 part b for the behaviour order except
+     the start order (unmeasured, see Open questions); P9 part d for
      the erasing exclusion; P9 part e for the leaving stage of a chrono move, by its leaving-stage
      expectation; P9 part c for the replaced queue if a stock or map-placed setup keeps the vehicle
      moving, as that part says, otherwise `unmeasured`). The tunnel and landed-aircraft exclusions are
@@ -223,9 +234,9 @@ skirmish only; network games and campaigns are out of scope.
      takes a unit inside. The non-leaving warp-only rule is a design rule of our engine, checked by
      replaying P9 part e on our engine; the original's leaving stage is `measurable` (P9 part e).
    - Confidence: high (countdown and expiry effects); medium (order of the step and the firing check,
-     pending P9 parts a and b; the erasing and leaving-stage exclusions of the countdown, pending P9
-     parts d and e; tunnel exclusion, unmeasured; the order of the queued behaviour's start in the
-     expiry update; the open-topped passenger case); medium (the *T* ≤ 0 case); low (landed aircraft
+     pending P9 parts a and b; the start of the queued behaviour in the expiry update, unmeasured (see
+     Open questions); the erasing and leaving-stage exclusions of the countdown, pending P9
+     parts d and e; tunnel exclusion, unmeasured; the open-topped passenger case); medium (the *T* ≤ 0 case); low (landed aircraft
      exclusion, unmeasured; that the original takes the step in the non-leaving warp updates, which our
      engine suppresses by design; the out-of-play rule: derived from the update order, unmeasured, and
      not known to be reachable in ordinary play)
@@ -612,7 +623,10 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
   moving under hunt (it is not ready to change while moving) and stops hunting only when it stops.
   Repeat with an infantry unit: it keeps its hunt move through the expiry tick and takes no
   guard-mode action (no target acquired by a guard scan and no hold) in the expiry tick; the
-  earliest guard-mode action is on a later tick. A run of either kind is valid only if the recorder
+  earliest guard-mode action is on a later tick. Whether a ready infantry unit shows the queued
+  behaviour as current at the end of the expiry tick (S-0215 claim 11) is not measured here: no
+  expected value is stated for it, so the start order of claim 5 is `unmeasured`. A run of either
+  kind is valid only if the recorder
   shows the unit moving on the expiry tick; otherwise it is void. Falsified by a guard-mode
   acquisition or hold in the expiry tick, an infantry unit that stops its hunt move before the end of
   the expiry tick, or a vehicle that stops moving under hunt, or changes its behaviour, before it
@@ -647,9 +661,10 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
 ## Open questions
 - Whether any ordinary play can put a berserk unit inside another object (claim 5, out of play):
   none is known, so the paused-countdown rule there is derived from the update order alone.
-- Whether a per-tick start of an ordinary unit falls after its countdown step, so that a queued *guard*
-  or *hunt* could become current and be processed in the expiry update (claim 5). No approved spec fixes
-  that order; part b of P9 decides it. Until then claim 5 states that it does not start there.
+- Whether a queued *guard* or *hunt* that expiry leaves becomes current at the late start of the
+  expiry update (claim 5, Effects). No approved spec fixes that order, and no measurement here decides
+  it, because P9 part b states no expected value. S-0215 claim 11 names this instance as measurable
+  under P9 part b, so that spec and this one must be revised together before sign-off.
 - Whether the original runs the countdown in the pending, departure, off-map, placement, arrival and hold
   updates of a superweapon warp member (claim 5). Our engine suppresses it in the pending, departure,
   off-map, placement and arrival updates by design, and runs it in hold after each hold-end test (S-0513
