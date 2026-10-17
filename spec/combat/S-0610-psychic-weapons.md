@@ -2,7 +2,7 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -192,8 +192,9 @@ skirmish only; network games and campaigns are out of scope.
    unit's firing, its target searches and its behaviour. The observable consequences are these.
    The unit's firing and target searches in that update already treat it as ordinary (the first
    bullet below). Whether a queued behaviour that the expiry leaves can become current at the end of
-   that update, through the unit's late start (S-0215 claim 11), is open (see Open questions). The
-   queued-behaviour bullet below states what follows either way, and no measurement here decides it:
+   that update, through the unit's late start (S-0215 claim 11), is open (see Open questions). For an
+   infantry unit that is moving and ready, S-0215 B46 is the proposed measurement of that case; for every
+   other ready unit no measurement exists yet. The queued-behaviour bullet below states what follows either way:
    - **No berserk shot in the expiry update.** The expiry therefore clears the target before any
      shot of that update. The last shot fired as
      berserk (halved rearm time, S-0301 claim 8; friendly targets allowed, S-0309) is in the
@@ -212,7 +213,8 @@ skirmish only; network games and campaigns are out of scope.
      with ordinary, non-berserk searches. A vehicle that is moving under hunt is
      not ready (S-0215 claim 11), so it keeps hunting until it stops; an infantry unit under hunt is
      ready, so, if the expiry is already in effect at its late start, that late start may make the queued
-     behaviour current at the end of the expiry update, without processing it (unmeasured, see Open
+     behaviour current at the end of the expiry update, without processing it (for an infantry unit that is
+     moving and ready, the proposed measurement is S-0215 B46; other cases are unmeasured, see Open
      questions).
    - **A queued behaviour that never started.** Expiry queues *guard* or *hunt* by replacing
      whatever is queued, as claim 4 does. A unit that was never ready after the hit still has the
@@ -221,7 +223,8 @@ skirmish only; network games and campaigns are out of scope.
      is queued (a neutral-house unit under hunt), nothing changes.
    - Backing: `measurable` (P2; for *T* ≤ 0, P3 and S-0302 scenario D17 part i's named zero- and
      negative-versus test setup; P9 part a for the shot, and P9 part b for the behaviour order except
-     the start order (unmeasured, see Open questions); P9 part d for
+     the start order (for an infantry unit that is moving and ready on the expiry tick, S-0215 B46; otherwise
+     unmeasured, see Open questions); P9 part d for
      the erasing exclusion; P9 part e for the leaving stage of a chrono move, by its leaving-stage
      expectation; P9 part c for the replaced queue if a stock or map-placed setup keeps the vehicle
      moving, as that part says, otherwise `unmeasured`). The tunnel and landed-aircraft exclusions are
@@ -234,7 +237,7 @@ skirmish only; network games and campaigns are out of scope.
      takes a unit inside. The non-leaving warp-only rule is a design rule of our engine, checked by
      replaying P9 part e on our engine; the original's leaving stage is `measurable` (P9 part e).
    - Confidence: high (countdown and expiry effects); medium (order of the step and the firing check,
-     pending P9 parts a and b; the start of the queued behaviour in the expiry update, unmeasured (see
+     pending P9 parts a and b; the start of the queued behaviour in the expiry update, pending S-0215 B46 (see
      Open questions); the erasing and leaving-stage exclusions of the countdown, pending P9
      parts d and e; tunnel exclusion, unmeasured; the open-topped passenger case); medium (the *T* ≤ 0 case); low (landed aircraft
      exclusion, unmeasured; that the original takes the step in the non-leaving warp updates, which our
@@ -619,15 +622,17 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
   at it up to the tick before expiry. Falsified by
   one shot at the own-house object on the expiry tick.
   (b) *Queued behaviour.* Put an enemy durable unit far outside the tank's weapon range but in
-  the unit's reach, and let the tank hunt it after the hit. Expected: at expiry a vehicle keeps
+  the unit's reach, and order the tank to hunt it before the hit (a berserk unit takes no orders, claim 6,
+  and the hit only queues *hunt*, claim 4). Expected: at expiry a vehicle keeps
   moving under hunt (it is not ready to change while moving) and stops hunting only when it stops.
   Repeat with an infantry unit: it keeps its hunt move through the expiry tick and takes no
   guard-mode action (no target acquired by a guard scan and no hold) in the expiry tick; the
   earliest guard-mode action is on a later tick. Whether a ready infantry unit shows the queued
-  behaviour as current at the end of the expiry tick (S-0215 claim 11) is not measured here: no
-  expected value is stated for it, so the start order of claim 5 is `unmeasured`. A run of either
-  kind is valid only if the recorder
-  shows the unit moving on the expiry tick; otherwise it is void. Falsified by a guard-mode
+  behaviour as current at the end of the expiry tick (S-0215 claim 11) is the proposed measurement S-0215 B46,
+  which states its expected value and falsifier. That measurement covers only an infantry unit that is moving
+  and ready on the expiry tick; the start order for any other ready unit is unmeasured. A run of either kind is
+  valid only if the recorder shows the unit moving on the expiry tick; an infantry run is also valid only under
+  the conditions of S-0215 B46. Any other run is void. Falsified by a guard-mode
   acquisition or hold in the expiry tick, an infantry unit that stops its hunt move before the end of
   the expiry tick, or a vehicle that stops moving under hunt, or changes its behaviour, before it
   stops of its own accord.
@@ -662,9 +667,9 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
 - Whether any ordinary play can put a berserk unit inside another object (claim 5, out of play):
   none is known, so the paused-countdown rule there is derived from the update order alone.
 - Whether a queued *guard* or *hunt* that expiry leaves becomes current at the late start of the
-  expiry update (claim 5, Effects). No approved spec fixes that order, and no measurement here decides
-  it, because P9 part b states no expected value. S-0215 claim 11 names this instance as measurable
-  under P9 part b, so that spec and this one must be revised together before sign-off.
+  expiry update (claim 5, Effects). S-0215 claim 11 gives that order as an example, and backs it by
+  S-0215 B46 only for an infantry unit that is moving and ready on the expiry tick. For any other ready
+  unit no measurement yet decides it, so that case stays open.
 - Whether the original runs the countdown in the pending, departure, off-map, placement, arrival and hold
   updates of a superweapon warp member (claim 5). Our engine suppresses it in the pending, departure,
   off-map, placement and arrival updates by design, and runs it in hold after each hold-end test (S-0513
