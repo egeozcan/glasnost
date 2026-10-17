@@ -70,7 +70,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0515](structures/S-0515-tech-buildings.md) | Tech buildings (manned state, acquisition bonus, periodic income, ownership changes) | structures | 4 | approved | — |
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 9 | approved | — |
 | [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 17 | approved | — |
-| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 17 | approved | — |
 | [S-0609](combat/S-0609-gattling-spin-up.md) | Gattling spin-up | combat | 5 | approved | — |
 | [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 29 | approved | — |
 | [S-0605](structures/S-0605-infantry-absorber.md) | Infantry absorber (who may enter an absorbing building, entry, holding, release) | structures | 2 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 12 | approved | — |
 | [S-0508](structures/S-0508-garrisons.md) | Garrisons (occupying buildings, ownership of civilian garrisons, evacuation and clearing) | structures | 9 | approved | — |
 | [S-0509](structures/S-0509-engineers-capture.md) | Engineers and capture | structures | 7 | approved | — |
+| [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 18 | approved | — |

@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1511,7 +1511,7 @@ The storm-created, storm-approach and storm-active/refusal messages use their co
 
 ## Measurement scenarios
 
-All runs: stock data unless a named test file is stated, skirmish mode, director and mods off,
+All runs: stock data unless a named test file is stated, skirmish mode, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
 800 × 600 resolution, game speed index 2, superweapons on. Each part uses a tiny purpose-made
 map and is run three times; draw tests use ten independently seeded runs, recording the seed
 without setting it. Observe through scripted normal mouse/keyboard input, video, a read-only
@@ -1658,8 +1658,8 @@ is not under test.
   test. Record each debris creation point read-only before its first turn: exactly the
   strike point, including bridge lift but no extra lift. Different witness, tie, empty
   result or creation position falsifies the corresponding subclaim.
-  (f) Building witness geometry: on a tiny level skirmish map, speed index 2, director
-  and mods off, use waypoint-triggered isolated strikes on each foundation cell of
+  (f) Building witness geometry: on a tiny level skirmish map, speed index 2, no engine add-on
+  and no mods (the named test files of a scenario and the purpose-made test maps excepted), use waypoint-triggered isolated strikes on each foundation cell of
   stock 1 × 1, 2 × 2, odd-by-even and even-by-odd building types where available.
   Run each cell in a fresh fixture so earlier destruction cannot change the listing.
   Use named test data only where needed to permit infantry on the footprint, make the
@@ -2034,7 +2034,7 @@ is not under test.
   (d) Extend the stock runs with a cell free at its successful landing check but receiving
   a building, terrain obstruction, protected occupant or capacity-filling unit before the
   next update. Separately change deck availability in that interval. Use stock objects,
-  director and mods off, fixed game speed and three repetitions per obtainable case, with
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), fixed game speed and three repetitions per obtainable case, with
   scripted ordinary orders and the permitted read-only recorder; inability to time the
   one-update interval makes that run inconclusive. Record landing point, occupants,
   capacity, warp stage, health, passenger counts and subsequent redirects every tick.
