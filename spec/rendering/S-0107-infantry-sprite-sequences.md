@@ -2,11 +2,11 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0087, Q-0212]
 supersedes: []
@@ -1176,14 +1176,14 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
 ## Measurement scenarios
 
 **M19 (claim 21, slave-release cheer).** Use S-0312 claims 30 and 31's scenarios D21
-and D22, including their stock-data setup, speed 6, director and mods off, and run counts.
+and D22, including their stock-data setup, speed 6, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and run counts.
 Record the released on-map slaves' sequence requests and drawn image frames at transfer.
 Expected: every successful release transfer requests *cheer*, subject to claim 6's start
 rules; hidden removal and the no-recipient damage path make no such request. A successful
 transfer without the request, or a release cheer request on either excluded path, falsifies
 this claim. A refused request need not produce a visible cheer.
 
-Common setup: skirmish, game speed 6 unless a part varies it, 800 × 600, director and mods off, and the glossary's measurement setup (an unmodified install with stock data, no loose
+Common setup: skirmish, game speed 6 unless a part varies it, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and the glossary's measurement setup (an unmodified install with stock data, no loose
 override files and no engine add-ons), a tiny flat map with clear terrain and one water and beach
 strip, and a fixed game speed unless stated otherwise. Include one distant bystander computer
 player unless a part already includes a computer-controlled test owner. The observed area contains
@@ -1251,7 +1251,7 @@ whose …") means any stock type with that property; the property is a precondit
   - (a) Destination equality and timing (Q-0087). On a flat skirmish test map, game speed 6,
     place a soldier of the human player that can crawl and has get-up image frames, and a
     weak known attacker beyond retaliation reach. One bystander computer player stays far
-    away. Director and mods are off. Hit the soldier once, then remove the attacker by a map
+    away. No engine add-on and no mods are in use (the named test files of a scenario and the purpose-made test maps excepted). Hit the soldier once, then remove the attacker by a map
     trigger. Wait until *prone* plays, but give the test orders before fear falls below 50.
     From a fresh prone state with no destination, issue a move to a distant clear cell A,
     then, while the unit still crawls toward A, reissue the move to A. In separate fresh
@@ -1268,7 +1268,7 @@ whose …") means any stock type with that property; the property is a precondit
   - (c) Order families. Repeat (a) from fresh prone states with attack-move to a cell,
     attack on an out-of-reach target, area guard, route-mode destinations, scatter, enter a
     transport and capture a building. Use stock types legally capable of each order and
-    stock data, game speed 6, director and mods off. Record the destination before and
+    stock data, game speed 6, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Record the destination before and
     after each assignment, its tick and the sequence, including later chase and waypoint
     assignments. For each family test a first destination and, where input permits it,
     a repeat of the same destination while still prone. Expected: get-up only at a
@@ -1513,7 +1513,7 @@ whose …") means any stock type with that property; the property is a precondit
     apart. Falsified if no idle outcome appears in the 18000 ticks while the unit stays in *hunt*.
     Runs: three games.
 - **M9(d) (claim 14, Q-0212).** On a tiny flat skirmish map at game speed 6, with one
-  distant bystander computer player, director and mods off, use named test rules data
+  distant bystander computer player, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), use named test rules data
   to register an invented infantry type under the designated cow identifier of Import
   mapping and a copy of the stock cow under an unrelated invented identifier. Give both
   to the human player, keep them unselected, unhurt and without targets, and use clear
