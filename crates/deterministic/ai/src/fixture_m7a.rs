@@ -15,7 +15,12 @@
 //!   berserk-causing warhead MAD; each house starts with a row of them and
 //!   the barracks builds more), EYE (a psychic sensor building, built by
 //!   the AI) and MINDB (a building that gives the psychic
-//!   reveal REVEAL, buildable once a war factory stands). A skirmish drops
+//!   reveal REVEAL, buildable once a war factory stands).
+//! - Alpha only (S-0609, S-0601): GATV (a gattling vehicle whose six
+//!   stage slots hold the weapons SPIN0 … SPIN2, built at the war
+//!   factory), GATB (a gattling defence building) and TAKER (a rifleman
+//!   whose weapon THRALL has the takeover warhead MIND, capacity 4). Its
+//!   victims are Beta's units, none psionics-immune. A skirmish drops
 //!   the structures a map gives a player's house (S-0009 claim 27), so the
 //!   houses start with units only.
 //!
@@ -28,7 +33,9 @@ use std::sync::Arc;
 use glasnost_map::objects::{Infantry, Placed, Unit};
 use glasnost_map::{CellXY, Map};
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{Decimal, LocomotionClass, Locomotor, UnitType, WarheadType, WeaponType};
+use glasnost_rules::sim::{
+    CombatFields, Decimal, LocomotionClass, Locomotor, UnitType, WarheadType, WeaponType,
+};
 use glasnost_rules::sim_econ::SuperweaponType;
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::rules::SimRules;
@@ -176,6 +183,78 @@ pub fn ruleset() -> Ruleset {
     mind.econ.super_weapon = Some("REVEAL".into());
     register(&mut r, "buildings", "MINDB");
     r.sim.buildings.insert("MINDB".into(), mind);
+
+    // Alpha's gattling vehicle and defence: three weapons of growing
+    // damage, one per stage (slots 0 and 1, 2 and 3, 4 and 5 alike).
+    let warhead = r.sim.weapons["Gun"].warhead.clone();
+    for (i, dmg) in [(0, 6), (1, 9), (2, 12)] {
+        r.sim.weapons.insert(
+            format!("SPIN{i}"),
+            WeaponType {
+                damage: Some(dmg),
+                rof: Some(20),
+                range: Some(d("6")),
+                speed: Some(100),
+                projectile: Some("Bullet".into()),
+                warhead: warhead.clone(),
+                ..Default::default()
+            },
+        );
+    }
+    let spin = |c: &mut CombatFields| {
+        c.weapon_slots = Some((0..6).map(|i| format!("SPIN{}", i / 2)).collect());
+        c.is_gattling = Some(true);
+        c.weapon_stages = Some(3);
+        c.rate_up = Some(4);
+        c.rate_down = Some(2);
+        c.stage_thresholds = Some(vec![20, 60, 120]);
+    };
+    let mut gatv = r.sim.vehicles["GUNR"].clone();
+    gatv.primary = None;
+    gatv.secondary = None;
+    gatv.turret_count = Some(1);
+    gatv.weapon_count = Some(6);
+    gatv.cost = Some(900);
+    gatv.econ.required_houses = only("Alphaland");
+    spin(&mut gatv.combat);
+    register(&mut r, "vehicles", "GATV");
+    r.sim.vehicles.insert("GATV".into(), gatv);
+    let mut gatb = fixture::building(1, 1, 500, 0);
+    gatb.strength = Some(1200);
+    gatb.turret_count = Some(1);
+    gatb.econ.required_houses = only("Alphaland");
+    spin(&mut gatb.combat);
+    register(&mut r, "buildings", "GATB");
+    r.sim.buildings.insert("GATB".into(), gatb);
+
+    // Alpha's mind controller.
+    r.sim.warheads.insert(
+        "MIND".into(),
+        WarheadType {
+            mind_control: Some(true),
+            verses: Some(vec![d("1"); 11]),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.insert(
+        "THRALL".into(),
+        WeaponType {
+            damage: Some(4),
+            rof: Some(60),
+            range: Some(d("3")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("MIND".into()),
+            ..Default::default()
+        },
+    );
+    let mut taker = r.sim.infantry["WALKER"].clone();
+    taker.primary = Some("THRALL".into());
+    taker.secondary = None;
+    taker.cost = Some(300);
+    taker.econ.required_houses = only("Alphaland");
+    register(&mut r, "infantry", "TAKER");
+    r.sim.infantry.insert("TAKER".into(), taker);
     r
 }
 
