@@ -282,6 +282,49 @@ fn edge_loading_request_makes_no_cloud() {
     assert_eq!(w.rng, expected, "the requests' creation draws are taken");
 }
 
+/// spec: S-0010 claim 19 (a tile animation started while the map loads with μ = 0 has its middle event at creation, S-0109 claim 14), S-0109 claim 14 (a loading-time μ = 0 request meets no shared system) and S-0613 Edge cases (our departure: the creation draws are taken and no cloud is made)
+#[test]
+fn edge_loading_tile_animation_request_makes_no_cloud() {
+    use glasnost_map::terrain::TileAnim;
+    let mut r = rules();
+    register(&mut r, "animations", "SEEP");
+    r.sim.animations.insert(
+        "SEEP".into(),
+        AnimationType {
+            middle_frame: Some(0),
+            spawns_particle: Some("FOG".into()),
+            num_particles: Some(2),
+            ..Default::default()
+        },
+    );
+    let mut cat = (*testkit::catalogue()).clone();
+    cat.tiles[1].anim = Some(TileAnim {
+        name: "SEEP".into(),
+        attaches_to: 0,
+        ..TileAnim::default()
+    });
+    let cat = Arc::new(cat);
+    let mut map = testkit::empty_map(SIZE);
+    map.cells.get_mut(testkit::mid(SIZE, 0, 0)).expect("a map cell").tile = 1;
+    let load = |r: &Ruleset| {
+        let rules = Arc::new(glasnost_sim::rules::SimRules::new(r, "synthetic-gas"));
+        glasnost_sim::load::new_game(rules, &map, cat.clone(), &testkit::setup(7)).expect("loads")
+    };
+    let w = load(&r);
+    assert!(w.gas.systems[&shared(&w)].particles.is_empty(), "no cloud from loading");
+    // The same tile animation with no particle requested. It starts twice
+    // while loading (its cell's first recalculation and the second pass,
+    // S-0010 claim 19), and each start's two requests take one raw value
+    // each (a gas particle, S-0202 claim 15).
+    let mut none = r.clone();
+    none.sim.animations.get_mut("SEEP").unwrap().num_particles = Some(0);
+    let mut expected = load(&none).rng;
+    for _ in 0..4 {
+        expected.raw();
+    }
+    assert_eq!(w.rng, expected, "both starts' creation draws are taken");
+}
+
 /// spec: S-0613 claim 17 (a positive lifetime marks the shared system in that turn; empty, it leaves play in the same turn and is not created again; a later virus death makes no cloud but takes the request's creation draws, a departure)
 #[test]
 fn claim_1_finite_shared_lifetime() {
@@ -831,6 +874,29 @@ fn f9_initial_lifetime() {
         if field == 1 {
             assert_eq!(e, 1);
         }
+    }
+}
+
+/// spec: S-0202 claim 15 (every particle: the lifetime variation is |r rem m|, with m = 10 for railgun behaviour, so it lies in 0 … 9 whatever the lifetime field; it is added to the field, S-0613 F9) and S-0613 claim 2 (a middle event's particle goes into the shared system whatever its kind)
+#[test]
+fn claim_15_railgun_lifetime_variation() {
+    let mut r = rules();
+    register(&mut r, "particles", "RAIL");
+    r.sim.particles.insert(
+        "RAIL".into(),
+        ParticleType {
+            behaves_like: Some("railgun".into()),
+            max_ec: Some(1000),
+            ..Default::default()
+        },
+    );
+    let mut w = game(&r);
+    for _ in 0..8 {
+        let mut rng: Rng = w.rng.clone();
+        let i = puff(&mut w, "RAIL", centre(0, 0));
+        let u = ((rng.raw() as i32) % 10).wrapping_abs();
+        assert!((0..10).contains(&u));
+        assert_eq!(i32::from(list(&w, shared(&w))[i].life), 1000 + u);
     }
 }
 
