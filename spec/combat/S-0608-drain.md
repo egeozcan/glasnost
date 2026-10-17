@@ -2,11 +2,11 @@
 id: S-0608
 title: Drain (attaching to a building, draining its power and credits, and letting go)
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -92,9 +92,8 @@ New terms:
      its target,
    - against an object whose type is not drainable, nothing happens and the firer keeps its target
      (the firing check normally refuses this case first, claim 3),
-   - against an object of a drainable type, the attempt tries to form a link (claim 2) and then
-     clears the firer's target, whether or not the link formed and whatever the weapon's fire-once
-     flag says. The destination is not touched.
+   - against an object of a drainable type, the firer's target is cleared whether or not a link
+     forms (claim 2 decides the link) and whatever the weapon's fire-once flag says. The destination is not touched.
 
    Because the countdown does not start, a later drain attempt is limited only by the firing
    check, not by the weapon's rate of fire.
@@ -253,16 +252,20 @@ New terms:
       has been established.
     - Confidence: high (the period and phase, the vehicle rule), medium (pulse-disabled drainers)
 
-13. **Either party is destroyed or removed.** The link ends at once:
+13. **Either party is destroyed or removed.** The link that involves it ends at once, except that a
+    first link stranded by the second-link quirk (Edge cases) does not end at its drainer's killing
+    hit: it ends when the drainer is removed. When the stranded first building receives its killing
+    hit or is removed, that link ends at once, and the drainer's newer link ends with it:
     - when the drainer or the building receives its killing hit (S-0302 claim 14), before the
       death effects that follow it,
     - when the drainer or the building is removed from the game in any other way (for example a
       building removed at the end of a sale it had started before the drain, or an object erased by
       a temporal weapon, S-0514).
-    - Backing: `measurable` (scenario D8)
-    - Confidence: high (killing hit, removal). Temporary departures from play without destruction
-      are `unmeasured` and unresolved here: their removal notifications have not been traced and
-      no isolating skirmish setup has been established.
+    - Backing: `measurable` (scenario D8; D9 part a for the stranded first link)
+    - Confidence: high (killing hit and removal, and the stranded state of Edge cases). Medium for
+      the stranded first building's destruction interactions, as Edge cases gives them. Temporary
+      departures from play without destruction are `unmeasured` and unresolved here: their removal
+      notifications have not been traced and no isolating skirmish setup has been established.
 
 14. **What ending the link restores.** When a link ends, for any cause:
     - the building is no longer being drained, and its house is due to work out its power.
@@ -397,7 +400,7 @@ Observable ordering consequences:
 
 ## Measurement scenarios
 
-Use a purpose-made small skirmish map with clear land, with director and other mods off, speed
+Use a purpose-made small skirmish map with clear land, with no engine add-on and no mods (the named test files of a scenario and the purpose-made test map excepted), speed
 index 2 and 800×600. One human house owns the drainers (Floating Discs). One computer house owns
 the target buildings and is allied with nobody unless a part says so; it is given buildings only
 and 0 starting credits (raised only in D6). Void a run if unrequested building, repair, sale,
@@ -439,7 +442,7 @@ weapon range of them.
     The attempt's additional non-drainable guard is `unmeasured`: no normal order bypasses
     this earlier firing refusal, so this part tests claim 3 c rather than that redundant guard.
 - **D2, geometry (claim 2).**
-  - Part a: a 3 × 3 enemy power plant (or any drainable building with a large foundation). Attack
+  - Part a: an enemy drainable building with a multi-cell foundation, its foundation cells recorded during the run. Attack
     it from each side. Record which cell the Disc stops in. Expected: a link whenever the stop cell
     is any foundation cell. Repeat with named test-map flight-height variants at two different
     heights, both within weapon range. Expected: the same foundation-cell requirement,
@@ -481,7 +484,7 @@ weapon range of them.
   An end-of-tick position alone cannot decide whether movement preceded that tick's check.
   A departure later in that turn may remain linked until the next due check. Payouts on due
   ticks and the blackout continue until release, subject to their ordinary gates. Also
-  move it within the foundation of a 3 × 3 building: the link stays. Falsified by a release
+  move it to another cell of the foundation of a multi-cell building (foundation cells recorded during the run): the link stays. Falsified by a release
   on a different phase, or survival after a due check sampled outside the foundation.
   The pulse case needs an established skirmish delivery setup before it can be measured.
 - **D6, payouts (claims 7 to 10).**
