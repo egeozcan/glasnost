@@ -2,11 +2,11 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0269, Q-0510]
 supersedes: []
@@ -55,7 +55,7 @@ Terms used as defined in the glossary: *trigger*, *trigger action*, *cell tag*, 
 *registry*, *registration index*, *weapon*, *warhead*, *cell*, *lepton*, *height level*,
 *scenario random stream* (with *draw* and *ranged draw*), *quirk switch*, *departure*, *importer
 warning*, *unspecified*, *measurement setup*, *recorder*. *Map trigger variable* is used as defined
-in S-0009 claim 32. *Observer* is used as defined in S-0009 (Terms): a human participant whom the
+in S-0009 claim 32. *House number* is used as defined in S-0009 (Terms): the house's place in the creation order, counting from 0. *Observer* is used as defined in S-0009 (Terms): a human participant whom the
 lobby sets to watch instead of play. Network games, and so how machines synchronise, are outside
 this spec. A claim whose result in the original depends on which machine it runs on says what our
 engine does instead (claims 26 and 36). The terms below are specific to this spec.
@@ -244,6 +244,16 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
    same raise, either by a latch (claim 9) or by being judged true:
    - a code-matched event is judged true only when the raise has its code and the rest of its
      condition holds (claims 18 to 20),
+   - the attack events 6 and 44, which S-0601 claim 5 raises on a tagged target. Every action of the
+     event-6 raise's satisfied triggers has completed before any event-44 trigger is judged, so those
+     actions are visible to it. Event 6 is judged true in any raise carrying its code. Event 44 is
+     judged true only in a raise carrying its code that has a causing object, and only when the
+     event's raw integer value equals the house number (S-0009 Terms, counting from 0) of the causing
+     object's owner at the moment of that raise. The value is not a country index and not a
+     position letter: −1 and the player-position values of claim 23 equal no house number, so such
+     an event is never judged true, and a value one above or one below the owner's house number does
+     not match either. Neither event records a triggering house (claim 18). The order of triggers
+     within each raise is claim 11's. Neither is latchable (Constants),
    - a condition event is judged against the current state, whatever the raise's code,
    - the any-event code is judged true in every raise.
 
@@ -263,10 +273,16 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
    one that combines a code-matched event with a condition event fires only in a raise of that code
    in which the condition already holds.
    - Backing: `measurable` (scenarios T5 and T10) for evaluation and the hit raise; T7 for the
-     post-destruction raise. The second arrival raise, airborne-unit raises, building-under-attack
-     raises and team raises are `unmeasured`: these scenarios do not isolate their firings from
-     arrival, damage or team activity; their precise conditions remain open
-   - Confidence: high (low for the list of out-of-subset raises)
+     post-destruction raise; for the attack events 6 and 44 raised by S-0601 claim 5, the backing of
+     that claim (its scenario MC14, which tests their order, cause and judging, including the
+     house-number base through the one-above and one-below values). The second arrival raise,
+     airborne-unit raises, building-under-attack raises and team raises are `unmeasured`: these
+     scenarios do not isolate their firings from arrival, damage or team activity; their precise
+     conditions remain open
+   - Confidence: high (low for the list of out-of-subset raises); for the attack events 6 and 44,
+     S-0601 claim 5's confidence (high; medium for the outcome with special house values, which MC14
+     part a tests), and here medium for the house-number base, which only MC14's one-above and
+     one-below values pin down
 
 9. **Latches on repeating tags.** When an event of the latchable set (Constants) is judged true in
    an evaluation of a trigger instance of a repeating tag, it is latched, whether or not the
@@ -436,10 +452,11 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
     groups: their actions and draws take effect within the killing hit, before death debris,
     passengers and death weapons, not at final removal. The raises themselves take no draw.
 
-    The common group has three attacker-dependent raises outside this subset, followed by
-    destroyed-by-anything and one further outside-subset raise. Vehicles normally have an
-    additional earlier group: an attacker-dependent outside-subset raise, destroyed-by-anything
-    and its following outside-subset raise. Every raise evaluates condition events and latches
+    The common group has three attacker-dependent raises, followed by destroyed-by-anything and one
+    further outside-subset raise. The first of the three, code 6, is in this subset: its raise judges
+    event-6 triggers as claim 8 says. The other two are outside it. Vehicles normally have an
+    additional earlier group: an attacker-dependent raise with code 7 (outside this subset),
+    destroyed-by-anything and its following outside-subset raise. Every raise evaluates condition events and latches
     (claim 8). A raise that detaches or deletes the tag prevents further raises of that tag
     from this object. Thus a fresh repeating trigger with destroyed-by-anything as its only
     event fires seven times for a normal vehicle death with an attacker and four without,
@@ -511,9 +528,13 @@ engine does instead (claims 26 and 36). The terms below are specific to this spe
       no established data-only setup attaches a tag to a generated slave; T25 B is a
       conditional proposal, not an established fixture. Separately supplied attacking-house
       attribution and actions that remove the dying object during the raises inherit
-      S-0312 claim 29's `unmeasured` boundary
+      S-0312 claim 29's `unmeasured` boundary. The event-6 firings of the code-6 raise are
+      `unmeasured`: no scenario here puts an event-6 trigger on a dying object, so their count and
+      timing have no measured backing. The firing counts above are of destroyed-by-anything triggers
+      only
     - Confidence: high for the groups, killing-hit counts and timing; medium for latches,
-      no-hit notifications and their counts, and the retained-infantry and hijacker/carry-over cases
+      no-hit notifications and their counts, and the retained-infantry and hijacker/carry-over cases, and low for
+      the event-6 firings of the code-6 raise
 
 20. **Bridge-destroyed event bands.** This event is satisfied in every raise with its code.
     S-0511 claims 7 and 8 define the bands that raise it; they are not limited to cells that
@@ -918,6 +939,7 @@ revision's import coverage.
 | Triggering-house value | 9013 | house value | claim 23 |
 | No-house value | −1 | house value | claim 23 |
 | Player-position values | 4475 … 4482 | house value | positions A … H (S-0009 claims 21 and 29) |
+| Event 44 value | house number, from 0 | integer | claim 8; neither a country index nor a player-position value |
 | Letters of a waypoint parameter | 2 | characters | F5. They cover waypoint numbers 0 … 701 |
 | High-bridge lift | 4 | height levels | F6 and the point of claims 28 and 36 (416 leptons) |
 | Height level | 104 | leptons | glossary |
@@ -1197,6 +1219,8 @@ but not specified in this revision.
 | Code | Our name | Value | Polled | Matched | Claim |
 |---|---|---|---|---|---|
 | 1 | entered-by | country index or −1 | no | yes | 18 |
+| 6 | attacked (tagged object) | unused | no | yes | 8 |
+| 44 | attacked by house | house number (S-0009 Terms, from 0) of the attacking house | no | yes | 8 |
 | 8 | any event | unused | yes | no | 17 |
 | 13 | elapsed time | *v* trigger time units | yes | no | 13 |
 | 31 | bridge destroyed in tagged cell | unused | no | yes | 20 |
@@ -1292,7 +1316,7 @@ are not part of I4's supported subset.
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | Map `[Tags]` repeat type, `[Triggers]`, `[Events]` code 48 and `[Actions]` | evaluation and firing for tagged no-hit victims, including hidden slaves and passengers | existing I1 to I4 forms; repeat integers 0, 1 and 2 keep claim 10's meanings | no attached tag: no tag raises; no special generated-slave tag-attachment key is established |
-| Destruction notification codes, engine constants rather than imported settings | the ordered common group of claim 19, including hidden slaves | with known attacker: 6, 4, 7, 48, 29; without: 48, 29. Only code 48's event meaning is in this subset | not configurable; subsequent raises require the victim still to exist and carry the tag |
+| Destruction notification codes, engine constants rather than imported settings | the ordered common group of claim 19, including hidden slaves | with known attacker: 6, 4, 7, 48, 29; without: 48, 29. Only the event meanings of codes 6 and 48 are in this subset (claims 8 and 19); the extra vehicle group's attacker-dependent raise has code 7 | not configurable; subsequent raises require the victim still to exist and carry the tag |
 
 This mapping inherits claim 19's backing and confidence; it does not establish a means of
 attaching a tag to generated slaves. The slave-group and conversion data remain owned by
@@ -1943,6 +1967,11 @@ using named test maps removed afterwards.
 - **Lobby control for the computer difficulty.** Whether the stock skirmish lobby sets
   the session computer difficulty (claim 4), from which control, and whether the value restored at a
   later game start replaces a lobby choice.
+- **Hand-off of the attack-event judging.** S-0601 claim 5 states the same judging of events 6 and 44
+  as claim 8 here. Claim 8 owns it; S-0601's judging paragraph should become a pointer to claim 8
+  (named change for S-0601). S-0312 claim 29's sentence that a known attacker's three preliminary
+  raises have codes outside this spec's subset must change too: the first of them, code 6, is inside
+  the subset, and the other two are outside it (named change for S-0312).
 - **Codes outside this subset.** Every event and action code not in tables I3 and I4 is parsed by
   Import mapping. Except for the companion-spec pointers, its meaning remains deferred.
   That includes the extra latch rule
