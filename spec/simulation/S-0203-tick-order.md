@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 33
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0018, Q-0412, Q-0430]
 supersedes: []
@@ -382,9 +382,8 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    both before and after it: self-healing, the per-tick behaviour start and behaviour
    processing, movement, firing, turret turning, ordinary cloak updates, ammunition
    reload updates and firing-frame advancement, attached parasite steps, the member's
-   economy and power work, depot queued-entry retries, expected-health turn bookkeeping
-   and protection-brightness phase processing. In arrival hold, including its expiry
-   turn, the hold-end test precedes all these ordinary opportunities, each still subject
+   economy and power work, depot queued-entry retries, expected-health turn bookkeeping,
+   protection-brightness phase processing and the berserk countdown (S-0610 claim 5). In arrival hold, including its expiry turn, the hold-end test precedes all these ordinary opportunities, each still subject
    to its own eligibility. No deferred ordinary updates are replayed in a catch-up burst.
    Launch immediately clears the old path, queued destinations and driving step; none
    resumes after the warp. Target and current destination retain claim 48's leaving-stage
@@ -402,8 +401,11 @@ phases. Their backing, confidence and proposed measurements remain those of the 
    timeline applicable in our engine for uninterrupted successful landing and placement.
    It does not settle the original's per-kind update count or continuation gaps above.
    This is an engine design rule, not a reproduction claim, and has no quirk switch.
-   - Backing for this contract: `measurable` in our engine (S-0513 scenario SW23 part f).
-     The original-side gaps retain claim 48's `unmeasured` backing
+   - Backing for this contract: `measurable` in our engine (S-0513 scenario SW23 part f). For
+     the berserk countdown in warp, which S-0513 does not mention, the backing is S-0610
+     scenario P9 part e, also measurable in our engine (S-0610 claim 5).
+     The original-side gaps retain claim 48's `unmeasured` backing. The original's behaviour
+     in the warp updates other than the leaving stage is an open question of S-0610
    - Confidence for this contract: high as design; low for matching the original's
      unresolved rows, as in S-0513 claim 51
 
