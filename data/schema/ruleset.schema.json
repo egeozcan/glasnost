@@ -1193,6 +1193,15 @@
           "maxItems": 2,
           "minItems": 2
         },
+        "turret_count": {
+          "description": "`TurretCount`: above 0 makes a multi-weapon type (S-0308 claim 1\nand Import mapping, a type section key; S-0609 Terms for a gattling\nbuilding).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "undeploys_into": {
           "description": "`UndeploysInto`.",
           "type": [
@@ -1627,6 +1636,18 @@
           "maxItems": 3,
           "minItems": 3
         },
+        "elite_stage_thresholds": {
+          "description": "`EliteStage1` … `EliteStage6`, the elite gattling thresholds\n(S-0609 Import mapping; absent: 0, not the normal threshold).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
         "elite_weapon_flh": {
           "description": "Art `EliteWeapon`n`FLH`, by slot (S-0313).",
           "type": [
@@ -1866,6 +1887,24 @@
           "format": "int32",
           "default": null
         },
+        "rate_down": {
+          "description": "`RateDown`, the gattling spin-down amount *d* (S-0609 Import\nmapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "rate_up": {
+          "description": "`RateUp`, the gattling spin-up amount *u* (S-0609 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "readiness_reduction_multiplier": {
           "description": "`ReadinessReductionMultiplier` κ (S-0302 F6), a single.",
           "anyOf": [
@@ -1980,6 +2019,18 @@
             }
           ]
         },
+        "stage_thresholds": {
+          "description": "`Stage1` … `Stage6`, the normal gattling thresholds *K*₁ … as the\nlayers leave them (S-0609 Import mapping: a layer reads them only\nwith the gattling flag and a stage count of at least 2).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
         "threat_posed": {
           "description": "`ThreatPosed` (S-0309 Terms).",
           "type": [
@@ -2065,6 +2116,15 @@
           "items": {
             "type": "string"
           }
+        },
+        "weapon_stages": {
+          "description": "`WeaponStages`, the gattling stage count *N* (S-0609 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         }
       },
       "additionalProperties": false
@@ -8307,7 +8367,7 @@
           "default": true
         },
         "gattling_zero_spin_down_empties": {
-          "description": "A spin-down update whose amount d × m is 0 sets the spin value to 0 at once; off: an amount of 0 leaves the value unchanged. Not implemented yet (wave 2).",
+          "description": "A spin-down update whose amount d × m is 0 sets the spin value to 0 at once; off: an amount of 0 leaves the value unchanged (`glasnost_sim::gattling::spin_down`).",
           "type": "boolean",
           "default": true
         },
