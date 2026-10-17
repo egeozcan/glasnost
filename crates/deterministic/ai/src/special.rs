@@ -67,6 +67,9 @@ pub struct Uses {
     pub prisms: u32,
     /// Chargers sent at an own overpowerable building (S-0518).
     pub charges: u32,
+    /// Overpowerable buildings (other than the prism type) ordered for the
+    /// house's chargers (S-0518).
+    pub overpowerables: u32,
     /// Bomb planters sent at an enemy (S-0519).
     pub bombs: u32,
     /// Disarmers sent at an own bombed object (S-0519).
@@ -146,6 +149,11 @@ impl Special {
     /// Counts one prism building ordered (S-0518, `linked`).
     pub(crate) fn count_prism(&mut self) {
         self.uses.prisms += 1;
+    }
+
+    /// Counts one overpowerable building ordered (S-0518, `linked`).
+    pub(crate) fn count_overpowerable(&mut self) {
+        self.uses.overpowerables += 1;
     }
 
     /// Counts one charger sent at a building (S-0518, `linked`).

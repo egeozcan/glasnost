@@ -1,12 +1,15 @@
 //! The own AI and linked weapons (S-0518; PLAN §4.7): a person who can
 //! build the prism type builds several, close together, because each one
-//! that is ready adds to the next one's shot; and sends charging infantry
-//! at its own overpowerable buildings, which then fire their stronger
-//! weapon. The brain does both with no limit of attention.
+//! that is ready adds to the next one's shot; a person who has chargers
+//! builds an overpowerable building for them if the sidebar offers one;
+//! and sends charging infantry at its own overpowerable buildings, which
+//! then fire their stronger weapon. The brain does all three with no limit
+//! of attention.
 //!
 //! It reads only its own objects and its sidebar, and gives its orders
 //! through `orders::issue`. It draws no random value. The counters
-//! [`Uses::prisms`] and [`Uses::charges`] count the orders it gave.
+//! [`Uses::prisms`], [`Uses::overpowerables`] and [`Uses::charges`] count
+//! the orders it gave.
 
 use glasnost_sim::econ::{TypeRef, production, tech};
 use glasnost_sim::linked;
@@ -25,6 +28,10 @@ const PRISMS_WANTED: usize = 3; // nocite: tuning of our own opponent
 /// a prism building is ordered.
 const RESERVE: i32 = 2; // nocite: tuning of our own opponent
 
+/// How many overpowerable buildings (other than the prism type) a house
+/// with a charger wants.
+const OVERPOWERABLE_WANTED: usize = 1; // nocite: tuning of our own opponent
+
 /// How near, in cells, a charger looks for an own overpowerable building.
 const CHARGE_REACH: i64 = 12; // nocite: tuning of our own opponent
 
@@ -36,6 +43,22 @@ fn prism_type(w: &World, house: HouseId) -> Option<TypeRef> {
         index: b,
     };
     tech::buildable(w, house, t).then_some(t)
+}
+
+/// The cheapest overpowerable building type other than the prism type
+/// that the house can build (the first in the rules on equal price).
+fn overpowerable_type(w: &World, house: HouseId) -> Option<TypeRef> {
+    let r = w.rules();
+    let prism = r.combat.general.prism.building;
+    (0..r.buildings.len())
+        .filter_map(|i| u32::try_from(i).ok())
+        .filter(|&i| Some(i) != prism && r.buildings[i as usize].building.overpowerable)
+        .map(|index| TypeRef {
+            kind: Kind::Building,
+            index,
+        })
+        .filter(|&t| tech::buildable(w, house, t))
+        .min_by_key(|&t| (production::cost_field(w, t), t.index))
 }
 
 /// How many buildings of the type the house has or has queued.
@@ -66,15 +89,45 @@ impl Special {
         out: &mut Vec<Order>,
     ) {
         let house = script.house;
+        let affords = |t: TypeRef| {
+            !script.busy(w, t)
+                && !script.selling()
+                && glasnost_sim::seams::available_credits(w, house)
+                    >= production::cost_field(w, t).saturating_mul(RESERVE)
+        };
+        let mut ordered = false;
         if let Some(t) = prism_type(w, house)
             && count(w, house, t) < PRISMS_WANTED
-            && !script.busy(w, t)
-            && !script.selling()
-            && glasnost_sim::seams::available_credits(w, house)
-                >= production::cost_field(w, t).saturating_mul(RESERVE)
+            && affords(t)
         {
             out.push(Order::Build { what: t });
             self.count_prism();
+            ordered = true;
+        }
+        // A house with a charger and no overpowerable building of its own
+        // orders one, as a person who built the charger would.
+        if !ordered
+            && own.iter().any(|&id| linked::charger_type(w, id))
+            && let Some(t) = overpowerable_type(w, house)
+        {
+            let have: usize = (0..w.rules().buildings.len())
+                .filter_map(|i| u32::try_from(i).ok())
+                .filter(|&i| w.rules().buildings[i as usize].building.overpowerable)
+                .map(|index| {
+                    count(
+                        w,
+                        house,
+                        TypeRef {
+                            kind: Kind::Building,
+                            index,
+                        },
+                    )
+                })
+                .sum();
+            if have < OVERPOWERABLE_WANTED && affords(t) {
+                out.push(Order::Build { what: t });
+                self.count_overpowerable();
+            }
         }
         for &id in own {
             if !linked::charger_type(w, id)

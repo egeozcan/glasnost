@@ -113,6 +113,9 @@ struct Game {
     /// buildings at the end.
     special: [glasnost_ai::special::Uses; PLAYERS],
     occupants_inside: usize,
+    /// Per player house: the occasions for charges and disarms (S-0518,
+    /// S-0519) a person in its seat would have had (M7a step 2c).
+    occasions: [Occasions; PLAYERS],
     /// The launches by superweapon kind (the kind names of the simulation).
     launches_by_kind: BTreeMap<String, usize>,
     /// House-ticks a superweapon record stood ready, by kind name.
@@ -525,6 +528,7 @@ fn play_ai(
         }
         drained = w.effects.len();
         tally.observe(w);
+        occasions(w, &mut g.occasions);
         features(w, &mut g.features);
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
@@ -1163,6 +1167,197 @@ fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
     }
 }
 
+/// Counts, per player house, the occasions for charges (S-0518) and
+/// disarms (S-0519) over a game: the types it could build at some sampled
+/// tick, and the house-ticks in which a person in its seat could have
+/// charged or disarmed. Counts only.
+#[derive(Debug, Default)]
+struct Occasions {
+    /// Distinct buildable types: chargers (slot-1 electric-charge warhead),
+    /// overpowerable buildings, of them the prism type, disarmers (slot-0
+    /// bomb-disarm warhead) and bomb detectors (bomb-sight above 0).
+    chargers: BTreeSet<(u8, u32)>,
+    overpowerable: BTreeSet<u32>,
+    overpowerable_prism: BTreeSet<u32>,
+    disarmers: BTreeSet<(u8, u32)>,
+    detectors: BTreeSet<(u8, u32)>,
+    /// House-ticks with an own charger; with an own overpowerable building;
+    /// with both; with an idle charger within 12 cells of one.
+    charger_ticks: u32,
+    overpowerable_ticks: u32,
+    both_ticks: u32,
+    idle_near_ticks: u32,
+    /// Distinct own objects that carried a bomb; house-ticks with an own
+    /// object carrying a bomb; with one the house sees; with a seen one and
+    /// an own disarmer; and an idle one; and an idle one in the same reach
+    /// region that could cover the straight-line distance before the fuse
+    /// ends.
+    bombed: BTreeSet<u32>,
+    bomb_ticks: u32,
+    seen_ticks: u32,
+    seen_disarmer_ticks: u32,
+    seen_idle_ticks: u32,
+    seen_reachable_ticks: u32,
+}
+
+fn cell_dist2(a: glasnost_map::CellXY, b: glasnost_map::CellXY) -> i64 {
+    let (dx, dy) = (i64::from(a.x - b.x), i64::from(a.y - b.y));
+    dx * dx + dy * dy
+}
+
+fn kind_code(k: Kind) -> u8 {
+    match k {
+        Kind::Infantry => 0,
+        Kind::Vehicle => 1,
+        Kind::Aircraft => 2,
+        _ => 3,
+    }
+}
+
+/// One tick of [`Occasions`] for every player house.
+fn occasions(w: &World, occ: &mut [Occasions; PLAYERS]) {
+    use glasnost_sim::world::ObjectId;
+    let r = w.rules();
+    let slot_warhead = |c: &glasnost_sim::combat::data::TypeCombat, i: usize| {
+        c.slots[i].and_then(|wp| r.combat.warhead_of(wp))
+    };
+    if w.tick % 300 == 0 {
+        for t in all_types(w) {
+            for (h, o) in occ.iter_mut().enumerate() {
+                let house = HouseId(h as u8);
+                if !tech::buildable(w, house, t) {
+                    continue;
+                }
+                if t.kind == Kind::Building {
+                    let b = &r.buildings[t.index as usize];
+                    if b.building.overpowerable {
+                        o.overpowerable.insert(t.index);
+                        if r.combat.general.prism.building == Some(t.index) {
+                            o.overpowerable_prism.insert(t.index);
+                        }
+                    }
+                    if b.combat.bomb_sight > 0 {
+                        o.detectors.insert((3, t.index));
+                    }
+                } else if let Some(u) = r.unit(t.kind, t.index) {
+                    let k = (kind_code(t.kind), t.index);
+                    if matches!(t.kind, Kind::Infantry | Kind::Vehicle)
+                        && slot_warhead(&u.combat, 1).is_some_and(|x| x.electric_assault)
+                    {
+                        o.chargers.insert(k);
+                    }
+                    if slot_warhead(&u.combat, 0).is_some_and(|x| x.bomb_disarm) {
+                        o.disarmers.insert(k);
+                    }
+                    if u.combat.bomb_sight > 0 {
+                        o.detectors.insert(k);
+                    }
+                }
+            }
+        }
+    }
+    let delay = r.combat.general.ivan.delay;
+    for (h, o) in occ.iter_mut().enumerate() {
+        let house = HouseId(h as u8);
+        let own: Vec<ObjectId> = w
+            .objects
+            .values()
+            .filter(|x| x.owner == Some(house) && x.on_map)
+            .map(|x| x.id)
+            .collect();
+        let chargers: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| glasnost_sim::linked::charger_type(w, id))
+            .collect();
+        let over: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| glasnost_sim::linked::overpowerable(w, id))
+            .collect();
+        o.charger_ticks += u32::from(!chargers.is_empty());
+        o.overpowerable_ticks += u32::from(!over.is_empty());
+        o.both_ticks += u32::from(!chargers.is_empty() && !over.is_empty());
+        let near = chargers.iter().any(|&c| {
+            glasnost_ai::scripted::idle(w, c)
+                && over.iter().any(|&b| {
+                    let (Some(a), Some(z)) = (w.obj(c), w.obj(b)) else {
+                        return false;
+                    };
+                    cell_dist2(a.pos.cell(), z.pos.cell()) <= 144
+                })
+        });
+        o.idle_near_ticks += u32::from(near);
+        let carriers: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| glasnost_sim::bomb::carries(w, id))
+            .collect();
+        if carriers.is_empty() {
+            continue;
+        }
+        o.bombed.extend(carriers.iter().map(|id| id.0));
+        o.bomb_ticks += 1;
+        let seen: Vec<ObjectId> = carriers
+            .into_iter()
+            .filter(|&c| glasnost_sim::bomb::visible(w, house, c))
+            .collect();
+        if seen.is_empty() {
+            continue;
+        }
+        o.seen_ticks += 1;
+        let disarmers: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| {
+                glasnost_sim::combat::weapon::slot_weapon(w, id, 0)
+                    .and_then(|wp| r.combat.warhead_of(wp))
+                    .is_some_and(|x| x.bomb_disarm)
+            })
+            .collect();
+        if disarmers.is_empty() {
+            continue;
+        }
+        o.seen_disarmer_ticks += 1;
+        let idle: Vec<ObjectId> = disarmers
+            .into_iter()
+            .filter(|&d| glasnost_ai::scripted::idle(w, d))
+            .collect();
+        if idle.is_empty() {
+            continue;
+        }
+        o.seen_idle_ticks += 1;
+        let reachable = idle.iter().any(|&d| {
+            let Some(dob) = w.obj(d) else { return false };
+            let Some(u) = r.unit(dob.kind, dob.type_index) else {
+                return false;
+            };
+            let speed = if dob.kind == Kind::Infantry {
+                glasnost_sim::walk::walking_speed(w, d)
+            } else {
+                glasnost_sim::rules::type_speed(u.speed)
+            };
+            if speed <= 0 {
+                return false;
+            }
+            let here = glasnost_sim::regions::reach_in(w, dob.pos.cell(), u.zone);
+            seen.iter().any(|&c| {
+                let Some(cob) = w.obj(c) else { return false };
+                let Some(b) = cob.combat.bomb else {
+                    return false;
+                };
+                let left = delay - (w.tick - b.planted);
+                let same = glasnost_sim::regions::reach_in(w, cob.pos.cell(), u.zone) == here;
+                let d2 = cell_dist2(cob.pos.cell(), dob.pos.cell());
+                // Straight-line leptons (256 per cell) over the speed: a lower bound of the trip.
+                let reach = i64::from(left.max(0)) * i64::from(speed);
+                same && d2 * 256 * 256 <= reach * reach
+            })
+        });
+        o.seen_reachable_ticks += u32::from(reachable);
+    }
+}
+
 /// Notes, per player house, the unit types it can build (every 300th tick)
 /// and the types of its new objects (every tick; `starting` holds the ids
 /// that were there at the start).
@@ -1379,8 +1574,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates
                     )
                 })
                 .collect();
@@ -1390,6 +1585,32 @@ fn report(
                 uses.join("; "),
                 g.occupants_inside
             );
+            let occ: Vec<String> = g
+                .occasions
+                .iter()
+                .enumerate()
+                .map(|(h, o)| {
+                    format!(
+                        "house {h} types: chargers {} overpowerable {} (prism type {}) disarmers {} detectors {}; house-ticks: charger {} overpowerable {} both {} idle charger near {}; bombed objects {} bomb {} seen {} seen+disarmer {} seen+idle {} seen+idle reachable {}",
+                        o.chargers.len(),
+                        o.overpowerable.len(),
+                        o.overpowerable_prism.len(),
+                        o.disarmers.len(),
+                        o.detectors.len(),
+                        o.charger_ticks,
+                        o.overpowerable_ticks,
+                        o.both_ticks,
+                        o.idle_near_ticks,
+                        o.bombed.len(),
+                        o.bomb_ticks,
+                        o.seen_ticks,
+                        o.seen_disarmer_ticks,
+                        o.seen_idle_ticks,
+                        o.seen_reachable_ticks
+                    )
+                })
+                .collect();
+            let _ = writeln!(s, "  occasions (S-0518, S-0519): {}", occ.join("; "));
         }
         let f: Vec<String> = g
             .features
