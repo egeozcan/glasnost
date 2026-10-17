@@ -165,7 +165,7 @@ pub fn cloud(w: &mut World, cell: CellXY) {
 /// to 4): the ranged draw `drawn` of a random rate, else its constant
 /// delay, else the rate field's (1 when not given), then the game-speed
 /// normalisation of a normalised type.
-fn stage_delay(w: &World, a: &crate::rules::AnimRules, drawn: Option<i32>) -> i32 {
+pub(crate) fn stage_delay(w: &World, a: &crate::rules::AnimRules, drawn: Option<i32>) -> i32 {
     let q = &w.rules().quirks;
     let (d1, d2) = a.random_delay;
     let d = if let Some(x) = drawn {

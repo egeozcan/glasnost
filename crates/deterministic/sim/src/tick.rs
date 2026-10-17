@@ -89,6 +89,16 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::projectile::turn(w, id);
         return;
     }
+    if w.gas.systems.contains_key(&id) {
+        // spec: S-0613 claim 6 and S-0203 claim 2 (a particle system takes one turn per tick)
+        crate::gas::system_turn(w, id);
+        return;
+    }
+    if w.gas.anims.contains_key(&id) {
+        // spec: S-0109 claim 5 (an animation updates in its own turn)
+        crate::gas::anim_turn(w, id);
+        return;
+    }
     let Some(o) = w.obj(id) else { return };
     // A building in a delayed-kill countdown is killed but alive (S-0302 claim 16): it takes its whole turn.
     let dead = crate::combat::damage::dead(o);

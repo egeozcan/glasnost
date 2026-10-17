@@ -556,6 +556,27 @@ pub struct ParticleRules {
     /// A nonempty colour list with a nonblack starting colour: the
     /// starting-colour draw.
     pub colour_draw: bool,
+    /// The particle type's registration index (S-0613 claim 2: the middle
+    /// event creates particles of it); `None` for a type the rules do not
+    /// list.
+    pub index: Option<u32>,
+}
+
+/// A particle type's creation-draw fields (S-0202 claim 15 and Import
+/// mapping), without its index.
+pub fn particle_draw_rules(t: &glasnost_rules::sim::ParticleType) -> ParticleRules {
+    let behaves = t.behaves_like.as_deref();
+    // spec: S-0202 Import mapping (StartColor1, StartColor2 black at type creation)
+    let lit = |c: Option<[i32; 3]>| c.is_some_and(|c| c.iter().any(|&x| x != 0));
+    ParticleRules {
+        smoke: behaves == Some("smoke"),
+        railgun: behaves == Some("railgun"),
+        // spec: S-0202 Import mapping (MaxEC: 1 at type creation)
+        max_ec: t.max_ec.unwrap_or(1),
+        // spec: S-0202 claim 15 (the colour draw: a nonempty colour list and a nonzero component in either starting colour)
+        colour_draw: t.color_count.unwrap_or(0) > 0 && (lit(t.start_color1) || lit(t.start_color2)),
+        index: None,
+    }
 }
 
 /// The stage delay d of a rate value ρ (S-0109 F1), with
@@ -925,6 +946,9 @@ pub struct SimRules {
     pub gates: GateTypes,
     /// Animation types by registration index.
     pub animations: Vec<AnimRules>,
+    /// Particle and particle-system types, the shared gas system and the
+    /// wind (S-0613).
+    pub gas: crate::gas::GasRules,
     /// The resource-glint animation type, if one is configured (S-0202
     /// claim 14).
     pub ore_twinkle: Option<String>,
@@ -1323,6 +1347,7 @@ impl SimRules {
             soviet_two: index(Kind::Building, &g.soviet_gate_two),
             tower: index(Kind::Building, &g.wall_tower),
         };
+        let particle_names = registry("particles");
         let animations = registry("animations")
             .iter()
             .map(|n| {
@@ -1348,19 +1373,11 @@ impl SimRules {
                     shadow: a.shadow.unwrap_or(false),
                     particles: a.spawns_particle.as_ref().map(|p| {
                         let t = s.particles.get(p).cloned().unwrap_or_default();
-                        let behaves = t.behaves_like.as_deref();
-                        // spec: S-0202 Import mapping (StartColor1, StartColor2 black at type creation)
-                        let lit =
-                            |c: Option<[i32; 3]>| c.is_some_and(|c| c.iter().any(|&x| x != 0));
-                        let rules = ParticleRules {
-                            smoke: behaves == Some("smoke"),
-                            railgun: behaves == Some("railgun"),
-                            // spec: S-0202 Import mapping (MaxEC: 1 at type creation)
-                            max_ec: t.max_ec.unwrap_or(1),
-                            // spec: S-0202 claim 15 (the colour draw: a nonempty colour list and a nonzero component in either starting colour)
-                            colour_draw: t.color_count.unwrap_or(0) > 0
-                                && (lit(t.start_color1) || lit(t.start_color2)),
-                        };
+                        let mut rules = particle_draw_rules(&t);
+                        rules.index = particle_names
+                            .iter()
+                            .position(|n| n == p)
+                            .and_then(|i| u32::try_from(i).ok());
                         // spec: S-0202 Import mapping (NumParticles absent 0)
                         (rules, a.num_particles.unwrap_or(0))
                     }),
@@ -1383,6 +1400,8 @@ impl SimRules {
         let econ = crate::econ::EconRules::new(r, mode);
         let missiles = crate::spawn::MissileRules::new(s, &names, &combat.warheads, mode);
         let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, mode);
+        let warhead_names: Vec<String> = combat.warheads.iter().map(|h| h.name.clone()).collect();
+        let gas = crate::gas::GasRules::new(r, &warhead_names, &quirks);
         Self {
             crates,
             superweapons,
@@ -1396,6 +1415,7 @@ impl SimRules {
             mode,
             general,
             animations,
+            gas,
             // spec: S-0202 Import mapping (OreTwinkle: no animation at database creation)
             ore_twinkle: g.ore_twinkle.clone(),
             // spec: S-0207 Import mapping (WarpOut: with none in force, no animation is played)

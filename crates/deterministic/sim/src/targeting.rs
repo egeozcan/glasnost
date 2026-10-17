@@ -267,7 +267,7 @@ pub fn selectable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
 
 /// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1
 /// foundation (S-0214 Terms).
-fn vehicle_like(w: &World, id: ObjectId) -> bool {
+pub(crate) fn vehicle_like(w: &World, id: ObjectId) -> bool {
     building(w, id).is_some_and(|b| b.raw.undeploys_into.is_some() && b.foundation == (1, 1))
 }
 

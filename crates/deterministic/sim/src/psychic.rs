@@ -17,9 +17,9 @@
 //! Seams:
 //! - S-0606 (tank bunkers) is not built: the bunker half of claim 3 is
 //!   [`bunker_refusal`], which no object meets yet.
-//! - S-0613 (gas clouds): a gas particle with a berserk-causing warhead
-//!   reaches damage resolution like any other hit and then follows
-//!   [`enter`]; gas clouds themselves are a later step.
+//! - S-0613 (gas clouds): a gas particle's hit with a berserk-causing
+//!   warhead goes through damage resolution like any other hit
+//!   (`gas::damage_step`, S-0613 claim 13) and so reaches [`enter`].
 //! - S-0611 and S-0612 (mutation, psychic domination) are M7b; psychic
 //!   domination's immunity reads the same psionics immunity (claim 1).
 
