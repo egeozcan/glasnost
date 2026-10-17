@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -493,7 +493,7 @@ The glossary also defines *trigger*, used here.
     | Pulse result | Observable effects |
     |---|---|
     | *d* < 1 | The overload sound mark is cleared. There is no pulse damage, highlight reset, sound, spark creation or rocking update. The ordinary highlight countdown still applies. |
-    | *d* ≥ 1 | The pip highlight is set to 10. The controller receives a hit of *d* with the demolition warhead (S-0303, Import mapping), with no attacker or attacking house and without ignoring defences. S-0302 resolves it like any other hit; a killing hit releases the victims under claim 10. The overload sound plays at the controller when its sound mark was clear, and the mark becomes set. Five spark particle systems of the rules' default spark type appear around the controller (F3), even after a lethal hit. Their positions consume 10 placement draws from the scenario random stream; draws made by particle-system creation itself belong to that creation. When *i* > 0 and the controller survives, its sideways body-rocking rate takes the F4 value, consuming one further draw. |
+    | *d* ≥ 1 | The pip highlight is set to 10. The controller receives a hit of *d* with the demolition warhead (S-0303, Import mapping), with no attacker or attacking house and without ignoring defences. S-0302 resolves it like any other hit; a killing hit releases the victims under claim 10. The overload sound plays at the controller when its sound mark was clear, and the mark becomes set. Five spark particle systems of the rules' default spark type appear around the controller (F3), even after a lethal hit. Their positions consume 10 placement draws from the scenario random stream, taken at the pulse before the rocking draw. Creating a spark system takes no draw of its own; the draws of the sparks that each system later emits come in that system's turns (S-0616 claim 15). When *i* > 0 and the controller survives, its sideways body-rocking rate takes the F4 value, consuming one further draw. |
 
     Thus the sound plays once per uninterrupted run of damaging checks. The hit's effects and
     draws precede the spark placement draws, and the rocking draw follows the sparks (F3, F4).
@@ -818,7 +818,7 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   from the second level on. Include a transition through a non-damaging level and back to test
   the sound-mark reset. Use the random-state recorder, not a fixed seed, to attribute ten
   placement draws per damaging pulse and one rocking draw when the level is above zero and
-  the controller survives. Account separately for draws made by the hit and particle creation.
+  the controller survives. Account separately for draws made by the hit and by the spark systems' later turns (S-0616 claim 15).
   Check F3 positions and F4 signs and binary32 rocking magnitudes against the recorded values.
   Include a pulse that kills the controller, run on a named test copy whose test overload table gives a lethal level: expected release of all victims in that tick,
   five spark systems and ten placement draws, but no rocking update or rocking draw and no
