@@ -17,16 +17,16 @@
 //! follow-up types and loop delays (S-0109 claims 6 to 9, 11 and 15) are a
 //! seam, as for the storm's clouds (S-0513 claim 46).
 //!
-//! Provisional rules (requests): the shared system enters play before the
-//! map is read, so it is first in the update order (Q-1240); the order
-//! within one update follows the claim numbers (Q-1241); a new particle's
-//! remaining lifetime is the drawn value itself (Q-1242); a warhead's system
-//! of another behaviour kind is not kept (Q-1243); a system's lifetime
-//! counts down at the end of its turn, only when positive (Q-1244).
+//! Provisional rule (request Q-1243, open): the particles of a smoke, fire,
+//! spark or railgun system are not kept. Such a system made by a warhead
+//! is kept and takes its turns (claims 4 and 17); its first particle takes
+//! its creation draws only, and the system does no kind work.
 //!
 //! Seams: a particle of another behaviour kind in a gas system only counts
 //! its lifetime down (its own update and movement belong to other specs);
-//! the drawing of claim 16 belongs to the view.
+//! the drawing of claim 16 belongs to the view; the importer's warning for a
+//! loading-time particle request covers cell animations only (theater tile
+//! animations are not seen by the rules import).
 
 use glasnost_map::CellXY;
 use glasnost_num::{F32, F64, Rounding};
@@ -530,9 +530,9 @@ pub struct ParticleSystem {
     pub owner: Option<HouseId>,
     /// Its position (no observable effect, claim 1).
     pub pos: Pos,
-    /// The system lifetime, ticks (−1: never times out).
+    /// The system lifetime, a signed count of turns (claim 17).
     pub lifetime: i32,
-    /// Marked to end (claim 6).
+    /// Marked to end (claim 17).
     pub ending: bool,
     /// Its particles, oldest first.
     pub particles: Vec<Particle>,
@@ -570,8 +570,10 @@ pub struct GasWorld {
 }
 
 /// Creates the shared gas system at game start (claim 1): no owner, the
-/// lifetime of its type, empty. It enters the update order before the map
-/// is read (Q-1240).
+/// lifetime of its type, empty. The caller creates it last in the
+/// game-start step, before only the ore-twinkle animations, so it is
+/// appended to the update order after every map-placed object and
+/// starting unit.
 pub fn create_shared(w: &mut World) {
     let Some(ti) = w.rules().gas.shared else {
         return;
@@ -628,7 +630,7 @@ fn add_particle(w: &mut World, sys: ObjectId, ti: u32, at: Pos) -> Option<Object
 }
 
 /// A particle's creation draws (S-0202 claim 15) in table order; returns
-/// the remaining lifetime *E* (claim 5, Q-1242).
+/// the remaining lifetime *E* (claim 5, F9).
 fn creation_draws(w: &mut World, p: ParticleRules) -> u16 {
     let half = w.rules().quirks.ranged_draw_half_span;
     if p.smoke {
@@ -642,14 +644,14 @@ fn creation_draws(w: &mut World, p: ParticleRules) -> u16 {
     } else {
         p.max_ec
     };
-    // spec: S-0205 claim 3 (a remainder by 0 is the dividend, our engine's departure; the importer warns)
-    let e = magnitude(glasnost_num::int::rem(r, modulus));
+    // spec: S-0613 F9 and S-0205 claim 3 (u = |r rem E_max|, the remainder first; a remainder by 0 is the dividend, our engine's departure; the importer warns)
+    let u = magnitude(glasnost_num::int::rem(r, modulus));
     if p.colour_draw {
         // spec: S-0202 claim 15 (one ranged draw R(0, 2147483646) for the starting-colour interpolation)
         let _ = w.rng.ranged(0, 2147483646, half);
     }
-    // spec: S-0613 claim 5 (the lifetime is reduced modulo 65536)
-    e as u16
+    // spec: S-0613 claim 5 and F9 (E = (E_max + u) mod 65536, an unsigned 16-bit count)
+    p.max_ec.wrapping_add(u) as u16
 }
 
 /// One particle requested by an animation's middle event (S-0109 claim 14):
@@ -669,16 +671,18 @@ pub fn middle_event_particle(w: &mut World, p: ParticleRules, at: Option<(i32, i
             w.note("S-0004 claim 2: a middle event's particle type is not a listed type; its creation draws are taken and no particle is made");
         }
         (_, _, None) => {
+            // spec: S-0613 Edge cases (a particle requested before the shared system exists, at loading) and claim 17 (after it left play): a departure, the original stops; our engine takes the creation draws and makes no particle
             creation_draws(w, p);
-            w.note("Q-1244: no shared gas system is in play (its lifetime ran out, or the rules list no particle-system type); a requested particle takes its creation draws and is not made");
+            w.note("S-0613 claim 17 and Edge cases: no shared gas system is in play (not yet created while loading, its lifetime ran out, or the rules list no particle-system type); a requested particle takes its creation draws and is not made (a departure: the original stops)");
         }
     }
 }
 
 /// The particle system a detonation's warhead names (S-0303 claim 20,
 /// S-0613 claim 4): created at `p` owned by `house`, with one particle of
-/// its held type at once. A system of another behaviour kind than gas, or
-/// none, is not kept (Q-1243): its first particle takes its creation draws.
+/// its held type at once. A system of every behaviour kind is kept and takes
+/// its turns (claims 4 and 17); for the smoke, fire, spark and railgun kinds
+/// the first particle takes its creation draws and is not kept (Q-1243).
 pub fn warhead_system(w: &mut World, name: &str, p: Pos, house: Option<HouseId>) {
     let rules = w.rules_arc();
     let Some(ti) = rules.gas.system(name) else {
@@ -688,36 +692,49 @@ pub fn warhead_system(w: &mut World, name: &str, p: Pos, house: Option<HouseId>)
         return;
     };
     let t = &rules.gas.systems[ti as usize];
+    let id = w.new_id();
+    // spec: S-0303 claim 20 and S-0613 claim 4 (created at P, owned by the source house, with its type's lifetime; every system, whatever its kind, takes a turn each tick)
+    w.gas.systems.insert(
+        id,
+        ParticleSystem {
+            type_index: ti,
+            owner: house,
+            pos: p,
+            lifetime: t.lifetime,
+            ending: false,
+            particles: Vec::new(),
+        },
+    );
+    w.update.enter(id);
+    let Some(pt) = t.holds else {
+        return;
+    };
     match t.kind {
         Some(Behaviour::Gas) | None => {
-            let id = w.new_id();
-            // spec: S-0303 claim 20 and S-0613 claim 4 (created at P, owned by the source house, with its type's lifetime)
-            w.gas.systems.insert(
-                id,
-                ParticleSystem {
-                    type_index: ti,
-                    owner: house,
-                    pos: p,
-                    lifetime: t.lifetime,
-                    ending: false,
-                    particles: Vec::new(),
-                },
-            );
-            w.update.enter(id);
-            if let Some(pt) = t.holds {
-                // spec: S-0613 claim 4 (one particle of the held type at P at once, subject to claim 5's terrain floor)
-                add_particle(w, id, pt, p);
-            }
+            // spec: S-0613 claim 4 (one particle of the held type at P at once, subject to claim 5's terrain floor)
+            add_particle(w, id, pt, p);
         }
         Some(_) => {
-            if let Some(pt) = t.holds
-                && let Some(pr) = rules.gas.particles.get(pt as usize)
-            {
+            if let Some(pr) = rules.gas.particles.get(pt as usize) {
+                // spec: S-0613 claim 4 and S-0202 claim 15 (the first particle's creation draws)
                 creation_draws(w, pr.draw);
             }
-            w.note("Q-1243: a warhead's particle system of the smoke, fire, spark or railgun kind is not kept; its first particle takes its creation draws only");
+            w.note("Q-1243: the particles of a smoke, fire, spark or railgun system are not specified; the warhead's system is kept and takes its turns, its first particle takes its creation draws and is not kept");
         }
     }
+}
+
+/// Whether particle system `id` is a gas cloud: a gas-kind system other than
+/// the shared one (for counting).
+pub fn is_cloud(w: &World, id: ObjectId) -> bool {
+    w.gas.shared != Some(id)
+        && w.gas.systems.get(&id).is_some_and(|s| {
+            w.rules()
+                .gas
+                .systems
+                .get(s.type_index as usize)
+                .is_some_and(|t| t.kind == Some(Behaviour::Gas))
+        })
 }
 
 /// A virus death's clouds (S-0613 claims 2 and 3) for an infantry unit at
@@ -850,22 +867,21 @@ pub fn system_turn(w: &mut World, id: ObjectId) {
     };
     let kind = rules.gas.systems[s.type_index as usize].kind;
     if kind == Some(Behaviour::Gas) {
+        // spec: S-0613 claim 6 (a gas system's turn: the update pass, then the second pass)
         update_pass(w, id);
         second_pass(w, id);
     }
-    // Q-1244: the lifetime counts down, and the removal is tested, at the end of the turn.
+    // spec: S-0613 claim 17 (after the kind's own turn work, whatever the kind, also none)
     let Some(s) = w.gas.systems.get_mut(&id) else {
         return;
     };
-    if s.lifetime > 0 {
-        // spec: S-0613 claim 6 (the system lifetime goes down by 1 each turn; reaching exactly 0 marks it to end; −1 never reaches 0)
-        s.lifetime -= 1;
-        if s.lifetime == 0 {
-            s.ending = true;
-        }
+    // spec: S-0613 claim 17 (the system lifetime, a signed integer count of turns, goes down by 1 whatever its value; marked to end in the turn the result is exactly 0)
+    s.lifetime = s.lifetime.wrapping_sub(1);
+    if s.lifetime == 0 {
+        s.ending = true;
     }
     if s.ending && s.particles.is_empty() {
-        // spec: S-0613 claim 6 (a marked system with no particles left is removed)
+        // spec: S-0613 claim 17 (then, in the same turn, a marked system that holds no particles leaves play; the shared system is not created again)
         w.gas.systems.remove(&id);
         if w.gas.shared == Some(id) {
             w.gas.shared = None;
@@ -901,8 +917,10 @@ fn put(w: &mut World, sys: ObjectId, i: usize, p: Particle) {
     }
 }
 
-/// One particle's update (claims 8, 9, 10, 13 and 15, then the lifetime of
-/// claim 6; the order follows Q-1241).
+/// One particle's update (claim 18): on even ticks the drift, vertical
+/// speed and deflection (claims 8 to 10), which only set the velocity and
+/// deflection; then the countdown and hits (claim 13), the stage step
+/// (claim 15) and last the lifetime count-down (claim 6).
 fn update_particle(w: &mut World, sys: ObjectId, i: usize) {
     let rules = w.rules_arc();
     let Some(mut p) = particle(w, sys, i) else {
@@ -913,6 +931,7 @@ fn update_particle(w: &mut World, sys: ObjectId, i: usize) {
     };
     let gas = t.kind == Some(Behaviour::Gas);
     if gas {
+        // spec: S-0613 claim 18 (the drift draws precede the draws of every death the particle's hits cause; the hits precede its stage step; the lifetime count-down comes last)
         if even(w.tick) {
             drift(w, &mut p);
             vertical(w, &mut p);

@@ -224,16 +224,16 @@ impl Exercise {
             u32::try_from(victims.difference(&watch.victims).count()).unwrap_or(u32::MAX);
         first |= watch.first(!victims.is_empty(), "takeover");
         watch.victims = victims;
-        // Gas clouds: warhead-made systems and virus-death animations that
-        // appeared (the shared system is there from the start), and the
-        // hits clouds dealt.
+        // Gas clouds: warhead-made gas systems and virus-death animations
+        // that appeared (the shared system is there from the start; systems
+        // of other kinds are no clouds), and the hits clouds dealt.
         let clouds: BTreeSet<ObjectId> = w
             .gas
             .systems
             .keys()
-            .chain(w.gas.anims.keys())
             .copied()
-            .filter(|&id| Some(id) != w.gas.shared)
+            .filter(|&id| glasnost_sim::gas::is_cloud(w, id))
+            .chain(w.gas.anims.keys().copied())
             .collect();
         self.gas_clouds += began(&watch.clouds, &clouds);
         watch.clouds = clouds;

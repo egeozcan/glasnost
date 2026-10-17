@@ -176,3 +176,68 @@ fn gas_coverage() {
     assert_eq!(row("global:General", "WindDirection").0, Field);
     assert_eq!(row("global:General", "InfantryVirus").0, Field);
 }
+
+/// spec: S-0613 claim 17 (the shared gas system leaves play after a positive
+/// lifetime and is not created again, a departure: the importer warns when
+/// its lifetime is positive; none for −1 or 0)
+#[test]
+fn shared_system_positive_lifetime_warns() {
+    let with = |l: &str| format!("[ParticleSystems]\n0=GasCloudSys\n[GasCloudSys]\nLifetime={l}\n");
+    let (_, w) = sim(&with("3"), "", "");
+    assert!(warned(&w, "particle system GasCloudSys Lifetime 3"), "{w:?}");
+    for l in ["-1", "0"] {
+        let (_, w) = sim(&with(l), "", "");
+        assert!(!warned(&w, "particle system GasCloudSys Lifetime"), "{l}: {w:?}");
+    }
+    // Another system's positive lifetime is ordinary.
+    let (_, w) = sim("[ParticleSystems]\n0=Cloud\n[Cloud]\nLifetime=3\n", "", "");
+    assert!(!warned(&w, "Lifetime 3"), "{w:?}");
+}
+
+/// spec: S-0613 Edge cases (a cell animation with μ = 0 that requests
+/// particles is created while the map loads, before the shared gas system
+/// exists: the importer warns; none when μ is not 0 or no particle is
+/// requested)
+#[test]
+fn loading_time_particle_request_warns() {
+    use crate::art::TypeArt;
+    use crate::kinds::Kind;
+    use crate::layers::{Layer, Role, apply};
+    use glasnost_ini::Document;
+    use std::collections::BTreeMap;
+    let base = "[Animations]\n0=Seep\n1=Late\n2=Dry\n[Particles]\n0=Puff\n\
+                [OverlayTypes]\n0=Vent\n1=Slow\n2=Bare\n\
+                [Vent]\nCellAnim=Seep\n[Slow]\nCellAnim=Late\n[Bare]\nCellAnim=Dry\n";
+    let art_text = "[Seep]\nSpawnsParticle=Puff\nNumParticles=2\n\
+                    [Late]\nSpawnsParticle=Puff\nNumParticles=2\n[Dry]\nNumParticles=2\n";
+    let layers = [Layer {
+        role: Role::Base,
+        file: "rules.ini".into(),
+        doc: Document::parse(base.as_bytes(), Default::default(), &mut Vec::new()),
+    }];
+    let art = Document::parse(art_text.as_bytes(), Default::default(), &mut Vec::new());
+    let outcome = apply(&layers, &art, "art.ini", Default::default(), &Default::default());
+    // μ: Seep and Dry found no middle sprite (μ = 0); Late's has 8 frames (μ = 4).
+    let late = TypeArt {
+        middle_sprite: Some(b"late.shp".to_vec()),
+        middle_sprite_frames: Some(8),
+        ..TypeArt::default()
+    };
+    let arts = BTreeMap::from([
+        ((Kind::Animations, 0), TypeArt::default()),
+        ((Kind::Animations, 1), late),
+        ((Kind::Animations, 2), TypeArt::default()),
+    ]);
+    let (_, w) = super::build(super::SimInputs {
+        outcome: &outcome,
+        art: &art,
+        arts: Some(&arts),
+        quirks: &Default::default(),
+        art_quirks: &Default::default(),
+        ini_quirks: &Default::default(),
+        sim_quirks: &Default::default(),
+    });
+    assert!(warned(&w, "overlay Vent CellAnim Seep"), "{w:?}");
+    assert!(!warned(&w, "CellAnim Late"), "μ ≠ 0: {w:?}");
+    assert!(!warned(&w, "CellAnim Dry"), "no particle type: {w:?}");
+}

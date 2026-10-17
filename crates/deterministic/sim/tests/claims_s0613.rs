@@ -13,6 +13,7 @@ use glasnost_sim::rng::Rng;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 use glasnost_sim::{save, testkit};
+use std::sync::Arc;
 
 const SIZE: i32 = 20;
 /// The invented virus-death animation's middle frame μ and frame count.
@@ -40,7 +41,7 @@ fn verses() -> Option<Vec<Decimal>> {
 /// - SMOG, a smoke particle;
 /// - the shared gas system GasCloudSys (gas, holding FOG), CLOUD (gas,
 ///   holding FOG, lifetime −1), SOOT (smoke, holding SMOG), BARE (gas, no
-///   held type);
+///   held type), STILL (no behaviour kind, holding FOG);
 /// - VENOM, a warhead of infantry-death kind 8; MIST, a warhead naming
 ///   CLOUD; SMOKER, one naming SOOT; EMPTY, one naming BARE;
 /// - PLAGUE, the virus-death animation (μ = 2, 6 frames, 3 FOG particles);
@@ -82,6 +83,13 @@ fn rules() -> Ruleset {
         ("CLOUD", sys("gas", Some("FOG"))),
         ("SOOT", sys("smoke", Some("SMOG"))),
         ("BARE", sys("gas", None)),
+        (
+            "STILL",
+            ParticleSystemType {
+                holds_what: Some("FOG".into()),
+                ..Default::default()
+            },
+        ),
     ] {
         register(&mut r, "particle_systems", n);
         r.sim.particle_systems.insert(n.into(), s);
@@ -205,13 +213,67 @@ fn claim_1_shared_system_at_game_start() {
     assert_eq!(sys.owner, None);
     assert!(sys.particles.is_empty());
     assert_eq!(sys.lifetime, -1);
-    // Q-1240: it is first in the update order.
-    assert_eq!(w.update.order.first(), Some(&s));
+    assert!(w.update.contains(s));
     testkit::run(&mut w, 30);
     assert_eq!(w.gas.shared, Some(s), "never removed for being empty");
 }
 
-/// spec: S-0613 claim 1 and claim 6 (a positive system lifetime marks the shared system to end after that many turns; a marked empty system is removed)
+/// spec: S-0613 claim 1 and S-0203 claim 3 (the shared system is the last object of the game-start step to enter play: appended to the update order after every map-placed object; an object created in play comes after it)
+#[test]
+fn claim_1_shared_system_enters_play_last() {
+    let rules = Arc::new(glasnost_sim::rules::SimRules::new(&rules(), "synthetic-gas"));
+    let mut w = glasnost_sim::load::new_game(
+        rules,
+        &testkit::map(),
+        testkit::catalogue(),
+        &testkit::setup(7),
+    )
+    .expect("loads");
+    let s = shared(&w);
+    let placed: Vec<ObjectId> = w.objects.keys().copied().collect();
+    assert!(placed.len() > 5, "the scenario map places objects");
+    assert_eq!(w.update.order.last(), Some(&s), "after every map-placed object");
+    assert!(placed.iter().all(|&id| id < s), "map objects keep the lower numbers");
+    assert_eq!(placed.first(), Some(&ObjectId(1)), "map objects start at 1");
+    let later = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, testkit::cell(0, 6), 0);
+    assert!(later > s);
+    let pos = |id: ObjectId| w.update.order.iter().position(|&x| x == id).unwrap();
+    assert!(pos(s) < pos(later), "before any object created later");
+}
+
+/// spec: S-0613 Edge cases (a particle requested before the shared system exists: a cell animation with μ = 0 created while loading takes the creation draws and makes no cloud, a departure) and claim 1 (the system is not created early to receive it)
+#[test]
+fn edge_loading_request_makes_no_cloud() {
+    let mut r = rules();
+    register(&mut r, "animations", "SEEP");
+    r.sim.animations.insert(
+        "SEEP".into(),
+        AnimationType {
+            middle_frame: Some(0),
+            spawns_particle: Some("FOG".into()),
+            num_particles: Some(2),
+            ..Default::default()
+        },
+    );
+    let ov = glasnost_rules::sim::OverlayType {
+        cell_anim: Some("SEEP".into()),
+        ..Default::default()
+    };
+    register(&mut r, "overlays", "VENT");
+    r.sim.overlays.insert("VENT".into(), ov);
+    let index = r.registries["overlays"].iter().position(|n| n == "VENT").unwrap() as u8;
+    let mut map = testkit::empty_map(SIZE);
+    let c = testkit::mid(SIZE, 0, 0);
+    map.cells.get_mut(c).expect("a map cell").overlay = index;
+    let plain = game(&r);
+    let rules = Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-gas"));
+    let w = glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(7))
+        .expect("loads");
+    assert!(w.gas.systems[&shared(&w)].particles.is_empty(), "no cloud from loading");
+    assert_ne!(w.rng, plain.rng, "the request's creation draws are taken");
+}
+
+/// spec: S-0613 claim 17 (a positive lifetime marks the shared system in that turn; empty, it leaves play in the same turn and is not created again; a later virus death makes no cloud but takes the request's creation draws, a departure)
 #[test]
 fn claim_1_finite_shared_lifetime() {
     let mut r = rules();
@@ -224,10 +286,18 @@ fn claim_1_finite_shared_lifetime() {
     let s = shared(&w);
     testkit::run(&mut w, 2);
     assert!(w.gas.systems.contains_key(&s));
+    assert!(!w.gas.systems[&s].ending);
     testkit::run(&mut w, 1);
     assert!(!w.gas.systems.contains_key(&s));
     assert!(!w.update.contains(s));
     assert_eq!(w.gas.shared, None);
+    // A not-human virus death: one particle requested at once (claim 3).
+    let victim = testkit::spawn(&mut w, Kind::Infantry, "DRONE", 1, testkit::mid(SIZE, 0, 0), 0);
+    let rng = w.rng.clone();
+    venom(&mut w, victim, None, None);
+    assert_ne!(w.rng, rng, "the draws are taken");
+    assert_eq!(w.gas.shared, None, "not created again");
+    assert!(gas::particles(&w).next().is_none(), "no cloud");
 }
 
 /// spec: S-0613 claim 1 (a shared system type without a behaviour kind neither updates nor moves the particles delivered into it)
@@ -319,7 +389,7 @@ fn edge_virus_animation_without_particle_type() {
     assert!(list(&w, shared(&w)).is_empty());
 }
 
-/// spec: S-0613 claim 4 and S-0303 claim 20 (a warhead's gas system at P, owned by the source house, lifetime −1, with one particle of its held type at P; without a held type no particle; a non-gas kind is not kept, Q-1243)
+/// spec: S-0613 claim 4 and S-0303 claim 20 (a warhead's gas system at P, owned by the source house, lifetime −1, with one particle of its held type at P; without a held type no particle; a system of every kind takes its turns, its non-gas particles are not kept by Q-1243)
 #[test]
 fn claim_4_warhead_system_and_first_particle() {
     let mut w = game(&rules());
@@ -343,7 +413,11 @@ fn claim_4_warhead_system_and_first_particle() {
     assert!(w.gas.systems.values().any(|s| s.particles.is_empty() && s.owner.is_none() && s.type_index == w.rules().gas.system("BARE").unwrap()));
     let rng = w.rng.clone();
     gas::warhead_system(&mut w, "SOOT", p, None);
-    assert_eq!(w.gas.systems.len(), n + 1, "a smoke system is not kept");
+    assert_eq!(w.gas.systems.len(), n + 2, "a smoke system is kept");
+    let soot = *w.gas.systems.keys().last().unwrap();
+    assert!(w.update.contains(soot), "and takes its turns");
+    assert!(w.gas.systems[&soot].particles.is_empty(), "its particle is not kept (Q-1243)");
+    assert!(!gas::is_cloud(&w, soot));
     assert_ne!(w.rng, rng, "its first particle's creation draws are taken");
     // A gas system with lifetime −1 stays, inert, after its last particle is gone.
     w.gas.systems.get_mut(&id).unwrap().particles[0].life = 1;
@@ -377,7 +451,7 @@ fn claim_4_detonation_creates_the_system() {
     assert_eq!(s.particles.len(), 1);
 }
 
-/// spec: S-0613 claim 5 and S-0202 claim 15 (E is the drawn lifetime variation m(r rem MaxEC) modulo 65536, Q-1242; C the damage interval; the stage the start stage; a height at or below H raised to H; zero velocity and deflection)
+/// spec: S-0613 claim 5, F9 and S-0202 claim 15 (E is the lifetime field plus the drawn variation |r rem MaxEC|, modulo 65536; C the damage interval; the stage the start stage; a height at or below H raised to H; zero velocity and deflection)
 #[test]
 fn claim_5_particle_creation() {
     let mut w = game(&rules());
@@ -385,7 +459,8 @@ fn claim_5_particle_creation() {
     let i = puff(&mut w, "FOG", Pos::new(centre(0, 0).x, centre(0, 0).y, -50));
     let r = rng.raw() as i32;
     let p = &list(&w, shared(&w))[i];
-    assert_eq!(i32::from(p.life), (r % 30000).wrapping_abs());
+    assert_eq!(i32::from(p.life), 30000 + (r % 30000).wrapping_abs());
+    assert!((30000..60000).contains(&i32::from(p.life)));
     assert_eq!(p.countdown, 5);
     assert_eq!(p.stage, 0);
     assert_eq!(p.pos.z, 0, "raised to the terrain");
@@ -729,4 +804,153 @@ fn claim_6_newest_draws_first() {
         }
     }
     assert!(told_apart, "the run separated the two orders at least once");
+}
+
+/// spec: S-0613 F9 and claim 5 (E = (E_max + |r rem E_max|) mod 65536: a field above 32768 wraps, a field of 1 gives 1, a field of 0 takes u = |r| by S-0205 claim 3)
+#[test]
+fn f9_initial_lifetime() {
+    for field in [1, 0, 40_000, -70_000] {
+        let mut r = rules();
+        r.sim.particles.get_mut("WISP").unwrap().max_ec = Some(field);
+        let mut w = game(&r);
+        let mut rng: Rng = w.rng.clone();
+        let i = puff(&mut w, "WISP", centre(0, 0));
+        let raw = rng.raw() as i32;
+        let u = if field == 0 { raw.wrapping_abs() } else { (raw % field).wrapping_abs() };
+        let e = field.wrapping_add(u) as u16;
+        assert_eq!(list(&w, shared(&w))[i].life, e, "field {field}");
+        if field == 1 {
+            assert_eq!(e, 1);
+        }
+    }
+}
+
+/// A gas system of type `name` made by a warhead at the map's middle, with
+/// `life` set as its particle's remaining lifetime when it holds one.
+fn system(w: &mut World, name: &str, life: Option<u16>) -> ObjectId {
+    gas::warhead_system(w, name, centre(0, 0), None);
+    let id = *w.gas.systems.keys().last().unwrap();
+    if let Some(l) = life {
+        for p in &mut w.gas.systems.get_mut(&id).unwrap().particles {
+            p.life = l;
+        }
+    }
+    id
+}
+
+fn with_lifetime(name: &str, lifetime: i32) -> Ruleset {
+    let mut r = rules();
+    r.sim.particle_systems.get_mut(name).unwrap().lifetime = Some(lifetime);
+    r
+}
+
+/// spec: S-0613 claim 17 (lifetime 1: marked in the first turn; it leaves play in the turn its last particle is removed, the same turn when it is then empty)
+#[test]
+fn claim_17_lifetime_one() {
+    let mut w = game(&with_lifetime("CLOUD", 1));
+    let s = system(&mut w, "CLOUD", Some(5));
+    testkit::run(&mut w, 1);
+    assert!(w.gas.systems[&s].ending, "marked in its first turn");
+    assert_eq!(w.gas.systems[&s].lifetime, 0);
+    testkit::run(&mut w, 3);
+    assert!(w.gas.systems.contains_key(&s), "still holds its particle");
+    testkit::run(&mut w, 1);
+    assert!(!w.gas.systems.contains_key(&s), "left play in the turn its particle was removed");
+    assert!(!w.update.contains(s));
+    // G13 part a, fifth variant: a 1-tick particle empties it in the first turn.
+    let s = system(&mut w, "CLOUD", Some(1));
+    testkit::run(&mut w, 1);
+    assert!(!w.gas.systems.contains_key(&s), "left play in its first turn");
+}
+
+/// spec: S-0613 claim 17 (lifetime 3: marked in its third turn, kept while it holds particles)
+#[test]
+fn claim_17_lifetime_three() {
+    let mut w = game(&with_lifetime("CLOUD", 3));
+    let s = system(&mut w, "CLOUD", Some(30));
+    testkit::run(&mut w, 2);
+    assert!(!w.gas.systems[&s].ending);
+    testkit::run(&mut w, 1);
+    assert!(w.gas.systems[&s].ending, "marked in its third turn");
+    testkit::run(&mut w, 20);
+    assert!(w.gas.systems.contains_key(&s), "its particle is still there");
+}
+
+/// spec: S-0613 claim 17 (lifetime 0 goes to −1 in the first turn and is never marked; every negative lifetime goes down each turn and is never marked)
+#[test]
+fn claim_17_zero_and_negative_never_end() {
+    for lifetime in [0, -2, -1] {
+        let mut w = game(&with_lifetime("CLOUD", lifetime));
+        let s = system(&mut w, "CLOUD", Some(1));
+        testkit::run(&mut w, 60);
+        let sys = &w.gas.systems[&s];
+        assert!(!sys.ending, "lifetime {lifetime}");
+        assert!(sys.particles.is_empty());
+        assert_eq!(sys.lifetime, lifetime - 60, "goes down by 1 whatever its value");
+    }
+    // The shared system's −1 counts down too.
+    let mut w = game(&rules());
+    testkit::run(&mut w, 4);
+    assert_eq!(w.gas.systems[&shared(&w)].lifetime, -5);
+}
+
+/// spec: S-0613 claim 17 (every kind counts down and leaves play: a smoke system with lifetime 1 leaves in its first turn once empty; a system with no behaviour kind keeps its particle, which neither moves nor expires, and so never leaves play)
+#[test]
+fn claim_17_kinds_and_no_kind() {
+    let mut r = with_lifetime("SOOT", 1);
+    r.sim.particle_systems.get_mut("STILL").unwrap().lifetime = Some(1);
+    let mut w = game(&r);
+    // The no-kind system first: a removal from the update order skips the
+    // next object's turn (S-0203 claim 10).
+    let still = system(&mut w, "STILL", Some(1));
+    let soot = system(&mut w, "SOOT", None);
+    let before = w.gas.systems[&still].particles.clone();
+    assert_eq!(before.len(), 1);
+    testkit::run(&mut w, 1);
+    assert!(!w.gas.systems.contains_key(&soot), "the smoke system left play in its first turn");
+    assert!(w.gas.systems[&still].ending, "the no-kind system is marked");
+    testkit::run(&mut w, 30);
+    assert_eq!(w.gas.systems[&still].particles, before, "its particle neither moves nor expires");
+    // Without particles a no-kind system leaves play like any other.
+    let empty = system(&mut w, "STILL", None);
+    w.gas.systems.get_mut(&empty).unwrap().particles.clear();
+    testkit::run(&mut w, 1);
+    assert!(!w.gas.systems.contains_key(&empty));
+}
+
+/// spec: S-0613 claim 18 (on an even tick a particle's drift draws precede the draws of the death its own hit causes)
+#[test]
+fn claim_18_drift_draws_before_death_draws() {
+    let mut r = rules();
+    r.sim.particles.get_mut("FOG").unwrap().damage = Some(10_000);
+    // The death's animation takes a ranged draw for its stage delay (S-0109 claim 3).
+    r.sim.animations.get_mut("PLAGUE").unwrap().random_rate = Some([450, 225]);
+    let mut w = game(&r);
+    to_even(&mut w);
+    let c = testkit::mid(SIZE, 0, 0);
+    let victim = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, c, 0);
+    let i = puff(&mut w, "FOG", Pos::centre(c, 0));
+    edit(&mut w, i, |p| {
+        p.life = 1000;
+        p.countdown = 1;
+        p.vel = [0, 0, 0];
+    });
+    // Move the stream to a state whose drift changes the velocity.
+    loop {
+        let mut a = w.rng.clone();
+        let v = drift_with(&mut a, [0, 0, 0]);
+        if v != [0, 0, 0] {
+            break;
+        }
+        w.rng.raw();
+    }
+    let mut a = w.rng.clone();
+    let expected = drift_with(&mut a, [0, 0, 0]);
+    let s = shared(&w);
+    gas::system_turn(&mut w, s);
+    assert!(w.obj(victim).is_none_or(|o| !o.on_map), "the hit killed the unit");
+    assert_eq!(w.gas.anims.len(), 1, "a death with draws of its own");
+    let v = list(&w, s)[i].vel;
+    assert_eq!([v[0], v[1]], [expected[0], expected[1]], "drift drew first");
+    assert_ne!(w.rng, a, "the death's draws followed");
 }
