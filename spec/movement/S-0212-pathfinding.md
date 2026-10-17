@@ -2,11 +2,11 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 45
+revision: 46
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634]
 supersedes: []
@@ -2507,8 +2507,7 @@ S-0209's Import mapping says.
 
 ## Measurement scenarios
 
-**Common setup.** The glossary's *measurement setup*: unmodified install, stock data, director
-and mods off except named test data, no engine add-ons, a purpose-made test map unless stated,
+**Common setup.** The glossary's *measurement setup*: unmodified install, stock data, no engine add-on and no mods (the named test files of a scenario excepted), a purpose-made test map unless stated,
 skirmish, game speed 2 unless stated otherwise (results are in ticks and cells). One
 human-controlled house with the test units and one bystander computer player isolated from the
 scenario's observed area. The observed area comprises the test routes, objects and search
@@ -3256,8 +3255,8 @@ P16 run (u) checks this separately from other activity in the tick.
 
 **P18. Immediate fresh search after a blocked first step (claim 22).** Use S-0207 D17
 part d3's narrow clear-ground corridor, unarmed human-owned mover and enemy blocker, with
-one bystander computer player isolated from the observed corridor. Game speed 2, director
-and mods off, except the named test map and retry-delay override. Set the path-retry delay
+one bystander computer player isolated from the observed corridor. Game speed 2,
+no engine add-on and no mods (the named test files of a scenario excepted), except the named test map and retry-delay override. Set the path-retry delay
 to 1 game minute. Introduce the blocker by the map's supported reinforcement trigger after
 the mover has a stored path, before its check of the blocked cell. For each tick, record the
 stored steps, destination, track state, search occurrences and retry-timer state. The run qualifies
@@ -3289,8 +3288,8 @@ moving-blocker extension. Report inconclusive for each subtest without a qualify
 Retain the same game speed, settings and bystander void rule.
 
 **P19. Failed search beside the destination: ship and hovering (claims 21 and 23).**
-Use a tiny level map with an isolated bystander computer player, game speed 2, director and
-mods off except this test map and named overrides. Use a human-owned stock hovering type
+Use a tiny level map with an isolated bystander computer player, game speed 2,
+no engine add-on and no mods (the named test files of a scenario excepted), this test map and named overrides included. Use a human-owned stock hovering type
 on clear ground, and a human-owned stock ship type in a separate open-water area. In each
 area place one destination tile of a distinct land type that is connected to the mover's
 reach region. An override makes that tile's land multiplier zero for the mover's locomotion
@@ -3507,8 +3506,8 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   step in the replacement-only run, or no such step in the step-only run, voids the contrast.
 
 **P26. Neutral and special give-up (claim 23a; Q-0238).**
-- Setup: purpose-made skirmish map, game-speed index 2, 800 × 600, director and mods
-  off, stock types only. Place one ordinary unarmed driving vehicle owned by the neutral
+- Setup: purpose-made skirmish map, game-speed index 2, 800 × 600, 
+  no engine add-on and no mods (the named test files of a scenario excepted), stock types only. Place one ordinary unarmed driving vehicle owned by the neutral
   house, then repeat with the special house. A map-defined team of that house supplies
   a move-to-waypoint destination through its script, as in P11; the team is used only
   to exercise the original, not as an implementation requirement. Enclose that waypoint
@@ -3560,7 +3559,7 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 
 - Setup: a tiny revealed skirmish map with a stock refinery, two ordinary driving
   harvesters A and B of the human player, a nearby resource field and one bystander
-  computer player kept away. Use speed 2, stock data, director and mods off.
+  computer player kept away. Use speed 2, stock data, no engine add-on and no mods (the named test files of a scenario excepted).
   Record tick, position, destination, current and queued behaviour, contact, tether,
   stored route and retry timer with a read-only recorder and scripted input.
 - Entry and rest: while B holds the refinery contact, order A to its docking cell
@@ -3593,7 +3592,7 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 
 ### P28: Aircraft landing footprints and ties (claim 25a)
 
-- **Setup:** purpose-made skirmish maps with stock rules and art, director and mods off,
+- **Setup:** purpose-made skirmish maps with stock rules and art, no engine add-on and no mods (the named test files of a scenario excepted),
   speed index 2, short game off. Use an ordinary aircraft and a full own-house pad whose
   building behaviour requests landing nearby when it cannot accept another aircraft.
   Confirm that S-0501 claim 41's building search is used, that the winning building's
@@ -3650,7 +3649,7 @@ shared selection rules, or treating a qualifying effective clear as exempt from 
 row, falsifies the claim.
 
 **Transport caller checks (claim 25).** Use S-0507 T13's tiny flat skirmish map,
-stock-data setup with director and mods off, game-speed index 2 and 800 × 600.
+stock-data setup with no engine add-on and no mods (the named test files of a scenario excepted), game-speed index 2 and 800 × 600.
 Unload a vehicle passenger through ordinary orders, varying the processing tick with
 candidate cells held fixed. Record the serving neighbour, passenger placement cell,
 subsequent movement destination and random-stream state read-only. Predict placement
@@ -3663,7 +3662,7 @@ shore witness; shore approach and both unchecked no-result cases retain the unme
 qualifications of claim 25, rather than being confirmed by ordinary successful exits.
 
 **P29. Restoration displacement and no-track cleanup (claims 20 and 25).**
-Use tiny skirmish maps with stock types and data, director and mods off, game speed
+Use tiny skirmish maps with stock types and data, no engine add-on and no mods (the named test files of a scenario excepted), game speed
 index 2, and read-only tick/state recording. For displacement, follow S-0524 C14:
 sell a starting building, park ground occupants on its former foundation, and trigger
 restoration. Predict each search from the occupant's old cell and T5, recording
