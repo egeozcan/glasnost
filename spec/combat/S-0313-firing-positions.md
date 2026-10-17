@@ -2,11 +2,11 @@
 id: S-0313
 title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0601, Q-0670]
 supersedes: []
@@ -412,7 +412,7 @@ its dual-shift flag remain art settings, not members of this four-key rules grou
 Use a small purpose-made skirmish map with a flat observed firing area, one human-controlled
 house owning the firers and one bystander computer player kept away as in the glossary. Place
 neutral durable targets in the observed area. Use game speed index 2 and 800 × 600 pixels,
-director, unrelated mods and engine add-ons off. Stock data applies except the named test rules
+no engine add-on and no mods (the named test files of a scenario excepted). Stock data applies except the named test rules
 and art files of each scenario, removed after that scenario.
 
 Procedure for every part: position the firer, load passengers or occupants where named, order an
