@@ -1031,32 +1031,12 @@ fn step_off_refinery(w: &mut World, id: ObjectId) {
     else {
         return;
     };
-    let r = w.rules_arc();
-    let Some(u) = r.unit(o.kind, o.type_index) else {
-        return;
-    };
     // spec: S-0402 claim 13 (the centre: the cell of that building's reference point)
     let centre = w.reference_point(b).cell();
-    let deck = o.layer == Layer::Deck;
     crate::regions::ensure(w);
-    let settings = crate::path::NearbySettings {
-        // spec: S-0402 claim 13 (the harvester's own locomotion class, winged counted as track)
-        class: u.class.map(|k| match k {
-            glasnost_rules::sim::LocomotionClass::Winged => {
-                glasnost_rules::sim::LocomotionClass::Track
-            }
-            other => other,
-        }),
-        // spec: S-0402 claim 13 (its type's own movement zone; the reach region of the centre cell for that zone, read for the deck when it is on a bridge deck)
-        zone: u.zone,
-        reach: Some(crate::regions::reach_read(w, centre, u.zone, deck)),
-        // spec: S-0402 claim 13 (deck mode when it is on a bridge deck; no height condition; no further test)
-        deck,
-        height: false,
-        // spec: S-0402 claim 13 (no reference cell: the preferred cell at position N mod n)
-        reference: None,
-        no_bridges: false,
-        no_overlay: false,
+    // spec: S-0402 claim 13 and S-0212 table T5 (the step-off row: the harvester's own class, winged as track, its own zone and the centre's reach region read for its deck, deck mode on a bridge deck, no height condition, no further test, no reference cell: the preferred cell at position N mod n)
+    let Some(settings) = crate::path::NearbySettings::own_class(w, id, centre) else {
+        return;
     };
     match crate::path::nearby(w, centre, crate::path::NearbyUse::Settings(settings)) {
         Some(n) => drive_to(w, id, Target::Cell(n)),

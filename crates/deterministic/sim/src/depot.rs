@@ -863,8 +863,12 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
 /// has *enter* current (the order ends at once, `order_applied`), and the
 /// order of the walk and the same turn's retry is open (Open questions).
 /// Our engine walks in the vehicle's first queued-entry turn whose retry
-/// finds no free place (option A of the Open questions), with the nearby
-/// search of Q-1152's interim (`absorb::approach`).
+/// finds no free place (option A of the Open questions). Claim 23 leaves
+/// the cell to the implementation and points at S-0605 claim 4, so the
+/// walk uses that claim's search (`absorb::approach`, S-0212 table T5's
+/// waiting absorber row), with *N* the tick of the turn that makes it.
+/// When no cell is found the vehicle stays where it is; claim 23 names no
+/// fall-back to rest for it.
 fn queued_walk(w: &mut World, id: ObjectId, k: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     // spec: S-0314 claim 23 (while it holds no contact and remembers no object it is entering, the condition of S-0605 claim 4); Q-1156 interim (once per queued entry)
@@ -874,7 +878,7 @@ fn queued_walk(w: &mut World, id: ObjectId, k: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.depot.walked = true;
     }
-    // spec: S-0314 claim 23 (a free location near the depot's centre cell its own locomotion class can stand on, assigned as destination, move queued and started at once; the queued entry is not cleared)
+    // spec: S-0314 claim 23 (a free location near the depot's centre cell its own locomotion class can stand on, the choice left to the implementation; assigned as destination, move queued and started at once; the queued entry is not cleared) and S-0605 claim 4 (the search of the waiting absorber approach, S-0212 table T5)
     crate::structures::absorb::approach(w, id, k);
 }
 

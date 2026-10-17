@@ -13,12 +13,9 @@
 //! on a building does not make an actor remember an entry object (claims 4
 //! and 5), so only the contact completes an entry.
 //!
-//! Interim rule of our request:
-//! - Q-1152: the waiting actor's approach (claim 4) takes the nearby-cell
-//!   search of S-0212 claim 25 from the building's centre cell with the
-//!   settings of a vehicle passenger's exit (S-0507 claim 10): the actor's
-//!   own locomotion class, zone normal, no reach region, ground mode,
-//!   bridges allowed, no height, overlay or reference-cell condition.
+//! The waiting actor's approach (claim 4) is S-0212 claim 25's
+//! nearby-cell search with table T5's row for the waiting absorber
+//! approach (Q-1152, answered by S-0605 revision 5).
 
 use glasnost_map::CellXY;
 use glasnost_num::F64;
@@ -396,7 +393,10 @@ pub fn process_enter(w: &mut World, u: ObjectId) -> i32 {
         && w.obj(b).is_some_and(|o| o.on_map)
     {
         // spec: S-0605 claim 4 (approach: the first processing of enter after the wait began, with no contact and no remembered entry object, the building still in the game)
-        approach(w, u, b);
+        if !approach(w, u, b) {
+            // spec: S-0605 claim 4 (no cell found: it falls back to rest in that same processing and stays where it is; nothing is kept, its destination was cleared when the wait began; the wait and its retry go on)
+            crate::process::fall_back(w, u, false);
+        }
         // spec: S-0215 claims 6 and 29 (the processing ends with the standard delay)
         return crate::process::standard_delay(w, u);
     }
@@ -405,32 +405,21 @@ pub fn process_enter(w: &mut World, u: ObjectId) -> i32 {
     crate::process::standard_delay(w, u)
 }
 
-/// Claim 4's approach of an actor waiting in line for building `b`: a free
-/// location near the building's centre cell, of the kind the actor's own
-/// movement class can stand on, as its destination, with *move* queued and
-/// started at once. The waiting goes on.
-pub(crate) fn approach(w: &mut World, u: ObjectId, b: ObjectId) {
-    let Some(uo) = w.obj(u).cloned() else { return };
-    // spec: S-0605 claim 4 and S-0204 claim 4 (the building's centre cell: the cell of its reference point, the centre of its foundation)
+/// Claim 4's approach of an actor waiting in line for building `b`: the
+/// nearby-cell search of S-0212 claim 25 with table T5's row for the
+/// waiting absorber approach, from the cell of the building's reference
+/// point; a found cell becomes its destination, with *move* queued and
+/// started at once. The waiting goes on. Returns whether a cell was found.
+pub(crate) fn approach(w: &mut World, u: ObjectId, b: ObjectId) -> bool {
+    // spec: S-0605 claim 4 and S-0204 claim 4 (the centre: the cell of the building's reference point, the centre of its foundation, not its top-left cell and not S-0507 claim 10's exit ring)
     let centre = w.reference_point(b).cell();
     crate::regions::ensure(w);
-    let class = w.rules().unit(uo.kind, uo.type_index).and_then(|t| t.class);
-    // Q-1152 interim (S-0605 claim 4: the nearby-location search of claim 12, its tie-breaks open): S-0212 claim 25 with the settings of S-0507 claim 10's vehicle exit and the actor's own class
-    let found = crate::path::nearby(
-        w,
-        centre,
-        crate::path::NearbyUse::Settings(crate::path::NearbySettings {
-            class,
-            zone: glasnost_rules::sim::MovementZone::Normal,
-            reach: None,
-            deck: false,
-            height: false,
-            reference: None,
-            no_bridges: false,
-            no_overlay: false,
-        }),
-    );
-    let Some(c) = found else { return };
+    // spec: S-0605 claim 4 and S-0212 table T5 (the waiting absorber approach row: the actor's own class with winged counted as track, its type's own zone, the reach region of the centre cell for that zone read for its deck, deck mode when it is on a bridge deck, no height condition, no further test, no no-overlay condition, bridge cells allowed, no reference cell: the preferred cell at position N mod n with N the tick of this processing; no draw)
+    let Some(settings) = crate::path::NearbySettings::own_class(w, u, centre) else {
+        return false;
+    };
+    let found = crate::path::nearby(w, centre, crate::path::NearbyUse::Settings(settings));
+    let Some(c) = found else { return false };
     let (t, stale) = (w.tick, w.rules().quirks.stale_suspended_revert); // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     // spec: S-0605 claim 4 (it assigns the location as its destination, queues move and starts it at once; the waiting itself does not end)
     crate::econ::assign_destination(w, u, Some(Target::Cell(c)));
@@ -439,6 +428,7 @@ pub(crate) fn approach(w: &mut World, u: ObjectId, b: ObjectId) {
         ob.path.steps.clear();
         ob.path.retry_at = 0;
     }
+    true
 }
 
 // ---------------------------------------------------------------------------

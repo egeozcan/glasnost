@@ -493,6 +493,101 @@ fn claim_4_approach_and_retry() {
     assert!(until(&mut w, 800, |w| inside(w, c, b)));
 }
 
+/// The eight neighbours of the cell of `b`'s reference point that are not
+/// cells of `b`, in step-direction order.
+fn ring_one(w: &World, b: ObjectId) -> Vec<CellXY> {
+    let centre = w.reference_point(b).cell();
+    glasnost_sim::regions::STEPS
+        .iter()
+        .map(|&(dx, dy)| CellXY::new(centre.x + dx, centre.y + dy))
+        .filter(|&c| !w.cells.list(c, glasnost_sim::world::Layer::Ground).contains(&b))
+        .collect()
+}
+
+/// A waiting walker's destination after its first enter processing, with
+/// WALLs on every free ring-one cell of BIO except `keep` (indices into
+/// [`ring_one`]); the waiting walker starts at (dx, dy) after `delay`
+/// extra ticks. The first walker takes the link place from (-5, -5).
+fn approach_cell(keep: &[usize], dx: i32, dy: i32, delay: i32) -> (CellXY, Vec<CellXY>) {
+    let mut w = game();
+    let b = bio(&mut w, "BIO");
+    let ring = ring_one(&w, b);
+    for (i, &c) in ring.iter().enumerate() {
+        if !keep.contains(&i) {
+            testkit::spawn(&mut w, Kind::Building, "WALL", 0, c, 0);
+        }
+    }
+    testkit::run(&mut w, 2 + delay);
+    let a = walker(&mut w, -5, -5);
+    let c = walker(&mut w, dx, dy);
+    send(&mut w, a, b);
+    send(&mut w, c, b);
+    assert_eq!(absorb::waiting_for(&w, c), Some(b));
+    assert!(until(&mut w, 20, |w| matches!(w.obj(c).unwrap().dest, Some(Target::Cell(_)))));
+    let Some(Target::Cell(k)) = w.obj(c).unwrap().dest else { unreachable!() };
+    (k, ring.iter().enumerate().filter(|(i, _)| keep.contains(i)).map(|(_, &c)| c).collect())
+}
+
+// spec: S-0605 claim 4 and scenario A2c search variant (i) with S-0212 claim 25 and table T5 (the waiting absorber approach searches from the cell of the building's reference point: with exactly one free cell next to it, the waiting unit walks to that cell whichever side it starts on); Q-1152 answered
+#[test]
+fn claim_4_approach_one_free_cell() {
+    for (dx, dy) in [(6, 0), (-6, 1), (1, 6), (0, -6)] {
+        let (k, kept) = approach_cell(&[2], dx, dy, 0);
+        assert_eq!(k, kept[0], "start ({dx}, {dy})");
+    }
+}
+
+// spec: S-0605 claim 4 and scenario A2c search variant (ii) with S-0212 claim 25 (no reference cell: the preferred cell at position N mod n, N the tick of the enter processing; two equally near free cells alternate with the tick's parity)
+#[test]
+fn claim_4_approach_tie_by_tick() {
+    let picks: Vec<CellXY> = (0..4).map(|d| approach_cell(&[0, 4], 6, 0, d).0).collect();
+    let (_, kept) = approach_cell(&[0, 4], 6, 0, 0);
+    assert!(picks.iter().all(|k| kept.contains(k)), "{picks:?} among {kept:?}");
+    assert_ne!(picks[0], picks[1], "the choice follows the tick");
+    assert_eq!(picks[0], picks[2]);
+    assert_eq!(picks[1], picks[3]);
+}
+
+// spec: S-0605 claim 4 and scenario A2c search variant (iii) (no cell qualifies: the actor falls back to rest in that same processing and stays where it is; it is still waiting, the retry goes on, and it goes in once the place is free)
+#[test]
+fn claim_4_approach_no_cell() {
+    // A small map, so that few cells need filling.
+    const SMALL: i32 = 10;
+    let mut w = testkit::game_with(&rules(), SMALL, 7);
+    testkit::run(&mut w, 2);
+    let b = testkit::spawn(&mut w, Kind::Building, "BIO", 0, testkit::mid(SMALL, 0, 0), 0);
+    testkit::run(&mut w, 3);
+    let a = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, testkit::mid(SMALL, -1, 0), 0);
+    let c = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, testkit::mid(SMALL, 2, 2), 0);
+    // Every other free cell of the map holds a building, so no cell qualifies.
+    let (ac, cc) = (w.obj(a).unwrap().pos.cell(), w.obj(c).unwrap().pos.cell());
+    for x in 0..4 * SMALL {
+        for y in 0..4 * SMALL {
+            let cell = CellXY::new(x, y);
+            if cell != ac
+                && cell != cc
+                && w.cells.usable(cell)
+                && w.cells.list(cell, glasnost_sim::world::Layer::Ground).is_empty()
+            {
+                testkit::spawn(&mut w, Kind::Building, "WALL", 0, cell, 0);
+            }
+        }
+    }
+    testkit::run(&mut w, 2);
+    send(&mut w, a, b);
+    send(&mut w, c, b);
+    assert_eq!(absorb::waiting_for(&w, c), Some(b));
+    testkit::run(&mut w, 3);
+    let o = w.obj(c).unwrap();
+    assert_eq!(o.dest, None, "no destination");
+    assert_ne!(o.beh.current, Some(Behaviour::Enter), "fell back to rest");
+    assert_ne!(o.beh.current, Some(Behaviour::Move));
+    assert_eq!(o.pos.cell(), cc, "it stays where it is");
+    assert_eq!(absorb::waiting_for(&w, c), Some(b), "still waiting");
+    assert!(until(&mut w, 800, |w| inside(w, a, b)));
+    assert!(until(&mut w, 800, |w| inside(w, c, b)), "it goes in once the place is free");
+}
+
 // spec: S-0605 claim 3 (switched off: the actor asks to load, is refused and gives up the contact; the destination assignment goes on, so it holds the building as its destination without contact)
 #[test]
 fn claim_3_switched_off_refuses_loading() {

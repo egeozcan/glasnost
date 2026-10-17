@@ -923,7 +923,28 @@ fn claim_23_queued_entry() {
     assert!(run_until(&mut w, 6000, |w| health(w, b) == 600));
 }
 
-// spec: S-0314 claim 23 (a queued vehicle with no contact walks once to a free cell near the depot's centre cell, move started at once, and rests there with its queued entry kept); Q-1156 interim (in its first queued-entry turn whose retry finds no place) and Q-1152 interim (the nearby search)
+// spec: S-0214 claim 23 (revision 41: for a group click on a depot, event order is selection order, S-0213, so the first selected vehicle takes contact and a damaged second one waits with a queued entry) and S-0314 claim 23
+#[test]
+fn s0214_group_click_first_selected_takes_contact() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "DEPOT");
+    let a = truck(&mut w, 0, 6, 1, 300);
+    let b = truck(&mut w, 0, 6, 4, 300);
+    open(&mut w);
+    // Selected b first, then a.
+    let orders = targeting::click(&w, ALPHA, &[b, a], ClickOn::Object(d), Modifiers::default()).orders;
+    assert_eq!(orders.len(), 2, "one enter order each");
+    for o in orders {
+        assert!(orders::issue(&mut w, ALPHA, o));
+    }
+    tick::step(&mut w);
+    assert_eq!(contact(&w, b), Some(d), "the first selected takes contact");
+    assert_eq!(contact(&w, a), None);
+    assert_eq!(w.obj(a).unwrap().depot.queued, Some(d));
+}
+
+// spec: S-0314 claim 23 (a queued vehicle with no contact walks once to a free cell near the depot's centre cell, move started at once, and rests there with its queued entry kept); Q-1156 interim (in its first queued-entry turn whose retry finds no place) and S-0605 claim 4 (the nearby search of S-0212 table T5's waiting absorber row)
 #[test]
 fn claim_23_queued_walk() {
     let r = rules();
