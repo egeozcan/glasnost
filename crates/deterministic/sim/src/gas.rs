@@ -674,7 +674,7 @@ impl ParticleSystem {
             ending: false,
             particles: Vec::new(),
             owner_object: None,
-            owner_offset: [0; 3],
+            owner_offset: [0; 3], // nocite: vector and matrix dimensions (three axes)
             // spec: S-0616 Terms (a target point the creator passes; none: the world origin)
             target: Pos::default(),
             // spec: S-0616 Terms (T starts at the type's spawn interval; K at its spark-turns field)

@@ -313,7 +313,7 @@ pub fn smoke_turn(w: &mut World, sys: ObjectId) {
         let at = Pos::new(
             ob.pos.x.wrapping_add(off[0]),
             ob.pos.y.wrapping_add(off[1]),
-            ob.pos.z.wrapping_add(off[2]),
+            ob.pos.z.wrapping_add(off[2]), // nocite: vector and matrix dimensions (three axes)
         );
         if let Some(s) = w.gas.systems.get_mut(&sys) {
             s.pos = at;
@@ -463,7 +463,7 @@ fn smoke_move(w: &World, t: &ParticleType, p: &mut Particle) -> bool {
     let y2 = y.wrapping_add(dy.wrapping_mul(t.wind_effect)).wrapping_add(p.vel[1]);
     let z2 = z
         .wrapping_add(p.speed.to_f64().to_i32_common())
-        .wrapping_add(p.vel[2]);
+        .wrapping_add(p.vel[2]); // nocite: vector and matrix dimensions (three axes)
     let h0 = w.surface_at(x, y);
     // spec: S-0616 F2 (stopped and marked when the cell at (x, y) is a bridge cell, z < H₀ + 416 and z′ ≥ H₀ + 416 − 260)
     if w.high_bridge(p.pos.cell())
@@ -579,7 +579,7 @@ fn fire_update(w: &mut World, sys: ObjectId, i: usize) {
     }
     // spec: S-0616 F8 (one raw value r: k = (r rem 10) − 5, φ = k × 0.02 + 1.0 in double precision)
     let r = w.rng.raw() as i32;
-    let k = glasnost_num::int::rem(r, 10) - 5;
+    let k = glasnost_num::int::rem(r, 10) - 5; // spec: S-0616 F8 (k = (r rem 10) − 5)
     let phi = d(i64::from(k), m).mul(c("0.02"), m).add(d(1, m), m);
     let sp = p.speed.to_f64();
     // spec: S-0616 F8 (step = (trunc(fl(φ × uₓ) × S), trunc(fl(φ × u_y) × S), trunc(φ × u_z × S)))
@@ -587,7 +587,7 @@ fn fire_update(w: &mut World, sys: ObjectId, i: usize) {
     p.step = [
         xy(p.dir[0]),
         xy(p.dir[1]),
-        phi.mul(p.dir[2].to_f64(), m).mul(sp, m).to_i32_common(),
+        phi.mul(p.dir[2].to_f64(), m).mul(sp, m).to_i32_common(), // nocite: vector and matrix dimensions (three axes)
     ];
     // spec: S-0616 claim 12 (below the end stage the stage advances by S-0613 F8 with the particle's own value, claim 19)
     if p.stage < t.end_stage && crate::gas::stage_due(t.max_ec, p.advance, &p) {
@@ -846,7 +846,7 @@ fn spark_update(w: &mut World, sys: ObjectId, i: usize) {
         }
         None => p.pos = b,
     }
-    p.fvel[2] = vz2;
+    p.fvel[2] = vz2; // nocite: vector and matrix dimensions (three axes)
     crate::gas::put(w, sys, i, p);
     // spec: S-0616 claim 16 (the colour draw after any contact: one ranged draw R(0, 2147483646), drawing only)
     let _colour = w.rng.ranged(0, DRAW_TOP, half);
