@@ -78,3 +78,31 @@ fn absent_transport_fields() {
         (None, None, None, None, None)
     );
 }
+
+/// spec: S-0605 Import mapping (InfantryAbsorb, UnitAbsorb booleans;
+/// Passengers an integer and SizeLimit floating point on a building type;
+/// [AudioVisual] EnterBioReactorSound and LeaveBioReactorSound sound
+/// names; every key absent leaves its field unset, read as the spec's
+/// absent value: no, no, 0, 0.0, none)
+#[test]
+fn absorber_fields() {
+    let s = sim("[BuildingTypes]\n1=Vat\n2=Shack\n\
+         [Vat]\nInfantryAbsorb=yes\nUnitAbsorb=no\nPassengers=5\nSizeLimit=2.5\n\
+         [Shack]\nStrength=10\n\
+         [AudioVisual]\nEnterBioReactorSound=Gulp\nLeaveBioReactorSound=Burp\n");
+    let v = &s.buildings["Vat"];
+    assert_eq!(v.infantry_absorb, Some(true));
+    assert_eq!(v.unit_absorb, Some(false));
+    assert_eq!(v.passengers, Some(5));
+    assert_eq!(text(&v.size_limit).as_deref(), Some("25e-1"));
+    assert_eq!(s.general.enter_bio_reactor_sound.as_deref(), Some("Gulp"));
+    assert_eq!(s.general.leave_bio_reactor_sound.as_deref(), Some("Burp"));
+    let h = &s.buildings["Shack"];
+    assert_eq!(h.infantry_absorb, None);
+    assert_eq!(h.unit_absorb, None);
+    assert_eq!(h.passengers, None);
+    assert_eq!(h.size_limit, None);
+    let s = sim("[BuildingTypes]\n1=Shack\n[Shack]\nStrength=10\n");
+    assert_eq!(s.general.enter_bio_reactor_sound, None);
+    assert_eq!(s.general.leave_bio_reactor_sound, None);
+}

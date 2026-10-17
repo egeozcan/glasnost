@@ -471,6 +471,10 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("grinding", "Grinding", Bool),
     ("unit_absorb", "UnitAbsorb", Bool),
     ("infantry_absorb", "InfantryAbsorb", Bool),
+    // spec: S-0605 Import mapping: capacity c (absent 0) and size limit L
+    // (absent 0.0) of an absorbing building.
+    ("passengers", "Passengers", Int),
+    ("size_limit", "SizeLimit", Dec),
     ("bridge_repair_hut", "BridgeRepairHut", Bool),
     ("number_impassable_rows", "NumberImpassableRows", Int),
     ("weapons_factory", "WeaponsFactory", Bool),
@@ -698,6 +702,9 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
     // [General] Wake (S-0207 Import mapping, claim 23) is imported with the combat table (S-0614).
     ("chrono_out_sound", b"AudioVisual", "ChronoOutSound", Text),
     ("chrono_in_sound", b"AudioVisual", "ChronoInSound", Text),
+    // spec: S-0605 Import mapping (absent: none)
+    ("enter_bio_reactor_sound", b"AudioVisual", "EnterBioReactorSound", Text),
+    ("leave_bio_reactor_sound", b"AudioVisual", "LeaveBioReactorSound", Text),
     // spec: S-0213 Import mapping
     ("maximum_cheer_rate", b"General", "MaximumCheerRate", Int),
     // spec: S-0209, S-0215, S-0210 Import mapping ([IQ])

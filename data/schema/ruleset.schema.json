@@ -984,6 +984,15 @@
             "type": "string"
           }
         },
+        "passengers": {
+          "description": "`Passengers` of a building type: an absorbing building's capacity\n*c* (S-0605 F1 and Import mapping; absent: 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "powered": {
           "description": "`Powered`.",
           "type": [
@@ -1097,6 +1106,17 @@
             "null"
           ],
           "default": null
+        },
+        "size_limit": {
+          "description": "`SizeLimit` of a building type: an absorbing building's size limit\n*L*, floating point (S-0605 F1 and Import mapping; absent: 0.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "spyable": {
           "description": "`Spyable`.",
@@ -5171,6 +5191,14 @@
             }
           ]
         },
+        "enter_bio_reactor_sound": {
+          "description": "`[AudioVisual] EnterBioReactorSound`, the entry sound at an infantry\nabsorber (S-0605 claim 7 and Import mapping; absent: none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "fire_supress": {
           "description": "`FireSupress`, cells (S-0309 F6; lepton form).",
           "anyOf": [
@@ -5433,6 +5461,14 @@
         },
         "ivan_warhead": {
           "description": "`[CombatDamage] IvanWarhead`, the bomb warhead (S-0519 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "leave_bio_reactor_sound": {
+          "description": "`[AudioVisual] LeaveBioReactorSound`, the exit sound at an infantry\nabsorber (S-0605 claim 13 and Import mapping; absent: none).",
           "type": [
             "string",
             "null"

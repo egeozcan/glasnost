@@ -67,6 +67,23 @@ const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
     ("particle_systems", "BehavesLike", Outcome::Field, "S-0006"),
     ("particles", "BehavesLike", Outcome::Field, "S-0006"),
     ("buildings", "SuperWeapon", Outcome::Field, "S-0004"),
+    // spec: S-0605 Import mapping (absorbing buildings)
+    ("buildings", "InfantryAbsorb", Outcome::Field, "S-0605"),
+    ("buildings", "UnitAbsorb", Outcome::Field, "S-0605"),
+    ("buildings", "Passengers", Outcome::Field, "S-0605"),
+    ("buildings", "SizeLimit", Outcome::Field, "S-0605"),
+    (
+        "global:AudioVisual",
+        "EnterBioReactorSound",
+        Outcome::Field,
+        "S-0605",
+    ),
+    (
+        "global:AudioVisual",
+        "LeaveBioReactorSound",
+        Outcome::Field,
+        "S-0605",
+    ),
     (
         "warheads",
         "Verses",

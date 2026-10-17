@@ -591,6 +591,14 @@ pub struct General {
     /// teleporting jump (S-0207 claim 20 e).
     #[serde(default)]
     pub chrono_in_sound: Option<String>,
+    /// `[AudioVisual] EnterBioReactorSound`, the entry sound at an infantry
+    /// absorber (S-0605 claim 7 and Import mapping; absent: none).
+    #[serde(default)]
+    pub enter_bio_reactor_sound: Option<String>,
+    /// `[AudioVisual] LeaveBioReactorSound`, the exit sound at an infantry
+    /// absorber (S-0605 claim 13 and Import mapping; absent: none).
+    #[serde(default)]
+    pub leave_bio_reactor_sound: Option<String>,
     /// `MaximumCheerRate`, ticks (S-0213 claim 19).
     #[serde(default)]
     pub maximum_cheer_rate: Option<i32>,
@@ -2157,6 +2165,14 @@ pub struct BuildingType {
     /// `InfantryAbsorb`.
     #[serde(default)]
     pub infantry_absorb: Option<bool>,
+    /// `Passengers` of a building type: an absorbing building's capacity
+    /// *c* (S-0605 F1 and Import mapping; absent: 0).
+    #[serde(default)]
+    pub passengers: Option<i32>,
+    /// `SizeLimit` of a building type: an absorbing building's size limit
+    /// *L*, floating point (S-0605 F1 and Import mapping; absent: 0.0).
+    #[serde(default)]
+    pub size_limit: Option<Decimal>,
     /// `BridgeRepairHut`.
     #[serde(default)]
     pub bridge_repair_hut: Option<bool>,
