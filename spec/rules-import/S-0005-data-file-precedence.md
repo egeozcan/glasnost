@@ -2,11 +2,11 @@
 id: S-0005
 title: Data file precedence (loose files, archive mount order, name lookup)
 topic: rules-import
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0002, Q-0263, Q-0451]
 supersedes: []
@@ -1007,7 +1007,7 @@ side archive number.
 
 Every active scenario runs under the glossary's *measurement setup*, including its allowances
 for a presentation-only display compatibility layer, named test files, statistical runs, a
-read-only random-state recorder and scripted input. The director and unrelated mods are off.
+read-only random-state recorder and scripted input. There is no engine add-on and there are no mods (the named test files of a scenario and the purpose-made test maps excepted).
 Use speed 2 unless a scenario specifies otherwise. Skirmish tests use a local human player and
 one bystander computer player isolated from the observed objects, with the glossary's void rule.
 Scenarios M2 (d), M19 and M20 (b) instead observe that opponent's play as explicitly stated.
@@ -2074,7 +2074,7 @@ mean those sides' names as the stock side list writes them.
   - *Falsified if:* any mission reaches play or fails to reach play otherwise than stated.
 
 **Scenario M25: sample-bank and separate-file resolution (claim 10a; Q-0263).**
-- *Common setup:* stock executable, director and mods off except the named test files below,
+- *Common setup:* stock executable, no engine add-on and no mods (the named test files below and the purpose-made test maps excepted),
   working sound device and nonzero sound and voice volumes. A tiny skirmish map, speed 2, has one
   local-player infantry and one bystander computer player confined away from it. Record audio
   output. Keep the bystander from affecting the observed unit; void a run if it does. Use a
@@ -2123,7 +2123,7 @@ mean those sides' names as the stock side list writes them.
   copy wins. An inaudible control voids (ii) or (v), respectively.
 
 **Scenario M26: game bitmap-font lookup (claim 18a; Q-0451).**
-- *Setup:* measurement setup, director and mods off except named test files. Use a tiny skirmish
+- *Setup:* measurement setup, no engine add-on and no mods (the named test files and the purpose-made test maps excepted). Use a tiny skirmish
   map at speed 2 with a local-player unit and a bystander computer player isolated from it.
   Prepare a valid test copy of `game.fnt` with a visibly altered glyph used in a repeatable
   status notice, keeping its width unchanged. Variant (a): replace that member in a loose copy
