@@ -144,9 +144,18 @@ fn object_turn(w: &mut World, id: ObjectId) {
     crate::combat::acquire::expected_health_turn(w, id);
     // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
     crate::superweapons::protect::tint_turn(w, id);
-    // The berserk countdown (S-0610 claim 5) runs in the behaviour part, after the first per-tick start (`process::turn`).
-    // spec: S-0601 claim 16 (an unlimited controller's overload update in its own turn; its place in the turn is an interim rule of Q-1201: after the bookkeeping, before self-healing)
-    crate::mind::overload_turn(w, id);
+    // The berserk countdown (S-0610 claim 5) runs in the behaviour part, after the first per-tick start (`process::head`).
+    // spec: S-0601 claim 16 (revision 9: the overload update runs in exactly the updates in which the berserk countdown runs: not in an excluded update, S-0215 claim 2's being erased (a tunnel is not built), nor in a warp-only update, which returned above, S-0513 claim 51 and S-0203 claim 4)
+    let early = crate::mind::unlimited(w, id) && !crate::temporal::erased(w, id);
+    if early {
+        // spec: S-0601 claim 16 and State and ordering (revision 9: the overload update follows the berserk countdown of S-0610 claim 5, which follows the first per-tick start, and precedes self-healing, behaviour processing, movement and firing; so an unlimited controller's first per-tick start and countdown come here, ahead of its self-healing, an order S-0610 claim 6 and S-0314 claim 9 leave to the engine)
+        process::head(w, id);
+        crate::mind::overload_turn(w, id);
+        // spec: S-0601 claim 16 (a lethal pulse ends the update's remaining work: no self-healing, behaviour, movement or firing follows; for a controller that is not a vehicle the same rule, unmeasured)
+        if w.obj(id).is_none_or(crate::combat::damage::dead) {
+            return;
+        }
+    }
     // spec: S-0504 claim 4 (a sinking vessel's own update first descends, and may leave play at once)
     if crate::naval::sinking_turn(w, id) {
         return;
@@ -170,7 +179,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none() {
         return;
     }
-    if !crate::temporal::building_erased(w, id) {
+    if early {
+        // The first per-tick start and the countdown ran before the overload update.
+        process::tail(w, id);
+    } else if !crate::temporal::building_erased(w, id) {
         process::turn(w, id);
     }
     if w.obj(id).is_none() {

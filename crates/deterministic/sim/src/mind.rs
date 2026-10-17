@@ -316,8 +316,8 @@ fn deploying_in_place(w: &World, id: ObjectId) -> bool {
 }
 
 /// Changes an object's owner with every change-of-owner consumer (claim
-/// 6): a building through S-0509's ownership change without an
-/// announcement, a mobile object through `econ::events::owner_changed` and
+/// 6): a building through S-0509's ownership change, which requests the
+/// capture or loss announcement (claims 6 and 9), a mobile object through `econ::events::owner_changed` and
 /// S-0506 claim 13's spawner reset. No change when the owner is the same.
 pub fn set_owner(w: &mut World, id: ObjectId, new: Option<HouseId>) {
     let Some(o) = w.obj(id) else { return };
@@ -325,7 +325,7 @@ pub fn set_owner(w: &mut World, id: ObjectId, new: Option<HouseId>) {
         return;
     }
     if o.kind == Kind::Building {
-        // spec: S-0601 claim 6 (every consumer of a change of owner; S-0509 claim 12: no announcement for this cause)
+        // spec: S-0601 claims 6 and 9 and S-0509 claim 12 (every consumer of a change of owner; the takeover and the release of a building request the capture or loss announcement, at the owner change itself, after the trigger events of claim 5)
         crate::structures::ownership::change(
             w,
             id,
@@ -414,11 +414,15 @@ pub fn detonation(w: &mut World, attacker: Option<ObjectId>, target: Option<Targ
     let Some(c) = attacker.filter(|&a| w.obj(a).is_some() && controller(w, a).is_some()) else {
         return;
     };
-    if to.health > 0
-        && let Some(&tag) = w.triggers.objects.get(&t)
-    {
-        // spec: S-0601 claim 5 (a live target's tag hears attack events 6 and 44, whether or not the takeover then succeeds; Q-1203 for their order)
+    if to.health > 0 && w.triggers.objects.contains_key(&t) {
+        // spec: S-0601 claim 5 (a live target's tag hears attack events 6 and then 44, both before the takeover test of the landing and whether or not the takeover then succeeds; both name the firer as causing object)
         for code in [6, 44] {
+            // spec: S-0601 claim 5 and S-0011 claim 8 (every action of the event-6 raise has completed before event 44 is judged: the tag is looked up again, so an action that changed the target's tag or removed the target is seen)
+            // spec: S-0601 claim 5 and Edge cases (quirks.removed_tag_attack_event: off, event 44 is raised only if the target still carries a tag, on that tag; on, the original faults, and our engine does the same as off, Q-1150 interim)
+            let _fault = w.rules().quirks.removed_tag_attack_event;
+            let Some(&tag) = w.triggers.objects.get(&t) else {
+                break;
+            };
             crate::triggers::raise(
                 w,
                 tag,
@@ -525,7 +529,7 @@ pub fn bio_reactor_fate(w: &mut World, id: ObjectId) -> bool {
 fn fate_table(w: &World, h: HouseId, v: ObjectId) -> Vec<i32> {
     let m = &w.rules().combat.general.mind;
     let money = crate::econ::production::available_credits(w, h);
-    // spec: S-0601 claim 8 (low money first: the controlling house's money below the low-money mark; Q-1202: an absent mark never selects it)
+    // spec: S-0601 claim 8 (low money first: the controlling house's money below the low-money mark; revision 9 design rule: an absent mark never selects its table, the others keep their places)
     if m.low_money_mark.is_some_and(|mark| money < mark) {
         return m.fate[3].clone();
     }
@@ -533,7 +537,7 @@ fn fate_table(w: &World, h: HouseId, v: ObjectId) -> Vec<i32> {
     if crate::econ::power::low_power(w, h) {
         return m.fate[2].clone();
     }
-    // spec: S-0601 claim 8 (then wounded: health ratio strictly below the mark; Q-1202: an absent mark never selects it)
+    // spec: S-0601 claim 8 (then wounded: health ratio strictly below the mark; revision 9 design rule: an absent mark never selects its table, the others keep their places)
     if let Some(mark) = m.wounded_mark
         && wounded_ratio(w, v).is_some_and(|q| q.lt(mark))
     {
@@ -859,9 +863,15 @@ pub fn overload_level(count: &[i32], n: i64) -> Option<usize> {
     )
 }
 
-/// An unlimited controller's overload update, in its own turn (claim 16).
-/// Its place in the turn is an interim rule of Q-1201: after the
-/// bookkeeping, before self-healing.
+/// Whether `id` is an unlimited controller (claim 16; S-0610 Terms).
+pub fn unlimited(w: &World, id: ObjectId) -> bool {
+    controller(w, id).is_some_and(|c| c.unlimited)
+}
+
+/// An unlimited controller's overload update, in its own turn (claim 16):
+/// after the first per-tick start and the berserk countdown, before
+/// self-healing, behaviour processing, movement and firing
+/// (`tick::object_turn`).
 pub fn overload_turn(w: &mut World, id: ObjectId) {
     let Some(rec) = w.mind.controllers.get_mut(&id) else {
         return;

@@ -2144,9 +2144,13 @@ pub fn key_command(
                     dest: None,
                 })
             }
-            // spec: S-0213 table T2 (deploy: units that are movable or able to fire; deploy readiness waits for the deploy specs)
+            // spec: S-0213 table T2 (deploy: units that are movable or able to fire; the rest of deploy readiness waits for the deploy specs)
             KeyCommand::Deploy if (mv || fire) && o.kind != Kind::Building => {
-                Some(Order::Deploy { actor: id })
+                // spec: S-0213 the deploy rule and S-0601 claim 15 (revision 9: a vehicle that deploys into a building and fails its deploy readiness, S-0214 Terms, gets no order; no refusal sound or message)
+                let into = o.kind == Kind::Vehicle
+                    && crate::econ::deploy::deploys_into(w, o.kind, o.type_index).is_some();
+                (!into || crate::econ::deploy::deploy_ready(w, id))
+                    .then_some(Order::Deploy { actor: id })
             }
             _ => None,
         };

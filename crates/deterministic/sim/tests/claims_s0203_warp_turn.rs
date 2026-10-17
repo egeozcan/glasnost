@@ -289,3 +289,40 @@ fn berserk_countdown_is_ordinary_work_of_the_warp_turn() {
     assert!(hold_ticks >= 2, "the hold lasts several turns");
     assert_eq!(last, 1000 - hold_ticks, "no catch-up");
 }
+
+#[test]
+fn overload_update_is_ordinary_work_of_the_warp_turn() {
+    // spec: S-0601 claim 16 (revision 9: the overload update is ordinary work that S-0513 claim 51 suppresses from the first pending update through arrival effects, as for the berserk countdown; no step made up later; in arrival hold one step in each update after the hold-end test); S-0513 scenario SW23 part f (revision 17); S-0203 claim 4 (revision 35)
+    let (mut w, a) = launched();
+    w.mind.controllers.insert(
+        a,
+        glasnost_sim::mind::Controller {
+            capacity: 3,
+            unlimited: true,
+            victims: Vec::new(),
+            countdown: 1000,
+            highlight: 0,
+            sound_mark: false,
+        },
+    );
+    warp(&mut w, at(0, 0), at(5, 5));
+    assert_eq!(stage(&w, a), Some(Stage::Pending));
+    let left = |w: &World| w.mind.controllers[&a].countdown;
+    let start = left(&w);
+    let mut last = start;
+    let mut hold_ticks = 0;
+    each_tick(&mut w, a, |w, _, s| {
+        let now = left(w);
+        match s {
+            Some(Stage::Hold(_)) => {
+                hold_ticks += 1;
+                assert_eq!(now, last - 1, "one step per hold update");
+            }
+            Some(st) => assert_eq!(now, last, "no step in {st:?}"),
+            None => unreachable!(),
+        }
+        last = now;
+    });
+    assert!(hold_ticks >= 2);
+    assert_eq!(last, start - hold_ticks, "no catch-up");
+}
