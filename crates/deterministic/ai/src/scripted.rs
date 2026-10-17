@@ -284,7 +284,7 @@ pub(crate) fn is_slave_miner(w: &World, t: TypeRef) -> bool {
 
 /// Whether type `kind`/`index` is a vehicle that deploys into a
 /// construction yard (a slave miner deploys too, but into its own building).
-pub(crate) fn deploys_into_yard(w: &World, kind: Kind, index: u32) -> bool {
+pub fn deploys_into_yard(w: &World, kind: Kind, index: u32) -> bool {
     deploy::deploys_into(w, kind, index).is_some_and(|b| {
         w.rules()
             .buildings
@@ -294,7 +294,7 @@ pub(crate) fn deploys_into_yard(w: &World, kind: Kind, index: u32) -> bool {
 }
 
 /// Whether an object is a construction yard (a factory of buildings).
-pub(crate) fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
+pub fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
     o.kind == Kind::Building
         && w.rules()
             .buildings
@@ -1260,7 +1260,7 @@ impl Script {
     /// a place order for `t` is legal, the cell test passes and the
     /// foundation is free. A naval building is looked for in the wider
     /// spiral, as a person looks for the water near the base.
-    pub(crate) fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
+    pub fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
         let rings = if naval_building(w, t) {
             WIDE_RINGS
         } else {

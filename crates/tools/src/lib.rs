@@ -9,6 +9,7 @@
 
 pub mod headless;
 pub mod local_lane;
+pub mod side_audit;
 pub mod skirmish_lane;
 pub mod trigger_lane;
 
