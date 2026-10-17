@@ -2,11 +2,11 @@
 id: S-0406
 title: Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades)
 topic: structures
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0133, Q-0130, Q-0220, Q-0277, Q-0282, Q-0798]
 supersedes: []
@@ -988,7 +988,7 @@ art or map key supplies a direction to a place order (claim 16).
 Measurement setup (glossary): a tiny purpose-made skirmish map, one human house and one allied and
 one enemy bystander computer player (glossary; the allied one is also the owner of the allied test
 buildings of PL5, which also uses a second enemy one), named test rules files in the map's override sections, scripted input for exact
-clicks, game speed index 2, 800 × 600 pixels, director and mods off except the named test data,
+clicks, game speed index 2, 800 × 600 pixels, no engine add-on and no mods (the named test files of a scenario excepted),
 a recorder noting each building's type, owner and top-left cell per tick (and, for PL1
 run 4, its position in leptons, world height included). Placement
 legality uses no random draw, so every run is deterministic given the same input; each scenario is
@@ -1385,8 +1385,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
   (the count was capped, as in part c), or the second placement succeeds.
 
 **PL11. Construction start, cadence and handover (Q-0130).**
-- Setup: the common skirmish measurement setup, game speed index 2, director and mods off
-  except named test data permitted by the measurement setup. Observed area: the building's
+- Setup: the common skirmish measurement setup, game speed index 2, no engine add-on and no mods (the named test files of a scenario excepted). Observed area: the building's
   foundation and any inherited target. Use an unarmed test building with a known multi-stage
   positive-delay build-up (*n* ≥ 4 and *d_b* ≥ 3, so that the two runs are easy to tell apart),
   plus a turreted copy with no enemy in sight. Test data give two substantially different
@@ -1430,7 +1429,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
   completion.
 
 **PL12. Placement facing (Q-0133).**
-- Setup: the common skirmish setup, speed index 2, director and mods off. Observed area:
+- Setup: the common skirmish setup, speed index 2, no engine add-on and no mods (the named test files of a scenario excepted). Observed area:
   a legal foundation next to the base. Use a placed absorbing test building and a placed
   turreted test defence, with no enemy in sight. Give pre-placed factory buildings differing
   map facings in separate runs.
@@ -1447,7 +1446,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
 
 **PL13. Deployed-building facing and invalid deploy directions (Q-0220).**
 - Setup: the common skirmish measurement setup, game speed index 2, 800 × 600 pixels,
-  director and mods off except named test map overrides. Observed area: a clear foundation
+  no engine add-on and no mods (the named test files of a scenario excepted). Observed area: a clear foundation
   and the deploying vehicle's cell, with no enemy in range and no inherited target. A test
   vehicle deploys into an ordinary building, then in separate runs into a turreted copy.
   Map overrides set deploy facing to 64, 192, −1 and 256, each in a separate variant.
@@ -1469,8 +1468,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
   Later aiming alone is not a falsifier.
 
 **PL14. Placement pointer and separate foundation display.**
-- Setup: common skirmish setup, speed 2, 800 × 600, director and mods off except named
-  test map overrides. Observed area: an explored foundation beside the base, a blocked
+- Setup: common skirmish setup, speed 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario excepted). Observed area: an explored foundation beside the base, a blocked
   foundation, a sloped cell, a shrouded cell and a lone upgrade target. Use a done ordinary
   building, a place-anywhere copy and an upgrade with room on its target. A named test
   placement image with distinguishable frames 0, 2 and 3 identifies frame choice without
@@ -1496,8 +1494,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
   separately: a correct arrow alone does not confirm the foundation display.
 
 **PL15. Placement's Q-0282 text/no-text answer.**
-- Setup: common skirmish setup, speed 2, 800 × 600, director and mods off except named
-  test map overrides. Observed area: the candidate foundation, its only supporting building,
+- Setup: common skirmish setup, speed 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario excepted). Observed area: the candidate foundation, its only supporting building,
   the upgrade target and the battlefield message area. Use a done building and, in separate
   runs, a done upgrade. No independent messages may occur during the observation.
 - Procedure: refuse clicks for missing adjacency and unexplored ground; apply a place order
@@ -1521,7 +1518,7 @@ Each scenario names its observed area, the cells in which the void rule applies.
 
 - Setup: a tiny flat skirmish map, game speed index 2, stock data except named map overrides
   for a test armed host and upgrades. One human house and one isolated bystander computer
-  player; director and mods off. Use ordinary non-SAM hosts, with no delayed firing, no
+  player; no engine add-on and no mods (the named test files of a scenario excepted). Use ordinary non-SAM hosts, with no delayed firing, no
   occupants and stationary enemy targets. Give each upgrade distinguishable ordinary primary
   and secondary weapons, observable by projectile or damage. A passing upgrade has identical
   primary and secondary weapon types; a failing upgrade has an ordinary single-shot primary
