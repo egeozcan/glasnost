@@ -2,11 +2,11 @@
 id: S-0014
 title: Game bitmap font file layout
 topic: formats
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0501, Q-0530]
 supersedes: []
@@ -223,7 +223,8 @@ S-0213 claim 25's contract.
 
 **F2 — Mapping and mask orientation (claims 1 to 4).**
 - Setup: a tiny purpose-made skirmish map with a distant bystander computer player,
-  stock data, game speed 2, 800 × 600, director and unrelated mods off. Named test
+  stock data, game speed 2, 800 × 600, no engine add-on and no mods (the named test
+  files of a scenario and the purpose-made test maps excepted). Named test
   files are one valid font copy and status-text resources used by a repeatable
   notice; restore them after each run. Follow S-0213 claim 25's status scenario
   and void rule. Keep positive widths comfortably fitting the line; the separate
