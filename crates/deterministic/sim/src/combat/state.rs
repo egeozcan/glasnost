@@ -96,8 +96,9 @@ pub struct CombatState {
     pub killed: bool,
     /// The tick at which a delayed kill ends (S-0302 claim 16).
     pub delay_kill_until: Option<i32>,
-    /// Has a damage particle effect (S-0302 claim 13).
-    pub damage_effect: bool,
+    /// The damage-smoke system held in the damage-smoke emitter place
+    /// (S-0302 claim 13, S-0616 Terms and claim 1), until it leaves play.
+    pub damage_smoke: Option<crate::world::ObjectId>,
     /// The berserk state and its remaining berserk time in countdown
     /// updates (S-0610 claims 4 and 5, F2): `Some(t)` while berserk, even
     /// when `t` is 0 or less (a hit with *T* ≤ 0 under
@@ -160,7 +161,7 @@ impl CombatState {
             fired_at: Vec::new(),
             killed: false,
             delay_kill_until: None,
-            damage_effect: false,
+            damage_smoke: None,
             berserk: None,
             turret_was_turning: false,
             last_shot_target: None,

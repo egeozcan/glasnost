@@ -863,7 +863,9 @@ fn deliver(w: &mut World, host: ObjectId, p: ObjectId, weapon: Option<WeaponId>)
         );
         return;
     }
-    // spec: S-0614 claim 9 (the spark effect at the host's position: particle systems are a seam; the animation indexed directly by the host's 8-direction, none past the list's end or for an empty list)
+    // spec: S-0614 claim 9 and S-0616 claim 1 (a system of the game-wide spark type at the host's position; creating it takes no draw)
+    crate::particles::spark_system(w, h.pos);
+    // spec: S-0614 claim 9 (the animation indexed directly by the host's 8-direction, none past the list's end or for an empty list)
     let dir = eight_direction(h.body.value(w.tick));
     if let Some(name) = wr.anim.get(usize::from(dir)) {
         crate::combat::effects::anim(w, name, h.pos);

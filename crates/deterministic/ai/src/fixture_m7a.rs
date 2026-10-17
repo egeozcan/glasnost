@@ -292,6 +292,7 @@ pub fn ruleset() -> Ruleset {
                 behaves_like: Some("gas".into()),
                 holds_what: Some("FOG".into()),
                 lifetime: None,
+                ..Default::default()
             },
         );
     }

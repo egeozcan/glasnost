@@ -77,6 +77,7 @@ fn rules() -> Ruleset {
         behaves_like: Some(kind.into()),
         holds_what: holds.map(Into::into),
         lifetime: None,
+        ..Default::default()
     };
     for (n, s) in [
         ("GasCloudSys", sys("gas", Some("FOG"))),
@@ -441,7 +442,7 @@ fn edge_virus_animation_without_particle_type() {
     assert!(list(&w, shared(&w)).is_empty());
 }
 
-/// spec: S-0613 claim 4 and S-0303 claim 20 (a warhead's gas system at P, owned by the source house, lifetime −1, with one particle of its held type at P; without a held type no particle; a system of every kind takes its turns, its non-gas particles are not kept by Q-1243)
+/// spec: S-0613 claim 4 and S-0303 claim 20 (a warhead's gas system at P, owned by the source house, lifetime −1, with one particle of its held type at P; without a held type no particle; a system of every kind takes its turns and keeps its first particle, S-0616 claim 1)
 #[test]
 fn claim_4_warhead_system_and_first_particle() {
     let mut w = game(&rules());
@@ -468,7 +469,7 @@ fn claim_4_warhead_system_and_first_particle() {
     assert_eq!(w.gas.systems.len(), n + 2, "a smoke system is kept");
     let soot = *w.gas.systems.keys().last().unwrap();
     assert!(w.update.contains(soot), "and takes its turns");
-    assert!(w.gas.systems[&soot].particles.is_empty(), "its particle is not kept (Q-1243)");
+    assert_eq!(w.gas.systems[&soot].particles.len(), 1, "its first particle is kept (S-0616 claim 1)");
     assert!(!gas::is_cloud(&w, soot));
     assert_ne!(w.rng, rng, "its first particle's creation draws are taken");
     // A gas system with lifetime −1 stays, inert, after its last particle is gone.
@@ -969,10 +970,12 @@ fn claim_17_zero_and_negative_never_end() {
     assert_eq!(w.gas.systems[&shared(&w)].lifetime, -5);
 }
 
-/// spec: S-0613 claim 17 (every kind counts down and leaves play: a smoke system with lifetime 1 leaves in its first turn once empty; a system with no behaviour kind keeps its particle, which neither moves nor expires, and so never leaves play)
+/// spec: S-0613 claim 17 (every kind counts down and leaves play: a smoke system with lifetime 1 and no held type leaves in its first turn, empty; a system with no behaviour kind keeps its particle, which neither moves nor expires, and so never leaves play)
 #[test]
 fn claim_17_kinds_and_no_kind() {
     let mut r = with_lifetime("SOOT", 1);
+    // Without a held type the smoke system makes no particle (S-0616 claims 1 and 9).
+    r.sim.particle_systems.get_mut("SOOT").unwrap().holds_what = None;
     r.sim.particle_systems.get_mut("STILL").unwrap().lifetime = Some(1);
     let mut w = game(&r);
     // The no-kind system first: a removal from the update order skips the

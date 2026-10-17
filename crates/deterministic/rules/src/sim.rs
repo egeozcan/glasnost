@@ -466,6 +466,37 @@ pub struct ParticleType {
     /// absent 0; reduced to a signed byte for drawing, claim 16).
     #[serde(default)]
     pub translucency: Option<i32>,
+    /// `Velocity`, the speed field *S* in leptons per tick, a
+    /// single-precision decimal (S-0616 Import mapping; absent 0.0).
+    #[serde(default)]
+    pub velocity: Option<Decimal>,
+    /// `Deacc`, the slowing field, a single-precision decimal (S-0616
+    /// Import mapping; absent 0.0).
+    #[serde(default)]
+    pub deacc: Option<Decimal>,
+    /// `FinalDamageState`, the last damaging stage as written (S-0616
+    /// Import mapping; absent: the end stage's value; reduced to a signed
+    /// byte).
+    #[serde(default)]
+    pub final_damage_state: Option<i32>,
+    /// `Normalized`, the normalised flag (S-0616 claim 19; absent no).
+    #[serde(default)]
+    pub normalized: Option<bool>,
+    /// `Radius`, the radius field ρ in leptons (S-0616 F3; absent 0).
+    #[serde(default)]
+    pub radius: Option<i32>,
+    /// `XVelocity`, the spark *X* field (S-0616 F10; absent 1).
+    #[serde(default)]
+    pub x_velocity: Option<i32>,
+    /// `YVelocity`, the spark *Y* field (S-0616 F10; absent 1).
+    #[serde(default)]
+    pub y_velocity: Option<i32>,
+    /// `MinZVelocity`, the spark *Z*ₘ field (S-0616 F10; absent 0).
+    #[serde(default)]
+    pub min_z_velocity: Option<i32>,
+    /// `ZVelocityRange`, the spark *Z*ᵣ field (S-0616 F10; absent 1).
+    #[serde(default)]
+    pub z_velocity_range: Option<i32>,
 }
 
 /// A particle-system type's fields (S-0613 Import mapping).
@@ -482,6 +513,42 @@ pub struct ParticleSystemType {
     /// `Lifetime`, ticks; absent −1 (never times out).
     #[serde(default)]
     pub lifetime: Option<i32>,
+    /// `SpawnFrames`, the smoke spawn interval *T*₀ and the fire emission
+    /// interval, ticks (S-0616 Import mapping; absent 1).
+    #[serde(default)]
+    pub spawn_frames: Option<i32>,
+    /// `Slowdown`, the smoke emission timer's growth, a single-precision
+    /// decimal (S-0616 Import mapping; absent 0.0).
+    #[serde(default)]
+    pub slowdown: Option<Decimal>,
+    /// `SpawnCutoff`, the smoke spawn cut-off, a single-precision decimal
+    /// (S-0616 Import mapping; absent 0.0).
+    #[serde(default)]
+    pub spawn_cutoff: Option<Decimal>,
+    /// `SpawnRadius`, the smoke spawn radius σ in leptons (S-0616 Import
+    /// mapping; absent 0).
+    #[serde(default)]
+    pub spawn_radius: Option<i32>,
+    /// `ParticleCap`, the spark particle cap κ (S-0616 Import mapping;
+    /// absent 50).
+    #[serde(default)]
+    pub particle_cap: Option<i32>,
+    /// `SparkSpawnFrames`, the spark counter start *K* (S-0616 Import
+    /// mapping; absent 0).
+    #[serde(default)]
+    pub spark_spawn_frames: Option<i32>,
+    /// `SpawnSparkPercentage`, the spark chance χ as a fraction, a double
+    /// (S-0616 Import mapping; absent 0.0).
+    #[serde(default)]
+    pub spawn_spark_percentage: Option<Decimal>,
+    /// `SpawnDirection`, the spark spawn direction *s*, three
+    /// single-precision decimals (S-0616 Import mapping; absent 0, 0, 0).
+    #[serde(default)]
+    pub spawn_direction: Option<Vec<Decimal>>,
+    /// `ParticlesPerCoord`, the railgun particles per lepton *p*, a double
+    /// (S-0616 Import mapping; absent 0.1).
+    #[serde(default)]
+    pub particles_per_coord: Option<Decimal>,
 }
 
 /// Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,
@@ -1943,6 +2010,10 @@ pub struct CombatFields {
     /// eligible (behaviour *smoke*, S-0302 claim 13), in list order.
     #[serde(default)]
     pub damage_smoke_systems: Option<Vec<String>>,
+    /// `DamageSmokeOffset`, the damage-smoke displacement in leptons per
+    /// axis (S-0616 claim 1 and Import mapping; absent 0, 0, 0).
+    #[serde(default)]
+    pub damage_smoke_offset: Option<[i32; 3]>, // spec: S-0616 Import mapping (three integers, leptons)
     /// `MaxDebris` X (S-0312 F1).
     #[serde(default)]
     pub max_debris: Option<i32>,

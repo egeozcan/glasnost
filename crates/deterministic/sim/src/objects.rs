@@ -433,6 +433,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     crate::econ::slaves::removing(w, id);
     // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)
     crate::spawn::removing(w, id);
+    // spec: S-0616 claim 4 (every particle system whose owner object is removed loses it and is marked)
+    crate::particles::owner_removed(w, id);
     crate::econ::events::leaving_map(w, id, true);
     // spec: S-0609 claims 11 and 13 (leaving the map ends the spin sound's loop and clears the playing mark)
     crate::gattling::leaving_map(w, id);

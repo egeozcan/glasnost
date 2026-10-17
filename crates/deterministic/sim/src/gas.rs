@@ -17,16 +17,13 @@
 //! follow-up types and loop delays (S-0109 claims 6 to 9, 11 and 15) are a
 //! seam, as for the storm's clouds (S-0513 claim 46).
 //!
-//! Provisional rule (request Q-1243, open): the particles of a smoke, fire,
-//! spark or railgun system are not kept. Such a system made by a warhead
-//! is kept and takes its turns (claims 4 and 17); its first particle takes
-//! its creation draws only, and the system does no kind work.
+//! The turns of the smoke, fire, spark and railgun kinds, and the update
+//! and move of a particle of those kinds in a system of any kind (S-0616),
+//! are in [`crate::particles`].
 //!
-//! Seams: a particle of another behaviour kind in a gas system only counts
-//! its lifetime down (its own update and movement belong to other specs);
-//! the drawing of claim 16 belongs to the view; the importer's warning for a
-//! loading-time particle request covers cell animations only (theater tile
-//! animations are not seen by the rules import).
+//! Seams: the drawing of claim 16 belongs to the view; the importer's
+//! warning for a loading-time particle request covers cell animations only
+//! (theater tile animations are not seen by the rules import).
 
 use glasnost_map::CellXY;
 use glasnost_num::{F32, F64, Rounding};
@@ -149,6 +146,18 @@ pub struct ParticleType {
     pub wind_effect: i32,
     /// Translucency reduced modulo 256 (claim 16; the drawing reads it).
     pub translucency: i8,
+    /// The speed field *S* at creation, single precision (S-0616 Terms).
+    pub speed: F32,
+    /// The slowing field, single precision (S-0616 claims 6 and 12).
+    pub deacc: F32,
+    /// The last damaging stage δ_F (S-0616 claim 12).
+    pub final_stage: i8,
+    /// The normalised flag (S-0616 claim 19).
+    pub normalized: bool,
+    /// The radius field ρ, leptons (S-0616 F3).
+    pub radius: i32,
+    /// The spark fields *X*, *Y*, *Z*ₘ and *Z*ᵣ (S-0616 F10).
+    pub spark: [i32; 4], // nocite: the four spark velocity fields of S-0616 F10
 }
 
 /// A particle-system type's fields (S-0613 Import mapping).
@@ -162,6 +171,31 @@ pub struct SystemType {
     pub holds: Option<u32>,
     /// The system lifetime, ticks (−1: never times out).
     pub lifetime: i32,
+    /// The smoke spawn interval *T*₀, also the fire emission interval
+    /// (S-0616 claims 9 and 11).
+    pub spawn_frames: i32,
+    /// The smoke emission timer's growth (S-0616 claim 9).
+    pub slowdown: F32,
+    /// The smoke spawn cut-off (S-0616 claim 9).
+    pub cutoff: F32,
+    /// The smoke spawn radius σ (S-0616 F4).
+    pub spawn_radius: i32,
+    /// The particle cap κ (S-0616 F10; the smoke cap quirk).
+    pub cap: i32,
+    /// The spark counter start *K* (S-0616 claim 15).
+    pub spark_turns: i32,
+    /// The spark chance χ (S-0616 F10).
+    pub chance: F64,
+    /// The spark spawn direction *s* (S-0616 F10).
+    pub direction: [F32; 3], // nocite: vector and matrix dimensions (three axes)
+    /// The railgun particles per lepton *p* (S-0616 F12).
+    pub per_coord: F64,
+}
+
+/// A single-precision rules decimal (S-0003 claim 7), 0.0 when absent.
+fn single(d: &Option<glasnost_rules::sim::Decimal>, mode: Rounding) -> F32 {
+    d.as_ref()
+        .map_or(F32(0), |d| d.single_value(mode).to_f32(mode))
 }
 
 /// The gas rules.
@@ -181,6 +215,14 @@ pub struct GasRules {
     pub wind: Option<(i32, i32)>,
     /// Gravity *G*, leptons per tick² (F3).
     pub gravity: i32,
+    /// The smoke wind push (Δₓ, Δᵧ) of the rules' wind direction by
+    /// S-0616's own table; `None` outside 0 … 7 (S-0616 claim 7).
+    pub smoke_wind: Option<(i32, i32)>,
+    /// The game-wide spark type (`DefaultSparkSystem`, S-0616 Import
+    /// mapping), when the key names a listed system type.
+    pub default_spark: Option<u32>,
+    /// Whether `DefaultSparkSystem` is present at all (S-0601 claim 16).
+    pub default_spark_given: bool,
     /// The ramp matrices of S-0106 table C4 by slope shape 0 … 20.
     pub ramps: Vec<[[F32; 3]; 3]>, // nocite: vector and matrix dimensions (three axes)
 }
@@ -399,6 +441,7 @@ impl GasRules {
         quirks: &glasnost_rules::quirks::Quirks,
     ) -> Self {
         let s = &r.sim;
+        let mode = quirks.rounding();
         let registry =
             |key: &str| -> Vec<String> { r.registries.get(key).cloned().unwrap_or_default() };
         let particle_names = registry("particles");
@@ -444,6 +487,22 @@ impl GasRules {
                     wind_effect: t.wind_effect.unwrap_or(0),
                     // spec: S-0613 claim 16 and Import mapping (Translucency absent 0, reduced modulo 256)
                     translucency: t.translucency.unwrap_or(0) as i8,
+                    // spec: S-0616 Import mapping (Velocity, Deacc: single-precision numbers, absent 0.0)
+                    speed: single(&t.velocity, mode),
+                    deacc: single(&t.deacc, mode),
+                    // spec: S-0616 Import mapping (FinalDamageState: an 8-bit signed integer, absent the end stage's value as read)
+                    final_stage: t.final_damage_state.or(t.end_state_ai).unwrap_or(0) as i8,
+                    // spec: S-0616 Import mapping (Normalized absent no)
+                    normalized: t.normalized.unwrap_or(false),
+                    // spec: S-0616 Import mapping (Radius absent 0)
+                    radius: t.radius.unwrap_or(0),
+                    // spec: S-0616 Import mapping (XVelocity, YVelocity absent 1; MinZVelocity absent 0; ZVelocityRange absent 1)
+                    spark: [
+                        t.x_velocity.unwrap_or(1),
+                        t.y_velocity.unwrap_or(1),
+                        t.min_z_velocity.unwrap_or(0),
+                        t.z_velocity_range.unwrap_or(1),
+                    ],
                 }
             })
             .collect();
@@ -457,6 +516,35 @@ impl GasRules {
                     holds: particle_index(&t.holds_what),
                     // spec: S-0613 Import mapping (Lifetime absent −1)
                     lifetime: t.lifetime.unwrap_or(-1),
+                    // spec: S-0616 Import mapping (SpawnFrames absent 1)
+                    spawn_frames: t.spawn_frames.unwrap_or(1),
+                    // spec: S-0616 Import mapping (Slowdown, SpawnCutoff: single-precision numbers, absent 0.0)
+                    slowdown: single(&t.slowdown, mode),
+                    cutoff: single(&t.spawn_cutoff, mode),
+                    // spec: S-0616 Import mapping (SpawnRadius absent 0)
+                    spawn_radius: t.spawn_radius.unwrap_or(0),
+                    // spec: S-0616 Import mapping (ParticleCap absent 50)
+                    cap: t.particle_cap.unwrap_or(50),
+                    // spec: S-0616 Import mapping (SparkSpawnFrames absent 0)
+                    spark_turns: t.spark_spawn_frames.unwrap_or(0),
+                    // spec: S-0616 Import mapping (SpawnSparkPercentage: a double fraction, absent 0.0)
+                    chance: t
+                        .spawn_spark_percentage
+                        .as_ref()
+                        .map_or(F64::from_i64(0, mode), |d| d.value(mode)),
+                    // spec: S-0616 Import mapping (SpawnDirection: three single-precision numbers, absent 0, 0, 0)
+                    direction: {
+                        let mut out = [F32(0); 3]; // nocite: vector and matrix dimensions (three axes)
+                        for (o, d) in out.iter_mut().zip(t.spawn_direction.iter().flatten()) {
+                            *o = d.single_value(mode).to_f32(mode);
+                        }
+                        out
+                    },
+                    // spec: S-0616 Import mapping (ParticlesPerCoord: a double, absent 0.1)
+                    per_coord: t
+                        .particles_per_coord
+                        .as_ref()
+                        .map_or_else(|| crate::rules::nearest_double("0.1"), |d| d.value(mode)),
                 }
             })
             .collect();
@@ -477,10 +565,25 @@ impl GasRules {
                     (dx, dy)
                 }
             });
+        // spec: S-0616 claim 7, F2 and Constants (smoke uses its own wind table; outside 0 … 7 no push, a departure)
+        let smoke_wind = usize::try_from(direction)
+            .ok()
+            .and_then(|d| crate::particles::SMOKE_WIND.get(d).copied());
+        // spec: S-0616 Import mapping ([CombatDamage] DefaultSparkSystem: the game-wide spark type, absent none) and S-0601 claim 16
+        let default_spark_given = g.default_spark_system.is_some();
+        let default_spark = g.default_spark_system.as_ref().and_then(|n| {
+            systems
+                .iter()
+                .position(|t| &t.name == n)
+                .and_then(|i| u32::try_from(i).ok())
+        });
         GasRules {
             particles,
             systems,
             shared,
+            smoke_wind,
+            default_spark,
+            default_spark_given,
             virus: g.infantry_virus.clone(),
             wind,
             // spec: S-0613 Import mapping and Constants (Gravity absent 3 leptons per tick²)
@@ -519,6 +622,16 @@ pub struct Particle {
     pub stage: i8,
     /// The dead mark.
     pub dead: bool,
+    /// The particle speed *S*, single precision (S-0616 Terms).
+    pub speed: F32,
+    /// The flight direction *u*, single precision (S-0616 Terms, F1).
+    pub dir: [F32; 3], // nocite: vector and matrix dimensions (three axes)
+    /// A spark's velocity, single precision (S-0616 F10, F11).
+    pub fvel: [F32; 3], // nocite: vector and matrix dimensions (three axes)
+    /// A fire particle's step for this tick (S-0616 F8).
+    pub step: [i32; 3], // nocite: vector and matrix dimensions (three axes)
+    /// Its own stage-advance value (S-0616 claim 19).
+    pub advance: i8,
 }
 
 /// One particle system (S-0613 Terms).
@@ -536,6 +649,39 @@ pub struct ParticleSystem {
     pub ending: bool,
     /// Its particles, oldest first.
     pub particles: Vec<Particle>,
+    /// Its owner object, if any (S-0616 Terms, claim 4).
+    pub owner_object: Option<ObjectId>,
+    /// Its displacement from the owner object at creation (S-0616 claim 5).
+    pub owner_offset: [i32; 3], // nocite: vector and matrix dimensions (three axes)
+    /// Its target point (S-0616 Terms).
+    pub target: Pos,
+    /// The smoke emission timer *T* (S-0616 Terms, claim 9).
+    pub timer: F32,
+    /// The spark counter *K* (S-0616 Terms, claim 15).
+    pub sparks: i32,
+}
+
+impl ParticleSystem {
+    /// A new system of type `t` at `pos` (S-0616 claim 1): no particle, no
+    /// owner object, the type's lifetime, *T* at the spawn interval and *K*
+    /// at the spark-turns field.
+    pub fn new(ti: u32, t: &SystemType, pos: Pos, owner: Option<HouseId>, mode: Rounding) -> Self {
+        ParticleSystem {
+            type_index: ti,
+            owner,
+            pos,
+            lifetime: t.lifetime,
+            ending: false,
+            particles: Vec::new(),
+            owner_object: None,
+            owner_offset: [0; 3],
+            // spec: S-0616 Terms (a target point the creator passes; none: the world origin)
+            target: Pos::default(),
+            // spec: S-0616 Terms (T starts at the type's spawn interval; K at its spark-turns field)
+            timer: F64::from_i64(i64::from(t.spawn_frames), mode).to_f32(mode),
+            sparks: t.spark_turns,
+        }
+    }
 }
 
 /// The virus-death animation of claim 2 while it plays (one forward pass,
@@ -578,20 +724,14 @@ pub fn create_shared(w: &mut World) {
     let Some(ti) = w.rules().gas.shared else {
         return;
     };
-    let lifetime = w.rules().gas.systems[ti as usize].lifetime;
+    let rules = w.rules_arc();
+    let t = &rules.gas.systems[ti as usize];
     let id = w.new_id();
-    // spec: S-0613 claim 1 (no owner house, no target, the system lifetime of its type; it starts empty)
-    w.gas.systems.insert(
-        id,
-        ParticleSystem {
-            type_index: ti,
-            owner: None,
-            pos: Pos::default(),
-            lifetime,
-            ending: false,
-            particles: Vec::new(),
-        },
-    );
+    // spec: S-0613 claim 1 (no owner house, no target, the system lifetime of its type; it starts empty) and S-0616 claim 1 and Constants (its position, an engine constant: (2688, 2688, 0) leptons, the hypothesis P1 decides)
+    let pos = Pos::new(2688, 2688, 0); // spec: S-0616 Constants (shared gas system position (2688, 2688, 0) leptons)
+    w.gas
+        .systems
+        .insert(id, ParticleSystem::new(ti, t, pos, None, rules.mode));
     w.gas.shared = Some(id);
     w.update.enter(id);
 }
@@ -603,13 +743,30 @@ fn magnitude(r: i32) -> i32 {
 }
 
 /// Creates one particle of type `ti` in system `sys` at `at` (claim 5),
-/// with its creation draws (S-0202 claim 15). Returns its object number.
-fn add_particle(w: &mut World, sys: ObjectId, ti: u32, at: Pos) -> Option<ObjectId> {
+/// aimed at target point `target` (S-0616 F1), with its creation draws
+/// (S-0202 claim 15). Returns its object number.
+pub(crate) fn add_particle(
+    w: &mut World,
+    sys: ObjectId,
+    ti: u32,
+    at: Pos,
+    target: Pos,
+) -> Option<ObjectId> {
     let rules = w.rules_arc();
     let t = rules.gas.particles.get(ti as usize)?;
-    let life = creation_draws(w, t.draw);
+    let (life, smoke) = creation_draws(w, t.draw);
     let h = w.surface_at(at.x, at.y);
     let id = w.new_id();
+    let mode = rules.mode;
+    // spec: S-0616 Terms (S starts at the type's speed field plus the smoke variation of S-0202 claim 15, formed in double precision and held in single)
+    let speed = t
+        .speed
+        .to_f64()
+        .add(F64::from_i64(i64::from(smoke), mode), mode)
+        .to_f32(mode);
+    // spec: S-0616 F1 (u from the position before the terrain floor to the target point)
+    let dir = crate::particles::heading(w, at, target);
+    let advance = crate::particles::own_advance(w, t, at, target, dir, speed);
     let p = Particle {
         id,
         type_index: ti,
@@ -623,6 +780,12 @@ fn add_particle(w: &mut World, sys: ObjectId, ti: u32, at: Pos) -> Option<Object
         countdown: t.max_dc,
         stage: t.start_stage,
         dead: false,
+        speed,
+        dir,
+        // spec: S-0616 Terms (a new particle's velocity starts at zero, whatever its kind)
+        fvel: [F32(0); 3], // nocite: vector and matrix dimensions (three axes)
+        step: [0; 3], // nocite: vector and matrix dimensions (three axes)
+        advance,
     };
     // spec: S-0613 claim 5 (a new particle is added at the end of its system's list)
     w.gas.systems.get_mut(&sys)?.particles.push(p);
@@ -630,12 +793,14 @@ fn add_particle(w: &mut World, sys: ObjectId, ti: u32, at: Pos) -> Option<Object
 }
 
 /// A particle's creation draws (S-0202 claim 15) in table order; returns
-/// the remaining lifetime *E* (claim 5, F9).
-fn creation_draws(w: &mut World, p: ParticleRules) -> u16 {
+/// the remaining lifetime *E* (claim 5, F9) and the smoke speed variation
+/// (0 for other kinds).
+pub(crate) fn creation_draws(w: &mut World, p: ParticleRules) -> (u16, i32) {
     let half = w.rules().quirks.ranged_draw_half_span;
+    let mut smoke = 0;
     if p.smoke {
-        // spec: S-0202 claim 15 (smoke: one raw value for a starting-speed variation)
-        let _ = w.rng.raw();
+        // spec: S-0202 claim 15 (smoke: one raw value, signed remainder modulo 2, for a starting-speed variation)
+        smoke = glasnost_num::int::rem(w.rng.raw() as i32, 2);
     }
     // spec: S-0202 claim 15 (every particle: one raw value for its lifetime variation, magnitude after signed remainder, modulo 10 for railgun behaviour, otherwise modulo the lifetime field)
     let r = w.rng.raw() as i32;
@@ -651,7 +816,7 @@ fn creation_draws(w: &mut World, p: ParticleRules) -> u16 {
         let _ = w.rng.ranged(0, 2147483646, half);
     }
     // spec: S-0613 claim 5 and F9 (E = (E_max + u) mod 65536, an unsigned 16-bit count)
-    p.max_ec.wrapping_add(u) as u16
+    (p.max_ec.wrapping_add(u) as u16, smoke)
 }
 
 /// One particle requested by an animation's middle event (S-0109 claim 14):
@@ -661,7 +826,9 @@ fn creation_draws(w: &mut World, p: ParticleRules) -> u16 {
 pub fn middle_event_particle(w: &mut World, p: ParticleRules, at: Option<(i32, i32, i32)>) {
     match (at, p.index, w.gas.shared) {
         (Some((x, y, z)), Some(ti), Some(sys)) => {
-            add_particle(w, sys, ti, Pos::new(x, y, z));
+            let at = Pos::new(x, y, z);
+            // spec: S-0616 Terms (an animation's request passes no target point: the world origin)
+            add_particle(w, sys, ti, at, Pos::default());
         }
         (None, ..) => {
             creation_draws(w, p);
@@ -679,10 +846,9 @@ pub fn middle_event_particle(w: &mut World, p: ParticleRules, at: Option<(i32, i
 }
 
 /// The particle system a detonation's warhead names (S-0303 claim 20,
-/// S-0613 claim 4): created at `p` owned by `house`, with one particle of
-/// its held type at once. A system of every behaviour kind is kept and takes
-/// its turns (claims 4 and 17); for the smoke, fire, spark and railgun kinds
-/// the first particle takes its creation draws and is not kept (Q-1243).
+/// S-0613 claim 4, S-0616 claim 1): created at `p` owned by `house`, with no
+/// owner object, target point `p`, and one particle of its held type at
+/// once, whatever its kind; its turns are S-0613's (gas) and S-0616's.
 pub fn warhead_system(w: &mut World, name: &str, p: Pos, house: Option<HouseId>) {
     let rules = w.rules_arc();
     let Some(ti) = rules.gas.system(name) else {
@@ -693,35 +859,16 @@ pub fn warhead_system(w: &mut World, name: &str, p: Pos, house: Option<HouseId>)
     };
     let t = &rules.gas.systems[ti as usize];
     let id = w.new_id();
-    // spec: S-0303 claim 20 and S-0613 claim 4 (created at P, owned by the source house, with its type's lifetime; every system, whatever its kind, takes a turn each tick)
-    w.gas.systems.insert(
-        id,
-        ParticleSystem {
-            type_index: ti,
-            owner: house,
-            pos: p,
-            lifetime: t.lifetime,
-            ending: false,
-            particles: Vec::new(),
-        },
-    );
+    // spec: S-0303 claim 20, S-0613 claim 4 and S-0616 claim 1 (created at P, owned by the source house, no owner object, target point the detonation point, with its type's lifetime; every system, whatever its kind, takes a turn each tick)
+    let mut sys = ParticleSystem::new(ti, t, p, house, rules.mode);
+    sys.target = p;
+    w.gas.systems.insert(id, sys);
     w.update.enter(id);
     let Some(pt) = t.holds else {
         return;
     };
-    match t.kind {
-        Some(Behaviour::Gas) | None => {
-            // spec: S-0613 claim 4 (one particle of the held type at P at once, subject to claim 5's terrain floor)
-            add_particle(w, id, pt, p);
-        }
-        Some(_) => {
-            if let Some(pr) = rules.gas.particles.get(pt as usize) {
-                // spec: S-0613 claim 4 and S-0202 claim 15 (the first particle's creation draws)
-                creation_draws(w, pr.draw);
-            }
-            w.note("Q-1243: the particles of a smoke, fire, spark or railgun system are not specified; the warhead's system is kept and takes its turns, its first particle takes its creation draws and is not kept");
-        }
-    }
+    // spec: S-0613 claim 4 and S-0616 claims 1 and 22 (one particle of the held type at P at once, subject to claim 5's terrain floor, whatever the system's kind; its target point is P)
+    add_particle(w, id, pt, p, p);
 }
 
 /// Whether particle system `id` is a gas cloud: a gas-kind system other than
@@ -866,10 +1013,19 @@ pub fn system_turn(w: &mut World, id: ObjectId) {
         return;
     };
     let kind = rules.gas.systems[s.type_index as usize].kind;
-    if kind == Some(Behaviour::Gas) {
-        // spec: S-0613 claim 6 (a gas system's turn: the update pass, then the second pass)
-        update_pass(w, id);
-        second_pass(w, id);
+    match kind {
+        Some(Behaviour::Gas) => {
+            // spec: S-0613 claim 6 (a gas system's turn: the update pass, then the second pass)
+            update_pass(w, id);
+            second_pass(w, id);
+        }
+        // spec: S-0616 claims 5, 10, 15 and 17 (the kind work of the other kinds)
+        Some(Behaviour::Smoke) => crate::particles::smoke_turn(w, id),
+        Some(Behaviour::Fire) => crate::particles::fire_turn(w, id),
+        Some(Behaviour::Spark) => crate::particles::spark_turn(w, id),
+        Some(Behaviour::Railgun) => crate::particles::railgun_turn(w, id),
+        // spec: S-0616 claim 2 and S-0613 claim 17 (no behaviour kind: no kind work)
+        None => {}
     }
     // spec: S-0613 claim 17 (after the kind's own turn work, whatever the kind, also none)
     let Some(s) = w.gas.systems.get_mut(&id) else {
@@ -882,7 +1038,14 @@ pub fn system_turn(w: &mut World, id: ObjectId) {
     }
     if s.ending && s.particles.is_empty() {
         // spec: S-0613 claim 17 (then, in the same turn, a marked system that holds no particles leaves play; the shared system is not created again)
-        w.gas.systems.remove(&id);
+        let gone = w.gas.systems.remove(&id);
+        // spec: S-0616 claim 1 (a damage-smoke system stays in its owner's damage-smoke place until it leaves play)
+        if let Some(o) = gone.and_then(|g| g.owner_object)
+            && let Some(ob) = w.obj_mut(o)
+            && ob.combat.damage_smoke == Some(id)
+        {
+            ob.combat.damage_smoke = None;
+        }
         if w.gas.shared == Some(id) {
             w.gas.shared = None;
         }
@@ -898,15 +1061,15 @@ fn update_pass(w: &mut World, id: ObjectId) {
     let n = w.gas.systems.get(&id).map_or(0, |s| s.particles.len());
     // spec: S-0613 claim 6 (the newer particle's update effects, draws included, precede the older's)
     for i in (0..n).rev() {
-        update_particle(w, id, i);
+        crate::particles::update_one(w, id, i);
     }
 }
 
-fn particle(w: &World, sys: ObjectId, i: usize) -> Option<Particle> {
+pub(crate) fn particle(w: &World, sys: ObjectId, i: usize) -> Option<Particle> {
     w.gas.systems.get(&sys)?.particles.get(i).cloned()
 }
 
-fn put(w: &mut World, sys: ObjectId, i: usize, p: Particle) {
+pub(crate) fn put(w: &mut World, sys: ObjectId, i: usize, p: Particle) {
     if let Some(slot) = w
         .gas
         .systems
@@ -917,11 +1080,12 @@ fn put(w: &mut World, sys: ObjectId, i: usize, p: Particle) {
     }
 }
 
-/// One particle's update (claim 18): on even ticks the drift, vertical
-/// speed and deflection (claims 8 to 10), which only set the velocity and
-/// deflection; then the countdown and hits (claim 13), the stage step
-/// (claim 15) and last the lifetime count-down (claim 6).
-fn update_particle(w: &mut World, sys: ObjectId, i: usize) {
+/// A gas particle's own update (claim 18): on even ticks the drift,
+/// vertical speed and deflection (claims 8 to 10), which only set the
+/// velocity and deflection; then the countdown and hits (claim 13) and the
+/// stage step (claim 15). The lifetime count-down follows in
+/// [`crate::particles::update_one`].
+pub(crate) fn gas_update(w: &mut World, sys: ObjectId, i: usize) {
     let rules = w.rules_arc();
     let Some(mut p) = particle(w, sys, i) else {
         return;
@@ -929,27 +1093,16 @@ fn update_particle(w: &mut World, sys: ObjectId, i: usize) {
     let Some(t) = rules.gas.particles.get(p.type_index as usize) else {
         return;
     };
-    let gas = t.kind == Some(Behaviour::Gas);
-    if gas {
-        // spec: S-0613 claim 18 (the drift draws precede the draws of every death the particle's hits cause; the hits precede its stage step; the lifetime count-down comes last)
-        if even(w.tick) {
-            drift(w, &mut p);
-            vertical(w, &mut p);
-            p.defl = deflection(w, p.pos);
-        }
-        put(w, sys, i, p.clone());
-        damage_step(w, sys, i);
-        let Some(q) = particle(w, sys, i) else { return };
-        p = q;
-        stage_step(t, &mut p);
-    } else {
-        w.note("S-0613 Edge cases: a particle of another behaviour kind in a gas system only counts its lifetime down; its own update and movement belong to other specs");
+    // spec: S-0613 claim 18 (the drift draws precede the draws of every death the particle's hits cause; the hits precede its stage step; the lifetime count-down comes last)
+    if even(w.tick) {
+        drift(w, &mut p);
+        vertical(w, &mut p);
+        p.defl = deflection(w, p.pos);
     }
-    // spec: S-0613 claim 6 (the lifetime goes down by one modulo 65536; 0 marks it dead)
-    p.life = p.life.wrapping_sub(1);
-    if p.life == 0 {
-        p.dead = true;
-    }
+    put(w, sys, i, p);
+    damage_step(w, sys, i);
+    let Some(mut p) = particle(w, sys, i) else { return };
+    stage_step(t, &mut p);
     put(w, sys, i, p);
 }
 
@@ -1145,13 +1298,18 @@ fn damage_step(w: &mut World, sys: ObjectId, i: usize) {
     }
 }
 
-/// Claim 15, F8: the particle stage step.
-fn stage_step(t: &ParticleType, p: &mut Particle) {
+/// S-0613 F8's advance test of particle `p` with stage-advance value `a`.
+pub(crate) fn stage_due(max_ec: i32, a: i8, p: &Particle) -> bool {
     let n = p.id.0 as i32;
     // spec: S-0613 F8 ((n + E_max − E) divisible by (n mod 2) + A, signed 32-bit wraparound; S-0205 claim 3 for a zero divisor)
-    let x = n.wrapping_add(t.max_ec).wrapping_sub(i32::from(p.life));
-    let divisor = n.rem_euclid(2) + i32::from(t.advance); // spec: S-0613 F8 ((n mod 2) + A)
-    if glasnost_num::int::rem(x, divisor) == 0 {
+    let x = n.wrapping_add(max_ec).wrapping_sub(i32::from(p.life));
+    let divisor = n.rem_euclid(2) + i32::from(a); // spec: S-0613 F8 ((n mod 2) + A)
+    glasnost_num::int::rem(x, divisor) == 0
+}
+
+/// Claim 15, F8: the particle stage step.
+fn stage_step(t: &ParticleType, p: &mut Particle) {
+    if stage_due(t.max_ec, t.advance, p) {
         // spec: S-0613 F8 (an 8-bit signed counter, wrapping from 127 to −128)
         p.stage = p.stage.wrapping_add(1);
     }
@@ -1182,7 +1340,7 @@ fn wind_push(w: &World, t: &ParticleType, tick: i32) -> (i32, i32) {
 }
 
 /// Claim 11, F5: one live gas particle's move.
-fn move_particle(w: &World, t: &ParticleType, p: &mut Particle) {
+pub(crate) fn move_particle(w: &World, t: &ParticleType, p: &mut Particle) {
     let tick = w.tick;
     let (dx, dy) = wind_push(w, t, tick);
     let Pos { x, y, z } = p.pos;
@@ -1217,24 +1375,23 @@ fn second_pass(w: &mut World, sys: ObjectId) {
         return;
     };
     let mut list = s.particles.clone();
-    // spec: S-0613 claims 6 and 11 (only particles not marked dead move, by F5)
+    // spec: S-0613 claims 6 and 11 (only particles not marked dead move) and S-0616 claim 3 (the particle's own kind chooses the move: gas F5, smoke claim 7, fire claim 13)
     for p in list.iter_mut().filter(|p| !p.dead) {
-        if let Some(t) = rules.gas.particles.get(p.type_index as usize)
-            && t.kind == Some(Behaviour::Gas)
-        {
-            move_particle(w, t, p);
-        }
+        crate::particles::move_one(w, p);
     }
     let dead: Vec<Particle> = list.iter().filter(|p| p.dead).cloned().collect();
     list.retain(|p| !p.dead);
     if let Some(s) = w.gas.systems.get_mut(&sys) {
         s.particles = list;
     }
-    // spec: S-0613 claims 6 and 7 (successor creation follows all update effects, newest dead particle first)
+    // spec: S-0613 claims 6 and 7 (successor creation follows all update effects, newest dead particle first; claim 7 is the gas kind's rule, so only a dead gas particle has one here; Q-1155 interim for the other kinds)
     for d in dead.iter().rev() {
         let Some(t) = rules.gas.particles.get(d.type_index as usize) else {
             continue;
         };
+        if t.kind != Some(Behaviour::Gas) {
+            continue;
+        }
         let Some(next) = t.next else { continue };
         let [ox, oy, oz] = t.next_offset;
         // spec: S-0613 claim 7 (at the dead particle's position plus the displacement, by claim 5; then it takes the dead particle's velocity)
@@ -1243,7 +1400,8 @@ fn second_pass(w: &mut World, sys: ObjectId) {
             d.pos.y.wrapping_add(oy),
             d.pos.z.wrapping_add(oz),
         );
-        if add_particle(w, sys, next, at).is_some()
+        // spec: S-0616 Terms (a successor's target point is not given for the gas kind: the world origin, which no gas rule reads)
+        if add_particle(w, sys, next, at, Pos::default()).is_some()
             && let Some(p) = w
                 .gas
                 .systems
@@ -1285,6 +1443,12 @@ mod tests {
             next_offset: [0; 3],
             wind_effect: 0,
             translucency: 0,
+            speed: F32(0),
+            deacc: F32(0),
+            final_stage: 0,
+            normalized: false,
+            radius: 0,
+            spark: [1, 1, 0, 1],
         }
     }
 
@@ -1299,6 +1463,11 @@ mod tests {
             countdown: 0,
             stage,
             dead: false,
+            speed: F32(0),
+            dir: [F32(0); 3],
+            fvel: [F32(0); 3],
+            step: [0; 3],
+            advance: 0,
         }
     }
 

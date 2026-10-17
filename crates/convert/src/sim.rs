@@ -552,6 +552,30 @@ const PARTICLE_GAS_FIELDS: &[(&str, &str, Form)] = &[
     ("delete_on_state_limit", "DeleteOnStateLimit", Bool),
     ("wind_effect", "WindEffect", Int),
     ("translucency", "Translucency", Int),
+    // spec: S-0616 Import mapping (particle sections: Velocity, Deacc single-precision numbers; FinalDamageState, Radius, XVelocity, YVelocity, MinZVelocity, ZVelocityRange integers; Normalized boolean)
+    ("velocity", "Velocity", Dec),
+    ("deacc", "Deacc", Dec),
+    ("final_damage_state", "FinalDamageState", Int),
+    ("normalized", "Normalized", Bool),
+    ("radius", "Radius", Int),
+    ("x_velocity", "XVelocity", Int),
+    ("y_velocity", "YVelocity", Int),
+    ("min_z_velocity", "MinZVelocity", Int),
+    ("z_velocity_range", "ZVelocityRange", Int),
+];
+
+/// Particle-system fields of the smoke, fire, spark and railgun kinds
+/// (S-0616 Import mapping); `SpawnDirection` is read on its own.
+// spec: S-0616 Import mapping (particle system sections: SpawnFrames, SpawnRadius, ParticleCap, SparkSpawnFrames integers; Slowdown, SpawnCutoff single-precision numbers; SpawnSparkPercentage, ParticlesPerCoord doubles)
+const PARTICLE_SYSTEM_FIELDS: &[(&str, &str, Form)] = &[
+    ("spawn_frames", "SpawnFrames", Int),
+    ("slowdown", "Slowdown", Dec),
+    ("spawn_cutoff", "SpawnCutoff", Dec),
+    ("spawn_radius", "SpawnRadius", Int),
+    ("particle_cap", "ParticleCap", Int),
+    ("spark_spawn_frames", "SparkSpawnFrames", Int),
+    ("spawn_spark_percentage", "SpawnSparkPercentage", Dec),
+    ("particles_per_coord", "ParticlesPerCoord", Dec),
 ];
 
 /// Terrain-object fields (S-0211 Import mapping).
@@ -1985,6 +2009,39 @@ impl Builder<'_> {
     fn particle_gas(&mut self, rec: &mut Rec, t: &TypeRec) {
         self.fields(rec, t, Kind::Particles, PARTICLE_GAS_FIELDS);
         let line = t.reads.last().copied().unwrap_or(t.created_in);
+        {
+            let int_of = |k: &str| fold(t.keys.get(k.as_bytes()), None, |v, _| value::integer(v));
+            let kind = behaves_like(t);
+            let mut bad = Vec::new();
+            // spec: S-0616 claim 20 (smoke successor with d = 0 or below, spark velocity fields of 0, a fire type with damage and no warhead: departures the importer warns for)
+            if kind.as_deref() == Some("smoke") && t.keys.contains_key(&b"NextParticle"[..]) {
+                let d = int_of("Radius").unwrap_or(0).div_euclid(8);
+                if d == 0 {
+                    bad.push("a smoke type with a next type and a radius below 8 divides its successor draw by 0".to_owned());
+                } else if d < 0 {
+                    bad.push("a negative radius: our engine rounds the division by 8 down".to_owned());
+                }
+            }
+            if kind.as_deref() == Some("spark") {
+                for k in ["XVelocity", "YVelocity", "ZVelocityRange"] {
+                    if int_of(k) == Some(0) {
+                        bad.push(format!("{k} 0 divides a spark velocity draw by 0"));
+                    }
+                }
+            }
+            if kind.as_deref() == Some("fire")
+                && int_of("Damage").is_some_and(|d| d != 0)
+                && !t.keys.contains_key(&b"Warhead"[..])
+            {
+                bad.push("a fire type with damage and no warhead: our engine's hits deal no damage".to_owned());
+            }
+            for b in bad {
+                self.warn(line, 0, format!(
+                    "particle {}: {b} (S-0616 claim 20, a departure)",
+                    show(&t.name)
+                ));
+            }
+        }
         let advance = fold(t.keys.get(&b"StateAIAdvance"[..]), None, |v, _| value::integer(v));
         if let Some(a) = advance {
             // spec: S-0613 Import mapping (StateAIAdvance reduced to signed 8-bit) and F8 (the divisor is the object-number parity plus A)
@@ -2063,6 +2120,60 @@ impl Builder<'_> {
         // spec: S-0613 Import mapping (Lifetime: an integer, ticks; absent −1)
         if let Some(l) = fold(t.keys.get(&b"Lifetime"[..]), None, |v, _| value::integer(v)) {
             rec.put("lifetime", int_node(l));
+        }
+        self.fields(rec, t, Kind::ParticleSystems, PARTICLE_SYSTEM_FIELDS);
+        // spec: S-0616 Import mapping (SpawnDirection: three single-precision numbers, absent 0, 0, 0); a value with fewer readable numbers keeps the value in force for the others (S-0003 claim 9, as for integer tuples)
+        let mut held: Option<[String; 3]> = None;
+        for e in t
+            .keys
+            .get(&b"SpawnDirection"[..])
+            .into_iter()
+            .flat_map(|s| &s.history)
+        {
+            match &e.what {
+                What::Set(v) => {
+                    let mut out = held.clone().unwrap_or_else(|| ["0".into(), "0".into(), "0".into()]);
+                    for (slot, item) in out.iter_mut().zip(v.split(|&b| b == b',')) {
+                        if let Some(d) = decimal_text(item) {
+                            *slot = d;
+                        }
+                    }
+                    held = Some(out);
+                }
+                What::Reset => held = None,
+                _ => {}
+            }
+        }
+        if let Some(d) = held {
+            rec.put(
+                "spawn_direction",
+                jsonc::array(d.into_iter().map(jsonc::string).collect()),
+            );
+        }
+        let line = t.reads.last().copied().unwrap_or(t.created_in);
+        let int_of = |k: &str| fold(t.keys.get(k.as_bytes()), None, |v, _| value::integer(v));
+        let kind = behaves_like(t);
+        // spec: S-0616 claim 20 (zero divisors and bad data: a departure; the importer warns for the data cases)
+        let mut bad = Vec::new();
+        if kind.as_deref() == Some("smoke") {
+            if int_of("SpawnFrames") == Some(0) {
+                bad.push("a smoke spawn interval of 0 emits at tick 0 only while the timer stays below 1");
+            }
+            if int_of("SpawnRadius").is_some_and(|r| r < 0) {
+                bad.push("a smoke spawn radius below 0 divides by zero or by a negative number");
+            }
+        }
+        if kind.as_deref() == Some("fire") && int_of("SpawnFrames") == Some(0) {
+            bad.push("a fire spawn interval of 0 passes the interval test only at tick 0");
+        }
+        if kind.as_deref() == Some("spark") && int_of("ParticleCap").is_some_and(|c| (-1..=1).contains(&c)) {
+            bad.push("a spark particle cap of -1, 0 or 1 makes no spark");
+        }
+        for b in bad {
+            self.warn(line, 0, format!(
+                "particle system {}: {b} (S-0616 claim 20, a departure)",
+                show(&t.name)
+            ));
         }
     }
 

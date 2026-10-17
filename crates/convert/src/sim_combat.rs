@@ -1800,6 +1800,38 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         "S-0202, S-0613",
     );
     keyed(&["particle_systems"], &s(&["Lifetime"]), "S-0613");
+    // spec: S-0616 Import mapping (the keys of the smoke, fire, spark and railgun kinds that change play)
+    keyed(
+        &["particles"],
+        &s(&[
+            "Velocity",
+            "Deacc",
+            "FinalDamageState",
+            "Normalized",
+            "Radius",
+            "XVelocity",
+            "YVelocity",
+            "MinZVelocity",
+            "ZVelocityRange",
+        ]),
+        "S-0616",
+    );
+    keyed(
+        &["particle_systems"],
+        &s(&[
+            "SpawnFrames",
+            "Slowdown",
+            "SpawnCutoff",
+            "SpawnRadius",
+            "ParticleCap",
+            "SparkSpawnFrames",
+            "SpawnSparkPercentage",
+            "SpawnDirection",
+            "ParticlesPerCoord",
+        ]),
+        "S-0616",
+    );
+    keyed(&UNITS, &s(&["DamageSmokeOffset", "DamSmkOffScrnRel"]), "S-0616");
     let crews: Vec<String> = CREWS.iter().map(|c| c.1.to_owned()).collect();
     keyed(&["global:General"], &crews, "S-0312");
     keyed(&UNITS, &s(&["DamageParticleSystems"]), "S-0302");
@@ -2349,6 +2381,43 @@ impl Builder<'_> {
         }
     }
 
+    /// `DamageSmokeOffset` and `DamSmkOffScrnRel` (S-0616 claim 1 and
+    /// Import mapping): the damage-smoke displacement, three integers in
+    /// leptons; the screen-relative case is not specified, so the importer
+    /// warns and the displacement is used as given.
+    fn damage_smoke_offset(&mut self, combat: &mut Rec, kind: Kind, t: &TypeRec) {
+        let mut held: Option<[i32; 3]> = None;
+        for e in t
+            .keys
+            .get(&b"DamageSmokeOffset"[..])
+            .into_iter()
+            .flat_map(|s| &s.history)
+        {
+            match &e.what {
+                What::Set(v) => {
+                    // spec: S-0616 Import mapping (DamageSmokeOffset: three integers, leptons; absent 0, 0, 0) and S-0003 claim 9 (unread components keep the value in force, our engine)
+                    let (out, _) = value::int_tuple_or::<3>(v, held.unwrap_or([0; 3]));
+                    held = Some(out);
+                }
+                What::Reset => held = None,
+                _ => {}
+            }
+        }
+        if let Some(o) = held {
+            Self::put_tuple(combat, "damage_smoke_offset", o);
+        }
+        let rel = fold(t.keys.get(&b"DamSmkOffScrnRel"[..]), None, |v, _| value::boolean(v));
+        if rel == Some(true) {
+            // spec: S-0616 claim 1 and Open questions (the screen-relative flag on: not specified; the importer warns and uses the displacement as given)
+            let line = t.reads.last().copied().unwrap_or(t.created_in);
+            self.warn(line, 0, format!(
+                "{} {}: DamSmkOffScrnRel is on; the screen-relative damage-smoke displacement is not specified, so it is used as given (S-0616 claim 1)",
+                kind.key(),
+                show(&t.name)
+            ));
+        }
+    }
+
     /// `DamageParticleSystems` (S-0302 Import mapping): the listed particle
     /// systems whose `BehavesLike` is `Smoke` (letter case ignored), in list
     /// order, as type keys.
@@ -2491,6 +2560,7 @@ impl Builder<'_> {
         self.weapon_slots(rec, &mut combat, kind, t);
         Self::numbered_flh_only_with_slots(&mut combat);
         self.smoke_systems(&mut combat, t);
+        self.damage_smoke_offset(&mut combat, kind, t);
         if !combat.0.is_empty() {
             rec.put("combat", combat.node());
         }
@@ -3434,7 +3504,9 @@ impl Builder<'_> {
         let mut windy = false;
         for t in particles {
             let w = int_of(key(t, "WindEffect")).unwrap_or(0);
-            windy |= w > 0;
+            let smoke = text_of(key(t, "BehavesLike")).is_some_and(|b| b.eq_ignore_ascii_case(b"Smoke"));
+            // spec: S-0613 Edge cases (gas: a positive wind effect) and S-0616 claim 7 (smoke: any nonzero wind effect) with a direction outside 0 … 7: no push, the importer warns
+            windy |= w > 0 || (smoke && w != 0);
             // spec: S-0613 F6 and S-0205 claim 3 (W above 10 makes the cadence divisor 0: the original fails; our engine takes the remainder as the tick number and the importer warns)
             if w > 10 {
                 self.warn_at(key(t, "WindEffect"), format!(
@@ -3463,6 +3535,11 @@ impl Builder<'_> {
                     show(&t.name)
                 ));
             }
+        }
+        let spark = self.global(COMBAT_DAMAGE, "DefaultSparkSystem");
+        if spark.is_none() {
+            // spec: S-0601 Import mapping (DefaultSparkSystem absent: the overload pulse makes no spark systems and takes no spark placement draws, and the importer warns) and S-0616 Import mapping (no game-wide spark type)
+            self.warn_at(None, "[CombatDamage] DefaultSparkSystem is absent: the original's result is not established; our engine makes no overload, drone or other game-wide spark systems and takes no overload spark placement draws (S-0601 Import mapping, a design fallback)".to_owned());
         }
         self.loading_particle_checks();
     }
