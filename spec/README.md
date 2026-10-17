@@ -102,7 +102,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0301](combat/S-0301-firing-cycle.md) | Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check) | combat | 21 | approved | — |
 | [S-0605](structures/S-0605-infantry-absorber.md) | Infantry absorber (who may enter an absorbing building, entry, holding, release) | structures | 2 | approved | — |
 | [S-0312](combat/S-0312-death-and-destruction.md) | Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains) | combat | 31 | approved | — |
-| [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 60 | approved | — |
 | [S-0214](ui/S-0214-order-targeting-rules.md) | Order targeting rules (what a click means for each kind of object, and group orders) | ui | 40 | approved | — |
 | [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 17 | approved | — |
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 24 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0204](simulation/S-0204-coordinates-distance-facing.md) | Coordinates, distance and facing | simulation | 9 | approved | — |
 | [S-0203](simulation/S-0203-tick-order.md) | Tick order | simulation | 37 | approved | — |
 | [S-0205](simulation/S-0205-number-domains.md) | Number domains (integers, floating point, the round-toward-zero mode, conversions) | simulation | 9 | approved | — |
+| [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 61 | approved | — |

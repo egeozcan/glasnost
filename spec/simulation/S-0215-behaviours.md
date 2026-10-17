@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 60
+revision: 61
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -4382,7 +4382,7 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   (e) Timing control for Q-0983: on a small clear flat skirmish map, deploy a stock
   radiation-immune infantry unit that deploys to fire, with negative undeploy delay,
   on a cell without a centred field. Keep enemies out of its acquisition range and
-  hold game speed fixed, with director and mods off. Use the measurement setup's
+  hold game speed fixed, with no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use the measurement setup's
   read-only recorder and tick-aligned capture to record the deciding processing tick,
   shot, target before and after processing, sequence start and field creation or top-up.
   Expected: the secondary shot occurs in that processing, the own-cell target is absent
