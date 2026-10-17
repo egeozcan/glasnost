@@ -1324,6 +1324,23 @@
           ],
           "default": null
         },
+        "alternate_flh": {
+          "description": "Art `AlternateFLH0` … `AlternateFLH4`, the five alternate link\nanchors (S-0601 claim 17, F5), by index; a missing one is the zero\ntriple.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
         "ammo": {
           "description": "`Ammo` A (S-0301 claim 10).",
           "type": [
@@ -1732,6 +1749,15 @@
           "format": "int32",
           "default": null
         },
+        "lepton_mind_control_offset": {
+          "description": "`LeptonMindControlOffset`, the link-line end height in leptons\n(S-0601 claim 17); absent: 70.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "manual_reload": {
           "description": "`ManualReload` (S-0301 claim 11).",
           "type": [
@@ -1751,6 +1777,23 @@
         },
         "min_debris": {
           "description": "`MinDebris` Y (S-0312 F1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "mind_cleared_sound": {
+          "description": "`MindClearedSound`, the type's release sound (S-0601 claim 9).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "mind_control_ring_offset": {
+          "description": "`MindControlRingOffset`, the mobile ring height in leptons (S-0601\nclaim 18); absent: 140.",
           "type": [
             "integer",
             "null"
@@ -4196,6 +4239,74 @@
             "format": "int32"
           }
         },
+        "ai_capture_low_money": {
+          "description": "`[General] AICaptureLowMoney` (S-0601 claim 8).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "ai_capture_low_money_mark": {
+          "description": "`[General] AICaptureLowMoneyMark`, credits (S-0601 claim 8); the\nabsent-key default is not determined (Q-1202).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "ai_capture_low_power": {
+          "description": "`[General] AICaptureLowPower` (S-0601 claim 8).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "ai_capture_normal": {
+          "description": "`[General] AICaptureNormal`, the normal fate table (S-0601 claim 8):\nweights for team, grinder, bio reactor, hunt; absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "ai_capture_wounded": {
+          "description": "`[General] AICaptureWounded` (S-0601 claim 8).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "ai_capture_wounded_mark": {
+          "description": "`[General] AICaptureWoundedMark`, a fraction read as a single\n(S-0601 claim 8); the absent-key default is not determined (Q-1202).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "allied_crew": {
           "description": "`[General] AlliedCrew`, an infantry type key (S-0312 F4).",
           "type": [
@@ -4696,6 +4807,14 @@
               "type": "null"
             }
           ]
+        },
+        "controlled_animation_type": {
+          "description": "`[CombatDamage] ControlledAnimationType`, the control ring (S-0601\nclaim 18).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "credit_reserve": {
           "description": "`[AI] CreditReserve` (S-0314 claim 12).",
@@ -5269,6 +5388,14 @@
           "format": "int32",
           "default": null
         },
+        "master_mind_overload_death_sound": {
+          "description": "`[AudioVisual] MasterMindOverloadDeathSound`, the overload sound\n(S-0601 claim 16).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "max_damage": {
           "description": "`MaxDamage` (S-0302 claim 6).",
           "type": [
@@ -5306,6 +5433,23 @@
           "items": {
             "type": "string"
           }
+        },
+        "mind_cleared_sound": {
+          "description": "`[AudioVisual] MindClearedSound`, the rules-wide release sound\n(S-0601 claim 9).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "mind_control_attack_line_frames": {
+          "description": "`[CombatDamage] MindControlAttackLineFrames`, the link-line timer in\nticks (S-0601 claim 17); absent: 15.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "missile_rot_var": {
           "description": "`[General] MissileROTVar` m (S-0306 claim 13), a double.",
@@ -5431,6 +5575,42 @@
           "format": "int32",
           "default": null
         },
+        "overload_count": {
+          "description": "`[CombatDamage] OverloadCount`, *count* of S-0601 F2; absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "overload_damage": {
+          "description": "`[CombatDamage] OverloadDamage`, *damage* of S-0601 F2; absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "overload_frames": {
+          "description": "`[CombatDamage] OverloadFrames`, *frames* of S-0601 F2; absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
         "parachute_max_fall_rate": {
           "description": "`[General] ParachuteMaxFallRate`, leptons per update (S-0511 F3).",
           "type": [
@@ -5450,6 +5630,14 @@
               "type": "null"
             }
           ]
+        },
+        "perma_controlled_animation_type": {
+          "description": "`[CombatDamage] PermaControlledAnimationType`, the permanent control\nring (S-0601 claim 18).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "player_auto_crush": {
           "description": "`PlayerAutoCrush` (S-0210 claim 11).",
@@ -6134,6 +6322,14 @@
               "type": "null"
             }
           ]
+        },
+        "yuri_mind_control_sound": {
+          "description": "`[AudioVisual] YuriMindControlSound`, the take-over sound (S-0601\nclaim 5).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false
@@ -7726,7 +7922,7 @@
           "default": true
         },
         "deploy_makes_control_permanent": {
-          "description": "A controlled vehicle that deploys into a building leaves its controller's list silently and the owner change becomes permanent; off: the new object inherits the control link, the original owner and the list place, and is released as the old object would have been. Not implemented yet (wave 2).",
+          "description": "A controlled vehicle that deploys into a building leaves its controller's list silently and the owner change becomes permanent; off: the new object inherits the control link, the original owner and the list place, and is released as the old object would have been (`glasnost_sim::mind::converted`).",
           "type": "boolean",
           "default": true
         },
@@ -7886,7 +8082,7 @@
           "default": true
         },
         "dying_victim_holds_slot": {
-          "description": "A dying victim holds its controller slot for as long as it still exists as the same object (a sinking ship, a building awaiting delayed destruction); off: a victim leaves its controller's list at its killing hit. Not implemented yet (wave 2).",
+          "description": "A dying victim holds its controller slot for as long as it still exists as the same object (a sinking ship, a building awaiting delayed destruction); off: a victim leaves its controller's list at its killing hit (`glasnost_sim::mind::killed`).",
           "type": "boolean",
           "default": true
         },
@@ -8286,7 +8482,7 @@
           "default": true
         },
         "mind_control_owner_change_keeps_victims": {
-          "description": "A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does. Not implemented yet (wave 2).",
+          "description": "A controller that changes owner keeps its victims, which keep their owner and original owners and stay on its list; off: an owner change releases all victims first, as claim 10 does (`glasnost_sim::mind::owner_changed`).",
           "type": "boolean",
           "default": true
         },
@@ -12210,6 +12406,14 @@
         },
         "fire_while_moving": {
           "description": "`FireWhileMoving` (S-0310 claim 7).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "infinite_mind_control": {
+          "description": "`InfiniteMindControl`, the unlimited-control flag (S-0601 claim 1);\nabsent: no.",
           "type": [
             "boolean",
             "null"
