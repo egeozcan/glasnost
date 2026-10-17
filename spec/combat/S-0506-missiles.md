@@ -2,11 +2,11 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645]
 supersedes: []
@@ -54,8 +54,14 @@ above the terrain*.
 - **Slot index.** The stable launch-position number, from 0 to *N* − 1, also identifying the
   alternating muzzle side in claim 7. Indices remain the same across replacement objects.
 - **Missile type.** A type with the missile-spawn flag (S-0311, Terms *missile spawn*). In this spec
-  a *missile slot* is a slot whose spawned type is one of the three *rocket types*: the types named
-  by the game-wide rocket settings of parameter sets A, B and C (Import mapping).
+  a *missile slot* (also called a *rocket slot*) is a slot whose spawned type is one of the three
+  *rocket types*: the types named by the game-wide rocket settings of parameter sets A, B and C
+  (Import mapping). The flag does not make a slot a missile slot. It decides the release in claim 8,
+  the reset release in claim 11 and the flagged object's place in the launching count (Terms). Every
+  other slot is a *non-missile slot*, including a slot of a flagged type that is not a rocket
+  type. Such a slot has the launch conditions and destination of a non-missile slot (claims 3, 6
+  and 7).
+  Its preparing object is released by claim 8 and is not moved by the preparing rows of the Slot table.
 - **Spawn slot, slot object, slot state.** Each slot holds at most one *slot object* (an object of
   the spawned type) and is in one of the states of claim 4: *docked*, *on the rail*, *preparing*,
   *attacking*, *returning*, *reloading*, *empty*. A slot object is *alive* while its slot is not
@@ -190,8 +196,7 @@ above the terrain*.
      types is detached at once and its slot starts regenerating.
 
    The release decision uses the object's flag, not merely whether its type is one of the rocket
-   types. Stock rocket types have the flag; a named rocket type with the flag absent would instead
-   enter attacking.
+   types. A named rocket type with the flag absent would instead enter attacking.
 
    If at least one missile was released, the controller then resets (claim 11; there are no
    preparing missiles left, so the reset only clears the controller target and state). It then
@@ -372,7 +377,9 @@ above the terrain*.
 
 18. **Movement and the edge of the map.** In every tick with a rocket speed above 0 the missile
     moves by Formulas F1. It moves only when the cell of its new position is a legal cell; if it is
-    not, the missile keeps its position for that tick (and keeps its speed and pitch).
+    not, the missile keeps its position for that tick; its phase, speed and pitch updates still
+    proceed. With `quirks.rocket_stalls_at_map_edge` off it instead detonates there, at its nose point
+    (claim 19), with the missile still at its last legal position (Edge cases and quirks).
     - Backing: `measurable` (scenario R10, including its named map-edge variant)
     - Confidence: high for the step; medium for the edge case
 
@@ -382,8 +389,9 @@ above the terrain*.
       world height; or the missile is over a cell with a high bridge, the aim point's world
       height equals that cell's terrain height, and the height its move would reach is at or below
       the aim point's world height plus the 416-lepton height of a bridge deck (glossary *bridge
-      deck*); or its height above the terrain is
-      below 1 lepton.
+      deck*); or
+    - (lazy cruise and descent) its height above the terrain is below 1 lepton (the same test as
+      the first bullet above, which covers cruise in both modes).
 
     It also detonates after a positive-speed movement attempt with health below 1 (claim 20),
     even if that attempt was rejected at the map edge. When it detonates it
@@ -454,7 +462,7 @@ above the terrain*.
 23. **Cell scans and occupancy.** A rocket missile in rocket-flight movement is not listed among
     the objects in the cell under it, in any flight phase, including pause, tilt and raise at
     its launch point. Crossing cells does not add it to those cell lists. It sets no
-    object-present occupancy flag there. Consequently S-0303 claim 5's cell scan cannot hit it:
+    object-present occupancy flag there. Consequently S-0303 claim 3's cell scan cannot hit it:
     before claim 15's tracking start it is absent from both area-damage candidate searches.
     After that start it can be found through S-0303 claim 6's flying-object search, subject to
     that search's restrictions. S-0209 claims 1 and 13 own the general occupancy and cell-list
@@ -481,9 +489,10 @@ above the terrain*.
     not interpolate pitch or raise height. Raise adds its rate only on updates before expiry,
     so positive *T* gives *T* − 1 raise increments. Tick arithmetic here is integer.
 
-    Ascent tests the altitude before F1 moves it. The update first finding cruise altitude still
-    accelerates and moves with ascent pitch, records the cruise-start horizontal distance before
-    that movement, and does not apply cruise steering. Cruise acceleration and pitch/heading
+    The ascent test uses the altitude before that tick's movement. The update whose test first finds
+    the altitude at or above cruise altitude still accelerates and moves with ascent pitch and does not apply
+    cruise steering; the cruise-start horizontal distance is the one at the position before that
+    movement. Cruise acceleration and pitch/heading
     steering begin in the next tick. Crossing cruise altitude during an F1 step cannot apply
     cruise steering in that same tick. Likewise the plain-cruise update selecting descent still
     uses cruise pitch and acceleration; descent pitch starts in the next update.
@@ -511,7 +520,7 @@ above the terrain*.
     must supply a replacement. Clearing and restoring the same own target before a pass neither
     undoes an effective pending clear nor cancels pending that survived the clear. Move/stop
     orders, fall-backs and acquisition use these rules when they request an own-target clear
-    or assignment. S-0215 claims 12–15 and S-0309 claims 4, 23 and 24 own those events.
+    or assignment. S-0215 claims 12–15 and S-0309 claims 23 and 24 (and claim 4 for opportunity targets) own those events.
     The discard and restoration of the own target in attack-move searches that run as for an
     object with no target (S-0309 claim 23) request no pending clear, with either quirk setting.
     Pending is unchanged whether that search finds a replacement, leaves the spawner targetless
@@ -648,13 +657,14 @@ narrows. A recorded distance of zero uses F5, not this division. π/2 is the dou
 these expressions. Units: distances in leptons, squared distances in square leptons, *q*
 dimensionless, angles in radians.
 
-*A* is the raw table arctangent. For a double argument *u*,
-*i* = |trunc(RZ₅₃(*u* / *σ*))|. The sign comes from RZ₂₄(*u*).
-For *i* ≤ 4096, the magnitude is the original single-precision *T*(*i*); for larger *i* it is the
-single-precision π/2. The signed value widens exactly to a double. The narrowing for the sign
-does not narrow the quotient used to select the index. S-0204 claim 13 supplies the exact
-raw angles, the same angles used before S-0204 claim 8's integer-facing conversion. Neither
-facing corrections nor surrogate angles are applied here. Fixed raw entries remain unchanged
+*A* is the raw table arctangent of S-0204 claim 13 (the exact raw angles, the same angles used
+before S-0204 claim 8's integer-facing conversion), applied to the double argument *u* with the
+tangent step *σ* of S-0204 claim 8 as its unit. For *u*, the entry is the one numbered by the
+magnitude of the double quotient *u* / *σ* truncated toward zero (RZ₅₃ division), and the sign
+comes from RZ₂₄(*u*). When that number is past the last entry of the table of S-0204 claim 13,
+the magnitude is the single-precision π/2. The entry is selected from the double quotient before
+the sign is narrowed, so the narrowing does not change which entry is used. The signed value
+widens exactly to a double. Neither facing corrections nor surrogate angles are applied here. Fixed raw entries remain unchanged
 with either setting of the shared table-direction quirk. The rounding-mode quirk changes the
 arithmetic sites stated here, not those entries.
 
@@ -719,9 +729,9 @@ required order of internal processing.
 | any occupied non-rocket slot | loss notification or removal from play, object alive and not a kamikaze | slot unchanged (claim 9) |
 | docked | claim 6 conditions hold | launch (claim 7); spacing restarts; preparing |
 | docked | otherwise | none |
-| preparing, missile slot | | none (claim 8 releases it) |
-| preparing, non-missile | no controller target | returning |
-| preparing, non-missile | controller target | re-sent to the step direction 4 neighbour of the spawner's cell (S-0501) |
+| preparing, object of a missile type (rocket or flagged) | | none (claim 8 releases it) |
+| preparing, object not of a missile type | no controller target | returning |
+| preparing, object not of a missile type | controller target | re-sent to the step direction 4 neighbour of the spawner's cell (S-0501) |
 | on the rail | rail time over | empty, regeneration countdown starts |
 | attacking | object out of ammunition, or no controller target | returning |
 | attacking | otherwise | object keeps attacking the controller target |
@@ -823,8 +833,8 @@ Ordering consequences:
 | `V3RocketRaiseRate`, `DMislRaiseRate`, `CMislRaiseRate` (rules, General) | raise rate of sets A, B, C | real, truncated to an integer, leptons per tick | A 1, B 1, C 1 |
 | `V3RocketAcceleration`, `DMislAcceleration`, `CMislAcceleration` (rules, General) | *a* of sets A, B, C | real, single precision, leptons per tick per tick | A 0.4, B 0.4, C 0.6 |
 | `V3RocketAltitude`, `DMislAltitude`, `CMislAltitude` (rules, General) | cruise altitude of sets A, B, C | integer, leptons above the terrain | A 768, B 768, C 768 |
-| `V3RocketDamage`, `DMislDamage`, `CMislDamage` (rules, General) | damage of sets A, B, C | integer | A 1000, B 1000, C 500 |
-| `V3RocketEliteDamage`, `DMislEliteDamage`, `CMislEliteDamage` (rules, General) | elite damage of sets A, B, C | integer | A 1000, B 1000, C 500 |
+| `V3RocketDamage`, `DMislDamage`, `CMislDamage` (rules, General) | damage of sets A, B, C | integer, hit points of damage before warhead scaling (S-0302) | A 1000, B 1000, C 500 |
+| `V3RocketEliteDamage`, `DMislEliteDamage`, `CMislEliteDamage` (rules, General) | elite damage of sets A, B, C | integer, hit points of damage before warhead scaling (S-0302) | A 1000, B 1000, C 500 |
 | `V3RocketBodyLength`, `DMislBodyLength`, `CMislBodyLength` (rules, General) | body length *L* of sets A, B, C | integer, leptons | A 256, B 128, C 128 |
 | `V3RocketLazyCurve`, `DMislLazyCurve`, `CMislLazyCurve` (rules, General) | lazy-curve flag of sets A, B, C | boolean | A yes, B no, C no |
 | `V3Warhead`, `V3EliteWarhead` (rules, CombatDamage) | set A warhead, elite warhead | warhead name | none |
@@ -832,13 +842,14 @@ Ordering consequences:
 | `CMislWarhead`, `CMislEliteWarhead` (rules, CombatDamage) | set C warheads | warhead name | none |
 
 The rocket parameter keys are in General; the warhead keys are in CombatDamage. The defaults
-above are the original's own initial absent-key values, not stock rule values. Later rules layers
-retain the current value for an omitted key (S-0006 claim 2).
+above are the values the original program holds at a fresh program start when no layer gives the
+key, not stock rule values; a later game in the same session keeps what an earlier game left (glossary
+*rules database*). Later rules layers retain the current value for an omitted key (S-0006 claim 2).
 
 ## Measurement scenarios
 
-All scenarios: skirmish, director and mods off, a small purpose-made map, game speed index 2,
-800 × 600, one human test house and one isolated bystander computer player (glossary void rule).
+All scenarios: skirmish, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), a small purpose-made map, game speed index 2,
+800 × 600 pixels, one human test house and one bystander computer player kept away from the test area (glossary void rule).
 Use stock data except the explicitly named test-map overrides below; remove those after each run.
 Record tick numbers and positions with a read-only recorder and capture video for visible effects.
 Scripted normal input is allowed. No game-state writes or patched executable are allowed. Run each
@@ -880,8 +891,15 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   A named variant removes the missile-spawn flag from a named rocket type; its released slot
   enters attacking rather than the rail interval. Another gives an ordinary spawned aircraft
   that flag without naming it as any rocket type; its slot starts regenerating at release, with
-  no rail delay. Record slot pips and subsequent appearances; a rail delay in either variant
-  falsifies the flag/type distinction in claim 8. On the moving-carrier run, also change the
+  no rail delay. In the same variant, with the carrier moving, the object still launches at its
+  first eligible pass (claim 6's motion lockout applies to rocket-type slots only),
+  and before release it is sent to the neighbouring cell of the spawner's cell in step direction 0
+  and not given the controller target as destination (claim 7); a pending target adopted while it
+  is preparing replaces the controller target (claim 3). Record slot pips and subsequent
+  appearances; a rail delay in either variant falsifies the flag/type distinction in claim 8, and
+  a motion lockout (claim 6), a controller-target destination or burst alternation for the flagged
+  non-rocket variant falsifies the missile-slot definition. The claim 10 lockouts that its launching
+  count causes are expected, not a falsifier. On the moving-carrier run, also change the
   pending target during preparation, attack and return; subsequent attacks use the new target.
 - **R4. Launch point and facing.** Spawner facing set to several facings (including just below and
   above a 256-step boundary); record the missile's first position and facing. Expected: fire point
@@ -1050,17 +1068,17 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   and a set-B descent missile aimed at a stationary target. Vary only firing distance and
   test-map terrain height, retaining R10's parameter settings. Use the common setup, recorder
   and five-run count. Record position, fixed aim point, phase, cruise-start distance and exact
-  single-precision pitch immediately before and after each rocket update. Compute the index
+  single-precision pitch immediately before and after each rocket update. Compute the table entry
   and two F6/F7 predictions from those inputs: one using the exact raw entries required by
   S-0204 claim 13, the other using S-0204 claim 8's surrogate without integer-facing corrections.
-  Seek nonzero indices, including 40 and 1024 where reachable, and both signs of aim-height
-  difference. Count an update only when the predictions differ after final single-precision
+  Seek nonzero entries, including index 1024 where reachable
+  (the descent case below), and both signs of aim-height difference. Count an update only when the predictions differ after final single-precision
   rounding. Lazy cruise must have a cruise-distance ratio other than 1; descent must reach
   its line-of-sight pitch rather than only taking the maximum pitch step. Expected: the
   recorded pitch equals the exact-entry prediction. In particular, descent reaching the
   line-of-sight pitch at index 1024 gives 12841411 / 8388608 radians for a positive angle,
   its negation for a negative angle. A different pitch in a valid distinguishing update
-  falsifies the exact-entry use. Coincident predictions, unavailable indices or signs, or
+  falsifies the exact-entry use. Coincident predictions, unavailable entries or signs, or
   observation only of drawn orientation or integer positions are inconclusive, not coverage.
   Entries without a valid distinguishing update remain unmeasured; this scenario does not
   test every entry or either shared quirk's alternative setting.
