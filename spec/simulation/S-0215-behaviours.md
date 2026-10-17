@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 56
+revision: 57
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -577,7 +577,8 @@ Terms used by this spec:
      claim 5's backing: `measurable` for the erasing and leaving-stage ticks (S-0610 scenario P9
      parts d and e), `unmeasured` for the tunnel and landed-aircraft ticks (S-0610 claim 5 gives
      the reason: no setup is known). The exclusion of the late start of claim 11 on those ticks is
-     `unmeasured`, with the reason that claim 11 gives for the late start.
+     `unmeasured`: B46 uses an expiry tick on which none of those exclusions holds, and no setup
+     is known that puts the expiry on an excluded tick together with a ready, queued unit.
    - Confidence: high (alive, health, timer, parasite ordering and the engine design contract),
      medium (the tunnel, erasing and leaving-stage exclusions, including landed-aircraft erasure,
      and locomotor phase-in not excluding processing, and the composed field-arrival timing); low
@@ -900,13 +901,16 @@ Terms used by this spec:
     can read. A building and
     an aircraft do not have a late start; buildings have the second start above and aircraft
     the end-of-update start below. No quirk switch: it is the original's order, not a defect.
-    Backing for the late start: `measurable` for the expiry-update instance of a berserk unit (S-0610
-    scenario P9 part b, which records the current and queued behaviour tick by tick), and `unmeasured`
-    for the rest. A queued behaviour that the late start makes current is in the unchanged case also
-    made current by the next update's first start before it is processed, so the only other difference
-    is the current behaviour seen by actors that update later in that tick (or after an intervening
-    change of readiness, slots or orders), and no harness is known that records such a read or sets up
-    that change at that point of the tick. Confidence: medium (that the readiness test counts this
+    Backing for the late start. (i) The expiry-update instance of a berserk unit that is infantry,
+    moving, and ready: `measurable` by B46 below, which reads the current and queued behaviour after
+    the last update of the expiry tick. (ii) Every other late start: `unmeasured`. In the unchanged case
+    the queued behaviour is also made current by the next update's first start before it is processed,
+    so the only other difference is the current behaviour seen after the update by actors that update
+    later in that tick (or after an intervening change of readiness, slots or orders). Observing it
+    needs a unit that has a queued behaviour left over at the end of its update while ready, and no
+    setup is known that makes that happen at a chosen update other than the berserk expiry of (i), so
+    the reason does not depend on how the recorder reads.
+    Confidence: medium (that the readiness test counts this
     update's movement, and for infantry the firing state that earlier updates left; the position
     relative to a vehicle's firing and turret turning is not observable and is not asserted).
     Aircraft have a per-tick start after their processing and movement, not before processing:
@@ -5267,6 +5271,29 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     Three switch-off/on pairs. No takeover or target-loss event may substitute for the
     switch; a run without the control-count transition tests neither reset site.
 
+- **B46 (claim 11: late start in the expiry update of a berserk infantry unit; S-0610 P9 part b).**
+  Proposed measurement, not a result. Use the setup of S-0610 P9 part b for infantry: a
+  human-owned infantry unit made berserk by a berserk-causing hit, an enemy durable unit far
+  outside its weapon range but in its reach, the unit ordered to hunt that enemy unit before the
+  hit (a berserk unit takes no orders, S-0610 claim 6, and the hit only queues *hunt*, which takes
+  effect at the unit's next behaviour change, S-0610 claim 4), the common skirmish setup, speed
+  index 2, no external controller, read-only recorder. The recorder reads the unit's current and
+  queued behaviour, its moving state and the expiry tick (the first tick on which the berserk tint
+  of S-0610 claim 7 is gone and an order is accepted) after the last update of every tick and again
+  before the first update of the next tick. A run is valid only if the unit is moving and ready
+  (the infantry readiness of this spec) on the expiry tick, and is not being erased, not in a
+  tunnel, not in its leaving stage and not in the middle of firing; any other run is void, not a
+  pass. Repeat until three valid runs are recorded.
+  Expected, taking claim 11's example ("a queued *guard* can become current at the late start") as
+  the outcome of a valid run: on the expiry tick the unit keeps moving and takes no guard-mode action
+  (search, hold); at the read after the last update of the expiry tick *guard* is current and
+  nothing is queued; the reading before the next tick's first update agrees. Falsified by *hunt*
+  still current (with *guard* queued) at the read after the last update of the expiry tick while
+  *guard* is current at the first update of the next tick, which shows that only the first start
+  of the next update makes it current. Also falsified by a guard-mode action on the expiry tick.
+  If *guard* is neither current nor queued at either read, the run shows a different expiry rule
+  and is reported to S-0610. This part does not test any other late start.
+
 ## Open questions
 
 - **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
@@ -5379,9 +5406,11 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 - S-0610 claim 5 (its Effects section, its queued-behaviour bullet, which says the queued *guard* or
   *hunt* does not start in the expiry update, and its Open questions) leaves open whether a per-tick
   start after the countdown step can make the queued behaviour current in the expiry update, and says
-  P9 part b decides it. Claim 11 here gives that as an example, "a queued *guard* can become current
-  at the late start". One of the two specs must be revised so they agree, and both must be handed off
-  together. Which one changes, and whether the answer stands, depends on P9 part b.
+  B46 here decides it. Claim 11 here gives that as an example, "a queued *guard* can become
+  current at the late start", with backing `measurable` (B46). The joint hand-off must give S-0610
+  P9 part b the expected value of B46 (or cite B46) and drop its sentence that no expected value is
+  stated; S-0610's start-order question stays open until B46 is run, and the two specs are handed
+  off together.
 Joint hand-off checks: S-0213 claim 16 already supplies the route-order timing
 pointer. Confirm S-0207 claim 20 e and S-0208 claim 19 with claim 10's airstrike exception,
 not an erasing-lock exception, and its restored-target distinction. S-0307 claims 15 to 25 and S-0406
