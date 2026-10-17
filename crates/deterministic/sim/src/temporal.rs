@@ -214,6 +214,8 @@ fn lock(w: &mut World, f: ObjectId, x: ObjectId) {
     if let Some(l) = w.temporal.locks.get_mut(&x) {
         // spec: S-0514 claim 4 (a lock on an erased target joins without resetting the amount)
         l.joiners.push(f);
+        // spec: S-0514 claim 4 and S-0609 claim 11 (a joining lock also gives a gattling target one spin-down update with multiplier 1)
+        crate::gattling::temporal_lock(w, x);
     } else {
         // spec: S-0514 claim 4 (the target releases any beam of its own)
         let_go(w, x);
@@ -235,7 +237,8 @@ fn lock(w: &mut World, f: ObjectId, x: ObjectId) {
             // spec: S-0514 claim 4 (a building is switched off and its house reconsiders power and radar)
             set_switch(w, x, true);
         }
-        // spec: S-0514 claim 4 (gattling spin-down: S-0609 is not built, no gattling spin state exists yet)
+        // spec: S-0514 claim 4 and S-0609 claim 11 (a successful lock gives a gattling target one spin-down update with multiplier 1, with its sound effect)
+        crate::gattling::temporal_lock(w, x);
         // spec: S-0514 claim 5 (first-lock notices: no notice mechanism exists in our engine yet)
     }
     w.temporal.beams.insert(f, Beam { target: x, cell });

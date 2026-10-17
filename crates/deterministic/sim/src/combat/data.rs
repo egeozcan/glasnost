@@ -455,8 +455,10 @@ pub struct TypeCombat {
     pub multi_weapon: bool,
     /// Turret count N.
     pub turret_count: i32,
-    /// Gattling type.
+    /// Gattling flag (S-0609 Terms: a gattling-flagged type).
     pub gattling: bool,
+    /// The gattling spin settings (S-0609 Terms and Import mapping).
+    pub spin: crate::gattling::SpinType,
     /// Charge-turret type.
     pub charge_turret: bool,
     /// Gunner type.
@@ -1329,6 +1331,7 @@ pub fn type_combat(
         multi_weapon: turret_count > 0,
         turret_count,
         gattling: b(c.is_gattling),
+        spin: crate::gattling::SpinType::from_fields(c),
         charge_turret: b(c.is_charge_turret),
         gunner: false,
         ifv_mode: 0,

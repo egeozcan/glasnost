@@ -499,6 +499,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
         ob.combat.opportunity = false;
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
+    // spec: S-0609 Terms (the elapsed-tick count grows by 1 just before the behaviour may be processed, after the per-tick start; only gattling-flagged objects read it, so only they keep it)
+    if crate::gattling::flagged(w, id) {
+        crate::gattling::elapse(w, id);
+    }
     let Some(o) = w.obj(id) else { return };
     // spec: S-0215 claim 2 (alive with health above 0 and the timer expired)
     if o.health <= 0 || !o.beh.due(t) {

@@ -737,6 +737,7 @@ fn weapon_report() {
             weapon: gun,
             from: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
             report: r,
+            gattling: false,
         };
         a.tick(&w, &[fx], &mut u);
         assert_eq!(u.taken(), 0);

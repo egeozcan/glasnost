@@ -262,11 +262,10 @@ pub fn release_mind_control(w: &mut World, id: ObjectId) {
     crate::mind::boarding(w, id);
 }
 
-/// Resets a boarding unit's gattling spin value (claim 6, S-0609 claim
-/// 11). Seam: the spin value belongs to S-0609, which is not built; the
-/// stage our engine keeps is reset by [`board`].
+/// Resets a boarding unit's gattling spin value, stage and elapsed-tick
+/// count (claim 6, S-0609 claim 11).
 pub fn reset_gattling_spin(w: &mut World, id: ObjectId) {
-    let _ = (w, id);
+    crate::gattling::reset(w, id);
 }
 
 /// Whether an object is inside a tube (claim 7). Seam: tubes are not
@@ -555,9 +554,8 @@ pub fn board(w: &mut World, p: ObjectId, t: ObjectId) {
         if let Some((_, d)) = ob.beh.aside {
             ob.beh.aside = Some((None, d));
         }
-        // spec: S-0507 claim 6 (it resets its gattling stage to 0, S-0609 claim 11)
-        ob.combat.gattling_stage = 0;
     }
+    // spec: S-0507 claim 6 and S-0609 claim 11 (it resets its gattling stage, spin value and elapsed-tick count to 0)
     reset_gattling_spin(w, p);
     release_mind_control(w, p);
     // spec: S-0507 claim 6 and S-0203 claim 3 (it leaves the map; it leaves play)

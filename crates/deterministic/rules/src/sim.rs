@@ -1738,6 +1738,25 @@ pub struct CombatFields {
     /// `IsGattling` (S-0308 claim 7).
     #[serde(default)]
     pub is_gattling: Option<bool>,
+    /// `WeaponStages`, the gattling stage count *N* (S-0609 Import mapping).
+    #[serde(default)]
+    pub weapon_stages: Option<i32>,
+    /// `RateUp`, the gattling spin-up amount *u* (S-0609 Import mapping).
+    #[serde(default)]
+    pub rate_up: Option<i32>,
+    /// `RateDown`, the gattling spin-down amount *d* (S-0609 Import
+    /// mapping).
+    #[serde(default)]
+    pub rate_down: Option<i32>,
+    /// `Stage1` … `Stage6`, the normal gattling thresholds *K*₁ … as the
+    /// layers leave them (S-0609 Import mapping: a layer reads them only
+    /// with the gattling flag and a stage count of at least 2).
+    #[serde(default)]
+    pub stage_thresholds: Option<Vec<i32>>,
+    /// `EliteStage1` … `EliteStage6`, the elite gattling thresholds
+    /// (S-0609 Import mapping; absent: 0, not the normal threshold).
+    #[serde(default)]
+    pub elite_stage_thresholds: Option<Vec<i32>>,
     /// `IsChargeTurret` (S-0301 claim 16, S-0308 claim 5).
     #[serde(default)]
     pub is_charge_turret: Option<bool>,

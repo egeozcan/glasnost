@@ -177,6 +177,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none() {
         return;
     }
+    if kind == Kind::Building {
+        // spec: S-0609 claims 9 and 14 (a gattling building's animation advance and its passive spin-down follow the tick's behaviour processing)
+        crate::gattling::building_turn(w, id);
+    }
     // spec: S-0519 claim 4 (a planted bomb is checked in its carrier's own turn, after the behaviour processing; not in a pass of its own)
     crate::bomb::turn(w, id);
     // spec: S-0519 claim 19 (a designator's change of target cancels its strike: looked at in its own turn)

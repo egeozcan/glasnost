@@ -44,6 +44,8 @@ const SPEAK_DELAY_INITIAL_TICKS: i32 = 1800; // spec: S-0701 claim 38 (the low-f
 const CREDIT_TICK_LEVEL: i32 = FULL / 2; // spec: S-0416 claim 4; S-0701 claim 35 (half volume: request level 8192)
 /// Anchors of turret sounds are offset from those of movement sounds.
 const TURRET_ANCHOR: u64 = 1 << 40;
+/// Anchors of gattling spin sounds (S-0609 claim 13), offset from both.
+const SPIN_ANCHOR: u64 = 1 << 41;
 
 /// Interface cues the client reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,6 +172,9 @@ pub struct Audio {
     slots: BTreeMap<ObjectId, Slot>,
     motion: BTreeMap<ObjectId, Motion>,
     turrets: BTreeMap<ObjectId, InstanceId>,
+    /// The gattling spin sounds (S-0609 claim 13), by object: the playing
+    /// mark and the last instance started, when it was audible.
+    spins: BTreeMap<ObjectId, (bool, Option<InstanceId>)>,
     ranks: BTreeMap<ObjectId, Rank>,
     radar: Vec<RadarEvent>,
     radar_map: Option<(Grid, Image)>,
@@ -224,6 +229,7 @@ impl Audio {
             slots: BTreeMap::new(),
             motion: BTreeMap::new(),
             turrets: BTreeMap::new(),
+            spins: BTreeMap::new(),
             ranks: BTreeMap::new(),
             radar: Vec::new(),
             radar_map: None,
@@ -564,6 +570,61 @@ impl Audio {
         self.house_announcements(w);
     }
 
+    /// A gattling spin update's sound request (S-0609 claim 13). The
+    /// playing mark is set while `spins` holds the object.
+    fn spin(
+        &mut self,
+        w: &World,
+        id: ObjectId,
+        event: glasnost_sim::gattling::SpinEvent,
+        pos: Option<Pos>,
+        unsync: &mut Rng,
+    ) {
+        use glasnost_sim::gattling::SpinEvent;
+        let anchor = SPIN_ANCHOR | u64::from(id.0);
+        match event {
+            SpinEvent::Up { raised, weapon } => {
+                let (mut mark, last) = self.spins.get(&id).copied().unwrap_or((false, None));
+                if raised && mark {
+                    // spec: S-0609 claim 13 (a spin-up update that raises the stage stops the current spin sound and clears the mark)
+                    if let Some(i) = last {
+                        self.mixer.stop(i);
+                    }
+                    mark = false;
+                }
+                if mark {
+                    // spec: S-0609 claim 13 (a spin-up update that raises no stage while the mark is set starts nothing and takes no draw)
+                    return;
+                }
+                let name = weapon.map(|x| w.rules().combat.weapon(x).name.clone());
+                let list = name.map(|n| self.names.report(&n).to_vec()).unwrap_or_default();
+                if list.is_empty() {
+                    // spec: S-0609 claim 13 and Edge cases (an empty report list, or an empty slot 2s: nothing started, no draw, the mark stays clear)
+                    self.spins.insert(id, (false, last));
+                    return;
+                }
+                // spec: S-0609 claim 13 (starting stops any spin sound of the object still playing)
+                if let Some(i) = last {
+                    self.mixer.stop(i);
+                }
+                // spec: S-0609 claim 13 (one raw value of the unsynchronised stream picks the entry, S-0701 claim 21 and F5; positional, following the object, any owner)
+                let at = pos.unwrap_or_default();
+                let inst = self
+                    .choose(&list, unsync)
+                    .and_then(|e| self.request(Some(w), e, Where::Attached { anchor, pos: at }, FULL));
+                // spec: S-0609 claim 13 (starting sets the playing mark)
+                self.spins.insert(id, (true, inst));
+            }
+            SpinEvent::Down | SpinEvent::Left => {
+                // spec: S-0609 claim 13 (a spin-down update, or leaving the map, clears the mark and lets the sound end after its present loop)
+                self.mixer.finish_anchor(anchor);
+                if let Some(e) = self.spins.get_mut(&id) {
+                    e.0 = false;
+                }
+            }
+        }
+    }
+
     /// A mind-control sound (S-0601 claims 5, 9 and 16).
     fn mind(
         &mut self,
@@ -612,6 +673,8 @@ impl Audio {
                 let s = self.names.anim_report(name).map(str::to_owned);
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
+            // spec: S-0609 claim 13 (a gattling-flagged firer never plays the ordinary per-shot report)
+            Effect::Shot { gattling: true, .. } => {}
             Effect::Shot {
                 weapon,
                 from,
@@ -656,6 +719,7 @@ impl Audio {
                 houses,
                 pos,
             } => self.mind(w, *sound, *of, *houses, *pos),
+            Effect::Spin { id, event, pos } => self.spin(w, *id, *event, *pos, unsync),
             Effect::Sound {
                 sound,
                 of,
@@ -1179,6 +1243,17 @@ impl Audio {
             self.mixer.finish_anchor(TURRET_ANCHOR | u64::from(id.0));
             self.motion.remove(&id);
             self.turrets.remove(&id);
+        }
+        let spun: Vec<ObjectId> = self.spins.keys().copied().collect();
+        for id in spun {
+            match w.obj(id) {
+                // spec: S-0609 claim 13 (the spin sound follows the object as it moves)
+                Some(o) => self.mixer.move_anchor(SPIN_ANCHOR | u64::from(id.0), o.pos),
+                None => {
+                    self.mixer.finish_anchor(SPIN_ANCHOR | u64::from(id.0));
+                    self.spins.remove(&id);
+                }
+            }
         }
         self.ranks.retain(|id, _| w.obj(*id).is_some());
         for (&id, o) in &w.objects {
