@@ -2,11 +2,11 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0180, Q-0224, Q-0276]
 supersedes: []
@@ -253,15 +253,24 @@ house's own update in a tick, which comes after the turn pass and before orders 
    happens after that update's power evaluation: it makes power due for the next house update,
    without changing the totals already published in the current one (S-0414 claim 16).
    A later evaluation still counts buildings by claim 3, including those awaiting removal.
-   Whether removal of a passenger while it remains inside a surviving absorbing building
-   makes power due is unresolved (S-0605 claim 15); it is not an established event of this list.
+   Removal of a passenger while it remains inside a surviving absorbing building (it is removed
+   from the game there, S-0605 claim 15) is not an event of this list: the building's passenger
+   count drops at once, but the building's owner's totals keep the removed passenger's contribution
+   until another event of this list makes the house due. This is the original's rule for a passenger
+   of another house. For a passenger of the same house as the building, whether its removal makes that
+   house due is not established (Open questions). S-0605 owns `quirks.absorber_removal_keeps_stale_power`,
+   default original. With it off, the removal makes the building's owner's power due, as a release does,
+   but only when the building type's extra output is above 0 (S-0605 claim 15).
    - Backing: `measurable` (S-0414 scenario V12 for house-update destruction,
      scenario W5, parts a to c for health and switch timing; W1, W2, W4
      and W12 for the resulting totals after erasure, passengers, placement, removal, blackout,
      draining and upgrades); `unmeasured` for owner-change timing and the exact recheck timing
      after passengers, erasure, draining and upgrades (those scenarios read settled totals, and
      no tick-level scenario for these causes is specified here), and for super-gap rechecks
-     (no skirmish input path is established, claim 16).
+     (no skirmish input path is established, claim 16). The stale totals after a passenger of
+     another house is removed inside by its house's defeat are `measurable` by S-0605 scenario A11,
+     which proposes setup, observable, expected value and falsifier; the same-house case is
+     `unmeasured` (Open questions).
    - Confidence: high (the house update, health changes, live health in the sum), medium (the full
      event list; the lag of at most one tick)
 
@@ -1074,8 +1083,9 @@ switched off the house has full power (W3's second pair).
   entry falls (W4 parts a and c vary it).
 - Whether a blackout started with a length of 0 or less during a running one occurs in any
   skirmish (claim 6); it needs a superweapon effect with its own length.
-- Whether removal of a passenger inside a surviving absorbing building makes the house's
-  power due (S-0605 claim 15).
+- Whether the loss of a passenger inside a surviving absorbing building makes the house's
+  power due when the passenger belongs to the same house as the building (S-0605 claim 15). For
+  a passenger of another house it does not.
 - The full list of building functions that the in-operation test gates beyond those of claim 9.
 - What else a fourth or later upgrade of a wall tower changes in the original (S-0406 claim 12).
   This spec does not depend on it: power reads only the three positions (W12 confirms that a fourth
