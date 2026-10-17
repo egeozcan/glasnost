@@ -23,7 +23,12 @@
 //!   has room for, counting the ones already on their way or waiting in
 //!   line (claims 3 and 4), and the order is the click a person gives on
 //!   the building (the *enter* cursor, S-0214 rows x3 and x4), so a full,
-//!   switched-off or unfinished building is never chosen.
+//!   switched-off or unfinished building is never chosen;
+//! - **sends a stalled entrant again.** An entrant that has left *enter*
+//!   while it still holds its link place keeps it, and every later entrant
+//!   waits for good (S-0605 claim 17). Such a unit gets the *enter* click
+//!   on its building again, once per cell it stands on: the new order ends
+//!   its contact (S-0213 table T3 (b)) and claim 3 runs afresh.
 //!
 //! It reads only the house's own objects and the rules a person may read,
 //! and draws no random value. The numbers are tuning of our own opponent,
@@ -66,21 +71,38 @@ pub fn absorbers(w: &World, house: HouseId) -> Vec<ObjectId> {
         .collect()
 }
 
+fn entering(o: &glasnost_sim::world::Object) -> bool {
+    o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter)
+}
+
 /// The house's units on their way into absorbing building `b`: in contact
-/// with it, waiting in line for it, or in *enter* with it as destination.
+/// with it or with it as destination while in *enter*, or waiting in line
+/// for it. A stalled entrant ([`stalled`]) does not count: it is sent again.
+/// One with the building as destination but no contact and no *enter*
+/// (S-0605 claim 5) does not count either.
 pub fn en_route(w: &World, b: ObjectId) -> usize {
     w.objects
         .values()
         .filter(|o| {
             o.on_map
                 && o.id != b
-                && (o.contact == Some(b)
-                    || absorb::waiting_for(w, o.id) == Some(b)
-                    || (o.beh.current == Some(Behaviour::Enter)
-                        || o.beh.queued == Some(Behaviour::Enter))
-                        && o.dest == Some(Target::Object(b)))
+                && (absorb::waiting_for(w, o.id) == Some(b)
+                    || entering(o)
+                        && (o.contact == Some(b) || o.dest == Some(Target::Object(b))))
         })
         .count()
+}
+
+/// The absorbing building infantry unit `id` has stalled on: it holds the
+/// building's contact but has neither *enter* current nor queued (S-0605
+/// claim 17).
+pub fn stalled(w: &World, id: ObjectId) -> Option<ObjectId> {
+    let o = w.obj(id)?;
+    if o.kind != Kind::Infantry || !o.on_map || entering(o) {
+        return None;
+    }
+    let b = o.contact?;
+    absorb::infantry_absorber(w, b).then_some(b)
 }
 
 /// The room left in `b` for this think: its capacity less its passengers
@@ -141,6 +163,29 @@ impl Special {
         if buildings.is_empty() {
             return;
         }
+        let mut sent = 0;
+        // Stalled entrants first: the enter click on their building again.
+        for &id in own {
+            if sent >= PER_THINK {
+                break;
+            }
+            let Some(b) = stalled(w, id) else { continue };
+            // Once per cell: a unit sent again that still stands where it
+            // stood is left until its order has been judged (`memory`).
+            let goal = Target::Object(b);
+            if psychic::berserk(w, id)
+                || !buildings.contains(&b)
+                || !self.memory.ok(w, id, goal)
+                || self.memory.pending(w, id, goal)
+            {
+                continue;
+            }
+            if let Some(orders) = click_if(w, house, id, b, &[Action::Enter]) {
+                out.extend(orders);
+                sent += 1;
+                self.count_absorb();
+            }
+        }
         let mut rooms: Vec<(ObjectId, usize)> =
             buildings.iter().map(|&b| (b, room(w, b))).collect();
         if rooms.iter().all(|&(_, r)| r == 0) {
@@ -180,7 +225,6 @@ impl Special {
             spare.len().saturating_sub(KEEP)
         };
         spare.truncate(surplus);
-        let mut sent = 0;
         for id in controlled.into_iter().chain(spare) {
             if sent >= PER_THINK {
                 break;

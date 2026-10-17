@@ -2,7 +2,7 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 6
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -57,7 +57,8 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
   (claim 15). It selects the drawn frame and can end the particle. Not the resource stage of
   S-0401.
 - **Successor.** The particle that replaces a dead particle whose type names a next particle type
-  (claim 7).
+  (claim 7). The rule of claim 7 is the gas kind's; successors of the other
+  kinds are S-0616 claim 8.
 - **Object number.** S-0306 (Terms): the number our engine gives each object at creation from its
   own counter. A particle gets one like any other object.
 - **Terrain height** *H*(*x*, *y*). The terrain surface height of S-0106 claims 2 and 3 at a
@@ -79,9 +80,12 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    to 15, comes after the turn of every map-placed object and of every starting unit that is
    still in play, and before any object created later (for example by a production or a
    death in play). It has no owner
-   house, no target and the system lifetime of its type. Its own position has no observable effect.
-   With an unlimited system lifetime it lasts until the game is cleared and is never removed merely
-   for being empty. A positive system lifetime instead marks it to end after that many turns (claim 17).
+   house, no target and the system lifetime of its type. Its own position is observable only through S-0616 claim 1's
+   second trigger action, which marks every particle system in the cell of a waypoint, this system
+   included when its position lies in that cell (claim 17). This spec does not give the position
+   value: S-0616 states it as an engine constant and its scenario P1 decides it. Nothing else
+   reads it.
+   With an unlimited system lifetime it lasts until the game is cleared, unless a trigger action marks it (claim 17); it is never removed merely for being empty. A positive system lifetime instead marks it to end after that many turns (claim 17).
    When no type of that name exists after all rules layers, the original creates it at game
    start and reads no rules section, as S-0004 claim 3 states. The game is not rejected. This
    newly created type has unlimited system lifetime (−1 ticks), no behaviour kind and no held
@@ -91,8 +95,7 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    or expire through claims 5 to 15. Those claims' gas-system turns require gas behaviour.
    - Backing: `measurable` (G1 for creation, ownership, target and empty persistence,
      G1-missing for the missing-type case and its defaults, G3 for finite system lifetime, G12 for
-     its place in the update order). The statement that its own position has no effect is
-     `unmeasured`: these scenarios do not independently vary that position.
+     its place in the update order). The shared system's position is not given here. Its value is decided by S-0616 P1 (part b, second run), which is `measurable`; no scenario of this spec varies it. The claim that nothing else reads the position is `unmeasured`: the position is an engine constant fixed at game start, so no setup can vary it independently, and the absence of other readers cannot be observed.
    - Confidence: high
 
 2. **Virus death with the animation.** When an infantry unit dies a virus death that plays the
@@ -170,9 +173,11 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    - Backing: `measurable` (G5 for lifetime, successor and turn timing; G6 for draw order).
    - Confidence: high
 
-7. **Successor.** When a dead particle's type names a next particle type, a particle of that type
+7. **Successor.** When a dead gas particle's type names a next particle type, a particle of that type
    is created (claim 5, including its creation draws) at the dead particle's position plus the type's
-   next-particle displacement (leptons, per axis). It then takes the dead particle's velocity. Successors
+   next-particle displacement (leptons, per axis). It then takes the dead particle's velocity. This one successor
+   with the dead particle's velocity is the gas kind's rule; the successors of the other kinds are
+   S-0616 claim 8. Successors
    are created in the second pass, so their draws come after all the update draws of that turn.
    - Backing: `measurable` (scenario G5)
    - Confidence: high
@@ -292,8 +297,7 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     - A lifetime of 0 goes to −1 on the first turn and so never again equals 0: it never ends. Every
       negative lifetime, −1 included, likewise never ends (its count comes back to 0 only after
       2³² + *L* turns, *L* being the lifetime, once it has wrapped round: far beyond any game).
-      Only a positive lifetime ever sets the mark through the count-down; owner removal (above) is
-      the only other way a system is marked here, and S-0616 claim 22 lists the marks of the other kinds.
+      Only a positive lifetime ever sets the mark through the count-down; owner removal (above) and a trigger action (S-0616 claim 1) are the only other ways a system is marked here, and S-0616 claim 22 lists the marks of the other kinds.
     - A system marked by owner removal leaves play like any marked system: in the first turn,
       after that turn's count-down, in which it holds no particle. Removal in the middle of a tick
       therefore leaves an empty system in play until its own turn comes, in that same tick if its
@@ -303,7 +307,7 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     - A system with no behaviour kind does no kind work, so its particles are never updated or
       moved and never die by lifetime; it counts down and is marked as above but, holding
       particles, never leaves play. One without particles leaves play like any other.
-    - When the shared gas system leaves play (positive lifetime), the game has no shared system
+    - When the shared gas system leaves play (positive lifetime, or a trigger action marking it (S-0616 claim 1)), the game has no shared system
       for the rest of the play: it is not created again. The original then fails on the next virus
       death or the next middle event that requests a particle (it uses the missing system without
       a check). **Departure** (no switch: the original stops): our engine takes every draw of those
@@ -313,7 +317,7 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
       same-turn removal, the systems of each kind, and the shared system's positive-lifetime
       departure). The owner-removal mark and its departure turn are `measurable` through S-0616's
       scenario P4 (a smoke system whose owner is removed), which falsifies a mark placed at a later
-      count-down or a departure in another turn. For a gas-kind system the owner-removal rule is
+      count-down or a departure in another turn. The trigger-action mark of the shared system and its departure turn are `measurable` through S-0616's scenario P1 (part b, second run). For a gas-kind system the owner-removal rule is
       `unmeasured` here: no stock data path gives a gas system an owner object, so no scenario can
       vary it. The behaviour after removal is `unmeasured`: the original stops there, so there
       is no original behaviour to compare. The 2³² + *L* turns to the first return to 0 is
@@ -481,8 +485,9 @@ Ordering consequences:
 ## Edge cases and quirks
 
 - **Short wind step** (`quirks.wind_southeast_short`, default on). Direction 3 pushes 1 lepton in *x*
-  instead of 2, unlike its mirror direction 5. Off: Δₓ = 2 for direction 3. It affects only gas
-  types with a wind effect, and none have one in stock data.
+  instead of 2, unlike its mirror direction 5. Off: Δₓ = 2 for direction 3. It is gas-only: smoke has its own wind table
+  (S-0616 claim 7), so it does not apply to smoke. It affects only gas
+  types with a wind effect.
 - **Particle stage parity.** The original takes the parity in F8 from its own object identifier.
   Our object number (Terms) has a different sequence, so which clouds advance with period *A* and which with
   *A* + 1 can differ from the original. This is a known departure of the same kind as S-0306's
@@ -547,7 +552,7 @@ Ordering consequences:
 ## Measurement scenarios
 
 All under the measurement setup (glossary): stock data except explicitly named test files,
-engine add-ons, director and unrelated mods off, skirmish, game speed index 2, 800×600, a small
+engine add-ons and unrelated mods off, skirmish, game speed index 2, 800×600, a small
 flat purpose-made map unless stated. Use one bystander computer player kept away from the
 observed cells under the glossary's void rule. Run each deterministic variant three times,
 statistical variants name their run counts below. Record the original's random state rather

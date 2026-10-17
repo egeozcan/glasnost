@@ -654,7 +654,7 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     crate::infantry::destination_assigned(w, actor, ob.dest);
     // spec: S-0314 claim 23 (an enter order on a depot that holds no contact asks for entry at once)
     crate::depot::order_entered(w, actor, b, dest);
-    // spec: S-0605 claim 3 (an enter order on an absorbing building: contact, or waiting in line); Q-1261 interim (when the order is applied)
+    // spec: S-0605 claim 3 (the destination assignment of an enter order on an absorbing building, after the order's other effects: contact, or waiting in line)
     crate::structures::absorb::order_entered(w, actor, b, dest);
     // spec: S-0213 table T3 (f) (an open-topped transport gives the same target to its passengers when the target is not nothing)
     crate::transport::hand_down_target(w, actor);

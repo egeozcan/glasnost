@@ -7723,17 +7723,27 @@
       "type": "object",
       "properties": {
         "absorber_contact_no_capacity_recheck": {
-          "description": "An infantry entrant that reaches an absorbing building goes in whatever the passenger count, the switch or its size, so with two or more link places the building can hold more than its capacity; off: at completion the building applies claim 1's acceptance test again, and a refused entrant is treated as a refused vehicle. Not implemented yet (wave 2).",
+          "description": "An infantry entrant that reaches an absorbing building goes in whatever the passenger count, the switch or its size, so with two or more link places the building can hold more than its capacity; off: at completion the building applies claim 1's acceptance test again, and a refused entrant is treated as a refused vehicle.",
           "type": "boolean",
           "default": true
         },
         "absorber_release_bridge_ends_search": {
-          "description": "When the eighth direction of the first round of an absorbing building's exit search passes both cell tests but its neighbour cell carries a bridge deck, the second round never starts and the passenger stays inside this processing; off: the second round starts as after any other failure at the eighth direction. Not implemented yet (wave 2).",
+          "description": "When the eighth direction of the first round of an absorbing building's exit search passes both cell tests but its neighbour cell carries a bridge deck, the second round never starts and the passenger stays inside this processing; off: the second round starts as after any other failure at the eighth direction.",
           "type": "boolean",
           "default": true
         },
         "absorber_release_second_round_skips_rear": {
-          "description": "The second round of an absorbing building's exit search does not try the rear direction; off: the second round tries the rear direction first. Not implemented yet (wave 2).",
+          "description": "The second round of an absorbing building's exit search does not try the rear direction; off: the second round tries the rear direction first.",
+          "type": "boolean",
+          "default": true
+        },
+        "absorber_removal_keeps_stale_power": {
+          "description": "A passenger removed while inside an absorbing building does not make the building owner's power due, so the owner's totals keep its contribution until something else makes them due; off: the removal makes the building owner's power due, as a release does, when the type's extra output is above 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "absorber_stale_contact_kept": {
+          "description": "An actor that stops being in *enter* with its contact with an absorbing building intact keeps the building's link place for good, so every later entrant waits in line for ever; off: in its own turn, after its movement, an actor in contact with an absorbing building that has neither *enter* current nor *enter* queued gives the contact up (the window in which a waiting actor has been granted contact and has *enter* queued but not yet started keeps it).",
           "type": "boolean",
           "default": true
         },
@@ -8384,6 +8394,11 @@
         },
         "engineer_repairs_during_sale": {
           "description": "An engineer reaching a damaged arrival-friendly building during its sale repairs it and is used up; off: sale-time entry is refused as in claim 4, regardless of health.",
+          "type": "boolean",
+          "default": true
+        },
+        "enter_nearest_survives_absorption": {
+          "description": "A unit of the neutral or special house that took the enter-nearest instruction through the bio-reactor fate keeps it when it goes in and when it is let out, so a released passenger walks straight back in; off: going in clears the instruction.",
           "type": "boolean",
           "default": true
         },

@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 39
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -433,7 +433,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      S-0508 claim 1, G1 and G2 for row I8's occupation test; S-0509 claims 6 and 7,
      E4 for the distinction between engineer click action and arrival outcome; S-0519
      claim 10, T11 for row I2's bomb-visibility requirement, and claim 13, T13 for
-     row I16's veterancy-only planting failure).
+     row I16's veterancy-only planting failure). The building count test of rows x and
+     I13 is backed by S-0605 claim 1, scenarios A1 and A1b, which set capacity 3, 0 and −1
+     for an entry and for a healer.
      The rows that the list after Scenario T10 gives
      as `unmeasured` have no step, each with its reason.
    - Confidence: medium (low where a row says so)
@@ -448,7 +450,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      T2, T4 and T7 for transport answers and readiness; S-0314 claim 16 and H16 a, b and d,
      plus Scenario T6 below, for depot permission and click outcomes; S-0314 claim 23 and
      H18 f for orders issued together and queued entry). Rows that the list after Scenario
-     T10 gives as `unmeasured` have no step, each with its reason.
+     T10 gives as `unmeasured` have no step, each with its reason. The building count test
+     of transport verdict q (table V) is backed as in claim 7: S-0605 claim 1, scenarios A1
+     and A1b.
    - Confidence: medium for table V; low for tables AC and B
 
 9. **Actions on a cell.** Over a cell, every actor has a generic cell result *c* by table GC.
@@ -1252,7 +1256,7 @@ in-place deployer or gets a docking answer that is neither).
 | v5 | Otherwise | nothing |
 
 *Transport verdict x.* Defined only when the target is an allied unit or building whose type
-carries passengers, not being erased and not phasing in, the actor is movable, and *v* is none of
+carries passengers (its imported passenger count is above 0, whatever the kind of the target), not being erased and not phasing in, the actor is movable, and *v* is none of
 attack, area guard and no-enter. Where no row matches (the docking answer is neither), *x* is
 undefined.
 
@@ -1281,7 +1285,7 @@ undefined.
 | I10 | Healing actor; the target an enemy | idle |
 | I11 | Healing actor; the target is the actor itself | area guard |
 | I12 | Healing actor; the target infantry below full health | heal |
-| I13 | Healing actor; the target is not a unit or building, or its type carries no passengers | *g* if *g* is move or area guard, else select |
+| I13 | Healing actor; the target is not a unit or building, or its type carries no passengers (for a unit, its count is not above 0; for a building, its count equals 0, so a negative building count does not meet it) | *g* if *g* is move or area guard, else select |
 | I14 | Vehicle thief; the target counts as a vehicle and is a train | select |
 | I15 | Vehicle thief; the target counts as a vehicle and belongs to another house (allied ones included) | capture (hijack); see the harvester-truce quirk |
 | I16 | Charge planter (the type flag, or the actor has the explosive-charges veterancy ability at its current rank); *g*₁ is attack; the target a building, not vehicle-like | sabotage if the building's type accepts charges and is not invisible in the game, else attack |
@@ -1361,7 +1365,7 @@ order to a later click on an already-full depot.
 
 *Transport verdict q.* Rows q1 to q3 apply only when *n* is none of attack, repair vehicle, area guard and
 no-enter, and the target is an allied unit or building other than the actor, not being erased and
-not phasing in, whose type carries passengers.
+not phasing in, whose type carries passengers (its imported passenger count is above 0, for a building type as for a vehicle type; an absorbing building of count 1 or more reaches rows q1 to q3, one of count 0 or below does not).
 
 | Row | Condition | *q* |
 |---|---|---|
@@ -1734,6 +1738,7 @@ Ordering consequences:
 | Vehicle types, `NonVehicle` | does not count as a vehicle (Terms) | boolean (S-0003) | no |
 | Vehicle types, `IsTrain` | train (row I14) | boolean (S-0003) | no |
 | Vehicle and aircraft types, `Passengers` | transport (values *x* of table I and *q* of table V, rows VD4 to VD8, AC7): more than 0 | integer (S-0003) | 0 |
+| Building types, `Passengers` | transport test of rows x and q for a building target (more than 0), and row I13 for a building target (equal to 0); read for building types only | integer (S-0003) | 0 |
 | Building types, `UndeploysInto` | vehicle-like building, with a 1 × 1 foundation (Terms); undeploys into a vehicle (Terms, *movable*; rows GC9, BC2; table M); does not change its building candidate group (claim 24) | vehicle type name | none |
 | Aircraft types, `Dock` | docking buildings (row AC10) | list of building types | empty |
 | Building type `Capturable` | capturable (claim 6, rows I7, I24) | boolean (S-0003) | no |

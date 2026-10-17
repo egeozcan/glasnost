@@ -1109,6 +1109,12 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
         }
         // Row 3 (the weeder's rule) is left by S-0402 to a later revision; row 4 is the original's computer players' only.
     }
+    if crate::structures::absorb::holds_instruction(w, id) {
+        // spec: S-0605 claim 16 and S-0215 claim 24 (a holder of the enter-nearest instruction carries it out and nothing else of the general rules: the search again, none found ends it); Q-1154 interim (S-0605's reading: the fate gives the instruction in our engine, and waiting in line for the found building counts as already bound)
+        crate::structures::absorb::instruction_turn(w, id);
+        // spec: S-0215 claim 24 (D_r with no draw, the rate of the behaviour being processed: enter is queued without a start)
+        return rate_delay(w, id);
+    }
     // spec: S-0518 claim 14 (a charger with no target in guard looks at the cells next to it; when it takes a building its idle action does not run, but the delay selection of the table below still does, with the rate of guard; Q-0985 answered by revision 3)
     let charging = o.target.is_none() && crate::linked::start_charging(w, id);
     if !charging && o.target.is_none() && o.kind == Kind::Infantry {
@@ -1231,6 +1237,12 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     if o.kind == Kind::Vehicle && crate::seams::slave_wake_rule_holds(w, id) {
         crate::seams::wake_slaves(w, id);
         return standard_delay(w, id);
+    }
+    if crate::structures::absorb::holds_instruction(w, id) {
+        // spec: S-0605 claim 16 and S-0215 claim 26 row 3 (the enter-nearest instruction is carried out as in guard); Q-1154 interim
+        crate::structures::absorb::instruction_turn(w, id);
+        // spec: S-0215 claim 26 row 3 (D_r, no draw, with the rate of the behaviour then current: area guard's, enter being queued without a start)
+        return rate_delay(w, id);
     }
     if o.kind == Kind::Vehicle && u.harvester {
         // spec: S-0215 claim 26 row 4 (a harvester: harvest at once; 1 + U(1, 10))

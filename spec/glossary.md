@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 45
+revision: 51
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -44,7 +44,7 @@ not rules for implementing them.
   claim G1 to G3 or a claim of a written spec that the entry names, and the rest is vocabulary. At
   sign-off every S-number a spec cites must be an approved spec listed in `spec/README.md`, a draft
   in the same batch or a planned spec that the citing text labels as planned in one of the two forms
-  above. A draft in the batch is cited by its number and
+  above. S-0605 (revised) and S-0616 are drafts of this batch, and so are the revised drafts of approved specs that the paragraph below describes. A draft in the batch is cited by its number and
   claim like an approved spec, never as planned, because calling it planned would take away the
   claims it owns.
 - A pointer to a planned spec that has since been approved reads as a plain pointer. The same holds
@@ -546,8 +546,10 @@ and gives each actor a current, a queued and a suspended behaviour (Terms, claim
 behaviour name in italics means the behaviour, never the sequence kind of the same name in S-0107.
 See S-0215; orders that set a behaviour are S-0213's.
 
-**capacity (transport).** A transport type's imported passenger count, an integer
-(S-0507 claim 1). Not a harvester's resource capacity.
+**capacity (transport).** The imported passenger count of a vehicle, aircraft or building type, an integer
+(S-0507 claim 1; S-0214 reads the same count for buildings, where a count of 0 or below carries no
+passengers). S-0507 itself covers only vehicle and aircraft transports. Not a harvester's resource
+capacity.
 
 **computer-controlled.** A house of the original that its computer player plays rather than a
 person. The specs use the word for the original: a rule given for a "computer-controlled owner"
@@ -776,6 +778,10 @@ open-topped flag (S-0507 claim 14). Its passengers fire from inside it. S-0203 c
 their place in the update order; S-0507 claim 15 owns position and target hand-down, and
 S-0307, S-0308, S-0311 and S-0313 own its combat effects in their topics.
 
+**particle speed.** A particle's single-precision speed in leptons per tick, *S*. What it scales depends on the
+particle kind: for smoke it is the vertical rise per tick, for fire the magnitude of the step taken along the
+flight direction (with its per-tick variation); other kinds are given in S-0616. It starts at the particle type's speed field. See S-0616 (Terms, F2 and F8).
+
 **passenger order, position 1.** The order in which a transport or absorbing building holds
 its passengers, most recent first. For a transport, boarding places a passenger at position 1,
 and passengers leave from there; a failed exit puts the passenger back there
@@ -923,6 +929,13 @@ forwards after it is placed (*build-up*), and backwards while it is sold (*selli
 rule that holds "outside the construction state" excludes both build-up and build-down. S-0408 and S-0415 call
 the backwards direction the *build-down* (S-0408, Terms). S-0108 owns its timing. See S-0108.
 
+**dead mark.** The mark a particle carries once it has ended. S-0613 uses the same mark for gas. The mark's
+observable consequence is that the particle leaves play (it is no longer counted in its system, so a marked system
+can end) in the tick that the claims of its kind give, which is the tick it was marked in for most kinds and
+the next tick for a smoke particle that hit a bridge deck (S-0616 claims 5, 7, 10, 15 and 17). Those claims
+also say whether the particle still moves, takes draws or splits into successors before it leaves. Whether a
+particle that carries the mark is still drawn in the tick it was marked in is not claimed here. See S-0616, Terms and claim 3.
+
 **detail level.** The player's visual-detail option, kept in the settings file: 0 = low, 1 =
 medium, 2 = high. Specs write "detail level", not "detail setting". See S-0104.
 
@@ -947,6 +960,11 @@ game every cycle makes exactly one drawn frame, so a rule "per drawn frame" and 
 coincide there except during a freeze, which makes drawn frames without ticks (S-0201, claim 6).
 Rendering specs say which of the two each rule follows. Not the same thing as an *image frame*
 either. Specs should not write "frame" or "game frame" on its own.
+
+**electric-bolt shot.** The instantaneous lightning-style shot of a weapon flagged as an electric-bolt weapon,
+fired instead of launching a projectile. It has an end point, where it makes one spark system (S-0616 claim 1), and
+S-0102 draws it (beam effects). No approved spec yet owns the shot's range, damage or timing. See S-0616, Terms
+and Open questions.
 
 **fake blink.** A countdown in ticks, set when a disguise-when-still vehicle fires and creates
 a projectile, during which non-owner viewers are shown the real unit. It does not remove
@@ -975,10 +993,17 @@ projection of its ground point, written *L(z)*. See S-0101.
 
 **image frame.** One picture in a sprite's shape file, numbered from 0. Not a drawn frame.
 
+**marked (particle system).** The state of a particle system that emits no more and leaves play once it holds no
+particle. See S-0613 claim 17 and S-0616, Terms and claim 22. Elsewhere "marked" keeps its plain sense, as in a factory
+marked primary (S-0404) or a country marked passive (see *multiplayer game, network game*).
+
 **object pass, cell pass.** The two parts of making a drawn frame in S-0102. The *cell pass* paints
 the persistent terrain picture (terrain tiles, overlays, terrain objects that are not animated,
 building bodies and the like), and the *object pass* paints the five render layers over it. Both are
 rendering terms; the *turn pass* of S-0203 is a part of a tick. See S-0102.
+
+**owner object.** The object a particle system follows and belongs to, if any; removing that object (an object that is *removed*, not one that merely leaves the map) marks the system. Not the owner house. See S-0616, Terms and claim 4, which also says that an owner that only leaves the map does not mark it (medium confidence). S-0109 (claim 22) and S-0102 use the same words for the object
+an animation is attached to and follows; this entry is the particle-system case of that idea.
 
 **palette.** 256 colour entries. Once loaded, each entry is a colour with a red, a green and a blue
 component, each an integer from 0 to 255; S-0103 says which of those values loading can produce.
@@ -1017,6 +1042,11 @@ sprite*, *roof-deploying sprite*, *under-door sprite* and *under-roof-door sprit
 *body sprite*. Specs don't call them "sheets" or "images" (an *image name*, see *art database*, names
 an art section, not a sprite), and a numbered picture inside one is an
 *image frame*, never a bare "frame". See S-0007, S-0102, S-0105, S-0107 and S-0108.
+
+**target point.** Several specs use "target point" in their own senses: a particle system's target point
+(S-0616, Terms and claims 1 and 11), a projectile's stored target point (S-0306), the centre of a target's cell
+in S-0208's infantry case, and the target's own target point where a beam or a detonation aims (S-0615,
+S-0303). Such a spec says which sense it means; there is no common sense.
 
 **voxel model.** A volumetric model in the public "VXL" format, with a companion motion file in the
 public "HVA" format of the same base name. See S-0105.
@@ -1759,7 +1789,7 @@ S-0314 use the terms.
 
 **absorbing building.** A building whose type takes in infantry, vehicles or both as passengers
 that do not come out on their own (S-0312, Terms, *absorbed passengers*). S-0405 names it
-(Terms); S-0605 claims 1 to 14 own entry, holding and voluntary release, and S-0408 claim 8
+(Terms); S-0605 claims 1 to 17 (the revised draft of this batch) own entry, holding and voluntary release, and S-0408 claim 8
 owns release by sale.
 
 **adjacency.** A building type's adjacency field, in cells, and the placement condition that
@@ -2311,7 +2341,9 @@ Specs write "trigger action", not "script action".
 
 **waypoint point.** The centre of a waypoint's cell at its terrain surface height, raised
 416 leptons on a high bridge. S-0011 claim 28 owns the point; S-0524 claim 5 uses it for
-demolition blasts, unlike the cell-only actions of S-0524 claims 1, 2 and 4.
+demolition blasts, unlike the cell-only actions of S-0524 claims 1, 2 and 4. Not every action that
+takes a waypoint uses this point: the particle-system trigger action of S-0616 (claim 1) places its
+system at terrain surface height, without the bridge lift.
 
 ### ui
 
@@ -2733,7 +2765,16 @@ scenario T6, part G.
 
 ## Questions for the project lead
 
-- Should the glossary define *director*? The measurement setups say "director and mods off", and the
-  approved specs use the word the same way without defining it. If it is to be defined, the lead (or
-  the owner, on the lead's word) supplies the meaning. Until then the term is used as the approved
-  specs use it.
+- Should the glossary define *director*? Approved specs' measurement scenarios say "director and mods
+  off" (S-0404 and S-0522 cite the glossary's measurement setup for that condition), and use the
+  word without defining it. The glossary's measurement setup states that no engine add-on and no mods are
+  active, and says nothing about a director, so it does not give the director
+  condition those specs cite. The glossary also
+  does not know what *director* denotes: whether it is an outside component of the measuring machine
+  or a setting of the original. The two readings give different meanings to "off".
+- The lead decides one of two things, and the owner then applies it and drops this question:
+  either the glossary gains a definition of *director* (with the meaning the lead supplies) and states
+  the condition in the measurement setup, or the specs stop citing the glossary for it and say the
+  condition themselves. If the word turns out to name an outside tool or source, the lead also decides
+  how the scenarios that use it are reworded. Until then the term is used as the approved specs use
+  it. The decision is needed before sign-off.

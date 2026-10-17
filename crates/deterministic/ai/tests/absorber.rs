@@ -245,3 +245,29 @@ fn a_unit_waiting_in_line_is_not_sent_again() {
     let orders = brain(&w).think(&w);
     assert_eq!(entered(&orders, waiting[0]), None, "{orders:?}");
 }
+
+// S-0605 claims 5 and 17 and S-0213 table T3 (b), PLAN §4.7: an entrant that has left enter while holding its link place is given the enter click again (the new order ends the contact), so the unit waiting behind it is not stuck for good.
+#[test]
+fn a_stalled_entrant_is_sent_again() {
+    let g = game(10);
+    let (mut w, b, u) = scene(&g, "BIOD", "WALKER", 2);
+    let orders = brain(&w).think(&w);
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    testkit::run(&mut w, 1);
+    let holder = u.iter().copied().find(|&x| w.obj(x).unwrap().contact == Some(b)).expect("one in contact");
+    // Taken out of enter with its contact intact.
+    {
+        let o = w.obj_mut(holder).unwrap();
+        o.beh.current = Some(Behaviour::Guard);
+        o.beh.queued = None;
+        o.dest = None;
+    }
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    assert_eq!(glasnost_ai::absorber::stalled(&w, holder), Some(b));
+    let orders = brain(&w).think(&w);
+    assert_eq!(entered(&orders, holder), Some(b), "{orders:?}");
+}

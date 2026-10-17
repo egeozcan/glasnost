@@ -79,14 +79,15 @@ pub const M6C_TICKS: i32 = 12_000;
 /// orders stay 2, one per house, as the AI orders a sensor only when the
 /// house has none), but the Yuri-style house wins 7 of the 16 games
 /// before the full run ends (seed 1 among them with an earlier tuning),
-/// and the full run must play all its ticks. Seed 2 did in every tuning
-/// tried until M7a step 3.6 (S-0603), when the Yuri-style house was given a
-/// grinder: seed 2's game then ended before the full run did, and the seed
-/// moved to 9. Once the house also started with badly damaged hulks for
-/// its grinder, seed 9's game ended early instead and seed 2 played all its
-/// ticks again, so the seed is back at 2 (see `docs/development.md`,
-/// *Determinism gate*).
-pub const M7A_SEED: u32 = 2;
+/// and the full run must play all its ticks. Seed 2 does in every tuning
+/// tried, so it is kept, and nothing more (see `docs/development.md`, *Determinism gate*).
+/// Moved from 2 to 3 at M7a step 1g (S-0605 revision 2 and the AI's
+/// re-send of a stalled entrant): Alpha then won seed 2 at tick 10 314;
+/// seed 3 played all its ticks in each of the three sweeps of that step.
+/// At M7a step 3.6 (S-0603: a grinder, and badly damaged hulks for it) seed
+/// 3 still plays all its ticks, with every counter at least 3 but the
+/// sensor orders' 2, and is kept.
+pub const M7A_SEED: u32 = 3;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;

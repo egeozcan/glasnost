@@ -2,11 +2,11 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796]
 supersedes: []
@@ -101,6 +101,9 @@ Two kinds of rule are kept apart throughout.
   affects uses it.
 - **Drawn as its disguise for V.** The presentation test of claim 37. It says what viewing house *V*
   is shown, and it never feeds game state.
+- **Natural smoke system.** The particle system that S-0616 claim 1 gives a building whose type names a
+  natural particle system. Its *natural-smoke displacement* is the type's displacement from the building's
+  position at which that system is placed (S-0616 claim 1).
 - **Fake blink.** A per-unit countdown, in ticks, started when a disguise-when-still vehicle fires
   (claim 39). While it runs, other houses are shown the real unit.
 - **Re-disguise lockout.** A per-unit countdown, in ticks. While it runs, a disguise-when-still
@@ -390,8 +393,11 @@ Two kinds of rule are kept apart throughout.
       at level 7 starts falling from 7 on subsequent fade updates. This differs from merely
       losing eligibility. A field re-evaluation can subsequently reverse it as above.
     - **Delay.** Reaching level 0 does not start the mobile object's cloak delay.
-    - **State changes.** At level 15 the building is fully cloaked; its natural particle effects
-      stop. At level 0 it is uncloaked; they restart.
+    - **State changes.** At level 15 the building is fully cloaked; its natural smoke system, if
+      any, is removed at once together with its particles. At level 0 it is uncloaked; a new
+      natural smoke system is made (S-0616 claim 1) only when its type names a natural particle
+      system, the building has none, and its type's natural-smoke displacement is not (0, 0, 0).
+      Otherwise none is made.
     - **Sensor ring.** A building is not ready to cloak, and a cloaked building starts uncloaking,
       while one of the following stands in its foundation or in the 1-cell ring around it:
       a unit whose type has the sensors flag and whose owner is not the building's owner.
@@ -1037,12 +1043,12 @@ F6, owner's disguise cycle (integers):
 | State | Event | Next state | Effect |
 |---|---|---|---|
 | uncloaked | ready (claim 18) | cloaking | Level rises 1 per tick, sound |
-| cloaking | level 15 | cloaked | Particle effects stop |
+| cloaking | level 15 | cloaked | Natural smoke system removed at once with its particles |
 | cloaked | should not be cloaked | uncloaking | Level falls 1 per tick |
 | cloaking | loses eligibility | cloaking | Completes fade, then uncloaks if still ineligible |
 | cloaking or cloaked | explicit uncloak cause, claim 11 | uncloaking | Preserve fade level, sound once |
 | uncloaking | ready inside own field, cell re-evaluated | cloaking | Current fade level preserved |
-| uncloaking | level 0 | uncloaked | Particle effects restart |
+| uncloaking | level 0 | uncloaked | New natural smoke system, only if its type names one, the building has none, and the natural-smoke displacement is not (0, 0, 0) |
 
 **Ordering.** Claim 42 places the ordinary cloak update after due behaviour processing,
   before ordinary locomotion and separate infantry/vehicle firing. Its stage step precedes
@@ -1404,7 +1410,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 11, 12, 15 | Repeat CS7 for each accepted and rejected hit category in claim 12. Record sounds and fade. Repeat a hit while already uncloaking. | Accepted hits and listed uncloak causes sound; rejected hits do not reveal. Repeated causes during uncloaking do not replay sound. |
 | 13 | Share a neighbouring cell between sensor and non-sensor infantry. Swap which is nearest the top corner. Repeat with an ability sensor and on a bridge. | Only the nearest ground-layer candidate counts. A sensor approaching a stationary target gives coverage, not adjacency uncloaking. |
 | 14, 24–26 | Retain own-house, sensed-enemy and unsensed-enemy targeters at the mobile start/completion. Repeat on a building. Select a sensed non-owned object before it cloaks. Try positive-damage force fire on a hidden own target and healing on a hidden ally. | Unsensed enemies drop at both mobile moments, buildings only at the start. Non-owner selection is lost at cloak start even with sensors. Positive mean weapon damage is refused; nonpositive mean passes the cloak test for an own or allied target, independently of the selected weapon's sign. |
-| 18 | Put sensor infantry in the foundation/border, with candidate-control occupants. Compare own/allied/enemy and veterancy-only sensors. Lose the field during cloaking, then restore it during uncloaking and change sensor coverage. Watch levels and particles. | Foreign type-flag sensors, allies included, block. Interrupted cloaking completes before uncloaking. Field re-evaluation can reverse uncloaking at its current level. Particles stop at 15 and restart at 0. |
+| 18 | Put sensor infantry in the foundation/border, with candidate-control occupants. Compare own/allied/enemy and veterancy-only sensors. Lose the field during cloaking, then restore it during uncloaking and change sensor coverage. Watch levels and particles. Use one named test building type whose natural-smoke displacement is (0, 0, 0), and one whose displacement is not (0, 0, 0); both are named test data, removed after the run. | Foreign type-flag sensors, allies included, block. Interrupted cloaking completes before uncloaking. Field re-evaluation can reverse uncloaking at its current level. Natural smoke is removed at once at 15; a new system appears at 0 only when the building has none and the natural-smoke displacement is not (0, 0, 0). |
 | 19, 20 | Witness the circle boundary. Power, disable, sell, destroy and capture a generator separately. Test allied witnesses. With two generators cut one's power, then separately sell it. Repeat with a nearby other-owner generator. | F5's candidate circles, interrupted growth/shrinking and immediate removal hold. Allies are not covered. Overlaps can lose coverage; a full idle neighbouring generator restarts irrespective of owner. |
 | 21–23, 40 | Observe detection across a mobile sensor's movement, capture and removal. Compare a type flag alone with a range alone. Toggle array/detector power after placement, and remove an initially unpowered building. Compare mobile and building disguise detectors. | Coverage is owner-only and does not lift shroud. Mobile range supplies coverage. Building power changes do not toggle coverage, and capture leaves it with the old owner. Mobile disguise detectors supply no shared coverage. |
 | 23, 40 | Make the array's cloak radius larger than its sensor sight. After removal, cover an affected outer cell with one sensor, then two. For detectors test the detection-radius disc after an initially unpowered building is removed. | A formerly −1 cell needs two additions. Array removal uses cloak radius; detector removal uses detection radius. |

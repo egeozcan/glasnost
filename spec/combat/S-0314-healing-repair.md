@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -76,6 +76,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
   driving and ship locomotion; S-0503 claim 16 for hovering).
 - **Queued entry.** A vehicle's standing intention to enter one depot. While it holds one, the
   vehicle requests a contact place again on every tick (claim 23).
+- **Locomotion class.** The class name of a mobile type, as S-0211 claim 3 gives it (see Import
+  mapping).
 - **Docking point.** The world position the depot supplies for that vehicle's approach and
   waiting-distance check (claim 18 for repair depots, including naval yards).
 - **Building repair.** The repair state of a building that its owner turns on and off with the
@@ -637,7 +639,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     tether test uses the state at the repeated request, not the earlier order-issue state.
     This answer does not bypass claim 16's permission refusal for a vehicle already standing
     on this depot, claim 20's ignored repeated enter, or claim 23's queued entry without a
-    destination. A refused click or an ignored order supplies no new movement instruction.
+    depot destination. A refused click or an ignored order supplies no new movement instruction.
     A repeated approach exchange that recognizes the vehicle's cell likewise does not by
     itself erase the point already assigned by the accepted order.
     Without the pad flag this ordinary repeated-request exchange sets no tether.
@@ -823,8 +825,17 @@ only the vehicle in that place.
     two vehicles sent together are resolved in that order. The first entry request finds a free
     place and takes contact (claim 17). For a later enter order on a depot that holds *any*
     contact, whatever its place count:
-    - a vehicle below full health (health ratio below 1) gets no destination and no contact. It
-      stays where it is with a *queued entry* for that depot. Once per eligible vehicle turn
+    - a vehicle below full health (health ratio below 1) gets no depot destination and no contact
+      from the order. It stays where it is, for now, with a *queued entry* for that depot. At its
+      first processing of *enter* (S-0215 claim 29) after that, while it holds no contact and
+      remembers no object it is entering (the condition of S-0605 claim 4), it chooses a free
+      location near the depot's centre cell that its own locomotion class can stand on (the
+      nearby-location search of S-0605 claim 12; its tie-breaks are open, see Open questions),
+      assigns it as destination, queues *move* and starts it at once (S-0605 claim 4), so it walks
+      to a cell next to the depot and rests there; the queued entry is not cleared by this walk.
+      Which cell it picks is left to the implementation, which must make the same choice from the
+      same game state.
+      Once per eligible vehicle turn
       it asks again for a contact place (claim 16's alliance and free-place tests). While none is free it keeps
       waiting. When one is free it takes it and asks permission. If permission is granted, it
       queues *enter* with immediate start (S-0215 claim 7), assigns the depot as destination
@@ -868,7 +879,9 @@ only the vehicle in that place.
       next-turn processing and the state/parasite/passenger distinctions). The inactive-reference
       case is `unmeasured`: a stock-only setup distinguishing that check has not been established.
     - Confidence: high (event order, retry position, queue/start distinction and automatic
-      entry), medium (stock observations of refusal and the full-health case)
+      entry), medium (stock observations of refusal and the full-health case; the walk to a
+      free cell near the depot, proposed in H18 f(ii) and S-0605 scenario A2c, with its cell
+      left open under Open questions)
 
 24. **No automatic return for repair.** No original rule sends a damaged vehicle of a player
     house to a depot by itself, at any health. The only automatic movements related to a depot
@@ -1061,6 +1074,7 @@ Backing and confidence are claim 15's.
 | any phase | depot starts selling | run-away notice to every contact; contacts released at the next processing (claim 22) |
 | any phase | depot destroyed | contacts released; docked vehicle stays in *sleep* (claim 22) |
 | depot holds any contact | enter order for a damaged vehicle | queued entry; no destination (claim 23) |
+| queued entry, no contact, no remembered object | first processing of *enter* (claim 23) | walks to a free cell near the depot's centre cell as destination (*move* started at once); queued entry kept |
 | queued entry | tick with a free place and permission | contact taken; *enter* (claim 23) |
 | queued entry | tick with a free place, permission refused | gives up (claim 23) |
 | infantry inside a hospital | a step falls due (claim 7) | repair step at cost 0 |
@@ -1220,7 +1234,7 @@ alternatives are design rules, not claims of oracle measurements.
 
 ## Measurement scenarios
 
-All scenarios run in skirmish under the glossary's measurement setup, director and mods off,
+All scenarios run in skirmish under the glossary's measurement setup, engine add-ons and mods off,
 with named test files: a flat test map whose override sections set the game-wide fields and
 define the test types named. Use game speed index 2 and 800 × 600 resolution; repeat each part
 three times unless it gives another count. One bystander computer player starts in an isolated
@@ -1731,7 +1745,7 @@ AC16 covering step size and cost; they are not open questions here.
 
 **H16: land docking (claims 16 to 18; Q-0641).** Use a tiny flat skirmish map with each
 stock land depot type in separate runs, two own stock ground vehicles, ample credits and one
-isolated bystander computer player. Director and mods off, game speed index 2, 800 × 600.
+isolated bystander computer player. Engine add-ons and mods off, game speed index 2, 800 × 600.
 Repeat each part three times. A read-only recorder logs input action, issued orders, positions,
 body facing, contact places, tether, behaviour, building processing and health every tick.
 - *a, ordinary entry:* damage one vehicle and click the depot with it selected, from each
@@ -1787,7 +1801,7 @@ vessel outright instead of entering sinking.
 
 **H18: ending and losing depot contact (claims 20 to 24; Q-0641).** H16's map, settings, repeat
 count and recorder, with credits, contact places, tether, queued entry, locomotor state and
-health logged every tick. Use one stock land depot and stock tracked and hovering vehicles,
+health logged every tick, plus each logged vehicle's current behaviour and destination. Use one stock land depot and stock tracked and hovering vehicles,
 damaged to half strength unless a part says otherwise.
 - *a, orders:* give a move, stop or attack order (i) while the vehicle approaches, (ii) after it
   docks. Repeat the enter order on the same depot while approaching. Expected: (i) contact
@@ -1803,33 +1817,42 @@ damaged to half strength unless a part says otherwise.
   until the vehicle stands still. Any distance-based stop in working falsifies claim 21.
 - *c, sale:* sell the depot (i) with a docked vehicle, (ii) with an approaching one. Expected:
   both switch to *guard*, the depot destination is cleared, contacts end one depot processing
-  later; record any scatter movement.
+  later; record any scatter movement. *Falsified if:* the depot stays in a working state, a
+  contact outlives the next depot processing, or a destination on the depot remains.
 - *d, destruction:* destroy the depot (scripted damage outside the vehicle) in the same two
   cases. Expected: contacts released; the approaching vehicle falls back to *guard*; the docked
   vehicle stays in *sleep* and does not fire at an enemy test unit placed in range. Then
   destroy a docked vehicle instead: the depot returns to *guard* and accepts another vehicle.
+  *Falsified if:* a contact survives, the approaching vehicle keeps its depot order, the docked
+  vehicle fires, or the depot refuses the next vehicle.
 - *e, locomotors:* repeat c and d with a hovering vehicle after its settling step, then give
   move orders. Expected: it never moves. Repeat with a tracked vehicle and record whether
   it moves (claim 22's low-confidence part).
 - *f, power and simultaneous orders:* (i) during working, drop the owner's power below demand,
-  then switch the depot off. Expected: steps, costs and timing unchanged. (ii) Select two
+  then switch the depot off. Expected: steps, costs and timing unchanged. *Falsified if:* any
+  step, cost or its tick differs from the same run without the power drop or switch-off. (ii) Select two
   damaged vehicles and click the depot once, so both orders are issued before either vehicle
   takes contact. The first applied enter order takes contact before the second is applied
   (S-0213 claim 3).
-  Expected: one approaches; the other stays put with a queued entry and enters by itself at most
+  Expected: one approaches; the other walks to a free cell near the depot (claim 23; S-0605
+  scenario A2c) with a queued entry and enters by itself at most
   one tick after the first leaves. Repeat with the second at full health: it stays put and never
   enters. Repeat with the depot switched off before the first leaves: the queued vehicle gives
-  up when the place frees.
+  up when the place frees. Record the second vehicle's destination and behaviour each tick.
+  *Falsified if:* the second stays where it was ordered, enters before the first leaves, or, with
+  the depot switched off, does not give up when the place frees.
 - *g, no automatic return:* leave a damaged vehicle of the human house idle near the depot for
   9000 ticks with no orders. Expected: it never enters. Any automatic entry falsifies claim 24.
 - *h, two places:* a named test depot type with a docking-place count of 2 and two invented
   displacements. Order the second vehicle in the same tick as the first. Expected: it takes place
   1, docks at its own point, and receives no step while the first is serviced. Stop recording
   before the first leaves, because the original's outcome there is undefined.
+  *Falsified if:* the second takes place 2 instead of 1, or receives a step while the first is
+  serviced.
 
 ### H19 — Tether, repeated entry and off-centre stopping (Q-0680)
 
-- **Setup:** tiny flat land-and-water test map, stock data only, director and mods off, speed
+- **Setup:** tiny flat land-and-water test map, stock data only, engine add-ons and mods off, speed
   index 2, 800 × 600. Use an own stock land repair depot and driving vehicle, then a stock
   naval yard and compatible ship. Damage the vehicle before entry. Record the imported pad
   flag and supplied docking displacement for each stock type without changing either.
@@ -1944,7 +1967,7 @@ damaged to half strength unless a part says otherwise.
 - **Setup:** H19's stock depot/yard and vehicle types, human-controlled owner, no guard-spot
   return, no rally point. Mark foundation cells, the appropriate exit list and claim 25's naval
   candidates on a tiny map. Stock blockers can be stationary own units or impassable terrain.
-  director and mods off, speed index 2, 800 × 600.
+  engine add-ons and mods off, speed index 2, 800 × 600.
 - **Procedure:** repair a damaged vehicle to completion. Record the assigned departure cell,
   health/credit ticks, movement and contact-release tick. Re-run with successive preferred
   candidates blocked, then all candidates blocked; remove one blocker after a known tick.
@@ -1985,7 +2008,7 @@ A departure-destination and contact-event trace is a proposed harness addition, 
 ### H22 — Late vehicle-turn queued retry (Q-0683)
 
 - **Setup:** tiny stock map, one-place depot or yard, one contacted vehicle and two damaged
-  vehicles with queued entry. Director and mods off, speed index 2, 800 × 600. Arrange separate
+  vehicles with queued entry. Engine add-ons and mods off, speed index 2, 800 × 600. Arrange separate
   runs with the releasing vehicle/depot before and after each waiter in the actual object-turn
   order; record that order rather than assuming creation order establishes it.
 - **Procedure:** release the first contact by completed repair, destruction or an untethered
@@ -2040,4 +2063,18 @@ The measurement scenario requires a read-only record of the ordered events; end-
   S-0410 claims 14–15, with their exact floating-point equality boundaries still unmeasured.
   The post-zoom tail begins at the completion frame's tick number. There is no separate
   unresolved zoom-duration rule here.
+- Which free cell the depot walk of claim 23 picks, and its tie-breaks. S-0605 claim 4 and its
+  Open questions say no approved spec owns the nearby-location search and that its owner is a
+  lead decision. Until it is decided, claim 23 leaves the cell to the implementation.
+- Whether a queued depot entry has *enter* as its current behaviour during the wait. The walk is
+  triggered by a processing of *enter* (S-0215 claim 29), while S-0215's text on the queued depot
+  entry describes its retry as separate from the current *enter* processing. H18 f(ii) records it.
+- Whether a queued depot vehicle with no contact and nothing remembered falls back to rest, as
+  the no-contact case of S-0215 claim 29 would give, or walks as claim 23 says. S-0215 leaves that
+  case to the entry specs, so this spec states it: it walks (medium confidence, H18 f(ii)).
+- Within one turn, whether the walk or the same turn's contact retry comes first when both are
+  due. Option A: the walk is taken only when the retry does not grant contact. Option B: the walk
+  is taken first, and a grant then reassigns the destination. Claim 23 places behaviour
+  processing before the retry, which favours option B; H18 f(ii) distinguishes them by the
+  recorded destinations.
 

@@ -2,7 +2,7 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -633,8 +633,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     next foundation cell in the cell order of S-0302 (claim 13), whether or not the previous
     passenger could be placed: the most recently entered passenger uses the first cell, the
     next most recent the second, and so on, and the survivors of claim 18
-    start after the last cell used. A vehicle comes out at the cell centre, an infantry unit on a
-    free standing position. Each gets out facing the building's facing and receives the scatter
+    start after the last cell used. A vehicle comes out at the cell centre. An infantry unit goes on a
+    free standing position: its desired point is 36 leptons from the cell centre along the map y axis (the second of the cell's two axes; S-0408 claim 7 gives the same point as 128 leptons along x and 164 along y from the cell's top corner), which S-0208 claim 2 counts as the centre class. An infantry unit whose cell is open takes one draw over 0 to 3, then the first free position of row R*k* of table O of S-0208 (claim 3), where *k* is that draw. A cell that the first row of table O refuses (a vehicle in it, or a flag that row names) takes no draw. When that row gives no position, the unit cannot be placed and dies, as below (S-0208 claim 3 gives no position then). This draw is taken before the scatter request that the passenger then receives (claim 12). Each gets out facing the building's facing and receives the scatter
     request of claim 12. A passenger that comes out keeps its owner and counts again towards
     that owner's crate infantry count if it was not already counted (S-0605 claim 14).
     Once out, a passenger is given no further order when its house is
@@ -1235,7 +1235,7 @@ Each RZ₅₃ operation is a separate rounding at the indicated stage. Thus *T* 
 | rules, type section, `Strength` | *H* (claim 2, F3) | integer | type specs |
 | rules, type section, `Explosion` | explosion list (claims 9, 16, 19); an aircraft's empty list gives no aircraft-specific explosion animation or list-pick draw, at any height (claim 16) | animation-name list (items as claim 28) | initially empty; absent or empty text keeps the list in force, while nonempty text consisting only of no-type items clears it (claim 28) |
 | rules, type section, `DestroyAnim` | destruction-animation list (claims 9, 19) | animation-name list (items as claim 28) | empty |
-| rules, infantry type section, `Cyborg` | cyborg type (claim 2) | boolean | no |
+| rules, infantry type section, `Cyborg` | cyborg type (claim 2); also the damage-sparks flag (S-0616 claim 1) | boolean | no |
 | rules, warhead section, `CausesDelayKill`, `DelayKillFrames`, `DelayKillAtMax` | delay-kill flag, *F*, *A* (F6) | boolean, integer, decimal (held as a single) | no; 5 ticks; 1.0 (as S-0302 Import mapping, which owns them) |
 | rules, building type section, `EligibleForDelayKill` | eligible for delayed death (claim 3) | boolean | no |
 | rules, type section, `Naval`, `Underwater`, `Organic`, `Weight` | sinking conditions (claim 10) | boolean, boolean, boolean, decimal | type specs |
@@ -1709,6 +1709,7 @@ All passengers die and none get out; without a charge planter nobody gets their 
 With crew present, occupy all standing positions of the first foundation cell: its passenger
 dies, while the next still uses the second cell, not the first. Any escape in a no-crew case,
 credit to the ordinary killing attacker, or cell reuse after failed placement falsifies d.
+Placement position and draw (claim 24, infantry): record each released infantry unit's position and the draws the recorder reports for its placement. Expected: each open cell's unit takes one draw over 0 to 3, and its position is the first free position of the row that draw picks in table O of S-0208 (claim 3); a unit in a cell that refuses it takes no draw. A different position, row or draw count falsifies this part.
 Vehicle passenger placement and credit to a separately remembered planter remain unmeasured:
 no setup here establishes vehicle absorption or a surviving planter for the failed releases.
 Variant e: set the side's survivor divisor to 0 with crew otherwise present. The three passengers

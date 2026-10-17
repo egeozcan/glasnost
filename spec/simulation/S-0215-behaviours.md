@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 59
+revision: 60
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -312,12 +312,16 @@ Terms used by this spec:
   house could build, rather than a neutral structure placed by a map.
 - **Enter-nearest instruction:** one of three standing instructions that a mobile actor can hold,
   apart from its behaviour slots: *enter the nearest absorbing building*, *occupy the nearest owned
-  occupiable building* and *occupy the nearest occupiable building*. Only rules of the original's
-  computer player give them (team scripts, and the computer's decision on what to do with a unit
-  it has just taken over by mind control). No rule of our engine gives them, so in our engine no
-  actor holds one and the rules that carry them out (claims 24 and 26, row 3) never apply; they
-  are recorded as the original's only (note for AI designers). This spec says only how a
-  holder's *guard* and *area guard* processings carry one out in the original (claim 24). An
+  occupiable building* and *occupy the nearest occupiable building*. The original's
+  computer player gives them (team scripts, and the computer's decision on what to do with a unit
+  it has just taken over by mind control). In our engine the only rule that gives one is the
+  bio-reactor fate of a taken or released unit owned by a neutral or special house (S-0605 claim
+  16, which gives *enter the nearest absorbing building* only); our AI gives none, and no other
+  actor holds one, so claim 24's rule (and row 3 of claim 26's area-guard table) applies in our engine to
+  the absorbing-building instruction only; the two occupy instructions never apply (note for AI
+  designers). This spec says only how a
+  holder's *guard* and *area guard* processings carry one out in the original and, for the absorbing-building
+  instruction, in our engine (claim 24). An
   actor holds at most one effective instruction at a time for this purpose: when several are
   held, the first in the order just given is the one carried out.
 - **Slave master, harvesting slave:** a slave master is a vehicle whose type controls a group of
@@ -1720,9 +1724,12 @@ apply in our engine to the actors of every player house.
 24. **Guard.** The actor stays where it is. The kind-specific rules at the end of this claim
     (deploying infantry, vehicles) take precedence over the general rules below.
 
-    **Enter-nearest instruction (original only).** In our engine no actor holds an enter-nearest
-    instruction (Terms), so this rule never applies; it is kept as a note for the AI designers.
-    Under the general rules, a processing of an actor that holds an
+    **Enter-nearest instruction.** In our engine only a unit of a neutral or special house can hold
+    one, and only when the bio-reactor fate of S-0605 claim 16 has given it the absorbing-building
+    instruction. The search made here at each processing, and the rule that ends the instruction when
+    it finds no building, are this claim's (S-0605 claim 16 says so); S-0605 claim 16 gives the fate's
+    first search and its candidates. The two occupy instructions are the original's only (note for the
+    AI designers). Under the general rules, a processing of an actor that holds an
     enter-nearest instruction (Terms) carries out that instruction and nothing else of the general
     rules, the delay table below included. The actor looks again for the nearest suitable building
     by the 3-D distance of F4: for *enter the nearest absorbing building*, the absorbing buildings
@@ -1731,7 +1738,7 @@ apply in our engine to the actors of every player house.
     occupiable building*, every building of any owner that it may occupy. If it finds one, it takes
     that building as its destination and queues *enter* (absorbing building), or queues *capture*
     with an immediate start (the two occupy instructions), unless it is already bound for that
-    building (in contact with it for *enter*; for *capture*, with that building as destination and
+    building (for *enter*: in contact with it, or waiting in line for it (S-0605 claims 3 and 16); for *capture*: with that building as destination and
     *capture* current). If it finds none, the instruction lapses. Either way it chooses
     *D*<sub>r</sub> with no draw, taken from the rate of the behaviour that is current once this
     has taken effect (claim 6): *capture*'s when the immediate start made *capture* current,
@@ -1792,7 +1799,7 @@ apply in our engine to the actors of every player house.
       case of claim 17 to the chrono miners of every player house (S-0402, claim 17). In our engine row 4 never applies; the original's computer player
       uses it to deploy its base-building vehicles by themselves, which our AI does with a deploy
       order.
-    - Backing: `measurable` (scenario B10, scenario B21 for the enter-nearest instructions,
+    - Backing: `measurable` (scenario B10, scenario B21 for the enter-nearest instructions, including its part (d) for the waiting-line exception,
       scenario B24, case a for the distributed-fire row and case b for the charge target,
       supplemented by S-0518 claim 14's scenarios TC2 and TC4; scenario
       B26, case a for the original-only sabotage rule). The vehicle table's row 1 is `measurable`
@@ -1837,7 +1844,7 @@ apply in our engine to the actors of every player house.
     |---|---|---|---|
     | 1 | **vehicles:** the vehicle is a slave master and the wake-up rule of S-0402 (claim 14) holds | wakes its slaves | standard delay |
     | 2 | the actor is in a bunker | queues *guard* with an immediate start | 1 tick |
-    | 3 | **original only:** the actor holds an enter-nearest instruction (Terms) | carries it out as in *guard* (claim 24) | *D*<sub>r</sub>, no draw, with the rate of the behaviour then current: *capture*'s when an occupy instruction's immediate start made it current, else *area guard*'s |
+    | 3 | the actor holds an enter-nearest instruction (Terms; in our engine only the absorbing-building one of a neutral or special house unit) | carries it out as in *guard* (claim 24) | *D*<sub>r</sub>, no draw, with the rate of the behaviour then current: *capture*'s when an occupy instruction's immediate start made it current, else *area guard*'s |
     | 4 | **vehicles:** the vehicle is a harvester | queues *harvest* and starts it at once, whether or not it is ready to change | 1 + *U*(1, 10) ticks |
     | 5 | **original only:** an infantry unit of a computer-controlled owner with explosive charges, whose target is a building, while *sabotage* is not current | queues *sabotage* | 1 tick |
 
@@ -1867,7 +1874,7 @@ apply in our engine to the actors of every player house.
       A guard spot that is a cell holding an allied building is moved to the nearest free cell (not
       for vehicles whose type has the harvester flag; weeders are not excluded).
 
-    **In our engine** rows 3 and 5 never apply and no actor has the computer-owner effects (Terms,
+    **In our engine** row 5 never applies, row 3 applies only to a unit that holds the absorbing-building instruction (a neutral or special house unit, S-0605 claim 16), and no actor has the computer-owner effects (Terms,
     houses in our engine): the outcomes "row 5 applies" and the column "Computer-owner effects" of
     the table above are the original's only. **Original only (note for AI designers):** the
     original's computer player gets from them a saboteur that goes for a building it has as target,
@@ -3270,14 +3277,14 @@ claim 25, part g, for the neutral and special houses.
 | attack | general rule | Std, or trunc(Std / 2) at close range | 1 |
 | attack (infantry) | explosive-charges or computer capture row of claim 23 | 1 | 0 |
 | attack (infantry) | deployed, human-controlled owner | Std | 1 |
-| guard, sticky | holding an enter-nearest instruction (original only) | *D*<sub>r</sub> (of *capture* if an occupy instruction started it) | 0 |
+| guard, sticky | holding an enter-nearest instruction (in our engine only the absorbing-building one) | *D*<sub>r</sub> (of *capture* if an occupy instruction started it) | 0 |
 | guard, sticky | weapon rearming | rearm time remaining | 0 |
 | guard, sticky | distributed-fire type with candidates | 0 | 0 |
 | guard, sticky | otherwise | Std | 1 |
 | guard, area guard (deploying infantry) | the rows of claim 31 | as claim 31 | 0 or 1 |
 | area guard | slave master's wake-up rule (S-0402, claim 14) holds (vehicles, row 1) | Std | 1 |
 | area guard | in a bunker; or sabotage queued (original only) | 1 | 0 |
-| area guard | holding an enter-nearest instruction (original only) | *D*<sub>r</sub> (of *capture* if an occupy instruction started it) | 0 |
+| area guard | holding an enter-nearest instruction (in our engine only the absorbing-building one) | *D*<sub>r</sub> (of *capture* if an occupy instruction started it) | 0 |
 | area guard | harvester (vehicles) | 1 + *U*(1, 10) | 1 |
 | area guard | search found a target | 1 | 0 |
 | area guard | otherwise | *k* × *D*<sub>r</sub> + *U*(1, 5), or trunc(that / 6) at close range | 1 |
@@ -4426,6 +4433,13 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   than 45, in a run that is not set aside; in (b) by an interval other than 63 after the
   processing that finds nothing, or by intervals of exactly 63 throughout; in (c) by *enter*
   current on the tick of the *guard* processing that finds B. Runs: five each.
+  (d) As (c), with a second absorbing building of the same owner that is nearer to the unit than B,
+  and a second unit of the same owner already in contact with it (so the first unit, in *guard*, finds that
+  building held and waits in line for it, S-0605 claim 3). Expected: at the *guard* processing that
+  finds that building, the first unit queues no second *enter* for it, and its current behaviour stays
+  *guard*. Falsified by any *enter* or *capture* queued or made current at that processing. Runs: five.
+  Setup not yet established: whether a team script can hold the second unit in contact is for the owner to
+  confirm; if it cannot, record the part as not applicable, as (c) does.
 - **B22 (claims 5 and 6, shared processings and their rates).** (a) Named test file: rate of *guard* 0.2
   (*D*<sub>r</sub> = 180) and rate of *sticky* 0.07
   (*D*<sub>r</sub> = 63). A test map places an armed vehicle of a human-controlled owner in
