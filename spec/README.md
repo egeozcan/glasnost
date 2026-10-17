@@ -54,7 +54,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0109](rendering/S-0109-animation-playback.md) | Animation playback | rendering | 29 | approved | — |
 | [S-0312](combat/S-0312-death-and-destruction.md) | Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains) | combat | 31 | approved | — |
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 24 | approved | — |
-| [S-0616](combat/S-0616-particle-systems.md) | Particle systems (smoke, fire, spark, railgun) | combat | 4 | approved | — |
 | [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 16 | approved | — |
 | [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 8 | approved | — |
 | [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 19 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 3 | approved | — |
 | [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 10 | approved | — |
 | [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 12 | approved | — |
+| [S-0616](combat/S-0616-particle-systems.md) | Particle systems (smoke, fire, spark, railgun) | combat | 5 | approved | — |
