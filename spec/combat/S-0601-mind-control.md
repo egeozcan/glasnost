@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -710,7 +710,7 @@ F3 uses exact integer additions and integer draws, with no rounding.
 | `OverloadDamage` | `[CombatDamage]` | integer list | empty | *damage* of F2 |
 | `OverloadFrames` | `[CombatDamage]` | integer list | empty | *frames* of F2 |
 | `C4Warhead` | `[CombatDamage]` | warhead name | (S-0303) | warhead of the overload hit (claim 16) |
-| `DefaultSparkSystem` | `[CombatDamage]` | particle-system name | none (the original's result for an absent key is not established; as a safe design fallback, the overload pulse creates no spark systems and takes no spark placement draws, and the importer warns) | overload sparks (claim 16) |
+| `DefaultSparkSystem` | `[CombatDamage]` | particle-system name | none (the original's result for an absent key is not established; as a safe design fallback, the overload pulse creates no spark systems and takes no spark placement draws, and the importer warns) | overload sparks (claim 16); the same key is also read by S-0616 (game-wide spark type) and S-0614 claim 9, and all three read the same value |
 | `AICaptureNormal`, `AICaptureWounded`, `AICaptureLowPower`, `AICaptureLowMoney` | `[General]` | integer list of four weights | empty | fate tables of claim 8, in the order team, grinder, bio reactor, hunt |
 | `AICaptureLowMoneyMark` | `[General]` | integer, credits | none: never selects the table (engine rule; the original's result is not determined, claim 8) | below this the controlling house's money selects the low-money table (claim 8) |
 | `AICaptureWoundedMark` | `[General]` | decimal fraction | none: never selects the table (engine rule; the original's result is not determined, claim 8) | below this health ratio the wounded table is used (claim 8) |
