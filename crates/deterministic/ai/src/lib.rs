@@ -30,6 +30,7 @@ pub mod game;
 pub mod jumpjets;
 pub mod linked;
 pub mod memory;
+pub mod psychic;
 pub mod radiation;
 pub mod scripted;
 pub mod skirmish;

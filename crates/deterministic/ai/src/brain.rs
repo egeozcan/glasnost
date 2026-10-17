@@ -30,7 +30,10 @@
 //!   on its buildings with seen enemies at them, a spy plane at the enemy
 //!   base, and the teleport takes a group of its armed vehicles (first
 //!   stage) to a free block next to the enemy base (second stage), each with
-//!   the order a person gives;
+//!   the order a person gives; a ready psychic reveal (S-0610) goes on the
+//!   enemy start cell nearest home that the house does not see; and once
+//!   the harvesters are kept it builds a psychic sensor when it has none
+//!   (`psychic`);
 //! - **selling out**: a house with no income for a long while and too few
 //!   credits for an army unit sells its buildings one by one for their
 //!   refunds and builds army units with them, and builds no more buildings;
@@ -262,6 +265,7 @@ impl Brain {
             self.send_for_repair(w, &mut out);
             self.ferry(w, &mut out);
             self.build_superweapon(w, &mut out);
+            self.build_sensor(w, &mut out);
         }
         if w.tick % THINK_PERIOD == 0 {
             self.special.think(&self.script, w, &mut out);
@@ -270,14 +274,42 @@ impl Brain {
         self.rebuild_yard(w, &mut out);
         self.find_deploy_spot(w, &mut out);
         self.defend(w, &mut out);
+        // spec: S-0214 claim 15 and S-0610 claim 6 (a berserk unit takes no orders: a person cannot give it one, so neither does the brain)
+        out.retain(|o| o.actor().is_none_or(|a| !glasnost_sim::psychic::berserk(w, a)));
         out
+    }
+
+    /// Builds a psychic sensor (S-0610 claim 9) as a person adds one to the
+    /// base: once it keeps its harvesters, is not selling out and has none,
+    /// the cheapest sensor type it can build and place now
+    /// ([`crate::psychic::build_sensor`]). Like a superweapon building it
+    /// replaces a tech-climb building this think ordered, but not a building
+    /// the plan places or wants, nor a superweapon building.
+    fn build_sensor(&mut self, w: &World, out: &mut Vec<Order>) {
+        let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
+        let giving = |t: &TypeRef| !Self::giving_kinds(w, t.index).is_empty();
+        if self.script.selling()
+            || !self.script.harvesters_kept(w)
+            || out.iter().any(|o| {
+                matches!(o, Order::Place { .. })
+                    || matches!(o, Order::Build { what } if what.kind == Kind::Building && (!climb(what) || giving(what)))
+            })
+        {
+            return;
+        }
+        if let Some(t) = crate::psychic::build_sensor(&self.script, w) {
+            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            out.push(Order::Build { what: t });
+            self.special.count_sensor();
+        }
     }
 
     /// The kind of superweapon type `i` when the brain fires it: every kind
     /// of the Allied and Soviet sides (the nuclear strike, the weather
     /// storm, the iron curtain, the teleport's two stages, the paradrops, the
-    /// spy plane and the force shield). The Yuri kinds are not built
-    /// (S-0610, S-0611, S-0612) and give none.
+    /// spy plane and the force shield) and the psychic reveal (S-0610). The
+    /// psychic dominator and the genetic mutator are not built (S-0611,
+    /// S-0612; M7b) and give none.
     fn fired_kind(w: &World, i: u32) -> Option<glasnost_sim::superweapons::SwKind> {
         use glasnost_sim::superweapons::SwKind;
         let k = w.rules().superweapons.types.get(i as usize)?.kind?;
@@ -292,6 +324,7 @@ impl Brain {
                 | SwKind::AmerParadrop
                 | SwKind::SpyPlane
                 | SwKind::ForceShield
+                | SwKind::PsychicReveal
         )
         .then_some(k)
     }
@@ -375,7 +408,7 @@ impl Brain {
     /// the fire order a person gives; a storm only while no storm is under
     /// way (a person sees one), a teleport's first stage only while no source
     /// is held.
-    fn fire_superweapons(&self, w: &World, out: &mut Vec<Order>) {
+    fn fire_superweapons(&mut self, w: &World, out: &mut Vec<Order>) {
         use glasnost_sim::superweapons::{StormState, SwKind, charge};
         let h = self.house();
         for (i, t) in w.rules().superweapons.types.iter().enumerate() {
@@ -393,10 +426,14 @@ impl Brain {
                 Some(SwKind::SpyPlane) => self.script.attack_goal(w),
                 Some(SwKind::Chrono) if !Self::has_source(w, h) => self.group_cell(w),
                 Some(SwKind::ChronoWarp) if Self::has_source(w, h) => self.landing_cell(w),
+                Some(SwKind::PsychicReveal) => crate::psychic::reveal_cell(&self.script, w),
                 _ => None,
             };
             if let Some(cell) = cell {
                 out.push(Order::FireSuperweapon { sw: i, cell });
+                if t.kind == Some(SwKind::PsychicReveal) {
+                    self.special.count_reveal();
+                }
             }
         }
     }

@@ -111,3 +111,48 @@ fn counts_a_launch_by_kind() {
     assert_eq!(tally.launches, 1, "{tally:?}");
     assert_eq!(tally.launches_by_kind.get("Missile"), Some(&1));
 }
+
+// Units that go berserk are counted once each, when they go berserk, and
+// the house-ticks with a hostile-intent line are counted (S-0610 claims 4
+// and 10).
+#[test]
+fn counts_berserk_units_and_intent_lines() {
+    let mut r = fixture::ruleset();
+    let mut eye = fixture::building(1, 1, 150, 0);
+    eye.econ.psychic_detection_radius = Some(5);
+    eye.tech_level = Some(99);
+    r.sim.buildings.insert("EYE".into(), eye);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("EYE".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-tally"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut tally = Tally::default();
+    g.step();
+    tally.observe(&g.world);
+    assert_eq!((tally.berserked, tally.intent_ticks), (0, 0));
+    let unit = g
+        .world
+        .objects
+        .values()
+        .find(|o| o.owner == Some(HouseId(1)) && o.kind != Kind::Building && o.on_map)
+        .map(|o| o.id)
+        .expect("a unit of house 1");
+    glasnost_sim::psychic::enter(&mut g.world, unit, 10_000);
+    let near = fixture::at(4, 4);
+    let eye = testkit::spawn(&mut g.world, Kind::Building, "EYE", 0, near, 0);
+    g.world.obj_mut(unit).unwrap().dest = Some(glasnost_sim::world::Target::Object(eye));
+    for _ in 0..3 {
+        tally.observe(&g.world);
+    }
+    assert_eq!(tally.berserked, 1, "{tally:?}");
+    assert_eq!(tally.intent_ticks, 3, "{tally:?}");
+}

@@ -69,6 +69,9 @@ pub fn total(uses: &[(glasnost_sim::world::HouseId, Uses)]) -> Uses {
         t.sabotages += u.sabotages;
         t.strikes += u.strikes;
         t.crates += u.crates;
+        t.berserks += u.berserks;
+        t.sensors += u.sensors;
+        t.reveals += u.reveals;
     }
     t
 }

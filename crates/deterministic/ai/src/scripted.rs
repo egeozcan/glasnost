@@ -538,6 +538,12 @@ impl Script {
             .map(|o| o.pos.cell())
     }
 
+    /// The enemy start cells (the map's start waypoints of the other
+    /// players: lobby knowledge).
+    pub(crate) fn enemy_starts(&self) -> &[CellXY] {
+        &self.targets
+    }
+
     /// Where the next wave would go, without choosing it: the seen enemy
     /// nearest home, else the next enemy start cell.
     pub(crate) fn attack_goal(&self, w: &World) -> Option<CellXY> {

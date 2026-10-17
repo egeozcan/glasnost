@@ -117,6 +117,11 @@ struct Game {
     launches_by_kind: BTreeMap<String, usize>,
     /// House-ticks a superweapon record stood ready, by kind name.
     ready_ticks: BTreeMap<String, usize>,
+    /// Units that went berserk (S-0610 claim 4), and house-ticks in which a
+    /// player house's psychic sensors showed a hostile-intent line
+    /// (claim 10).
+    berserked: usize,
+    intent_ticks: usize,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -591,6 +596,8 @@ fn play_ai(
     g.unloads = tally.unloads;
     g.launches = tally.launches;
     g.launches_by_kind = tally.launches_by_kind;
+    g.berserked = tally.berserked;
+    g.intent_ticks = tally.intent_ticks;
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -691,6 +698,14 @@ pub struct Tally {
     pub launches_by_kind: BTreeMap<String, usize>,
     /// House-ticks a superweapon record stood ready, by kind name.
     pub ready_ticks: BTreeMap<String, usize>,
+    /// Units that went berserk (S-0610 claim 4: a unit that was not berserk
+    /// after the last tick and is now).
+    pub berserked: usize,
+    /// House-ticks in which a player house's psychic sensors showed at least
+    /// one hostile-intent line (S-0610 claim 10).
+    pub intent_ticks: usize,
+    /// The units berserk after the last tick.
+    berserk_before: BTreeSet<u32>,
     /// The (house, superweapon type) pairs ready after the last tick.
     ready_before: BTreeSet<(usize, usize)>,
     /// The (passenger, transport) pairs of the last tick.
@@ -759,6 +774,17 @@ impl Tally {
                 .or_default() += 1;
         }
         self.ready_before = ready_now;
+        let berserk: BTreeSet<u32> = w
+            .objects
+            .keys()
+            .filter(|&&id| glasnost_sim::psychic::berserk(w, id))
+            .map(|id| id.0)
+            .collect();
+        self.berserked += berserk.difference(&self.berserk_before).count();
+        self.berserk_before = berserk;
+        self.intent_ticks += (0..PLAYERS)
+            .filter(|&h| !glasnost_sim::psychic::intent_lines(w, HouseId(h as u8)).is_empty())
+            .count();
     }
 }
 
@@ -1379,8 +1405,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals
                     )
                 })
                 .collect();
@@ -1389,6 +1415,11 @@ fn report(
                 "  special abilities (orders): {}; garrison occupants inside at the end: {}",
                 uses.join("; "),
                 g.occupants_inside
+            );
+            let _ = writeln!(
+                s,
+                "  psychic weapons: units gone berserk {}, house-ticks with a hostile-intent line {}",
+                g.berserked, g.intent_ticks
             );
         }
         let f: Vec<String> = g
