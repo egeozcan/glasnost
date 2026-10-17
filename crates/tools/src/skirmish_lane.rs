@@ -1279,10 +1279,9 @@ fn line_changes(
                 if let Some((t, _)) = n {
                     let _ = writeln!(
                         s,
-                        "lines tick {} line {i}: started {} cost {} credits {credits}",
+                        "lines tick {} line {i}: started {} credits {credits}",
                         w.tick,
-                        what(t),
-                        glasnost_sim::econ::production::cost_field(w, t)
+                        what(t)
                     );
                 }
             }

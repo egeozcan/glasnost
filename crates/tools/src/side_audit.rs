@@ -389,7 +389,7 @@ async fn run_async(dir: &Path, side: i32, index: usize, seed: u32) -> std::io::R
     let count = |k: Kind| side_types.iter().filter(|t| t.kind == k).count();
     let _ = writeln!(
         out,
-        "glasnost-headless side-audit: side {side}, map index {index}, seed {seed}; house tech level {level}; {} types of the side (buildings {}, infantry {}, vehicles {}, aircraft {}), {} within the house tech level; sandbox ran {} ticks",
+        "glasnost-headless side-audit: side {side}, map index {index}, seed {seed}; {} types of the side (buildings {}, infantry {}, vehicles {}, aircraft {}), {} within the house tech level; sandbox ran {} ticks",
         side_types.len(),
         count(Kind::Building),
         count(Kind::Infantry),
