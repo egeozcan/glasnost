@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 55
+revision: 56
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -413,11 +413,12 @@ Terms used by this spec:
   coverage. This spec uses them only as a revert cause
   and its exception (claim 10).
 - **Chrono move, leaving stage, phase-in:** a chrono move teleports an actor to another place, by a
-  superweapon or by its own teleporting locomotor. A superweapon move's **leaving stage** runs
-  from the beginning of departure until its position changes. A teleporting locomotor's own
-  jump has no leaving stage (S-0207 claim 20 d). **Phase-in** is reappearance at the new place.
-  The superweapon topic owns its move's stages and lengths. S-0207 claim 20 f and F9 own the
-  locomotor jump's phase-in length and harvester exception.
+  superweapon or by its own teleporting locomotor. A superweapon move's **leaving stage** runs, for
+  each member of its warp group that the move moves, from that member's first update after launch
+  until departure, including the update at which its 60-tick wait expires (S-0513 claim 39). A
+  teleporting locomotor's own jump has no leaving stage (S-0207 claim 20 d). **Phase-in** is
+  reappearance at the new place. The superweapon topic owns its move's stages and lengths. S-0207
+  claim 20 f and F9 own the locomotor jump's phase-in length and harvester exception.
 - **Tunnel:** a pair of linked tunnel entrances on a map through which infantry and vehicles
   travel out of sight to the other entrance. The movement topic owns it.
 - **Radiation level:** S-0525 claim 7 defines a field's current integer *field level*.
