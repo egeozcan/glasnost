@@ -2,11 +2,11 @@
 id: S-0512
 title: "Superweapons: charge and readiness"
 topic: superweapons
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0742, Q-0730, Q-0731, Q-0737]
 supersedes: []
@@ -687,7 +687,7 @@ Confidence: high.
 
 ## Measurement scenarios
 
-All scenarios use standard skirmish at 800 × 600, game-speed index 2, director and mods off,
+All scenarios use standard skirmish at 800 × 600, game-speed index 2, no engine add-on and no mods (the named test files of a scenario excepted),
 superweapon setting on unless stated. Use stock data except for the named test-map overrides
 explicitly listed below. A purpose-made small map gives the human player the needed buildings,
 plants and a spare consumer for power changes. One bystander computer player starts farthest
