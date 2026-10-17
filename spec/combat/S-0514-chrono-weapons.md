@@ -2,7 +2,7 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -461,7 +461,7 @@ gains are present by target removal.
 
 ## Measurement scenarios
 
-Use the glossary measurement setup: stock executable and data, director/mods/add-ons off,
+Use the glossary measurement setup: stock executable and data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
 speed index 2, 800 × 600, a small purpose-made skirmish map and a bystander computer player
 kept outside the observed area. Void runs where it interferes or is defeated. Named test
 overrides below are temporary map sections, or named test art where stated, not changes to
