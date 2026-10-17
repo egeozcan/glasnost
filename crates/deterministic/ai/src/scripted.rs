@@ -27,7 +27,9 @@
 //!    nearest the explored water, so that the base grows toward it;
 //! 4. keep the plan's harvester count, and send idle or resting harvesters
 //!    to harvest; a slave miner counts as a harvester (and, deployed, its
-//!    building too), needs no refinery, and is sent to harvest at the
+//!    building too), needs no refinery and stands for one (so a house
+//!    whose slave miners have all packed up to move on orders no new
+//!    refinery building), and is sent to harvest at the
 //!    nearest explored resource cell, the order a person gives it;
 //! 5. once the harvesters are kept, build army units (one type per kind:
 //!    vehicles, infantry, aircraft; the type it has fewest of, in turn on
@@ -492,6 +494,20 @@ impl Script {
             .collect()
     }
 
+    /// Whether the house has a refinery for the plan: a refinery building,
+    /// or a slave miner on the move, which acts as its slaves' refinery
+    /// whether it is a vehicle or deployed (S-0402 claim 14). A person
+    /// whose slave miners have packed up to move on does not build another
+    /// refinery for that.
+    pub(crate) fn has_refinery(&self, w: &World) -> bool {
+        // spec: S-0402 claim 14 (a slave miner acts as its slaves' refinery as a vehicle too)
+        !self.of_role(w, Role::Refinery).is_empty()
+            || self.own(w).into_iter().any(|id| {
+                w.obj(id)
+                    .is_some_and(|o| is_slave_miner(w, tech::type_of(o)))
+            })
+    }
+
     /// The nearest explored cell to `from` that holds a resource, the first
     /// in cell order on equal distance: where a person sends a slave miner.
     fn field_cell(&self, w: &World, from: CellXY) -> Option<CellXY> {
@@ -877,11 +893,7 @@ impl Script {
             let wanted = low_power
                 .then_some(Role::Power)
                 .into_iter()
-                .chain(
-                    self.of_role(w, Role::Refinery)
-                        .is_empty()
-                        .then_some(Role::Refinery),
-                )
+                .chain((!self.has_refinery(w)).then_some(Role::Refinery))
                 .chain(
                     FACTORIES
                         .into_iter()
