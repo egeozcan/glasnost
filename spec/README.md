@@ -133,4 +133,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 17 | approved | — |
 | [S-0011](triggers/S-0011-map-triggers-mp.md) | Map triggers (multiplayer subset) | triggers | 24 | approved | — |
 | [S-0609](combat/S-0609-gattling-spin-up.md) | Gattling spin-up | combat | 4 | approved | — |
-| [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 11 | approved | — |
+| [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 12 | approved | — |

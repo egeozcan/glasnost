@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -209,10 +209,10 @@ The glossary also defines *trigger*, used here.
      tag leaves the target. Event 44 is then raised only if the target still carries a tag at that
      point, and then on that tag, whichever tag it is. This follows S-0011 claim 10 and its repeat-type
      table, under which the raising carrier loses the tag. **Departure:** the original still raises
-     event 44 at the target although the tag has gone, and that raise faults; the fault needs no bad
-     data, only a legal one-time trigger on the tag, and it has no gameplay value, so it is not
-     reproduced and has no quirk switch, by lead decision on Q-1150: an original fault on legal data
-     with no gameplay value is fixed outright as a departure.
+     event 44 at the target although the tag has gone, and that raise faults (it crashes or hangs); the
+     fault needs no bad data, only a legal one-time trigger on the tag, so it is not reproduced and
+     has no quirk switch, by lead decision on Q-1150: a fault of the original (it crashes or hangs)
+     on legal data is fixed outright as a departure.
    - Backing: `measurable` (MC3 for target-only, no-damage hits; MC1 for takeover sound,
      MC11 for mixed-effect variants, and MC14 for the order, cause and judging of the two events.
      S-0514 scenario E13 for the remaining special-hit exclusions and independent
@@ -987,9 +987,9 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
 - S-0701 claim 39: no change needed. Approved S-0701 claim 39 already states that S-0509 claim 12 lists
   the mind-control takeover and release of a building, without a condition. Its medium confidence for
   mind-control entry selection rests on MC9 being proposed and not run; this revision does not change that.
-- Glossary, *departure* and *quirk switch*: add a third case to *departure*, a fault of the original on
-  legal data that has no gameplay value, which our engine fixes outright with no switch, as the lead
-  decided on Q-1150. The *quirk switch* entry's "no switch" rule, which now covers only bad data and host or
+- Glossary, *departure* and *quirk switch*: add a third case to *departure*, a fault of the original (it crashes
+  or hangs) on legal data, which our engine fixes outright with no switch, as the lead decided on
+  Q-1150. The *quirk switch* entry's "no switch" rule, which now covers only bad data and host or
   real-time dependence, takes the same case. This claim (claim 5) is the first case.
 - S-0011: no change needed; it names no switch for this case.
 
