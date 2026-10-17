@@ -176,9 +176,9 @@ fn controlled_infantry_go_to_an_absorber_first() {
     }
 }
 
-// S-0603 claim 8, PLAN §4.7: a badly damaged own vehicle at home is recycled, a healthy one is not, and a harvester and an engineer are kept however damaged.
+// S-0603 claim 8, PLAN §4.7: a badly damaged own vehicle is recycled, a healthy one is not, and a harvester and an engineer are kept however damaged.
 #[test]
-fn badly_damaged_units_at_home_are_recycled() {
+fn badly_damaged_units_are_recycled() {
     let g = game(99);
     let (mut w, b) = scene(&g);
     let hurt = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 2, 10);
@@ -257,4 +257,120 @@ fn the_house_builds_one_grinder() {
         g.step();
     }
     assert!(count(&g.world) <= 1, "only one");
+}
+
+// S-0603 claims 1 and 9, PLAN §4.7: a controlled enemy harvester standing idle is recycled (only the house's own harvesters are kept), whatever the plan told it in the same think.
+#[test]
+fn a_controlled_enemy_harvester_is_recycled() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let clone = spawn(&mut w, Kind::Infantry, "CLONE", 0, 3, 9);
+    let foe = spawn(&mut w, Kind::Vehicle, "MINR", 1, 4, 9);
+    assert!(mind::take(&mut w, clone, foe));
+    settle(&mut w);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert_eq!(sent(&orders, foe, Behaviour::Eaten), Some(b), "{orders:?}");
+    assert_eq!(br.special_uses().grinds, 1);
+}
+
+// S-0603 claim 15, PLAN §4.7: the base defence gives no new order to a unit on its way into the grinder (a new order would end its trip), while a free unit near it is sent at the intruder.
+#[test]
+fn the_defence_leaves_a_unit_on_its_way_in() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let hurt = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 2, 10);
+    let fine = spawn(&mut w, Kind::Vehicle, "GUNR", 0, 4, 10);
+    w.obj_mut(hurt).unwrap().health /= 5;
+    settle(&mut w);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert_eq!(sent(&orders, hurt, Behaviour::Eaten), Some(b), "{orders:?}");
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    testkit::run(&mut w, 1);
+    spawn(&mut w, Kind::Vehicle, "GUNR", 1, 3, 2);
+    testkit::run(&mut w, 1);
+    let orders = br.think(&w);
+    let attacked = |who: ObjectId| {
+        orders.iter().any(|o| {
+            matches!(o, Order::Behaviour { actor, behaviour: Behaviour::Attack, .. } if *actor == who)
+        })
+    };
+    assert!(attacked(fine), "the defence is on: {orders:?}");
+    assert!(!attacked(hurt), "{orders:?}");
+}
+
+// PLAN §4.7: with every absorbing building full (two on their way fill BIOR), surplus infantry at home are recycled while money is short.
+#[test]
+fn surplus_infantry_when_the_absorber_is_full() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let bio = spawn(&mut w, Kind::Building, "BIOR", 0, -6, 6);
+    testkit::run(&mut w, 1);
+    for i in 0..2 {
+        let m = spawn(&mut w, Kind::Infantry, "WALKER", 0, -6 + i, 10);
+        glasnost_sim::orders::issue(
+            &mut w,
+            HouseId(0),
+            Order::Behaviour {
+                actor: m,
+                behaviour: Behaviour::Enter,
+                attack_move: false,
+                target: None,
+                dest: Some(Target::Object(bio)),
+            },
+        );
+    }
+    let men: Vec<ObjectId> = (0..glasnost_ai::absorber::KEEP as i32 + 1)
+        .map(|i| spawn(&mut w, Kind::Infantry, "WALKER", 0, i - 3, 12))
+        .collect();
+    w.houses[0].credits = LOW_MONEY / 2;
+    settle(&mut w);
+    let orders = brain(&w).think(&w);
+    let n = men
+        .iter()
+        .filter(|&&x| sent(&orders, x, Behaviour::Eaten) == Some(b))
+        .count();
+    assert_eq!(n, 1, "{orders:?}");
+}
+
+// PLAN §4.7: a badly damaged unit far from the grinder (away from home too) is first moved to the grinder's side by a click on the ground, then sent in from there.
+#[test]
+fn a_far_unit_is_moved_to_the_grinder_first() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let far = spawn(&mut w, Kind::Infantry, "WALKER", 0, 16, 6);
+    w.obj_mut(far).unwrap().health /= 5;
+    settle(&mut w);
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    let side = orders.iter().rev().find_map(|o| match o {
+        Order::Behaviour { actor, behaviour: Behaviour::Move, dest: Some(Target::Cell(c)), .. }
+            if *actor == far => Some(*c),
+        _ => None,
+    });
+    let g0 = w.obj(b).unwrap().pos.cell();
+    let side = side.unwrap_or_else(|| panic!("moved first: {orders:?}"));
+    assert!((side.x - g0.x).abs().max((side.y - g0.y).abs()) <= 4, "{side:?} by {g0:?}");
+    assert_eq!(br.special_uses().grinds, 0);
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+    }
+    let mut sent_in = false;
+    for _ in 0..40 {
+        for _ in 0..15 {
+            testkit::run(&mut w, 1);
+        }
+        let orders = br.think(&w);
+        if sent(&orders, far, Behaviour::Eaten) == Some(b) {
+            sent_in = true;
+            break;
+        }
+        for o in orders {
+            glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+        }
+    }
+    assert!(sent_in, "sent in once at the side");
 }

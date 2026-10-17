@@ -1183,7 +1183,9 @@ impl Brain {
             }
             let busy = matches!(o.target, Some(Target::Object(t))
                 if intruders.iter().any(|&(e, _)| e == t));
-            if busy {
+            // A unit on its way into a recycling building (S-0603) is left to go.
+            let bound = o.beh.current == Some(Behaviour::Eaten) || o.beh.queued == Some(Behaviour::Eaten);
+            if busy || bound {
                 continue;
             }
             if let Some(&(e, _)) = intruders

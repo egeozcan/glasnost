@@ -11,19 +11,25 @@
 //! - **grinds mind-controlled enemy units.** A controlled unit is consumed
 //!   as an object of the controlling house: the house is paid for it and
 //!   the controller's slot is freed for a new victim (claim 9). Every idle
-//!   controlled enemy vehicle is sent. Controlled infantry go to an
+//!   controlled enemy vehicle is sent, whatever else this think told it
+//!   (the recycle order comes later and replaces it). Controlled infantry go to an
 //!   absorbing building while one has room (`absorber`, which also frees the
 //!   slot and gives power), and to the grinder only when none has;
-//! - **grinds badly damaged units at home.** An idle own unit at home at or
+//! - **grinds badly damaged units.** An idle own unit at or
 //!   below [`WOUNDED_PERCENT`] of its strength, when the house has no
 //!   repair depot to send it to, is turned into money;
 //! - **grinds surplus infantry when short of money.** With no absorbing
-//!   building to take them, idle own infantry at home beyond
+//!   building that has room for them, idle own infantry at home beyond
 //!   [`crate::absorber::KEEP`] are sent, the cheapest first, while the
 //!   house's credits are below [`LOW_MONEY`].
 //!
-//! It never sends a harvester, a slave miner or a slave, an engineer, a
-//! spy, a controller or a unit with passengers, and every order is the
+//! A unit far from the grinder is first moved to its side with a click on
+//! the ground, then sent in from there. The brain's base defence leaves a
+//! unit on its way in alone.
+//!
+//! It never sends an own harvester, slave miner or slave, engineer or spy
+//! (a controlled enemy one standing idle is sent), nor a controller or a
+//! unit with passengers, and every order is the
 //! click a person gives on the building (the *recycle* cursor, S-0214 rows
 //! I26 and n2), so a switched-off, sold or enemy building is never chosen.
 //! It reads only the house's own objects and the rules a person may read,
@@ -52,6 +58,13 @@ pub const LOW_MONEY: i32 = 1000; // nocite: tuning of our own opponent
 
 /// The most units sent in one think.
 const PER_THINK: usize = 2; // nocite: tuning of our own opponent
+
+/// A unit farther than this many cells from the grinder is first moved to
+/// its side, [`SIDE`] cells off, and sent in from there.
+const NEAR: i64 = 12; // nocite: tuning of our own opponent
+
+/// How many cells off the grinder a far unit is first moved to.
+const SIDE: i32 = 4; // nocite: tuning of our own opponent
 
 /// The credits kept in hand beyond the grinder's cost, as a multiple of it.
 const RESERVE: i32 = 2; // nocite: tuning of our own opponent
@@ -119,20 +132,23 @@ fn free(w: &World, id: ObjectId) -> bool {
         return false;
     }
     let t = tech::type_of(o);
-    let kept = w.rules().unit(o.kind, o.type_index).is_some_and(|u| {
-        u.harvester || u.engineer || u.raw.agent.unwrap_or(false)
-    }) || scripted::is_slave_miner(w, t)
-        || slaves::is_slave(w, id)
-        || mind::controller(w, id).is_some()
-        || transport::count(w, id) > 0
-        || scripted::deploys_into_yard(w, o.kind, o.type_index);
+    // A controlled enemy harvester, engineer or the like does no work for
+    // the house while it stands idle, so only the house's own are kept.
+    let own_kind_kept = !mind::mind_controlled(w, id)
+        && (w.rules().unit(o.kind, o.type_index).is_some_and(|u| {
+            u.harvester || u.engineer || u.raw.agent.unwrap_or(false)
+        }) || scripted::is_slave_miner(w, t)
+            || slaves::is_slave(w, id)
+            || scripted::deploys_into_yard(w, o.kind, o.type_index));
+    let kept =
+        own_kind_kept || mind::controller(w, id).is_some() || transport::count(w, id) > 0;
     !kept && scripted::idle(w, id) && targeting::selectable(w, id)
 }
 
 impl Special {
     /// Recycling buildings: idle controlled enemy vehicles (and infantry
     /// when no absorbing building has room), then badly damaged own units
-    /// at home, then surplus own infantry at home while money is short,
+    /// then surplus own infantry at home while money is short,
     /// each to the nearest own recycling building, by the *recycle* click.
     pub(crate) fn grinders(
         &mut self,
@@ -146,12 +162,16 @@ impl Special {
         if buildings.is_empty() {
             return;
         }
-        // Units this think already gave an order to are left alone.
+        // Units this think already gave an order to are left alone, but for
+        // an idle controlled unit: the recycle order (later, so it replaces
+        // the other) turns it into money and frees its controller's slot.
         let ordered: Vec<ObjectId> = out.iter().filter_map(Order::actor).collect();
         let free: Vec<ObjectId> = own
             .iter()
             .copied()
-            .filter(|&id| !ordered.contains(&id) && free(w, id))
+            .filter(|&id| {
+                (!ordered.contains(&id) || mind::mind_controlled(w, id)) && free(w, id)
+            })
             .collect();
         let absorber_room = crate::absorber::room_left(w, house);
         let controlled: Vec<ObjectId> = free
@@ -160,17 +180,10 @@ impl Special {
             .filter(|&id| mind::mind_controlled(w, id))
             .filter(|&id| w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle) || !absorber_room)
             .collect();
-        let home = script.home(w);
-        let at_home = |id: ObjectId| {
-            home.is_some_and(|h| {
-                w.obj(id)
-                    .is_some_and(|o| dist2(o.pos.cell(), h) <= HOME_REACH * HOME_REACH)
-            })
-        };
         let mine: Vec<ObjectId> = free
             .iter()
             .copied()
-            .filter(|&id| !mind::mind_controlled(w, id) && at_home(id))
+            .filter(|&id| !mind::mind_controlled(w, id))
             .collect();
         let depot = own.iter().any(|&id| glasnost_sim::depot::is_depot(w, id));
         let wounded: Vec<ObjectId> = mine
@@ -185,18 +198,27 @@ impl Special {
             })
             .collect();
         let mut surplus: Vec<ObjectId> = Vec::new();
-        if crate::absorber::absorbers(w, house).is_empty()
-            && glasnost_sim::seams::available_credits(w, house) < LOW_MONEY
+        if !absorber_room && glasnost_sim::seams::available_credits(w, house) < LOW_MONEY
         {
             let cost = |id: ObjectId| {
                 w.obj(id)
                     .map_or(0, |o| production::cost_field(w, tech::type_of(o)))
             };
+            // Only at home: infantry gathering elsewhere are a wave forming.
+            let home = script.home(w);
+            let at_home = |id: ObjectId| {
+                home.is_some_and(|h| {
+                    w.obj(id)
+                        .is_some_and(|o| dist2(o.pos.cell(), h) <= HOME_REACH * HOME_REACH)
+                })
+            };
             let mut spare: Vec<ObjectId> = mine
                 .iter()
                 .copied()
                 .filter(|&id| {
-                    w.obj(id).is_some_and(|o| o.kind == Kind::Infantry) && !wounded.contains(&id)
+                    w.obj(id).is_some_and(|o| o.kind == Kind::Infantry)
+                        && !wounded.contains(&id)
+                        && at_home(id)
                 })
                 .collect();
             spare.sort_by_key(|&id| (cost(id), id));
@@ -227,6 +249,27 @@ impl Special {
                 })
                 .min_by_key(|&b| (distance(w, b, at), b));
             let Some(b) = pick else { continue };
+            if let Some(g) = w.obj(b).map(|o| o.pos.cell())
+                && dist2(g, at) > NEAR * NEAR
+            {
+                // Far off, it is first walked or driven to the grinder's
+                // side by a click on the ground, and sent in once there.
+                let (dx, dy) = (at.x - g.x, at.y - g.y);
+                let k = dx.abs().max(dy.abs()).max(1);
+                let side = CellXY::new(g.x + dx * SIDE / k, g.y + dy * SIDE / k);
+                let r = targeting::click(
+                    w,
+                    house,
+                    &[id],
+                    targeting::ClickOn::Cell(side),
+                    targeting::Modifiers::default(),
+                );
+                if !r.orders.is_empty() {
+                    out.extend(r.orders);
+                    sent += 1;
+                }
+                continue;
+            }
             if let Some(orders) = click_if(w, house, id, b, &[Action::Recycle]) {
                 out.extend(orders);
                 sent += 1;
