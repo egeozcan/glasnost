@@ -5334,6 +5334,14 @@
           ],
           "default": null
         },
+        "infantry_virus": {
+          "description": "`[General] InfantryVirus`, the virus-death animation name (S-0613\nclaims 2 and 3).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "ion_cannon_warhead": {
           "description": "`IonCannonWarhead` (S-0303 claim 18).",
           "type": [
@@ -6383,6 +6391,15 @@
             }
           ]
         },
+        "wind_direction": {
+          "description": "`[General] WindDirection`, the wind table index 0 … 7 (S-0613 claim\n12); absent −1.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "yuri_mind_control_sound": {
           "description": "`[AudioVisual] YuriMindControlSound`, the take-over sound (S-0601\nclaim 5).",
           "type": [
@@ -7171,6 +7188,38 @@
       "type": "object",
       "additionalProperties": false
     },
+    "ParticleSystemType": {
+      "description": "A particle-system type's fields (S-0613 Import mapping).",
+      "type": "object",
+      "properties": {
+        "behaves_like": {
+          "description": "`BehavesLike`: `gas`, `smoke`, `fire`, `spark` or `railgun`; absent\nfor no behaviour kind (no update).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "holds_what": {
+          "description": "`HoldsWhat`, the held particle type name; absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "lifetime": {
+          "description": "`Lifetime`, ticks; absent −1 (never times out).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
     "ParticleType": {
       "description": "A particle type's fields that its creation draws read (S-0202 claim 15\nand Import mapping).",
       "type": "object",
@@ -7192,6 +7241,41 @@
           "format": "int32",
           "default": null
         },
+        "damage": {
+          "description": "`Damage`, health points per hit before damage resolution (S-0613\nImport mapping; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "delete_on_state_limit": {
+          "description": "`DeleteOnStateLimit` (S-0613 Import mapping; absent no).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "end_state_ai": {
+          "description": "`EndStateAI`, the end stage as written (S-0613 Import mapping;\nabsent 0; reduced to a signed byte).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "max_dc": {
+          "description": "`MaxDC`, the damage interval in ticks (S-0613 Import mapping;\nabsent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "max_ec": {
           "description": "`MaxEC`: the lifetime field (absent 1).",
           "type": [
@@ -7200,6 +7284,28 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "next_particle": {
+          "description": "`NextParticle`, a particle type name (S-0613 Import mapping; absent\nor `<none>`: none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "next_particle_offset": {
+          "description": "`NextParticleOffset`, leptons per axis (S-0613 Import mapping;\nabsent 0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
         },
         "start_color1": {
           "description": "`StartColor1`, components 0 … 255 (absent black).",
@@ -7228,6 +7334,59 @@
           },
           "maxItems": 3,
           "minItems": 3
+        },
+        "start_frame": {
+          "description": "`StartFrame` (S-0613 Import mapping; absent 0; not added for gas\ndrawing, claim 15).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "start_state_ai": {
+          "description": "`StartStateAI`, the start stage as written (S-0613 Import mapping;\nabsent 0; the simulation reduces it to a signed byte).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "state_ai_advance": {
+          "description": "`StateAIAdvance`, the stage-advance period in ticks as written\n(S-0613 Import mapping; absent 4; reduced to a signed byte).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "translucency": {
+          "description": "`Translucency`, percentage points as written (S-0613 Import mapping;\nabsent 0; reduced to a signed byte for drawing, claim 16).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "warhead": {
+          "description": "`Warhead`, a warhead name (S-0613 Import mapping; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "wind_effect": {
+          "description": "`WindEffect`, the wind cadence divisor (S-0613 Import mapping;\nabsent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         }
       },
       "additionalProperties": false
@@ -9707,7 +9866,7 @@
           "default": true
         },
         "wind_southeast_short": {
-          "description": "Wind direction 3 pushes a gas particle 1 lepton in x instead of 2, unlike its mirror direction 5; off: Δx = 2 for direction 3. Not implemented yet (wave 2).",
+          "description": "Wind direction 3 pushes a gas particle 1 lepton in x instead of 2, unlike its mirror direction 5; off: Δx = 2 for direction 3.",
           "type": "boolean",
           "default": true
         },
@@ -9878,8 +10037,15 @@
             "$ref": "#/$defs/OverlayType"
           }
         },
+        "particle_systems": {
+          "description": "Particle-system types by type name (S-0613 Import mapping); the\nregistry `particle_systems` gives their order.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ParticleSystemType"
+          }
+        },
         "particles": {
-          "description": "Particle types by type name (S-0202 claim 15).",
+          "description": "Particle types by type name (S-0202 claim 15, S-0613 Import\nmapping).",
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/ParticleType"
