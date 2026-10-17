@@ -14,7 +14,9 @@
 //! then a second, and its death releases both; an unlimited controller
 //! taken past its overload counts pulses. S-0609 (gattling spin-up): a
 //! gattling vehicle and a gattling building fire at enemies and climb their
-//! stages; the vehicle's target removed, it spins down.
+//! stages; the vehicle's target removed, it spins down. S-0613 (gas
+//! clouds): a unit whose weapon kills with the virus death fires at enemy
+//! infantry; the deaths leave clouds that drift and hit what stands in them.
 //!
 //! Run with `cargo test --release -p glasnost-app --test m7a_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -51,6 +53,7 @@ const SCENES: &[Scene] = &[
     ("mind", mind_control),
     ("overload", mind_overload),
     ("gattling", gattling_spin),
+    ("gas", gas_clouds),
 ];
 
 #[test]
@@ -499,6 +502,112 @@ fn gattling_spin(lane: &mut Lane) {
         );
         lane.save("gattling-building");
     }
+}
+
+/// The first infantry type whose primary weapon's warhead kills with the
+/// virus death (infantry-death kind 8, S-0107 claim 17), and whether that
+/// warhead also names a particle system (S-0613 claim 4).
+fn virus_type(w: &World) -> Option<(String, bool)> {
+    let r = w.rules();
+    (0..r.infantry.len() as u32).find_map(|i| {
+        let u = r.unit(Kind::Infantry, i)?;
+        let p = u.combat.slots[0]?;
+        let h = r.combat.weapon(p).warhead?;
+        let wh = r.combat.warhead(h);
+        // spec: S-0107 claim 17 (infantry-death kind 8, the virus death)
+        (wh.inf_death == 8).then(|| (u.name.clone(), wh.particle.is_some()))
+    })
+}
+
+/// A human, armed infantry type that the virus death applies to (S-0613
+/// claim 2), for the enemy group.
+fn human_infantry(w: &World) -> Option<String> {
+    let r = w.rules();
+    (0..r.infantry.len() as u32)
+        .find(|&i| {
+            r.unit(Kind::Infantry, i).is_some_and(|u| {
+                u.combat.slots[0].is_some()
+                    && u.strength > 0
+                    && !u.raw.not_human.unwrap_or(false)
+                    && r.combat
+                        .weapon(u.combat.slots[0].unwrap())
+                        .warhead
+                        // spec: S-0107 claim 17 (infantry-death kind 8, the virus death)
+                        .is_none_or(|h| r.combat.warhead(h).inf_death != 8)
+            })
+        })
+        .map(|i| r.infantry[i as usize].name.clone())
+}
+
+/// S-0613 claims 2, 4, 5, 8 to 13: a virus unit of the local house is
+/// ordered (by the click a person gives) at enemy infantry standing in a
+/// row; each kill plays the virus death and its middle event puts clouds
+/// into the shared gas system; the clouds drift, sink to the ground and
+/// hit what stands in them. Counts clouds, hits and kills; three screens.
+fn gas_clouds(lane: &mut Lane) {
+    let w = lane.world();
+    let virus = virus_type(w);
+    let victim = human_infantry(w);
+    println!(
+        "virus type found: {}, its warhead names a particle system: {}, enemy infantry type found: {}, shared gas system: {}",
+        virus.is_some(),
+        virus.as_ref().is_some_and(|v| v.1),
+        victim.is_some(),
+        w.gas.shared.is_some()
+    );
+    let (Some((vname, _)), Some(iname)) = (virus, victim) else {
+        return;
+    };
+    let local = lane.local();
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let v = lane.spawn(Kind::Infantry, &vname, local, CellXY::new(spot.x - 3, spot.y));
+    let foes: Vec<ObjectId> = (0..4)
+        .map(|i| lane.spawn(Kind::Infantry, &iname, enemy, CellXY::new(spot.x + 1, spot.y - 1 + i)))
+        .collect();
+    lane.look_at(spot);
+    lane.ticks(4);
+    lane.save("gas-before");
+    let particles = |w: &World| glasnost_sim::gas::particles(w).count();
+    let mut most = 0;
+    let mut shot_cloud = false;
+    for (n, &f) in foes.iter().enumerate() {
+        if lane.world().obj(f).is_none_or(|o| !o.on_map) {
+            continue;
+        }
+        let sent = lane.order(local, v, ClickOn::Object(f));
+        println!("click on enemy infantry {n}: {sent} orders");
+        for _ in 0..400 {
+            lane.ticks(1);
+            most = most.max(particles(lane.world()));
+            if !shot_cloud && particles(lane.world()) >= 2 {
+                lane.ticks(6);
+                lane.save("gas-cloud");
+                shot_cloud = true;
+            }
+            if lane.world().obj(f).is_none_or(|o| !o.on_map) {
+                println!("enemy infantry {n} gone at tick {}", lane.world().tick);
+                break;
+            }
+        }
+    }
+    lane.ticks(60);
+    most = most.max(particles(lane.world()));
+    lane.save("gas-later");
+    let w = lane.world();
+    let s = lane.c.session.as_ref().unwrap();
+    let k = &s.loaded.live.as_ref().expect("a live game").counts;
+    println!(
+        "gas: particles now {}, most at once {most} (view {}), systems {}, virus animations playing {}, gas hits {}, kills {}; virus unit alive {}",
+        particles(w),
+        k.most_gas,
+        w.gas.systems.len(),
+        w.gas.anims.len(),
+        k.gas_hits,
+        k.kills,
+        w.obj(v).is_some_and(|o| o.on_map)
+    );
 }
 
 /// The first unit type (infantry, then vehicles) whose primary weapon has a

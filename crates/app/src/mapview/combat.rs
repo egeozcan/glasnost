@@ -302,6 +302,9 @@ pub enum Marker {
     /// A crate on the map (S-0520): a yellow box, our placeholder for the
     /// crate overlay's picture, which the view draws only from the map.
     Crate,
+    /// A gas particle (S-0613): a green cloud, our placeholder for the
+    /// particle's picture and translucency, which the view does not draw.
+    Gas,
 }
 
 /// Placeholder palette indices (our own colours).
@@ -482,6 +485,8 @@ fn marker_image(m: Marker) -> IndexedImage {
             IndexedImage::new(13, 13, px).expect("sized")
         }
         Marker::Marked => disc(20, 10, Some(880), ink::CYAN, ink::CYAN),
+        // A cloud twice as wide as high (S-0101 F1's ground projection).
+        Marker::Gas => disc(14, 7, None, ink::GREEN, ink::OUTLINE),
         Marker::Crate => {
             // A 13 × 11 box with an outline and a cross.
             let mut px = vec![0u8; 143];
@@ -589,6 +594,10 @@ pub struct Counts {
     pub kills: u64,
     /// Most projectiles in flight at once.
     pub most_in_flight: usize,
+    /// Hits that gas clouds dealt (S-0613 claim 13).
+    pub gas_hits: u64,
+    /// Most gas particles in the world at once (S-0613).
+    pub most_gas: usize,
 }
 
 /// A decoded overlay sprite frame: image, frame offset, canvas size.
