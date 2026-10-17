@@ -2,11 +2,11 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0150, Q-0151, Q-0193, Q-0267, Q-0285]
 supersedes: []
@@ -904,8 +904,7 @@ S-0701 owns the announcement-entry bindings and audio imports used by claim 5.
 ## Measurement scenarios
 
 All scenarios use the measurement setup with a skirmish on a small test map, the human against
-computer players, at game-speed index 2 and 800 × 600, with the director and mods off except for the named test
-files. Run each deterministic variant once; repeat void runs. Computer players are bystander computer players
+computer players, at game-speed index 2 and 800 × 600, with no engine add-on and no mods (the named test files of a scenario excepted). Run each deterministic variant once; repeat void runs. Computer players are bystander computer players
 (glossary), kept away from the observed area; a run is void when a computer player's own defeat,
 alliance or attack changes the events the scenario observes, and is then repeated. Every scenario
 in which the human gives an alliance order (V5 part c, V9) uses a test rules file that sets the
