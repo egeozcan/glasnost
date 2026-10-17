@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 53
+revision: 54
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2770,5 +2770,5 @@ scenario T6, part G.
 
 ## Questions for the project lead
 
-None. (The lead's decision of 2026-10-17 dropped the word for a measuring-machine add-on from every setup. The measurement setup here says "no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted)". S-0106's Measurement scenarios still say "director and mods off"; that needs the same wording as a cross-spec change to confirm at sign-off.)
+None. (The lead's decision of 2026-10-17 dropped the word for a measuring-machine add-on from every setup. The measurement setup here says "no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted)".)
 
