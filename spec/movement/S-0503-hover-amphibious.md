@@ -2,11 +2,11 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696]
 supersedes: []
@@ -724,7 +724,7 @@ the cited import specs' backing and confidence.
 
 ## Measurement scenarios
 
-Use stock data, director and mods off, game-speed index 2, 800 × 600, one human test house and
+Use stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game-speed index 2, 800 × 600 pixels, one human-controlled house and
 one bystander computer player outside the observed test area under the glossary's void rule.
 Use a purpose-made map with flat land, beach and water lanes, a bank with a traversable ramp,
 a high bridge, and a stock control centre with dependent hovering vehicles. Use scripted input
