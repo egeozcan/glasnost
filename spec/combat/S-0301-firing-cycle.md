@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1000,7 +1000,7 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   `quirks.shared_wave_slot` off it fires at once.
 - Magnetic control: named test map data supplies a magnetic-beam weapon with an ordinary,
   non-seizing warhead and a full delay shorter than the wave's remaining lifetime. Use a
-  stationary firer and durable target building, speed index 2, director and other mods off.
+  stationary firer and durable target building, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
   Keep the target unchanged and all other firing gates satisfied. Record shot ticks, grip
   presence and live wave count with tick-labelled capture and a read-only recorder, for three
   runs. Expected: no grip; repeated shots follow their claim-2 delays while the first wave
@@ -1068,7 +1068,7 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   fully visible; (d) the vehicle re-aims.
 
 - (e) Empty passenger carrier: use the named facing-test override of S-0501 scenario
-  AC11 on a small skirmish map, speed index 2, director and other mods off, with a
+  AC11 on a small skirmish map, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), with a
   bystander computer player outside the test area under the glossary's void rule.
   Place a controllable non-fighter aircraft loaded, then unload every passenger. Give
   it ample ammunition and a durable enemy ground target. Compare a fresh aircraft of
@@ -1107,7 +1107,7 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 - Starting-count part (Q-0060 question 1): a named test rules file sets a buildable vehicle,
   infantry and ungarrisoned defence building to maximum ammunition 4. Remove the initial field
   from every rules layer for those types. Use a small isolated skirmish test area, speed index 2,
-  director off and other mods off, with one bystander computer player kept outside the area
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), with one bystander computer player kept outside the area
   under the glossary's void rule. Repeat with an explicit initial field of −1, 0 and 6.
   also test maximum 0 with the initial field absent, and maximum −1 with initial field 0.
   Supply a single-shot ordinary weapon and a durable stationary enemy target in range.
@@ -1272,7 +1272,7 @@ is absent (the control).
   refused although the target is in range, so the vehicle does not make an ordinary shot and
   shows the behaviour S-0215 gives to *out of range*. Falsified if it makes an ordinary shot.
 
-- (f) Hidden targets (rank 4): a named test map, speed index 2, director and other mods off,
+- (f) Hidden targets (rank 4): a named test map, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
   one allied and one enemy bystander computer player outside the observed area under the
   glossary's void rule. Its override sections supply a self-cloaking target and an armed vehicle
   with two ordinary weapons whose signed damage-plus-ambient sums give positive, zero and
@@ -1303,7 +1303,7 @@ is absent (the control).
   if the 0.5 run shortens the delay.
 
 **F17. Upgrade pair with an empty secondary and animation delay (Q-0798).**
-- Setup: tiny skirmish test map, speed index 2, 800 × 600, director and other mods off,
+- Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
   one bystander computer player outside the test area under the glossary's void rule.
   Named map overrides supply a non-SAM, ungarrisoned host and an upgrade in position 1
   with a primary ordinary projectile weapon of burst count 2 and no secondary. Remove
@@ -1333,7 +1333,7 @@ is absent (the control).
 
 **F18. Non-shot charge-arrival delay (claim 19).**
 - Setup and procedure: use S-0519 scenario T13's named test map and override variants,
-  speed index 2, director and other mods off, a bystander computer player kept outside the
+  speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), a bystander computer player kept outside the
   observed area under the glossary's void rule. Run each variant three times. Compare
   successful, protected and duplicate-countdown arrivals with an ordinary second weapon,
   first at *k* = 0 with burst count 1, then with a retained *k* at least its burst count.
