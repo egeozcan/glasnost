@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -54,7 +54,7 @@ Terms used as defined in the glossary: *trigger*, *trigger action*, *cell tag*, 
 *country*, *human-controlled*, *local player*, *game start*, *game minute*, *type*, *type name*,
 *registry*, *registration index*, *weapon*, *warhead*, *cell*, *lepton*, *height level*,
 *scenario random stream* (with *draw* and *ranged draw*), *quirk switch*, *departure*, *importer
-warning*, *unspecified*, *measurement setup*, *recorder*. *Map trigger variable* is used as defined
+warning*, *unspecified*, *measurement setup*, *recorder*, *marked (particle system)*. *Map trigger variable* is used as defined
 in S-0009 claim 32. *House number* is used as defined in S-0009 (Terms): the house's place in the creation order, counting from 0. *Observer* is used as defined in S-0009 (Terms): a human participant whom the
 lobby sets to watch instead of play. Network games, and so how machines synchronise, are outside
 this spec. A claim whose result in the original depends on which machine it runs on says what our
@@ -1310,6 +1310,15 @@ are not part of I4's supported subset.
 | 127 | chrono flash | number slot; S-0201 claim 11, including its quirk rules, warnings and Import mapping |
 | 129 | set superweapon charge | number slot as superweapon type index, kind 11 second number slot as percentage, trigger owner house; S-0512 claim 14 |
 | 133 | reset superweapon charge | number slot as superweapon type index, trigger owner house; S-0512 claim 15 |
+
+The two particle-system actions are likewise outside I4's supported subset. They are parsed by I2
+like any action; their behaviour is specified in S-0616 claim 1 (Trigger actions), and nothing here
+adds to it. Their codes and parameter slots are these, in the form of the companion table above:
+
+| Code | Our name | Parameter and owning spec |
+|---|---|---|
+| 88 | create a particle system of a given type at a waypoint's cell centre | number slot as the particle-system type index, plus the waypoint slot (eighth action item); S-0616 claim 1 |
+| 89 | mark every particle system in a waypoint's cell (*marked (particle system)*) | waypoint slot only (eighth action item); number slot unused; S-0616 claim 1 |
 
 **No-hit destruction mapping (claim 19).** These are not new sale or pack-up event codes.
 
