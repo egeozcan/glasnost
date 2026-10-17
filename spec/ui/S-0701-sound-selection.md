@@ -2,11 +2,11 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0260, Q-0264, Q-0265, Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671]
 supersedes: []
@@ -30,8 +30,8 @@ The following are deferred, with no conformance rule or implied silence: complet
 attack/decay playback and draw totals; total infantry death-sound multiplicity across specialised
 death reactions; specialised movement-state and building-deploy response gates; alliance
 announcement selection; specialised superweapon activation bindings not listed here; and
-announcement eligibility for ownership-change causes other than the engineer captures tested
-in G5. The retained delayed-mode rules apply only to the explicitly described choices, not a
+announcement eligibility for ownership-change causes outside claim 39 (trigger and occupation
+changes, and passive new owners). The retained delayed-mode rules apply only to the explicitly described choices, not a
 complete replacement sequence. Q-0325 and Q-0329 remain partial answers. E3, F9, G5 and G6
 include exploratory work for deferred coverage; those parts are not backing for additional
 claims. Feature specs retain their independently stated rules. A future revision must settle
@@ -92,6 +92,10 @@ normalisation N of its Formulas F3. In addition:
 - **Needs-engineer flag.** S-0405 claim 8's building-type boolean, also used to distinguish
   claim 39's custom capture/tech-building-loss announcement branch from ordinary capture.
   This spec uses it only to select an announcement, not to define capture legality.
+- **Vehicle-like takeover.** The takeover of a vehicle-like building (S-0214 Terms) by an infantry
+  unit under S-0509 claim 17. S-0509 claim 12 lists it as requesting a capture announcement.
+- **Mind-control takeover and release.** The taking of a building by a mind controller (S-0601
+  claim 6) and its release back to its original owner (S-0601 claim 9).
 
 ## Behaviour
 
@@ -599,7 +603,7 @@ normalisation N of its Formulas F3. In addition:
     | unit repaired | S-0314 | F7, kind *unit repaired* |
     | unit promoted | S-0311 | none |
     | primary building selected, rally point set | the local player's matching action | none |
-    | building captured, tech building lost | ordinary engineer captures involving the local player under claim 39 | none |
+    | building captured, tech building lost | building ownership changes that request an announcement and involve the local player, under claim 39 | none |
     | structure garrisoned | an entry makes the occupant count 1 and the entering unit belongs to the local player, regardless of the building's owner (S-0508 claim 6); also requests the positional garrisoned sound at the entering unit's last position | none beyond claim 27 |
     | structure abandoned | the building-turn ownership change to the civilian house of S-0508 claim 8, when the owner losing the building is the local player; also requests the screen abandoned sound without radar-event throttling | announcement only when F7 creates a *garrison abandoned* event at the building's top-left cell |
     | cannot deploy here | S-0415, S-0406 and a refused placement (S-0411 claim 10, claim 24) | none |
@@ -779,7 +783,7 @@ normalisation N of its Formulas F3. In addition:
       exhaustive activation/detection eligibility are outside this revision's coverage.
       G6 explores those gaps; an unestablished binding is not proven silence.
       Feature eligibility remains with the feature specs. Claim 39 covers entry selection
-      on ordinary engineer captures only.
+      on the ownership changes of claim 39 only.
     - Entry names are matched ignoring case; an unknown name plays nothing.
     These are presentation rules; they do not end a game. Our engine keeps playing to the
     last alliance under S-0414 claim 6, even after the local player's defeat. The described
@@ -808,8 +812,11 @@ normalisation N of its Formulas F3. In addition:
     - Backing: `measurable` (A5)
     - Confidence: high
 
-39. **Capture announcement entry selection.** This claim covers ordinary engineer captures
-    between non-passive player houses, with the local player gaining or losing the building.
+39. **Capture announcement entry selection.** This claim covers building ownership changes whose
+    cause requests a capture or loss announcement: engineer captures and vehicle-like takeovers, which
+    S-0509 claim 12 lists, and the mind-control takeover and release of a building (S-0601 claims 6 and
+    9), which S-0509 claim 12 lists once the named change in Changes for other specs is made. The local player gains or loses the building and the new owner's
+    country is not passive. The entry choice below is the same for every such cause.
     A building whose type has the needs-engineer flag (S-0405 claim 8) uses its imported capture
     announcement when its new owner is the local player. With no capture announcement, this
     branch is silent: it does not fall back to the ordinary building-captured entry. Losing
@@ -818,10 +825,15 @@ normalisation N of its Formulas F3. In addition:
     ownership-change announcement, not its imported custom capture entry. These alternatives
     do not depend on the local player's faction; their samples still use claim 26's voice set.
     The imported custom reference is an announcement entry, never a sound entry or a sample.
-    Passive transfers and other ownership-change causes are outside this claim's coverage.
-    Their feature specs must establish eligibility before these bindings can be extended to them.
-    - Backing: `measurable` (G5) for ordinary engineer captures
-    - Confidence: high (entry selection and missing-custom silence)
+    Ownership-change causes that S-0509 claim 12 does not list as requesting an announcement
+    (trigger and occupation changes) and passive new owners are outside this claim's coverage.
+    - Backing: `measurable` (G5) for engineer captures, for the mind-control takeover and release (MC9) and
+      for vehicle-like takeovers (S-0509 scenario E12's setup as a G5 fixture); eligibility itself is stated
+      by S-0509 claim 12 and S-0601 claims 6 and 9. S-0509's own scenario E14 does not exercise vehicle-like
+      takeovers, so that case rests on G5.
+    - Confidence: high (engineer-capture entry selection and missing-custom silence); medium (mind-control
+      entry selection, because its eligibility depends on the pending S-0509 claim 12 change; vehicle-like
+      entry selection, because its G5 fixture is proposed, not run)
 
 ### Request coverage and remaining limits
 
@@ -1289,8 +1301,9 @@ slot selects the following kind. These are map input-format values, not program 
 | 16 | ally attacked |
 
 The custom capture entry uses the announcement sample-name, separate `.wav` file and voice
-volume rules of claims 26, 34 and 35, not the sound-entry bank. Claim 39 covers ordinary
-engineer captures between non-passive player houses only. These rows do not define a
+volume rules of claims 26, 34 and 35, not the sound-entry bank. Claim 39 covers the ownership
+changes its scope names (engineer captures, vehicle-like takeovers, and the mind-control takeover and
+release), where the new owner is not passive. These rows do not define a
 universal ownership-change announcement.
 
 In the key table below, a plus sign joins the two quoted spelling fragments with no separator.
@@ -2052,8 +2065,14 @@ not requested entry. A generic fallback in the flagged/missing-custom control, c
 on the unflagged control or different entry on an eligible event falsifies claim 39.
 Void a run when capture does not occur or a competing announcement masks request observation.
 Ownership changes that the recorder establishes as ineligible are inconclusive for entry
-selection, not evidence that an entry binding is absent. Special ownership-changing abilities
-remain exploratory: record their eligibility separately rather than extrapolating this capture test.
+selection, not evidence that an entry binding is absent. For a mind-control takeover and release of a
+flagged and an unflagged building (S-0601 scenario MC9), the same expected entries apply; record
+them as a separate fixture from the engineer capture.
+For a vehicle-like takeover, the same expected entries apply under S-0509 scenario E12's setup (a
+test-map override gives a 1 × 1 building type an undeploy-into vehicle, and a vehicle thief takes it),
+with the needs-engineer flag on and off, recorded as a further separate fixture. As in the base control,
+the local player's vehicle thief takes a bystander's building, and a named bystander vehicle thief then
+takes it back; that thief is exempt from the observed-area void rule.
 Exploratory extension, outside claim 39: transfer an own building to a passive house, with
 flagged and unflagged types, using S-0011 claim 24's ownership-change trigger. Compare an
 otherwise matching transfer to a non-passive house. Investigate the hypothesis that a passive
@@ -2165,6 +2184,12 @@ The no-body quirk is a particular tested exception, not a general bad-data rule.
 covers lethal-damage reactions, not sale, crushing or script removal.
 
 ## Changes for other specs
+
+Mind-control announcement eligibility (claim 39):
+- S-0509 claim 12: list the mind-control takeover and release of a building among the building
+  ownership changes that request a capture or loss announcement, under the same new-owner condition
+  (the new owner's country is not passive), as S-0601 claims 6 and 9 already ask for. Confirm at
+  joint sign-off.
 
 Q-0264 companion import clarification:
 - S-0109 Import mapping: include the animation start-sound reference and stop-sound
