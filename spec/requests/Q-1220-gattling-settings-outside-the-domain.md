@@ -1,9 +1,9 @@
 ---
 id: Q-1220
 title: Gattling spin settings outside the supported domain
-status: open
+status: answered
 related: [S-0609]
-answered-by: []
+answered-by: [S-0609]
 ---
 
 ## Need

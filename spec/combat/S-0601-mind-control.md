@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -101,8 +101,7 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
 - **One-time and all-carriers.** The repeat types 0 and 1 of a tag definition (S-0011, Terms and
   claim 10).
 - **Deploy readiness.** Whether an object can carry out a deploy now, by its kind (S-0214, Terms).
-- **House-order position.** The place of a house in the game's house order (S-0009 claim 19),
-  counted from zero.
+- **House number.** A house's place in the creation order, counting from 0 (S-0009, Terms).
 
 The glossary also defines *trigger*, used here.
 
@@ -938,20 +937,20 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
 - **MC14. Attack events and the overload turn** (claims 5 and 16). Part a (claim 5): on a named
   test map attach one repeating tag (repeat type 2, which no raise removes) to a B tank. The tag
   carries two triggers: one on event 6 and one on
-  event 44 whose value is A's house-order position, each setting a different local variable and playing a different
-  sound; add a third trigger on event 44 with C's house-order position. Fire a takeover shot from A's
+  event 44 whose value is A's house number, each setting a different local variable and playing a different
+  sound; add a third trigger on event 44 with C's house number. Fire a takeover shot from A's
   Yuri Clone. Expected: the event-6 effects, then the event-44 effects, in that order and
   both before the tank changes owner; the C-valued trigger never fires. Repeat with a tank that is
   put under protection after the shot is launched, so that the landing test refuses it: both events
   still fire in the same order and no takeover happens. Repeat with the
   event-44 value −1, then with a player-position value, then with the registration index of the
-  country A plays when that differs from A's position: never fires in any of the three. Repeat
-  with the value one above and one below A's position: never fires. A firing for any of these, or
-  no firing for A's position, falsifies the judging rule. A position counted from one, or from any other base, would show as the one-above or one-below value firing. Repeat twice with an event-6
+  country A plays when that differs from A's house number: never fires in any of the three. Repeat
+  with the value one above and one below A's house number: never fires. A firing for any of these, or
+  no firing for A's house number, falsifies the judging rule. A number counted from one, or from any other base, would show as the one-above or one-below value firing. Repeat twice with an event-6
   trigger action that changes the tank's owner, to A in the first run and to C in the second.
   Expected: with the owner changed to A the takeover is refused, since the owner is the controller's
   house; with it changed to C the takeover lands, the tank becomes A's, and its original owner is C.
-  In both runs the event-44 trigger with A's position still fires and the C-valued one does not,
+  In both runs the event-44 trigger with A's house number still fires and the C-valued one does not,
   since the value is judged against the causing object's owner, not the target's. A trigger action
   that names the triggering house (house value 9013) has no effect in either event's trigger. Any
   other result falsifies the order or the cause rule. Never use a one-time event-6 trigger on the oracle: the

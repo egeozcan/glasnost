@@ -2,13 +2,13 @@
 id: S-0609
 title: Gattling spin-up
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
-requests: []
+requests: [Q-1220]
 supersedes: []
 ---
 
@@ -278,8 +278,12 @@ claim 12. Sound playback and the report-variant rule are S-0701 claims 13, 14 an
 For stage counts 2 through 6, all spin arithmetic uses signed 32-bit integers, not floating
 point. F1 and F2 have no
 fractional operations and require no rounding. Their stated non-negative results assume
-non-negative amounts and thresholds and that products, sums, differences and elapsed counts
-remain in the signed 32-bit range; overflow inputs are outside these formulas' supported domain. *s* is the stage and *v* the spin value before the
+non-negative amounts and thresholds. Out-of-domain settings and results are handled by the two
+proposed rules of Edge cases (negative settings used as 0, saturation at 2³¹ − 1), which are
+pending the project lead's decision (Questions for the project lead). Under them F1, F2 and F4 see
+non-negative inputs, and every product, sum and elapsed count they form lies in the range 0 to
+2³¹ − 1. The v_max of F3 is not clamped by its formula; the stored value stops at the bound, as
+Edge cases (saturation) says. *s* is the stage and *v* the spin value before the
 update, *s*′ and *v*′ after it. *T*ₖ are the thresholds in force (Terms).
 
 **F1. Spin-up update with multiplier *m*** (claim 2).
@@ -334,6 +338,7 @@ would end at 1, so the order is observable.)
 | Largest stage count supported | 6 | stages | Import mapping and Edge cases |
 | Stage rise or fall per update | at most 1 | stage | Claims 2, 3 |
 | Draws per spin sound start | 1 | raw values, unsynchronised stream | Claim 13 |
+| Spin arithmetic saturation bound | 2³¹ − 1 | integer: a count of spin-value units for *v* and the spin products, ticks for the elapsed-tick count *c* | Formulas (preamble) and Edge cases (saturation), proposed |
 
 ## State and ordering
 
@@ -379,8 +384,9 @@ Ordering consequences:
 
 - **Stage count 0 or 1 from creation.** When no earlier layer populated thresholds, they remain
   0. The value never grows and the stage stays 0. Spin-up updates still request sound from slot 0
-  (claim 13). Reducing an earlier layer's stage count below 2 while retaining its thresholds is
-  outside the supported domain; no result is established here.
+  (claim 13). A later layer that lowers the stage count below 2 after an earlier layer populated
+  thresholds is outside the supported domain; no result is established here (Questions for the
+  project lead).
 - **Elite rank without elite thresholds.** All elite thresholds are 0. An elite object's value then
   never grows (cap 0), but its stage rises by one at every spin-up update (the value before the
   update is always at least 0) up to *N* − 1, and never falls (no value is below 0). So such an
@@ -398,10 +404,23 @@ Ordering consequences:
   can give corrupted settings or fail, with no safe specified result. Our engine reads at most
   six stages: a stage count above 6 is used as 6, and the importer warns.
   Stock data does not reach this case.
-- **Negative stage count, amounts or thresholds, and arithmetic overflow.** Outside the
-  supported arithmetic domain above. No result is established here; these inputs must not be
-  interpreted through F1 or F2. The importer warns; their deterministic handling remains an
-  open design question.
+- **Negative settings are used as 0** (proposed engine rule, no quirk switch, pending the project
+  lead's decision; confidence: high that stock data never reaches it; backing: `unmeasured`, because
+  the original's result for such data is not observed and the rule is a design choice for data
+  outside the original's supported domain). A negative stage count, spin-up amount, spin-down amount
+  or threshold is used as 0, and the importer warns for each such imported value. An integer that
+  S-0003 claim 4 wraps into a negative number is used as 0 in the same way; this is also a topic-spec
+  override of the wrap that S-0205 claim 1 gives such an integer. The clamp applies to
+  the imported value itself, so a later layer that omits the key keeps the 0, not the negative
+  value.
+- **Saturation** (proposed engine rule, no quirk switch, pending the project lead's decision; same
+  confidence and backing; the bound is in Constants). Every spin product (*u* × *m*, *d* × *m*),
+  every sum (*v* + *u* × *m*) and the building elapsed-tick count *c* of F4 saturates: a result
+  above 2³¹ − 1 is 2³¹ − 1. Nothing wraps: this is a topic-spec override of S-0205 claim 1, which
+  makes an out-of-range integer result wrap in every spec that does not say otherwise, and whose
+  overflow case for the original is `unmeasured`. No lower bound is reached because all inputs are
+  non-negative. Once *v* has saturated, F1 leaves it unchanged, because it is at or above any threshold.
+  Once *c* has saturated it stays there until its next reset.
 - **`quirks.gattling_zero_spin_down_empties`** (default: on, the original). A spin-down update whose
   amount *d* × *m* is 0 sets the spin value to 0 at once (claims 3 and 9). With a spin-down amount of
   0 an object therefore loses its whole value at its first spin-down update; it then loses at
@@ -430,7 +449,10 @@ Ordering consequences:
   the earlier one.
 - The numbered threshold keys are read only when the type's gattling flag is set and its stage count
   is at least 2, for *k* = 1 … *N* (at most 6 in our engine, Edge cases). A layer that does not
-  meet this condition leaves the thresholds held from earlier layers unchanged (initially 0).
+  meet this condition leaves the thresholds held from earlier layers unchanged (initially 0). Which
+  thresholds a type uses when a later layer lowers its stage count below 2 is an open question
+  (Questions for the project lead). Negative values of the stage count, *u*, *d* and the thresholds
+  are used as 0, with an importer warning for each (Edge cases, proposed rule).
 - The weapon slots per stage (`Weapon`*k* and `EliteWeapon`*k*) are S-0308's.
 
 ## Measurement scenarios
@@ -621,6 +643,17 @@ attacker's turret at the start. Record per run the tick and damage of every hit 
 
 ## Questions for the project lead
 
-- Choose deterministic handling for negative spin settings, arithmetic overflow and a layered
-  reduction to fewer than two stages after thresholds were populated. These inputs are not covered
-  by the supported formulas; no behaviour is proposed as verified.
+These answer Q-1220. No decision is recorded yet, so the first two proposals above stay proposals.
+
+1. Negative stage count, spin-up amount, spin-down amount or threshold: use as 0 with an importer
+   warning (proposed), reject at import, or run through F1 and F2 as written. Whether this is a
+   *departure* in the glossary's sense is also the lead's call, since the original's result is
+   unobserved rather than known to be undefined.
+2. Arithmetic leaving the signed 32-bit range: saturate at 2³¹ − 1 (proposed), wrap, or stop growth
+   at some other bound.
+3. A later rules layer lowers the stage count below 2 after an earlier layer, with the flag set and
+   at least 2 stages, populated the thresholds. Either the held thresholds are used as imported
+   (this follows S-0006 claim 3, which keeps a type section's held value for a key a layer omits, and
+   gives a spin cap from the earlier layer's numbers), or all are used as 0, as for a type that never
+   had 2 stages (this would need S-0006 claim 3 and the glossary's *rules layer* entry to name an
+   exception for these keys). No result is established here.
