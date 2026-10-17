@@ -28,6 +28,7 @@ pub mod fixture;
 pub mod fixture_m6c;
 pub mod fixture_m7a;
 pub mod game;
+pub mod gattling;
 pub mod jumpjets;
 pub mod linked;
 pub mod memory;
