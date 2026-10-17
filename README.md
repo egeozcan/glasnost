@@ -25,8 +25,12 @@ The simulation is deterministic: integers only and one seeded random stream. Nat
 
 **M6b (second wave of M6) adds** hover and amphibious movement over water, transports (units board, ride and unload; the opponent ferries infantry across water), bridges (destruction from the hut, collapse, repair by an engineer), cloaking and stealth (cloaked units, cloak fields, sensors), walls and gates, the teleporting locomotor, the repair depot and the ship-repair yard, the superweapons (nuclear strike, weather storm, iron curtain, chronosphere, force shield, spy plane and paradrop, with the sidebar icons, aiming and radar launch), parachutes and paradrops, the remaining multiplayer map trigger actions, and animation playback. The opponent uses transports and every superweapon kind it can aim, hover units on water maps, and repair depots. Aircraft cast their shadow on the ground.
 
-**Not there yet (later M6 parts and beyond):**
-- garrisons, engineers and capture, spies, jumpjets, crates and the other M6c abilities; psychic and genetic superweapons;
+**M6c (last part of M6) adds** garrisons (infantry occupy civilian buildings and fire from them, and are evicted), engineers capturing buildings, spies infiltrating them, tech buildings (captured for their income and effects), jumpjet infantry and vehicles (they rise from their factory, fly and land), deployable units (in-place deploy, deploy-fire vehicles, deployed infantry), radiation fields, chrono weapons (temporal erasure), linked weapons (prism support beams and chargers), terror weapons (planted bombs, charges, suicide attacks, attack animals, air-strike designation) and crates with their power-ups. The opponent uses every one of these the way a person could, sets rally points on its barracks, and builds every unit class its side can build, jumpjet units included.
+
+**M6 is done.** In the local lane our AI plays itself to a winner on every stock map run (0, 2, 3, 5, 6, 7 and 8, the naval maps 0, 3 and 5 included), Allied against Allied, Allied against Soviet and Soviet against Soviet, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game that exercises every M6c ability, natively and in WebAssembly.
+
+**Not there yet (M7 and beyond):**
+- mind control, psychic and genetic superweapons, and the other M7 abilities;
 - multiplayer over the network.
 
 ## You need your own copy of the game
