@@ -2,11 +2,11 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0986]
 supersedes: []
@@ -710,11 +710,11 @@ turns, rather than after timed bomb detonations. No corresponding correction is 
 
 ## Measurement scenarios
 
-All scenarios use stock data, director and mods off, on a small flat skirmish map at game speed
+All scenarios use stock data, no engine add-on and no mods (the named test files of a scenario excepted), on a small flat skirmish map at game speed
 index 2 and 800×600. Use one local player and an enemy bystander computer player kept away
 from the observed area under the glossary's void rule. Run each variant three times. Record
 video, ticks, health, kills and experience with a read-only recorder. Scripted input may time
-orders. Use the unit arena or bench only with the stock executable. Named test data below
+orders. Use only the stock executable, with the read-only recorder and scripted input that the measurement setup allows. Named test data below
 means override sections in the temporary map `S-0519-tests.map`, removed after the run,
 only the named fields differ from stock. Any result inconsistent with a variant's expected
 result falsifies that part of its claim.
