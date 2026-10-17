@@ -21,6 +21,10 @@
 //!   sides (each player the first open country of its side) and writes
 //!   `local-lane/ai-sides.txt`; `GLASNOST_AI_SIDES=a,b` plays only that
 //!   pair of sides (`a,a`: the first two open countries of side a).
+//! - `GLASNOST_GAME_DIR=<install> glasnost-headless side-audit [side] [map
+//!   index] [seed]`: every type the side can build, its flags, and a sandbox
+//!   game that offers, builds and places or releases each in turn; kinds,
+//!   flags and ticks only, written to the git-ignored `local-lane/side-audit.txt`.
 //! - `GLASNOST_GAME_DIR=<install> glasnost-headless triggers [index …]`: the
 //!   map trigger event and action codes every map of the install uses
 //!   (S-0011), with the listed map indices' own counts; codes and counts
@@ -127,6 +131,36 @@ fn main() -> ExitCode {
                         && std::fs::write(out.join(file), &report).is_ok()
                     {
                         println!("wrote local-lane/{file} (git-ignored; never commit it)");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless: could not read the install ({:?})",
+                        e.kind()
+                    );
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some("side-audit") => {
+            let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+                eprintln!("glasnost-headless side-audit: set {GAME_DIR_VAR} to an install folder");
+                return ExitCode::from(2);
+            };
+            match glasnost_tools::side_audit::run(
+                std::path::Path::new(&dir),
+                arg(&args, 1, 2),
+                arg(&args, 2, 0),
+                arg(&args, 3, 7),
+            ) {
+                Ok(report) => {
+                    print!("{report}");
+                    let out = std::path::Path::new("local-lane");
+                    if std::fs::create_dir_all(out).is_ok()
+                        && std::fs::write(out.join("side-audit.txt"), &report).is_ok()
+                    {
+                        println!("wrote local-lane/side-audit.txt (git-ignored; never commit it)");
                     }
                     ExitCode::SUCCESS
                 }

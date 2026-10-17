@@ -250,7 +250,7 @@ async fn run_async(
 
 /// The open countries: those that are not passive and not the neutral or
 /// special house's, with their registration indices.
-fn countries(rules: &SimRules) -> Vec<(u32, String)> {
+pub(crate) fn countries(rules: &SimRules) -> Vec<(u32, String)> {
     rules
         .country_names
         .iter()
@@ -517,6 +517,14 @@ fn play_ai(
                 p.get(2)?.parse().ok()?,
             ))
         });
+    // `GLASNOST_AI_LINES=h`: every item house h starts or loses on its
+    // production lines (tick, line kind, unit class or building, cost,
+    // credits), and every 300 ticks a still item's progress.
+    let lines_of: Option<u8> = std::env::var("GLASNOST_AI_LINES")
+        .ok()
+        .and_then(|v| v.trim().parse().ok());
+    let mut line_items: BTreeMap<String, Option<(glasnost_sim::econ::TypeRef, i32)>> =
+        BTreeMap::new();
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -524,6 +532,9 @@ fn play_ai(
     while game.world.tick < max_ticks {
         game.step();
         let w = &game.world;
+        if let Some(h) = lines_of {
+            print!("{}", line_changes(w, HouseId(h), &mut line_items));
+        }
         classes(w, &starting, &mut g.offered, &mut g.made);
         // The effects pile up when nobody drains them: count the new ones.
         for e in w.effects.iter().skip(drained) {
@@ -1185,7 +1196,7 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
 /// The class of a unit type for the lane's coverage line: the first of
 /// harvester, engineer, transport, jumpjet, ship, hover, teleporter,
 /// aircraft, deployer, armed, unarmed that fits.
-fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
+pub(crate) fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
     let Some(u) = w.rules().unit(kind, index) else {
         return "unknown";
     };
@@ -1212,6 +1223,73 @@ fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
     } else {
         "unarmed"
     }
+}
+
+/// The lines of `GLASNOST_AI_LINES`: what changed on house `h`'s production
+/// lines since the last call (`items`: per line index its last item type
+/// and progress). Classes and counts only.
+fn line_changes(
+    w: &World,
+    h: HouseId,
+    items: &mut BTreeMap<String, Option<(glasnost_sim::econ::TypeRef, i32)>>,
+) -> String {
+    let mut s = String::new();
+    let what = |t: glasnost_sim::econ::TypeRef| {
+        if t.kind == Kind::Building {
+            format!(
+                "building {:?}",
+                role_of(w, t).map_or("other".into(), role_name)
+            )
+        } else {
+            format!("{:?} {}", t.kind, unit_class(w, t.kind, t.index))
+        }
+    };
+    let credits = w.houses[usize::from(h.0)].credits;
+    for l in &w.econ.lines.lines {
+        if l.house != h {
+            continue;
+        }
+        let i = format!("{:?}", l.kind);
+        let now = l.item.as_ref().map(|it| (it.t, it.progress));
+        let before = items.get(&i).copied().flatten();
+        match (before, now) {
+            (Some((a, _)), Some((b, _))) if a == b => {
+                if w.tick % 300 == 0 {
+                    let it = l.item.as_ref().expect("an item");
+                    let _ = writeln!(
+                        s,
+                        "lines tick {} line {i}: {} progress {} waiting {} credits {credits} queue {}",
+                        w.tick,
+                        what(b),
+                        it.progress,
+                        it.waiting,
+                        l.queue.len()
+                    );
+                }
+            }
+            (b, n) if b.map(|x| x.0) != n.map(|x| x.0) => {
+                if let Some((a, p)) = b {
+                    let _ = writeln!(
+                        s,
+                        "lines tick {} line {i}: ended {} at progress {p}",
+                        w.tick,
+                        what(a)
+                    );
+                }
+                if let Some((t, _)) = n {
+                    let _ = writeln!(
+                        s,
+                        "lines tick {} line {i}: started {} credits {credits}",
+                        w.tick,
+                        what(t)
+                    );
+                }
+            }
+            _ => {}
+        }
+        items.insert(i, now);
+    }
+    s
 }
 
 /// Counts, per player house, the occasions for charges (S-0518) and

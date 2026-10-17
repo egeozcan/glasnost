@@ -762,6 +762,14 @@ fn sends_damaged_vehicles_to_a_depot() {
 /// (its 3 × 3 deployed form, not on the sidebar); MINR is no longer offered.
 /// Invented values.
 fn slave_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
+    std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &slave_ruleset(),
+        "synthetic-skirmish",
+    ))
+}
+
+/// The ruleset behind [`slave_rules`].
+fn slave_ruleset() -> glasnost_rules::schema::Ruleset {
     use glasnost_rules::sim::{BuildingType, LocomotionClass, Locomotor, UnitType};
     let mut r = fixture::ruleset();
     let group = |e: &mut glasnost_rules::sim_econ::EconFields| {
@@ -827,7 +835,7 @@ fn slave_rules() -> std::sync::Arc<glasnost_sim::rules::SimRules> {
         .entry("buildings".into())
         .or_default()
         .push("SMB".into());
-    std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-skirmish"))
+    r
 }
 
 // A side whose only gatherer is a slave miner builds one, sends it to a
@@ -912,6 +920,71 @@ fn a_slave_miner_side_earns_income() {
         }
         false
     });
+}
+
+// spec: S-0402 claim 14 (a slave miner acts as its slaves' refinery, whether it is a vehicle or
+// deployed): on a side whose only refinery is the slave miner's deployed building, a house whose
+// slave miner has packed up and drives orders no new refinery building; with no slave miner, it
+// orders one.
+#[test]
+fn a_moving_slave_miner_stands_for_the_refinery() {
+    let mut r = slave_ruleset();
+    // The slave miner's building is the side's refinery on the sidebar;
+    // the fixture refinery is another side's.
+    r.sim
+        .buildings
+        .get_mut("PROC")
+        .expect("fixture refinery")
+        .owner = Some(vec!["Nowhere".into()]);
+    let fixture_yard = r.sim.buildings["YARD"].owner.clone();
+    let smb = r
+        .sim
+        .buildings
+        .get_mut("SMB")
+        .expect("slave miner building");
+    smb.owner = fixture_yard;
+    smb.tech_level = Some(1);
+    smb.cost = Some(1500);
+    smb.econ.refinery = Some(true);
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "slave-refinery"));
+    let map = fixture::map();
+    let smb_t = |w: &World| glasnost_sim::econ::TypeRef {
+        kind: Kind::Building,
+        index: w.rules().index_of(Kind::Building, "SMB").expect("SMB"),
+    };
+    let wants_refinery = |with_miner: bool| {
+        let mut w = glasnost_sim::load::new_game(
+            rules.clone(),
+            &map,
+            fixture::catalogue(),
+            &fixture::setup(5),
+        )
+        .expect("loads");
+        for id in of(&w, 0, "MCV") {
+            objects::remove(&mut w, id);
+        }
+        let at = |dx: i32, dy: i32| fixture::at(dx, dy);
+        testkit::spawn(&mut w, Kind::Building, "YARD", 0, at(-12, 0), 0);
+        testkit::spawn(&mut w, Kind::Building, "POWR", 0, at(-12, 5), 0);
+        if with_miner {
+            testkit::spawn(&mut w, Kind::Vehicle, "SMV", 0, at(-8, 8), 0);
+        }
+        // One think period, so that the power totals count the new plant.
+        testkit::run(&mut w, glasnost_ai::scripted::THINK_PERIOD);
+        let t = smb_t(&w);
+        let orders = Brain::new(&w, &map, HouseId(0)).think(&w);
+        orders
+            .iter()
+            .any(|o| matches!(o, Order::Build { what } if *what == t))
+    };
+    assert!(
+        wants_refinery(false),
+        "no slave miner: the refinery is built"
+    );
+    assert!(
+        !wants_refinery(true),
+        "a moving slave miner stands for the refinery"
+    );
 }
 
 /// `n` free land cells around `c`, nearest first.

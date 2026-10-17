@@ -26,6 +26,7 @@ pub mod crates;
 pub mod deployers;
 pub mod fixture;
 pub mod fixture_m6c;
+pub mod fixture_m7a;
 pub mod game;
 pub mod jumpjets;
 pub mod linked;

@@ -27,7 +27,9 @@
 //!    nearest the explored water, so that the base grows toward it;
 //! 4. keep the plan's harvester count, and send idle or resting harvesters
 //!    to harvest; a slave miner counts as a harvester (and, deployed, its
-//!    building too), needs no refinery, and is sent to harvest at the
+//!    building too), needs no refinery and stands for one (so a house
+//!    whose slave miners have all packed up to move on orders no new
+//!    refinery building), and is sent to harvest at the
 //!    nearest explored resource cell, the order a person gives it;
 //! 5. once the harvesters are kept, build army units (one type per kind:
 //!    vehicles, infantry, aircraft; the type it has fewest of, in turn on
@@ -284,7 +286,7 @@ pub(crate) fn is_slave_miner(w: &World, t: TypeRef) -> bool {
 
 /// Whether type `kind`/`index` is a vehicle that deploys into a
 /// construction yard (a slave miner deploys too, but into its own building).
-pub(crate) fn deploys_into_yard(w: &World, kind: Kind, index: u32) -> bool {
+pub fn deploys_into_yard(w: &World, kind: Kind, index: u32) -> bool {
     deploy::deploys_into(w, kind, index).is_some_and(|b| {
         w.rules()
             .buildings
@@ -294,7 +296,7 @@ pub(crate) fn deploys_into_yard(w: &World, kind: Kind, index: u32) -> bool {
 }
 
 /// Whether an object is a construction yard (a factory of buildings).
-pub(crate) fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
+pub fn is_yard(w: &World, o: &glasnost_sim::world::Object) -> bool {
     o.kind == Kind::Building
         && w.rules()
             .buildings
@@ -490,6 +492,20 @@ impl Script {
                 w.obj(id).is_some_and(|o| o.kind == Kind::Building) && slaves::is_master(w, id)
             })
             .collect()
+    }
+
+    /// Whether the house has a refinery for the plan: a refinery building,
+    /// or a slave miner on the move, which acts as its slaves' refinery
+    /// whether it is a vehicle or deployed (S-0402 claim 14). A person
+    /// whose slave miners have packed up to move on does not build another
+    /// refinery for that.
+    pub(crate) fn has_refinery(&self, w: &World) -> bool {
+        // spec: S-0402 claim 14 (a slave miner acts as its slaves' refinery as a vehicle too)
+        !self.of_role(w, Role::Refinery).is_empty()
+            || self.own(w).into_iter().any(|id| {
+                w.obj(id)
+                    .is_some_and(|o| is_slave_miner(w, tech::type_of(o)))
+            })
     }
 
     /// The nearest explored cell to `from` that holds a resource, the first
@@ -877,11 +893,7 @@ impl Script {
             let wanted = low_power
                 .then_some(Role::Power)
                 .into_iter()
-                .chain(
-                    self.of_role(w, Role::Refinery)
-                        .is_empty()
-                        .then_some(Role::Refinery),
-                )
+                .chain((!self.has_refinery(w)).then_some(Role::Refinery))
                 .chain(
                     FACTORIES
                         .into_iter()
@@ -1260,7 +1272,7 @@ impl Script {
     /// a place order for `t` is legal, the cell test passes and the
     /// foundation is free. A naval building is looked for in the wider
     /// spiral, as a person looks for the water near the base.
-    pub(crate) fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
+    pub fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
         let rings = if naval_building(w, t) {
             WIDE_RINGS
         } else {

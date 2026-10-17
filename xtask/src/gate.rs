@@ -60,6 +60,7 @@ pub fn run_gate() -> Result<(), String> {
         "duel-diagonal",
         "duel-naval",
         "duel-m6c",
+        "duel-m7a",
     ]
     .iter()
     .enumerate()
