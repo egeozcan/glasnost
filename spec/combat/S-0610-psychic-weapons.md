@@ -2,13 +2,13 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-17
 measurements: []
-requests: [Q-0661, Q-1180]
+requests: [Q-0661, Q-1166, Q-1180]
 supersedes: []
 ---
 
@@ -73,6 +73,9 @@ skirmish only; network games and campaigns are out of scope.
   comes first in the update; the late start is separate from it.
 - **Countdown update.** An update of a berserk unit on which its remaining berserk time goes down by
   one: any update that is in play and is neither an excluded nor a warp-only update (claim 5).
+- **Unlimited controller.** A mind controller whose primary weapon gives unlimited control, so that its
+  capacity test never refuses a target and it suffers overload pulses (S-0601, Terms and claims 1 and
+  16). Its overload update is not a countdown update: it does not need the controller to be berserk.
 - **Excluded update, warp-only update.** An update of a berserk unit that is in play but on which the
   countdown does not run. An excluded update is one that S-0215 claim 2 excludes for an infantry unit
   or vehicle (travelling through a tunnel, being erased, or in the leaving stage of a chrono move, in the sense of S-0513 claim 39: from the member's first
@@ -186,7 +189,11 @@ skirmish only; network games and campaigns are out of scope.
      still holding or expiring, as S-0513 claim 51 gives the other ordinary work.
      This is a departure of design scope: for the updates before arrival hold, the original's
      continuation is unresolved (S-0513 claim 52), so it may run the countdown in them, and our
-     engine does not. It has no quirk switch.
+     engine does not. It has no quirk switch. An unlimited controller (Terms) has an overload update
+     (S-0601 claim 16) in the same set of updates as this countdown, read without the berserk
+     condition: every update that is in play and is neither excluded nor warp-only. In the warp-only
+     updates the overload update is suppressed and its timing is kept, as the countdown is. S-0601
+     claim 16 owns its rules and its backing.
 
    **Effects in the update where the countdown ends.** The expiry shows in that same tick, in the
    unit's firing, its target searches and its behaviour. The observable consequences are these.
@@ -260,8 +267,20 @@ skirmish only; network games and campaigns are out of scope.
      the unit is berserk. A healing hit from a warhead that is not berserk-causing leaves the
      remaining time unchanged. A hit with a negative amount from a berserk-causing warhead is still
      a berserk hit (S-0302 claim 10): it changes no health, and its effects are those of claims 4
-     and 5, so its place in the update relative to the countdown step can be observable (Open
-     questions).
+     and 5. Where such a hit falls relative to the countdown step is open (Open questions): it depends
+     on the update in which the hit is applied (for a projectile, its own turn, S-0203 claim 5) and on
+     the target's update (S-0203 claims 1 and 3). Backing: `measurable` (scenario P3: its
+     negative-versus repeat and its hit timing on either side of the target's update). Confidence: low.
+     **Self-healing against the countdown.** Self-healing reads no berserk state and the countdown
+     reads no health, so for a berserk unit with no overload pulse, the order of self-healing and the
+     countdown step has no observable effect: an engine may run them in either order. For an unlimited
+     controller, the place of the countdown step against its overload pulse and its heal is S-0601
+     claim 16's; this spec adds no order of its own. In a given update a damaged berserk unit that heals
+     itself and has no overload pulse gains the same health and its remaining time falls by the same step
+     whichever comes first. Backing: `unmeasured` for units without an overload pulse (no observable
+     depends on the order); for an unlimited controller, as S-0601 claim 16 gives it.
+     Confidence: high for units without an overload pulse; for an unlimited controller, as S-0601
+     claim 16 gives it.
      Healing backing: `unmeasured`: no scenario here records the health of a berserk unit, and no
      setup covers the healers, the repair depot, the hospital or the crates.
      Healing confidence: medium.
@@ -677,13 +696,13 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
 - Whether the original runs the countdown of a landed aircraft being erased. S-0514 claim 17 and
   S-0215 claim 2 exclude its movement, turning, firing and behaviour processing, and say nothing of the
   countdown. Until a measurement settles it, claim 5 takes no countdown step there.
-- Whether healing of a berserk unit falls before or after the countdown step (Q-1180's healing
-  question). Healing does not read the berserk state (claim 6), so the order matters only for a hit with
-  a negative amount from a berserk-causing warhead (claim 6; S-0302 claim 10). No scenario here
-  measures it.
 - (Low) Whether a psychic sensor that leaves the map but is not destroyed stays a sensor of its
   owner (claim 9). It cannot be in operation then, so no observable depends on it as far as known.
 - Exact line-colour animation, and whether its cosmetic appearance needs a separate rendering
   claim (claim 11).
+- Where a negative-amount berserk hit falls relative to the countdown step (claim 6, S-0302 claim 10
+  and S-0203 claim 5). Scenario P3 measures it (its negative-versus repeat and hit timing on either side
+  of the target's update); until that is run, it stays open.
+- Whether a late start falls back to rest (Q-1166, question 1). This spec does not answer it.
 - The aircraft-tint subcase marked unmeasured needs a dedicated setup before it can acquire
   measurement backing.

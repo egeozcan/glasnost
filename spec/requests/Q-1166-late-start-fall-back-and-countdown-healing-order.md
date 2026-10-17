@@ -3,7 +3,7 @@ id: Q-1166
 title: Whether the late start falls back to rest, and where self-healing falls against the berserk countdown
 status: answered
 related: [S-0215, S-0610, S-0314]
-answered-by: [S-0215]
+answered-by: [S-0215, S-0610]
 ---
 
 ## Need
