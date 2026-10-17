@@ -697,6 +697,10 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         {
             crate::structures::absorb::process_enter(w, id)
         }
+        // spec: S-0603 claim 3 and S-0215 claim 28 (eaten: the capture and sabotage table with its eaten differences)
+        (Some(Behaviour::Eaten), Kind::Infantry | Kind::Vehicle) => {
+            crate::structures::grinder::process_eaten(w, id)
+        }
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
             crate::econ::harvest::process_enter(w, id)
         }

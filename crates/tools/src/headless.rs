@@ -167,6 +167,7 @@ async fn smoke_async(
                         Effect::Anim { .. }
                         | Effect::Sound { .. }
                         | Effect::Mind { .. }
+                        | Effect::Consumed { .. }
                         | Effect::Spin { .. }
                         | Effect::Trigger { .. }
                         | Effect::Hit { .. }

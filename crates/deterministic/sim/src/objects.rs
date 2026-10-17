@@ -429,6 +429,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     crate::structures::garrison::removing(w, id);
     // spec: S-0605 claim 15 (a passenger removed inside leaves the passenger order; a building removed with passengers deletes them; a waiting actor stops waiting)
     crate::structures::absorb::removing(w, id);
+    // spec: S-0603 claim 15 (a recycling building that leaves the game: its entrants' destinations are cleared)
+    crate::structures::grinder::removing(w, id);
     // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)
     crate::econ::slaves::removing(w, id);
     // spec: S-0506 claims 9, 11 and 13 (a removed spawner clears its slots; a removed slot object or controller target is announced)

@@ -498,6 +498,10 @@ fn travel_turn(w: &mut World, id: ObjectId, u: &UnitRules) {
             if crate::structures::absorb::vehicle_arrival(w, id) {
                 return;
             }
+            // spec: S-0603 claim 5 (a cell-arrival update in a cell of the building it is eaten by: it is consumed)
+            if crate::structures::grinder::vehicle_arrival(w, id) {
+                return;
+            }
             // spec: S-0314 claim 17 (reaching the docking-point cell during movement: the depot's movement-arrival exchange)
             crate::depot::movement_arrival(w, id);
             // spec: S-0503 claims 7 and 15 (the initial path update can finish or fail the move before the choice)
