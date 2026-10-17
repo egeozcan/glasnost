@@ -2,7 +2,7 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -815,7 +815,7 @@ normalisation N of its Formulas F3. In addition:
 39. **Capture announcement entry selection.** This claim covers building ownership changes whose
     cause requests a capture or loss announcement: engineer captures and vehicle-like takeovers, which
     S-0509 claim 12 lists, and the mind-control takeover and release of a building (S-0601 claims 6 and
-    9), which S-0509 claim 12 lists once the named change in Changes for other specs is made. The local player gains or loses the building and the new owner's
+    9), which S-0509 claim 12 also lists. The local player gains or loses the building and the new owner's
     country is not passive. The entry choice below is the same for every such cause.
     A building whose type has the needs-engineer flag (S-0405 claim 8) uses its imported capture
     announcement when its new owner is the local player. With no capture announcement, this
@@ -832,8 +832,8 @@ normalisation N of its Formulas F3. In addition:
       by S-0509 claim 12 and S-0601 claims 6 and 9. S-0509's own scenario E14 does not exercise vehicle-like
       takeovers, so that case rests on G5.
     - Confidence: high (engineer-capture entry selection and missing-custom silence); medium (mind-control
-      entry selection, because its eligibility depends on the pending S-0509 claim 12 change; vehicle-like
-      entry selection, because its G5 fixture is proposed, not run)
+      entry selection, because its fixture MC9 is proposed, not run; vehicle-like entry selection,
+      because its G5 fixture is proposed, not run)
 
 ### Request coverage and remaining limits
 
@@ -2184,12 +2184,6 @@ The no-body quirk is a particular tested exception, not a general bad-data rule.
 covers lethal-damage reactions, not sale, crushing or script removal.
 
 ## Changes for other specs
-
-Mind-control announcement eligibility (claim 39):
-- S-0509 claim 12: list the mind-control takeover and release of a building among the building
-  ownership changes that request a capture or loss announcement, under the same new-owner condition
-  (the new owner's country is not passive), as S-0601 claims 6 and 9 already ask for. Confirm at
-  joint sign-off.
 
 Q-0264 companion import clarification:
 - S-0109 Import mapping: include the animation start-sound reference and stop-sound
