@@ -644,7 +644,7 @@ fn creation_draws(w: &mut World, p: ParticleRules) -> u16 {
     } else {
         p.max_ec
     };
-    // spec: S-0613 F9 and S-0205 claim 3 (u = |r rem E_max|, the remainder first; a remainder by 0 is the dividend, our engine's departure; the importer warns)
+    // spec: S-0613 F9, S-0202 claim 15 and S-0205 claim 3 (u = |r rem E_max|, in 0 … |m| − 1 for a nonzero modulus m, the remainder first; a remainder by 0 is the dividend, our engine's departure; the importer warns)
     let u = magnitude(glasnost_num::int::rem(r, modulus));
     if p.colour_draw {
         // spec: S-0202 claim 15 (one ranged draw R(0, 2147483646) for the starting-colour interpolation)
