@@ -11,7 +11,7 @@ use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
-use glasnost_sim::{mind, orders, save, testkit, tick, transport};
+use glasnost_sim::{gattling, mind, orders, save, testkit, tick, transport};
 
 const SIZE: i32 = 24;
 const ALPHA: u8 = 0;
@@ -30,7 +30,11 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 
 /// The combat ruleset with the takeover warhead MIND, the weapon Ray3
 /// (MIND, damage 3: room for three victims), infantry CLONE (Ray3) and
-/// GRUNT (plain), and vehicle CART (an open-topped transport for three).
+/// GRUNT (plain), vehicle CART (an open-topped transport for three), and
+/// for the gattling pair GAT (a turreted gattling vehicle: six slots W0 …
+/// W5 of damage 1 and rate 1, stage count 3, spin-up 7, spin-down 1,
+/// thresholds 10, 30 and 60) and TGT (an unarmed vehicle of strength
+/// 30000).
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     r.sim.warheads.insert(
@@ -68,6 +72,37 @@ fn rules() -> Ruleset {
     cart.open_topped = Some(true);
     register(&mut r, "vehicles", "CART");
     r.sim.vehicles.insert("CART".into(), cart);
+    let slots: Vec<String> = (0..6).map(|i| format!("W{i}")).collect();
+    for n in &slots {
+        r.sim.weapons.insert(
+            n.clone(),
+            WeaponType {
+                damage: Some(1),
+                rof: Some(1),
+                range: Some(dec("10")),
+                speed: Some(100),
+                projectile: Some("Bullet".into()),
+                warhead: Some("SA".into()),
+                ..Default::default()
+            },
+        );
+    }
+    let mut tgt: UnitType = r.sim.vehicles["BUGGY"].clone();
+    tgt.strength = Some(30000);
+    tgt.primary = None;
+    let mut gat = tgt.clone();
+    gat.turret_count = Some(1);
+    gat.weapon_count = Some(6);
+    gat.combat.weapon_slots = Some(slots);
+    gat.combat.is_gattling = Some(true);
+    gat.combat.weapon_stages = Some(3);
+    gat.combat.rate_up = Some(7);
+    gat.combat.rate_down = Some(1);
+    gat.combat.stage_thresholds = Some(vec![10, 30, 60]);
+    for (n, t) in [("GAT", gat), ("TGT", tgt)] {
+        register(&mut r, "vehicles", n);
+        r.sim.vehicles.insert(n.into(), t);
+    }
     r
 }
 
@@ -194,4 +229,89 @@ fn a_controller_riding_an_open_transport_takes_and_loses_a_victim() {
     assert!(w.obj(cart).is_none() && w.obj(clone).is_none());
     assert_eq!(owner(&w, grunt), Some(ALPHA));
     assert!(!mind::mind_controlled(&w, grunt));
+}
+
+fn attack(w: &mut World, house: u8, actor: ObjectId, target: ObjectId) {
+    orders::issue(
+        w,
+        HouseId(house),
+        orders::Order::Behaviour {
+            actor,
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(target)),
+            dest: None,
+        },
+    );
+}
+
+// Pair: a gattling taken over by mind control while it fires.
+// spec: S-0609 claims 1 and 4 and scenario G7 (d) (a gattling taken over part-way, its attack re-ordered at once: no drop of stage at the change of owner)
+// spec: S-0601 claims 4, 5 and 6 (the controller's shot lands, the gattling changes owner and gets a guard reset)
+#[test]
+fn a_gattling_taken_over_while_firing_keeps_its_stage() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let gat = put(&mut w, Kind::Vehicle, "GAT", ALPHA, 0, 0);
+    let tgt = put(&mut w, Kind::Vehicle, "TGT", BETA, 6, 0);
+    let home = put(&mut w, Kind::Vehicle, "TGT", ALPHA, -6, 0);
+    attack(&mut w, ALPHA, gat, tgt);
+    assert!(
+        run_until(&mut w, 600, |w| gattling::spin(w, gat).stage >= 1),
+        "the gattling spins up"
+    );
+
+    let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, 0, 6);
+    attack(&mut w, BETA, clone, gat);
+    let mut before = gattling::spin(&w, gat).stage;
+    let mut taken = false;
+    for _ in 0..900 {
+        before = gattling::spin(&w, gat).stage;
+        tick::step(&mut w);
+        if mind::mind_controlled(&w, gat) {
+            taken = true;
+            break;
+        }
+    }
+    assert!(taken, "the controller takes the gattling");
+    assert_eq!(owner(&w, gat), Some(BETA));
+    assert!(before >= 1);
+    assert!(
+        gattling::spin(&w, gat).stage >= before,
+        "no drop of stage at the change of owner"
+    );
+    assert_ne!(
+        w.obj(gat).unwrap().target,
+        Some(Target::Object(tgt)),
+        "the guard reset let go of its new house's object"
+    );
+
+    // Re-ordered at once against its former owner, it climbs to the top stage.
+    attack(&mut w, BETA, gat, home);
+    assert!(
+        run_until(&mut w, 900, |w| gattling::spin(w, gat).stage == 2),
+        "the top stage under the new owner"
+    );
+}
+
+// Pair: a takeover in the tick of the former owner's order.
+// spec: S-0213 claim 15 (a behaviour order is applied without an owner check: an actor taken over by mind control between the issue and the application still gets it)
+// spec: S-0203 claim 7 (orders take effect after the turn pass)
+// spec: S-0601 claim 6 (the takeover's guard reset comes first and the order then replaces it)
+#[test]
+fn an_order_of_the_former_owner_still_applies_in_the_takeover_tick() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let gat = put(&mut w, Kind::Vehicle, "GAT", ALPHA, 0, 0);
+    let tgt = put(&mut w, Kind::Vehicle, "TGT", BETA, 6, 0);
+    let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, 0, 6);
+    testkit::run(&mut w, 5);
+    attack(&mut w, ALPHA, gat, tgt);
+    assert!(mind::take(&mut w, clone, gat));
+    assert_eq!(w.obj(gat).unwrap().target, None, "the guard reset");
+    tick::step(&mut w);
+    assert_eq!(owner(&w, gat), Some(BETA));
+    assert_eq!(
+        w.obj(gat).unwrap().target,
+        Some(Target::Object(tgt)),
+        "Alpha's order reached Beta's new object"
+    );
 }
