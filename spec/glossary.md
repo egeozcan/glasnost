@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 43
+revision: 44
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -624,6 +624,13 @@ original's facings retain the full resolution of one facing unit, how a coarser 
 facing* (*n* a power of two from 2 to 256) is derived from a facing, and how two facings are
 compared (the *signed facing difference*). A spec that derives a coarse facing in another way says
 so.
+
+**freeze, timed freeze, stand-still.** A *freeze* is a stretch of real time during which cycles keep
+making drawn frames, no tick runs and the player cannot give orders. A cycle during a freeze is a
+*frozen cycle*. A freeze is *timed* when it ends after a set time, and *untimed* when something else
+ends it. A *stand-still* is a stretch of real time with no cycles at all, during which the game
+window has lost the input focus or the options menu is open (see *cycle*). S-0201 owns these terms
+(Terms, claims 8 to 11).
 
 **game.** One match, from the moment the map is loaded until it ends. Several games can run in one
 session.
@@ -2362,7 +2369,10 @@ level fraction in 0 … 1 says so. This is not a height level. See S-0701 (Terms
 Formulas F1 to F4).
 
 **vehicle thief.** An infantry unit whose type has the imported vehicle-thief flag: it takes over a
-vehicle by entering it. Its rules belong to the special-abilities specs. See S-0209 and S-0214.
+vehicle by entering it. It may also be ordered into a vehicle-like building, which it takes over like
+any infantry unit would (S-0509 claim 17; the flag plays no part there, and S-0509 scenario E12 uses
+the unit only as such an infantry unit). Its rules belong to the special-abilities specs. See S-0209,
+S-0214 and S-0509.
 
 ## Behaviour
 
@@ -2715,4 +2725,7 @@ scenario T6, part G.
 
 ## Questions for the project lead
 
-No question for the project lead remains open in this revision.
+- Should the glossary define *director*? The measurement setups say "director and mods off", and the
+  approved specs use the word the same way without defining it. If it is to be defined, the lead (or
+  the owner, on the lead's word) supplies the meaning. Until then the term is used as the approved
+  specs use it.
