@@ -2,11 +2,11 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -377,7 +377,7 @@ values under S-0006 claim 3.
 
 ## Measurement scenarios
 
-Use a small purpose-made skirmish map, game-speed index 2, director and mods off. Stock data apply
+Use a small purpose-made skirmish map, game-speed index 2, no engine add-on and no mods (the named test files and named test-map overrides of a scenario excepted). Stock data apply
 except named data-only override sections in the test map. The stock recycling building is the Yuri
 faction's grinder. Keep one bystander computer player outside the test area; void a run if an
 unnamed bystander object affects that area or the bystander is defeated. Use scripted input and a
@@ -396,13 +396,13 @@ depends on health (repeat with a damaged unit) or veterancy (repeat with an elit
 delay after arrival. Repeat with a full and empty harvester of the same type: equal payouts are
 expected. To test eligibility (claim 1), let the local house own the infantry while an allied
 bystander owns the building: an ordinary infantry unit has no recycle order, but an
-engineer does when the building is at full health. Repeat with an enemy building, and with a test vehicle in the fly movement zone:
+engineer does when the building is at full health. Repeat with an enemy building, and with a named test-map vehicle in the fly movement zone:
 neither offers the recycle order. For claim 4, record the arrival position for approaches along
-each side and a corner, including a test building with a larger foundation.
+each side and a corner, including a named test-map building with a larger foundation.
 
 **G2. Docking answer** (claim 2). House B allied with A, house C enemy. Order a vehicle of B into
 A's building while it is normal, switched off, under build-up and being sold, and with A at low
-power. Order a vehicle of C. Order a test vehicle whose type hovers by balloon (test data).
+power. Order a vehicle of C. Order a test vehicle whose type hovers by balloon (the balloon-hovering override named above).
 *Expected:* the cursor and order succeed only for B with the building normal or at low power.
 *Falsified by:* acceptance while switched off, or refusal at low power. The asking house is the
 local player in each order test. Use separate named test-map overrides for naval mismatch,
@@ -418,10 +418,10 @@ until a link is free; a repeated query by a holder does not fail the link test. 
 cannot establish full contact occupancy, it is inconclusive rather than evidence for that row.
 
 **G3. Ally's loaded vehicle** (claims 8, 10). House B (allied, a country with a different cost
-factor from A's, test data allowed) sends a transport with two infantry passengers of B into A's
+factor from A's, from a named test-map override) sends a transport with two infantry passengers of B into A's
 building. *Expected:* A's balance rises by the sum of three F1 refunds computed with B's factors
 and B's refund percentage use. No sounds for the passengers, no losses for B.
-Variant for passengers of passengers (test data): a transport type that accepts vehicles carries
+Variant for passengers of passengers (named test-map override): a transport type that accepts vehicles carries
 a loaded troop vehicle. *Expected:* A is paid for all of them, each with its own owner's factors.
 
 **G4. Infected vehicle** (claims 8, 10). A vehicle of A with a parasite of house C attached is
@@ -461,7 +461,7 @@ and is not paid for.
 
 **G8. Switch, power, destruction, owner change** (claims 5, 15). Bind a vehicle, then switch the
 building off: it is still consumed. Bind a vehicle, then destroy the building: it stays in
-*eaten* with nothing queued for at least 10 processings. With test data making the building
+*eaten* with nothing queued for at least 10 processings. With a named test-map override making the building
 capturable, bind an infantry unit, capture the building with another house's engineer and let the
 unit arrive: the capturing house is paid. Separately lower power without switching off: the
 pending entrant still enters. Give a new move order before arrival: the entrant follows it and
@@ -491,7 +491,7 @@ and a test animation removed by an external animation effect separately for the 
 Removal by the building's own slot replacement is not that case.
 
 **G11. Nearest recycling building** (claim 14). In the original, a computer player of the Yuri
-faction with a controller, fate weights set by test data so that only "go to the nearest grinder"
+faction with a controller, fate weights set by a named test-map override so that only "go to the nearest grinder"
 can be chosen, owns two recycling buildings at equal distance from the victim's spot, placed in a
 known order, and a third nearer one that is switched off. It takes a unit. *Expected:* the unit takes the
 nearest one even when switched off. Remove the nearer building and repeat the takeover to test
