@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 54
+revision: 55
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -40,7 +40,8 @@ setup*, *departure*, *importer warning*, *quirk switch*, *unspecified* and *roun
 defines them. *Turn* and *turn pass* are used as S-0203 (tick order) defines them. *Pending
 suppression* is S-0207 claim 27's point suppression that has not yet been consumed: a one-application
 skip of the next otherwise due nonempty point application. It is not the unchanged-destination
-suppression of S-0502.
+suppression of S-0502. *Late start* is the further per-tick start of an infantry unit or vehicle that
+claim 11 defines.
 
 Other specs cited: S-0001, S-0003, S-0006, S-0007, S-0009, S-0105, S-0107, S-0202 (random
 streams), S-0203 (tick order), S-0204 (coordinates, distance and facing), S-0205 (number domains),
@@ -518,9 +519,11 @@ Terms used by this spec:
      (S-0514 claim 17). This does not exclude its erasure update or presentation effects.
 
    On a tick on which the tunnel, erasing or leaving-stage exclusion holds (the last three bullets
-   above), the per-tick start of claim 11 takes no effect. Subject also to the superweapon-warp
+   above), no per-tick start of claim 11 takes effect (the first start, and for infantry and vehicles
+   also the late start defined there), and neither does the berserk countdown
+   (S-0610 claim 5), which does not otherwise depend on the processing timer being due. Subject also to the superweapon-warp
    design exclusion below, on every other tick on which the actor does not process, the
-   per-tick start still takes effect: for example on a tick on which only the
+   per-tick starts still take effect: for example on a tick on which only the
    timer has not expired (claim 3a, scenario B3, case k). A teleporting locomotor's own
    phase-in does not stop processing: the actor processes under the ordinary eligibility rules.
 
@@ -568,12 +571,19 @@ Terms used by this spec:
      eligibility evidence). The second-turn case is `unmeasured`: S-0203
      marks the second turn itself as not observable by a recorder. No original-side rule
      is asserted here for an erasure overlapping a chrono arrival; S-0513 and S-0514
-     own those effects, and no isolated fixture is established here.
+     own those effects, and no isolated fixture is established here. The berserk countdown
+     on the ticks that the tunnel, erasing and leaving-stage exclusions hold takes S-0610
+     claim 5's backing: `measurable` for the erasing and leaving-stage ticks (S-0610 scenario P9
+     parts d and e), `unmeasured` for the tunnel and landed-aircraft ticks (S-0610 claim 5 gives
+     the reason: no setup is known). The exclusion of the late start of claim 11 on those ticks is
+     `unmeasured`, with the reason that claim 11 gives for the late start.
    - Confidence: high (alive, health, timer, parasite ordering and the engine design contract),
      medium (the tunnel, erasing and leaving-stage exclusions, including landed-aircraft erasure,
      and locomotor phase-in not excluding processing, and the composed field-arrival timing); low
      (the second-turn case and
-     matching the original's unresolved superweapon-warp continuation)
+     matching the original's unresolved superweapon-warp continuation); the berserk countdown on
+     the tunnel, erasing and leaving-stage ticks medium, and on the landed-aircraft tick low (S-0610
+     claim 5); the exclusion of the late start medium
    - Pending-suppression exception (the vehicle clause of the erasing and leaving-stage bullet):
      Backing: `unmeasured`. S-0207 claim 27 finds its reachability not established (its Reachability
      paragraph and its table row for a suppressed vehicle in any state, including one being erased),
@@ -585,11 +595,11 @@ Terms used by this spec:
    - (a) a start on tick *t* that precedes the actor's processing for tick *t* (for example one
      caused by another actor's update earlier in the tick) leads to a processing of the new
      behaviour on tick *t*. In particular, a queued behaviour that an infantry unit, vehicle or
-     building makes current at its per-tick start (claim 11; for a building, its first per-tick
+     building makes current at its first per-tick start (claim 11; for a building, its first per-tick
      start of the tick) is processed on that same tick,
    - (b) a start that happens after the actor's processing for tick *t* (for example one caused by
-     another actor's update later in the tick, a building's second per-tick start, or an aircraft's
-     end-of-update start, claim 11) is
+     another actor's update later in the tick, a building's second per-tick start, an infantry unit's
+     or vehicle's late start, or an aircraft's end-of-update start, claim 11) is
      processed on tick *t* + 1 (or in a second turn of the same tick, claim 2),
    - (c) a start that a processing itself causes is overridden by the delay that processing then
      chooses: the new behaviour is first processed when that delay runs out. Each claim below that
@@ -862,12 +872,42 @@ Terms used by this spec:
 
 11. **Ready to change, and the per-tick start.** On each tick on which its update runs, an infantry
     unit, vehicle or building that is ready to change and has a behaviour queued makes it current
-    by a start-next, its **per-tick start**. The behaviour that this start makes current is the one
+    by a start-next, its **first per-tick start**. The behaviour that this start makes current is the one
     processed on that tick (claim 3a). For a building this start also needs the building to have
     left its construction state. A building also has a second per-tick start on the same tick,
     without the construction-state condition, which sees the ready mark as that tick's processing
     has left it; a behaviour that the second start makes current is not the one processed on that
     tick, and is first processed on the next tick (claim 3b); see the building rule below.
+    Infantry and vehicles also have a **late start**, a further ready-and-start chance in the same
+    update, judged with that update's movement already counted. It makes current a queued behaviour
+    of a unit that is then ready under the readiness rules below, so "moving on this tick" includes
+    the movement of the same update. For an infantry unit the "in the middle of firing" test reads the
+    firing state that earlier updates left and does not see the ordinary firing check of this update.
+    No readiness condition of a vehicle depends on its firing or turret turning.
+    A behaviour made current there is processed as claim 3b states for a start after the actor's
+    processing (on the unit's next update). It is a per-tick start for claim 2's exclusions: it takes
+    no effect on a tunnel, erasing or leaving-stage tick, and in our engine none on a tick that
+    S-0513 claim 51 suppresses it. The behaviour current at the end of an update is the one that the
+    late start leaves; the drop rule and the per-tick search of claim 33 on that tick judged
+    the behaviour as processing left it, before the late start, and so never see a behaviour made
+    current late. After the expiry update of a berserk unit (S-0610 claim 5), for example, a queued
+    *guard* can become current at the late start, but nothing of it (search, hold, processing) happens
+    before the unit's next update. Unless something changes the unit's readiness, its slots or its orders between the late
+    start and the unit's next update, the late start has the same observable result as the first
+    start of the next update, which would make the same behaviour current and process it on that
+    update; the difference is the current behaviour that an actor updating later in the same tick
+    can read. A building and
+    an aircraft do not have a late start; buildings have the second start above and aircraft
+    the end-of-update start below. No quirk switch: it is the original's order, not a defect.
+    Backing for the late start: `measurable` for the expiry-update instance of a berserk unit (S-0610
+    scenario P9 part b, which records the current and queued behaviour tick by tick), and `unmeasured`
+    for the rest. A queued behaviour that the late start makes current is in the unchanged case also
+    made current by the next update's first start before it is processed, so the only other difference
+    is the current behaviour seen by actors that update later in that tick (or after an intervening
+    change of readiness, slots or orders), and no harness is known that records such a read or sets up
+    that change at that point of the tick. Confidence: medium (that the readiness test counts this
+    update's movement, and for infantry the firing state that earlier updates left; the position
+    relative to a vehicle's firing and turret turning is not observable and is not asserted).
     Aircraft have a per-tick start after their processing and movement, not before processing:
     a behaviour made current there is first processed on a later tick (claim 3b). S-0501 claim 31
     also permits a ready aircraft to start its queued behaviour during its locomotor's step,
@@ -875,10 +915,11 @@ Terms used by this spec:
     an ordinary fall-back to rest. The early exits of S-0501 claim 18 do not reach that last
     opportunity. S-0501 claim 31 owns all three aircraft start points. An infantry unit that
     is ready to change and has neither a current nor a queued behaviour falls back to rest (claims
-    13 and 14) at its per-tick start, and the behaviour that this fall-back queues, if any, becomes
-    current at that same per-tick start.
+    13 and 14) at its first per-tick start, and the behaviour that this fall-back queues, if any,
+    becomes current at that same start. Whether the late start also performs the fall-back is not
+    established and is not asserted.
 
-    These per-tick starts are subject to claim 2's exclusions. In our engine, S-0513 claim 51
+    These per-tick starts, the late start included, are subject to claim 2's exclusions. In our engine, S-0513 claim 51
     additionally suppresses them for vehicles, teleporter infantry and landed aircraft from
     the first pending warp update through arrival effects, before and after warp work. During
     arrival hold they regain ordinary eligibility after the hold-end test, whether the hold
@@ -2406,7 +2447,8 @@ apply in our engine to the actors of every player house.
       effect (for a building, its first per-tick start of the tick), and that tick's processing
       never acts on a target the drop rule removed on that tick,
     - (b) whether the per-tick search runs is decided by the current behaviour as that tick's
-      processing leaves it, so a processing that starts *guard* (for example a building's *attack*
+      processing leaves it (before any late start of claim 11, which therefore never influences
+      the search or the drop rule of its own tick), so a processing that starts *guard* (for example a building's *attack*
       whose target left its range, claim 32) can be followed by a search, and a restart of the
       targeting timer, on the same tick,
     - (c) a target that the per-tick search finds on a tick is first acted on by the processing of
@@ -3295,7 +3337,11 @@ adds none of its own:
   game that is its update on the next tick, S-0203, claim 7),
 - for a building, a queued behaviour can also become current after the building's processing and
   per-tick search on the same tick (its second per-tick start, claim 11); it is then first
-  processed on the next tick (claim 3b).
+  processed on the next tick (claim 3b), and
+- for an infantry unit or vehicle, a queued behaviour can also become current after its processing,
+  per-tick search and movement on the same tick (its late start, claim 11); it is then first
+  processed on the unit's next update (claim 3b), and neither the drop rule nor the per-tick search
+  of the tick that made it current ever sees it as current (claim 11, claim 33 part b).
 
 Where orders take effect within the tick belongs to S-0203 (tick order) and S-0213 (human
 orders).
@@ -3679,7 +3725,9 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   to change) an attack order on a distant enemy building out of range, then, while it still
   moves, a move order to another cell. Expected: after the attack order the queued slot shows
   *attack*; after the move order it shows *move* (the current behaviour, queued again in place of
-  *attack*); *move* stays current throughout. Falsified by *move* not becoming
+  *attack*); *move* stays current for as long as the vehicle is still moving (on the tick of its arrival, the
+  late start of claim 11 may already make the queued behaviour current; that tick is not part of
+  "throughout"). Falsified by *move* not becoming
   current at the vehicle's first per-tick start after the order takes effect, or not being
   processed on the tick it becomes current (case a), by a queued behaviour
   becoming current while the actor moves (cases b, c), by no resting behaviour queued at the first
@@ -5295,6 +5343,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   per-tick drop of claim 37 a, the only way an actor in those behaviours reaches the step, so they
   stay unmeasured; the *attack*, *area guard* and human-controlled *hunt* rows are backed by
   scenario B32 (c and c2).
+- Whether the late start of claim 11 also performs the fall-back to rest that claims 13 and 14 give an
+  infantry unit with neither a current nor a queued behaviour. Claim 11 does not assert it.
 
 ### Cross-spec changes to confirm
 
@@ -5325,6 +5375,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   open until the complementary revisions are approved together.
 - S-0309's current claim 23 b already cites claim 13 here for assignments that can supersede
   the refresh result and for route-generated orders rather than immediate destination changes.
+- S-0610 claim 5 (its Effects section, its queued-behaviour bullet, which says the queued *guard* or
+  *hunt* does not start in the expiry update, and its Open questions) leaves open whether a per-tick
+  start after the countdown step can make the queued behaviour current in the expiry update, and says
+  P9 part b decides it. Claim 11 here gives that as an example, "a queued *guard* can become current
+  at the late start". One of the two specs must be revised so they agree, and both must be handed off
+  together. Which one changes, and whether the answer stands, depends on P9 part b.
 Joint hand-off checks: S-0213 claim 16 already supplies the route-order timing
 pointer. Confirm S-0207 claim 20 e and S-0208 claim 19 with claim 10's airstrike exception,
 not an erasing-lock exception, and its restored-target distinction. S-0307 claims 15 to 25 and S-0406
