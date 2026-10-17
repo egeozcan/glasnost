@@ -2,7 +2,7 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2068,8 +2068,9 @@ parts use their stated replay checks and rejection thresholds instead.
   the ordinary heal-all and transport controls; CR12 tests the separate direct damaging hits.
 
 - **D33 (claim 1: damaging-animation hit metadata).** Use a tiny named test map at speed 2,
-  director and mods off, with one bystander computer player kept away from the test area under
-  the glossary's void rule. A named animation-damage fixture gives an ordinary damaging animation
+  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps
+  excepted; see *measurement setup*), with one bystander computer player kept away from the test area
+  under the glossary's void rule. A named animation-damage fixture gives an ordinary damaging animation
   a known owner, damage and game-wide warhead, with no secondary effects; compare an ownerless
   copy. Place isolated infantry and crewed vehicle targets within the area, with enough health
   for several advances. Use two armour/versus settings that give different predicted ordinary
