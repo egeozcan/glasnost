@@ -2,11 +2,11 @@
 id: S-0518
 title: Linked weapons (prism support beams, charging of overpowerable buildings)
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0985]
 supersedes: []
@@ -441,7 +441,7 @@ The modifier is a percentage field (S-0003, Terms and claim 7) scaled by F4. The
 
 ## Measurement scenarios
 
-Use tiny purpose-made skirmish maps, game speed index 2, 800 × 600, director and mods off,
+Use tiny purpose-made skirmish maps, game speed index 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario excepted),
 except the named test data below. Use one enemy bystander computer player outside the observed
 area, following the glossary's void rule. The observed area is the test buildings and the cells
 within their weapon and support reach. Repeat each case three times. Record ticks, targets,
