@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -104,6 +104,10 @@ presentation and swept-layer rules below also apply where those specs cite them.
   decay and conversion to damage belong to S-0525 claims 5 to 10.
 - **R(a, b).** A scenario-stream ranged draw over the inclusive integer range a … b, as in
   S-0202 claim 4; it can consume zero, one or several raw values.
+- **Overload update.** The per-update step of an unlimited controller's overload countdown
+  (S-0601 claim 16). When the countdown is nonpositive at the start of such an update, a pulse
+  check occurs. The countdown counts updates, not ticks. Claim 51 suppresses this step from the
+  first pending update through arrival effects. It runs again in arrival hold, after the hold-end test.
 
 ## Behaviour
 
@@ -1167,8 +1171,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
     ammunition reload update and firing-frame advancement (S-0301 claims 11 and 13),
     attached parasite step (S-0614 claim 18), the member's own economy and power work,
     depot queued-entry retry, expected-health turn bookkeeping, protection-brightness
-    phase processing, and the berserk countdown (S-0610 claim 5; an update count, not an
-    elapsed-tick clock, so it does not keep running as the clocks below do). In short, the warp update is the whole member turn before arrival
+    phase processing, the berserk countdown (S-0610 claim 5) and the mind-control overload
+    update (S-0601 claim 16). The berserk countdown and the overload countdown are update counts,
+    not elapsed-tick clocks, so neither takes a step in a suppressed update, and no missed step of
+    either is made up later. The elapsed-tick clocks below (protection duration, reload countdown,
+    shot cooldown) keep running in suppressed updates. S-0203 claim 4's list of suppressed ordinary
+    work gains the overload update in the same round (see Cross-spec changes to confirm). In short,
+    the warp update is the whole member turn before arrival
     hold, with the intrinsic exceptions below; it is not merely five disabled operations.
     No deferred ordinary updates are replayed in a burst on entering hold. The leaving row agrees
     with the confirmed exclusion, rather than replacing it. The hold row follows the
@@ -1964,10 +1973,11 @@ is not under test.
   multiple warp updates; exact per-kind absolute timelines remain unmeasured. An
   observation that cannot separate same-tick events is inconclusive, not confirmation.
   (f) Engine-only contract test, not an oracle expectation: arrange a due, otherwise
-  eligible heal, visible behaviour action, movement, shot and turret turn independently
-  at every row of claim 51 for each applicable kind. Expect zero ordinary work in all
-  five columns through arrival effects, and ordinary eligibility after the hold-end
-  test. Confirm one warp update per tick and immediate route, queued-destination and
+  eligible heal, visible behaviour action, movement, shot, turret turn and, for a member
+  that is an unlimited controller (S-0601 claim 16), its overload update, independently at
+  every row of claim 51 for each applicable kind. Expect zero ordinary work in all
+  five columns through arrival effects, with no overload step in those rows, and ordinary
+  eligibility after the hold-end test. Confirm one warp update per tick and immediate route, queued-destination and
   driving-step clearing at launch. Any contrary event falsifies the engine contract.
   Compare the same witnesses in (a) to (e) against the original: a heal, due action,
   movement, shot or turret turn in a suppressed row, retained route or multiple warp
