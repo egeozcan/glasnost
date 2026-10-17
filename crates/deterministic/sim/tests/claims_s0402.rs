@@ -1497,10 +1497,13 @@ fn claim_10_second_route() {
         for _ in 0..200 {
             testkit::run(&mut w, 1);
             let o = w.obj(h).unwrap();
-            if o.beh.queued == Some(Behaviour::Unload) {
+            if o.beh.queued == Some(Behaviour::Unload) || o.beh.current == Some(Behaviour::Unload) {
                 queued_at = Some(o.pos.cell());
-                // spec: S-0402 claim 10 (queued, not started; facing map north, not 16384)
-                assert_eq!(o.beh.current, Some(Behaviour::Enter));
+                // spec: S-0402 claim 10 (queued, not started by the report; facing map north, not 16384)
+                // spec: S-0215 claim 11 (revision 57: the stopped vehicle is ready at its late start, after the movement that queued unload, so unload is current at the end of that update, not yet processed; claim 3b)
+                assert_eq!(o.beh.current, Some(Behaviour::Unload));
+                assert_eq!(o.beh.queued, None);
+                assert!(o.beh.expired, "started, not processed");
                 assert_ne!(w.body_facing(h), 16384);
                 break;
             }

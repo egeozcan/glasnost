@@ -436,6 +436,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let kind = o.kind;
     if kind == Kind::Aircraft {
+        // spec: S-0610 claim 5 (the berserk countdown precedes the update's processing and shots; an aircraft has no first per-tick start before its processing; a landed aircraft being erased never gets here, S-0514 claim 17)
+        crate::psychic::countdown_turn(w, id);
         // spec: S-0501 claims 31 and 32 (an aircraft has no per-tick start; its processing)
         crate::air::behaviour_turn(w, id);
         return;
@@ -472,6 +474,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
             ob.beh.ready_mark = false;
         }
     }
+    // spec: S-0610 claim 5 and F2 (the berserk countdown, one step in each countdown update: after the first per-tick start, so that a behaviour the expiry queues is not made current and processed in the expiry update; before the processing, the per-tick search and every shot of the update, so that the expiry update already treats the unit as ordinary; not dependent on the processing timer being due. Excluded and warp-only updates never reach here: S-0215 claim 2, S-0513 claim 51)
+    crate::psychic::countdown_turn(w, id);
     // spec: S-0215 claim 33 (the drop rule: an opportunity target is dropped in these behaviours, judged after the per-tick start)
     if let Some(ob) = w.obj_mut(id)
         && ob.target.is_some()
@@ -522,6 +526,32 @@ pub fn turn(w: &mut World, id: ObjectId) {
     crate::combat::acquire::per_tick(w, id);
     // spec: S-0215 claim 37 (a) and (a2) (the per-tick approach of an actor that cannot reach its target follows the processing and the per-tick search; revision 48 specifies the resulting state, not a count of internal evaluations)
     crate::approach::per_tick(w, id);
+}
+
+/// The late start of an infantry unit or vehicle (S-0215 claim 11): one
+/// more ready-and-start chance in its update, after its movement, so that
+/// readiness counts this update's movement. It only makes a queued
+/// behaviour current; no fall-back to rest (claim 11 does not assert one;
+/// interim rule of Q-1166). A behaviour made current here is first
+/// processed on the unit's next update (claim 3b), and the drop rule and
+/// the per-tick search of this update have already run (claim 33 b).
+pub fn late_start(w: &mut World, id: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let t = w.tick;
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0215 claim 11 (infantry and vehicles have a late start; buildings and aircraft do not)
+    if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) || o.health <= 0 {
+        return;
+    }
+    if o.beh.queued.is_none() {
+        return;
+    }
+    // spec: S-0215 claim 11 (the late start: ready under the readiness rules, with this update's movement counted)
+    if ready(w, id)
+        && let Some(ob) = w.obj_mut(id)
+    {
+        ob.beh.start_next(t, stale);
+    }
 }
 
 /// The attack-move refresh among the common effects of a fall-back to rest

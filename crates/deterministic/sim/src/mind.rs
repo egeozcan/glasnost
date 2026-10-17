@@ -860,8 +860,8 @@ pub fn overload_level(count: &[i32], n: i64) -> Option<usize> {
 }
 
 /// An unlimited controller's overload update, in its own turn (claim 16).
-/// Its place in the turn is an interim rule of Q-1201: right after the
-/// berserk countdown.
+/// Its place in the turn is an interim rule of Q-1201: after the
+/// bookkeeping, before self-healing.
 pub fn overload_turn(w: &mut World, id: ObjectId) {
     let Some(rec) = w.mind.controllers.get_mut(&id) else {
         return;

@@ -92,6 +92,7 @@ fn acquisitions_in_one_tick_rank_by_event_order() {
 }
 
 // spec: S-0518 claim 14 (revision 3): when a guarding charger takes a building the idle action does not run, but the processing keeps the delay of guard (its rate plus one draw over 0 to 2), not a fixed 1 tick and not the attack rate; attack is queued without starting
+// spec: S-0215 claim 11 (revision 57: the late start of the same update then makes attack current; it is first processed on the unit's next update)
 #[test]
 fn a_charger_keeps_the_guard_delay_after_taking_a_building() {
     let mut w = world(|_| {});
@@ -104,12 +105,10 @@ fn a_charger_keeps_the_guard_delay_after_taking_a_building() {
         if w.obj(u).unwrap().target == Some(Target::Object(coil)) {
             seen = w.obj(u).unwrap().beh.last;
             let o = w.obj(u).unwrap();
-            assert_eq!(
-                o.beh.current,
-                Some(Behaviour::Guard),
-                "attack is only queued"
-            );
-            assert_eq!(o.beh.queued, Some(Behaviour::Attack));
+            // Attack is only queued by the processing; the late start after the unit's movement makes it current at the end of the update (S-0215 claim 11, revision 57), not processed before the unit's next update (claim 3b).
+            assert_eq!(o.beh.current, Some(Behaviour::Attack), "late start");
+            assert_eq!(o.beh.queued, None);
+            assert!(o.beh.expired, "started (timer expired now), not yet processed");
             break;
         }
     }
