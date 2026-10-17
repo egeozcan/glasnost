@@ -863,9 +863,15 @@ pub fn overload_level(count: &[i32], n: i64) -> Option<usize> {
     )
 }
 
-/// An unlimited controller's overload update, in its own turn (claim 16).
-/// Its place in the turn is an interim rule of Q-1201: after the
-/// bookkeeping, before self-healing.
+/// Whether `id` is an unlimited controller (claim 16; S-0610 Terms).
+pub fn unlimited(w: &World, id: ObjectId) -> bool {
+    controller(w, id).is_some_and(|c| c.unlimited)
+}
+
+/// An unlimited controller's overload update, in its own turn (claim 16):
+/// after the first per-tick start and the berserk countdown, before
+/// self-healing, behaviour processing, movement and firing
+/// (`tick::object_turn`).
 pub fn overload_turn(w: &mut World, id: ObjectId) {
     let Some(rec) = w.mind.controllers.get_mut(&id) else {
         return;
