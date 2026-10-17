@@ -151,6 +151,10 @@ struct Game {
     absorber_releases: usize,
     passengers_max: [usize; PLAYERS],
     absorbers: [usize; PLAYERS],
+    /// Recycling buildings (S-0603): units consumed and per player house
+    /// its distinct recycling buildings.
+    ground: usize,
+    grinders: [usize; PLAYERS],
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -564,6 +568,7 @@ fn play_ai(
                 Effect::Shot { .. } => g.shots += 1,
                 Effect::Killed { .. } => g.killed += 1,
                 Effect::GasHit { .. } => g.gas_hits += 1,
+                Effect::Consumed { .. } => g.ground += 1,
                 _ => {}
             }
         }
@@ -652,6 +657,7 @@ fn play_ai(
     g.absorber_releases = tally.absorber_releases;
     g.passengers_max = tally.passengers_max;
     g.absorbers = tally.absorbers.map(|s| s.len());
+    g.grinders = tally.grinders.map(|s| s.len());
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -796,6 +802,8 @@ pub struct Tally {
     pub passengers_max: [usize; PLAYERS],
     /// Per player house: its absorbing buildings seen so far.
     pub absorbers: [BTreeSet<u32>; PLAYERS],
+    /// Per player house: its recycling buildings seen so far (S-0603).
+    pub grinders: [BTreeSet<u32>; PLAYERS],
     /// The (passenger, building) pairs after the last tick.
     absorbed_before: BTreeSet<(u32, u32)>,
     /// The gas systems and animations after the last tick.
@@ -983,6 +991,9 @@ impl Tally {
             if glasnost_sim::structures::absorb::is_absorber(w, o.id) {
                 self.absorbers[h].insert(o.id.0);
                 held[h] += glasnost_sim::structures::absorb::count(w, o.id) as usize;
+            }
+            if glasnost_sim::structures::grinder::is_recycler(w, o.id) {
+                self.grinders[h].insert(o.id.0);
             }
         }
         for h in 0..PLAYERS {
@@ -1866,8 +1877,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds
                     )
                 })
                 .collect();
@@ -1927,6 +1938,11 @@ fn report(
                 s,
                 "  absorbers: entries {}, releases beside a standing building {}; most passengers at once per house {:?}; absorbing buildings per house {:?}",
                 g.absorbed, g.absorber_releases, g.passengers_max, g.absorbers
+            );
+            let _ = writeln!(
+                s,
+                "  grinders: units ground {}; recycling buildings per house {:?}",
+                g.ground, g.grinders
             );
         }
         let f: Vec<String> = g

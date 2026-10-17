@@ -380,3 +380,36 @@ fn counts_absorber_entries_and_releases() {
     assert_eq!(tally.absorbed, 1, "{tally:?}");
     assert_eq!(tally.absorber_releases, 1, "{tally:?}");
 }
+
+// A recycling building is kept per house once seen (S-0603 Terms: a
+// building whose type has the grinding flag).
+#[test]
+fn counts_recycling_buildings() {
+    let mut r = fixture::ruleset();
+    let mut b = fixture::building(2, 2, 400, 0);
+    b.grinding = Some(true);
+    b.tech_level = Some(99);
+    r.sim.buildings.insert("GRND".into(), b);
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("GRND".into());
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-tally"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut tally = Tally::default();
+    g.step();
+    tally.observe(&g.world);
+    assert!(tally.grinders[0].is_empty(), "{tally:?}");
+    testkit::spawn(&mut g.world, Kind::Building, "GRND", 0, fixture::at(0, 6), 0);
+    g.step();
+    tally.observe(&g.world);
+    assert_eq!(tally.grinders[0].len(), 1, "{tally:?}");
+    assert!(tally.grinders[1].is_empty(), "{tally:?}");
+}

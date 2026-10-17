@@ -94,6 +94,12 @@ fn room(w: &World, b: ObjectId) -> usize {
     usize::try_from(cap).unwrap_or(0).saturating_sub(taken)
 }
 
+/// Whether one of the house's infantry absorbers has room left (the
+/// grinder step sends controlled infantry there first, `grinder`).
+pub(crate) fn room_left(w: &World, house: HouseId) -> bool {
+    absorbers(w, house).iter().any(|&b| room(w, b) > 0)
+}
+
 /// Whether the house is short of power: output not above drain.
 fn short_of_power(w: &World, house: HouseId) -> bool {
     let (output, drain) = glasnost_sim::econ::power::totals(w, house);

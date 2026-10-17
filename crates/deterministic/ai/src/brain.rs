@@ -268,7 +268,7 @@ impl Brain {
             self.build_superweapon(w, &mut out);
             let sensors = self.special_uses().sensors;
             self.build_sensor(w, &mut out);
-            if self.special_uses().sensors == sensors {
+            if self.special_uses().sensors == sensors && !self.build_grinder(w, &mut out) {
                 self.build_gattling_defence(w, &mut out);
             }
         }
@@ -341,6 +341,29 @@ impl Brain {
             out.push(Order::Build { what: t });
             self.special.count_sensor();
         }
+    }
+
+    /// Builds a recycling building (S-0603, [`crate::grinder::build_type`])
+    /// as a person adds a grinder to the base, under the same conditions as
+    /// the psychic sensor. Returns whether it ordered one.
+    fn build_grinder(&mut self, w: &World, out: &mut Vec<Order>) -> bool {
+        let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
+        let giving = |t: &TypeRef| !Self::giving_kinds(w, t.index).is_empty();
+        if self.script.selling()
+            || !self.script.harvesters_kept(w)
+            || out.iter().any(|o| {
+                matches!(o, Order::Place { .. })
+                    || matches!(o, Order::Build { what } if what.kind == Kind::Building && (!climb(what) || giving(what)))
+            })
+        {
+            return false;
+        }
+        let Some(t) = crate::grinder::build_type(&self.script, w) else {
+            return false;
+        };
+        out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+        out.push(Order::Build { what: t });
+        true
     }
 
     /// Builds a gattling defence (S-0609, [`crate::gattling::defence_type`])
