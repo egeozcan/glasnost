@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 41
+revision: 42
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -1177,7 +1177,7 @@ a visiting aircraft carrying its paratroopers as passengers (S-0522 claim 3).
 it lands (S-0522 claim 9).
 
 **pass counter.** A paradrop plane's count of passes it may still start without a successful
-drop. It starts at 5 and a successful drop resets it to 5 (S-0522 claims 6 to 8).
+drop. It starts at 5 passes and a successful drop resets it to 5 passes (S-0522 claims 6 to 8).
 
 **passability category.** A number from 0 to 7 that each cell carries, computed from its land type,
 overlay and contents: *open*, *crushable*, *wall-like*, *beach*, *water*, *partial obstacle*,
@@ -1885,9 +1885,7 @@ fit test (Terms, claim 26).
 runs of sections touching neither end of the affected span, subject to the span bounds in
 S-0511 claim 7.
 
-**tech building.** A building whose type has the needs-engineer flag. The stock examples are
-neutral service buildings: oil derrick, hospitals, machine shop, airport, outpost, secret lab
-and civilian power plant. Their services are owned by the specs indexed in S-0515 claim 1.
+**tech building.** A building whose type has the needs-engineer flag. Their services are owned by the specs indexed in S-0515 claim 1.
 
 **upgrade.** A building type that is added to an existing building instead of standing on its own
 cells, and a building of such a type. S-0405 names it (Terms), and S-0406 owns how it is placed
@@ -2184,7 +2182,7 @@ readiness, with remaining time in ticks. A running clock counts down by one per 
 below zero; a stopped clock keeps its remaining time. S-0512 claim 5 owns completion.
 Its claims 10 and 14 describe clocks that run despite suspension.
 
-**clock stage.** The whole-number charge progress from 0 to 54 shown on a superweapon icon.
+**clock stage.** The whole-number charge progress, from 0 to 54 stages, shown on a superweapon icon.
 S-0512 claim 16 owns the display, including drain-mode exceptions.
 
 **cloud, strike.** A *cloud* is a storm cloud animation over a cell; its *strike* is the bolt
@@ -2218,7 +2216,8 @@ granting and its giving-building definition includes the auxiliary-building cond
 including the update at which its fixed 60-tick wait expires. The 60 ticks are the leaving wait,
 not the full leaving stage; the member remains at its old position in the expiry update and
 departs on the following update. It counts as being erased throughout the leaving stage
-(S-0513 claim 39).
+(S-0513 claim 39). S-0513 owns the stage and its length; the stage starts at the first update
+after launch, not at departure. Departure is its end.
 
 **manual-charge superweapon.** A type whose record is granted with its clock stopped at the
 full charge time and charges only when a trigger sets its charge (S-0512 claim 20).
