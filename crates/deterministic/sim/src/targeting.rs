@@ -676,7 +676,7 @@ fn has_undeploy_delay(w: &World, id: ObjectId) -> bool {
 }
 
 fn passengers(w: &World, id: ObjectId) -> bool {
-    // spec: S-0214 Import mapping (Passengers: a transport when more than 0); S-0605 claim 1 (an absorbing building's type carries passengers, Q-1265 interim: capacity above 0)
+    // spec: S-0214 Import mapping (Passengers: a transport when more than 0); S-0605 claim 1 (an absorbing building's type carries passengers when its capacity is above 0)
     unit(w, id).is_some_and(|u| u.passengers > 0)
         || crate::structures::absorb::carries_passengers(w, id)
 }
@@ -1017,7 +1017,10 @@ fn infantry_on(
             return Action::Heal;
         }
         // spec: S-0214 table I row I13 (not a unit or building, or no passengers: g if move or area guard, else select)
-        if !unit_or_building(w, t) || !passengers(w, t) {
+        // spec: S-0605 claim 1 (for an absorbing building, "no passengers" is a capacity equal to 0, so a negative one does not meet the row)
+        let none = crate::structures::absorb::carries_no_passengers(w, t)
+            .unwrap_or_else(|| !passengers(w, t));
+        if !unit_or_building(w, t) || none {
             return if matches!(g, Action::Move | Action::AreaGuard) {
                 g
             } else {

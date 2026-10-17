@@ -105,6 +105,29 @@ fn particle_system_fields_and_shared_gas_system() {
     assert_eq!(gas.lifetime, None);
 }
 
+/// spec: S-0613 Terms (empty-named type), claim 4 and Import mapping
+/// (HoldsWhat absent from a section that is read: the empty-named type;
+/// a system type never read: none) and S-0004 claim 13 (the empty-named
+/// particle type registered by reference, at the end of the list)
+#[test]
+fn absent_holds_what_in_a_read_section_names_the_empty_type() {
+    let base = "[Particles]\n0=Puff\n[ParticleSystems]\n0=Plain\n1=Unread\n\
+                [Puff]\nBehavesLike=Gas\n[Plain]\nBehavesLike=Smoke\nLifetime=5\n";
+    let import = import(base, "", "");
+    let r = glasnost_rules::resolve_ruleset(Some((import.tree, import.provenance)), &[])
+        .unwrap_or_else(|e| panic!("{e}"))
+        .ruleset;
+    let (names, s) = (&r.registries["particles"], &r.sim);
+    let empty = names.last().expect("a particle type");
+    assert_eq!(names.len(), 2, "Puff, then the empty-named type: {names:?}");
+    assert_ne!(empty, "Puff");
+    let plain = &s.particle_systems["Plain"];
+    assert_eq!(plain.holds_what.as_ref(), Some(empty), "read without HoldsWhat");
+    let unread = s.particle_systems.get("Unread").cloned().unwrap_or_default();
+    assert_eq!(unread.holds_what, None, "never read");
+    assert_eq!(s.particle_systems["GasCloudSys"].holds_what, None, "never read");
+}
+
 /// spec: S-0613 Import mapping ([General] InfantryVirus an animation name,
 /// WindDirection an integer; absent: none and −1)
 #[test]

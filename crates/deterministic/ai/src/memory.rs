@@ -153,6 +153,18 @@ impl Memory {
             .any(|f| f.unit == unit && f.goal == goal && f.at == at && f.until > w.tick)
     }
 
+    /// Whether `unit` was already sent for `goal` from the cell it stands
+    /// on and its order is still being judged (it has not moved): a
+    /// module that would click the same again waits instead.
+    pub fn pending(&self, w: &World, unit: ObjectId, goal: Target) -> bool {
+        let Some(at) = w.obj(unit).map(|o| o.pos.cell()) else {
+            return false;
+        };
+        self.given
+            .iter()
+            .any(|g| g.unit == unit && g.goal == goal && g.at == at)
+    }
+
     /// How many (unit, goal) pairs are blocked now (diagnostics).
     pub fn blocked(&self) -> usize {
         self.failed.len()

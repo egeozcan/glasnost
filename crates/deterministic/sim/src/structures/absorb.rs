@@ -1,38 +1,24 @@
 //! Absorbing buildings (S-0605): who may enter (claims 1 and 2, F1), contact
 //! and waiting in line (claims 3 to 5, F2), going inside (claims 6 to 8),
-//! holding (claims 9 and 10), the voluntary release (claims 11 to 13, F3)
-//! and the other ways out (claims 14 and 15: S-0312 claim 24, S-0408 claim
-//! 8, S-0514 claim 12).
+//! holding (claims 9 and 10), the voluntary release (claims 11 to 13, F3),
+//! the other ways out (claims 14 and 15: S-0312 claim 24, S-0408 claim 8,
+//! S-0514 claim 12), the bio-reactor fate (claim 16) and what ends an
+//! entrant's contact (claim 17).
 //!
 //! State, all in [`super::StructState`]: a building's passengers in the
-//! passenger order (front first), a passenger's building, and the building
-//! an actor is waiting in line to enter. An entrant's contact is the
-//! ordinary contact field; a building's contacts are the objects whose
-//! contact it is.
+//! passenger order (front first), a passenger's building, the building an
+//! actor is waiting in line to enter, and the enter-nearest instruction of
+//! claim 16. An entrant's contact is the ordinary contact field; a
+//! building's contacts are the objects whose contact it is. An enter order
+//! on a building does not make an actor remember an entry object (claims 4
+//! and 5), so only the contact completes an entry.
 //!
-//! Interim rules of our requests:
-//! - Q-1260: the bio-reactor fate of S-0601 claim 8 is a one-shot search
-//!   ([`bio_reactor_fate`]); none found falls back to *hunt*.
-//! - Q-1261: claim 3 runs when an enter order on an absorbing building is
-//!   applied (after the order's ordinary effects), and a contact not granted
-//!   for any reason other than a held contact also starts waiting in line;
-//!   the retry of claim 4 runs in the actor's own turn after its movement,
-//!   where the depot retry runs (S-0314 claim 23), and its *enter* is queued
-//!   without an immediate start.
-//! - Q-1262: at the eighth first-round direction the search ends only when
-//!   both cell tests pass and the neighbour carries a deck (Edge cases).
-//! - Q-1263: a passenger removed inside makes the building owner's power
-//!   due when the type's extra output is above 0.
-//! - Q-1264: a passenger let out by a destruction takes the first free
-//!   standing position of its cell, without a draw (as S-0312 claim 13's
-//!   crew placement).
-//! - Q-1265: a building type carries passengers for S-0214 rows x and q
-//!   when it is absorbing and its capacity is above 0.
-//! - Q-1266: an entrant whose loading request is refused (claims 3 and 5)
-//!   also forgets the building as its destination and stops walking, so
-//!   that it stands (scenario A6).
-//! - Q-1267: an actor in contact with an absorbing building that neither is
-//!   in *enter* nor has *enter* queued gives the contact up in its turn.
+//! Interim rule of our request:
+//! - Q-1152: the waiting actor's approach (claim 4) takes the nearby-cell
+//!   search of S-0212 claim 25 from the building's centre cell with the
+//!   settings of a vehicle passenger's exit (S-0507 claim 10): the actor's
+//!   own locomotion class, zone normal, no reach region, ground mode,
+//!   bridges allowed, no height, overlay or reference-cell condition.
 
 use glasnost_map::CellXY;
 use glasnost_num::F64;
@@ -89,10 +75,25 @@ pub fn vehicle_absorber(w: &World, b: ObjectId) -> bool {
 }
 
 /// Whether a building's type carries passengers for S-0214's transport
-/// verdicts *x* and *q*: an absorbing type with a capacity above 0 (Q-1265
-/// interim).
+/// verdicts *x* and *q*: an absorbing type whose capacity is above 0
+/// (claim 1).
 pub fn carries_passengers(w: &World, b: ObjectId) -> bool {
+    // spec: S-0605 claim 1 and Import mapping (rows x and q read the imported passenger count as above 0)
     absorb_rules(w, b).is_some_and(|r| r.capacity > 0)
+}
+
+/// For an absorbing building, whether it carries no passengers for S-0214
+/// row I13: its capacity equals 0, so a negative capacity does not (claim
+/// 1). `None` for any other object.
+pub fn carries_no_passengers(w: &World, b: ObjectId) -> Option<bool> {
+    // spec: S-0605 claim 1 (row I13 tests "carries no passengers" as equality with 0)
+    absorb_rules(w, b).map(|r| r.capacity == 0)
+}
+
+/// Whether an actor holds the enter-nearest instruction for absorbing
+/// buildings (claim 16, S-0215 Terms).
+pub fn holds_instruction(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.structure.enter_nearest)
 }
 
 /// A building's passengers in the passenger order, the front first (Terms).
@@ -235,19 +236,6 @@ fn give_up_contact(w: &mut World, u: ObjectId) {
     }
 }
 
-/// A refused loading request (claims 3 and 5): the actor gives up the
-/// contact and, under Q-1266's interim rule, forgets the building as its
-/// destination and stops walking, so that the fall-back to rest makes it
-/// stand (scenario A6) instead of walking on and going in under claim 6.
-fn loading_given_up(w: &mut World, u: ObjectId) {
-    give_up_contact(w, u);
-    // Q-1266 interim (S-0605 claim 5 and scenario A6: it stops and stands, it does not go in)
-    crate::econ::assign_destination(w, u, None);
-    if let Some(ob) = w.obj_mut(u) {
-        ob.path.steps.clear();
-    }
-}
-
 fn set_waiting(w: &mut World, u: ObjectId, b: Option<ObjectId>) {
     if let Some(ob) = w.obj_mut(u) {
         ob.structure.waiting = b;
@@ -257,14 +245,15 @@ fn set_waiting(w: &mut World, u: ObjectId, b: Option<ObjectId>) {
 // ---------------------------------------------------------------------------
 // Getting contact (claims 3 to 5)
 
-/// Claim 3 for actor `u` given absorbing building `b` as its destination
-/// with *enter*: contact, or waiting in line.
+/// Claim 3 for actor `u` that has just been given absorbing building `b`
+/// as its destination with *enter* current or queued: contact, or waiting
+/// in line.
 fn seek_contact(w: &mut World, u: ObjectId, b: ObjectId) {
     if w.obj(u).is_none_or(|o| o.contact.is_some()) {
         return;
     }
-    // spec: S-0605 claim 3 (the building already holds any contact: waiting in line, destination cleared, stays where it is); Q-1261 interim (a contact not granted for another reason also waits)
-    if !contacts(w, b).is_empty() || !grants_contact(w, b, u) {
+    if !contacts(w, b).is_empty() {
+        // spec: S-0605 claim 3 (the building already holds any contact, whatever the number of link places: waiting in line, destination cleared, not told to walk yet)
         crate::econ::assign_destination(w, u, None);
         if let Some(ob) = w.obj_mut(u) {
             ob.path.steps.clear();
@@ -272,16 +261,21 @@ fn seek_contact(w: &mut World, u: ObjectId, b: ObjectId) {
         set_waiting(w, u, Some(b));
         return;
     }
+    if !grants_contact(w, b, u) {
+        // spec: S-0605 claim 3 (not granted: no waiting in line; the destination assignment goes on, so the actor holds the building as its destination without contact)
+        return;
+    }
     if let Some(ob) = w.obj_mut(u) {
         ob.contact = Some(b);
     }
-    // spec: S-0605 claim 3 (with contact it asks to load; switched off: it gives up the contact)
+    // spec: S-0605 claim 3 (granted: it asks to load; switched off refuses, it gives up the contact and keeps the building as its destination)
     if loading_refused(w, b) {
-        loading_given_up(w, u);
+        give_up_contact(w, u);
     }
 }
 
-/// After an enter order's ordinary effects (claim 3, Q-1261 interim): an
+/// After an enter order's ordinary effects (claim 3; S-0213 table T3:
+/// part (d) has queued *enter* when part (f) assigns the destination): an
 /// enter order naming an absorbing building as destination seeks contact.
 pub fn order_entered(w: &mut World, u: ObjectId, b: Behaviour, dest: Option<Target>) {
     if b != Behaviour::Enter {
@@ -303,19 +297,25 @@ pub fn order_applied(w: &mut World, u: ObjectId) {
     set_waiting(w, u, None);
 }
 
-/// The per-tick retry of an actor waiting in line (claim 4), in its own
-/// turn after its movement (Q-1261 interim).
+/// The retry of an actor waiting in line (claim 4), in its own turn after
+/// its behaviour processing and its movement, where S-0314 claim 23's
+/// retry runs.
 ///
-/// First, under Q-1267's interim rule, an actor in contact with an
-/// absorbing building that neither is in *enter* nor has *enter* queued
-/// gives the contact up, so that the building's link place is free for the
-/// next actor waiting in line.
+/// First, with `quirks.absorber_stale_contact_kept` off, an actor in
+/// contact with an absorbing building that has neither *enter* current nor
+/// *enter* queued gives the contact up (claim 17, Edge cases).
 pub fn waiting_turn(w: &mut World, u: ObjectId) {
-    contact_outlived(w, u);
+    if !w.rules().quirks.absorber_stale_contact_kept {
+        contact_outlived(w, u);
+    }
     let Some(b) = waiting_for(w, u) else { return };
     // spec: S-0605 claim 4 (a building that has left the game ends the wait)
     if w.obj(b).is_none_or(|o| !o.on_map) {
         set_waiting(w, u, None);
+        return;
+    }
+    // spec: S-0605 claim 4 and S-0314 claim 23 (nothing is retried while the actor is still phasing in)
+    if crate::teleport::phasing_in(w, u) {
         return;
     }
     // spec: S-0605 claim 4 (not granted, no free link place or any other reason: it keeps waiting)
@@ -327,71 +327,118 @@ pub fn waiting_turn(w: &mut World, u: ObjectId) {
     }
     set_waiting(w, u, None);
     if answer(w, b, u) == Answer::Accepts {
-        // spec: S-0605 claim 4 (accept: it queues enter with that building as its destination and stops waiting)
+        let (t, stale) = (w.tick, w.rules().quirks.stale_suspended_revert); // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+        let ready = crate::process::ready(w, u);
+        // spec: S-0605 claim 4 and S-0215 claim 7 (accept: enter queued with an immediate start, current at once when ready; the building as destination; waiting ends)
         if let Some(ob) = w.obj_mut(u) {
-            ob.beh.queue(Some(Behaviour::Enter));
+            ob.beh.queue_and_start(Some(Behaviour::Enter), ready, t, stale);
             ob.path.steps.clear();
             ob.path.retry_at = 0;
         }
         crate::econ::assign_destination(w, u, Some(Target::Object(b)));
     } else {
-        // spec: S-0605 claim 4 (refuse: it gives up the contact, its behaviour becomes none, its destination is cleared and it stops waiting)
+        // spec: S-0605 claim 4 (refuse: it gives up the contact, queues the none behaviour without a start, which leaves its behaviours as they are (S-0215 claim 7), clears its destination and stops waiting)
         give_up_contact(w, u);
         if let Some(ob) = w.obj_mut(u) {
-            ob.beh.current = None;
-            ob.beh.queued = None;
+            ob.beh.queue(None);
         }
         crate::econ::assign_destination(w, u, None);
     }
 }
 
-/// Q-1267 interim: the contact of an actor that has left *enter* (none
-/// current, none queued) by a way S-0605 does not name, such as resting
-/// after the approach step of S-0215 claim 37 replaced its destination, or
-/// a new order, ends.
+/// `quirks.absorber_stale_contact_kept` off (claim 17, Edge cases): the
+/// contact of an actor that has neither *enter* current nor *enter* queued
+/// ends. A waiting actor granted contact with *enter* queued but not yet
+/// started keeps it.
 fn contact_outlived(w: &mut World, u: ObjectId) {
     let Some(o) = w.obj(u) else { return };
     let Some(b) = o.contact else { return };
     let entering =
         o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter);
-    // Q-1267 interim (S-0605 claims 3 and 4: a contact held by an actor that is no longer entering ends)
+    // spec: S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept off: an actor in contact with an absorbing building with neither enter current nor queued gives the contact up)
     if !entering && is_absorber(w, b) {
         give_up_contact(w, u);
     }
 }
 
-/// The absorbing building an actor in *enter* is entering: its contact,
-/// else the object it remembers entering (S-0215 claim 29).
+/// The absorbing building an actor's contact is, if any. An enter order on
+/// a building does not make an actor remember an entry object (claims 4
+/// and 5), so the contact is the only partner of S-0215 claim 29's request.
 fn partner(w: &World, u: ObjectId) -> Option<ObjectId> {
     let o = w.obj(u)?;
-    // spec: S-0215 claim 29 (to its contact when present, otherwise to the object it remembers entering)
-    o.contact
-        .or(match o.dest {
-            Some(Target::Object(k)) => Some(k),
-            _ => None,
-        })
-        .filter(|&k| is_absorber(w, k))
+    // spec: S-0605 claims 4 and 5 and S-0215 claim 29 (the request goes to the contact; an enter order on a building leaves no remembered entry object)
+    o.contact.filter(|&k| is_absorber(w, k))
 }
 
-/// Whether an actor in *enter* is entering an absorbing building.
+/// Whether an actor in *enter* is entering an absorbing building: in
+/// contact with one, waiting in line for one, or holding one as its
+/// destination.
 pub fn entering_absorber(w: &World, u: ObjectId) -> bool {
+    let Some(o) = w.obj(u) else { return false };
     partner(w, u).is_some()
+        || o.structure.waiting.is_some()
+        || matches!(o.dest, Some(Target::Object(k)) if is_absorber(w, k))
 }
 
-/// The *enter* processing toward an absorbing building (claim 5, S-0215
-/// claim 29). Returns the delay.
+/// The *enter* processing toward an absorbing building (claims 4 and 5,
+/// S-0215 claim 29). Returns the delay.
 pub fn process_enter(w: &mut World, u: ObjectId) -> i32 {
-    let Some(b) = partner(w, u) else {
-        crate::process::fall_back(w, u, false);
+    if let Some(b) = partner(w, u) {
+        if loading_refused(w, b) {
+            // spec: S-0605 claim 5 (switched off since then: the loading request is refused; it gives up the contact and falls back to rest in the same processing, its destination and walk kept)
+            give_up_contact(w, u);
+            crate::process::fall_back(w, u, false);
+        }
+        // spec: S-0215 claims 6 and 29 (the processing ends with the standard delay)
         return crate::process::standard_delay(w, u);
-    };
-    if loading_refused(w, b) {
-        // spec: S-0605 claim 5 (switched off since then: it gives up the contact and falls back to rest)
-        loading_given_up(w, u);
-        crate::process::fall_back(w, u, false);
     }
-    // spec: S-0215 claims 6 and 29 (the processing ends with the standard delay)
+    if let Some(b) = waiting_for(w, u)
+        && w.obj(b).is_some_and(|o| o.on_map)
+    {
+        // spec: S-0605 claim 4 (approach: the first processing of enter after the wait began, with no contact and no remembered entry object, the building still in the game)
+        approach(w, u, b);
+        // spec: S-0215 claims 6 and 29 (the processing ends with the standard delay)
+        return crate::process::standard_delay(w, u);
+    }
+    // spec: S-0605 claim 5 (no contact, no remembered entry object, not waiting in line: it falls back to rest at once, keeping the building as its destination; it never goes in)
+    crate::process::fall_back(w, u, false);
     crate::process::standard_delay(w, u)
+}
+
+/// Claim 4's approach of an actor waiting in line for building `b`: a free
+/// location near the building's centre cell, of the kind the actor's own
+/// movement class can stand on, as its destination, with *move* queued and
+/// started at once. The waiting goes on.
+fn approach(w: &mut World, u: ObjectId, b: ObjectId) {
+    let Some(uo) = w.obj(u).cloned() else { return };
+    // spec: S-0605 claim 4 and S-0204 claim 4 (the building's centre cell: the cell of its reference point, the centre of its foundation)
+    let centre = w.reference_point(b).cell();
+    crate::regions::ensure(w);
+    let class = w.rules().unit(uo.kind, uo.type_index).and_then(|t| t.class);
+    // Q-1152 interim (S-0605 claim 4: the nearby-location search of claim 12, its tie-breaks open): S-0212 claim 25 with the settings of S-0507 claim 10's vehicle exit and the actor's own class
+    let found = crate::path::nearby(
+        w,
+        centre,
+        crate::path::NearbyUse::Settings(crate::path::NearbySettings {
+            class,
+            zone: glasnost_rules::sim::MovementZone::Normal,
+            reach: None,
+            deck: false,
+            height: false,
+            reference: None,
+            no_bridges: false,
+            no_overlay: false,
+        }),
+    );
+    let Some(c) = found else { return };
+    let (t, stale) = (w.tick, w.rules().quirks.stale_suspended_revert); // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    // spec: S-0605 claim 4 (it assigns the location as its destination, queues move and starts it at once; the waiting itself does not end)
+    crate::econ::assign_destination(w, u, Some(Target::Cell(c)));
+    if let Some(ob) = w.obj_mut(u) {
+        ob.beh.queue_and_start_at_once(Behaviour::Move, t, stale);
+        ob.path.steps.clear();
+        ob.path.retry_at = 0;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -438,7 +485,7 @@ pub fn arrival(w: &mut World, u: ObjectId) -> bool {
     let Some(b) = arrival_building(w, u) else {
         return false;
     };
-    // spec: S-0605 claim 6 and S-0524 claim 12 (one entry raise on the building's tag, the entrant as causing object, while it is still outside)
+    // spec: S-0605 claim 6 and S-0524 claim 12 (one entry raise on the building's tag, the entrant as causing object, while it is still outside; not conditional on contact)
     crate::mp_triggers::entry_raise(w, b, u);
     // The raise's actions may have removed either object.
     if !w.obj(u).is_some_and(|o| o.on_map) || !w.obj(b).is_some_and(|o| o.on_map) {
@@ -449,6 +496,10 @@ pub fn arrival(w: &mut World, u: ObjectId) -> bool {
         o.econ.sale.is_some() || crate::econ::placement::seen_behaviour(o) == Some(Behaviour::Selling)
     });
     if selling {
+        return false;
+    }
+    // spec: S-0605 claim 6 (the entrant asks its contact to complete its entry: one that holds no contact gets no answer and does not go in, the raise made all the same)
+    if w.obj(u).and_then(|o| o.contact) != Some(b) {
         return false;
     }
     if !w.rules().quirks.absorber_contact_no_capacity_recheck && answer(w, b, u) != Answer::Accepts
@@ -554,12 +605,17 @@ fn go_in(w: &mut World, u: ObjectId, b: ObjectId, infantry: bool) {
     }
     // spec: S-0605 claims 7 and 9 (it leaves the map and play; its destination is cleared)
     crate::objects::take_inside(w, u);
+    let keep = w.rules().quirks.enter_nearest_survives_absorption;
     if let Some(ob) = w.obj_mut(u) {
         // spec: S-0605 claim 7 (its contact ends, freeing the link place)
         ob.contact = None;
         ob.structure.absorbed_in = Some(b);
         ob.structure.waiting = None;
         ob.layer = Layer::Ground;
+        if !keep {
+            // spec: S-0605 Edge cases (quirks.enter_nearest_survives_absorption off: going in clears the enter-nearest instruction)
+            ob.structure.enter_nearest = false;
+        }
     }
     if let Some(bb) = w.obj_mut(b) {
         // spec: S-0605 claim 7 and Terms (passenger order: it becomes the front passenger; n goes up by 1)
@@ -634,7 +690,7 @@ fn let_out(w: &mut World, b: ObjectId) -> bool {
                 && crate::transport::enters(w, p, far, reference)
         };
         if deck(w, n) {
-            // spec: S-0605 claim 12 and Edge cases (quirks.absorber_release_bridge_ends_search: a deck neighbour at the eighth direction that passes both cell tests ends the search; Q-1262 interim)
+            // spec: S-0605 claim 12 and Edge cases (quirks.absorber_release_bridge_ends_search: a deck neighbour at the eighth direction that passes both cell tests ends the search; a deck neighbour that fails a cell test there takes the ordinary advance)
             if k == DIRECTIONS - 1 && deck_ends && serves() {
                 ended = true;
             }
@@ -693,6 +749,15 @@ fn let_out(w: &mut World, b: ObjectId) -> bool {
     }
     // spec: S-0605 claim 13 (power due as in claim 7)
     power_due(w, b);
+    let human = w
+        .obj(p)
+        .and_then(|o| o.owner)
+        .and_then(|h| w.houses.get(usize::from(h.0)))
+        .is_some_and(|x| x.human);
+    if human && let Some(ob) = w.obj_mut(p) {
+        // spec: S-0605 claim 13 (a passenger of a human-controlled house drops an enter-nearest instruction; one of the neutral or special house keeps it, quirks.enter_nearest_survives_absorption)
+        ob.structure.enter_nearest = false;
+    }
     true
 }
 
@@ -735,9 +800,10 @@ fn released_orders(w: &mut World, p: ObjectId) {
 
 /// Puts passenger `p` of `b` into foundation cell `c` facing the
 /// building's facing with a forced scatter request (S-0312 claim 24,
-/// S-0408 claim 8). `sale` chooses the sale's standing position (one
-/// R(0, 3) draw, S-0408 claim 7). Returns whether it was placed.
-fn place_released(w: &mut World, b: ObjectId, p: ObjectId, c: CellXY, sale: bool) -> bool {
+/// S-0408 claim 8). An infantry passenger takes the centre placement of
+/// S-0208 claim 3, for a destruction as for a sale (claim 14). Returns
+/// whether it was placed.
+fn place_released(w: &mut World, b: ObjectId, p: ObjectId, c: CellXY) -> bool {
     let Some(bo) = w.obj(b).cloned() else {
         return false;
     };
@@ -745,25 +811,14 @@ fn place_released(w: &mut World, b: ObjectId, p: ObjectId, c: CellXY, sale: bool
         return false;
     };
     let (x, y) = if kind == Kind::Infantry {
-        let k = if sale {
-            // spec: S-0408 claims 7 and 8 (the desired point 128, 164 of the cell: class centre, one R(0, 3) draw unless the record blocks every position)
-            crate::walk::choose_position(
-                w,
-                c,
-                Layer::Ground,
-                crate::cells::position::CENTRE,
-                false,
-            )
-        } else if crate::occupancy::no_position_by_flags(w, c, Layer::Ground) {
-            None
-        } else {
-            // spec: S-0312 claim 24 (an infantry unit on a free standing position); Q-1264 interim (the first free one of S-0208 table P, no draw)
-            (0u8..5).find(|&k| {
-                w.cells
-                    .occ(c, Layer::Ground)
-                    .is_none_or(|o| !o.taken(k))
-            })
-        };
+        // spec: S-0605 claim 14, S-0408 claims 7 and 8 and S-0208 claim 3 (destruction and sale alike: the aim point 36 leptons from the cell's centre along its second axis, the centre class; an open cell makes one R(0, 3) draw and takes the first free position of the chosen row; a cell that refuses the infantry unit makes no draw)
+        let k = crate::walk::choose_position(
+            w,
+            c,
+            Layer::Ground,
+            crate::cells::position::CENTRE,
+            false,
+        );
         let Some(k) = k else {
             return false;
         };
@@ -819,7 +874,7 @@ pub fn destroyed(w: &mut World, b: ObjectId, hit: &Hit) {
             // spec: S-0312 claim 24 and Edge cases (beyond the last cell: not placed)
             && cells
                 .get(i)
-                .is_some_and(|&c| place_released(w, b, p, c, false));
+                .is_some_and(|&c| place_released(w, b, p, c));
         if !placed {
             leave_order(w, b, p);
             // spec: S-0312 claim 24 (one that cannot be placed, or every one without a crew, dies)
@@ -842,7 +897,7 @@ pub fn sold(w: &mut World, b: ObjectId) {
         // spec: S-0408 claim 8 (one per foundation cell in the cell order, front first, even if an earlier placement fails; beyond the last cell, S-0312 Edge cases)
         let placed = cells
             .get(i)
-            .is_some_and(|&c| place_released(w, b, p, c, true));
+            .is_some_and(|&c| place_released(w, b, p, c));
         if !placed {
             leave_order(w, b, p);
             // spec: S-0408 claim 8 (a passenger that cannot be placed is deleted)
@@ -867,8 +922,11 @@ pub fn erased(w: &mut World, b: ObjectId) {
 pub fn removing(w: &mut World, id: ObjectId) {
     if let Some(b) = absorbed_in(w, id) {
         leave_order(w, b, id);
-        // Q-1263 interim (S-0605 claim 15 open question): the removal makes power due as a release does.
-        power_due(w, b);
+        if !w.rules().quirks.absorber_removal_keeps_stale_power {
+            // spec: S-0605 claim 15 and Edge cases (quirks.absorber_removal_keeps_stale_power off: the removal makes the building owner's power due as a release does, when the extra output is above 0)
+            power_due(w, b);
+        }
+        // spec: S-0605 claim 15 and Edge cases (quirks.absorber_removal_keeps_stale_power on: nothing marks the building owner's power due; its totals keep the removed passenger's contribution until another event)
     }
     set_waiting(w, id, None);
     if count(w, id) > 0 {
@@ -877,46 +935,85 @@ pub fn removing(w: &mut World, id: ObjectId) {
 }
 
 // ---------------------------------------------------------------------------
-// The bio-reactor fate (S-0601 claim 8, S-0215 claim 24)
+// The bio-reactor fate (claim 16, S-0601 claim 8, S-0215 claims 24 and 26)
 
-/// The bio-reactor fate of S-0601 claim 8: S-0215 claim 24's search for
-/// *enter the nearest absorbing building*, made once (Q-1260 interim):
-/// the absorbing buildings of the object's own owner that accept it, the
-/// nearest by F4's 3-D distance to the building's centre, ties to the
-/// lowest object number. Found: that building as destination and *enter*
-/// queued; returns whether one was found.
-pub fn bio_reactor_fate(w: &mut World, u: ObjectId) -> bool {
-    let Some(uo) = w.obj(u).cloned() else {
-        return false;
-    };
-    if !uo.on_map || uo.owner.is_none() {
-        return false;
-    }
+/// Claim 16's search for unit `u`: its owner's absorbing buildings in the
+/// order of the absorber list (the house's holding order, S-0402 Terms,
+/// filtered to absorbing buildings), each asked claim 1's acceptance test
+/// (a free link place does not count), the smallest ρ₃ from the unit's
+/// position to the building's reference point winning, and on equal values
+/// the later one in the list. Draws nothing.
+fn nearest_accepting(w: &World, u: ObjectId) -> Option<ObjectId> {
+    let uo = w.obj(u)?;
+    let owner = uo.owner?;
+    let list = &w.houses.get(usize::from(owner.0))?.econ.acquired;
     let mut best: Option<(i64, ObjectId)> = None;
-    for o in w.objects.values() {
-        // spec: S-0215 claim 24 (the absorbing buildings of its own owner that accept it as a passenger)
-        if o.owner != uo.owner || !o.on_map || answer(w, o.id, u) != Answer::Accepts {
+    // spec: S-0605 claim 16 and Terms (candidates: the owner's absorbing buildings in absorber-list order, the order they were placed or came to the house)
+    for &b in list {
+        let Some(bo) = w.obj(b) else { continue };
+        // spec: S-0605 claim 16 (each asked claim 1's acceptance test: alliance, build state, kind, switch, capacity, size; a link place is not asked)
+        if bo.owner != Some(owner)
+            || !bo.on_map
+            || !is_absorber(w, b)
+            || answer(w, b, u) != Answer::Accepts
+        {
             continue;
         }
-        // spec: S-0215 claim 24 and F4 (the nearest by the 3-D distance ρ₃)
-        let d = crate::approach::rho3(w, uo.pos, w.reference_point(o.id));
-        if best.is_none_or(|(bd, _)| d < bd) {
-            best = Some((d, o.id));
+        // spec: S-0605 claim 16 and S-0215 F4 (ρ₃ from the unit's own position to the building's reference point, the foundation centre, S-0204 claim 4; quirks.table_root_distance)
+        let d = crate::approach::rho3(w, uo.pos, w.reference_point(b));
+        // spec: S-0605 claim 16 (the smallest value wins; on equal values the building later in the absorber list)
+        if best.is_none_or(|(bd, _)| d <= bd) {
+            best = Some((d, b));
         }
     }
-    let Some((_, b)) = best else {
+    best.map(|(_, b)| b)
+}
+
+/// The search and its result (claim 16, S-0215 claim 24): found, the unit
+/// takes the instruction and, unless already in contact with that building
+/// or waiting in line for it, queues *enter* without a start and takes the
+/// building as its destination, which applies claim 3. None found, the
+/// instruction is cleared. Returns whether a building was found.
+fn search_and_go(w: &mut World, u: ObjectId) -> bool {
+    let Some(b) = nearest_accepting(w, u) else {
+        if let Some(ob) = w.obj_mut(u) {
+            // spec: S-0605 claim 16 (none found: the instruction is cleared)
+            ob.structure.enter_nearest = false;
+        }
         return false;
     };
-    // spec: S-0215 claim 24 (it takes that building as its destination and queues enter, unless already in contact with it)
-    if uo.contact == Some(b) {
+    let Some(o) = w.obj_mut(u) else { return false };
+    // spec: S-0605 claim 16 (found: the unit takes the enter-nearest instruction for absorbing buildings)
+    o.structure.enter_nearest = true;
+    // spec: S-0605 claim 16 and S-0215 claim 24 (unless already bound for it: in contact with it, or waiting in line for it); Q-1154 interim (S-0215 claim 24 names contact only)
+    if o.contact == Some(b) || o.structure.waiting == Some(b) {
         return true;
     }
-    if let Some(ob) = w.obj_mut(u) {
-        ob.beh.queue(Some(Behaviour::Enter));
-        ob.path.steps.clear();
-        ob.path.retry_at = 0;
-    }
+    // spec: S-0605 claim 16 (it queues enter without a start and assigns the building as its destination)
+    o.beh.queue(Some(Behaviour::Enter));
+    o.path.steps.clear();
+    o.path.retry_at = 0;
     crate::econ::assign_destination(w, u, Some(Target::Object(b)));
+    // spec: S-0605 claims 3 and 16 (the assignment applies claim 3 at once: contact, or waiting in line)
     seek_contact(w, u, b);
     true
+}
+
+/// The bio-reactor fate of S-0601 claim 8 (claim 16), once, at the moment
+/// of the fate. Returns whether it succeeded; a failure becomes *hunt* in
+/// the caller.
+pub fn bio_reactor_fate(w: &mut World, u: ObjectId) -> bool {
+    if w.obj(u).is_none_or(|o| !o.on_map || o.owner.is_none()) {
+        return false;
+    }
+    search_and_go(w, u)
+}
+
+/// The *guard* or *area guard* processing of an actor that holds the
+/// enter-nearest instruction (claim 16, S-0215 claims 24 and 26 row 3): the
+/// same search again; none found ends the instruction. The caller chooses
+/// the delay: D_r of the behaviour being processed, no draw.
+pub fn instruction_turn(w: &mut World, u: ObjectId) {
+    // spec: S-0605 claim 16 and S-0215 claim 24 (at each guard or area guard processing the holder searches again and ends the instruction when no building is found)
+    search_and_go(w, u);
 }

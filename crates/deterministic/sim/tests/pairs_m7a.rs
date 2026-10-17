@@ -393,7 +393,7 @@ fn a_controlled_enemy_goes_into_an_absorber_and_comes_out_an_enemy() {
 
 // Pair: the release fate and an absorbing building.
 // spec: S-0601 claims 8 and 10 (the controller's destruction releases its victim; the neutral house's fate decision draws and selects the bio reactor)
-// spec: S-0605 claims 1, 3, 6 and 7 and S-0215 claim 24 (the released unit enters its own owner's nearest accepting absorbing building); Q-1260 interim
+// spec: S-0605 claims 1, 3, 6, 7 and 16 and S-0215 claim 24 (the released unit takes the enter-nearest instruction and enters its own owner's nearest accepting absorbing building)
 #[test]
 fn a_released_neutral_unit_takes_the_bio_reactor_fate() {
     use glasnost_sim::structures::absorb;

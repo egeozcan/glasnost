@@ -1675,18 +1675,30 @@ pub struct Quirks {
     // spec: S-0603 claim 5 and Edge cases
     #[serde(default = "on")]
     pub grinder_no_arrival_recheck: bool,
-    /// An infantry entrant that reaches an absorbing building goes in whatever the passenger count, the switch or its size, so with two or more link places the building can hold more than its capacity; off: at completion the building applies claim 1's acceptance test again, and a refused entrant is treated as a refused vehicle. Not implemented yet (wave 2).
+    /// An infantry entrant that reaches an absorbing building goes in whatever the passenger count, the switch or its size, so with two or more link places the building can hold more than its capacity; off: at completion the building applies claim 1's acceptance test again, and a refused entrant is treated as a refused vehicle.
     // spec: S-0605 claim 6 and Edge cases
     #[serde(default = "on")]
     pub absorber_contact_no_capacity_recheck: bool,
-    /// When the eighth direction of the first round of an absorbing building's exit search passes both cell tests but its neighbour cell carries a bridge deck, the second round never starts and the passenger stays inside this processing; off: the second round starts as after any other failure at the eighth direction. Not implemented yet (wave 2).
+    /// When the eighth direction of the first round of an absorbing building's exit search passes both cell tests but its neighbour cell carries a bridge deck, the second round never starts and the passenger stays inside this processing; off: the second round starts as after any other failure at the eighth direction.
     // spec: S-0605 claim 12 and Edge cases
     #[serde(default = "on")]
     pub absorber_release_bridge_ends_search: bool,
-    /// The second round of an absorbing building's exit search does not try the rear direction; off: the second round tries the rear direction first. Not implemented yet (wave 2).
+    /// The second round of an absorbing building's exit search does not try the rear direction; off: the second round tries the rear direction first.
     // spec: S-0605 claim 12 and Edge cases
     #[serde(default = "on")]
     pub absorber_release_second_round_skips_rear: bool,
+    /// An actor that stops being in *enter* with its contact with an absorbing building intact keeps the building's link place for good, so every later entrant waits in line for ever; off: in its own turn, after its movement, an actor in contact with an absorbing building that has neither *enter* current nor *enter* queued gives the contact up (the window in which a waiting actor has been granted contact and has *enter* queued but not yet started keeps it).
+    // spec: S-0605 claim 17 and Edge cases
+    #[serde(default = "on")]
+    pub absorber_stale_contact_kept: bool,
+    /// A passenger removed while inside an absorbing building does not make the building owner's power due, so the owner's totals keep its contribution until something else makes them due; off: the removal makes the building owner's power due, as a release does, when the type's extra output is above 0.
+    // spec: S-0605 claim 15 and Edge cases
+    #[serde(default = "on")]
+    pub absorber_removal_keeps_stale_power: bool,
+    /// A unit of the neutral or special house that took the enter-nearest instruction through the bio-reactor fate keeps it when it goes in and when it is let out, so a released passenger walks straight back in; off: going in clears the instruction.
+    // spec: S-0605 claims 13 and 16 and Edge cases
+    #[serde(default = "on")]
+    pub enter_nearest_survives_absorption: bool,
     /// The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left. Not implemented yet (wave 2).
     // spec: S-0606 claim 6 and Edge cases
     #[serde(default = "on")]
@@ -2243,6 +2255,9 @@ impl Default for Quirks {
             absorber_contact_no_capacity_recheck: true,
             absorber_release_bridge_ends_search: true,
             absorber_release_second_round_skips_rear: true,
+            absorber_stale_contact_kept: true,
+            absorber_removal_keeps_stale_power: true,
+            enter_nearest_survives_absorption: true,
             bunker_clear_nearest_only: true,
             airborne_deploy_order_dropped: true,
             drain_relink_strands_previous: true,
@@ -3341,6 +3356,18 @@ impl Quirks {
             (
                 "absorber_release_second_round_skips_rear",
                 self.absorber_release_second_round_skips_rear,
+            ),
+            (
+                "absorber_stale_contact_kept",
+                self.absorber_stale_contact_kept,
+            ),
+            (
+                "absorber_removal_keeps_stale_power",
+                self.absorber_removal_keeps_stale_power,
+            ),
+            (
+                "enter_nearest_survives_absorption",
+                self.enter_nearest_survives_absorption,
             ),
             ("bunker_clear_nearest_only", self.bunker_clear_nearest_only),
             (
