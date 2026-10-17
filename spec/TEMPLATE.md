@@ -52,7 +52,7 @@ State tables (state, event, result) and ordering stated as observable consequenc
 
 ## Edge cases and quirks
 
-Unusual or buggy behaviour of the original, described as behaviour. Name a quirk switch for each one that a mod might want to turn off; it defaults to the original behaviour. Exception: an obvious bug with no gameplay impact (a display glitch, a drawing artefact, a view that jumps) gets no switch; state the fixed behaviour as the claim and record the original's bug in one sentence.
+Unusual or buggy behaviour of the original, described as behaviour. Name a quirk switch for each one that a mod might want to turn off; it defaults to the original behaviour. Exceptions get no switch: an obvious bug with no gameplay impact (a display glitch, a drawing artefact, a view that jumps), and a fault of the original (it crashes or hangs) on legal data, which is a departure (glossary). For either, state the fixed behaviour as the claim and record the original's bug in one sentence.
 
 ## Import mapping
 
