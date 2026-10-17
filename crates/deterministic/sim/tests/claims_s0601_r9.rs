@@ -13,6 +13,7 @@ use glasnost_rules::sim::{WarheadType, WeaponType};
 use glasnost_sim::mind;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
+use glasnost_sim::transport;
 use glasnost_sim::world::{ObjectId, Target, World};
 use temporal_common::*;
 
@@ -25,7 +26,8 @@ const STRENGTH: i32 = 10_000;
 
 /// The temporal fixture plus MIND (a takeover warhead), BOOM (the
 /// demolition warhead), RayU (MIND, damage 3, unlimited), MASTER (an
-/// unlimited controller of strength 10000 that self-heals every tick) and
+/// unlimited controller of strength 10000 that self-heals every tick),
+/// MASTERI (an unlimited controller on foot) and
 /// the overload lists count (0, 5), damage (7, 7), frames (3, 3).
 fn rules() -> Ruleset {
     let mut r = ruleset();
@@ -62,6 +64,7 @@ fn rules() -> Ruleset {
         t.strength = Some(STRENGTH);
         t.combat.self_healing = Some(true);
     });
+    infantry(&mut r, "MASTERI", |t| t.primary = Some("RayU".into()));
     let g = &mut r.sim.general;
     g.c4_warhead = Some("BOOM".into());
     // spec: S-0314 F1 and Edge cases (a rate whose period is 0 ticks is treated as 1: a heal at every tick)
@@ -191,4 +194,22 @@ fn claim_16_steps_with_the_berserk_countdown() {
     testkit::run(&mut w, 3);
     assert_eq!(w.obj(m).unwrap().combat.berserk, Some(47));
     assert_eq!(countdown(&w, m), 17);
+}
+
+// spec: S-0601 claim 16 (revision 9: a controller inside a transport that is not open-topped takes no update, so its overload countdown stays as it is; one in an open-topped transport is in play and steps)
+#[test]
+fn claim_16_transports() {
+    let mut w = game(&rules());
+    let closed = spawn(&mut w, Kind::Vehicle, "GUNNER", BETA, at(0, 0));
+    let p = spawn(&mut w, Kind::Infantry, "MASTERI", BETA, at(0, 1));
+    transport::board(&mut w, p, closed);
+    let open = spawn(&mut w, Kind::Vehicle, "OPEN", BETA, at(6, 0));
+    let q = spawn(&mut w, Kind::Infantry, "MASTERI", BETA, at(6, 1));
+    transport::board(&mut w, q, open);
+    assert!(transport::open_topped_passenger(&w, q));
+    set_countdown(&mut w, p, 20);
+    set_countdown(&mut w, q, 20);
+    testkit::run(&mut w, 5);
+    assert_eq!(countdown(&w, p), 20, "kept inside");
+    assert_eq!(countdown(&w, q), 15, "in play: steps");
 }
