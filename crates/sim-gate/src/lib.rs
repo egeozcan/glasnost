@@ -79,9 +79,13 @@ pub const M6C_TICKS: i32 = 12_000;
 /// orders stay 2, one per house, as the AI orders a sensor only when the
 /// house has none), but the Yuri-style house wins 7 of the 16 games
 /// before the full run ends (seed 1 among them with an earlier tuning),
-/// and the full run must play all its ticks. Seed 2 does in every tuning
-/// tried, so it is kept, and nothing more (see `docs/development.md`, *Determinism gate*).
-pub const M7A_SEED: u32 = 2;
+/// and the full run must play all its ticks. Seed 2 did in every tuning
+/// tried until M7a step 3.6 (S-0603), when the Yuri-style house was given a
+/// grinder: seed 2's game then ends before the full run does, and the seed
+/// moved to 9, which plays all its ticks with every counter at least 3,
+/// the psychic sensor orders included (see `docs/development.md`,
+/// *Determinism gate*).
+pub const M7A_SEED: u32 = 9;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;

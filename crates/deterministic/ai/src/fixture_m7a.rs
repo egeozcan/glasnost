@@ -29,8 +29,9 @@
 //!   barracks from the other abilities' units.
 //! - Alpha only (S-0605): BIOP, an infantry absorber, is Alpha's power
 //!   plant in place of the fixture's POWR (which only Beta builds); the AI
-//!   sends spare and controlled infantry in. A
-//!   skirmish drops
+//!   sends spare and controlled infantry in.
+//! - Alpha only (S-0603): GRND, a recycling building, built by the AI.
+//!   A skirmish drops
 //!   the structures a map gives a player's house (S-0009 claim 27), so the
 //!   houses start with units only.
 //!
@@ -335,6 +336,15 @@ pub fn ruleset() -> Ruleset {
     biop.econ.required_houses = only("Alphaland");
     register(&mut r, "buildings", "BIOP");
     r.sim.buildings.insert("BIOP".into(), biop);
+
+    // Alpha's grinder (S-0603): GRND, a 2 × 2 recycling building with no
+    // power of its own; the AI builds one and recycles controlled enemy
+    // units, badly damaged units and surplus infantry in it.
+    let mut grnd = fixture::building(2, 2, 400, 0);
+    grnd.grinding = Some(true);
+    grnd.econ.required_houses = only("Alphaland");
+    register(&mut r, "buildings", "GRND");
+    r.sim.buildings.insert("GRND".into(), grnd);
     r
 }
 
