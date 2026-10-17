@@ -20,7 +20,13 @@
 //!   stage slots hold the weapons SPIN0 … SPIN2, built at the war
 //!   factory), GATB (a gattling defence building) and TAKER (a rifleman
 //!   whose weapon THRALL has the takeover warhead MIND, capacity 4,
-//!   range 2). Its victims are Beta's units, none psionics-immune. A
+//!   range 2). Its victims are Beta's units, none psionics-immune.
+//! - Alpha only (S-0613): GATV's and GATB's top-stage weapon SPIN2 fires
+//!   VENOM, the gun's warhead with the virus death for the infantry it
+//!   kills and a gas cloud system VAPOUR at each hit. The virus death's
+//!   animation PLAGUE and the shared system GasCloudSys hold the gas
+//!   particle FOG. No new buildable type: one would take a share of the
+//!   barracks from the other abilities' units. A
 //!   skirmish drops
 //!   the structures a map gives a player's house (S-0009 claim 27), so the
 //!   houses start with units only.
@@ -35,7 +41,8 @@ use glasnost_map::objects::{Infantry, Placed, Unit};
 use glasnost_map::{CellXY, Map};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
-    CombatFields, Decimal, LocomotionClass, Locomotor, UnitType, WarheadType, WeaponType,
+    AnimationType, CombatFields, Decimal, LocomotionClass, Locomotor, ParticleSystemType,
+    ParticleType, UnitType, WarheadType, WeaponType,
 };
 use glasnost_rules::sim_econ::SuperweaponType;
 use glasnost_sim::econ::setup::{self, Player, Settings};
@@ -256,6 +263,58 @@ pub fn ruleset() -> Ruleset {
     taker.econ.required_houses = only("Alphaland");
     register(&mut r, "infantry", "TAKER");
     r.sim.infantry.insert("TAKER".into(), taker);
+
+    // Alpha's gas weapon (S-0613): the gattling's top-stage weapon SPIN2
+    // fires VENOM, the gun's warhead with the virus death (kind 8) for the
+    // infantry it kills and a cloud system VAPOUR at each hit. The virus
+    // death's animation PLAGUE puts FOG clouds into the shared system
+    // GasCloudSys.
+    let fog = ParticleType {
+        behaves_like: Some("gas".into()),
+        max_ec: Some(150),
+        max_dc: Some(30),
+        damage: Some(3),
+        warhead: Some("VENOM".into()),
+        state_ai_advance: Some(4),
+        end_state_ai: Some(100),
+        ..Default::default()
+    };
+    register(&mut r, "particles", "FOG");
+    r.sim.particles.insert("FOG".into(), fog);
+    for name in ["GasCloudSys", "VAPOUR"] {
+        register(&mut r, "particle_systems", name);
+        r.sim.particle_systems.insert(
+            name.into(),
+            ParticleSystemType {
+                behaves_like: Some("gas".into()),
+                holds_what: Some("FOG".into()),
+                lifetime: None,
+            },
+        );
+    }
+    register(&mut r, "animations", "PLAGUE");
+    r.sim.animations.insert(
+        "PLAGUE".into(),
+        AnimationType {
+            middle_frame: Some(3),
+            frame_count: Some(8),
+            spawns_particle: Some("FOG".into()),
+            num_particles: Some(2),
+            ..Default::default()
+        },
+    );
+    r.sim.general.infantry_virus = Some("PLAGUE".into());
+    let mut venom = warhead
+        .as_ref()
+        .and_then(|h| r.sim.warheads.get(h))
+        .cloned()
+        .unwrap_or_default();
+    venom.inf_death = Some(8);
+    venom.particle = Some("VAPOUR".into());
+    r.sim.warheads.insert("VENOM".into(), venom);
+    if let Some(top) = r.sim.weapons.get_mut("SPIN2") {
+        top.warhead = Some("VENOM".into());
+    }
     r
 }
 

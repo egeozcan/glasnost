@@ -138,6 +138,12 @@ struct Game {
     /// the distinct gattling types it had (S-0609).
     top_ticks: [usize; PLAYERS],
     gattling_types: [usize; PLAYERS],
+    /// Gas (S-0613): hits clouds dealt, clouds that appeared, the most gas
+    /// particles at once and per player house its virus units.
+    gas_hits: usize,
+    clouds: usize,
+    gas_max: usize,
+    virus_armed: [usize; PLAYERS],
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -550,6 +556,7 @@ fn play_ai(
             match e {
                 Effect::Shot { .. } => g.shots += 1,
                 Effect::Killed { .. } => g.killed += 1,
+                Effect::GasHit { .. } => g.gas_hits += 1,
                 _ => {}
             }
         }
@@ -631,6 +638,9 @@ fn play_ai(
     g.controllers = tally.controllers.map(|s| s.len());
     g.top_ticks = tally.top_ticks;
     g.gattling_types = tally.gattling_types.map(|s| s.len());
+    g.clouds = tally.clouds;
+    g.gas_max = tally.gas_max;
+    g.virus_armed = tally.virus_armed.map(|s| s.len());
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -755,6 +765,16 @@ pub struct Tally {
     /// Per player house: the gattling types (kind code, type index) it had
     /// an object of (S-0609 Terms).
     pub gattling_types: [BTreeSet<(u8, u32)>; PLAYERS],
+    /// Gas clouds that appeared (S-0613 claims 2 to 4): warhead-made
+    /// particle systems and virus-death animations.
+    pub clouds: usize,
+    /// The most gas particles in the world at one tick (S-0613).
+    pub gas_max: usize,
+    /// Per player house: its units whose first weapon kills with the virus
+    /// death (infantry-death kind 8, S-0107 claim 17) seen so far.
+    pub virus_armed: [BTreeSet<u32>; PLAYERS],
+    /// The gas systems and animations after the last tick.
+    clouds_before: BTreeSet<u32>,
     /// The (victim, controller) pairs after the last tick.
     victims_before: BTreeSet<(u32, u32)>,
     /// The units berserk after the last tick.
@@ -885,6 +905,32 @@ impl Tally {
         self.intent_ticks += (0..PLAYERS)
             .filter(|&h| !glasnost_sim::psychic::intent_lines(w, HouseId(h as u8)).is_empty())
             .count();
+        let clouds: BTreeSet<u32> = w
+            .gas
+            .systems
+            .keys()
+            .chain(w.gas.anims.keys())
+            .filter(|&&id| Some(id) != w.gas.shared)
+            .map(|id| id.0)
+            .collect();
+        self.clouds += clouds.difference(&self.clouds_before).count();
+        self.clouds_before = clouds;
+        self.gas_max = self.gas_max.max(glasnost_sim::gas::particles(w).count());
+        let r = w.rules();
+        for o in w.objects.values() {
+            let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
+                continue;
+            };
+            let virus = r
+                .unit(o.kind, o.type_index)
+                .and_then(|u| u.combat.slots[0])
+                .and_then(|p| r.combat.weapon(p).warhead)
+                // spec: S-0107 claim 17 (infantry-death kind 8, the virus death)
+                .is_some_and(|wh| r.combat.warhead(wh).inf_death == 8);
+            if virus && o.kind != glasnost_sim::rules::Kind::Building {
+                self.virus_armed[h].insert(o.id.0);
+            }
+        }
     }
 }
 
@@ -1814,6 +1860,11 @@ fn report(
                 s,
                 "  gattling: house-ticks at the top stage per house {:?}; gattling types per house {:?}",
                 g.top_ticks, g.gattling_types
+            );
+            let _ = writeln!(
+                s,
+                "  gas: hits {}, clouds {}, most particles at once {}; virus units per house {:?}",
+                g.gas_hits, g.clouds, g.gas_max, g.virus_armed
             );
         }
         let f: Vec<String> = g
