@@ -2,7 +2,7 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -761,7 +761,7 @@ computer player and are out of scope.
 
 | Source | Key | Parse form | Feeds | Absent-key default |
 |---|---|---|---|---|
-| rules `[CombatDamage]` | `DefaultSparkSystem` | particle-system type name | spark effect of claim 9 | not established |
+| rules `[CombatDamage]` | `DefaultSparkSystem` | particle-system type name | spark effect of claim 9; the same key also feeds the overload sparks of S-0601 claim 16 | not established |
 
 ## Measurement scenarios
 
