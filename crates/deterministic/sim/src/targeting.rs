@@ -1234,17 +1234,24 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
     } else {
         k
     };
-    // spec: S-0214 table V value n (an accepting allied building: allied with the actor, docking answer accepts; for a repair depot S-0314 claim 16's permission)
+    // spec: S-0214 table V value n (an accepting allied building: allied with the actor, docking answer accepts; for a repair depot S-0314 claim 16's permission, for a recycling building S-0603 claim 2's answer)
+    let recycler = crate::structures::grinder::is_recycler(w, t);
     let accepting = b == Action::Select
         && building(w, t).is_some()
         && ally
-        && crate::depot::accepts(w, t, actor, true);
+        && (crate::depot::accepts(w, t, actor, true)
+            || (recycler
+                && crate::structures::grinder::answer(w, t, actor)
+                    == crate::transport::Answer::Accepts));
     let n = if !accepting {
-        // spec: S-0214 table V row n4 (row n2's recycling building is not built: no building type of ours recycles)
+        // spec: S-0214 table V row n4 (otherwise b)
         b
     } else if unit(w, actor).is_some_and(|u| u.zone == MovementZone::Fly) {
         // spec: S-0214 table V row n1 (movement zone fly: no-enter)
         Action::NoEnter
+    } else if recycler {
+        // spec: S-0214 table V row n2 and S-0603 claim 1 (an accepting allied recycling building: recycle)
+        Action::Recycle
     } else {
         // spec: S-0214 table V row n3 (an accepting allied building: enter)
         Action::Enter

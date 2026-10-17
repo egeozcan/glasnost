@@ -239,7 +239,7 @@ pub fn charge_flash(w: &World) -> i32 {
 
 /// Whether the walker may plant a charge: the type flag, or with
 /// `quirks.charge_needs_type_flag` off the veterancy ability too (claim 13).
-fn has_charges(w: &World, id: ObjectId) -> bool {
+pub(crate) fn has_charges(w: &World, id: ObjectId) -> bool {
     let flag = w
         .obj(id)
         .and_then(|o| w.rules().unit(o.kind, o.type_index))

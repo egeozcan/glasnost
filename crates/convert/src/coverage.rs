@@ -84,6 +84,20 @@ const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
         Outcome::Field,
         "S-0605",
     ),
+    // spec: S-0603 Import mapping (recycling buildings)
+    ("buildings", "Grinding", Outcome::Field, "S-0603"),
+    (
+        "global:AudioVisual",
+        "EnterGrinderSound",
+        Outcome::Field,
+        "S-0603",
+    ),
+    (
+        "global:AudioVisual",
+        "LeaveGrinderSound",
+        Outcome::Field,
+        "S-0603",
+    ),
     (
         "warheads",
         "Verses",

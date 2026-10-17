@@ -186,8 +186,8 @@ pub fn answer(w: &World, b: ObjectId, u: ObjectId) -> Answer {
     if crate::mind::controls_objects(w, u) {
         return Answer::Refuses;
     }
-    // spec: S-0605 claim 1 (otherwise it accepts exactly when F1 holds; no other entry feature is built, so a failed F1 refuses)
-    if fits(w, b, u) {
+    // spec: S-0605 claim 1 and S-0603 claim 2 (otherwise it accepts when F1 holds or its recycling feature applies)
+    if fits(w, b, u) || crate::structures::grinder::is_recycler(w, b) {
         Answer::Accepts
     } else {
         Answer::Refuses

@@ -719,6 +719,12 @@ impl Audio {
                 pos,
             } => self.mind(w, *sound, *of, *houses, *pos),
             Effect::Spin { id, event, pos } => self.spin(w, *id, *event, *pos, unsync),
+            Effect::Consumed {
+                of,
+                owner,
+                pos,
+                grinding,
+            } => self.consumed(w, *of, *owner, *pos, *grinding, unsync),
             Effect::Sound {
                 sound,
                 of,
@@ -1033,6 +1039,35 @@ impl Audio {
                 self.announce(Announcement::LowFunds);
             }
             _ => {}
+        }
+    }
+
+    /// A recycling building's consumption (S-0603 claim 7): the death
+    /// response and death sound of S-0701 claim 20's *now dead* case, then
+    /// the rules-wide enter-grinder sound; no announcement (claim 11).
+    fn consumed(
+        &mut self,
+        w: &World,
+        of: TypeRef,
+        owner: Option<HouseId>,
+        pos: Pos,
+        grinding: bool,
+        unsync: &mut Rng,
+    ) {
+        let ts = self.sounds(of);
+        let local = owner.is_some() && owner == self.local;
+        // spec: S-0603 claim 7 and S-0701 claim 20 (the local player's entrant first chooses one death response, positional at the entrant, one raw draw for a non-empty list)
+        if local && let Some(e) = self.choose(&ts.voice_die, unsync) {
+            self.request(Some(w), e, Where::Fixed(pos), FULL);
+        }
+        // spec: S-0603 claim 7 and S-0701 claim 20 (then, for any owner, one death sound at the entrant, after the response's draw)
+        if let Some(e) = self.choose(&ts.die_sound, unsync) {
+            self.request(Some(w), e, Where::Fixed(pos), FULL);
+        }
+        if grinding {
+            // spec: S-0603 claims 7 and 13 (the rules-wide enter-grinder sound at the entrant's centre, if set; not at a building without the grinding flag)
+            let s = self.names.enter_grinder.clone();
+            self.play_in(w, s.as_deref(), Where::Fixed(pos));
         }
     }
 

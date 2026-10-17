@@ -1305,6 +1305,10 @@ fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
     if ended && crate::structures::absorb::vehicle_arrival(w, id) {
         return true;
     }
+    // spec: S-0603 claim 5 (a cell-arrival update in a cell of the building it is eaten by: it is consumed)
+    if ended && crate::structures::grinder::vehicle_arrival(w, id) {
+        return true;
+    }
     if ended {
         // spec: S-0314 claim 17 (reaching the docking-point cell during movement: the depot's movement-arrival exchange)
         crate::depot::movement_arrival(w, id);

@@ -1671,7 +1671,7 @@ pub struct Quirks {
     // spec: S-0607 claim 16 and Edge cases
     #[serde(default = "on")]
     pub lift_deck_impact_reads_ground: bool,
-    /// A recycling building tests nothing about itself or its owner when an entrant arrives, so a building being sold, switched off or now owned by a house that does not count the entrant's house as allied still consumes the entrant and pays its owner; off: at consumption the building gives claim 2's docking answer to every entrant, infantry included, without the link-place row, and a refused entrant is not consumed, its destination is cleared and it falls back to rest. Not implemented yet (wave 2).
+    /// A recycling building tests nothing about itself or its owner when an entrant arrives, so a building being sold, switched off or now owned by a house that does not count the entrant's house as allied still consumes the entrant and pays its owner; off: at consumption the building gives claim 2's docking answer to every entrant, infantry included, without the link-place row, and a refused entrant is not consumed, its destination is cleared and it falls back to rest.
     // spec: S-0603 claim 5 and Edge cases
     #[serde(default = "on")]
     pub grinder_no_arrival_recheck: bool,

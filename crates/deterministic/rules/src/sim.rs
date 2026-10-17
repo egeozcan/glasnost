@@ -599,6 +599,15 @@ pub struct General {
     /// absorber (S-0605 claim 13 and Import mapping; absent: none).
     #[serde(default)]
     pub leave_bio_reactor_sound: Option<String>,
+    /// `[AudioVisual] EnterGrinderSound`, the rules-wide sound at a
+    /// recycling building's consumption (S-0603 claim 7 and Import mapping;
+    /// absent: none).
+    #[serde(default)]
+    pub enter_grinder_sound: Option<String>,
+    /// `[AudioVisual] LeaveGrinderSound`, read and not played during a
+    /// consumption (S-0603 claim 7 and Import mapping; absent: none).
+    #[serde(default)]
+    pub leave_grinder_sound: Option<String>,
     /// `MaximumCheerRate`, ticks (S-0213 claim 19).
     #[serde(default)]
     pub maximum_cheer_rate: Option<i32>,
@@ -2156,7 +2165,8 @@ pub struct BuildingType {
     /// `UnitRepair`.
     #[serde(default)]
     pub unit_repair: Option<bool>,
-    /// `Grinding`.
+    /// `Grinding`: a recycling building (S-0603 Terms and Import mapping;
+    /// absent: no).
     #[serde(default)]
     pub grinding: Option<bool>,
     /// `UnitAbsorb`.

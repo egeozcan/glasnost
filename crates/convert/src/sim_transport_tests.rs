@@ -106,3 +106,23 @@ fn absorber_fields() {
     assert_eq!(s.general.enter_bio_reactor_sound, None);
     assert_eq!(s.general.leave_bio_reactor_sound, None);
 }
+
+/// spec: S-0603 Import mapping (Grinding a boolean on a building type;
+/// [AudioVisual] EnterGrinderSound and LeaveGrinderSound sound names; every
+/// key absent leaves its field unset, read as the spec's absent value: no,
+/// none, none)
+#[test]
+fn grinder_fields() {
+    let s = sim("[BuildingTypes]\n1=Mill\n2=Shack\n\
+         [Mill]\nGrinding=yes\nNumberOfDocks=2\n\
+         [Shack]\nStrength=10\n\
+         [AudioVisual]\nEnterGrinderSound=Crunch\nLeaveGrinderSound=Spit\n");
+    assert_eq!(s.buildings["Mill"].grinding, Some(true));
+    assert_eq!(s.buildings["Mill"].econ.number_of_docks, Some(2));
+    assert_eq!(s.buildings["Shack"].grinding, None);
+    assert_eq!(s.general.enter_grinder_sound.as_deref(), Some("Crunch"));
+    assert_eq!(s.general.leave_grinder_sound.as_deref(), Some("Spit"));
+    let s = sim("[BuildingTypes]\n1=Shack\n[Shack]\nStrength=10\n");
+    assert_eq!(s.general.enter_grinder_sound, None);
+    assert_eq!(s.general.leave_grinder_sound, None);
+}

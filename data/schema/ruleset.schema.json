@@ -835,7 +835,7 @@
           ]
         },
         "grinding": {
-          "description": "`Grinding`.",
+          "description": "`Grinding`: a recycling building (S-0603 Terms and Import mapping;\nabsent: no).",
           "type": [
             "boolean",
             "null"
@@ -5199,6 +5199,14 @@
           ],
           "default": null
         },
+        "enter_grinder_sound": {
+          "description": "`[AudioVisual] EnterGrinderSound`, the rules-wide sound at a\nrecycling building's consumption (S-0603 claim 7 and Import mapping;\nabsent: none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "fire_supress": {
           "description": "`FireSupress`, cells (S-0309 F6; lepton form).",
           "anyOf": [
@@ -5469,6 +5477,14 @@
         },
         "leave_bio_reactor_sound": {
           "description": "`[AudioVisual] LeaveBioReactorSound`, the exit sound at an infantry\nabsorber (S-0605 claim 13 and Import mapping; absent: none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "leave_grinder_sound": {
+          "description": "`[AudioVisual] LeaveGrinderSound`, read and not played during a\nconsumption (S-0603 claim 7 and Import mapping; absent: none).",
           "type": [
             "string",
             "null"
@@ -8582,7 +8598,7 @@
           "default": true
         },
         "grinder_no_arrival_recheck": {
-          "description": "A recycling building tests nothing about itself or its owner when an entrant arrives, so a building being sold, switched off or now owned by a house that does not count the entrant's house as allied still consumes the entrant and pays its owner; off: at consumption the building gives claim 2's docking answer to every entrant, infantry included, without the link-place row, and a refused entrant is not consumed, its destination is cleared and it falls back to rest. Not implemented yet (wave 2).",
+          "description": "A recycling building tests nothing about itself or its owner when an entrant arrives, so a building being sold, switched off or now owned by a house that does not count the entrant's house as allied still consumes the entrant and pays its owner; off: at consumption the building gives claim 2's docking answer to every entrant, infantry included, without the link-place row, and a refused entrant is not consumed, its destination is cleared and it falls back to rest.",
           "type": "boolean",
           "default": true
         },

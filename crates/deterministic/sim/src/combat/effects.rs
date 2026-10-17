@@ -107,6 +107,22 @@ pub enum Effect {
         /// Where.
         pos: Option<Pos>,
     },
+    /// A recycling building consumed an entrant (S-0603 claim 7): the
+    /// entrant's death response (its owner's player only) and death sound
+    /// at `pos`, chosen as S-0701 claim 20's *now dead* case, then the
+    /// rules-wide enter-grinder sound at `pos` when `grinding` (the
+    /// destination has the grinding flag, claim 13). Not a death: no
+    /// announcement, kill or loss goes with it (claim 11).
+    Consumed {
+        /// The entrant's type.
+        of: crate::econ::TypeRef,
+        /// The entrant's owner at consumption.
+        owner: Option<crate::world::HouseId>,
+        /// The entrant's position (its centre).
+        pos: Pos,
+        /// Whether the building has the grinding flag.
+        grinding: bool,
+    },
     /// A gattling spin update or a gattling-flagged object leaving the map
     /// (S-0609 claim 13), for the spin sound the audio crate keeps.
     Spin {

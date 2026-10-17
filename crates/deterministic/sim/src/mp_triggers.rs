@@ -729,13 +729,14 @@ pub fn hijack_seam(
     crate::objects::remove(w, thief);
 }
 
-/// Seam: a consuming entry (S-0524 claims 12 and 14): the destination's
-/// entry raise precedes the entry's effect `effect`, and the entrant's own
-/// tag receives destroyed-by-anything after the effect and before removal.
-/// For spy infiltration (S-0510 claim 9) and for recycling in *eaten*
-/// (S-0603 claims 6 and 10: the effect is the payments), when their specs are
-/// built. The entrant's passengers get no such raise merely for being removed
-/// with it.
+/// A consuming entry (S-0524 claims 12 and 14): the destination's entry
+/// raise precedes the entry's effect `effect`, and the entrant's own tag
+/// receives destroyed-by-anything after the effect and before removal.
+/// Recycling in *eaten* uses it (`structures::grinder`, S-0603 claims 6 and
+/// 10: the effect is the sounds and payments); spy infiltration (S-0510
+/// claim 9) follows the general raise instead. An entrant that the raise's
+/// actions took off the map has no further entry. The entrant's passengers
+/// get no such raise merely for being removed with it.
 pub fn consuming_entry_seam(
     w: &mut World,
     building: ObjectId,
@@ -744,6 +745,10 @@ pub fn consuming_entry_seam(
 ) {
     // spec: S-0524 claim 12 (the building's entry raise precedes the infiltration effect)
     entry_raise(w, building, entrant);
+    // The raise's actions may have removed the entrant.
+    if w.obj(entrant).is_none_or(|o| !o.on_map) {
+        return;
+    }
     effect(w);
     // spec: S-0524 claim 12 (the spy's own tag receives destroyed-by-anything with the spy as causing object after that effect and before removal)
     crate::triggers::destroyed_by_anything(w, entrant);
@@ -752,11 +757,16 @@ pub fn consuming_entry_seam(
     crate::objects::remove(w, entrant);
 }
 
-/// Removes the passengers of `t`, theirs first, without death effects or
-/// raises (S-0603 claim 10).
+/// Removes the passengers of `t` and theirs (two levels), without death
+/// effects or raises (S-0603 claim 10). A third level is killed with no
+/// attacker as its transport is removed (S-0507 claim 16; S-0603 Edge
+/// cases).
 fn remove_passengers_silently(w: &mut World, t: ObjectId) {
     for p in crate::transport::passengers(w, t) {
-        remove_passengers_silently(w, p);
+        for q in crate::transport::passengers(w, p) {
+            // spec: S-0603 claim 10 and Edge cases (the passengers of those passengers are removed with it; deeper ones die with their transport, S-0507 claim 16)
+            crate::objects::remove(w, q);
+        }
         crate::objects::remove(w, p);
     }
 }

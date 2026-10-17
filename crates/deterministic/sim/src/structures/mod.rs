@@ -1,11 +1,12 @@
 //! Structures and special infantry abilities of M6c: garrisons (S-0508),
 //! engineers and capture (S-0509) and spies and infiltration (S-0510); of
-//! M7a: absorbing buildings (S-0605).
+//! M7a: absorbing buildings (S-0605) and recycling buildings (S-0603).
 //!
 //! [`entry`] is the one place where an infantry unit's arrival at a building
 //! is turned into an entry (garrison, capture, infiltration or refusal);
 //! [`garrison`] holds the occupants of garrisonable buildings;
-//! [`absorb`] the passengers of absorbing buildings.
+//! [`absorb`] the passengers of absorbing buildings; [`grinder`] the
+//! consumption of entrants by recycling buildings.
 
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +16,7 @@ pub mod absorb;
 pub mod engineer;
 pub mod entry;
 pub mod garrison;
+pub mod grinder;
 pub mod ownership;
 pub mod spy;
 pub mod tech;

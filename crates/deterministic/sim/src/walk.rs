@@ -214,6 +214,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             if crate::structures::absorb::arrival(w, id) {
                 return true;
             }
+            // spec: S-0603 claim 5 (arriving at the end of a walking step in a cell of the building it is eaten by: it is consumed)
+            if crate::structures::grinder::arrival(w, id) {
+                return true;
+            }
             // spec: S-0508 claim 2 and S-0208 claim 22 (a building entry at the arrival update: a unit that went inside or was used up has no arrival raise)
             if crate::structures::entry::arrival(w, id) {
                 return true;

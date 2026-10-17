@@ -101,6 +101,9 @@ pub struct Uses {
     /// Infantry sent into an own absorbing building (S-0605).
     #[serde(default)]
     pub absorbs: u32,
+    /// Units sent into an own recycling building (S-0603).
+    #[serde(default)]
+    pub grinds: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -153,6 +156,7 @@ impl Special {
         self.berserk(script, &own, w, out);
         self.mind_control(script, &own, w, out);
         self.absorbers(script, &own, w, out);
+        self.grinders(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -197,6 +201,11 @@ impl Special {
     /// `absorber`).
     pub(crate) fn count_absorb(&mut self) {
         self.uses.absorbs += 1;
+    }
+
+    /// Counts one unit sent into a recycling building (S-0603, `grinder`).
+    pub(crate) fn count_grind(&mut self) {
+        self.uses.grinds += 1;
     }
 
     /// Counts one gattling defence building ordered (S-0609, `gattling`).
