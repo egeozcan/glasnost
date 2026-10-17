@@ -2,11 +2,11 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-17
 measurements: []
 requests: [Q-0046]
 supersedes: []
@@ -925,7 +925,7 @@ entries whatever their keys). With `quirks.spread_offer_by_emptied_type` off the
 list and appear only at B's next update (about tick 2000). *Falsified if:* the new cell appears only near tick 2000.
 
 **E17. Start-event chain-reaction draws (claim 20; Q-0046 Q2a).** *Setup:* a purpose-made
-skirmish map, game speed 2, the usual human and bystander houses, director and mods off. Named
+skirmish map, game speed 2, the usual human and bystander houses, no engine add-on and no mods (the named test files of a scenario excepted). Named
 art test data gives a tile animation the resource-chain-reaction flag, no particles, crater or
 scorch flags, no bouncing, and a sprite with μ > 0. Named map overrides set growth and spread
 fractions to 0 and the resource-explosion damage to 0, isolating the direct draws. Use the
