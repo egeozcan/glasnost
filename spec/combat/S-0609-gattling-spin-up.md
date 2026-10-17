@@ -2,13 +2,13 @@
 id: S-0609
 title: Gattling spin-up
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-17
 measurements: []
-requests: [Q-1220]
+requests: [Q-1220, Q-1151]
 supersedes: []
 ---
 
@@ -278,9 +278,9 @@ claim 12. Sound playback and the report-variant rule are S-0701 claims 13, 14 an
 For stage counts 2 through 6, all spin arithmetic uses signed 32-bit integers, not floating
 point. F1 and F2 have no
 fractional operations and require no rounding. Their stated non-negative results assume
-non-negative amounts and thresholds. Out-of-domain settings and results are handled by the two
-proposed rules of Edge cases (negative settings used as 0, saturation at 2³¹ − 1), which are
-pending the project lead's decision (Questions for the project lead). Under them F1, F2 and F4 see
+non-negative amounts and thresholds. Out-of-domain settings and results are handled by the three
+engine rules of Edge cases (negative settings used as 0, saturation at 2³¹ − 1, and the
+stage count as the layers finally leave it). Under them F1, F2 and F4 see
 non-negative inputs, and every product, sum and elapsed count they form lies in the range 0 to
 2³¹ − 1. The v_max of F3 is not clamped by its formula; the stored value stops at the bound, as
 Edge cases (saturation) says. *s* is the stage and *v* the spin value before the
@@ -338,7 +338,7 @@ would end at 1, so the order is observable.)
 | Largest stage count supported | 6 | stages | Import mapping and Edge cases |
 | Stage rise or fall per update | at most 1 | stage | Claims 2, 3 |
 | Draws per spin sound start | 1 | raw values, unsynchronised stream | Claim 13 |
-| Spin arithmetic saturation bound | 2³¹ − 1 | integer: a count of spin-value units for *v* and the spin products, ticks for the elapsed-tick count *c* | Formulas (preamble) and Edge cases (saturation), proposed |
+| Spin arithmetic saturation bound | 2³¹ − 1 | integer: a count of spin-value units for *v* and the spin products, ticks for the elapsed-tick count *c* | Formulas (preamble) and Edge cases (saturation) |
 
 ## State and ordering
 
@@ -385,8 +385,17 @@ Ordering consequences:
 - **Stage count 0 or 1 from creation.** When no earlier layer populated thresholds, they remain
   0. The value never grows and the stage stays 0. Spin-up updates still request sound from slot 0
   (claim 13). A later layer that lowers the stage count below 2 after an earlier layer populated
-  thresholds is outside the supported domain; no result is established here (Questions for the
-  project lead).
+  thresholds is covered by the next item.
+- **Stage count lowered below 2 by a later layer** (engine rule, no quirk switch; confidence:
+  high that stock data never reaches it; backing: `unmeasured`, because the original's result for
+  such data is not observed and the rule is a design decision for data outside the original's
+  supported domain; answers Q-1151). The stage count as the rules layers finally leave it governs.
+  With fewer than 2 stages the type uses no thresholds: the thresholds in force (Terms) are all 0,
+  the spin cap is 0, the value never grows and the stage stays 0, as for a type that never had
+  2 stages, even if an earlier layer populated them. The importer warns about the layer that
+  reduced the count. The thresholds are still held as imported under S-0006 claim 3; this item
+  alone states that a type with fewer than 2 stages does not use them, and S-0006 claim 3 and the
+  glossary need no exception.
 - **Elite rank without elite thresholds.** All elite thresholds are 0. An elite object's value then
   never grows (cap 0), but its stage rises by one at every spin-up update (the value before the
   update is always at least 0) up to *N* − 1, and never falls (no value is below 0). So such an
@@ -404,8 +413,7 @@ Ordering consequences:
   can give corrupted settings or fail, with no safe specified result. Our engine reads at most
   six stages: a stage count above 6 is used as 6, and the importer warns.
   Stock data does not reach this case.
-- **Negative settings are used as 0** (proposed engine rule, no quirk switch, pending the project
-  lead's decision; confidence: high that stock data never reaches it; backing: `unmeasured`, because
+- **Negative settings are used as 0** (engine rule, no quirk switch; confidence: high that stock data never reaches it; backing: `unmeasured`, because
   the original's result for such data is not observed and the rule is a design choice for data
   outside the original's supported domain). A negative stage count, spin-up amount, spin-down amount
   or threshold is used as 0, and the importer warns for each such imported value. An integer that
@@ -413,7 +421,7 @@ Ordering consequences:
   override of the wrap that S-0205 claim 1 gives such an integer. The clamp applies to
   the imported value itself, so a later layer that omits the key keeps the 0, not the negative
   value.
-- **Saturation** (proposed engine rule, no quirk switch, pending the project lead's decision; same
+- **Saturation** (engine rule, no quirk switch; same
   confidence and backing; the bound is in Constants). Every spin product (*u* × *m*, *d* × *m*),
   every sum (*v* + *u* × *m*) and the building elapsed-tick count *c* of F4 saturates: a result
   above 2³¹ − 1 is 2³¹ − 1. Nothing wraps: this is a topic-spec override of S-0205 claim 1, which
@@ -449,10 +457,10 @@ Ordering consequences:
   the earlier one.
 - The numbered threshold keys are read only when the type's gattling flag is set and its stage count
   is at least 2, for *k* = 1 … *N* (at most 6 in our engine, Edge cases). A layer that does not
-  meet this condition leaves the thresholds held from earlier layers unchanged (initially 0). Which
-  thresholds a type uses when a later layer lowers its stage count below 2 is an open question
-  (Questions for the project lead). Negative values of the stage count, *u*, *d* and the thresholds
-  are used as 0, with an importer warning for each (Edge cases, proposed rule).
+  meet this condition leaves the thresholds held from earlier layers unchanged (initially 0), but a
+  type whose final stage count is below 2 uses no thresholds (all 0), with an importer warning
+  about the reducing layer (Edge cases). Negative values of the stage count, *u*, *d* and the
+  thresholds are used as 0, with an importer warning for each (Edge cases).
 - The weapon slots per stage (`Weapon`*k* and `EliteWeapon`*k*) are S-0308's.
 
 ## Measurement scenarios
@@ -640,20 +648,3 @@ attacker's turret at the start. Record per run the tick and damage of every hit 
    step remains untraced (claim 6); no additional gameplay state is asserted from those paths.
 2. Whether the end-after-loop treatment of a spin sound at a spin-down update is audibly different
    from stopping it depends on the sound entry's loop words (S-0701 claim 14).
-
-## Questions for the project lead
-
-These answer Q-1220. No decision is recorded yet, so the first two proposals above stay proposals.
-
-1. Negative stage count, spin-up amount, spin-down amount or threshold: use as 0 with an importer
-   warning (proposed), reject at import, or run through F1 and F2 as written. Whether this is a
-   *departure* in the glossary's sense is also the lead's call, since the original's result is
-   unobserved rather than known to be undefined.
-2. Arithmetic leaving the signed 32-bit range: saturate at 2³¹ − 1 (proposed), wrap, or stop growth
-   at some other bound.
-3. A later rules layer lowers the stage count below 2 after an earlier layer, with the flag set and
-   at least 2 stages, populated the thresholds. Either the held thresholds are used as imported
-   (this follows S-0006 claim 3, which keeps a type section's held value for a key a layer omits, and
-   gives a spin cap from the earlier layer's numbers), or all are used as 0, as for a type that never
-   had 2 stages (this would need S-0006 claim 3 and the glossary's *rules layer* entry to name an
-   exception for these keys). No result is established here.

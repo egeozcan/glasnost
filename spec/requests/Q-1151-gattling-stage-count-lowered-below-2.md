@@ -1,9 +1,9 @@
 ---
 id: Q-1151
 title: Gattling thresholds when a later rules layer lowers the stage count below 2
-status: open
+status: answered
 related: [S-0609, S-0006]
-answered-by: []
+answered-by: [S-0609]
 ---
 
 ## Need
