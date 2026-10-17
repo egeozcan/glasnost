@@ -2,13 +2,13 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
-requests: []
+requests: [Q-1200, Q-1201, Q-1202, Q-1203]
 supersedes: []
 ---
 
@@ -73,7 +73,8 @@ specs consume. These claims cover skirmish only.
 - **Permanently controlled.** The state that psychic domination gives an object. It is never
   cleared, has no controller and no original owner (claim 13).
 - **Mind-controlled.** Either controlled or permanently controlled. This is the condition that
-  S-0214, S-0507 claim 4 and the other consumers test (claim 13).
+  S-0214, S-0507 claim 4 and the other consumers test (claim 13). One consumer reads only the
+  *controlled* half: the construction-yard deploy readiness (claim 15).
 - **Original owner.** For a controlled object, the house that owned it at the moment of takeover.
   The *original-owner query* is defined for every object by claim 14.
 - **Release.** The end of control in which the victim goes back to its original owner, with the
@@ -89,6 +90,22 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
 *computer-controlled*, *scenario random stream*, *lepton*, *tick*, *being erased*, *guard reset*
 (S-0215), *protection* (S-0513), *psionics immunity* (S-0610).
 
+- **Tag.** The one tag that a tag definition gives the game. Everything that names the tag definition
+  carries that same tag, and the tag keeps its own state for each member of the chain (S-0011, Terms).
+- **House value.** The integer that an action's parameter uses to name a house (S-0011, Terms and
+  claim 23). An event's value is read by that event's own rule: S-0011 claim 18 for the
+  entered-by event, claim 5 here for event 44.
+- **Triggering house.** Of a trigger instance: the owner of the causing object of its last entered-by event judged true (S-0011, Terms and claim 18). Neither event 6 nor event 44 sets it (claim 5).
+- **Player-position value.** A house value from 4475 to 4482, which names the player at start
+  position A to H (S-0011, claim 23).
+- **One-time and all-carriers.** The repeat types 0 and 1 of a tag definition (S-0011, Terms and
+  claim 10).
+- **Deploy readiness.** Whether an object can carry out a deploy now, by its kind (S-0214, Terms).
+- **House-order position.** The place of a house in the game's house order (S-0009 claim 19),
+  counted from zero.
+
+The glossary also defines *trigger*, used here.
+
 ## Behaviour
 
 ### Controllers
@@ -103,7 +120,7 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    - Both are fixed for the object's lifetime. A promotion that switches the object to an elite
      weapon with a different damage value does not change its capacity. The control pips of S-0111
      claim 13 read the same primary weapon's damage.
-   - A new record starts with no victims, an overload countdown of 30 ticks (claim 16), a cleared
+   - A new record starts with no victims, an overload countdown of 30 overload updates (claim 16), a cleared
      pip highlight and a cleared overload-sound mark.
    - Backing: `measurable` (MC2 for capacity; MC11 for creation and promotion variants,
      MC8 for the initial countdown and cleared presentation marks)
@@ -142,15 +159,15 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    *illegal* when the takeover test fails, at the capture-tests rank of S-0301 claim 9. When the
    test passes, the check goes on to its later ranks, including the zero-versus test. So a
    takeover warhead whose versus value against a target's armour is 0 cannot be fired at that
-   target even when the takeover test would pass. Stock controllers' different versus values
-   against building armour therefore allow some to fire at eligible buildings and prevent others. A shot that does land still takes the target regardless of versus (claim 5).
+   target even when the takeover test would pass. A shot that does land still takes the target regardless of versus (claim 5).
    - A firer that has no control record but carries a takeover weapon in another slot cannot be
      checked by the original, which fails as soon as such a weapon is checked. Our engine answers
      *illegal* for that weapon, and the importer warns when a takeover weapon is present but
      the rookie primary does not create a control record, including an elite primary takeover
      weapon over a rookie primary without one (departure).
    - Backing: `measurable` (MC3 for firing refusal). The missing-record crash is `unmeasured`:
-     no stock type has this inconsistent weapon arrangement; the safe refusal and warning are design
+     this arrangement is outside the measurement setup, which uses stock data except named test
+     variants; the safe refusal and warning are design
    - Confidence: high
 
 5. **Detonation: takeover replaces damage and other special hits.** A warhead with the
@@ -167,15 +184,47 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    firer no longer exists, or has no control record, there is no takeover or attack-tag notification.
    Otherwise:
    - when the target is a live object and has a trigger tag, that tag hears attack events 6 and 44,
-     whether or not the takeover then succeeds (the trigger-event vocabulary is S-0011's),
+     whether or not the takeover then succeeds (the trigger-event vocabulary is S-0011's; the
+     order, cause and judging are given below),
    - the takeover test (claim 3) is made again, and if it holds the takeover of claim 6 happens,
    - on success the take-over sound (Import mapping) plays at the target when the local player
      owns the controller or owned the target before the takeover.
+
+   **The two attack events of a takeover hit.**
+   - *Order.* Both raises happen before the takeover test of the landing. No event-44 trigger is
+     judged until every action of the event-6 raise's satisfied triggers has completed, so an action
+     may change the target (its owner, its tag, its existence) before event 44 is judged, and the
+     takeover test sees the result of both raises. The order of the triggers within one raise is
+     that of S-0011 claim 11.
+   - *Cause.* Both raises name the shot's firer, the controlling object, as the causing object. For
+     event 44, the causing object's owner at the moment of that raise is the attacking house.
+     Except for a change made by an action of the event-6 raise, the target's owner in both raises
+     is still its owner from before the takeover.
+   - *Judging.* Event 6 is judged true by any raise carrying its code. Event 44 is judged true
+     only in a raise that has a causing object, and only when the event's value equals the
+     house-order position of the causing object's owner. This is not a country registration index,
+     unlike the entered-by event of S-0011 claim 18: two houses that play the same country have
+     different positions, and a country's index generally differs from any position. A value of −1 or a
+     player-position value (S-0011 claim 23) equals no house, so such an event is never judged
+     true; unlike an entered-by event, it does not read the value as a country. Neither event
+     records a triggering house for the trigger's actions. This judging of events 6 and 44 is
+     this spec's rule until S-0011 takes it over (Open questions, named changes).
+   - *Tag removed by the first raise.* When a raise of a one-time or all-carriers trigger on event 6
+     takes the tag off the target, as the repeat-type table of S-0011 (State and ordering) gives, the
+     tag leaves the target. The original then still raises event 44 at the target, although the tag
+     has gone, and that raise faults. The crash needs no bad data, only a legal one-time trigger on
+     the tag. So under the glossary it is a quirk, not a departure, and it has the switch
+     `quirks.removed_tag_attack_event`. Off: event 44 is raised only if the target still carries a
+     tag at that point, and then on that tag, whichever tag it is. This follows S-0011 claim 10 and
+     its repeat-type table, under which the raising carrier loses the tag. As every quirk switch's default is the original's behaviour (glossary, *quirk switch*), this switch defaults to the fault. Whether the fault stays a quirk at all is for the project lead (Questions for the project lead).
    - Backing: `measurable` (MC3 for target-only, no-damage hits; MC1 for takeover sound,
-     MC11 for mixed-effect and trigger-event variants; S-0514 scenario E13 for the remaining
-     special-hit exclusions and independent radiation/presentation). Missing-firer and missing-record hits
-     are `unmeasured`: no stock skirmish scenario here isolates a delayed shot after firer removal
-   - Confidence: high
+     MC11 for mixed-effect variants, and MC14 for the order, cause and judging of the two events.
+     S-0514 scenario E13 for the remaining special-hit exclusions and independent
+     radiation/presentation). Missing-firer and missing-record hits are `unmeasured`: no
+     scenario here isolates a delayed shot after firer removal. The removed-tag fault
+     is `unmeasured`: the original's fault must not be provoked on the oracle
+   - Confidence: high; medium for the outcome with special house values (−1 and the
+     player-position values), which MC14 part a tests
 
 6. **The takeover.** A successful takeover by controller *C* of object *T* has these results:
    - if *C*'s capacity is exactly 1, *C* first releases its current victim (claim 7),
@@ -196,9 +245,19 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    A building can be taken like any other object when the takeover test allows it. After the
    takeover it belongs to the controller's house in every respect, including power, production and
    prerequisites. A controlled construction yard cannot pack up (S-0213, S-0214).
-   - Backing: `measurable` (MC1 and MC3; MC9 for a building; MC11 for the simple-deployer,
-     temporal-attacker, passenger-target and construction-yard variants; S-0215 scenario B3
-     case i for the *wait* exception). Team membership is
+
+   **Announcement for a taken building.** The owner change of a building asks for the capture or
+   loss announcement, exactly as an engineer capture does (S-0509 claim 12 owns the eligibility:
+   the local player is the old or the new owner and the new owner's country is not passive.
+   S-0701 claim 39 owns which entry is chosen and played). A mind-control takeover requests the
+   announcement, and the entry chosen does not depend on the cause, so it is the same as for an
+   engineer capture of that building. S-0509 claim 12 lists the causes that request one and
+   needs mind-control takeover and release of a building added (Open questions, named
+   changes). The announcement is requested at the owner change itself, after the trigger
+   events of claim 5.
+   - Backing: `measurable` (MC1 and MC3, MC9 for a building including the announcement,
+     MC11 for the simple-deployer, temporal-attacker, passenger-target and construction-yard
+     variants; S-0215 scenario B3 case i for the *wait* exception). Team membership is
      `unmeasured` here: original scripted teams are outside the skirmish tests
    - Confidence: high
 
@@ -211,8 +270,8 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    that is full cannot fire a takeover weapon at all; unlimited controllers are exempt.
    - Backing: `measurable` (MC1 for replacement; MC3 for a refused landing; MC11 for unlimited
      capacity 1). Failure of the
-     ownership transfer after a passing test is `unmeasured`: no stock skirmish case is known
-     that reaches it
+     ownership transfer after a passing test is `unmeasured`: no measurement setup
+     here reaches it
    - Confidence: high
 
 8. **The original computer player's fate decision (original only).** After every takeover and
@@ -232,6 +291,17 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    narrowing the quotient to binary32. A team assignment is attempted only when the victim's
    new house is still the controller's house and the controller has a team; otherwise that fate
    becomes *hunt*. A failed team, grinder or bio-reactor assignment also falls back to *hunt*.
+   - **Marks absent from every rules layer.** For a rules set that omits a key, the original's
+     result is not determined (Open questions). (A rules set
+     that gives both marks never meets this case.) Our engine uses a design rule instead: an absent
+     low-money mark never selects the low-money table whatever the house's money (which can be
+     negative, S-0404 claim 6), and an absent wounded mark never selects the wounded table
+     whatever the health ratio; the decision skips only that mark's own table and the other tables keep their
+     places in the precedence above (so an absent low-money mark leaves low power, wounded, then
+     normal; an absent wounded mark leaves low money, low power, then normal). Each mark is judged on its own, so one present key does not
+     change the other's default. The importer warns once for each absent mark when at least one
+     of the four tables is non-empty. A key that is absent from the top layer but present in a
+     lower layer keeps the lower layer's value (S-0006).
    - In our engine no player house is computer-controlled (glossary, *AI house*), so the decision
      never runs for a player house. It is recorded as something our AI may reproduce through
      ordinary orders. The neutral and special houses keep the original's rule, including its
@@ -239,7 +309,10 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    - The parts that do not depend on the owner (leaving the team, the temporal let-go and the
      passengers' targets of claim 6) happen for every owner.
    - Backing: `measurable` (MC12 for the original computer-player fate decision, including the
-     draw when a team-type override replaces the selected fate). The policy for our AI is design
+     draw when a team-type override replaces the selected fate). The policy for our AI is design.
+     The absent-mark rule is a design rule and `unmeasured`: the original's result is not
+     determined, and MC12's absent-key variant only records what one oracle build shows,
+     informationally, so nothing confirms or falsifies the design rule.
    - Confidence: medium
 
 ### Ending control
@@ -259,7 +332,12 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
    A simple-deployer vehicle currently in *unload* skips that guard request. The owner-independent
    effects of claim 6 also apply on release: leaving a team, letting go of a temporal target and
    clearing open-topped passenger targets.
-   - Backing: `measurable` (MC4 for order clearing and sound; MC11 for the release exceptions).
+
+   The release of a building asks for the capture or loss announcement in the same way as its
+   takeover does (claim 6), with the controlling house as the old owner and the original owner as
+   the new one.
+   - Backing: `measurable` (MC4 for order clearing and sound; MC9 for a released building's
+     announcement; MC11 for the release exceptions).
      Scripted-team departure remains `unmeasured` for the reason in claim 6
    - Confidence: high
 
@@ -339,7 +417,8 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
     No original owner is recorded. The state is never cleared for the object's lifetime.
     - A permanently controlled object is mind-controlled for every consumer: it fails the takeover
       test (claim 3) and is refused where S-0214 and S-0507 claim 4 refuse a mind-controlled
-      object.
+      object, with one exception: the construction-yard deploy readiness (claim 15) reads only
+      control by a controller.
     - Being permanently controlled is not among the conditions above, so a later psychic
       domination by another house takes the object again and changes its owner to that house.
     - Backing: `measurable` (MC10, including exclusion, own-house and repeat-domination variants)
@@ -362,9 +441,9 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
 
 ### Deploying and packing up
 
-15. **Deploying ends control for good.** When a controlled vehicle deploys into a building (a
-    construction vehicle into a construction yard, or a slave miner into its refinery), the new
-    building belongs to the vehicle's current owner, the controlling house. It is not controlled.
+15. **Deploying ends control for good.** When a controlled vehicle deploys into a building (for
+    example, a vehicle whose imported deploy-into field names a test building), the new building belongs to the vehicle's
+    current owner, the controlling house. It is not controlled.
     The vehicle is removed, so it leaves its controller's list silently (claim 12). The owner change
     is permanent: killing the controller afterwards gives nothing back. The same holds for any
     other conversion of a vehicle into a building that replaces a controlled object with a new one.
@@ -372,8 +451,34 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
     `quirks.deploy_makes_control_permanent` (default on, the original). Off: the new object
     inherits the control link, the original owner and its place on the controller's list, and is
     released as the old object would have been.
-    - Backing: `measurable` (MC7)
-    - Confidence: high
+
+    **Which controlled vehicles can deploy.** A vehicle that is controlled by a controller (claim 6)
+    is not deploy-ready when the building it would deploy into is a construction yard (S-0214
+    Terms, *deploy readiness*, which needs its wording narrowed to *controlled*, Open questions,
+    named changes). So a taken construction vehicle cannot deploy while it is
+    controlled:
+    - the deploy cursor on it is the refusal one (S-0214 table VD) and the deploy command of S-0213 (the
+      deploy rule) gives it no order because it fails deploy readiness, so a player's order never
+      reaches it and no yard appears; no refusal sound or message is requested, because the
+      refusal is the cursor only (S-0701 scenario D4 expects silence apart from the unit's own
+      deploy response). Whether a refused deploy plays that response is `unmeasured`; the absence
+      of a refusal sound and message is `measurable` under MC7 part b.
+    - a deploy order already queued when it is taken does not survive the guard reset of claim 6
+      (`unmeasured`: no scenario times a takeover between a deploy order and its start; the
+      rule follows from claim 6).
+    - after a release it is deploy-ready again, with no other trace of the control.
+    - a vehicle held by trigger takeover and one that is *permanently controlled* (claim 13) are
+      not refused: the readiness test looks only at control by a controller. A psychically
+      dominated construction vehicle therefore deploys, and the yard belongs to the dominating
+      house.
+    A taken vehicle that deploys into any other building (a vehicle whose deploy-into field names a
+    building that lacks the construction-yard marking) is deploy-ready, and the
+    paragraph above applies to it: the order is accepted, the building appears as the controlling
+    house's, and the controller's slot is freed.
+    - Backing: `measurable` (MC7 parts a to d) for the refusal, release and permanent-control
+      bullets; `unmeasured` for the queued-order bullet (claim 6) and for the trigger-held bullet
+      (claim 3: campaign-only state).
+    - Confidence: high (the readiness test); medium for the absence of a refusal sound
 
 ### Overload
 
@@ -396,8 +501,47 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
     Thus the sound plays once per uninterrupted run of damaging checks. The hit's effects and
     draws precede the spark placement draws, and the rocking draw follows the sparks (F3, F4).
     Controllers that are not unlimited never pulse.
-    - Backing: `measurable` (MC8; MC11 for initial timing and nonpositive frame variants)
-    - Confidence: high
+
+    **Where the overload update falls in the controller's turn.** The overload update is part of
+    the object's ordinary per-turn work and runs after the berserk countdown of S-0610 claim 5
+    (and a berserk unit's own berserk step). Work the controller does later in that turn is
+    observed after the pulse: a heal of that update is applied to the health the pulse leaves, a
+    shot the controller fires in that update leaves after the pulse, and the pulse's hit, sparks
+    and rocking draw all fall inside the overload update. S-0203 owns the order of the rest of the
+    turn, and S-0516 claim 42 owns cloak timing within it.
+    Consequences. A controller that self-heals and pulses in the same update loses health to the
+    pulse first and heals afterwards, from the reduced health; a heal never softens a pulse. A
+    controller that fires in an update fires after the pulse of that update. A pulse that kills a
+    vehicle controller ends that update's remaining work: no self-healing, behaviour, movement or
+    firing follows, so the shot does not leave. A shot already in flight is a separate object and
+    is not affected (S-0203 claim 5). The removal counts under S-0203 claim 10 when it happens in
+    the controller's own turn. For controllers that are not vehicles the same rule ends the
+    update (`unmeasured`: no measurement scenario covers such a controller), but whether the object counts as no longer in play at once after a lethal hit (an infantry death sequence, a building's delayed destruction) is not
+    established here. The
+    random draws of the turn's earlier work precede the pulse's draws. The chance draw for a
+    damaged object's smoke, which belongs to the same turn's ordinary work, comes after the pulse
+    draws.
+
+    **Updates in which the overload update runs.** In exactly those updates in which the berserk
+    countdown runs (S-0610 claim 5, *Which updates are countdown updates*): every update of an
+    object that is in play, except the excluded updates of S-0215 claim 2 (tunnel travel, being
+    erased by a temporal weapon, the leaving stage of a chrono move). A controller inside a
+    transport that is not open-topped, or otherwise out of play, takes no update and its overload
+    countdown and pulse timing stay as they are. The overload countdown is therefore a count of
+    such updates (F2), not of ticks, whenever updates are missed. Superweapon warp: its leaving-stage
+    updates are excluded as S-0513 claim 48 gives for the berserk countdown (S-0215 claim 2 names
+    only the chrono leaving stage). For the other warp updates of the kinds that S-0513 claim 51 names,
+    the original's behaviour is not established (S-0513 claim 48 gives only the leaving stage), and
+    our engine's rule is a design rule: the overload update is ordinary work that S-0513 claim 51
+    suppresses from the first pending update through arrival effects, exactly as S-0610 claim 5
+    does for the berserk countdown. No step is made up later, and the overload countdown and
+    timing are kept. In arrival hold the overload update runs in each update after that update's
+    hold-end test.
+    - Backing: `measurable` (MC8 and MC14 for the order against self-healing, firing, a lethal
+      pulse and the missed updates). The warp-time rule is a design rule of our engine and is
+      `unmeasured` here: no scenario sets up a superweapon warp.
+    - Confidence: high for the order inside the update and for the set of updates; medium for
+      the fate of the rest of the turn after a lethal pulse of a non-vehicle controller
 
 ### Presentation
 
@@ -468,7 +612,7 @@ F3 uses exact integer additions and integer draws, with no rounding.
 
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
-| initial overload countdown | 30 | ticks | for a new record (claim 1) |
+| initial overload countdown | 30 | overload updates | for a new record (claim 1); counts updates, not ticks (claim 16) |
 | pip highlight after a damaging pulse | 10 | ticks | read by S-0111 claim 13 |
 | sparks per damaging pulse | 5 | particle systems | claim 16 |
 | spark displacement range | −200 to 200 | leptons | each horizontal axis, F3 |
@@ -506,8 +650,9 @@ F3 uses exact integer additions and integer draws, with no rounding.
 - The killing hit on a controller releases its victims in the same tick, as part of that hit.
 - A controller building that loses power releases its victims in its own turn of the tick in which
   it is found not in operation (S-0405 claim 9), not at the moment the power changes.
-- An overload pulse happens in the controller's own turn, and its sparks and rocking draws come
-  after the hit, in the order of F3 and F4.
+- An overload pulse happens in the controller's own turn, after the berserk countdown and before
+  self-healing, behaviour processing, movement and firing, and its sparks and rocking draws come
+  after the hit, in the order of F3 and F4 (claim 16).
 
 ## Edge cases and quirks
 
@@ -535,6 +680,13 @@ F3 uses exact integer additions and integer draws, with no rounding.
   damage; the tag events of claim 5 are still raised.
 - **Overload hit with no attacker** (claim 16): S-0302 credits no house with the kill when it
   destroys the controller.
+- **Construction vehicle taken by control** (claim 15): it is not deploy-ready until released,
+  while a permanently controlled or trigger-held one is. No switch: the readiness rule is
+  S-0214's, with the narrowing named in Open questions.
+- **Second attack event after a tag-removing first raise** (claim 5): the original faults. With
+  `quirks.removed_tag_attack_event` off, the raise is skipped when no tag is attached (claim 5).
+- **Absent fate-table marks** (claim 8): an absent mark never selects its table, with an importer
+  warning (departure from an original whose result is not determined).
 
 ## Import mapping
 
@@ -562,8 +714,8 @@ F3 uses exact integer additions and integer draws, with no rounding.
 | `C4Warhead` | `[CombatDamage]` | warhead name | (S-0303) | warhead of the overload hit (claim 16) |
 | `DefaultSparkSystem` | `[CombatDamage]` | particle-system name | none | overload sparks (claim 16) |
 | `AICaptureNormal`, `AICaptureWounded`, `AICaptureLowPower`, `AICaptureLowMoney` | `[General]` | integer list of four weights | empty | fate tables of claim 8, in the order team, grinder, bio reactor, hunt |
-| `AICaptureLowMoneyMark` | `[General]` | integer, credits | not determined | below this the controlling house's money selects the low-money table (claim 8) |
-| `AICaptureWoundedMark` | `[General]` | decimal fraction | not determined | below this health ratio the wounded table is used (claim 8) |
+| `AICaptureLowMoneyMark` | `[General]` | integer, credits | none: never selects the table (engine rule; the original's result is not determined, claim 8) | below this the controlling house's money selects the low-money table (claim 8) |
+| `AICaptureWoundedMark` | `[General]` | decimal fraction | none: never selects the table (engine rule; the original's result is not determined, claim 8) | below this health ratio the wounded table is used (claim 8) |
 
 Bad data: a type whose primary weapon has a takeover warhead is a controller even when that
 weapon's damage is 0 or below. The capacity row of claim 3 then fails, so it can take nothing
@@ -587,8 +739,8 @@ exact timing is needed. Make three valid runs of each deterministic variant. Any
 from the stated expected owner, count, timing, sound or order effect falsifies that part of its
 claim, not just an alternative explicitly mentioned below. No scenario writes a random seed.
 
-- **MC1. Capacity 1, replacement and presentation** (claims 1, 6, 7, 17, 18). A's Yuri Clone and
-  two of B's tanks. Order the clone onto tank 1, then onto tank 2. Record per tick the owner of
+- **MC1. Capacity 1, replacement and presentation** (claims 1, 6, 7, 17, 18). A named test copy of the
+  Yuri Clone with its primary weapon's damage set to 1 by test data, and two of B's tanks. Order the clone onto tank 1, then onto tank 2. Record per tick the owner of
   both tanks. Expected: tank 1 becomes A's on landing and is guarded (stops, no target); when the
   second shot lands, tank 1 turns back to B in the same tick as tank 2 becomes A's; the release
   sound plays at tank 1. The takeover sound plays for A. A link line and a ring are visible on
@@ -608,10 +760,11 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   test retaliation separately. Kill one victim and record its actual removal, not merely the
   disappearance of a drawn death effect: another can be taken only after a slot becomes free.
   Falsified by an extra takeover or a full tower retaliating with its takeover weapon.
-- **MC3. Illegal targets** (claims 3, 4, 5). Variant (a): A's Yuri Clone ordered onto a B power
-  plant that is not psionics-immune is refused; A's Yuri Prime ordered onto the same building
-  takes it. Variant (b): A's Yuri Clone ordered onto: one of A's own units, a
-  psionics-immune unit (for example a Yuri unit of B), a unit already controlled by B's Yuri
+- **MC3. Illegal targets** (claims 3, 4, 5). Variant (a): a named test copy of the Clone whose takeover
+  weapon's versus against building armour is set to 0 by test data, ordered onto a B power plant
+  that test data marks not psionics-immune, is refused; a named test copy of the Prime with a
+  nonzero versus against the same building takes it. Variant (b): A's Yuri Clone ordered onto: one of A's own units, a
+  psionics-immune unit (for example one that the test data marks immune), a unit already controlled by B's Yuri
   Clone, and a unit under B's force shield or iron curtain. Expected: each attack order is refused
   or never fires; no damage. Include a vehicle in a tank bunker, an ordinary eligible vehicle
   outside it, and a cell-targeted force-fire order. Expected: no takeover inside the bunker or
@@ -644,9 +797,19 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   the infantry emerging as B's object (S-0605 claim 7). No release sound,
   continued control, or emergence as A's object falsifies the absorption expectation. Do not
   infer actor lifetime from a visible animation alone.
-- **MC7. Deploy keeps the new building** (claim 15). A's Yuri Clone takes B's construction
-  vehicle, A deploys it, then B kills the clone. Expected: the construction yard stays A's.
-  Falsified if it goes to B.
+- **MC7. Deploy keeps the new building** (claim 15). Part a: A's Yuri Clone takes a named test vehicle
+  whose deploy-into field test data sets to a named test building; A deploys it, then B kills the
+  clone. Expected: the test building stays A's, the clone's slot
+  is free. Falsified if it goes to B. Part b: A's Yuri Clone takes B's construction vehicle on
+  open ground. Select it, hover the deploy cursor over it and press the deploy hotkey. Expected: the
+  refusal cursor, no yard and no order accepted, no refusal sound or message; the vehicle keeps its
+  guard state. Falsified by a yard appearing, by a deploy turn starting, or by any refusal sound.
+  Part c: kill the clone, so the vehicle returns to B; B deploys it at once. Expected: deploys.
+  Falsified if it is refused or shows any trace of the control.
+  Part d: A's psychic dominator takes B's construction vehicle (S-0612); A orders it to deploy.
+  Expected: it deploys and the yard is A's. Falsified if it is refused; that would mean permanent
+  control also blocks the deploy and would change claim 15 and claim 13's exception. Run each
+  part three times.
 - **MC8. Overload** (claim 16). A's Mastermind; feed it victims one at a time, holding each count
   for at least 300 ticks. Record the Mastermind's health per tick and the ticks between drops.
   Expected: no damage for a level whose imported damage is nonpositive. For a damaging level,
@@ -659,18 +822,26 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   placement draws per damaging pulse and one rocking draw when the level is above zero and
   the controller survives. Account separately for draws made by the hit and particle creation.
   Check F3 positions and F4 signs and binary32 rocking magnitudes against the recorded values.
-  Include a pulse that kills the controller: expected release of all victims in that tick,
+  Include a pulse that kills the controller, run on a named test copy whose test overload table gives a lethal level: expected release of all victims in that tick,
   five spark systems and ten placement draws, but no rocking update or rocking draw and no
-  house credited with the overload kill. Compare a limited Psychic Tower over the same
-  observation interval: expected no overload check, pulse effects or attributed draws.
+  house credited with the overload kill. Compare a named test copy of a controller that is not unlimited
+  (test data clears its unlimited-control flag) over the same observation interval: expected no overload check, pulse effects or attributed draws.
+  MC14 covers the position of the pulse in the turn.
   A frames-tick interval, a
   premature first check, an extra sound, wrong placement or a different attributed draw order
   falsifies the corresponding part.
-- **MC9. Controller building not in operation** (claims 6, 10). A's Psychic Tower holds two of B's
+- **MC9. Controller building not in operation** (claims 6, 10). A named test copy of the Psychic Tower (test data: capacity 2) holds two of B's
   units; drop A's power below demand. Expected: both return to B within one tick of the power
-  change. Repeat by selling the tower: the units return when the sale starts. Then with Yuri Prime
-  take one of B's buildings that is not psionics-immune (a power plant): it becomes A's and A's
-  power rises by its output. Observe the building's ring in front of its sprite. For a captured
+  change. Repeat by selling the tower: the units return when the sale starts. Then with a named test
+  copy of Yuri Prime whose versus against the building's armour is set nonzero by test data, take
+  one of B's buildings that test data marks not psionics-immune (a power plant): it becomes A's and A's
+  power rises by its output. Record the capture announcement requests (read-only) and sounds in the
+  takeover tick: expected the same announcement entry an engineer capture of that building gives
+  the local player (once with A local, once with B local, and once with the local player a
+  third house: no announcement). Repeat for a building whose type has the needs-engineer flag and an
+  imported capture announcement, naming the type in the setup (S-0701 claim 39 gives the custom entry only to such buildings). Then let B kill the Yuri Prime that holds the power plant: the plant returns to B
+  and the release announcement goes to whichever of A and B is local, none to a third local
+  player. A missing or different announcement, or one for a third house, falsifies claim 6 or 9. Observe the building's ring in front of its sprite. For a captured
   construction yard test packing up: the controlled yard cannot do so. A power change from
   capture, or an attempted pack-up, must not silently remove the control link.
 - **MC10. Permanent control** (claims 13, 14). Three houses A, B and C. C's Yuri Clone controls
@@ -709,7 +880,7 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
     from the takeover test, so a cursor refusal does not by itself test an unchecked hit.
   - Set the takeover flag together with a demolition-charge or electric-charge flag on the test
     warhead. Expected: takeover only, no charge planting, electric-charge change or area damage.
-    Attach separate map tags with attack events 6 and 44 and observable local-variable effects:
+    Attach separate repeating tags (repeat type 2) with attack events 6 and 44 and observable local-variable effects:
     both events occur on an alive target even if protection is applied before landing.
     Launch control shots at a building in construction and at one beginning a sale, with
     eligible idle buildings as controls. Expected: construction and selling refuse takeover.
@@ -731,7 +902,7 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
     positive damage and a short invented positive frames value. Keep victim count in that level.
     Expected: first health loss at overload update 31, subsequent losses frames + 1 updates apart.
     Repeat with zero and negative frames: one check each update after the initial delay. Use
-    this variant to isolate MC8's initial countdown even when stock level-zero damage is zero.
+    this variant to isolate MC8's initial countdown even when the imported level-zero damage is zero.
   - Give the five alternate anchors distinct invented triples and vary the link-end and mobile
     ring heights independently. Expected: each visual moves only with its own imported field,
     and line anchors cycle and compact as F5 states. Compare pixels using S-0313 claim 1.
@@ -751,9 +922,14 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   precedence, one inclusive 1–100 draw is consumed even when a team override replaces the fate,
   and assignment failures fall back to hunt. A different table, draw count, selected fate or
   fallback falsifies the corresponding part of claim 8. The neutral/special-house rule can be
-  checked by repeating with that house as the new owner.
-- **MC13. Building control-ring height** (claim 18). On a named test map, have a Yuri Prime
-  control a building with a visible controlled animation. Record the building sprite and ring
+  checked by repeating with that house as the new owner. Absent-key variant, informational only:
+  on a test copy of the rules remove each mark in turn and, with fate tables that make each
+  table's choice visible (only the hunt weight set in one table), record which table the decision
+  uses with the controlling house at zero money and with a badly damaged victim. The original's
+  result is not determined, so any outcome is recorded without falsifying claim 8, and it never
+  changes claim 8's design rule; repeat on a fresh game start to see whether it varies.
+- **MC13. Building control-ring height** (claim 18). On a named test map, have a named test copy of Yuri Prime
+  (versus nonzero against the building's armour by test data) control a building with a visible controlled animation. Record the building sprite and ring
   pixels in a fixed-resolution capture, and compare the ring's vertical position against the
   building's height and the corresponding mobile ring-height setting. Repeat with named test
   variants that change only the building height and the ring-height field, three valid runs per
@@ -763,13 +939,65 @@ claim, not just an alternative explicitly mentioned below. No scenario writes a 
   falsifies the placement rule. Record the measured conversion in the measurement record before
   stating a numeric formula.
 
+- **MC14. Attack events and the overload turn** (claims 5 and 16). Part a (claim 5): on a named
+  test map attach one repeating tag (repeat type 2, which no raise removes) to a B tank. The tag
+  carries two triggers: one on event 6 and one on
+  event 44 whose value is A's house-order position, each setting a different local variable and playing a different
+  sound; add a third trigger on event 44 with C's house-order position. Fire a takeover shot from A's
+  Yuri Clone. Expected: the event-6 effects, then the event-44 effects, in that order and
+  both before the tank changes owner; the C-valued trigger never fires. Repeat with a tank that is
+  put under protection after the shot is launched, so that the landing test refuses it: both events
+  still fire in the same order and no takeover happens. Repeat with the
+  event-44 value −1, then with a player-position value, then with the registration index of the
+  country A plays when that differs from A's position: never fires in any of the three. Repeat
+  with the value one above and one below A's position: never fires. A firing for any of these, or
+  no firing for A's position, falsifies the judging rule. A position counted from one, or from any other base, would show as the one-above or one-below value firing. Repeat twice with an event-6
+  trigger action that changes the tank's owner, to A in the first run and to C in the second.
+  Expected: with the owner changed to A the takeover is refused, since the owner is the controller's
+  house; with it changed to C the takeover lands, the tank becomes A's, and its original owner is C.
+  In both runs the event-44 trigger with A's position still fires and the C-valued one does not,
+  since the value is judged against the causing object's owner, not the target's. A trigger action
+  that names the triggering house (house value 9013) has no effect in either event's trigger. Any
+  other result falsifies the order or the cause rule. Never use a one-time event-6 trigger on the oracle: the
+  original faults. Part b
+  (claim 16): a named test copy of a vehicle type (test data: an unlimited takeover weapon, a short invented positive frames value, two overload levels, one non-lethal and one lethal at the low health, and a self-healing rule at low health), holding enough victims for each level. Record
+  per tick its health, shots and the recorder's draws. Expected: the health dip of the pulse
+  tick and the heal of the same tick appear in that order (the net change equals the heal
+  applied to the reduced health); the shot of a pulse tick leaves after the pulse; for a lethal
+  pulse no shot leaves in that tick and no heal is applied. Then put the test vehicle into the
+  states of S-0215 claim 2 (a chrono jump's leaving stage, temporal erasure), into a transport that is not open-topped (expected: no step while it is inside), and into an open-topped transport where possible (expected: steps); record whether the pulse countdown steps in those updates
+  (expected: no, in the excluded ones and while inside a transport that is not open-topped; yes in the open-topped transport). Falsified by a heal
+  applied before the pulse, a shot that leaves before the pulse, a heal or a shot after a lethal
+  pulse, or a countdown step in an excluded update. Part b has no case for the superweapon warp.
+
 ## Open questions
 
 - The exact height of a control ring above a building (claim 18) is not settled; it is
   presentation only.
-- Whether a stock controller can change owner in a skirmish without named test data (claim 11).
-  MC11 uses an explicitly capturable test type rather than assuming a stock case exists.
+- Whether a controller can change owner in a skirmish without named test data (claim 11).
+  MC11 uses an explicitly capturable test type rather than assuming such a case exists.
 - What the original does when the damage or frames list of the overload is shorter than the count
   list, or when the count list is empty (F2).
-- The absent-key defaults of the two fate-table marks (claim 8, Import mapping) are not
-  determined; the fate decision cannot be fully specified for data omitting them.
+- What the original's fate decision does for rules that omit the two marks: its result is not determined
+  (claim 8). Our engine's never-select rule is a design choice, not a reproduction (Q-1202).
+
+**Changes named for other specs (same round).** Each is needed for this spec to agree with them, and
+none is decided here.
+- S-0214 Terms, *deploy readiness*: the construction-yard exclusion reads *controlled by a
+  controlling object* only. Permanently controlled and trigger-held vehicles are not refused
+  (claim 15; Q-1200). The other uses of *mind-controlled* there are unchanged.
+- S-0509 claim 12: mind-control takeover and release of a building request the capture or loss
+  announcement (claims 6 and 9; Q-1203 question 4). S-0701 claim 39 then covers those causes.
+- S-0011: judge attack events 6 and 44 as claim 5 gives, and note that the order of triggers in
+  the raise of claim 5 is claim 11's (Q-1203).
+- S-0513 claim 51 and S-0610 claim 5: the overload update of claim 16 joins the ordinary work
+  suppressed during a warp (Q-1201).
+- S-0203: its list of ordinary work suppressed from the first pending update through arrival
+  effects must name the overload update too.
+- S-0701 claim 39: its scope sentence ("Passive transfers and other ownership-change causes are
+  outside this claim's coverage") must admit mind-control takeover and release of a building, as
+  claims 6 and 9 of this spec and S-0509 claim 12 require.
+
+## Questions for the project lead
+
+- Whether the removed-tag fault stays a quirk switch, claim 5, whose default is the original's fault as the glossary requires, or whether the glossary should add a category for a fault on legal data (Q-1203).

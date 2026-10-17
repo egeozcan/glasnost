@@ -1,9 +1,9 @@
 ---
 id: Q-1202
 title: The absent-key values of AICaptureLowMoneyMark and AICaptureWoundedMark
-status: open
+status: answered
 related: [S-0601]
-answered-by: []
+answered-by: [S-0601]
 ---
 
 ## Need
