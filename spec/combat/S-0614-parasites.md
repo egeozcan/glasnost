@@ -2,7 +2,7 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1014,8 +1014,10 @@ For every part, a result different from its stated expectation falsifies that pa
 
 ## Open questions
 
-- Whether creating the delivery animation, the wakes or the splash animations draws
-  from the scenario random stream besides the draws listed in claims 9 and 10.
+- Whether creating the delivery animation, the wakes or the splash animations draws from the
+  scenario random stream besides the draws listed in claims 9 and 10, and whether creating the
+  game-wide spark effect of claim 9 draws (claim 9 relies on S-0616 claim 1 for no draw, which is
+  not confirmed for the original).
 - A weapon with the parasite flag on its warhead but without the launch-inside flag.
 - Building-targeted detonations with parasite attachment selected: no parasite-specific firing
   guard applies, but their attachment result is not established. Suppression by a higher selected
