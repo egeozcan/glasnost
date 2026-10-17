@@ -24,8 +24,12 @@
 //!   house's credits are below [`LOW_MONEY`].
 //!
 //! A unit far from the grinder is first moved to its side with a click on
-//! the ground, then sent in from there. The brain's base defence leaves a
-//! unit on its way in alone.
+//! the ground, then sent in from there. A direct recycle click from afar
+//! can fail at once when a short line of buildings stands across the route
+//! (S-0603 claim 3, S-0212 Edge cases "short line of buildings": the
+//! original's behaviour with `quirks.corridor_retry_no_fallback` on, its
+//! default), and a person would then click a nearer cell first. The
+//! brain's base defence leaves a unit on its way in alone.
 //!
 //! It never sends an own harvester, slave miner or slave, engineer or spy
 //! (a controlled enemy one standing idle is sent), nor a controller or a

@@ -814,15 +814,17 @@ fn slot_step(w: &mut World, spawner: ObjectId, i: usize) {
             }
         }
         SlotState::Preparing if missile => {
-            // spec: S-0506 Slot table (a preparing missile slot: none; claim 8 releases it)
+            // spec: S-0506 Slot table (preparing, object of a missile type: a rocket slot's object is of a rocket type; none, claim 8 releases it)
         }
         SlotState::Preparing => {
             // spec: S-0506 claim 3 (a non-missile slot preparing, attacking or returning adopts the pending target)
             adopt_pending(w, spawner);
             let target = controller(w, spawner).and_then(|c| c.target);
             let Some(x) = slot.object else { return };
-            if target.is_none() {
-                // spec: S-0506 Slot table (preparing non-missile, no controller target: returning)
+            if missile_type(w, x) {
+                // spec: S-0506 Terms (missile type) and Slot table (preparing, object of a missile type, here a flagged type in a non-missile slot: none; claim 8 releases it)
+            } else if target.is_none() {
+                // spec: S-0506 Slot table (preparing, object not of a missile type, no controller target: returning)
                 set_slot(w, spawner, i, SlotState::Returning, slot.until);
                 aircraft_return(w, x, spawner);
             } else if let Some(s) = w.obj(spawner) {

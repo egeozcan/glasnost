@@ -341,6 +341,15 @@ fn coarse_level(
 /// The corridor of every level, level 0 first.
 pub type Chains = [Vec<u32>; LEVELS];
 
+/// Why a coarse search failed (S-0212 claim 13 and departure D2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CoarseFail {
+    /// No chain at some level.
+    NoChain,
+    /// A chosen chain has more than 500 sectors at some level (departure D2).
+    ChainLength,
+}
+
 /// The coarse search of S-0212 claim 13 at every level, from the top level
 /// down, for movement zone `zone`, from cell `start` to cell `dest` (the
 /// coarse end cells).
@@ -352,14 +361,27 @@ pub fn coarse(
     dest: CellXY,
     closed: &Closed,
 ) -> Option<Chains> {
+    coarse_why(w, secs, zone, start, dest, closed).ok()
+}
+
+/// [`coarse`], telling a chain-length failure (departure D2) from the
+/// others.
+pub fn coarse_why(
+    w: &World,
+    secs: &Sectors,
+    zone: MovementZone,
+    start: CellXY,
+    dest: CellXY,
+    closed: &Closed,
+) -> Result<Chains, CoarseFail> {
     let mut chains: Chains = Default::default();
     let mut upper: BTreeSet<u32> = BTreeSet::new();
     for l in (0..LEVELS).rev() {
-        let lv = secs.levels.get(l)?;
+        let lv = secs.levels.get(l).ok_or(CoarseFail::NoChain)?;
         let s = lv.sector(w, start);
         let t = lv.sector(w, dest);
         if s == NONE || t == NONE {
-            return None;
+            return Err(CoarseFail::NoChain);
         }
         let top = l == LEVELS - 1;
         let allowed = |x: u32| {
@@ -369,17 +391,17 @@ pub fn coarse(
                 && (top || upper.contains(&lv.parent[x as usize]) || cat == category::CRUSHABLE)
         };
         if !allowed(s) || !allowed(t) {
-            return None;
+            return Err(CoarseFail::NoChain);
         }
-        let chain = coarse_level(w, lv, s, t, &allowed, &closed[l])?;
+        let chain = coarse_level(w, lv, s, t, &allowed, &closed[l]).ok_or(CoarseFail::NoChain)?;
         // spec: S-0212 Constants and departure D2 (a chain of more than 500 sectors: a failed coarse search)
         if chain.len() > 500 {
-            return None;
+            return Err(CoarseFail::ChainLength);
         }
         upper = chain.iter().copied().collect();
         chains[l] = chain;
     }
-    Some(chains)
+    Ok(chains)
 }
 
 /// Whether a ground-layer cell has the corridor exemption (S-0212 claim
