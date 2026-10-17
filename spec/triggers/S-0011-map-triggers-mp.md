@@ -2,7 +2,7 @@
 id: S-0011
 title: Map triggers (multiplayer subset)
 topic: triggers
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1967,11 +1967,13 @@ using named test maps removed afterwards.
 - **Lobby control for the computer difficulty.** Whether the stock skirmish lobby sets
   the session computer difficulty (claim 4), from which control, and whether the value restored at a
   later game start replaces a lobby choice.
-- **Hand-off of the attack-event judging.** S-0601 claim 5 states the same judging of events 6 and 44
-  as claim 8 here. Claim 8 owns it; S-0601's judging paragraph should become a pointer to claim 8
-  (named change for S-0601). S-0312 claim 29's sentence that a known attacker's three preliminary
-  raises have codes outside this spec's subset must change too: the first of them, code 6, is inside
-  the subset, and the other two are outside it (named change for S-0312).
+- **Hand-off of the attack-event judging.** S-0601 claim 5 restates the judging of events 6 and 44
+  that claim 8 here owns, and uses the term "house-order position (Terms)", which S-0601 does not
+  define; claim 8 counts the house number from 0 (S-0009 Terms). S-0601 claim 5 also describes an
+  event-44 raise after a one-time tag has left the target (`quirks.removed_tag_attack_event`), which
+  claim 8 does not mention. S-0601's judging paragraph should become a pointer to claim 8 (named
+  change for S-0601). The S-0312 claim 29 change named in an earlier revision is already in the
+  approved S-0312.
 - **Codes outside this subset.** Every event and action code not in tables I3 and I4 is parsed by
   Import mapping. Except for the companion-spec pointers, its meaning remains deferred.
   That includes the extra latch rule
