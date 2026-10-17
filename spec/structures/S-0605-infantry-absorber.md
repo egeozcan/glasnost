@@ -62,7 +62,8 @@ S-0312 and S-0408 are made in the current drafts of those specs):
 - S-0405 claim 7 and its Open questions: removing a passenger inside does not make power due
   (claim 15 below).
 - S-0215 claim 24's "already bound" test (for *enter*: in contact with that building) is widened by
-  claim 16's *Found* step to a unit already waiting in line for it. S-0215 names contact only.
+  claim 16's *Found* step to a unit already waiting in line for it. S-0215 claim 24 states the same
+  widening; its confidence there stays low (Q-1154 question 2, scenario B21 (d)).
 - S-0212 (claim 25 and table T5): the waiting-line approach of claim 4 is a single-cell user of the
   nearby-cell search, with the settings of the idle harvester step-off row and the tick *N* taken as the
   tick of the *enter* processing. S-0212 lists neither the user nor that tick. Add a T5 row and a
