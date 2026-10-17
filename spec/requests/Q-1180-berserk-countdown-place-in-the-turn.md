@@ -1,9 +1,9 @@
 ---
 id: Q-1180
 title: Where in a unit's own update the berserk countdown runs, and whether it runs out of play or in a warp
-status: open
+status: answered
 related: [S-0610, S-0203, S-0513, S-0215]
-answered-by: []
+answered-by: [S-0610]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 4
+revision: 5
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
-requests: [Q-0661]
+requests: [Q-0661, Q-1180]
 supersedes: []
 ---
 
@@ -40,7 +40,7 @@ skirmish only; network games and campaigns are out of scope.
 - **The area reveal itself** (cells, radius cap, explore and see, gap fields): S-0409 claim 17.
 - **Gas clouds** that carry a berserk warhead: S-0613 claims 4 and 13 cover their creation and
   hits when the data supplies them; each hit then follows this spec and S-0302 claim 10.
-  The stock chaos drone creates no gas particles (claim 8).
+  Whether an area berserk weapon creates gas particles depends only on its imported data (claim 8).
 - **Permanent and temporary mind control** use the psionics immunity of claim 1.
   Their eligibility rules are S-0601 claims 3 and 13. Psychic-domination eligibility is
   S-0612 claim 13.
@@ -64,6 +64,14 @@ skirmish only; network games and campaigns are out of scope.
   what that unit is attacking or where it is going (claims 10 and 11).
 - **Psychic reveal.** The superweapon kind that reveals an area of the map to the launching house
   (claims 13 to 15).
+- **Countdown update.** An update of a berserk unit on which its remaining berserk time goes down by
+  one: any update that is in play and is neither an excluded nor a warp-only update (claim 5).
+- **Excluded update, warp-only update.** An update of a berserk unit that is in play but on which the
+  countdown does not run. An excluded update is one that S-0215 claim 2 excludes for an infantry unit
+  or vehicle (travelling through a tunnel, being erased, or in the leaving stage of a chrono move),
+  or a landed aircraft's update while it is being erased (S-0215 claim 2 excludes its behaviour
+  processing; the countdown part of that exclusion is this spec's choice, claim 5). A warp-only update
+  is one of a superweapon-warp member on which S-0513 claim 51 suppresses its ordinary work (claim 5).
 
 ## Behaviour
 
@@ -127,7 +135,7 @@ skirmish only; network games and campaigns are out of scope.
      Team departure is `unmeasured` here because the original's team system is out of scope.
    - Confidence: high
 
-5. **Countdown and the end of berserk.** In each of its own updates a berserk unit's remaining time
+5. **Countdown and the end of berserk.** In each countdown update a berserk unit's remaining time
    goes down by 1. In the update where it reaches 0 or less, the berserk state ends, the remaining
    time is set to 0, the unit drops its target and a behaviour is queued:
    - *guard* when its owner is human-controlled,
@@ -138,11 +146,86 @@ skirmish only; network games and campaigns are out of scope.
    The first such update may occur in the hit tick if the hit precedes that unit's update
    (S-0203 claims 1 and 3); an elapsed interval of exactly *T* ticks from the hit is not guaranteed.
    A hit with *T* ≤ 0 still has all the effects of claim 4, and the state ends at the next
-   countdown update (Edge cases, `quirks.berserk_zero_duration`). Countdown behaviour while out
-   of play has not been established and is not specified here.
-   - Backing: `measurable` (P2; for *T* ≤ 0, P3 and S-0302 scenario D17 part i's
-     named zero- and negative-versus test setup).
-   - Confidence: high (countdown and expiry effects); medium (the *T* ≤ 0 case)
+   countdown update (Edge cases, `quirks.berserk_zero_duration`).
+
+   **Which updates are countdown updates.** A countdown update is any update of a berserk unit that
+   is in play and is neither excluded nor warp-only. The countdown is one of the few counters that
+   step once per turn, as S-0203 claim 9 allows, and this claim is the owner that says so. It does
+   not depend on the unit's behaviour timer being due, on what the unit is doing, on its owner or on
+   whether it has a target. The countdown does *not* run in any of these:
+   - **Out of play.** A unit that is out of play takes no updates (S-0203 claims 2 and 3): a
+     passenger of a transport that is not open-topped, an occupant of a building, and any other unit
+     held inside another object. Its berserk state and remaining time are *kept unchanged* while it
+     is inside. The approved specs give no change to the berserk state when a unit boards or leaves
+     (S-0507, S-0508 and S-0605 do not mention berserk), so none is assumed here. The countdown
+     resumes at the first update after the unit is back in play, with the time it had. A passenger
+     of an open-topped transport stays in play and does take updates (S-0203 claim 3), so its
+     countdown continues.
+   - **Excluded updates.** The updates of S-0215 claim 2 on which the unit is travelling through a
+     tunnel, is being erased by a temporal weapon or is in the leaving stage of a chrono move. Such
+     an update takes no countdown step; the remaining time is kept. For a landed aircraft being
+     erased, the countdown is not established: S-0514 claim 17 excludes its movement, turning and
+     firing, and S-0215 claim 2 excludes its behaviour processing, but neither mentions the
+     countdown. Until a measurement settles it, this spec takes no countdown step there (Open
+     questions). No part of P9 tests that case, and no setup is known for a berserk aircraft
+     (claim 7), so it is `unmeasured`.
+   - **Warp-only updates** of a superweapon-warp member of a kind that S-0513 claim 51 names
+     (vehicles, teleporter infantry, landed aircraft) (S-0513 claim 51; S-0203 claim 4). In the
+     original the leaving-stage updates are the excluded ones above. In our engine the countdown
+     joins the ordinary work that claim 51 suppresses from the first pending update through
+     arrival effects: no step is taken, none is made up later, and the remaining time is kept. In
+     arrival hold it runs in each update after that update's hold-end test, whether the hold is
+     still holding or expiring, as S-0513 claim 51 gives the other ordinary work.
+     This is a departure of design scope: for the updates before arrival hold, the original's
+     continuation is unresolved (S-0513 claim 52), so it may run the countdown in them, and our
+     engine does not. It has no quirk switch.
+
+   **Effects in the update where the countdown ends.** The expiry shows in that same tick, in the
+   unit's firing, its target searches and its behaviour. The observable consequences are these.
+   Whether a per-tick start (S-0215 claim 11) that falls after the countdown step can make a queued
+   behaviour current in the same tick is open (see Open questions); the queued-behaviour bullet
+   below states the provisional rule and the test that decides it (P9 part b):
+   - **No berserk shot in the expiry update.** The expiry therefore clears the target before any
+     shot of that update. The last shot fired as
+     berserk (halved rearm time, S-0301 claim 8; friendly targets allowed, S-0309) is in the
+     update before the expiry update, or earlier. After the expiry update's step the unit is an
+     ordinary unit for the rest of that update: a target it acquires later in the same update
+     follows the ordinary rules (no berserk exceptions, ordinary rearm) and may be fired at in that
+     same update. A shot already in flight is not affected.
+   - **The queued behaviour is not yet in charge.** The *guard* or *hunt* queued by expiry is only
+     queued in the expiry update, and it does not start there: no guard-mode search or guard hold
+     begins in the expiry update. A hunt move that the unit is carrying out as its current
+     behaviour continues through the expiry update. On the expiry tick, the behaviour that was
+     current before the expiry still runs when its delay is due, now without the target it had and
+     with ordinary, non-berserk searches. A vehicle that is moving under hunt is
+     not ready (S-0215 claim 11), so it keeps hunting until it stops; an infantry unit under hunt is
+     ready. Whether a per-tick start that falls after the countdown step could make the queued
+     behaviour current within the expiry update is open (see Open questions); part b of P9 decides it.
+   - **A queued behaviour that never started.** Expiry queues *guard* or *hunt* by replacing
+     whatever is queued, as claim 4 does. A unit that was never ready after the hit still has the
+     hit's *hunt* queued; expiry replaces it by *guard* (human-controlled owner, AI house) and the
+     unit never hunts. Where expiry queues the behaviour that is already current and nothing else
+     is queued (a neutral-house unit under hunt), nothing changes.
+   - Backing: `measurable` (P2; for *T* ≤ 0, P3 and S-0302 scenario D17 part i's named zero- and
+     negative-versus test setup; P9 parts a and b for the shot and the behaviour order; P9 part d for
+     the erasing exclusion; P9 part e for the leaving stage of a chrono move, by its leaving-stage
+     expectation; P9 part c for the replaced queue if a stock or map-placed setup keeps the vehicle
+     moving, as that part says, otherwise `unmeasured`). The tunnel and landed-aircraft exclusions are
+     `unmeasured`: no setup is known that puts a berserk unit in a tunnel, and no setup is known for a
+     berserk aircraft that could be landed and erased (claim 7). The out-of-play rule is
+     `unmeasured`: no ordinary way is known to bring a berserk unit inside another object (a berserk
+     unit takes no orders, S-0214 claim 15; a hit on a unit inside needs it to be on the map,
+     S-0303 claim 9). No scenario creates the branch, and whether ordinary play reaches it is not
+     established, since claim 4 does not say what a berserk hit does to a current behaviour that
+     takes a unit inside. The non-leaving warp-only rule is a design rule of our engine, checked by
+     replaying P9 part e on our engine; the original's leaving stage is `measurable` (P9 part e).
+   - Confidence: high (countdown and expiry effects); medium (order of the step and the firing check,
+     pending P9 parts a and b; the erasing and leaving-stage exclusions of the countdown, pending P9
+     parts d and e; tunnel exclusion, unmeasured; the order of the queued behaviour's start in the
+     expiry update; the open-topped passenger case); medium (the *T* ≤ 0 case); low (landed aircraft
+     exclusion, unmeasured; that the original takes the step in the non-leaving warp updates, which our
+     engine suppresses by design; the out-of-play rule: derived from the update order, unmeasured, and
+     not known to be reachable in ordinary play)
 
 6. **While berserk.** A berserk unit takes no orders (S-0214 claim 15), fires with the halved rearm
    time (S-0301 claim 8) and searches for targets with the friendly-row exceptions of S-0309. In
@@ -175,8 +258,8 @@ skirmish only; network games and campaigns are out of scope.
    *T* at distance 0 (S-0302 claim 10), so equally susceptible units with the same type,
    posture and damage modifiers get the same initial duration from one pulse. This does not
    promise simultaneous expiry: units can have different numbers of countdown updates in the hit
-   tick. The stock chaos drone creates an animation and an area berserk effect, but no gas
-   particles. If other data supplies gas particles with a berserk-causing warhead, their delivery
+   tick. Whether such a weapon also creates gas particles depends only on its imported data.
+   If the data supplies gas particles with a berserk-causing warhead, their delivery
    follows S-0613 claims 4 and 13, and their later hits can reset individual durations under
    S-0302 claim 10.
    - Backing: `measurable` (scenarios P4 part a and P5)
@@ -285,10 +368,10 @@ skirmish only; network games and campaigns are out of scope.
 > truncated toward zero to integer leptons. Radius scaling and comparison are integer.
 > Unlike S-0204 claim 6's object-to-object distance, no target-building size is subtracted.
 
-> **F2. Berserk countdown.** With remaining time *t* after the hit (*t* = *T*), each update of the
-> unit sets *t* ← *t* − 1 (integer); berserk ends in the update where *t* ≤ 0. For *T* ≥ 1 that is
+> **F2. Berserk countdown.** With remaining time *t* after the hit (*t* = *T*), each countdown update of the
+> unit sets *t* ← *t* − 1 (integer); berserk ends in the countdown update where *t* ≤ 0. For *T* ≥ 1 that is
 > the *T*-th countdown update following application of the hit; for *T* ≤ 0 it is the first.
-> The first countdown update may be in the same tick as the hit (claim 5).
+> The first countdown update may be in the same tick as the hit (claim 5). Out-of-play time, excluded updates and warp-only updates are not countdown updates and leave *t* unchanged (claim 5). A berserk shot in a countdown update is allowed only when *t* > 0 after its step (claim 5).
 
 ## Constants
 
@@ -299,7 +382,7 @@ skirmish only; network games and campaigns are out of scope.
 | Psychic-detection radius default | 0 | cells | no sensor (claim 9) |
 | Sensor reach scale | 256 | leptons per cell | F1 |
 | Intent-line end square | 3 × 3 | pixels | claim 11 |
-| Berserk countdown step | 1 | per update | F2 |
+| Berserk countdown step | 1 | per countdown update | F2 |
 
 ## State and ordering
 
@@ -307,8 +390,9 @@ skirmish only; network games and campaigns are out of scope.
 |---|---|---|
 | not berserk | berserk hit takes effect (S-0302 claim 10) | berserk with *t* = *T*; target dropped; *hunt* queued; leaves its team (original) |
 | berserk | berserk hit takes effect | *t* = new *T*; nothing else |
-| berserk | own update, *t* − 1 > 0 | *t* decreases by 1 |
-| berserk | own update, *t* − 1 ≤ 0 | not berserk, *t* = 0; target dropped; *guard* queued (human-controlled owner, AI house) or *hunt* (otherwise) |
+| berserk | countdown update, *t* − 1 > 0 | *t* decreases by 1 |
+| berserk | out of play (no update), excluded update (tunnel, erasing, leaving stage) or warp-only update | unchanged: still berserk, *t* kept (claim 5) |
+| berserk | countdown update, *t* − 1 ≤ 0 | not berserk, *t* = 0; target dropped; *guard* queued (human-controlled owner, AI house) or *hunt* (otherwise) |
 
 - Entry clears the old target immediately. This does not forbid acquiring that object again
   through a later search, even in the same tick. The queued *hunt* becomes current at the next
@@ -324,7 +408,7 @@ skirmish only; network games and campaigns are out of scope.
   less (for example on a target whose versus value for the warhead is 0, or any berserk hit in an
   inert game)
   still makes the target drop its target and queue *hunt*, and the unit is berserk until its next
-  update, when expiry queues *guard* or *hunt* (claim 5). Its effect is that the target loses its
+  countdown update, when expiry queues *guard* or *hunt* (claim 5). Its effect is that the target loses its
   target and its queued behaviour. Off: a berserk hit with *T* ≤ 0 has no effect on the target.
 - **`quirks.psychic_intent_ignores_visibility`** (default on, the original). Hostile-intent lines
   are shown for units the viewer cannot see, including cloaked units, disguised units and units
@@ -413,10 +497,10 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
 - **P5. Equal initial duration over the area.** Several enemy tanks of one type, rank and
   damage modifiers at different distances inside a chaos drone's area, all on the same side
   of the drone in update order.
-  Record the first hit and expiry for each, and record whether any gas particles appear.
-  Void runs with further berserk hits. Expected: no gas particles from the stock drone,
-  equal initial *T* under S-0302 claim 10, and expiry after equal numbers of countdown updates.
-  A duration difference caused by distance or a gas particle created by the stock drone
+  Record the first hit and expiry for each, and record whether any gas particles appear and compare with the drone's imported data.
+  Void runs with further berserk hits. Expected: gas particles appear only if the imported data
+  supplies them, equal initial *T* under S-0302 claim 10, and expiry after equal numbers of countdown updates.
+  A duration difference caused by distance, or a gas particle created where the data supplies none,
   falsifies the claim. A later reset does not falsify the equal-initial-duration claim.
 - **P6. Psychic sensor.** The viewer owns a psychic sensor (choose the type by reading the stock
   rules). Enemy tank 1 is ordered from outside the radius to move to a cell inside it, enemy tank
@@ -494,9 +578,74 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
   for its immunity, or a berserk shot at an immune building falsifies the corresponding part.
   Remove the named test data after the runs.
 
+- **P9. Countdown placement in the update (Q-1180).** Use the setup of P2 (a human-owned tank; a
+  chaos drone fires once and withdraws; compute *T* under S-0302 claim 10) and record, tick by
+  tick, the expiry tick (the first tick on which the tint is gone and an order is accepted), every
+  shot fired by the tank with its target, the tank's position and destination, and its queued and
+  current behaviour where the recorder can read them.
+  (a) *Last berserk shot.* Make a durable object of the tank's own house, and nothing else, the only
+  target in range. Choose the tank's weapon (reading the stock rules, copying no value) so that
+  its rearm time is long enough that the tank fires at most once in any three ticks while
+  berserk; if no stock weapon gives that spacing, this part is not measurable. Record each run's
+  seed without setting it (measurement setup). A run is valid only if the recorder shows a shot by
+  the tank at the own-house object on the tick before the expiry tick; a run without one is void,
+  not a pass. Repeat until three valid runs are recorded. Expected: no shot at the own-house
+  object on the expiry tick or later (the target is dropped and ordinary rules refuse it); shots
+  at it up to the tick before expiry. Falsified by
+  one shot at the own-house object on the expiry tick.
+  (b) *Queued behaviour.* Put an enemy durable unit far outside the tank's weapon range but in
+  the unit's reach, and let the tank hunt it after the hit. Expected: at expiry a vehicle keeps
+  moving under hunt (it is not ready to change while moving) and stops hunting only when it stops.
+  Repeat with an infantry unit: it keeps its hunt move through the expiry tick and takes no
+  guard-mode action (no target acquired by a guard scan and no hold) in the expiry tick; the
+  earliest guard-mode action is on a later tick. A run of either kind is valid only if the recorder
+  shows the unit moving on the expiry tick; otherwise it is void. Falsified by a guard-mode
+  acquisition or hold in the expiry tick, an infantry unit that stops its hunt move before the end of
+  the expiry tick, or a vehicle that stops moving under hunt, or changes its behaviour, before it
+  stops of its own accord.
+  (c) *Replaced queue.* Keep a vehicle moving (not ready) from the hit to the expiry by giving it
+  a destination through a map-placed script or a path that the hit does not interrupt; if no stock
+  setup does that, this part is not measurable. Expected: after expiry the vehicle never hunts
+  and holds as *guard* once it stops. Falsified by a hunt after expiry.
+  (d) *Excluded updates.* Make a unit berserk with a *T* whose expiry falls inside the unit's erasure:
+  the expiry tick comes after the first tick on which it is being erased and before the tick on which
+  the erasure removes it. Use a stock berserk warhead if one gives such a *T*; otherwise use the test
+  warhead P9-long-berserk, named test data removed after the run: a berserk-causing warhead whose *T*
+  under S-0302 claim 10 falls inside that window. Read the removal tick from S-0514's erasure
+  measurement scenario, with stock data, and void a run in which removal comes first, since a removed
+  unit shows no expiry. Then have a chrono-erasing weapon erase it, recording each tick on which it is
+  being erased. (A tunnel variant is not
+  measurable: a berserk unit takes no orders, S-0214 claim 15, so no known setup gets it into a
+  tunnel while berserk; run it only if a named setup is supplied.) Compare the expiry tick with an unexcluded twin hit in the same tick. Expected:
+  the expiry is later than the twin's by the number of excluded updates between the hit and the expiry
+  (every update on which the unit is being erased or is in its leaving stage); falsified by equal expiry ticks.
+  (e) *Warp.* Make two identical berserk units, one inside a superweapon warp (S-0513 SW23's setup),
+  and compare expiry ticks. Expected in the original for the leaving-stage updates: later by that
+  many updates. Whether the original takes the step in the other warp updates is unknown and is not
+  decided by this part. The engine expectation, later by every warp-only update of S-0513 claim 51,
+  is checked by replaying this setup on our engine, not on the stock executable. Falsified by equal
+  expiry ticks in the original's leaving stage, or by an engine expiry that is not later by every
+  warp-only update.
+  (f) *Passenger.* Not measurable in ordinary play (claim 5); do not run unless a setup that
+  puts a berserk unit inside a transport is supplied by named test data. Expected then: time
+  kept inside, resumed after leaving.
+
 ## Open questions
-- Whether a berserk unit's countdown is paused while it is out of play (claim 5). This is
-  untraced and unmeasured: no stock boarding setup that preserves the state is established.
+- Whether any ordinary play can put a berserk unit inside another object (claim 5, out of play):
+  none is known, so the paused-countdown rule there is derived from the update order alone.
+- Whether a per-tick start of an ordinary unit falls after its countdown step, so that a queued *guard*
+  or *hunt* could become current and be processed in the expiry update (claim 5). No approved spec fixes
+  that order; part b of P9 decides it. Until then claim 5 states that it does not start there.
+- Whether the original runs the countdown in the pending, departure, off-map, placement, arrival and hold
+  updates of a superweapon warp member (claim 5). Our engine suppresses it in the pending, departure,
+  off-map, placement and arrival updates by design, and runs it in hold after each hold-end test (S-0513
+  claim 51).
+- Whether the original runs the countdown of a landed aircraft being erased. S-0514 claim 17 and
+  S-0215 claim 2 exclude its movement, turning, firing and behaviour processing, and say nothing of the
+  countdown. Until a measurement settles it, claim 5 takes no countdown step there.
+- Whether healing of a berserk unit differs from an ordinary unit's, and whether it falls before or
+  after the countdown step (Q-1180's healing question). The draft states nothing about it; it is
+  unmeasured and no scenario here covers it.
 - (Low) Whether a psychic sensor that leaves the map but is not destroyed stays a sensor of its
   owner (claim 9). It cannot be in operation then, so no observable depends on it as far as known.
 - Exact line-colour animation, and whether its cosmetic appearance needs a separate rendering
