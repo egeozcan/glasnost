@@ -60,7 +60,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0616](combat/S-0616-particle-systems.md) | Particle systems (smoke, fire, spark, railgun) | combat | 4 | approved | — |
 | [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 16 | approved | — |
 | [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 8 | approved | — |
-| [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 11 | approved | — |
 | [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 19 | approved | — |
 | [S-0005](rules-import/S-0005-data-file-precedence.md) | Data file precedence (loose files, archive mount order, name lookup) | rules-import | 9 | approved | — |
 | [S-0002](rules-import/S-0002-ini-duplicates.md) | INI duplicates and name resolution | rules-import | 8 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0605](structures/S-0605-infantry-absorber.md) | Infantry absorber (who may enter an absorbing building, entry, holding, release) | structures | 3 | approved | — |
 | [S-0615](combat/S-0615-special-hit-effects.md) | Special-hit effects (death-kind animations, the burning walker and the disc laser) | combat | 2 | approved | — |
 | [S-0612](superweapons/S-0612-psychic-dominator.md) | Psychic Dominator superweapon | superweapons | 2 | approved | — |
+| [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 12 | approved | — |

@@ -2,7 +2,7 @@
 id: S-0614
 title: Parasites
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -765,7 +765,7 @@ computer player and are out of scope.
 
 ## Measurement scenarios
 
-Use a small purpose-made skirmish map, game-speed index 2, 800×600, director and mods off,
+Use a small purpose-made skirmish map, game-speed index 2, 800×600, no engine add-on and no mods (the named test files of a scenario excepted),
 with one bystander computer player kept outside the observed area and the glossary's void rule.
 Run each deterministic part three times. Use stock data except the named map override variants
 below, removed after the test. Scripted input, video and a read-only state recorder are permitted.
@@ -928,7 +928,7 @@ For every part, a result different from its stated expectation falsifies that pa
   independent of the ground-record choice. Use named map variants where needed to make
   infantry parasites or hosts latchable, but do not alter placement or random behaviour.
   Run each arrangement three times with exact recorded seeds and both kinds of parasite.
-  The common recorder and director-off settings apply. The recorder must include positions
+  The common recorder settings and the no-engine-add-on, no-mods setting apply. The recorder must include positions
   outside the playable map and stream state around release, not only visible units.
 - **P11, loss of the carrier (claim 21; Q-0621).** A named map variant gives a drone parasite
   an inaccurate non-steering projectile and a distant moving enemy at a legal map border.
