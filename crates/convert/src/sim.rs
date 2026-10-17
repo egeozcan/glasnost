@@ -2047,11 +2047,16 @@ impl Builder<'_> {
         if let Some(b) = behaves_like(t) {
             rec.put("behaves_like", jsonc::string(b));
         }
-        // spec: S-0613 Import mapping (HoldsWhat: a particle type name; absent none) and S-0004 claims 2 and 13 (63 bytes)
-        let holds = fold(t.keys.get(&b"HoldsWhat"[..]), None, |v, _| {
+        // spec: S-0613 Import mapping (HoldsWhat: a particle type name) and S-0004 claims 2 and 13 (63 bytes)
+        let given = fold(t.keys.get(&b"HoldsWhat"[..]), None, |v, _| {
             Some(self.particle_ref(v, crate::refs::EMITTED_PARTICLE_LIMIT))
-        })
-        .flatten();
+        });
+        let holds = match given {
+            Some(named) => named,
+            // spec: S-0613 Terms (empty-named type), claim 4 and Import mapping (absent from a section that is read: the empty-named type, registered by reference under S-0004 claim 13; a section never read: none)
+            None if !t.reads.is_empty() => self.type_key(Kind::Particles, b""),
+            None => None,
+        };
         if let Some(h) = holds {
             rec.put("holds_what", jsonc::string(h));
         }
