@@ -24,7 +24,7 @@ Requests:
 - **Q-1151** (answered by S-0609 revision 5 Edge cases, *Stage count lowered below 2 by a later layer*). The interim rule (thresholds not used while the count in force is below 2) becomes the rule, keyed to the count as the layers finally leave it. One difference from the interim: the importer used to warn at every layer that lowered a populated type below 2 stages, even when a later layer raised it back. It now warns once, at the layer that reduced the count, and only when the final count is below 2 and the flag is set.
 - New requests: none (block Q-1152 to Q-1159 unused).
 
-Save format: unchanged at 49 (no state added or removed; the quirk switch lives in the rules, not in the save). AI game format: unchanged at 18. Hashes: see the report of this step. Neither change alters what the simulation does.
+Save format: unchanged at 49 (no state added or removed; the quirk switch lives in the rules, not in the save). AI game format: unchanged at 18. Hashes: the sim-gate goldens pass unchanged (run with `--include-ignored`), as expected: neither change alters what the simulation does.
 
 ## S-0601 revisions 11 and 12 (answer Q-1150)
 
