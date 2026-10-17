@@ -2,7 +2,7 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 38
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -168,7 +168,9 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   disabled, not inside a tunnel, and it deploys into a building, carries passengers, deploys in
   place, sits in a tank bunker or has a deploy weapon; but not when it deploys into a building
   while a parasite is on it, not when it deploys into a construction yard while it is
-  mind-controlled. For a vehicle transport, the unload exclusions are S-0507 claim 7's:
+  controlled by a controlling object. This is an exception to *mind-controlled* (Terms) for these
+  input rules: a permanently controlled vehicle, or a vehicle held by a trigger's house takeover,
+  is not refused (S-0601 claims 3, 13, 14 and 15). For a vehicle transport, the unload exclusions are S-0507 claim 7's:
   on a bridge, on a cell or straight-neighbour cell carrying a bridge deck, on water, or on a
   building's cell other than a tank bunker's, as well as that claim's disabled and tunnel cases.
   The water refusal applies equally to human and AI player houses; neutral and special houses
