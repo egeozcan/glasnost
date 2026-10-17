@@ -309,7 +309,7 @@ const ARRIVED: i64 = 2; // nocite: tuning of our own opponent
 /// Whether a unit has nothing to do: no destination (or a cell destination
 /// it has as good as reached), no target, and a resting behaviour (or a
 /// move that has arrived).
-pub(crate) fn idle(w: &World, id: ObjectId) -> bool {
+pub fn idle(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
         let arrived = match o.dest {
             None => true,

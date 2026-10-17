@@ -54,9 +54,10 @@ pub const SEED: u32 = 20_261_010;
 /// replays keep [`SEED`].
 pub const DUEL_SEED: u32 = 20_261_018;
 
-/// Seed of the M6c duel. Chosen from a few tried (see `docs/development.md`,
-/// *Determinism gate*): the first of them that exercised every ability within
-/// [`M6C_TICKS`]. One passing seed and nothing more.
+/// Seed of the M6c duel. Kept at M7a step 2b, after the scenario was given
+/// margins: over the sweep of seeds 1 to 32 (`m6c_seed_sweep`) this seed's
+/// smallest counter is 4, the most any seed reached (see
+/// `docs/development.md`, *Determinism gate*).
 pub const M6C_SEED: u32 = 1;
 
 /// Ticks of the full run of the M6c duel (shorter than the other duels'

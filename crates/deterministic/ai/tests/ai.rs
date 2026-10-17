@@ -1098,6 +1098,85 @@ fn a_loaded_ferry_near_home_leaves_for_the_goal() {
     );
 }
 
+// The same loaded ferry just outside its home radius, but with no drop
+// cell near the goal (every land cell across the strait is taken): it
+// cannot leave for the goal, so it lets its passengers out where it stands
+// with a click on itself (the deploy cursor, S-0507 claims 7 and 8)
+// instead of standing loaded for good (PLAN §4.7).
+#[test]
+fn a_loaded_ferry_with_no_drop_cell_lets_its_passengers_out() {
+    let map = fixture::map_strait();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-strait",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the strait skirmish loads");
+    assert!(step_until(&mut g, 3000, |w| !of(w, 0, "YARD").is_empty()));
+    let period = glasnost_ai::scripted::THINK_PERIOD;
+    let t = g.world.tick;
+    step_until(&mut g, t + period, |w| w.tick % period == 0);
+    let yard = g.world.obj(of(&g.world, 0, "YARD")[0]).unwrap().pos.cell();
+    let mid = fixture::at(0, 0).x;
+    let side = (yard.x - mid).signum();
+    let away = glasnost_map::CellXY::new(yard.x + side * 14, yard.y);
+    let cells = free_cells(&g.world, away, 4);
+    assert_eq!(cells.len(), 4, "room near home");
+    let lift = testkit::spawn(&mut g.world, Kind::Vehicle, "LIFT", 0, cells[0], 0);
+    for &c in &cells[1..] {
+        let p = testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, c, 0);
+        glasnost_sim::transport::board(&mut g.world, p, lift);
+    }
+    assert_eq!(glasnost_sim::transport::count(&g.world, lift), 3);
+    // Take every free land cell across the strait.
+    let far: Vec<glasnost_map::CellXY> = g
+        .world
+        .cells
+        .grid
+        .iter()
+        .filter(|(c, cell)| {
+            (c.x - mid) * side < 0 && cell.land != glasnost_map::terrain::land::WATER
+        })
+        .map(|(c, _)| c)
+        .collect();
+    assert!(!far.is_empty(), "land across the strait");
+    for c in far {
+        if let Some(o) = g.world.cells.occ_mut(c, glasnost_sim::world::Layer::Ground) {
+            o.others = o.others.saturating_add(1);
+        }
+    }
+    let mut brain = Brain::with_plan(
+        &g.world,
+        &map,
+        HouseId(0),
+        glasnost_ai::brain::default_plan(),
+    );
+    let orders = brain.think(&g.world);
+    let mine: Vec<&Order> = orders
+        .iter()
+        .filter(|o| matches!(o, Order::Behaviour { actor, .. } if *actor == lift))
+        .collect();
+    assert!(
+        mine.iter().any(|o| matches!(
+            o,
+            Order::Behaviour {
+                behaviour: glasnost_sim::rules::Behaviour::Unload,
+                ..
+            }
+        )),
+        "the loaded ferry with no drop cell unloads, orders {mine:?}"
+    );
+    assert!(
+        !mine.iter().any(|o| matches!(
+            o,
+            Order::Behaviour { dest: Some(Target::Cell(c)), .. } if (c.x - mid) * side < 0
+        )),
+        "and is not sent across"
+    );
+}
+
 // Infantry that cannot walk to the next wave's goal (PLAN §4.7, S-0212
 // claim 4): on the strait map a rifleman standing far from home on its own
 // shore is called home, where the ferry takes idle infantry, instead of

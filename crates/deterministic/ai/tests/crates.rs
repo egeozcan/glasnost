@@ -144,6 +144,37 @@ fn does_not_resend_a_unit_that_did_not_take_the_order() {
     assert!(brain.given_up() >= 1);
 }
 
+// S-0520, PLAN §4.7 (memory, M7a step 2e): a unit that holds the order for a think and then drops it where it stood, without firing, did not take it either: it is not sent at the same crate again.
+#[test]
+fn does_not_resend_a_unit_that_dropped_the_order_where_it_stood() {
+    let g = game();
+    let (mut w, unit, c) = scene(&g, true);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert_eq!(moves(&brain.think(&w), c), vec![unit]);
+    // At the next think the unit still holds a move on its own cell (busy).
+    {
+        let o = w.obj_mut(unit).unwrap();
+        o.dest = Some(Target::Cell(c));
+        o.beh.current = Some(Behaviour::Move);
+    }
+    w.tick += 15;
+    assert!(!moves(&brain.think(&w), c).contains(&unit));
+    // Then it drops the order where it stood and is idle again.
+    {
+        let o = w.obj_mut(unit).unwrap();
+        o.dest = None;
+        o.beh.current = Some(Behaviour::Guard);
+    }
+    for _ in 0..3 {
+        w.tick += 15;
+        assert!(
+            !moves(&brain.think(&w), c).contains(&unit),
+            "the unit that dropped the order is sent again"
+        );
+    }
+    assert!(brain.given_up() >= 1);
+}
+
 // S-0520, PLAN §4.7 (memory): a unit that runs to the crate is not given up.
 #[test]
 fn a_unit_on_its_way_to_a_crate_is_not_given_up() {

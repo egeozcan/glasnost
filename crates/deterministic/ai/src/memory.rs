@@ -4,12 +4,16 @@
 //! unit up until something changes. The brain does the same.
 //!
 //! Each order a special-ability module gives to a unit is noted with the
-//! cell the unit stood on. At the next think the notes are judged: a unit
-//! that is idle again on the same cell did not take the order (a path
-//! that does not exist, a target it cannot attack, a building it cannot
-//! enter), so the pair of unit, goal and cell is blocked for a while. A
-//! module asks [`Memory::ok`] before it picks a goal for a unit. A unit
-//! that moved, died, entered something or is still busy leaves no memory.
+//! cell the unit stood on. At each think the notes are judged: a unit that
+//! is idle again on the same cell without having fired did not take the
+//! order (a path that does not exist, a target it cannot attack, a building
+//! it cannot enter), so the pair of unit, goal and cell is blocked for a
+//! while. A module asks [`Memory::ok`] before it picks a goal for a unit. A
+//! unit that moved, died, entered something or fired leaves no memory; one
+//! that is still busy on the same cell without having fired is judged again
+//! at the next think (a unit that holds an attack order for a while and
+//! then drops it where it stood did not take it either), for at most
+//! [`BLOCKED_FOR`] ticks, and a new order for the unit replaces the note.
 //!
 //! It reads only what a person sees (the unit's own cell and state) and is
 //! kept with the brain (saved and hashed with it).
@@ -35,6 +39,11 @@ struct Given {
     unit: ObjectId,
     goal: Target,
     at: CellXY,
+    /// The tick of the order.
+    since: i32,
+    /// The unit's rearm tick when it was given the order: another value
+    /// later means it fired.
+    rearm: i32,
 }
 
 /// A failed order: the unit did not leave its cell for the goal.
@@ -58,11 +67,20 @@ impl Memory {
     /// old or whose unit is gone.
     pub fn review(&mut self, w: &World) {
         for g in std::mem::take(&mut self.given) {
-            let stuck = w
-                .obj(g.unit)
-                .is_some_and(|o| o.on_map && o.health > 0 && o.pos.cell() == g.at)
-                && scripted::idle(w, g.unit);
-            if stuck {
+            let standing = w.obj(g.unit).is_some_and(|o| {
+                o.on_map && o.health > 0 && o.pos.cell() == g.at && o.combat.rearm_until == g.rearm
+            });
+            if !standing {
+                continue;
+            }
+            if !scripted::idle(w, g.unit) {
+                // Still busy where it stood: judged again at the next think.
+                if w.tick - g.since < BLOCKED_FOR {
+                    self.given.push(g);
+                }
+                continue;
+            }
+            {
                 let until = w.tick + BLOCKED_FOR;
                 match self
                     .failed
@@ -103,13 +121,18 @@ impl Memory {
             let Some(goal) = (*target).or(*dest) else {
                 continue;
             };
-            let Some(at) = w.obj(*actor).map(|u| u.pos.cell()) else {
+            let Some((at, rearm)) = w.obj(*actor).map(|u| (u.pos.cell(), u.combat.rearm_until))
+            else {
                 continue;
             };
+            // A new order replaces what the unit was given before.
+            self.given.retain(|g| g.unit != *actor);
             self.given.push(Given {
                 unit: *actor,
                 goal,
                 at,
+                since: w.tick,
+                rearm,
             });
         }
         if self.given.len() > LIMIT {

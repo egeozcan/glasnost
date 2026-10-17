@@ -19,6 +19,12 @@ fn d(s: &str) -> Decimal {
 }
 
 fn rules() -> Arc<SimRules> {
+    rules_with(false)
+}
+
+/// The rules; with `coil_offered` the overpowerable building is buildable
+/// and there is no prism type.
+fn rules_with(coil_offered: bool) -> Arc<SimRules> {
     let mut r = fixture::ruleset();
     for (reg, n) in [
         ("buildings", "PRSM"),
@@ -32,7 +38,9 @@ fn rules() -> Arc<SimRules> {
     prism.secondary = Some("Gun".into());
     r.sim.buildings.insert("PRSM".into(), prism);
     let mut coil = fixture::building(2, 2, 500, -20);
-    coil.tech_level = Some(99);
+    if !coil_offered {
+        coil.tech_level = Some(99);
+    }
     coil.overpowerable = Some(true);
     r.sim.buildings.insert("COIL".into(), coil);
     r.sim.warheads.insert(
@@ -59,13 +67,19 @@ fn rules() -> Arc<SimRules> {
     z.secondary = Some("Zap".into());
     z.tech_level = Some(99);
     r.sim.infantry.insert("ZAPPER".into(), z);
-    r.sim.general.prism_type = Some("PRSM".into());
+    if !coil_offered {
+        r.sim.general.prism_type = Some("PRSM".into());
+    }
     Arc::new(SimRules::new(&r, "synthetic-skirmish"))
 }
 
 fn game() -> Game {
+    game_with(rules())
+}
+
+fn game_with(rules: Arc<SimRules>) -> Game {
     let mut g = Game::new(
-        rules(),
+        rules,
         &fixture::map(),
         "synthetic",
         fixture::catalogue(),
@@ -129,6 +143,69 @@ fn orders_a_prism_building() {
     w.houses[0].credits = 0;
     let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
     assert_eq!(builds(&brain.think(&w), "PRSM", &w), 0);
+}
+
+/// A world of [`game_with`] after 900 ticks with plenty of credits and the
+/// house's building line free.
+fn free_line(g: &mut Game) -> World {
+    for _ in 0..900 {
+        g.step();
+    }
+    let mut w = g.world.clone();
+    w.houses[0].credits = 100_000;
+    for l in w
+        .econ
+        .lines
+        .lines
+        .iter_mut()
+        .filter(|l| l.house == HouseId(0))
+    {
+        if l.item.as_ref().is_some_and(|i| i.t.kind == Kind::Building) {
+            l.item = None;
+            l.queue.clear();
+        }
+    }
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    w
+}
+
+// S-0518, PLAN §4.7 (M7a step 2c): a house with a charger whose sidebar offers an overpowerable building other than the prism type orders one (it has none), as a person who built the charger would; a house with no charger orders none, and one that has the building orders no second.
+#[test]
+fn a_house_with_a_charger_orders_an_overpowerable_building() {
+    let mut g = game_with(rules_with(true));
+    let mut w = free_line(&mut g);
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert_eq!(
+        builds(&brain.think(&w), "COIL", &w),
+        0,
+        "no charger, no order"
+    );
+    let h = home(&w);
+    testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "ZAPPER",
+        0,
+        CellXY::new(h.x, h.y + 8),
+        0,
+    );
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert_eq!(builds(&orders, "COIL", &w), 1, "{orders:?}");
+    assert_eq!(brain.special_uses().overpowerables, 1);
+    testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "COIL",
+        0,
+        CellXY::new(h.x + 4, h.y + 8),
+        0,
+    );
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert_eq!(builds(&brain.think(&w), "COIL", &w), 0, "it has one");
 }
 
 // S-0518, PLAN §4.7: while the building line holds another building the prism building is not ordered (a person waits for the line; the order would be given again at every think).

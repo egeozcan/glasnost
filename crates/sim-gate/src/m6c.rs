@@ -74,11 +74,10 @@ pub fn total(uses: &[(glasnost_sim::world::HouseId, Uses)]) -> Uses {
 }
 
 impl Exercise {
-    /// The names of the abilities that a full run did not exercise, with the
-    /// counter that stayed zero (empty when the run exercised all of them).
-    pub fn missing(&self) -> Vec<&'static str> {
+    /// Every counter the full run asserts on, by name.
+    pub fn counters(&self) -> [(&'static str, u32); 29] {
         let u = &self.uses;
-        let checks: [(&'static str, u32); 29] = [
+        [
             ("garrison orders (S-0508)", u.garrisons),
             ("garrison occupants inside (S-0508)", self.occupants),
             ("engineer orders (S-0509)", u.engineers),
@@ -111,8 +110,13 @@ impl Exercise {
             ("air strikes called (S-0519)", self.strikes),
             ("crate orders (S-0520)", u.crates),
             ("crates picked up (S-0520)", self.crates),
-        ];
-        checks
+        ]
+    }
+
+    /// The names of the abilities that a full run did not exercise, with the
+    /// counter that stayed zero (empty when the run exercised all of them).
+    pub fn missing(&self) -> Vec<&'static str> {
+        self.counters()
             .iter()
             .filter(|&&(_, n)| n == 0)
             .map(|&(name, _)| name)
