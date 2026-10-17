@@ -144,7 +144,7 @@ pub struct ParticleType {
     /// The next particle type, by registration index (claim 7).
     pub next: Option<u32>,
     /// The next-particle displacement, leptons.
-    pub next_offset: [i32; 3],
+    pub next_offset: [i32; 3], // nocite: vector and matrix dimensions (three axes)
     /// The wind effect *W* (F6).
     pub wind_effect: i32,
     /// Translucency reduced modulo 256 (claim 16; the drawing reads it).
@@ -182,7 +182,7 @@ pub struct GasRules {
     /// Gravity *G*, leptons per tick² (F3).
     pub gravity: i32,
     /// The ramp matrices of S-0106 table C4 by slope shape 0 … 20.
-    pub ramps: Vec<[[F32; 3]; 3]>,
+    pub ramps: Vec<[[F32; 3]; 3]>, // nocite: vector and matrix dimensions (three axes)
 }
 
 /// The ramp matrices of S-0106 table C4, rows top to bottom, for shapes
@@ -366,23 +366,23 @@ pub fn nearest_single(text: &str) -> F32 {
     crate::rules::nearest_double(text).to_f32(Rounding::Nearest)
 }
 
-fn identity() -> [[F32; 3]; 3] {
+fn identity() -> [[F32; 3]; 3] { // nocite: vector and matrix dimensions (three axes)
     let one = nearest_single("1");
     let zero = nearest_single("0");
     [[one, zero, zero], [zero, one, zero], [zero, zero, one]]
 }
 
 /// The ramp matrices by shape 0 … 20 (S-0106 table C4).
-pub fn ramps() -> Vec<[[F32; 3]; 3]> {
-    let mut out = vec![identity(); 21];
+pub fn ramps() -> Vec<[[F32; 3]; 3]> { // nocite: vector and matrix dimensions (three axes)
+    let mut out = vec![identity(); 21]; // spec: S-0106 table C4 (ramp shapes 0 … 20)
     for (s, e) in C4 {
         let m = [
-            [nearest_single(e[0]), nearest_single(e[1]), nearest_single(e[2])],
-            [nearest_single(e[3]), nearest_single(e[4]), nearest_single(e[5])],
-            [nearest_single(e[6]), nearest_single(e[7]), nearest_single(e[8])],
+            [nearest_single(e[0]), nearest_single(e[1]), nearest_single(e[2])], // nocite: vector and matrix dimensions (three axes)
+            [nearest_single(e[3]), nearest_single(e[4]), nearest_single(e[5])], // nocite: vector and matrix dimensions (three axes)
+            [nearest_single(e[6]), nearest_single(e[7]), nearest_single(e[8])], // nocite: vector and matrix dimensions (three axes)
         ];
         out[usize::from(s)] = m;
-        if (5..=8).contains(&s) {
+        if (5..=8).contains(&s) { // spec: S-0106 C4 (shapes 9 … 12 equal 5 … 8)
             // spec: S-0106 C4 (shapes 9 … 12 equal 5 … 8)
             out[usize::from(s) + 4] = m;
         }
@@ -434,7 +434,7 @@ impl GasRules {
                     // spec: S-0613 Import mapping and F8 (StartStateAI, EndStateAI absent 0, StateAIAdvance absent 4; each stored as a signed 8-bit value)
                     start_stage: t.start_state_ai.unwrap_or(0) as i8,
                     end_stage: t.end_state_ai.unwrap_or(0) as i8,
-                    advance: t.state_ai_advance.unwrap_or(4) as i8,
+                    advance: t.state_ai_advance.unwrap_or(4) as i8, // spec: S-0613 Import mapping (StateAIAdvance absent: 4 ticks)
                     // spec: S-0613 Import mapping (DeleteOnStateLimit absent no)
                     delete_at_limit: t.delete_on_state_limit.unwrap_or(false),
                     next: particle_index(&t.next_particle),
@@ -471,7 +471,7 @@ impl GasRules {
             .ok()
             .and_then(|d| WIND.get(d).copied())
             .map(|(dx, dy)| {
-                if direction == 3 && !quirks.wind_southeast_short {
+                if direction == 3 && !quirks.wind_southeast_short { // spec: S-0613 Edge cases (the short step of direction 3)
                     (WIND_3_FULL, dy)
                 } else {
                     (dx, dy)
@@ -508,9 +508,9 @@ pub struct Particle {
     /// Position, leptons.
     pub pos: Pos,
     /// Velocity (vₓ, vᵧ, v_z), leptons per tick.
-    pub vel: [i32; 3],
+    pub vel: [i32; 3], // nocite: vector and matrix dimensions (three axes)
     /// The stored deflection (dₓ, dᵧ), single precision.
-    pub defl: [F32; 2],
+    pub defl: [F32; 2], // nocite: the two horizontal axes
     /// Remaining lifetime *E*, 16 bits.
     pub life: u16,
     /// Damage countdown *C*, 16 bits.
@@ -615,7 +615,7 @@ fn add_particle(w: &mut World, sys: ObjectId, ti: u32, at: Pos) -> Option<Object
         pos: Pos::new(at.x, at.y, at.z.max(h)),
         // spec: S-0613 claim 5 (velocity and deflection start at zero)
         vel: [0; 3],
-        defl: [F32(0); 2],
+        defl: [F32(0); 2], // nocite: the two horizontal axes
         life,
         // spec: S-0613 claim 5 (C starts at the damage interval modulo 65536, the stage at the start-stage field)
         countdown: t.max_dc,
@@ -839,7 +839,7 @@ pub fn anim_turn(w: &mut World, id: ObjectId) {
 
 /// Whether tick `t` is even.
 fn even(t: i32) -> bool {
-    t.rem_euclid(2) == 0
+    t.rem_euclid(2) == 0 // spec: S-0613 claims 8 to 11 (even tick numbers)
 }
 
 /// A particle system's turn (claim 6).
@@ -938,7 +938,7 @@ fn update_particle(w: &mut World, sys: ObjectId, i: usize) {
 fn drift(w: &mut World, p: &mut Particle) {
     // spec: S-0613 F2 (one raw value r₁; with the low three bits of m(r₁) zero, two more)
     let r1 = w.rng.raw() as i32;
-    if magnitude(r1) & 7 != 0 {
+    if magnitude(r1) & 7 != 0 { // spec: S-0613 F2 (the low three bits of m(r₁))
         return;
     }
     let r2 = w.rng.raw() as i32;
@@ -995,10 +995,10 @@ fn obstacle(w: &World, c: CellXY) -> bool {
 /// m · v for a single-precision matrix and vector (F3): products and sums
 /// in double precision, grouped (a_y + a_z) + a_x for x and (a_y + a_x) +
 /// a_z for y and z, each completed component stored as a single.
-fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] {
-    let mut out = [F32(0); 3];
+fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] { // nocite: vector and matrix dimensions (three axes)
+    let mut out = [F32(0); 3]; // nocite: vector and matrix dimensions (three axes)
     for (i, row) in m.iter().enumerate() {
-        let a: [F64; 3] = [0, 1, 2].map(|j| row[j].to_f64().mul(v[j].to_f64(), mode));
+        let a: [F64; 3] = [0, 1, 2].map(|j| row[j].to_f64().mul(v[j].to_f64(), mode)); // nocite: vector and matrix dimensions (three axes)
         // spec: S-0613 F3 (the sums are grouped (a_y + a_z) + a_x for x, (a_y + a_x) + a_z for y and z, with no fused operations)
         let sum = if i == 0 {
             a[1].add(a[2], mode).add(a[0], mode)
@@ -1011,7 +1011,7 @@ fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] {
     out
 }
 
-fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] {
+fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] { // nocite: vector and matrix dimensions (three axes)
     let mut t = *m;
     for (i, row) in t.iter_mut().enumerate() {
         for (j, e) in row.iter_mut().enumerate() {
@@ -1021,7 +1021,7 @@ fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] {
     t
 }
 
-fn diagonal(a: &str, b: &str, c: &str) -> [[F32; 3]; 3] {
+fn diagonal(a: &str, b: &str, c: &str) -> [[F32; 3]; 3] { // nocite: vector and matrix dimensions (three axes)
     let z = nearest_single("0");
     [
         [nearest_single(a), z, z],
@@ -1031,7 +1031,7 @@ fn diagonal(a: &str, b: &str, c: &str) -> [[F32; 3]; 3] {
 }
 
 /// Claim 10, F3: the deflection of a particle at `p` on an even tick.
-pub fn deflection(w: &World, p: Pos) -> [F32; 2] {
+pub fn deflection(w: &World, p: Pos) -> [F32; 2] { // nocite: the two horizontal axes
     let rules = w.rules();
     let g = rules.gas.gravity;
     let mode = rules.quirks.rounding();
@@ -1131,7 +1131,7 @@ fn stage_step(t: &ParticleType, p: &mut Particle) {
     let n = p.id.0 as i32;
     // spec: S-0613 F8 ((n + E_max − E) divisible by (n mod 2) + A, signed 32-bit wraparound; S-0205 claim 3 for a zero divisor)
     let x = n.wrapping_add(t.max_ec).wrapping_sub(i32::from(p.life));
-    let divisor = n.rem_euclid(2) + i32::from(t.advance);
+    let divisor = n.rem_euclid(2) + i32::from(t.advance); // spec: S-0613 F8 ((n mod 2) + A)
     if glasnost_num::int::rem(x, divisor) == 0 {
         // spec: S-0613 F8 (an 8-bit signed counter, wrapping from 127 to −128)
         p.stage = p.stage.wrapping_add(1);
@@ -1186,7 +1186,7 @@ fn move_particle(w: &World, t: &ParticleType, p: &mut Particle) {
     // spec: S-0613 F5 ((x′, y′) = (x₁ + vₓ, y₁ + vᵧ); z′ = max(z₁ + v_z, H(x′, y′) + 5))
     let x2 = x1.wrapping_add(p.vel[0]);
     let y2 = y1.wrapping_add(p.vel[1]);
-    let z2 = (z1 + p.vel[2]).max(w.surface_at(x2, y2) + HOVER);
+    let z2 = (z1 + p.vel[2]).max(w.surface_at(x2, y2) + HOVER); // spec: S-0613 F5 (never below the hover height above the terrain)
     p.pos = Pos::new(x2, y2, z2);
 }
 

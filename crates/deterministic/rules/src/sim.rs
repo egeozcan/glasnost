@@ -457,7 +457,7 @@ pub struct ParticleType {
     /// `NextParticleOffset`, leptons per axis (S-0613 Import mapping;
     /// absent 0, 0, 0).
     #[serde(default)]
-    pub next_particle_offset: Option<[i32; 3]>,
+    pub next_particle_offset: Option<[i32; 3]>, // spec: S-0613 Import mapping (three integers, leptons)
     /// `WindEffect`, the wind cadence divisor (S-0613 Import mapping;
     /// absent 0).
     #[serde(default)]
