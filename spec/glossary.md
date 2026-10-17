@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 50
+revision: 51
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2765,10 +2765,16 @@ scenario T6, part G.
 
 ## Questions for the project lead
 
-- Should the glossary define *director*? The measurement setups say "director and mods off", and the
-  approved specs use the word the same way without defining it. If it is to be defined, the lead (or
-  the owner, on the lead's word) supplies the meaning. Until then the term is used as the approved
-  specs use it.
-  The word appears in several specs' measurement scenarios. The glossary does not know whether it
-  names a tool; if it does, the lead's answer decides how those scenarios are reworded, and that
-  decision is needed before sign-off.
+- Should the glossary define *director*? Approved specs' measurement scenarios say "director and mods
+  off" (S-0404 and S-0522 cite the glossary's measurement setup for that condition), and use the
+  word without defining it. The glossary's measurement setup states that no engine add-on and no mods are
+  active, and says nothing about a director, so it does not give the director
+  condition those specs cite. The glossary also
+  does not know what *director* denotes: whether it is an outside component of the measuring machine
+  or a setting of the original. The two readings give different meanings to "off".
+- The lead decides one of two things, and the owner then applies it and drops this question:
+  either the glossary gains a definition of *director* (with the meaning the lead supplies) and states
+  the condition in the measurement setup, or the specs stop citing the glossary for it and say the
+  condition themselves. If the word turns out to name an outside tool or source, the lead also decides
+  how the scenarios that use it are reworded. Until then the term is used as the approved specs use
+  it. The decision is needed before sign-off.
