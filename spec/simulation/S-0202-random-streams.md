@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -887,7 +887,8 @@ original's recording modes are retained as deferred context, not implementation 
     a middle event occurs later in playback under S-0109 claim 14; subsequent particle
     updates are not particle creation and remain outside this spec. That exclusion does not
     make them draw-free: S-0613 claims 6 to 8 own gas-update draws and successor creation
-    draw ordering, separately from this event's group.
+    draw ordering, and S-0616 claims 6, 8, 9, 11, 12 and 15 to 18 own the non-gas update,
+    successor, emission and burst draws, separately from this event's group.
 
     The smudge height gate is also the same in both phases: for integer world position
     (X, Y, Z), test Z − H(X, Y) < 30 leptons, with H the terrain surface height at that
@@ -1916,7 +1917,7 @@ The recorder is part of the measurement setup (the project lead has approved it)
   smudge forms and map-data timing. These effects must not be treated as taking zero draws
   during map loading. Claim 15 and R14 D/E also answer all of Q-0217: creation-time
   middle events during play use the same scenario-stream composition and terrain-height
-  test. Subsequent particle updates remain outside this spec, not draw-free.
+  test. Subsequent particle updates remain outside this spec, not draw-free. S-0616 claims 6, 8, 9, 11, 12 and 15 to 18 own the non-gas update, successor, emission and burst draws.
 - Whether any of the unsynchronised random stream's users that were classified only briefly
   changes game state. In internet games, two draws are taken under a condition on the local
   player's house (the same kind of condition as claim 12's extra draw) and could not be tied to a
