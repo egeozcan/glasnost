@@ -17,6 +17,8 @@
 //! stages; the vehicle's target removed, it spins down. S-0613 (gas
 //! clouds): a unit whose weapon kills with the virus death fires at enemy
 //! infantry; the deaths leave clouds that drift and hit what stands in them.
+//! S-0605 (infantry absorber): three infantry are clicked into an absorber
+//! one at a time and the house's output rises; deployed, it lets them out.
 //!
 //! Run with `cargo test --release -p glasnost-app --test m7a_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -54,6 +56,7 @@ const SCENES: &[Scene] = &[
     ("overload", mind_overload),
     ("gattling", gattling_spin),
     ("gas", gas_clouds),
+    ("absorber", absorber),
 ];
 
 #[test]
@@ -537,6 +540,112 @@ fn human_infantry(w: &World) -> Option<String> {
             })
         })
         .map(|i| r.infantry[i as usize].name.clone())
+}
+
+/// An infantry absorber type (S-0605 Terms) with room, and its foundation.
+fn absorber_type(w: &World) -> Option<(String, (i32, i32))> {
+    w.rules()
+        .buildings
+        .iter()
+        .find(|b| b.absorb.infantry && b.absorb.capacity > 0)
+        .map(|b| (b.name.clone(), b.foundation))
+}
+
+/// S-0605 claims 1, 3 to 7, 10 to 13: an infantry absorber of the local
+/// house; three infantry are ordered in by the click a person gives (one
+/// link place: they go in one at a time) and the house's power rises with
+/// each; the building is ordered to deploy and lets them out at its exits.
+/// Counts and four screens.
+fn absorber(lane: &mut Lane) {
+    let w = lane.world();
+    let ty = absorber_type(w);
+    let inf = human_infantry(w);
+    println!(
+        "absorber type found: {}, infantry type found: {}",
+        ty.is_some(),
+        inf.is_some()
+    );
+    let (Some((bname, size)), Some(iname)) = (ty, inf) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let near = CellXY::new(home.x + 8, home.y + 8);
+    let Some(at) = lane.area(near, size, 3, |l| l != land::WATER && l != land::ROCK) else {
+        println!("no room for the absorber");
+        return;
+    };
+    let b = lane.spawn(Kind::Building, &bname, local, at);
+    lane.ticks(4);
+    let power = |lane: &Lane| glasnost_sim::econ::power::totals(lane.world(), local);
+    let start = power(lane);
+    println!("absorber placed");
+    let row = at.y + size.1 + 3;
+    let units: Vec<ObjectId> = (0..3)
+        .map(|i| lane.spawn(Kind::Infantry, &iname, local, CellXY::new(at.x + i, row)))
+        .collect();
+    lane.look_at(CellXY::new(at.x + 1, at.y + 2));
+    lane.ticks(2);
+    lane.save("absorber-before");
+    for &u in &units {
+        let n = lane.order(local, u, ClickOn::Object(b));
+        let wait = glasnost_sim::structures::absorb::waiting_for(lane.world(), u).is_some();
+        println!("click on the absorber: {n} orders");
+        lane.ticks(1);
+        println!(
+            "  contact {}, waiting in line {}",
+            lane.world().obj(u).and_then(|o| o.contact) == Some(b),
+            wait || glasnost_sim::structures::absorb::waiting_for(lane.world(), u).is_some()
+        );
+    }
+    let mut most_contacts = 0;
+    let mut shot = false;
+    for t in 0..1200 {
+        lane.ticks(1);
+        let w = lane.world();
+        most_contacts = most_contacts.max(glasnost_sim::structures::absorb::contacts(w, b).len());
+        let n = glasnost_sim::structures::absorb::count(w, b);
+        if n == 1 && !shot {
+            println!(
+                "first inside after {t} ticks; output rose {}",
+                power(lane).0 > start.0
+            );
+            lane.save("absorber-first-in");
+            shot = true;
+        }
+        if n == 3 {
+            println!("all three inside after {t} ticks");
+            break;
+        }
+    }
+    println!(
+        "passengers {}; most contacts at once {most_contacts}; output rose {}",
+        glasnost_sim::structures::absorb::count(lane.world(), b),
+        power(lane).0 > start.0
+    );
+    lane.c.session.as_mut().unwrap().play.selection = vec![b];
+    lane.ticks(1);
+    lane.save("absorber-full-selected");
+    let n = lane.order(local, b, ClickOn::Object(b));
+    println!("deploy click on the absorber: {n} orders");
+    for t in 0..600 {
+        lane.ticks(1);
+        if glasnost_sim::structures::absorb::count(lane.world(), b) == 0 {
+            println!("empty after {t} ticks");
+            break;
+        }
+    }
+    lane.ticks(20);
+    let out: Vec<_> = units
+        .iter()
+        .filter_map(|&u| lane.world().obj(u).filter(|o| o.on_map).map(|o| o.pos.cell()))
+        .collect();
+    println!(
+        "released {} of 3 at {out:?} (building at {at:?}, size {size:?}); output back {}",
+        out.len(),
+        power(lane).0 == start.0
+    );
+    lane.save("absorber-released");
 }
 
 /// S-0613 claims 2, 4, 5, 8 to 13: a virus unit of the local house is
