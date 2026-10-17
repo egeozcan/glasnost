@@ -320,13 +320,14 @@ pub fn ruleset() -> Ruleset {
     }
 
     // Alpha's power plant (S-0605): BIOP takes the fixture's POWR's place
-    // on Alpha's sidebar (POWR is Beta's only), with the same foundation,
-    // cost and power, and absorbs up to five infantry of size 1 or less,
-    // each adding 50 power.
+    // on Alpha's sidebar (POWR is Beta's only), with the same foundation
+    // and cost but half the power (50), and absorbs up to five infantry of
+    // size 1 or less, each adding 40 power, so that a short house sends
+    // its infantry in.
     if let Some(b) = r.sim.buildings.get_mut("POWR") {
         b.econ.required_houses = only("Betaland");
     }
-    let mut biop = fixture::building(2, 2, 600, 60);
+    let mut biop = fixture::building(2, 2, 600, 50);
     biop.infantry_absorb = Some(true);
     biop.passengers = Some(5);
     biop.size_limit = Some(d("1"));
