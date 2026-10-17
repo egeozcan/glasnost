@@ -909,8 +909,9 @@ impl Tally {
             .gas
             .systems
             .keys()
-            .chain(w.gas.anims.keys())
-            .filter(|&&id| Some(id) != w.gas.shared)
+            .copied()
+            .filter(|&id| glasnost_sim::gas::is_cloud(w, id))
+            .chain(w.gas.anims.keys().copied())
             .map(|id| id.0)
             .collect();
         self.clouds += clouds.difference(&self.clouds_before).count();
