@@ -1189,7 +1189,16 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         Dec,
         "S-0309",
     ),
-    ("gravity", AUDIO_VISUAL, "Gravity", Int, "S-0306, S-0503"),
+    ("gravity", AUDIO_VISUAL, "Gravity", Int, "S-0306, S-0503, S-0613"),
+    // spec: S-0613 Import mapping ([General] InfantryVirus an animation name; WindDirection an integer table index, absent −1)
+    (
+        "infantry_virus",
+        GENERAL,
+        "InfantryVirus",
+        Ref(Kind::Animations),
+        "S-0613",
+    ),
+    ("wind_direction", GENERAL, "WindDirection", Int, "S-0613"),
     (
         "allied_wall_transparency",
         WALL_MODEL,
@@ -1770,6 +1779,27 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         "S-0309",
     );
     keyed(&["global:General"], &s(&["HarvesterUnit"]), "S-0303");
+    // spec: S-0613 Import mapping (the gas-cloud keys of particle and particle-system types)
+    keyed(
+        &["particles"],
+        &s(&[
+            "MaxEC",
+            "MaxDC",
+            "Damage",
+            "Warhead",
+            "StartFrame",
+            "StartStateAI",
+            "EndStateAI",
+            "StateAIAdvance",
+            "DeleteOnStateLimit",
+            "NextParticle",
+            "NextParticleOffset",
+            "WindEffect",
+            "Translucency",
+        ]),
+        "S-0202, S-0613",
+    );
+    keyed(&["particle_systems"], &s(&["Lifetime"]), "S-0613");
     let crews: Vec<String> = CREWS.iter().map(|c| c.1.to_owned()).collect();
     keyed(&["global:General"], &crews, "S-0312");
     keyed(&UNITS, &s(&["DamageParticleSystems"]), "S-0302");
@@ -3345,6 +3375,51 @@ impl Builder<'_> {
     }
 
     /// Warnings that look at several records' values in force.
+    /// The gas-cloud checks (S-0613 Edge cases): a virus-death animation
+    /// without a particle type, a wind direction outside the table while a
+    /// particle type has a wind effect, and a wind divisor of 0.
+    pub(super) fn gas_checks(&mut self) {
+        let outcome = self.i.outcome;
+        let empty = Vec::new();
+        let virus = self.global(GENERAL, "InfantryVirus");
+        if let Some(name) = text_of(virus.as_ref()).filter(|n| !n.is_empty() && !value::is_no_type(n))
+        {
+            let spawns = find_in(outcome, Kind::Animations, &name)
+                .and_then(|t| self.art_section(&t.name))
+                .and_then(|sec| sec.value(b"SpawnsParticle").map(<[u8]>::to_vec))
+                .and_then(|v| self.particle_ref(&v, crate::refs::NEXT_PARTICLE_LIMIT));
+            if spawns.is_none() {
+                // spec: S-0613 Edge cases (a virus-death animation without a particle type: the original reads outside its type list; our engine creates no particle and the importer warns)
+                self.warn_at(virus.as_ref(), format!(
+                    "[General] InfantryVirus {}: the animation names no particle type; the original's result is undefined, our engine creates no gas particle (S-0613 Edge cases, a departure)",
+                    show(&name)
+                ));
+            }
+        }
+        let particles = outcome.registries.get(&Kind::Particles).unwrap_or(&empty);
+        let mut windy = false;
+        for t in particles {
+            let w = int_of(key(t, "WindEffect")).unwrap_or(0);
+            windy |= w > 0;
+            // spec: S-0613 F6 and S-0205 claim 3 (W above 10 makes the cadence divisor 0: the original fails; our engine takes the remainder as the tick number and the importer warns)
+            if w > 10 {
+                self.warn_at(key(t, "WindEffect"), format!(
+                    "particle {} WindEffect {w}: the wind cadence divisor is 0, which divides by zero in the original; our engine pushes only at tick 0 (S-0613 F6, S-0205 claim 3)",
+                    show(&t.name)
+                ));
+            }
+        }
+        let wind = self.global(GENERAL, "WindDirection");
+        // spec: S-0613 Import mapping and Edge cases (WindDirection absent: −1)
+        let direction = int_of(wind.as_ref()).unwrap_or(-1);
+        if windy && !(0..8).contains(&direction) {
+            // spec: S-0613 Edge cases (a wind direction outside 0–7 while a type has a wind effect: the original reads outside its table; our engine applies no push and the importer warns)
+            self.warn_at(wind.as_ref(), format!(
+                "[General] WindDirection {direction} is outside 0–7 while a particle type has a wind effect: the original's result is undefined, our engine applies no wind push (S-0613 Edge cases, a departure)"
+            ));
+        }
+    }
+
     pub(super) fn cross_checks(&mut self) {
         let outcome = self.i.outcome;
         let empty = Vec::new();

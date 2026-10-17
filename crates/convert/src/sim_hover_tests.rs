@@ -134,6 +134,6 @@ fn hover_coverage() {
     assert_eq!(row("global:General", "HoverBob"), (Field, "S-0503".into()));
     assert_eq!(
         row("global:AudioVisual", "Gravity"),
-        (Field, "S-0306, S-0503".into())
+        (Field, "S-0306, S-0503, S-0613".into())
     );
 }
