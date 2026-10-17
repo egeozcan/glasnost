@@ -2,7 +2,7 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1167,7 +1167,7 @@ tiny purpose-made skirmish map by a trigger action that plays an animation at a 
 specs own its form), or by the object that normally creates them. Include a human measuring
 player and one bystander computer player, kept away under the glossary's void rule. The
 observed area is the test waypoint cells and the cells occupied or crossed by named test
-objects. Director and mods are off except the named test files. Trigger-played animations have a
+objects. No engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Trigger-played animations have a
 creation start sound but no later start sounds and no damage (claims 13 and 17), so scenarios that
 observe repeated sounds or damage use another creator:
 the explosion animation of one stock weapon, fired by a unit. Such scenarios assume the weapon's
@@ -1501,7 +1501,7 @@ building that can cloak), it sets them in the test map's override section, which
     pilot run, the scenario is inconclusive. Campaign visibility is outside this revision.
 
 - **AN23 (claims 14 and 25; Q-0046 map-load events).** Common measurement setup, skirmish at
-  speed 4, director and mods off except named test data. A tiny test map names one test animation
+  speed 4, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). A tiny test map names one test animation
   on a tile (S-0010 claim 19), and a separate run gives an overlay a cell animation (S-0009
   claim 12). Record each creation separately, including creations removed later during loading,
   rather than counting only animations left at the first drawn frame. Use the read-only recorder
@@ -1555,7 +1555,7 @@ building that can cloak), it sets them in the test map's override section, which
     inconclusive.
 
 - **AN24 (claims 10, 26 and 27; Q-0418 placement).** Common setup at speed 4,
-  800×600, maximum detail, director and mods off except named test art and sprites.
+  800×600, maximum detail, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
   Use a long-lived test animation with labelled canvas points and a distinct shadow
   rectangle overlapping part of the body. Play it by trigger at a recorded position
   on flat ground and on raised ground; also use it as a building slot with a known
@@ -1629,7 +1629,7 @@ building that can cloak), it sets them in the test map's override section, which
   and wake animation a distinguishable stock sprite, explicit end 3, one ordinary
   forward pass, delay 1, no random rate, no normalisation, no follow-up and no event
   or damage effects. Named map test data selects these types through their creators'
-  import mappings. Director and unrelated mods are off. Use the read-only recorder
+  import mappings. No engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use the read-only recorder
   for creation tick, update order, actual first update, stage and removal tick, plus
   end-of-tick captures for visible types. Run each fixture three times.
   - During-pass fixtures: one firer launches a long-flight projectile, testing its
