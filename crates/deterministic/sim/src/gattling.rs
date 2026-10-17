@@ -422,6 +422,7 @@ pub fn spin(w: &World, id: ObjectId) -> Spin {
 /// is at its top stage.
 pub fn at_top(w: &World, id: ObjectId) -> bool {
     spin_type(w, id).is_some_and(|st| {
+        // spec: S-0609 Edge cases (a stage count of 0 or 1 has no stage above 0) and claim 2 (stages 0 … N − 1)
         st.stages >= 2 && w.obj(id).is_some_and(|o| o.combat.gattling_stage >= st.stages - 1)
     })
 }
