@@ -2,11 +2,11 @@
 id: S-0612
 title: Psychic Dominator superweapon
 topic: superweapons
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -412,8 +412,7 @@ warhead does.
 
 ## Measurement scenarios
 
-All scenarios: stock data except the explicitly named test data below, director off, mods off apart
-from that named test data, a small purpose-made skirmish map, game speed index 3, 800 × 600
+All scenarios: stock data except the explicitly named test data below, no engine add-on and no mods (the named test files of a scenario excepted), a small purpose-made skirmish map, game speed index 3, 800 × 600
 presentation. Use scripted input and a read-only recorder when needed to deliver and observe the
 stated setup on the stock executable. Record the seed rather than assuming it can be set. Repeat each deterministic part three times. Include one bystander computer
 player, kept outside the test area under the glossary's void rule, except where a part names a
