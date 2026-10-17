@@ -253,6 +253,10 @@ pub struct SoundNames {
     /// `[AudioVisual] EnterGrinderSound` (S-0603 claim 7). The leave-grinder
     /// sound is read by the importer and not played at a consumption.
     pub enter_grinder: Option<String>,
+    /// `[AudioVisual] BunkerWallsUpSound` (S-0606 claim 7).
+    pub bunker_walls_up: Option<String>,
+    /// `[AudioVisual] BunkerWallsDownSound` (S-0606 claims 12 and 14).
+    pub bunker_walls_down: Option<String>,
     /// `UpgradeVeteranSound` (S-0701 claim 23).
     pub upgrade_veteran: Option<String>,
     /// `UpgradeEliteSound` (S-0701 claim 23).
@@ -401,6 +405,9 @@ impl SoundNames {
             leave_bio_reactor: g.leave_bio_reactor_sound.clone(),
             // spec: S-0603 Import mapping and claim 7 (the rules-wide enter-grinder sound; none when absent; type sections do not choose it)
             enter_grinder: g.enter_grinder_sound.clone(),
+            // spec: S-0606 Import mapping (the rules-wide walls-up and walls-down sounds; none when absent)
+            bunker_walls_up: g.bunker_walls_up_sound.clone(),
+            bunker_walls_down: g.bunker_walls_down_sound.clone(),
             upgrade_veteran: global("UpgradeVeteranSound"),
             upgrade_elite: global("UpgradeEliteSound"),
             base_under_attack: global("BaseUnderAttackSound"),

@@ -599,6 +599,16 @@ pub struct General {
     /// absorber (S-0605 claim 13 and Import mapping; absent: none).
     #[serde(default)]
     pub leave_bio_reactor_sound: Option<String>,
+    /// `[AudioVisual] BunkerWallsUpSound`, the sound at a tank bunker's
+    /// position when a vehicle becomes bunkered (S-0606 claim 7 and Import
+    /// mapping; absent: none).
+    #[serde(default)]
+    pub bunker_walls_up_sound: Option<String>,
+    /// `[AudioVisual] BunkerWallsDownSound`, the sound at a tank bunker's
+    /// position when its walls go down (S-0606 claims 12 and 14 and Import
+    /// mapping; absent: none).
+    #[serde(default)]
+    pub bunker_walls_down_sound: Option<String>,
     /// `[AudioVisual] EnterGrinderSound`, the rules-wide sound at a
     /// recycling building's consumption (S-0603 claim 7 and Import mapping;
     /// absent: none).
@@ -1630,6 +1640,11 @@ pub struct UnitType {
     /// `BalloonHover`.
     #[serde(default)]
     pub balloon_hover: Option<bool>,
+    /// `Bunkerable`, the bunkerable flag of a tank bunker's entrant (S-0606
+    /// claim 1 and Import mapping); absent: on for vehicle types, off for
+    /// infantry and aircraft types.
+    #[serde(default)]
+    pub bunkerable: Option<bool>,
     /// `SprayAttack`.
     #[serde(default)]
     pub spray_attack: Option<bool>,

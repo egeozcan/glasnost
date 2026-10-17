@@ -800,3 +800,20 @@ fn psychic_keys() {
     );
     assert_eq!(g.psychic_reveal_activate_sound, None);
 }
+
+// spec: S-0606 Import mapping (art SpecialAnimTwo, SpecialAnimThree, SpecialAnimFour and their damaged forms, as S-0108; absent: none)
+#[test]
+fn bunker_wall_anims_are_converted() {
+    let art = "[MILLART]\nSpecialAnimTwo=W2\nSpecialAnimTwoDamaged=W2D\nSpecialAnimThree=W3\nSpecialAnimThreeDamaged=W3D\nSpecialAnimFour=W4\nSpecialAnimFourDamaged=W4D\n";
+    let (s, _) = import(BASE, art);
+    let e = &s.buildings["MILL"].econ;
+    assert_eq!(e.special_anim_two.as_deref(), Some("W2"));
+    assert_eq!(e.special_anim_two_damaged.as_deref(), Some("W2D"));
+    assert_eq!(e.special_anim_three.as_deref(), Some("W3"));
+    assert_eq!(e.special_anim_three_damaged.as_deref(), Some("W3D"));
+    assert_eq!(e.special_anim_four.as_deref(), Some("W4"));
+    assert_eq!(e.special_anim_four_damaged.as_deref(), Some("W4D"));
+    let p = &s.buildings["PLANT"].econ;
+    assert_eq!(p.special_anim_two, None);
+    assert_eq!(p.special_anim_four_damaged, None);
+}

@@ -417,6 +417,8 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     // spec: S-0514 Import mapping (Warpable: a boolean; absent: yes)
     ("warpable", "Warpable", Bool),
     ("balloon_hover", "BalloonHover", Bool),
+    // spec: S-0606 Import mapping (Bunkerable: a boolean of an actor type; the kind-dependent absent default is the simulation's)
+    ("bunkerable", "Bunkerable", Bool),
     ("spray_attack", "SprayAttack", Bool),
     ("tilts_when_crushes", "TiltsWhenCrushes", Bool),
     ("auto_crush", "AutoCrush", Bool),
@@ -466,6 +468,7 @@ const BUILDING_FIELDS: &[(&str, &str, Form)] = &[
     ("laser_fence", "LaserFence", Bool),
     ("firestorm_wall", "FirestormWall", Bool),
     ("naval", "Naval", Bool),
+    // spec: S-0606 Import mapping (Bunker: the tank bunker flag, boolean, absent off)
     ("bunker", "Bunker", Bool),
     ("unit_repair", "UnitRepair", Bool),
     // spec: S-0603 Import mapping (Grinding: a recycling building, boolean, absent no)
@@ -706,6 +709,9 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
     // spec: S-0605 Import mapping (absent: none)
     ("enter_bio_reactor_sound", b"AudioVisual", "EnterBioReactorSound", Text),
     ("leave_bio_reactor_sound", b"AudioVisual", "LeaveBioReactorSound", Text),
+    // spec: S-0606 Import mapping (the walls-up and walls-down sounds; absent: none)
+    ("bunker_walls_up_sound", b"AudioVisual", "BunkerWallsUpSound", Text),
+    ("bunker_walls_down_sound", b"AudioVisual", "BunkerWallsDownSound", Text),
     // spec: S-0603 Import mapping (the rules-wide enter-grinder and leave-grinder sounds; absent: none)
     ("enter_grinder_sound", b"AudioVisual", "EnterGrinderSound", Text),
     ("leave_grinder_sound", b"AudioVisual", "LeaveGrinderSound", Text),
