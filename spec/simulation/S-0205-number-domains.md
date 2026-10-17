@@ -2,11 +2,11 @@
 id: S-0205
 title: Number domains (integers, floating point, the round-toward-zero mode, conversions)
 topic: simulation
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-17
 measurements: []
 requests: []
 supersedes: []
@@ -393,7 +393,7 @@ This spec reads no keys. How data text becomes integers, decimals and percentage
 
 ## Measurement scenarios
 
-All scenarios use the glossary's measurement setup, with the director and unrelated mods off.
+All scenarios use the glossary's measurement setup, with no engine add-on and no mods (the named test files of a scenario excepted).
 Unless a referenced scenario fixes another value, use game-speed index 2 and 800 × 600 output.
 Each standalone test map includes one bystander computer player, farthest from the observed area,
 subject to the glossary's bystander void rule. The observed area is the test infantry patch for N2 and the human
