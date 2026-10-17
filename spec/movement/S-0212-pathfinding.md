@@ -2,11 +2,11 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 46
+revision: 47
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634]
 supersedes: []
@@ -1300,9 +1300,11 @@ Terms specific to this spec:
     nor goal-cell inequality substitutes for that presence test.
     Separately, a driving or ship vehicle with no active track removes an order-level
     cell destination when it occupies that cell, or falls back to rest when it has
-    approach destinations (S-0207 claim 26). This is locomotion cleanup, not search
+    approach destinations (S-0207 claim 26). For a cell destination this is locomotion cleanup, not search
     failure or give-up: it needs no successful search, exact point alignment or due
-    behaviour processing. Mere cell equality does not clear a building destination.
+    behaviour processing. For a destination that names a building, vehicle, infantry unit or
+    aircraft, mere cell equality does not clear it; a vehicle at rest in guard instead needs its
+    position to equal its locomotor destination point exactly (S-0207 claim 26).
     Final-track completion clears the locomotor point, not the order-level goal.
     Absent an intervening effect, the next no-track update clears that cell goal.
 
@@ -1334,7 +1336,7 @@ Terms specific to this spec:
       for the absence of the refresh in the walk locomotor; S-0504 N11 for ship refresh
       timing; S-0207 D29 for driving and ship destination presence before search and
       during retained-goal waits, including same-cell assignment; S-0207 D30 for
-      no-track cell-goal cleanup distinguished from search failure; S-0503 H12 and H15
+      no-track cell-goal cleanup distinguished from search failure; S-0207 D31 for a destination that names a building, vehicle, infantry unit or aircraft and for the guard exception; S-0503 H12 and H15
       for the hover movement/order-level destination split).
       The exact lepton-scale refresh boundary and the distinction between the
       table root and an exact Euclidean root are `unmeasured` for both driving and ships:
@@ -1351,7 +1353,7 @@ Terms specific to this spec:
       paths of their own, so the absence of the cut cannot be isolated
     - Confidence: high for the 24-step limit. Medium for the 512-lepton trigger, the chase cut, the
       train rule and their absence in the walk locomotor. High for destination presence
-      independent of search success and goal-cell inequality (S-0207 claim 25).
+      independent of search success and goal-cell inequality (S-0207 claim 25). High for the cell/object distinction and the cleanup conditions of the object and guard rows, as S-0207 claim 26 gives them.
       Low for the dropped first step
 
 21. **Retry delay.** The retry delay is *R* = trunc(*P* × 900) ticks (F3), where *P* is the
@@ -1642,7 +1644,7 @@ Terms specific to this spec:
     | Air-strike aircraft placement (S-0519 claim 17) | the strike's arrival cell | *winged* | *normal* | none | never | no | no | none |
     | Parasite exit (S-0614 claim 13) | the host's cell | the host's, *winged* counted as *track* | the host's own | that of the centre cell for that zone, read for its deck in deck mode | the host is on a bridge deck | no | no | none |
     | Scatter (S-0208 claim 13) | as S-0208 claim 13 says | the unit's | *normal* | none | the unit is on a bridge deck | yes | no | none |
-    | Move order onto a cell (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
+    | Move order onto a cell, or no-move order by a unit that is not a free mover (S-0214 claim 11), when that claim uses the search, except the next row | the clicked cell | the unit's | own zone, *subterranean* counted as *normal*, and *fly* counted as *infantry* while an ion storm (a global effect, S-0104) is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto a cell (S-0214 claim 11) by a free mover (S-0214 Terms: a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type with no ion storm active, or is an aircraft) | the clicked cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | for a unit of movement zone *subterranean* that is below the ground surface when the search is made (below) | none |
     | Move order onto an object (S-0214 claim 11), when that claim uses the search, except the next row | the object's cell | the unit's | own zone, *subterranean* counted as *normal* and *fly* as *infantry*, whether or not an ion storm is active | that of the unit's cell, read for its deck when the unit is on a bridge deck (claim 4), for that zone | the centre is a bridge cell | yes | no | none |
     | No-move order onto an object (S-0214 claim 11) by a unit that is in the air, is of movement zone *subterranean* whatever its state, is of a jumpjet infantry type (whether or not an ion storm is active) or is an aircraft | the object's cell | the unit's | as in the row above | none | the centre is a bridge cell | yes | as in the no-move row for a cell | none |
@@ -1839,7 +1841,9 @@ Terms specific to this spec:
       and for the choice without a reference cell (P16, runs
       (s), (u) and (r), which also test the parameters of table T5 for a scatter, a move order onto
       an unreachable cell and a rally point), and for the further test of the no-move row for a
-      cell, with the state that decides it (P16 run (t), test data). `unmeasured` for the
+      cell, with the state that decides it (P16 run (t), test data). The no-move row for a unit
+      that is not a free mover has the move-order row's parameters and is tested by run (u2) below.
+      `unmeasured` for the
       transport shore approach and its unchecked no-result handling (S-0507 claim 8):
       S-0507 T9 has not yet established its ordinary-order/map witness. Vehicle-passenger
       exit settings and tick-modulo choice are `measurable` (S-0507 T13); its unchecked
@@ -3164,7 +3168,7 @@ P16 run (u) checks this separately from other activity in the tick.
   - Run (u), a move order onto an unreachable cell (table T5, move-order row). Setup: open flat clear
     ground, and a test override that sets the wheel multiplier of one land type (say rough) to 0, so
     that its cells have the category *blocked* (S-0211 claim 11). The only cell of that land type is
-    (*x*, *y*). An unarmed wheeled vehicle of the human house (a test override removes its weapon if
+    (*x*, *y*), inside the usable area. An unarmed wheeled vehicle of the human house (a test override removes its weapon if
     its type has one) stands at (*x* − 6, *y*), no other object is within 3 cells of (*x*, *y*), and
     the area is not shrouded for the human house.
     Procedure: click a move order for the vehicle onto (*x*, *y*), 10 times, each time with the
@@ -3188,6 +3192,7 @@ P16 run (u) checks this separately from other activity in the tick.
     qualifying bracket among these ten runs. If the recorder cannot separate the search from
     other activity in the tick, report that check inconclusive; a whole-tick state difference
     alone is not a falsifier of the search's draw count.
+  - Run (u2), a no-move order by a unit that is not a free mover onto (*x*, *y*) (table T5, first row). Setup: as run (u), with the same wheeled vehicle (a wheeled vehicle is not a free mover as the draft's Terms define the term) and the same land-type override. Procedure: as run (u), with a no-move order in place of the move order, 10 times, each time with the vehicle placed afresh and the click in a different tick. Observable: the tick number *N* in force when the order is handled (recorder), and the vehicle's destination after the order. Expected: the destination is the cell at position (*N* mod 8) of run (u)'s ring list, in every run. Falsified if: the clicked cell itself is the destination in any run, or the destination differs from that cell. Void if the click does not give the vehicle the no-move action.
   - Run (r), a rally point (table T5, rally-point row). Setup: open flat clear ground with a
     barracks (a building that produces infantry) of the human house whose nearest cell is at least 3 cells from (*x*, *y*). An unarmed
     vehicle of the human house stands still with no destination on (*x*, *y*), wall sections of the
