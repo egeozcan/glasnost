@@ -31,6 +31,8 @@
 //! - Q-1266: an entrant whose loading request is refused (claims 3 and 5)
 //!   also forgets the building as its destination and stops walking, so
 //!   that it stands (scenario A6).
+//! - Q-1267: an actor in contact with an absorbing building that neither is
+//!   in *enter* nor has *enter* queued gives the contact up in its turn.
 
 use glasnost_map::CellXY;
 use glasnost_num::F64;
@@ -303,7 +305,13 @@ pub fn order_applied(w: &mut World, u: ObjectId) {
 
 /// The per-tick retry of an actor waiting in line (claim 4), in its own
 /// turn after its movement (Q-1261 interim).
+///
+/// First, under Q-1267's interim rule, an actor in contact with an
+/// absorbing building that neither is in *enter* nor has *enter* queued
+/// gives the contact up, so that the building's link place is free for the
+/// next actor waiting in line.
 pub fn waiting_turn(w: &mut World, u: ObjectId) {
+    contact_outlived(w, u);
     let Some(b) = waiting_for(w, u) else { return };
     // spec: S-0605 claim 4 (a building that has left the game ends the wait)
     if w.obj(b).is_none_or(|o| !o.on_map) {
@@ -334,6 +342,21 @@ pub fn waiting_turn(w: &mut World, u: ObjectId) {
             ob.beh.queued = None;
         }
         crate::econ::assign_destination(w, u, None);
+    }
+}
+
+/// Q-1267 interim: the contact of an actor that has left *enter* (none
+/// current, none queued) by a way S-0605 does not name, such as resting
+/// after the approach step of S-0215 claim 37 replaced its destination, or
+/// a new order, ends.
+fn contact_outlived(w: &mut World, u: ObjectId) {
+    let Some(o) = w.obj(u) else { return };
+    let Some(b) = o.contact else { return };
+    let entering =
+        o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter);
+    // Q-1267 interim (S-0605 claims 3 and 4: a contact held by an actor that is no longer entering ends)
+    if !entering && is_absorber(w, b) {
+        give_up_contact(w, u);
     }
 }
 

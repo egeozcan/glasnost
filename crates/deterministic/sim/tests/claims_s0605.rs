@@ -380,6 +380,30 @@ fn claim_3_4_waiting_in_line() {
     assert_eq!(absorb::passengers(&w, b), vec![c, a], "front first");
 }
 
+// spec: S-0605 claims 3 and 4; Q-1267 interim (an entrant that comes to rest without an order, here as after the approach step of S-0215 claim 37 replaced its destination, gives its contact up, and the one waiting in line gets it and goes in)
+#[test]
+fn q1267_contact_ends_when_the_entrant_leaves_enter() {
+    let mut w = game();
+    let b = bio(&mut w, "BIO");
+    let a = walker(&mut w, 8, 0);
+    let c = walker(&mut w, 4, 2);
+    send(&mut w, a, b);
+    send(&mut w, c, b);
+    assert_eq!(absorb::waiting_for(&w, c), Some(b));
+    {
+        let o = w.obj_mut(a).unwrap();
+        o.beh.current = Some(Behaviour::Guard);
+        o.beh.queued = None;
+        o.dest = None;
+        o.path.steps.clear();
+    }
+    assert_eq!(w.obj(a).unwrap().contact, Some(b));
+    tick::step(&mut w);
+    assert_eq!(w.obj(a).unwrap().contact, None);
+    assert!(until(&mut w, 800, |w| inside(w, c, b)));
+    assert!(!inside(&w, a, b));
+}
+
 // spec: S-0605 claim 3 (switched off: the actor asks to load, is refused and gives up the contact)
 #[test]
 fn claim_3_switched_off_refuses_loading() {
