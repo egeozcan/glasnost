@@ -2,7 +2,7 @@
 id: S-0601
 title: Mind control
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -94,7 +94,7 @@ Glossary terms used: *object*, *house*, *local player*, *human-controlled*,
   carries that same tag, and the tag keeps its own state for each member of the chain (S-0011, Terms).
 - **House value.** The integer that an action's parameter uses to name a house (S-0011, Terms and
   claim 23). An event's value is read by that event's own rule: S-0011 claim 18 for the
-  entered-by event, claim 5 here for event 44.
+  entered-by event, and S-0011 claim 8 for event 44.
 - **Triggering house.** Of a trigger instance: the owner of the causing object of its last entered-by event judged true (S-0011, Terms and claim 18). Neither event 6 nor event 44 sets it (claim 5).
 - **Player-position value.** A house value from 4475 to 4482, which names the player at start
   position A to H (S-0011, claim 23).
@@ -184,8 +184,8 @@ The glossary also defines *trigger*, used here.
    firer no longer exists, or has no control record, there is no takeover or attack-tag notification.
    Otherwise:
    - when the target is a live object and has a trigger tag, that tag hears attack events 6 and 44,
-     whether or not the takeover then succeeds (the trigger-event vocabulary is S-0011's; the
-     order, cause and judging are given below),
+     whether or not the takeover then succeeds (the trigger-event vocabulary and the judging are
+     S-0011's; the order and cause are given below),
    - the takeover test (claim 3) is made again, and if it holds the takeover of claim 6 happens,
    - on success the take-over sound (Import mapping) plays at the target when the local player
      owns the controller or owned the target before the takeover.
@@ -200,10 +200,9 @@ The glossary also defines *trigger*, used here.
      event 44, the causing object's owner at the moment of that raise is the attacking house.
      Except for a change made by an action of the event-6 raise, the target's owner in both raises
      is still its owner from before the takeover.
-   - *Judging.* S-0011 claim 8 owns how events 6 and 44 are judged: event 6 by any raise carrying
-     its code; event 44 only when the raise has a causing object and the event's value equals the
-     house-order position (Terms) of that object's owner. Neither event records a triggering house
-     for the trigger's actions.
+   - *Judging.* S-0011 claim 8 owns how events 6 and 44 are judged, including the base of event 44's
+     value, which counts houses from zero. Neither event records a triggering house. This claim
+     supplies only the raises' order and cause above.
    - *Tag removed by the first raise.* When a raise of a one-time or all-carriers trigger on event 6
      takes the tag off the target, as the repeat-type table of S-0011 (State and ordering) gives, the
      tag leaves the target. The original then still raises event 44 at the target, although the tag
