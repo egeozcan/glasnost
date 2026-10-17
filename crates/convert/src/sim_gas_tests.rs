@@ -264,3 +264,148 @@ fn loading_time_particle_request_warns() {
     assert!(!warned(&w, "CellAnim Late"), "μ ≠ 0: {w:?}");
     assert!(!warned(&w, "CellAnim Dry"), "no particle type: {w:?}");
 }
+
+fn dec(v: &Option<glasnost_rules::sim::Decimal>) -> Option<&str> {
+    v.as_ref().map(|d| d.0.as_str())
+}
+
+/// spec: S-0616 Import mapping (Velocity, Deacc, FinalDamageState, Normalized, Radius,
+/// XVelocity, YVelocity, MinZVelocity and ZVelocityRange of a particle type; SpawnFrames,
+/// Slowdown, SpawnCutoff, SpawnRadius, ParticleCap, SparkSpawnFrames, SpawnSparkPercentage,
+/// SpawnDirection and ParticlesPerCoord of a particle-system type; DamageSmokeOffset of a unit
+/// type; absent keys give no value, so the engine defaults apply)
+#[test]
+fn particle_system_kind_fields() {
+    let base = "[Particles]\n0=Soot\n1=Ember\n[ParticleSystems]\n0=Plume\n1=Burst\n\
+                [VehicleTypes]\n1=Hulk\n2=Plain\n\
+                [Soot]\nBehavesLike=Smoke\nVelocity=4.5\nDeacc=0.25\nRadius=40\n\
+                [Ember]\nBehavesLike=Spark\nFinalDamageState=3\nNormalized=yes\nXVelocity=7\n\
+                YVelocity=-6\nMinZVelocity=2\nZVelocityRange=9\n\
+                [Plume]\nBehavesLike=Smoke\nHoldsWhat=Soot\nSpawnFrames=3\nSlowdown=0.5\n\
+                SpawnCutoff=12.5\nSpawnRadius=20\nParticleCap=6\nParticlesPerCoord=0.25\n\
+                [Burst]\nBehavesLike=Spark\nHoldsWhat=Ember\nSparkSpawnFrames=4\n\
+                SpawnSparkPercentage=0.75\nSpawnDirection=1.5,-2\n\
+                [Hulk]\nDamageSmokeOffset=10,-20,30\n[Plain]\nStrength=5\n";
+    let (s, w) = sim(base, "", "");
+    let soot = &s.particles["Soot"];
+    assert_eq!((dec(&soot.velocity), dec(&soot.deacc)), (Some("45e-1"), Some("25e-2")));
+    assert_eq!(soot.radius, Some(40));
+    assert_eq!((soot.final_damage_state, soot.normalized), (None, None));
+    let ember = &s.particles["Ember"];
+    assert_eq!((ember.final_damage_state, ember.normalized), (Some(3), Some(true)));
+    assert_eq!(
+        (ember.x_velocity, ember.y_velocity, ember.min_z_velocity, ember.z_velocity_range),
+        (Some(7), Some(-6), Some(2), Some(9))
+    );
+    assert_eq!((ember.velocity.as_ref(), ember.radius), (None, None));
+    let plume = &s.particle_systems["Plume"];
+    assert_eq!(plume.spawn_frames, Some(3));
+    assert_eq!((dec(&plume.slowdown), dec(&plume.spawn_cutoff)), (Some("5e-1"), Some("125e-1")));
+    assert_eq!((plume.spawn_radius, plume.particle_cap), (Some(20), Some(6)));
+    assert_eq!(dec(&plume.particles_per_coord), Some("25e-2"));
+    assert_eq!(plume.spawn_direction, None);
+    let burst = &s.particle_systems["Burst"];
+    assert_eq!(burst.spark_spawn_frames, Some(4));
+    assert_eq!(dec(&burst.spawn_spark_percentage), Some("75e-2"));
+    // A value with two numbers keeps the value in force, 0, for the third (S-0003 claim 9).
+    let dir: Vec<&str> = burst.spawn_direction.iter().flatten().map(|d| d.0.as_str()).collect();
+    assert_eq!(dir, ["15e-1", "-2", "0"]);
+    assert_eq!(s.vehicles["Hulk"].combat.damage_smoke_offset, Some([10, -20, 30]));
+    assert_eq!(s.vehicles["Plain"].combat.damage_smoke_offset, None);
+    assert!(!warned(&w, "S-0616 claim 20"), "{w:?}");
+}
+
+/// spec: S-0616 claim 20 (the data cases the importer warns for: a smoke type with a next type
+/// and a radius below 8, spark velocity fields of 0, a fire type with damage and no warhead, a
+/// smoke spawn interval of 0, a negative smoke spawn radius, a fire spawn interval of 0 and a
+/// spark particle cap of −1, 0 or 1) and claim 1 (DamSmkOffScrnRel on: used as given, warned)
+#[test]
+fn particle_system_kind_warnings() {
+    let base = "[Particles]\n0=Soot\n1=Ash\n2=Ember\n3=Flame\n\
+                [ParticleSystems]\n0=Plume\n1=Burst\n2=Blaze\n\
+                [VehicleTypes]\n1=Hulk\n\
+                [Soot]\nBehavesLike=Smoke\nNextParticle=Ash\nRadius=7\n[Ash]\nBehavesLike=Smoke\n\
+                [Ember]\nBehavesLike=Spark\nXVelocity=0\nZVelocityRange=0\n\
+                [Flame]\nBehavesLike=Fire\nDamage=5\n\
+                [Plume]\nBehavesLike=Smoke\nSpawnFrames=0\nSpawnRadius=-1\n\
+                [Burst]\nBehavesLike=Spark\nParticleCap=1\n\
+                [Blaze]\nBehavesLike=Fire\nSpawnFrames=0\n\
+                [Hulk]\nDamSmkOffScrnRel=yes\n";
+    let (_, w) = sim(base, "", "");
+    for text in [
+        "particle Soot: a smoke type with a next type and a radius below 8",
+        "particle Ember: XVelocity 0",
+        "particle Ember: ZVelocityRange 0",
+        "particle Flame: a fire type with damage and no warhead",
+        "particle system Plume: a smoke spawn interval of 0",
+        "particle system Plume: a smoke spawn radius below 0",
+        "particle system Burst: a spark particle cap",
+        "particle system Blaze: a fire spawn interval of 0",
+        "DamSmkOffScrnRel is on",
+    ] {
+        assert!(warned(&w, text), "{text}: {w:?}");
+    }
+    assert!(!warned(&w, "particle Ember: YVelocity"), "{w:?}");
+}
+
+/// spec: S-0601 Import mapping (DefaultSparkSystem absent: no game-wide spark systems and no
+/// overload placement draws; the importer warns) and S-0616 Import mapping
+#[test]
+fn default_spark_system_absent_warns() {
+    let (s, w) = sim("[ParticleSystems]\n0=Fizz\n[Fizz]\nBehavesLike=Spark\n", "", "");
+    assert_eq!(s.general.default_spark_system, None);
+    assert!(warned(&w, "DefaultSparkSystem is absent"), "{w:?}");
+    let (s, w) = sim(
+        "[ParticleSystems]\n0=Fizz\n[Fizz]\nBehavesLike=Spark\n[CombatDamage]\nDefaultSparkSystem=Fizz\n",
+        "",
+        "",
+    );
+    assert_eq!(s.general.default_spark_system.as_deref(), Some("Fizz"));
+    assert!(!warned(&w, "DefaultSparkSystem is absent"), "{w:?}");
+}
+
+/// spec: S-0616 F5 and Edge cases (quirks.flame_sweep_facing: absent the original's position,
+/// on; an imported ruleset with a patch layer setting it loads either position. The switch is
+/// wired for the effect-weapon emitter seam and changes nothing until that seam is filled.)
+/// Every other S-0616 switch loads the same way.
+#[test]
+fn particle_quirks_load_in_both_positions() {
+    let base = "[ParticleSystems]\n0=Blaze\n[Blaze]\nBehavesLike=Fire\n";
+    let load = |layer: Option<&str>| {
+        let i = import(base, "", "");
+        let sources: Vec<glasnost_rules::resolve::Source> = layer
+            .iter()
+            .map(|text| glasnost_rules::resolve::Source {
+                layer: "patch",
+                file: "patch.jsonc",
+                text,
+            })
+            .collect();
+        glasnost_rules::resolve_ruleset(Some((i.tree, i.provenance)), &sources)
+            .unwrap_or_else(|e| panic!("{e}"))
+            .ruleset
+            .globals
+            .quirks
+    };
+    let q = load(None);
+    assert!(q.flame_sweep_facing, "absent: on");
+    assert!(q.fire_particle_no_house && q.smoke_ignores_particle_cap);
+    assert!(q.spark_double_gravity && q.smoke_deck_extra_update);
+    for on in [false, true] {
+        let text = format!(
+            "{{\"globals\": {{\"quirks\": {{\"flame_sweep_facing\": {on}, \"fire_particle_no_house\": {on}, \
+             \"smoke_ignores_particle_cap\": {on}, \"spark_double_gravity\": {on}, \"smoke_deck_extra_update\": {on}}}}}}}"
+        );
+        let q = load(Some(&text));
+        assert_eq!(
+            (
+                q.flame_sweep_facing,
+                q.fire_particle_no_house,
+                q.smoke_ignores_particle_cap,
+                q.spark_double_gravity,
+                q.smoke_deck_extra_update
+            ),
+            (on, on, on, on, on)
+        );
+    }
+}

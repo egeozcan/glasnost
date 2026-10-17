@@ -52,6 +52,9 @@ pub struct DepotState {
     /// A depot's serviced vehicle at its last repair processing (S-0314
     /// Edge cases, several contact places: a change restarts the phases).
     pub serviced: Option<ObjectId>,
+    /// A queued vehicle has made claim 23's walk to a free cell near the
+    /// depot for its current queued entry (Q-1156 interim).
+    pub walked: bool,
 }
 
 /// The phases of a depot's repair, kept in its *repair* behaviour's
@@ -825,6 +828,7 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claim 23 (every tick it asks again for a contact place: the alliance and free-place tests; while none is free it keeps waiting)
     let Some(place) = alliance_and_place(w, k, id) else {
+        queued_walk(w, id, k);
         return;
     };
     take(w, id, k, place);
@@ -848,6 +852,30 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
         crate::econ::assign_destination(w, id, None);
         crate::process::fall_back(w, id, false);
     }
+}
+
+/// Claim 23's walk of a vehicle with a queued entry for depot `k`: once
+/// per queued entry, holding no contact, it walks to a free location near
+/// the depot's centre cell and rests there, the queued entry kept.
+///
+/// Q-1156 interim: claim 23 starts the walk at the vehicle's first
+/// processing of *enter*, but in our engine a queued depot vehicle never
+/// has *enter* current (the order ends at once, `order_applied`), and the
+/// order of the walk and the same turn's retry is open (Open questions).
+/// Our engine walks in the vehicle's first queued-entry turn whose retry
+/// finds no free place (option A of the Open questions), with the nearby
+/// search of Q-1152's interim (`absorb::approach`).
+fn queued_walk(w: &mut World, id: ObjectId, k: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0314 claim 23 (while it holds no contact and remembers no object it is entering, the condition of S-0605 claim 4); Q-1156 interim (once per queued entry)
+    if o.depot.walked || o.contact.is_some() {
+        return;
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        ob.depot.walked = true;
+    }
+    // spec: S-0314 claim 23 (a free location near the depot's centre cell its own locomotion class can stand on, assigned as destination, move queued and started at once; the queued entry is not cleared)
+    crate::structures::absorb::approach(w, id, k);
 }
 
 /// What applying an order does to a vehicle's depot contact before the
@@ -880,6 +908,7 @@ pub fn order_applied(w: &mut World, id: ObjectId, b: Behaviour, dest: Option<Tar
                 release(w, id);
             } else if let Some(ob) = w.obj_mut(id) {
                 ob.depot.queued = Some(l.depot);
+                ob.depot.walked = false;
             }
             return true;
         }
@@ -909,6 +938,7 @@ pub fn order_applied(w: &mut World, id: ObjectId, b: Behaviour, dest: Option<Tar
         if !full && let Some(ob) = w.obj_mut(id) {
             // spec: S-0314 claim 23 (a later enter order on a depot that holds any contact: a damaged vehicle gets no destination and no contact and stays with a queued entry)
             ob.depot.queued = Some(k);
+            ob.depot.walked = false;
         }
         // spec: S-0314 claim 23 (a full-health vehicle gets no destination and no queued entry: the order ends)
         return true;

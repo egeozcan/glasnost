@@ -173,6 +173,16 @@ fn rules() -> Ruleset {
     g.overload_count = Some(vec![0, 5]);
     g.overload_damage = Some(vec![0, 7]);
     g.overload_frames = Some(vec![0, 3]);
+    // SPARKY, an invented spark particle-system type, is the game-wide spark type.
+    g.default_spark_system = Some("SPARKY".into());
+    register(&mut r, "particle_systems", "SPARKY");
+    r.sim.particle_systems.insert(
+        "SPARKY".into(),
+        glasnost_rules::sim::ParticleSystemType {
+            behaves_like: Some("spark".into()),
+            ..Default::default()
+        },
+    );
     r
 }
 
@@ -1276,6 +1286,16 @@ fn claim_16_pulse_timing_and_draws() {
     let r = mind::controller(&w, m).unwrap();
     assert_eq!((r.highlight, r.countdown, r.sound_mark), (10, 3, true));
     assert_eq!(w.rng, expect, "10 spark draws then the rocking draw");
+    // spec: S-0601 F3 and S-0616 claim 1 (five systems of the default spark type around the controller, no owner object, no first particle)
+    let sparky = w.rules().gas.system("SPARKY").unwrap();
+    let made: Vec<_> = w.gas.systems.values().filter(|s| s.type_index == sparky).collect();
+    assert_eq!(made.len(), 5);
+    let at = w.obj(m).unwrap().pos;
+    for s in &made {
+        assert!(s.owner_object.is_none() && s.owner.is_none() && s.particles.is_empty());
+        assert_eq!(s.pos.z, at.z + 100);
+        assert!((s.pos.x - at.x).abs() <= 200 && (s.pos.y - at.y).abs() <= 200);
+    }
     let sounds = |w: &World| {
         mind_effects(w)
             .iter()
@@ -1292,6 +1312,29 @@ fn claim_16_pulse_timing_and_draws() {
     mind::overload_turn(&mut w, m);
     assert_eq!(w.obj(m).unwrap().health, full - 14);
     assert_eq!(sounds(&w), 1, "once per uninterrupted run");
+}
+
+// spec: S-0601 claim 16 and Import mapping (DefaultSparkSystem absent: no spark systems and no spark placement draws; the rocking draw remains)
+#[test]
+fn claim_16_no_spark_type_no_spark_draws() {
+    let mut r = rules();
+    r.sim.general.default_spark_system = None;
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let m = veh(&mut w, "MASTER", BETA, 0, 0);
+    let a = veh(&mut w, "BOX", ALPHA, 3, 0);
+    let b = veh(&mut w, "BOX", ALPHA, 3, 3);
+    assert!(mind::take(&mut w, m, a));
+    assert!(mind::take(&mut w, m, b));
+    w.mind.controllers.get_mut(&m).unwrap().countdown = 0;
+    let n = w.gas.systems.len();
+    let mut expect = w.rng.clone();
+    let half = w.rules().quirks.ranged_draw_half_span;
+    expect.ranged(0, 100, half);
+    let full = w.obj(m).unwrap().health;
+    mind::overload_turn(&mut w, m);
+    assert_eq!(w.obj(m).unwrap().health, full - 7, "the pulse still hits");
+    assert_eq!(w.rng, expect, "only the rocking draw");
+    assert_eq!(w.gas.systems.len(), n, "no spark system");
 }
 
 // spec: S-0601 claim 16 (d < 1: the sound mark is cleared, no hit, no draws; the countdown becomes frames)

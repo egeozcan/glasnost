@@ -1659,6 +1659,26 @@ pub struct Quirks {
     // spec: S-0613 claim 12, Constants and Edge cases
     #[serde(default = "on")]
     pub wind_southeast_short: bool,
+    /// A kill by a fire particle has no attacking house, though its system may have one; off: the hit's attacking house is the system's owner house, as for gas (`glasnost_sim::particles`).
+    // spec: S-0616 claim 14 and Edge cases
+    #[serde(default = "on")]
+    pub fire_particle_no_house: bool,
+    /// A smoke system emits however many particles it holds, whatever its type's particle-cap field; off: while it holds as many particles as the cap, an emission takes its two raw values and grows the timer but makes no particle (`glasnost_sim::particles`).
+    // spec: S-0616 claim 9 and Edge cases
+    #[serde(default = "on")]
+    pub smoke_ignores_particle_cap: bool,
+    /// A spark's vertical step counts gravity twice in a tick, its stored vertical velocity once; off: the step uses the stored vertical velocity (`glasnost_sim::particles`).
+    // spec: S-0616 claim 16, F11 and Edge cases
+    #[serde(default = "on")]
+    pub spark_double_gravity: bool,
+    /// A smoke particle stopped at a bridge deck takes one more update with its draws and is removed (with its successors) in the next turn; off: it is removed in the pass that stops it, with no further update draws (`glasnost_sim::particles`).
+    // spec: S-0616 claim 7 and Edge cases
+    #[serde(default = "on")]
+    pub smoke_deck_extra_update: bool,
+    /// The flame sweep's facing constants are 16383 and 65534; off: 16384 and 65536. Seam: `effect_weapon_emitter` (`glasnost_sim::particles`); the switch loads in both positions and changes nothing until that seam is filled.
+    // spec: S-0616 F5 and Edge cases
+    #[serde(default = "on")]
+    pub flame_sweep_facing: bool,
     /// When the first other object under a dropped unit is an infantry unit, every object after it in the cell's list is also removed, whatever its kind, the dropped unit included when it is listed after the infantry; off: only infantry units in the cell are removed, and the dropped unit never is. Not implemented yet (wave 2).
     // spec: S-0607 claim 16 and Edge cases
     #[serde(default = "on")]
@@ -2248,6 +2268,11 @@ impl Default for Quirks {
             berserk_zero_duration: true,
             psychic_intent_ignores_visibility: true,
             wind_southeast_short: true,
+            fire_particle_no_house: true,
+            smoke_ignores_particle_cap: true,
+            spark_double_gravity: true,
+            smoke_deck_extra_update: true,
+            flame_sweep_facing: true,
             lift_drop_erases_cell_tail: true,
             lift_impact_removes_survivor: true,
             lift_deck_impact_reads_ground: true,
@@ -3329,6 +3354,11 @@ impl Quirks {
                 self.psychic_intent_ignores_visibility,
             ),
             ("wind_southeast_short", self.wind_southeast_short),
+            ("fire_particle_no_house", self.fire_particle_no_house),
+            ("smoke_ignores_particle_cap", self.smoke_ignores_particle_cap),
+            ("spark_double_gravity", self.spark_double_gravity),
+            ("smoke_deck_extra_update", self.smoke_deck_extra_update),
+            ("flame_sweep_facing", self.flame_sweep_facing),
             (
                 "lift_drop_erases_cell_tail",
                 self.lift_drop_erases_cell_tail,

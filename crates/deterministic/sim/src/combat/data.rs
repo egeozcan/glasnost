@@ -547,6 +547,8 @@ pub struct TypeCombat {
     pub damage_self: bool,
     /// Eligible damage particle systems (smoke), in list order.
     pub smoke_systems: Vec<String>,
+    /// The damage-smoke displacement, leptons (S-0616 claim 1).
+    pub smoke_offset: [i32; 3], // nocite: vector and matrix dimensions (three axes)
     /// Maximum debris X.
     pub max_debris: i32,
     /// Minimum debris Y.
@@ -1392,6 +1394,8 @@ pub fn type_combat(
         berserk_friendly: b(c.berserk_friendly),
         damage_self: b(c.damage_self),
         smoke_systems: c.damage_smoke_systems.clone().unwrap_or_default(),
+        // spec: S-0616 Import mapping (DamageSmokeOffset absent 0, 0, 0)
+        smoke_offset: c.damage_smoke_offset.unwrap_or([0; 3]),
         // spec: S-0312 Import mapping (MaxDebris, MinDebris absent: 0, 0)
         max_debris: c.max_debris.unwrap_or(0),
         min_debris: c.min_debris.unwrap_or(0),

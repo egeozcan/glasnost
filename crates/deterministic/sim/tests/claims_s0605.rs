@@ -134,6 +134,12 @@ fn rules() -> Ruleset {
     absorber(&mut r, "BIOS", |t| t.econ.power = Some(-10));
     absorber(&mut r, "BIOZ", |t| t.passengers = Some(0));
     absorber(&mut r, "BIOM", |t| t.passengers = Some(-1));
+    for (n, count) in [("SHEDZ", 0), ("SHEDM", -1), ("SHEDP", 2)] {
+        absorber(&mut r, n, |t| {
+            t.infantry_absorb = None;
+            t.passengers = Some(count);
+        });
+    }
     r.sim.weapons.insert(
         "Fix".into(),
         WeaponType {
@@ -1098,6 +1104,28 @@ fn claim_16_none_found_and_held_contact() {
     assert_eq!(absorb::waiting_for(&w, n), Some(b), "claim 3: waits in line");
 }
 
+// spec: S-0215 claim 24 and scenario B21 (d) (an instruction holder waiting in line for the building its guard processing finds is already bound for it: no second enter, the current behaviour stays guard) and S-0605 claims 3 and 16
+#[test]
+fn claim_16_waiting_in_line_is_already_bound() {
+    let mut w = neutral_game(&fate_rules(|_| {}));
+    let b = put(&mut w, Kind::Building, "BIO", 2, 6, 0);
+    let m = put(&mut w, Kind::Infantry, "WALKER", 2, 3, 3);
+    let n = put(&mut w, Kind::Infantry, "WALKER", 2, 0, 0);
+    testkit::run(&mut w, 3);
+    assert!(absorb::bio_reactor_fate(&mut w, m));
+    assert_eq!(w.obj(m).unwrap().contact, Some(b));
+    assert!(absorb::bio_reactor_fate(&mut w, n));
+    assert_eq!(absorb::waiting_for(&w, n), Some(b));
+    let o = w.obj_mut(n).unwrap();
+    o.beh.current = Some(Behaviour::Guard);
+    o.beh.queued = None;
+    absorb::instruction_turn(&mut w, n);
+    assert_eq!(queued(&w, n), None, "no second enter");
+    assert_eq!(cur(&w, n), Some(Behaviour::Guard));
+    assert!(absorb::holds_instruction(&w, n));
+    assert_eq!(absorb::waiting_for(&w, n), Some(b));
+}
+
 // spec: S-0605 claim 16 and Edge cases (quirks.enter_nearest_survives_absorption on: entry keeps the instruction and a neutral passenger let out walks back in at its next guard processing; off: entry clears it and the passenger stays out)
 // spec: S-0215 claim 24 (the guard processing of an instruction holder searches again)
 #[test]
@@ -1148,6 +1176,21 @@ fn table_i_x_rows_cursor() {
         fill_one(&mut w, b);
     }
     assert_ne!(cursor(&w, &[u], b), Action::Enter, "full");
+}
+
+// spec: S-0214 row I13 and Import mapping (building types Passengers: for any building target, not only an absorbing one, I13's no-passenger test is a count equal to 0; rows x and q test above 0)
+#[test]
+fn s0214_i13_any_building_count() {
+    let mut w = game();
+    let z = put(&mut w, Kind::Building, "SHEDZ", 0, -6, -6);
+    let m = put(&mut w, Kind::Building, "SHEDM", 0, 6, 6);
+    let p = put(&mut w, Kind::Building, "SHEDP", 0, -6, 6);
+    let h = put(&mut w, Kind::Infantry, "HEALER", 0, 4, 0);
+    testkit::run(&mut w, 3);
+    assert!(!absorb::is_absorber(&w, z) && !absorb::is_absorber(&w, m));
+    assert_eq!(cursor(&w, &[h], z), Action::Select, "I13: count 0");
+    // Count −1 and count 2 skip I13; for this healer the later rows give select too.
+    assert_eq!(cursor(&w, &[h], m), cursor(&w, &[h], p));
 }
 
 // spec: S-0605 claim 1 (rows x and q test capacity above 0, row I13 equality with 0: no enter over capacity 0 or -1; a healer over capacity 0 takes I13's no-passenger answer, over -1 the row's test does not hold)

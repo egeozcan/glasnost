@@ -559,30 +559,27 @@ fn damage_effect_reaction(
     let ratio = d(i64::from(o.health), mode).div(d(i64::from(s), mode), mode);
     let at_or_below = ratio.le(yellow_ratio);
     if matches!(result, HitResult::NowYellow | HitResult::NowRed) {
-        if at_or_below && !o.combat.damage_effect && o.kind != Kind::Building {
-            let list = type_combat(w, id)
-                .map(|t| t.smoke_systems.clone())
-                .unwrap_or_default();
+        // spec: S-0616 claim 1 (an object holds at most one damage-smoke system and makes a new one only when its place is empty)
+        if at_or_below && o.combat.damage_smoke.is_none() && o.kind != Kind::Building {
+            let tc = type_combat(w, id).cloned();
+            let list = tc.as_ref().map(|t| t.smoke_systems.clone()).unwrap_or_default();
             let n = list.len() as i32;
             // spec: S-0302 claim 13 (a draw over 0 … n − 1 when n > 0 and the height is above −10 leptons)
             if n > 0 && w.height_above_surface(id) > -10 {
                 let half = w.rules().quirks.ranged_draw_half_span;
                 let k = w.rng.ranged(0, n - 1, half);
                 // spec: S-0302 claim 13 (a draw of k picks the (k + 1)-th eligible entry from the end)
-                let _system = &list[(n - 1 - k) as usize];
-                if let Some(ob) = w.obj_mut(id) {
-                    ob.combat.damage_effect = true;
-                }
+                let name = list[(n - 1 - k) as usize].clone();
+                let offset = tc.map_or([0; 3], |t| t.smoke_offset);
+                crate::particles::damage_smoke(w, id, &name, offset);
             }
         }
         if o.kind == Kind::Building && warhead.is_some_and(|h| w.rules().combat.warhead(h).sparky) {
             building_fires(w, id);
         }
-    } else if !at_or_below && o.combat.damage_effect {
-        // spec: S-0302 claim 13 (a hit that leaves the ratio above the yellow ratio marks the effect); Q-1153 interim (when the marked system leaves play is not specified in spec/: the effect is let go at once, as in revision 27)
-        if let Some(ob) = w.obj_mut(id) {
-            ob.combat.damage_effect = false;
-        }
+    } else if !at_or_below && let Some(sys) = o.combat.damage_smoke {
+        // spec: S-0302 claim 13 and S-0616 claim 1 (a hit that leaves the ratio above the yellow ratio marks the damage-smoke system; the object keeps it in its place until it leaves play)
+        crate::particles::mark(w, sys);
     }
 }
 
