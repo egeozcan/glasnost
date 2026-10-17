@@ -12,7 +12,9 @@
 //! uncovers an area of a shrouded map. S-0601 (mind control): a
 //! controller takes an enemy vehicle over (the link line and the ring),
 //! then a second, and its death releases both; an unlimited controller
-//! taken past its overload counts pulses.
+//! taken past its overload counts pulses. S-0609 (gattling spin-up): a
+//! gattling vehicle and a gattling building fire at enemies and climb their
+//! stages; the vehicle's target removed, it spins down.
 //!
 //! Run with `cargo test --release -p glasnost-app --test m7a_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -48,6 +50,7 @@ const SCENES: &[Scene] = &[
     ("reveal", psychic_reveal),
     ("mind", mind_control),
     ("overload", mind_overload),
+    ("gattling", gattling_spin),
 ];
 
 #[test]
@@ -320,6 +323,182 @@ fn psychic_reveal(lane: &mut Lane) {
     lane.save("reveal-after");
     lane.ticks(60);
     println!("explored cells 60 ticks later: {}", explored(lane.world()));
+}
+
+/// The first armed type with the gattling flag of `kind` (vehicles or
+/// buildings), by index: its name and, for a building, its foundation.
+fn gattling_type(w: &World, kind: Kind) -> Option<(String, (i32, i32))> {
+    let r = w.rules();
+    if kind == Kind::Building {
+        return (0..r.buildings.len())
+            .find(|&b| r.buildings[b].combat.gattling && r.buildings[b].combat.slots[0].is_some())
+            .map(|b| (r.buildings[b].name.clone(), r.buildings[b].foundation));
+    }
+    (0..r.vehicles.len())
+        .find(|&i| {
+            r.unit(Kind::Vehicle, i as u32)
+                .is_some_and(|u| u.combat.gattling && u.combat.slots[0].is_some())
+        })
+        .map(|i| (r.vehicles[i].name.clone(), (1, 1)))
+}
+
+/// Follows `g`'s spin for up to `ticks` ticks, keeping `g` and `targets`
+/// at full health (so the scene shows the climb, not a kill); saves a screen the
+/// first time each stage is reached as `{name}-stage{n}`. Returns the
+/// (tick, stage) changes.
+fn follow_spin(
+    lane: &mut Lane,
+    g: ObjectId,
+    targets: &[ObjectId],
+    ticks: usize,
+    name: &str,
+) -> Vec<(i32, i32)> {
+    let mut changes = Vec::new();
+    let mut last = glasnost_sim::gattling::spin(lane.world(), g).stage;
+    let mut saved = std::collections::BTreeSet::new();
+    for _ in 0..ticks {
+        for &t in targets.iter().chain([&g]) {
+            let full = lane.full_health(t);
+            if let Some(o) = lane.world_mut().obj_mut(t) {
+                o.health = full;
+            }
+        }
+        lane.ticks(1);
+        let Some(o) = lane.world().obj(g) else {
+            println!("{name}: gone at tick {}", lane.world().tick);
+
+            break;
+        };
+        let aim = o.target;
+        let s = glasnost_sim::gattling::spin(lane.world(), g);
+        if lane.world().tick % 300 == 0 {
+            println!(
+                "{name} tick {}: value {} stage {} target set {} targets alive {}",
+                lane.world().tick,
+                s.value,
+                s.stage,
+                aim.is_some(),
+                targets.iter().filter(|&&t| lane.world().obj(t).is_some()).count()
+            );
+        }
+        if s.stage != last {
+            changes.push((lane.world().tick, s.stage));
+            last = s.stage;
+            if saved.insert(s.stage) {
+                lane.save(&format!("{name}-stage{}", s.stage));
+            }
+        }
+        if glasnost_sim::gattling::at_top(lane.world(), g) && saved.contains(&s.stage) {
+            lane.ticks(2);
+            break;
+        }
+    }
+    changes
+}
+
+/// S-0609 claims 2 to 5, 7, 9 and 14: a gattling vehicle of the local house
+/// is ordered (by the click a person gives) at an enemy vehicle beside it
+/// and climbs its stages while it fires; with the enemy removed it spins
+/// down over the passive spin-down. A gattling building beside an enemy
+/// vehicle climbs its stages by itself (guard, then attack).
+fn gattling_spin(lane: &mut Lane) {
+    let w = lane.world();
+    let unit = gattling_type(w, Kind::Vehicle);
+    let tower = gattling_type(w, Kind::Building);
+    let victim = plain_vehicle(w);
+    println!(
+        "gattling vehicle type found: {}, gattling building type found: {}, enemy vehicle type found: {}",
+        unit.is_some(),
+        tower.is_some(),
+        victim.is_some()
+    );
+    let Some(vname) = victim else { return };
+    let local = lane.local();
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    if let Some((gname, _)) = unit {
+        let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+        let g = lane.spawn(Kind::Vehicle, &gname, local, CellXY::new(spot.x - 2, spot.y));
+        let v = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(spot.x + 1, spot.y));
+        lane.look_at(spot);
+        lane.ticks(2);
+        lane.save("gattling-before");
+        let sent = lane.order(local, g, ClickOn::Object(v));
+        println!("click on the enemy vehicle: {sent} orders");
+        let changes = follow_spin(lane, g, &[v], 2400, "gattling-vehicle");
+        let s = glasnost_sim::gattling::spin(lane.world(), g);
+        println!(
+            "vehicle stage changes (tick, stage): {changes:?}; now value {} stage {}, at top {}",
+            s.value,
+            s.stage,
+            glasnost_sim::gattling::at_top(lane.world(), g)
+        );
+        glasnost_sim::objects::remove(lane.world_mut(), v);
+        let start = lane.world().tick;
+        let mut down = Vec::new();
+        let mut last = s.stage;
+        for _ in 0..600 {
+            lane.ticks(1);
+            let s = glasnost_sim::gattling::spin(lane.world(), g);
+            if s.stage != last {
+                down.push((lane.world().tick - start, s.stage));
+                last = s.stage;
+            }
+            if s.value == 0 {
+                break;
+            }
+        }
+        let s = glasnost_sim::gattling::spin(lane.world(), g);
+        println!(
+            "target removed: stage falls (ticks after, stage) {down:?}; value {} after {} ticks",
+            s.value,
+            lane.world().tick - start
+        );
+        lane.save("gattling-spun-down");
+        glasnost_sim::objects::remove(lane.world_mut(), g);
+    }
+    if let Some((bname, size)) = tower {
+        let Some(site) = lane.area(CellXY::new(home.x + 6, home.y - 6), size, 2, |l| {
+            l != land::WATER && l != land::ROCK
+        }) else {
+            println!("no open ground for the building");
+            return;
+        };
+        let b = lane.spawn(Kind::Building, &bname, local, site);
+        // Power for the building: the strongest power plant type, beside it.
+        let plant = {
+            let r = lane.world().rules();
+            (0..r.buildings.len())
+                .filter(|&p| r.buildings[p].raw.econ.power.unwrap_or(0) > 0)
+                .max_by_key(|&p| {
+                    (
+                        r.buildings[p].raw.econ.power.unwrap_or(0),
+                        std::cmp::Reverse(p),
+                    )
+                })
+                .map(|p| (r.buildings[p].name.clone(), r.buildings[p].foundation))
+        };
+        if let Some((pname, psize)) = plant
+            && let Some(at) = lane.area(CellXY::new(site.x - 5, site.y), psize, 1, |l| {
+                l != land::WATER && l != land::ROCK
+            })
+        {
+            lane.spawn(Kind::Building, &pname, local, at);
+        }
+        let at = lane.open_land(CellXY::new(site.x + size.0 + 3, site.y));
+        let v = lane.spawn(Kind::Vehicle, &vname, enemy, at);
+        lane.look_at(site);
+        lane.ticks(2);
+        let changes = follow_spin(lane, b, &[v], 3600, "gattling-building");
+        let s = glasnost_sim::gattling::spin(lane.world(), b);
+        println!(
+            "building stage changes (tick, stage): {changes:?}; now value {} stage {}, at top {}",
+            s.value,
+            s.stage,
+            glasnost_sim::gattling::at_top(lane.world(), b)
+        );
+        lane.save("gattling-building");
+    }
 }
 
 /// The first unit type (infantry, then vehicles) whose primary weapon has a
@@ -761,6 +940,17 @@ impl Lane {
         w.obj(id)
             .and_then(|o| w.rules().unit(o.kind, o.type_index))
             .map_or(1, |u| u.strength.max(1))
+    }
+
+    /// The strength of `id`'s type, buildings included.
+    fn full_health(&self, id: ObjectId) -> i32 {
+        let w = self.world();
+        match w.obj(id) {
+            Some(o) if o.kind == Kind::Building => {
+                w.rules().buildings[o.type_index as usize].strength.max(1)
+            }
+            _ => self.strength(id),
+        }
     }
 
     /// `id`'s health in per-mille of its type's strength.
