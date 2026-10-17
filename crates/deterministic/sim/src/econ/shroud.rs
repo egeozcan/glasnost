@@ -358,6 +358,14 @@ fn reveal_to_all(w: &World, id: ObjectId) -> bool {
 /// (claims 5 to 7); empty when the centre is not legal (with
 /// `quirks.sight_centre_off_map`).
 pub fn sight_cells(w: &World, p: Pos, r: i32) -> Vec<u32> {
+    sight_cells_with(w, p, r, true)
+}
+
+/// The cells of claims 5 and 6 around `p` with radius `r`, with claim 7's
+/// high-ground test when `height_test` is set (and the reveal-by-height
+/// flag is on). The psychic reveal skips that test (claim 17, S-0610 claim
+/// 14).
+fn sight_cells_with(w: &World, p: Pos, r: i32, height_test: bool) -> Vec<u32> {
     let mut out = Vec::new();
     if r <= 0 {
         return out;
@@ -369,7 +377,7 @@ pub fn sight_cells(w: &World, p: Pos, r: i32) -> Vec<u32> {
         return out;
     }
     let observer = p.z / LEVEL; // spec: S-0409 Terms (observer level = trunc(Z / 104))
-    let block = w.rules().econ.shroud.reveal_by_height;
+    let block = height_test && w.rules().econ.shroud.reveal_by_height;
     for (dx, dy) in shape(r.min(MAX_RADIUS)) {
         let t = CellXY::new(c.x + dx, c.y + dy);
         // spec: S-0409 claim 6 (only legal cells are covered; no sight wraps)
@@ -1073,11 +1081,27 @@ fn area_cells(w: &mut World, h: HouseId, cells: &[u32]) {
 /// counted for its allies with ally reveal on (claim 2).
 pub fn area_reveal(w: &mut World, made_for: HouseId, p: Pos, r: i32) {
     let cells = sight_cells(w, p, r.min(MAX_RADIUS));
+    reveal_for(w, made_for, &cells);
+}
+
+/// The psychic reveal's area reveal (claim 17 and S-0610 claim 14): as
+/// [`area_reveal`], but claim 7's high-ground test is not made, so every
+/// legal cell of the shape is explored and seen whatever the
+/// reveal-by-height flag says.
+pub fn psychic_reveal(w: &mut World, made_for: HouseId, p: Pos, r: i32) {
+    // spec: S-0409 claim 17 and S-0610 claim 14 (claims 5 and 6 with the radius capped at 10 and nothing at 0; claim 7's high-ground test skipped)
+    let cells = sight_cells_with(w, p, r.min(MAX_RADIUS), false);
+    reveal_for(w, made_for, &cells);
+}
+
+/// Applies an area reveal's cells for the house it is made for and the
+/// houses that claim 2 lets share it.
+fn reveal_for(w: &mut World, made_for: HouseId, cells: &[u32]) {
     let ally = w.rules().econ.shroud.ally_reveal;
     for h in player_houses(w) {
         // spec: S-0409 claim 2 (an area reveal counts for the house it is made for and, with ally reveal, its allies)
         if h == made_for || (ally && w.allied(Some(made_for), Some(h))) {
-            area_cells(w, h, &cells);
+            area_cells(w, h, cells);
         }
     }
 }

@@ -1647,11 +1647,11 @@ pub struct Quirks {
     // spec: S-0609 claims 3 and 9, F2 and Edge cases
     #[serde(default = "on")]
     pub gattling_zero_spin_down_empties: bool,
-    /// A berserk hit whose duration T is 0 or less still makes the target drop its target and queue *hunt*, berserk until its next update; off: such a hit has no effect on the target. Not implemented yet (wave 2).
+    /// A berserk hit whose duration T is 0 or less still makes the target drop its target and queue *hunt*, berserk until its next update; off: such a hit has no effect on the target (`glasnost_sim::psychic::enter`).
     // spec: S-0610 claim 5 and Edge cases
     #[serde(default = "on")]
     pub berserk_zero_duration: bool,
-    /// Hostile-intent lines are shown for units the viewer cannot see, including cloaked, disguised and shrouded units; off: a line is shown only for a unit visible to the viewer's house. Not implemented yet (wave 2).
+    /// Hostile-intent lines are shown for units the viewer cannot see, including cloaked, disguised and shrouded units; off: a line is shown only for a unit visible to the viewer's house (`glasnost_sim::psychic::intent_line`).
     // spec: S-0610 claim 10 and Edge cases
     #[serde(default = "on")]
     pub psychic_intent_ignores_visibility: bool,

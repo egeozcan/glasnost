@@ -1775,6 +1775,10 @@ pub struct CombatFields {
     /// (S-0610 claim 1).
     #[serde(default)]
     pub immune_to_psionics: Option<bool>,
+    /// `BerserkFriendly`: a berserk unit may not fire at objects of this
+    /// type (S-0610 claim 6); absent: no.
+    #[serde(default)]
+    pub berserk_friendly: Option<bool>,
     /// `DamageSelf` (S-0302 claim 8, S-0303 claim 9).
     #[serde(default)]
     pub damage_self: Option<bool>,

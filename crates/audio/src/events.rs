@@ -786,6 +786,8 @@ impl Audio {
             SwEvent::ShieldFade => ty.and_then(|t| t.special_sound.clone()),
             // spec: S-0513 claim 44 (the camera sound at the plane)
             SwEvent::Camera => s.camera_sound.clone(),
+            // spec: S-0610 claim 13 (the psychic reveal's activation sound at the target cell's centre, positionally, for every player)
+            SwEvent::RevealSound => s.reveal_sound.clone(),
             // Announcements, messages, markers and radar events are the
             // interface's (S-0701 claim 28; S-0410).
             _ => None,

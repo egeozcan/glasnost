@@ -288,6 +288,10 @@ pub struct EconFields {
     /// 0.
     #[serde(default)]
     pub psychic_detection_radius: Option<i32>,
+    /// Buildings: `HasRadialIndicator`, shows a range ring when selected
+    /// (S-0610 claim 12); absent: no.
+    #[serde(default)]
+    pub has_radial_indicator: Option<bool>,
     /// Buildings: `SecretLab` (S-0407 claims 4 and 14); absent: no.
     #[serde(default)]
     pub secret_lab: Option<bool>,
@@ -825,6 +829,22 @@ pub struct SwGeneral {
     /// absent: none.
     #[serde(default)]
     pub chute_sound: Option<String>,
+    /// `[CombatDamage] PsychicRevealRadius`, cells (S-0610 claim 14);
+    /// absent: 3.
+    #[serde(default)]
+    pub psychic_reveal_radius: Option<i32>,
+    /// `[AudioVisual] PsychicRevealActivateSound`, the reveal's activation
+    /// sound (S-0610 claim 13); absent: none.
+    #[serde(default)]
+    pub psychic_reveal_activate_sound: Option<String>,
+    /// `[AudioVisual] BerserkColor`, the berserk tint's colour-adjustment
+    /// table position (S-0610 claim 7); absent: 0.
+    #[serde(default)]
+    pub berserk_color: Option<i32>,
+    /// `[CombatDamage] BerzerkAllowed`: read, no effect (S-0610 claim 16);
+    /// absent: no.
+    #[serde(default)]
+    pub berzerk_allowed: Option<bool>,
 }
 
 /// One entry of the power-up table (S-0520 Terms): weight, animation, water

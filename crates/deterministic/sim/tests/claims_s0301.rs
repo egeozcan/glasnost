@@ -697,8 +697,7 @@ fn claim_6_which_ranks_and_abilities_take_the_factor() {
 // Claim 8: berserk halving.
 
 fn berserk(w: &mut World, a: ObjectId) {
-    let t = w.tick;
-    w.obj_mut(a).unwrap().combat.berserk_until = Some(t + 10000);
+    w.obj_mut(a).unwrap().combat.berserk = Some(10000);
 }
 
 // spec: S-0301 claim 8 and F1 (a berserk firer: D = trunc(D₅ / 2))

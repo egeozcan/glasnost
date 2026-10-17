@@ -525,7 +525,7 @@ fn friendly_exception(w: &World, a: ObjectId) -> bool {
         .rules()
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.raw.attack_friendlies.unwrap_or(false));
-    let berserk = o.combat.berserk_until.is_some_and(|u| w.tick < u);
+    let berserk = o.combat.berserk.is_some();
     attacks || berserk
 }
 

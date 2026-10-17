@@ -56,11 +56,10 @@ fn a_spent_burst_takes_the_full_arrival_delay_without_berserk_halving() {
     let mut w = world(|_| {});
     let b = target_building(&mut w);
     let s = sabotage(&mut w, "SABO", 0, b);
-    let until = w.tick + 1000;
     {
         let o = w.obj_mut(s).unwrap();
         o.combat.burst = 1; // fired its primary before the sabotage: k is not below the burst count of 1
-        o.combat.berserk_until = Some(until);
+        o.combat.berserk = Some(1000);
     }
     let mut r = w.rng.clone();
     let u = r.ranged(0, 2, w.rules().quirks.ranged_draw_half_span);

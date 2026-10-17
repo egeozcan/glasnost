@@ -391,11 +391,8 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
             modified(w, &hit, d3, 0, class)
         };
         let _ = h;
-        let now = w.tick;
-        if let Some(ob) = w.obj_mut(target) {
-            // spec: S-0302 claim 10 (a further berserk hit sets the remaining time to the new T)
-            ob.combat.berserk_until = Some(now.wrapping_add(t));
-        }
+        // spec: S-0302 claim 10 and S-0610 claim 4 (entry: T, target dropped, hunt queued; a further berserk hit sets the remaining time to the new T; quirks.berserk_zero_duration)
+        crate::psychic::enter(w, target, t);
         return HitResult::Unchanged;
     }
     // spec: S-0302 claim 6 (the modified amount)

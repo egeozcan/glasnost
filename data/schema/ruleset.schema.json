@@ -1344,6 +1344,14 @@
             }
           ]
         },
+        "berserk_friendly": {
+          "description": "`BerserkFriendly`: a berserk unit may not fire at objects of this\ntype (S-0610 claim 6); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "bomb_sight": {
           "description": "`BombSight`, cells (S-0519 Import mapping).",
           "type": [
@@ -2780,6 +2788,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "has_radial_indicator": {
+          "description": "Buildings: `HasRadialIndicator`, shows a range ring when selected\n(S-0610 claim 12); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "infantry_cost_bonus": {
@@ -7380,7 +7396,7 @@
           "default": true
         },
         "berserk_zero_duration": {
-          "description": "A berserk hit whose duration T is 0 or less still makes the target drop its target and queue *hunt*, berserk until its next update; off: such a hit has no effect on the target. Not implemented yet (wave 2).",
+          "description": "A berserk hit whose duration T is 0 or less still makes the target drop its target and queue *hunt*, berserk until its next update; off: such a hit has no effect on the target (`glasnost_sim::psychic::enter`).",
           "type": "boolean",
           "default": true
         },
@@ -8650,7 +8666,7 @@
           "default": true
         },
         "psychic_intent_ignores_visibility": {
-          "description": "Hostile-intent lines are shown for units the viewer cannot see, including cloaked, disguised and shrouded units; off: a line is shown only for a unit visible to the viewer's house. Not implemented yet (wave 2).",
+          "description": "Hostile-intent lines are shown for units the viewer cannot see, including cloaked, disguised and shrouded units; off: a line is shown only for a unit visible to the viewer's house (`glasnost_sim::psychic::intent_line`).",
           "type": "boolean",
           "default": true
         },
@@ -9865,6 +9881,23 @@
             "format": "int32"
           }
         },
+        "berserk_color": {
+          "description": "`[AudioVisual] BerserkColor`, the berserk tint's colour-adjustment\ntable position (S-0610 claim 7); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "berzerk_allowed": {
+          "description": "`[CombatDamage] BerzerkAllowed`: read, no effect (S-0610 claim 16);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "charge_to_drain_ratio": {
           "description": "`[General] ChargeToDrainRatio` ρ, a double (S-0512 F5); absent: 3.",
           "anyOf": [
@@ -10121,6 +10154,23 @@
         },
         "paradrop_radius": {
           "description": "`[General] ParadropRadius`, leptons (S-0522 claims 6 and 7); absent:\n1024.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "psychic_reveal_activate_sound": {
+          "description": "`[AudioVisual] PsychicRevealActivateSound`, the reveal's activation\nsound (S-0610 claim 13); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "psychic_reveal_radius": {
+          "description": "`[CombatDamage] PsychicRevealRadius`, cells (S-0610 claim 14);\nabsent: 3.",
           "type": [
             "integer",
             "null"

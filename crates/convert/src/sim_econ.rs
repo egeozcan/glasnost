@@ -164,7 +164,13 @@ const BUILDING_ECON: &[Row] = &[
         "psychic_detection_radius",
         "PsychicDetectionRadius",
         Int,
-        "S-0513",
+        "S-0513, S-0610",
+    ),
+    (
+        "has_radial_indicator",
+        "HasRadialIndicator",
+        Bool,
+        "S-0610",
     ),
     ("laser_fence_post", "LaserFencePost", Bool, "S-0406"),
     ("guard_range", "GuardRange", Dec, "S-0406"),
@@ -1040,6 +1046,23 @@ const GENERAL_SW: &[(&str, &[u8], &str, Form, &str)] = &[
         "S-0522",
     ),
     ("chute_sound", AUDIO_VISUAL, "ChuteSound", Text, "S-0522"),
+    (
+        "psychic_reveal_radius",
+        COMBAT_DAMAGE,
+        "PsychicRevealRadius",
+        Int,
+        "S-0610",
+    ),
+    (
+        "psychic_reveal_activate_sound",
+        AUDIO_VISUAL,
+        "PsychicRevealActivateSound",
+        Text,
+        "S-0610",
+    ),
+    ("berserk_color", AUDIO_VISUAL, "BerserkColor", Int, "S-0610"),
+    // spec: S-0610 claim 16 (BerzerkAllowed is read but has no effect)
+    ("berzerk_allowed", COMBAT_DAMAGE, "BerzerkAllowed", Bool, "S-0610"),
 ];
 
 /// The coverage rows of the keys this module converts: (category, key,

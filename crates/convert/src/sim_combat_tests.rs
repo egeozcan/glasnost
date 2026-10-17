@@ -1418,3 +1418,27 @@ fn invalid_cloak_stages_and_radius_warn() {
     let (_, w) = sim("[General]\nCloakingStages=1\n", "", "");
     assert!(!warned(&w, "CloakingStages"));
 }
+
+// spec: S-0610 Import mapping (BerserkFriendly, ImmuneToPsionics and ImmuneToPsionicWeapons: booleans on any unit or building type; absent: no value, so the simulation's per-kind defaults apply)
+#[test]
+fn psychic_type_flags() {
+    let base = "[VehicleTypes]\n1=Drone\n2=Cart\n[BuildingTypes]\n1=Hut\n\
+                [Drone]\nBerserkFriendly=yes\nImmuneToPsionics=yes\nImmuneToPsionicWeapons=no\n\
+                [Cart]\nSpeed=2\n[Hut]\nImmuneToPsionics=no\nBerserkFriendly=no\n";
+    let (s, _) = sim(base, "", "");
+    let d = &s.vehicles["Drone"].combat;
+    assert_eq!(
+        (d.berserk_friendly, d.immune_to_psionics, d.immune_to_psionic_weapons),
+        (Some(true), Some(true), Some(false))
+    );
+    let c = &s.vehicles["Cart"].combat;
+    assert_eq!(
+        (c.berserk_friendly, c.immune_to_psionics, c.immune_to_psionic_weapons),
+        (None, None, None)
+    );
+    let h = &s.buildings["Hut"].combat;
+    assert_eq!(
+        (h.berserk_friendly, h.immune_to_psionics, h.immune_to_psionic_weapons),
+        (Some(false), Some(false), None)
+    );
+}

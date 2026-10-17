@@ -313,7 +313,9 @@ fn effect(
             super::planes::spy_plane(w, h, cell);
         }
         Some(SwKind::ForceShield) => super::protect::force_shield(w, h, i, cell),
-        Some(k @ (SwKind::Dominator | SwKind::Genetic | SwKind::PsychicReveal)) => {
+        // spec: S-0610 claims 13 to 15 (the psychic reveal: the area reveal, the activation sound; no launch announcement and no radar event)
+        Some(SwKind::PsychicReveal) => crate::psychic::reveal(w, h, i, cell),
+        Some(k @ (SwKind::Dominator | SwKind::Genetic)) => {
             yuri_seam(w, h, k, cell);
         }
         // A type with no kind launches nothing.
@@ -321,12 +323,12 @@ fn effect(
     }
 }
 
-/// Seam: the Yuri kinds (psychic domination S-0612, genetic mutation
-/// S-0611, psychic reveal S-0610) are not built. The launch still counts
-/// (the charge is consumed) and nothing happens.
+/// Seam: S-0611 (genetic mutation) and S-0612 (psychic domination) are
+/// not built (M7b). The launch still counts (the charge is consumed) and
+/// nothing happens.
 pub fn yuri_seam(w: &mut World, h: HouseId, k: SwKind, cell: CellXY) {
     let _ = (h, cell);
     w.note(format!(
-        "superweapon kind {k:?} is not built (S-0610, S-0611, S-0612): the launch does nothing"
+        "superweapon kind {k:?} is not built (S-0611, S-0612): the launch does nothing"
     ));
 }

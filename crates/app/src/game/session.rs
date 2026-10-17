@@ -135,6 +135,9 @@ pub struct Session {
     /// The interface's real-time clock, milliseconds (S-0214 claim 22: not
     /// simulation ticks).
     pub clock_ms: i64,
+    /// Each house's display colour by house index (the radar colours,
+    /// S-0410 claim 8), for the psychic sensor's intent-line end squares.
+    house_colours: Vec<[u8; 3]>,
     /// The last drawn sidebar's targets.
     targets: Targets<HudHit>,
     pause_targets: Targets<PauseHit>,
@@ -234,11 +237,12 @@ impl Session {
             // spec: S-0516 claims 28 and 29 (the battlefield drawn through the local player's eyes)
             l.set_viewer(Some(local));
         }
+        let house_colours = loaded.house_radar_colours(&game.world);
         let radar = Radar::new(
             &game.world,
             loaded.map.theater,
             &loaded.tile_colours,
-            loaded.house_radar_colours(&game.world),
+            house_colours.clone(),
             loaded.neutral_radar_colour(),
         );
         let speed = game.world.game_speed;
@@ -282,6 +286,7 @@ impl Session {
             cursor_shown: None,
             mods: Modifiers::default(),
             clock_ms: 0,
+            house_colours,
             targets: Targets::new(),
             pause_targets: Targets::new(),
             problems: Vec::new(),
@@ -1009,6 +1014,27 @@ impl Session {
             };
             brackets(&mut d, cx, cy, hw, hh);
         }
+        // spec: S-0610 claims 10 and 11 (the hostile-intent lines the local player's psychic sensors show: from the unit's firing point to its target's aim point or to its destination, a 3 × 3 square in the unit owner's house colour at both ends, the dashes moving with real time)
+        let phase = (self.clock_ms / DASH_MS).rem_euclid(2 * DASH) as i32;
+        for l in glasnost_sim::psychic::intent_lines(w, self.play.local) {
+            let screen = |p: glasnost_sim::world::Pos| {
+                let (qx, qy) = project_lifted(p.x, p.y, p.z);
+                world_to_screen(qx, qy)
+            };
+            let (a, b) = (screen(l.from), screen(l.to));
+            let [r, g, bl] = l
+                .owner
+                .and_then(|h| self.house_colours.get(usize::from(h.0)))
+                .copied()
+                .unwrap_or([255, 255, 255]);
+            dashed(&mut d, a, b, phase, INTENT_INK, m);
+            for (x, y) in [a, b] {
+                let sq = Rect::new(x - 1, y - 1, 3, 3).intersect(&m);
+                if !sq.is_empty() {
+                    d.fill(sq, [r, g, bl, 255]);
+                }
+            }
+        }
         if let (Some(drag), Some(p)) = (self.drag, self.pointer)
             && drag.active
         {
@@ -1076,6 +1102,42 @@ fn diamond(d: &mut DrawList, x: i32, y: i32, rgba: [u8; 4], clip: Rect) {
         if !r.is_empty() {
             d.fill(r, rgba);
         }
+    }
+}
+
+/// The intent line's dash and gap length, pixels (our own look; S-0610
+/// claim 11 leaves the pattern open).
+// nocite: our own presentation of S-0610 claim 11's dash pattern
+const DASH: i64 = 4;
+/// Real milliseconds per pixel of dash movement (our own look).
+// nocite: our own presentation of S-0610 claim 11's real-time dash animation
+const DASH_MS: i64 = 60;
+/// The intent line's ink (our own; S-0610 open question on the line colour).
+// nocite: our own line colour, S-0610 leaves its animation unspecified
+const INTENT_INK: [u8; 4] = [230, 60, 60, 255];
+
+/// A dashed line from `a` to `b`: dashes of [`DASH`] pixels with gaps of the
+/// same length, shifted along the line by `phase` pixels; dashes outside
+/// `clip` are left out.
+fn dashed(d: &mut DrawList, a: (i32, i32), b: (i32, i32), phase: i32, rgba: [u8; 4], clip: Rect) {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len = dx.abs().max(dy.abs());
+    if len == 0 {
+        return;
+    }
+    let at = |t: i32| (a.0 + dx * t / len, a.1 + dy * t / len);
+    let step = 2 * DASH as i32;
+    let mut t = phase - step;
+    while t < len {
+        let (s, e) = (t.max(0), (t + DASH as i32).min(len));
+        if s < e {
+            let (p, q) = (at(s), at(e));
+            let inside = |(x, y): (i32, i32)| clip.contains(Point::new(x, y));
+            if inside(p) && inside(q) {
+                d.line(p, q, rgba);
+            }
+        }
+        t += step;
     }
 }
 
