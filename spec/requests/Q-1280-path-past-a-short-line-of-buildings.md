@@ -1,9 +1,9 @@
 ---
 id: Q-1280
 title: Does a unit find its way past a short line of buildings across its route?
-status: open
+status: answered
 related: [S-0212, S-0603, S-0605]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need
