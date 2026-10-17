@@ -2,7 +2,7 @@
 id: S-0605
 title: Infantry absorber (who may enter an absorbing building, entry, holding, release)
 topic: structures
-revision: 2
+revision: 3
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -21,9 +21,9 @@ units the building accepts and how its capacity is counted, how an entrant gets 
 in line, what happens in the tick an entrant goes inside, how passengers are held and who owns
 them, the owner's order that lets them out again while the building stands, what interrupts an
 entry, what ends an entrant's contact, the bio-reactor fate of a taken or released unit (claim
-16), and every event that changes the number of passengers. The stock data use this for
-infantry; the same rules with a few differences serve a building type that absorbs vehicles
-(claim 8). Skirmish only; network games and campaigns are out of scope.
+16), and every event that changes the number of passengers. Infantry absorbers are the case
+these rules are written for; the same rules with a few differences serve a building type that
+absorbs vehicles (claim 8). Skirmish only; network games and campaigns are out of scope.
 
 Neighbouring specs own the rest, and this spec does not repeat them:
 - the power each passenger gives, its health scaling, the house totals and when power is worked
@@ -281,7 +281,7 @@ S-0312 and S-0408 are made in the current drafts of those specs):
    - On *refuse*: its destination is cleared, it queues *guard* and it receives a forced scatter
      request (S-0208 claims 11 to 13).
 
-   No stock type is a vehicle absorber.
+   Whether any imported building type is a vehicle absorber is a question for the imported data. Claim 8 is tested on test data (scenario A8).
    - Backing: `measurable` (scenario A8, test data) for capacity re-check, boarding, passenger
      order, silent entry and refusal. `unmeasured` for bridge status, spin reset and controlled
      vehicle release on this path: no vehicle fixture here isolates those effects.
@@ -442,8 +442,8 @@ S-0312 and S-0408 are made in the current drafts of those specs):
     walks back in at its next *guard* processing when some building of its owner accepts it
     (Edge cases, `quirks.enter_nearest_survives_absorption`).
 
-    A victim that is a vehicle has only vehicle absorbers among its candidates, so with the
-    stock data it finds none. The decision's draw, its fate tables and its order of fates are
+    A victim that is a vehicle has only vehicle absorbers among its candidates, so the search
+    finds a building only where an imported building type is a vehicle absorber. The decision's draw, its fate tables and its order of fates are
     S-0601 claim 8's.
     - Backing: `measurable` (scenario A13, including variant (f)). The order of equal-distance
       candidates after a building has been removed from the list is measured by variant (f).
@@ -640,9 +640,10 @@ claim 3, including session-held rules-wide sounds.
 
 ## Measurement scenarios
 
-Use a small purpose-made skirmish map, normal game speed, director and mods off. Stock data
-apply except explicitly named data-only test variants. The stock infantry absorber is the Yuri
-faction's power building; "fill it" means bringing it to its imported capacity. Use scripted input
+Use a small purpose-made skirmish map, normal game speed, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Stock data
+apply except named test files (data-only test variants). Where a scenario uses a stock infantry
+absorber, it is a stock building type whose imported infantry-absorb flag is set; "fill it"
+means bringing it to its imported capacity. Use scripted input
 and a read-only recorder for ticks, unit positions, owners, health, experience, current and queued
 behaviours, destinations, contacts, passenger counts, crate infantry counts, house power and
 scenario random-stream state. Capture audio and images for sounds, pips and animation. Run each
