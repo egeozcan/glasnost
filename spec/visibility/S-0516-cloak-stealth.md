@@ -2,7 +2,7 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1169,8 +1169,7 @@ F6, owner's disguise cycle (integers):
 
 ## Measurement scenarios
 
-All scenarios use the measurement setup, game-speed index 2, 800 × 600 pixels, director off,
-mods and engine add-ons off, and a small purpose-made skirmish map. One bystander computer player
+All scenarios use the measurement setup, game-speed index 2, 800 × 600 pixels, no engine add-on and no mods (the named test files of a scenario excepted), and a small purpose-made skirmish map. One bystander computer player
 is kept outside the observed area under the glossary's void rule. Named fixture **CS-fixture**
 means that map's temporary override sections: only the abilities, weapons, radii, timing fields
 or health conditions explicitly required by a sub-test are changed, with other data stock.

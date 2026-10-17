@@ -71,7 +71,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 24 | approved | — |
 | [S-0616](combat/S-0616-particle-systems.md) | Particle systems (smoke, fire, spark, railgun) | combat | 4 | approved | — |
 | [S-0601](combat/S-0601-mind-control.md) | Mind control | combat | 16 | approved | — |
-| [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 10 | approved | — |
 | [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 8 | approved | — |
 | [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 11 | approved | — |
 | [S-0003](rules-import/S-0003-ini-value-forms.md) | INI value forms | rules-import | 19 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0504](movement/S-0504-naval-units.md) | Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards) | movement | 19 | approved | — |
 | [S-0518](combat/S-0518-linked-weapons.md) | Linked weapons (prism support beams, charging of overpowerable buildings) | combat | 5 | approved | — |
 | [S-0517](combat/S-0517-deployable-units.md) | Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing) | combat | 9 | approved | — |
+| [S-0516](visibility/S-0516-cloak-stealth.md) | Cloak and stealth (cloaking, cloak fields, sensors, disguise) | visibility | 11 | approved | — |
