@@ -1,9 +1,9 @@
 ---
 id: Q-1155
 title: Successors of a particle whose kind differs from its system's kind
-status: open
+status: answered
 related: [S-0616, S-0613]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need
