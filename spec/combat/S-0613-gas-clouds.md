@@ -2,7 +2,7 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -57,7 +57,8 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
   (claim 15). It selects the drawn frame and can end the particle. Not the resource stage of
   S-0401.
 - **Successor.** The particle that replaces a dead particle whose type names a next particle type
-  (claim 7).
+  (claim 7). The rule of claim 7 is the gas kind's; successors of the other
+  kinds are S-0616 claim 8.
 - **Object number.** S-0306 (Terms): the number our engine gives each object at creation from its
   own counter. A particle gets one like any other object.
 - **Terrain height** *H*(*x*, *y*). The terrain surface height of S-0106 claims 2 and 3 at a
@@ -170,9 +171,11 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    - Backing: `measurable` (G5 for lifetime, successor and turn timing; G6 for draw order).
    - Confidence: high
 
-7. **Successor.** When a dead particle's type names a next particle type, a particle of that type
+7. **Successor.** When a dead gas particle's type names a next particle type, a particle of that type
    is created (claim 5, including its creation draws) at the dead particle's position plus the type's
-   next-particle displacement (leptons, per axis). It then takes the dead particle's velocity. Successors
+   next-particle displacement (leptons, per axis). It then takes the dead particle's velocity. This one successor
+   with the dead particle's velocity is the gas kind's rule; the successors of the other kinds are
+   S-0616 claim 8. Successors
    are created in the second pass, so their draws come after all the update draws of that turn.
    - Backing: `measurable` (scenario G5)
    - Confidence: high
@@ -481,8 +484,9 @@ Ordering consequences:
 ## Edge cases and quirks
 
 - **Short wind step** (`quirks.wind_southeast_short`, default on). Direction 3 pushes 1 lepton in *x*
-  instead of 2, unlike its mirror direction 5. Off: Δₓ = 2 for direction 3. It affects only gas
-  types with a wind effect, and none have one in stock data.
+  instead of 2, unlike its mirror direction 5. Off: Δₓ = 2 for direction 3. It is gas-only: smoke has its own wind table
+  (S-0616 claim 7), so it does not apply to smoke. It affects only gas
+  types with a wind effect.
 - **Particle stage parity.** The original takes the parity in F8 from its own object identifier.
   Our object number (Terms) has a different sequence, so which clouds advance with period *A* and which with
   *A* + 1 can differ from the original. This is a known departure of the same kind as S-0306's
@@ -547,7 +551,7 @@ Ordering consequences:
 ## Measurement scenarios
 
 All under the measurement setup (glossary): stock data except explicitly named test files,
-engine add-ons, director and unrelated mods off, skirmish, game speed index 2, 800×600, a small
+engine add-ons and unrelated mods off, skirmish, game speed index 2, 800×600, a small
 flat purpose-made map unless stated. Use one bystander computer player kept away from the
 observed cells under the glossary's void rule. Run each deterministic variant three times,
 statistical variants name their run counts below. Record the original's random state rather
