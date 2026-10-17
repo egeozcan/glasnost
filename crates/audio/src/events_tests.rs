@@ -1815,3 +1815,77 @@ fn psychic_reveal_sound() {
     a.tick(&w, &fx, &mut u);
     assert_eq!(heard(&mut a, 0), ["Whisper"]);
 }
+
+/// A spin effect of `id`.
+fn spin_fx(id: ObjectId, event: glasnost_sim::gattling::SpinEvent) -> Effect {
+    Effect::Spin {
+        id,
+        event,
+        pos: Some(Pos::centre(testkit::mid(SIZE, 0, 0), 0)),
+    }
+}
+
+// spec: S-0609 claim 13 (one draw per spin sound start: at a spin-up with the mark clear, again at a stage rise and after a spin-down or leaving the map; none at a spin-up that raises nothing while the mark is set, none for an empty report list or an empty slot, which leave the mark clear; no per-shot report)
+#[test]
+fn spin_sound_draws() {
+    use glasnost_sim::gattling::SpinEvent;
+    let mut w = world();
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, 0, 0);
+    let gun = veterancy::type_combat(&w, tank)
+        .and_then(|c| c.slots[0])
+        .expect("gun");
+    let name = w.rules().combat.weapon(gun).name.clone();
+    let mut a = audio(&w, &["Spin0", "Spin1"]);
+    let mut n = SoundNames::default();
+    n.set_report(&name, &["Spin0", "Spin1"]);
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    let up = |raised| SpinEvent::Up {
+        raised,
+        weapon: Some(gun),
+    };
+    // A gattling firer's shot: no report, no draw.
+    let shot = Effect::Shot {
+        firer: tank,
+        weapon: gun,
+        from: Pos::centre(testkit::mid(SIZE, 0, 0), 0),
+        report: 4,
+        gattling: true,
+    };
+    a.tick(&w, &[shot], &mut u);
+    assert_eq!(u.taken(), 0);
+    assert!(heard(&mut a, 0).is_empty());
+    let steps: [(SpinEvent, u64); 9] = [
+        (up(false), 1),
+        (up(false), 1),
+        (up(true), 2),
+        (up(false), 2),
+        (SpinEvent::Down, 2),
+        (up(false), 3),
+        (SpinEvent::Left, 3),
+        (up(false), 4),
+        (up(false), 4),
+    ];
+    for (k, (e, want)) in steps.into_iter().enumerate() {
+        a.tick(&w, &[spin_fx(tank, e)], &mut u);
+        assert_eq!(u.taken(), want, "step {k}: {e:?}");
+    }
+    assert_eq!(heard(&mut a, 100).len(), 1, "one spin sound at a time");
+    // An empty slot: no draw, and the mark stays clear.
+    a.tick(&w, &[spin_fx(tank, SpinEvent::Down)], &mut u);
+    let empty = SpinEvent::Up {
+        raised: false,
+        weapon: None,
+    };
+    a.tick(&w, &[spin_fx(tank, empty)], &mut u);
+    assert_eq!(u.taken(), 4);
+    a.tick(&w, &[spin_fx(tank, up(false))], &mut u);
+    assert_eq!(u.taken(), 5, "the mark was left clear");
+    // A weapon without a report list: likewise.
+    let mut a = audio(&w, &["Spin0"]);
+    let mut u = Rng::new(1);
+    a.tick(&w, &[spin_fx(tank, up(false))], &mut u);
+    a.tick(&w, &[spin_fx(tank, up(true))], &mut u);
+    assert_eq!(u.taken(), 0);
+    assert!(heard(&mut a, 0).is_empty());
+}

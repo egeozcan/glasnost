@@ -598,20 +598,19 @@ impl Audio {
                 }
                 let name = weapon.map(|x| w.rules().combat.weapon(x).name.clone());
                 let list = name.map(|n| self.names.report(&n).to_vec()).unwrap_or_default();
-                if list.is_empty() {
+                // spec: S-0609 claim 13 (one raw value of the unsynchronised stream picks the entry, S-0701 claim 21 and F5, which takes none for an empty list)
+                let Some(entry) = self.choose(&list, unsync) else {
                     // spec: S-0609 claim 13 and Edge cases (an empty report list, or an empty slot 2s: nothing started, no draw, the mark stays clear)
                     self.spins.insert(id, (false, last));
                     return;
-                }
+                };
                 // spec: S-0609 claim 13 (starting stops any spin sound of the object still playing)
                 if let Some(i) = last {
                     self.mixer.stop(i);
                 }
-                // spec: S-0609 claim 13 (one raw value of the unsynchronised stream picks the entry, S-0701 claim 21 and F5; positional, following the object, any owner)
+                // spec: S-0609 claim 13 (positional, following the object, for any owner; whether it is heard is S-0701's)
                 let at = pos.unwrap_or_default();
-                let inst = self
-                    .choose(&list, unsync)
-                    .and_then(|e| self.request(Some(w), e, Where::Attached { anchor, pos: at }, FULL));
+                let inst = self.request(Some(w), entry, Where::Attached { anchor, pos: at }, FULL);
                 // spec: S-0609 claim 13 (starting sets the playing mark)
                 self.spins.insert(id, (true, inst));
             }
