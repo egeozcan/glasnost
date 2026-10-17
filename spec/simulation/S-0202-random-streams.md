@@ -2,7 +2,7 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -907,6 +907,13 @@ original's recording modes are retained as deferred context, not implementation 
     existing animation-particle system. Particles do not take the
     infantry/vehicle/aircraft/building creation draw of claim 10.
 
+    The table below belongs to the particle itself, so it applies to every creator of a
+    particle, not only to an animation's middle event: a particle made by a particle system's
+    emission, spark burst or railgun line (S-0616 claims 9, 11, 15 and 17), by a smoke
+    successor (S-0616 claim 8), or by a gas-behaviour particle's successor creation (S-0613
+    claims 5 and 7) takes the same draws in the same order. The owning spec places the group
+    among its own draws.
+
     | Condition | Draw and form |
     |---|---|
     | Smoke particle behaviour | One raw value, signed remainder modulo 2, for a starting-speed variation. |
@@ -980,11 +987,17 @@ original's recording modes are retained as deferred context, not implementation 
       terrain, overlay, occupation and theater variants, not every possible map state.
       Independence from every creator is also `unmeasured` beyond the tile, overlay,
       weapon and trigger fixtures in R14: it gives no teleport-, death- or debris-created
-      fixture. The corresponding event composition is still required for those creators
+      fixture. The corresponding event composition is still required for those creators.
+      The table's application to the other creators named in the paragraph above (emission,
+      spark burst, railgun line, smoke successor and gas-behaviour successor) is `measurable`
+      by the closing part of R14 A, and the gas lifetime draw is also checked by
+      S-0613's scenario G5. Until that scenario has been run, the application to those
+      creators rests on the owning specs' draw descriptions.
     - Confidence: high for particle draw forms, gates and order, smudge candidate preferences
       and data-stream ordering, the phase-independent event composition and terrain-height
       test; medium for absence of further placement draws and conditional
-      resource-removal recalculation composition
+      resource-removal recalculation composition; medium for the table's application to the
+      other creators named in the paragraph above
 
 16. **Post-game winner-score draws.** Preparing the skirmish result statistics after simulation
     has stopped takes one scenario-stream ranged request per undefeated listed house, in
@@ -1796,6 +1809,15 @@ The recorder is part of the measurement setup (the project lead has approved it)
     Any extra/missing raw value, different ordering, or choice from the pre-particle state
     falsifies the rule. The field-1 case still consumes its raw lifetime value despite a
     constant remainder. Do not run the original's zero-divisor crash case.
+    Creators other than an animation's middle event (claim 15, the paragraph on every creator
+    of a particle): in the same map, with the same recorder, one run each for a smoke emitter
+    with a held type, a spark burst, a railgun line, a smoke successor and a gas-behaviour
+    successor. Give each creator's particle type lifetime field 7 and one nonempty colour list
+    with one nonblack component. Observable: the raw values each creation takes, by the taking
+    object, and each particle's lifetime and colour. Expected: each particle's draws are those
+    of the table in table order (smoke speed, then lifetime, then colour), from the state left
+    by the creator's own earlier draws. Falsified by any extra, missing or reordered raw value,
+    or by a lifetime or colour result that the table does not give.
   - **B, smudges.** The test list gives each kind two 1 × 1 types and two 2 × 2 types, in
     known registration order. Place on flat morphable ground with no overlay or smudge at
     the animation position. Use test middle-frame visible bounds 60 × 51, 61 × 50 and
