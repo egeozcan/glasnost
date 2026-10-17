@@ -269,7 +269,11 @@ impl Brain {
             let sensors = self.special_uses().sensors;
             self.build_sensor(w, &mut out);
             if self.special_uses().sensors == sensors && !self.build_grinder(w, &mut out) {
+                let defences = self.special_uses().gattling_defences;
                 self.build_gattling_defence(w, &mut out);
+                if self.special_uses().gattling_defences == defences {
+                    self.build_bunker(w, &mut out);
+                }
             }
         }
         if w.tick % THINK_PERIOD == 0 {
@@ -387,6 +391,28 @@ impl Brain {
             out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
             out.push(Order::Build { what: t });
             self.special.count_gattling_defence();
+        }
+    }
+
+    /// Builds a tank bunker (S-0606, [`crate::bunker::build_type`]) as a
+    /// person adds base defences, under the same conditions as the gattling
+    /// defence (and not in a think that ordered one).
+    fn build_bunker(&mut self, w: &World, out: &mut Vec<Order>) {
+        let climb = |t: &TypeRef| t.kind == Kind::Building && scripted::role_of(w, *t).is_none();
+        let giving = |t: &TypeRef| !Self::giving_kinds(w, t.index).is_empty();
+        if self.script.selling()
+            || !self.script.harvesters_kept(w)
+            || out.iter().any(|o| {
+                matches!(o, Order::Place { .. })
+                    || matches!(o, Order::Build { what } if what.kind == Kind::Building && (!climb(what) || giving(what)))
+            })
+        {
+            return;
+        }
+        if let Some(t) = crate::bunker::build_type(&self.script, w) {
+            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            out.push(Order::Build { what: t });
+            self.special.count_bunker_build();
         }
     }
 
