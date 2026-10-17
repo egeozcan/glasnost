@@ -2,13 +2,13 @@
 id: S-0509
 title: Engineers and capture
 topic: structures
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-17
 measurements: []
-requests: []
+requests: [Q-1203]
 supersedes: []
 ---
 
@@ -253,7 +253,8 @@ Neighbouring specs own the rest:
 
     Capture/loss announcements are eligible only when the local player is the old or new owner,
     the new owner's country is not passive, and the cause of the transfer requests an announcement.
-    Engineer capture (claim 8) and vehicle-like takeover (claim 17) request one. Trigger owner
+    Engineer capture (claim 8), vehicle-like takeover (claim 17) and the mind-control takeover
+    and release of a building (S-0601 claims 6 and 9) request one. Trigger owner
     changes (S-0011 claim 24) and occupation ownership changes (S-0508 claims 7 and 8) do not.
     Occupation's own garrison/abandonment feedback is separate (S-0508 claims 6 and 8).
     Eligibility is not a promise of audible playback: S-0701 claim 39 owns the further selection
@@ -261,7 +262,9 @@ Neighbouring specs own the rest:
 
     - Backing: `measurable` (E14) for announcement eligibility in its tested transfers.
       `unmeasured` for passive new owners and transfers between two non-local houses, which E14
-      does not independently arrange. The dependency index is `unmeasured` here, not an additional
+      does not independently arrange. The mind-control takeover and release are not among E14's
+      transfers: their eligibility is backed by S-0601 claims 6 and 9 (its MC9 scenario), and is
+      `unmeasured` here. The dependency index is `unmeasured` here, not an additional
       claim of independent confirmation; the owning claims specify their actual rules and tests.
     - Confidence: high (announcement eligibility); medium (completeness of this index)
 

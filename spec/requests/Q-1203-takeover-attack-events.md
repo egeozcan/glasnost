@@ -3,7 +3,7 @@ id: Q-1203
 title: The attack events of a takeover hit, their order and how they are judged
 status: answered
 related: [S-0601, S-0011]
-answered-by: [S-0601]
+answered-by: [S-0601, S-0509]
 ---
 
 ## Need
