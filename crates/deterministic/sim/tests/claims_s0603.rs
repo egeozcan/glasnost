@@ -1087,7 +1087,7 @@ fn run_s_shifts_with_the_switch_on() {
     assert_eq!(fails, vec![(7, 0), (7, 1), (9, 0)]);
 }
 
-// spec: S-0603 claim 3 and S-0212 claim 23 row 2 and Departure D5 (an entrant whose approach search failed more than 1 cell from the building gives up: its destination is cleared and it queues guard, an AI house's unit as a human-controlled one); Q-1157 interim (the queued guard starts by S-0215's ordinary rules: it is current in the failure tick and 10 ticks later)
+// spec: S-0603 claim 3 and S-0212 claim 23 row 2 and Departure D5 (an entrant whose approach search failed more than 1 cell from the building gives up: its destination is cleared and it queues guard, an AI house's unit as a human-controlled one); revision 6, Q-1157 answered (eaten does not hold the queued guard back: a unit idle at the order is ready at the failing tick's late start, so guard is current at the end of that tick, nothing queued, and still 10 ticks later; scenario G9)
 #[test]
 fn claim_3_failed_approach_gives_up() {
     for infantry in [false, true] {

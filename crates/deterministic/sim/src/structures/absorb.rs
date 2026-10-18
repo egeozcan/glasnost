@@ -236,7 +236,21 @@ fn give_up_contact(w: &mut World, u: ObjectId) {
 fn set_waiting(w: &mut World, u: ObjectId, b: Option<ObjectId>) {
     if let Some(ob) = w.obj_mut(u) {
         ob.structure.waiting = b;
+        if b.is_some() {
+            // spec: S-0605 claim 4 and Terms, remembered entry object (setting up the wait clears any object the actor remembered entering; in our engine only S-0314 claim 23's depot is one)
+            ob.depot.entering = None;
+        }
     }
+}
+
+/// Claim 3's start of a wait: destination cleared, the building named in
+/// the waiting line, not told to walk yet.
+fn start_waiting(w: &mut World, u: ObjectId, b: ObjectId) {
+    crate::econ::assign_destination(w, u, None);
+    if let Some(ob) = w.obj_mut(u) {
+        ob.path.steps.clear();
+    }
+    set_waiting(w, u, Some(b));
 }
 
 // ---------------------------------------------------------------------------
@@ -249,13 +263,14 @@ fn seek_contact(w: &mut World, u: ObjectId, b: ObjectId) {
     if w.obj(u).is_none_or(|o| o.contact.is_some()) {
         return;
     }
+    if w.obj(u).is_some_and(|o| o.kind == Kind::Vehicle) && vehicle_absorber(w, b) {
+        // spec: S-0605 claim 3 (a vehicle ordered in to a vehicle absorber, or assigned one by claim 16's fate, always starts waiting in line for it, whether or not the building holds contact: no destination and no contact, no remembered entry object, and no contact request; claim 4's approach and retry follow)
+        start_waiting(w, u, b);
+        return;
+    }
     if !contacts(w, b).is_empty() {
         // spec: S-0605 claim 3 (the building already holds any contact, whatever the number of link places: waiting in line, destination cleared, not told to walk yet)
-        crate::econ::assign_destination(w, u, None);
-        if let Some(ob) = w.obj_mut(u) {
-            ob.path.steps.clear();
-        }
-        set_waiting(w, u, Some(b));
+        start_waiting(w, u, b);
         return;
     }
     if !grants_contact(w, b, u) {
@@ -306,6 +321,10 @@ pub fn waiting_turn(w: &mut World, u: ObjectId) {
         contact_outlived(w, u);
     }
     let Some(b) = waiting_for(w, u) else { return };
+    // spec: S-0605 claim 3 and scenario A13 (g) (a vehicle victim put in line by claim 16's fate sends no contact request in the tick of the release; its first request is a later update's retry)
+    if w.obj(u).is_some_and(|o| o.structure.fate_tick == Some(w.tick)) {
+        return;
+    }
     // spec: S-0605 claim 4 (a building that has left the game ends the wait)
     if w.obj(b).is_none_or(|o| !o.on_map) {
         set_waiting(w, u, None);
@@ -359,11 +378,12 @@ fn contact_outlived(w: &mut World, u: ObjectId) {
 }
 
 /// The absorbing building an actor's contact is, if any. An enter order on
-/// a building does not make an actor remember an entry object (claims 4
-/// and 5), so the contact is the only partner of S-0215 claim 29's request.
+/// an absorbing building does not make an actor remember an entry object
+/// (claims 4 and 5), so the contact is the only partner of S-0215 claim
+/// 29's request.
 fn partner(w: &World, u: ObjectId) -> Option<ObjectId> {
     let o = w.obj(u)?;
-    // spec: S-0605 claims 4 and 5 and S-0215 claim 29 (the request goes to the contact; an enter order on a building leaves no remembered entry object)
+    // spec: S-0605 claims 4 and 5 and S-0215 claim 29 (the request goes to the contact; an enter order on an absorbing building leaves no remembered entry object)
     o.contact.filter(|&k| is_absorber(w, k))
 }
 
@@ -996,7 +1016,14 @@ pub fn bio_reactor_fate(w: &mut World, u: ObjectId) -> bool {
     if w.obj(u).is_none_or(|o| !o.on_map || o.owner.is_none()) {
         return false;
     }
-    search_and_go(w, u)
+    let found = search_and_go(w, u);
+    if w.obj(u).is_some_and(|o| o.kind == Kind::Vehicle) && waiting_for(w, u).is_some() {
+        let t = w.tick;
+        if let Some(ob) = w.obj_mut(u) {
+            ob.structure.fate_tick = Some(t);
+        }
+    }
+    found
 }
 
 /// The *guard* or *area guard* processing of an actor that holds the

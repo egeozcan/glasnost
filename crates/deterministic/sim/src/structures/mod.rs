@@ -51,6 +51,11 @@ pub struct StructState {
     /// while held, every *guard* and *area guard* processing searches again
     /// (S-0215 claims 24 and 26 row 3).
     pub enter_nearest: bool,
+    /// The tick in which claim 16's fate put this vehicle in line for a
+    /// vehicle absorber: it sends no contact request in that tick (S-0605
+    /// claim 3).
+    #[serde(default)]
+    pub fate_tick: Option<i32>,
     /// A tank bunker's entry stage (S-0606 Terms, table S1); *clearing*
     /// when it takes in no vehicle.
     #[serde(default)]
