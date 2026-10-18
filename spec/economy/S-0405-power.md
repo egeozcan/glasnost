@@ -2,11 +2,11 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0180, Q-0224, Q-0276]
 supersedes: []
@@ -430,13 +430,18 @@ house's own update in a tick, which comes after the turn pass and before orders 
     The cell-entry rule reads the vehicle type's powered-unit flag, while enabling and disabling at
     the count's transitions read only the control centre's powered unit; the two need not agree
     (Edge cases).
-    - Backing: `measurable` (scenario W8, parts a to i; part h for off-map vehicles at disabling).
+    Disabling under this claim is the only way a vehicle in play enters the *deactivated*
+    state used by S-0616 claim 1 for deactivated-vehicle sparks. An electromagnetic pulse,
+    paralysis or being without a driver does not by itself enter that state; those conditions
+    may coexist with it. S-0616 claim 1 owns the sparks and their timing.
+    - Backing: `measurable` (scenario W8, parts a to i, part h for off-map vehicles at disabling,
+      S-0616 scenarios P1 and P23 for the deactivated-vehicle sparks).
       Hover effects inherit the backing and confidence of S-0503 claims 8 and 10–11, with
       scenario H7 there testing ordinary disabling, settling, spin, residual travel and water loss.
       `unmeasured` for off-map vehicles at enabling and for loss or owner-change transitions
       (W8 tests disabling off-map and switch transitions only; no scenario part covers these
       other cases).
-    - Confidence: medium (the count and its two transitions), low (the cell-entry rule and its
+    - Confidence: medium (the count and its two transitions, the deactivated-state distinction), low (the cell-entry rule and its
       building exception)
 
 14. **Spy satellite.** The map reveal of a spy satellite (S-0409 owns it) does not depend on
