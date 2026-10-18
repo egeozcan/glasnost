@@ -1,9 +1,9 @@
 ---
 id: Q-1158
 title: S-0314 claim 23 revision 25 for a docked vehicle's enter order on its own depot, and who gives the destination when the repeated request takes a free place
-status: open
+status: answered
 related: [S-0314, S-0215]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need
