@@ -2,11 +2,11 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244]
 supersedes: []
@@ -57,8 +57,9 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
   (claim 15). It selects the drawn frame and can end the particle. Not the resource stage of
   S-0401.
 - **Successor.** The particle that replaces a dead particle whose type names a next particle type
-  (claim 7). The rule of claim 7 is the gas kind's; successors of the other
-  kinds are S-0616 claim 8.
+  (claim 7). Which rule applies follows the kind of the system that holds the dead particle
+  (S-0616 claim 3), not the particle's own kind: in a gas system claim 7's one successor, in a smoke system
+  S-0616 claim 8's two, and in a fire, spark or railgun system none.
 - **Object number.** S-0306 (Terms): the number our engine gives each object at creation from its
   own counter. A particle gets one like any other object.
 - **Terrain height** *H*(*x*, *y*). The terrain surface height of S-0106 claims 2 and 3 at a
@@ -173,13 +174,15 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    - Backing: `measurable` (G5 for lifetime, successor and turn timing; G6 for draw order).
    - Confidence: high
 
-7. **Successor.** When a dead gas particle's type names a next particle type, a particle of that type
-   is created (claim 5, including its creation draws) at the dead particle's position plus the type's
-   next-particle displacement (leptons, per axis). It then takes the dead particle's velocity. This one successor
-   with the dead particle's velocity is the gas kind's rule; the successors of the other kinds are
-   S-0616 claim 8. Successors
+7. **Successor.** When a dead particle of any kind in a gas system has a type that names a next particle
+   type, one particle of that type is created (claim 5, including its creation draws) at the dead
+   particle's position plus the type's next-particle displacement (leptons, per axis). It then takes
+   the dead particle's velocity. The system's kind decides, not the particle's: a smoke
+   particle dying in a gas system gets this one successor, and a gas particle dying in a smoke system
+   gets S-0616 claim 8's two (mixed-kind rule: S-0616 claim 3). Successors
    are created in the second pass, so their draws come after all the update draws of that turn.
-   - Backing: `measurable` (scenario G5)
+   - Backing: `measurable` (scenario G5 for the gas-to-gas case; S-0616 scenario P3, part c, for the
+     smoke-in-gas and gas-in-smoke cases)
    - Confidence: high
 
 ### Gas particle motion
