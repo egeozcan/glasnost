@@ -86,8 +86,11 @@ pub const M6C_TICKS: i32 = 12_000;
 /// seed 3 played all its ticks in each of the three sweeps of that step.
 /// At M7a step 3.6 (S-0603: a grinder, and badly damaged hulks for it) seed
 /// 3 still plays all its ticks, with every counter at least 3 but the
-/// sensor orders' 2, and is kept.
-pub const M7A_SEED: u32 = 3;
+/// sensor orders' 2, and is kept. Moved from 3 to 1 at M7a step 1n: since
+/// step 1m (S-0607 revision 3) Alpha wins seed 3 at tick 11 222; seed 1,
+/// the lowest that plays all its ticks, has every counter at least 3 but
+/// the sensor orders' 2.
+pub const M7A_SEED: u32 = 1;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;
