@@ -336,6 +336,12 @@ struct LiveAnim {
     /// Its carrier's house name and the cell light sampled when it was
     /// attached (S-0522 claim 18).
     carrier: Option<(Vec<u8>, i32)>,
+    /// The burning walker it shows (S-0615 claims 4 to 11), if any: its
+    /// position and image frame are the simulation's walker's.
+    walker: Option<ObjectId>,
+    /// The image frame a burning walker shows (S-0615 F1, or its expiring
+    /// stage), in place of the playback's.
+    frame: Option<i32>,
 }
 
 /// What playback asks of the live game: the follow-up types, the
@@ -993,6 +999,8 @@ impl Live {
             first_update,
             owner: None,
             carrier: None,
+            walker: None,
+            frame: None,
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
         sprite
@@ -1091,6 +1099,29 @@ impl Live {
 
     /// Every playing animation's update of tick `now` (S-0109 claim 5: one
     /// update per tick from its first); ended ones leave.
+    /// The burning walkers (S-0615 claims 4 to 11): each drawn animation
+    /// takes its walker's position and image frame; one whose walker has
+    /// been removed disappears.
+    fn follow_walkers(&mut self) {
+        let world = &self.world;
+        let rules = &self.rules;
+        let table = rules.quirks.table_direction;
+        self.anims.retain_mut(|a| {
+            let Some(id) = a.walker else { return true };
+            let Some(wk) = world.walkers.get(&id) else {
+                return false;
+            };
+            a.pos = wk.pos;
+            let r = rules
+                .animations
+                .get(wk.anim as usize)
+                .map_or(0, |t| t.running_frames);
+            // spec: S-0615 claim 4 and F1 (the running frame; claim 11: the expiring stage)
+            a.frame = Some(glasnost_sim::walker::frame(wk, r, world.tick, table));
+            true
+        });
+    }
+
     fn update_anims(&mut self, now: i32) {
         let speed = self.world.game_speed;
         let mut env = AnimEnv {
@@ -1101,7 +1132,8 @@ impl Live {
         };
         let q = AnimQuirks::default();
         self.anims.retain_mut(|a| {
-            if now < a.first_update {
+            // spec: S-0615 claim 4 (a burning walker replaces S-0109's playback)
+            if now < a.first_update || a.walker.is_some() {
                 return true;
             }
             let before = a.player.name.clone();
@@ -1160,7 +1192,24 @@ impl Live {
                 }
             }
         }
+        for e in &effects {
+            if let Effect::Walker {
+                id,
+                name,
+                pos,
+                made: true,
+            } = e
+            {
+                self.counts.anims += 1;
+                let serial = self.anim_serial;
+                self.create_anim(&name_bytes(name), *pos, now, None, false);
+                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    a.walker = Some(*id);
+                }
+            }
+        }
         self.follow_owners();
+        self.follow_walkers();
         self.update_anims(now);
         for e in effects {
             if let Effect::SupportBeam {
@@ -1168,6 +1217,21 @@ impl Live {
             } = e
             {
                 // S-0518 claim 6: a support beam, drawn as nine marks from the supporter to the master for its duration.
+                let (a, b) = (at(from), at(to));
+                for i in 0..=8 {
+                    self.transients.push(Transient {
+                        kind: TransientKind::Beam(duration.max(1)),
+                        at: (a.0 + (b.0 - a.0) * i / 8, a.1 + (b.1 - a.1) * i / 8),
+                        born: now,
+                    });
+                }
+                continue;
+            }
+            if let Effect::Beam {
+                from, to, duration, ..
+            } = e
+            {
+                // S-0615 claims 15 and 16: a disc laser beam, drawn as nine marks for its duration (the beam's look is an open question of S-0615).
                 let (a, b) = (at(from), at(to));
                 for i in 0..=8 {
                     self.transients.push(Transient {
@@ -1215,7 +1279,10 @@ impl Live {
                 | Effect::SpecialAnims { .. }
                 | Effect::Bunkered { .. }
                 | Effect::Seized { .. }
-                | Effect::Dropped { .. } => continue,
+                | Effect::Dropped { .. }
+                | Effect::Disc { .. }
+                | Effect::Beam { .. }
+                | Effect::Walker { .. } => continue,
             };
             self.transients.push(Transient {
                 kind,
@@ -1530,7 +1597,7 @@ impl Live {
                     a.layer,
                     AnimDraw {
                         idx: e.idx,
-                        frame: a.player.frame(),
+                        frame: a.frame.unwrap_or_else(|| a.player.frame()),
                         stage: a.player.stage(),
                         end: a.player.play.end,
                         pos: (a.pos.x, a.pos.y, a.pos.z),

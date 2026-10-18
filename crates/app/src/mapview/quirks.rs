@@ -263,10 +263,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     // S-0109
     (
-        "anim_damage_starts_at_one",
-        "S-0109 claim 17: animation damage over time is simulation state and is not modelled",
-    ),
-    (
         "anim_hide_at_level_15",
         "S-0109 claim 20: only building slot animations have a translucency level t > 0, and they are not played (the played animations have t = 0)",
     ),

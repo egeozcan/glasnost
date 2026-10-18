@@ -654,3 +654,68 @@ fn counts_particle_systems_by_kind_and_emitters() {
     assert_eq!(tally.emitters, [1, 0, 0]);
     assert!(tally.particles_max >= 1);
 }
+
+// spec: S-0615 claims 4, 12, 14 and 16 (the lane counts burning walkers as they appear, and disc-laser shots, final-step hits and cancellations from their events)
+#[test]
+fn counts_burning_walkers_and_disc_lasers() {
+    use glasnost_sim::combat::effects::{DiscEvent, Effect};
+    let mut r = fixture::ruleset();
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push("BURN".into());
+    r.sim.animations.insert(
+        "BURN".into(),
+        glasnost_rules::sim::AnimationType {
+            frame_count: Some(80),
+            is_flaming_guy: Some(true),
+            running_frames: Some(4),
+            ..Default::default()
+        },
+    );
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-tally"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-skirmish",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the synthetic skirmish loads");
+    let mut tally = Tally::default();
+    g.step();
+    tally.observe(&g.world);
+    assert_eq!(tally.walkers, 0);
+    let anim = g
+        .world
+        .rules()
+        .animations
+        .iter()
+        .position(|a| a.name == "BURN")
+        .unwrap() as u32;
+    let at = glasnost_sim::world::Pos::centre(fixture::at(3, 3), 0);
+    glasnost_sim::walker::create(&mut g.world, anim, at);
+    glasnost_sim::walker::create(&mut g.world, anim, at);
+    tally.observe(&g.world);
+    tally.observe(&g.world);
+    assert_eq!(tally.walkers, 2, "each walker once");
+    let disc = |event| Effect::Disc {
+        firer: glasnost_sim::world::ObjectId(1),
+        weapon: 0,
+        event,
+        pos: at,
+    };
+    for e in [
+        disc(DiscEvent::Shot),
+        disc(DiscEvent::ChargeUp { sound: None }),
+        disc(DiscEvent::Shot),
+        disc(DiscEvent::Cancelled),
+        disc(DiscEvent::Hit { report: 0 }),
+    ] {
+        tally.effect(&e);
+    }
+    assert_eq!(
+        (tally.disc_shots, tally.disc_hits, tally.disc_cancelled),
+        (2, 1, 1)
+    );
+}

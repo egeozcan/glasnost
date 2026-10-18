@@ -161,7 +161,11 @@ async fn smoke_async(
                 // The tick's combat events, counted and then dropped (nothing draws them here).
                 for e in w.effects.drain(..) {
                     match e {
-                        Effect::Shot { .. } => fight[0] += 1,
+                        Effect::Shot { .. }
+                        | Effect::Disc {
+                            event: glasnost_sim::combat::effects::DiscEvent::Shot,
+                            ..
+                        } => fight[0] += 1,
                         Effect::Detonation { .. } => fight[1] += 1,
                         Effect::Killed { .. } => fight[2] += 1,
                         Effect::Anim { .. }
@@ -181,7 +185,10 @@ async fn smoke_async(
                         | Effect::SpecialAnims { .. }
                         | Effect::Bunkered { .. }
                         | Effect::Seized { .. }
-                        | Effect::Dropped { .. } => {}
+                        | Effect::Dropped { .. }
+                        | Effect::Disc { .. }
+                        | Effect::Beam { .. }
+                        | Effect::Walker { .. } => {}
                     }
                 }
                 fight[3] = fight[3].max(w.projectiles.len());

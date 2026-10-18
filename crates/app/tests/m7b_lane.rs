@@ -21,6 +21,12 @@
 //! lane's own copy of the rules (never in a file) so that the screen can
 //! show it.
 //!
+//! S-0615 (special-hit effects): one human infantry unit of the enemy house
+//! killed by a stock warhead of each death kind with an animation (3 to 7
+//! and 10), each death's effect on its own screen; a burning walker running
+//! from a kind-4 death and expiring; a disc-laser carrier clicked onto an
+//! enemy vehicle, its ring of beams closing and the final beam with the hit.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -58,6 +64,9 @@ const SCENES: &[Scene] = &[
     ("refinery", refinery_smoke),
     ("destroy", destruction_smoke),
     ("cyborg", damage_sparks),
+    ("deaths", death_kinds),
+    ("walker", burning_walker),
+    ("disc", disc_laser),
 ];
 
 #[test]
@@ -651,6 +660,192 @@ fn damage_sparks(lane: &mut Lane) {
     lane.ticks(2);
     print_census(lane, "damage sparks");
     lane.save("cyborg-sparks");
+}
+
+/// A human infantry type with strength that is not a cyborg, a jumpjet or
+/// marked not human (S-0107 claim 17's ordinary human rows).
+fn human_infantry(w: &World) -> Option<String> {
+    let r = w.rules();
+    (0..r.infantry.len())
+        .find(|&i| {
+            r.unit(Kind::Infantry, i as u32).is_some_and(|u| {
+                u.strength > 0 && !u.cyborg && !u.jumpjet && !u.raw.not_human.unwrap_or(false)
+            })
+        })
+        .map(|i| r.infantry[i].name.clone())
+}
+
+/// The first stock warhead of infantry-death kind `k`.
+fn warhead_of_kind(w: &World, k: i32) -> Option<u32> {
+    w.rules()
+        .combat
+        .warheads
+        .iter()
+        .position(|h| h.inf_death == k)
+        .map(|i| i as u32)
+}
+
+/// Kills `id` with a hit of warhead `h` that ignores defences.
+fn kill_with(lane: &mut Lane, id: ObjectId, h: u32) {
+    let amount = lane.strength(id) * 10;
+    glasnost_sim::combat::damage::apply(
+        lane.world_mut(),
+        id,
+        glasnost_sim::combat::damage::Hit {
+            amount,
+            warhead: Some(h),
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: false,
+        },
+    );
+}
+
+/// S-0615 claims 1 to 3: for each death kind with an animation (3 to 7
+/// and 10), an enemy human infantry unit is killed by a stock warhead of
+/// that kind; the screen shows the effect a few ticks later. A kind no stock
+/// warhead has is made directly at the unit's position (lane only).
+fn death_kinds(lane: &mut Lane) {
+    let Some(name) = human_infantry(lane.world()) else {
+        println!("human infantry type found: false");
+        return;
+    };
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    lane.look_at(at);
+    for k in [3, 4, 5, 6, 7, 10] {
+        let id = lane.spawn(Kind::Infantry, &name, enemy, at);
+        lane.ticks(2);
+        let pos = lane.world().obj(id).map(|o| o.pos);
+        let before = lane.counts().0;
+        match warhead_of_kind(lane.world(), k) {
+            Some(h) => kill_with(lane, id, h),
+            None => {
+                println!("kind {k}: no stock warhead, the effect made directly");
+                glasnost_sim::objects::remove(lane.world_mut(), id);
+                if let Some(p) = pos {
+                    glasnost_sim::combat::death::death_kind_effect(lane.world_mut(), k, p);
+                }
+            }
+        }
+        let gone = lane.world().obj(id).is_none();
+        let walkers = lane.world().walkers.len();
+        lane.ticks(4);
+        println!(
+            "kind {k}: unit removed {gone}, walkers {walkers}, animations created {}",
+            lane.counts().0 - before
+        );
+        lane.save(&format!("death-kind-{k}"));
+        lane.ticks(60);
+    }
+}
+
+/// S-0615 claims 4 to 11: three enemy human infantry units killed by a
+/// stock kind-4 warhead become burning walkers that run towards water (or
+/// stumble about), then expire with damage over time and are removed.
+fn burning_walker(lane: &mut Lane) {
+    let w = lane.world();
+    let (Some(name), Some(h)) = (human_infantry(w), warhead_of_kind(w, 4)) else {
+        println!("human infantry and a kind-4 warhead found: false");
+        return;
+    };
+    let flaming = w
+        .rules()
+        .combat
+        .general
+        .flaming_infantry
+        .as_ref()
+        .and_then(|n| w.rules().animation(n))
+        .is_some_and(|a| a.flaming);
+    println!("the burning death type is a burning walker: {flaming}");
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    lane.look_at(at);
+    for k in 0..3 {
+        let id = lane.spawn(Kind::Infantry, &name, enemy, CellXY::new(at.x + k, at.y));
+        lane.ticks(1);
+        kill_with(lane, id, h);
+    }
+    println!("walkers made: {}", lane.world().walkers.len());
+    lane.ticks(6);
+    lane.save("walker-running");
+    lane.ticks(20);
+    lane.save("walker-later");
+    let expiring = until(lane, 400, |w| w.walkers.values().any(|k| k.expiring));
+    println!("first expiry after {expiring:?} more ticks");
+    lane.ticks(3);
+    lane.save("walker-expiring");
+    let gone = until(lane, 600, |w| w.walkers.is_empty());
+    println!("all walkers gone after {gone:?} more ticks");
+}
+
+/// A stock unit type (vehicle or aircraft) whose first weapon is a disc
+/// laser, and its kind.
+fn disc_carrier(w: &World) -> Option<(Kind, String)> {
+    let r = w.rules();
+    for (kind, names) in [(Kind::Vehicle, &r.vehicles), (Kind::Aircraft, &r.aircraft)] {
+        for (i, t) in names.iter().enumerate() {
+            let disc = r
+                .unit(kind, i as u32)
+                .is_some_and(|u| u.combat.slots[0].is_some_and(|x| r.combat.weapon(x).disk_laser));
+            if disc {
+                return Some((kind, t.name.clone()));
+            }
+        }
+    }
+    None
+}
+
+/// S-0615 claims 12 to 17: a disc-laser carrier of the local house is
+/// clicked onto an enemy vehicle; the ring of beams closes over 16 ticks and
+/// the final beam lands with the damage at tick T + 17.
+fn disc_laser(lane: &mut Lane) {
+    let w = lane.world();
+    let c = disc_carrier(w);
+    let v = plain_vehicle(w);
+    println!(
+        "disc carrier found: {}, target type found: {}",
+        c.is_some(),
+        v.is_some()
+    );
+    let (Some((kind, cname)), Some(vname), Some(enemy)) = (c, v, lane.enemy()) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let disc = lane.spawn(kind, &cname, local, at);
+    let target = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(at.x + 3, at.y));
+    lane.ticks(2);
+    lane.look_at(CellXY::new(at.x + 1, at.y));
+    let n = lane.order(local, disc, ClickOn::Object(target));
+    let h0 = lane.permille(target);
+    println!("click on the enemy vehicle: {n} orders; target at {h0} per mille");
+    let shot = until(lane, 400, |w| !w.discs.is_empty());
+    println!("disc laser shot after {shot:?} ticks");
+    if shot.is_none() {
+        return;
+    }
+    lane.ticks(7);
+    lane.save("disc-ring");
+    lane.ticks(6);
+    lane.save("disc-ring-closing");
+    // The client drains the effects each frame, so the hit is seen by the target's health.
+    let health = lane.world().obj(target).map_or(0, |o| o.health);
+    let hit = until(lane, 20, |w| {
+        w.obj(target).is_none_or(|o| o.health < health)
+    });
+    println!(
+        "final step after {hit:?} more ticks; target at {} per mille",
+        lane.permille(target)
+    );
+    lane.save("disc-hit");
+    lane.ticks(2);
+    lane.save("disc-after");
 }
 
 // ---------------------------------------------------------------------------

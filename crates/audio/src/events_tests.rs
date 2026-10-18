@@ -1990,3 +1990,82 @@ fn grinder_consumption_sounds() {
         "no enter-grinder sound without the flag"
     );
 }
+
+// spec: S-0615 claims 12, 14, 15 and 16 (a disc laser: silent at the shot and at a cancellation; the charge-up sound at its first arc step, if given; the weapon's report with the damage, entry r mod n from the firer's own value, no draw) and S-0701 claim 21
+#[test]
+fn disc_laser_sounds() {
+    use glasnost_sim::combat::effects::DiscEvent;
+    let mut w = world();
+    let tank = spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, 0, 0);
+    let gun = veterancy::type_combat(&w, tank)
+        .and_then(|c| c.slots[0])
+        .expect("gun");
+    let name = w.rules().combat.weapon(gun).name.clone();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let fx = |event| Effect::Disc {
+        firer: tank,
+        weapon: gun,
+        event,
+        pos: at,
+    };
+    let names = || {
+        let mut n = SoundNames::default();
+        n.set_report(&name, &["Zap0", "Zap1"]);
+        n
+    };
+    for (event, want) in [
+        (DiscEvent::Shot, vec![]),
+        (DiscEvent::Cancelled, vec![]),
+        (
+            DiscEvent::ChargeUp {
+                sound: Some("Hum".into()),
+            },
+            vec!["Hum"],
+        ),
+        (DiscEvent::ChargeUp { sound: None }, vec![]),
+        (DiscEvent::Hit { report: 4 }, vec!["Zap0"]),
+        (DiscEvent::Hit { report: 65535 }, vec!["Zap1"]),
+    ] {
+        let mut a = audio(&w, &["Hum", "Zap0", "Zap1"]);
+        a.set_names(names());
+        let mut u = Rng::new(1);
+        a.tick(&w, &[fx(event.clone())], &mut u);
+        assert_eq!(u.taken(), 0);
+        assert_eq!(heard(&mut a, 0), want, "{event:?}");
+    }
+}
+
+// spec: S-0615 Terms (a beam is drawing only: no sound) and claim 2 with S-0701 claim 22 (a burning walker's creation plays its type's start sound)
+#[test]
+fn walker_and_beam_sounds() {
+    let w = world();
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let mut a = audio(&w, &["Roar"]);
+    let mut n = SoundNames::default();
+    n.set_anim_report("Burn", "Roar");
+    a.set_names(n);
+    let fx = [
+        Effect::Beam {
+            from: at,
+            to: at,
+            duration: 8,
+            fade_out: false,
+            colours: [[1, 2, 3]; 3],
+            house: None,
+        },
+        Effect::Walker {
+            id: ObjectId(9),
+            name: "BURN".into(),
+            pos: at,
+            made: true,
+        },
+        Effect::Walker {
+            id: ObjectId(9),
+            name: "BURN".into(),
+            pos: at,
+            made: false,
+        },
+    ];
+    a.tick(&w, &fx, &mut Rng::new(1));
+    assert_eq!(heard(&mut a, 0), ["Roar"]);
+}
