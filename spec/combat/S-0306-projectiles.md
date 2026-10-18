@@ -2,11 +2,11 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 13
+revision: 14
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160]
 supersedes: []
@@ -22,7 +22,8 @@ makes it detonate, where, and which rule wins when several apply in one turn; th
 anti-ground eligibility of a weapon; the line-of-fire walk that cliffs and walls block; and the
 nuclear warhead, whose detonation waits for an animation. The area damage of a detonation is S-0303,
 the range test is S-0307, where the shot starts is S-0313 and when shots are fired is S-0301.
-This spec covers skirmish; network games and campaigns are out of scope.
+Claim 27 also owns the railgun shot's direct hits and cliff-collapse chance, separately from
+its particle trail. This spec covers skirmish; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -781,6 +782,55 @@ S-0501 claim 20.
       the stated conditions; other projectile-property combinations retain claims 10 to 15's
       confidence
 
+### Railgun shot
+
+27. **Railgun hits and terrain.** A weapon with the railgun flag computes this effect at the
+    shot, only when the firer's railgun emitter place is empty (S-0616 claim 1). It uses the
+    start point, target position, ordered samples and terrain stopping condition of S-0616
+    F14, not the projectile's flight or the railgun particles' later positions.
+
+    **Objects hit.** Only cells newly entered by those samples contribute candidates; the
+    start cell is not visited unless a later sample enters it. In a visited bridge cell the
+    candidates are the objects of its bridge-deck layer when the sample's world height is at
+    least (the cell's height level + 4) × 104 leptons, otherwise its ground layer. In other
+    cells they are the ground-layer objects. Among these candidates, infantry, vehicles,
+    aircraft and buildings other than the firer qualify when they are the shot target or their
+    distance from the infinite three-dimensional line through the start and target positions
+    is strictly below the game-wide railgun hit distance (integer leptons). Buildings count
+    as distance 0, whatever their position within the cell. No alliance test excludes friendly
+    candidates. An object qualifies at most once even when listed in several visited cells.
+    If the shot target is an object rather than a cell and was not encountered, it is included
+    at the end, including a terrain-object target. Thus a target in the start cell can still
+    be hit. Cell listing order is S-0209 claim 13's; hits are ordered by the first qualifying
+    encounter in sample order, with that otherwise-unencountered target last.
+
+    The line-distance calculation is floating point, with single-precision coordinate values
+    and mixed single- and double-precision intermediate values, using the table square root
+    rather than an exact square root. It has no integer truncation before the strict comparison.
+    Exact rounding at this boundary and the zero-length or exactly collinear cases remain open
+    below; this claim does not substitute a rounded integer distance.
+
+    **Damage.** When no sample stops in terrain, every qualifying object takes one ordinary
+    hit of S-0302 claim 1: the weapon's integer damage field, without the firer's shot-damage
+    bonuses, distance 0 leptons, the weapon's warhead, the firer as attacker, no explicit
+    attacking house, defences not ignored and passenger escape allowed. This is not an area
+    detonation. In particular its amount is not the projectile's stored shot damage.
+
+    **Terrain and random draws.** A terrain stop cancels all of these hits, including hits on
+    objects before the stop. Only when the stop cell is a destroyable-cliff cell (S-0307 claim
+    23) is one ranged scenario draw R(0, 99) taken; the cliff is collapsed when that integer is
+    strictly below the game-wide cliff-collapse chance (integer percentage points). A stop on
+    other terrain takes no such draw. Without a terrain stop, the same one-draw test is made
+    after the ordinary hits only when the shot target is a destroyable-cliff cell. An ordinary
+    cell target takes no draw. Even chances at or below 0 or at least 100 still take the draw
+    when the cell qualifies. These draws precede creation of the railgun emitter and its
+    later particle draws (S-0616 claims 1 and 17).
+    - Backing: `measurable` (P41 for hits, ordering, damage, terrain cancellation and draw gates,
+      with S-0616 scenario P22 for the samples and end point). Exact arithmetic boundary cases are
+      not asserted pending the investigation in Open questions.
+    - Confidence: high for the gates, candidate kinds, layer choice, unique hits, raw damage
+      and draw conditions; medium for line-distance arithmetic and observable hit ordering
+
 ## Formulas
 
 Every floating-point step is rounded toward zero in the original (S-0205 claim 5,
@@ -1310,6 +1360,10 @@ that no fix would change.
 | File, section | Key | Concept | Form | Absent |
 |---|---|---|---|---|
 | rules, weapon | `Speed` | the imported speed field: the shot speed and top speed of a projectile with ρ ≠ 0, and the top speed of a steering projectile; for ρ = 0 it is replaced by *v*(*R*₀, *g*) and read only through *S*_w (claims 1, 2, 11, 12, 21) | integer *v*; stored speed = min(trunc(256 × min(*v*, 100) / 100), 255) leptons per tick; −1 keeps the value in force, any other *v* ≤ 0 gives 0 | 0 |
+| rules, weapon | `IsRailgun` | railgun shot flag (claim 27) | boolean | no |
+| rules, weapon | `Damage` | unmodified damage of each railgun hit (claim 27) | integer health points | 0 |
+| rules, `[CombatDamage]` | `railgundamageradius` | railgun hit distance (claim 27) | integer leptons, not a cells-form value | 128 |
+| rules, `[CombatDamage]` | `CollapseChance` | railgun cliff-collapse chance (claim 27) | integer percentage points, compared directly with R(0, 99) | 100 |
 | rules, weapon | `Lobber` | lob (claim 6 a) | boolean | no |
 | rules, weapon | `AreaFire` | area-fire flag (claim 3 a) | boolean | no |
 | rules, weapon | `Projectile`, `Warhead` | the projectile and warhead types | type names | — |
@@ -2403,7 +2457,45 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   falsifies the attribution rule. An early unrelated T1 condition voids the timing fixture,
   rather than falsifying its explicitly conditional prediction.
 
+**P41. Railgun hits and terrain (claim 27).**
+- Setup: a tiny skirmish map with a flat firing lane, a second lane crossing a ridge, and a
+  destroyable cliff. Stock railgun firer and stock targets, director and mods off, fixed game
+  speed and recorded seeds; run one game instance at 800×600. Put friendly and enemy vehicles
+  beside the flat beam, a multi-cell building intersecting it, and a target in the firer's
+  cell in a separate run. Repeat under and over a high bridge with occupants on both layers.
+  Keep all objects alive through one shot and record their health immediately around the shot,
+  then end the run before a second shot. Record projectile damage separately if that weapon
+  also delivers it; do not attribute it to the beam.
+- Procedure: fire once in each lane. Sweep the beam past stationary bystanders by varying the
+  target position across runs. For ordering, use otherwise identical runs with a first-hit
+  object's death effect able to affect a later candidate, and record hit/death times and health.
+  For the raw amount, compare a stock firer before and after a firepower bonus, recording only
+  the beam's hits. Repeat cliff-cell and ordinary-cell force attacks across exact seeds with
+  the random-state recorder; also fire across a non-cliff ridge with a bystander before it.
+- Observable: qualifying objects, health deltas at the shot, whether a building receives more
+  than one hit, deck versus ground hits, hit order, cliff collapse and the position of each
+  R(0, 99) draw relative to ordinary damage and particle creation. Record the imported weapon
+  damage, warhead, hit distance and collapse chance rather than assuming stock values.
+- Expected: the firer is excluded, friendly bystanders can be hit, each qualifying object is
+  hit once with the unmodified weapon amount through ordinary defences, and the target still
+  receives its hit when unencountered by the samples. Buildings in visited cells use distance
+  0. Bridge occupants qualify only from the selected layer. Terrain cancellation leaves even
+  the earlier bystander unharmed by the beam. There is exactly one collapse draw for a
+  destroyable-cliff terrain stop or an unobstructed destroyable-cliff cell target, none for an
+  ordinary ridge or ordinary cell target. Collapse agrees with the strict chance comparison.
+  Any contrary health delta, duplicate hit, opposite layer, bonus-scaled beam amount, earlier
+  terrain-blocked hit or extra/missing collapse draw falsifies the corresponding rule.
+- Limits: if the installed stock data provides no railgun weapon or cannot isolate its direct
+  damage, this fixture cannot validate those rows without a separately authorised test-data
+  variant. The mathematical boundary and degenerate-distance cases remain open, not measured.
+
 ## Open questions
+
+- **Railgun distance boundary (claim 27).** The geometric test is a floating-point distance to
+  the infinite beam line, but the exact mixed-precision rounding, zero-length beam and exactly
+  collinear non-target comparisons are not specified yet. A boundary fixture must record the
+  precise start, target and candidate positions and distinguish adjacent representable results.
+  P41's ordinary hit tests do not establish these exceptional cases.
 
 - Whether a detonation can remove the projectile that causes it, which would end a cluster early
   (claim 21), is not established. S-0303 leaves the same case open (its claim on the animation
