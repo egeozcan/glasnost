@@ -162,9 +162,9 @@ fn claim_23_teleport_stand_in_jumps_to_the_lifter() {
     );
     assert_eq!(height(&w, v), 0, "never lifted");
     assert!(!lift::dropped(&w, v));
-    // Q-1340 interim: S-0207 claim 20's jump removes the destination, so
-    // claim 12's no-destination row ends the grip and the unit is set down.
-    assert!(!lift::grips(&w, l, v), "Q-1340 interim");
+    // Revision 7: S-0207 claim 20's jump removes the destination, so claim
+    // 12's no-destination row ends the grip and the unit is set down.
+    assert!(!lift::grips(&w, l, v), "the jump ends the grip");
     assert!(lift::seized(&w, v));
 }
 
@@ -180,7 +180,7 @@ fn claim_23_walk_stand_in_stays() {
     assert!(lift::grips(&w, l, v));
 }
 
-// spec: S-0607 claims 23 and 24 (drop-pod, design): the stand-in ends at once at the seize; the unit stays where it is with its own locomotor, the grip ends with it set down, and it stays seized; Q-1337 interim: the lifter's target is not cleared
+// spec: S-0607 claims 23 and 24 (drop-pod, design): the stand-in ends at once at the seize; the unit stays where it is with its own locomotor, the grip ends with it set down, and it stays seized (the lifter's target: `claim_12_drop_pod_end_clears_the_lifter_target` in claims_s0607_r7.rs)
 #[test]
 fn claim_23_drop_pod_ends_at_once() {
     let mut w = world(rules(Some("drop_pod"), true));
@@ -201,11 +201,6 @@ fn claim_23_drop_pod_ends_at_once() {
     );
     assert!(w.obj(v).unwrap().drive.is_some(), "its own driving state");
     assert_eq!(vehicle_marks(&w), marks, "its own mark is back");
-    assert_eq!(
-        w.obj(l).unwrap().target,
-        Some(Target::Object(v)),
-        "Q-1337 interim"
-    );
 }
 
 // spec: S-0607 claim 23 (claims 9 and 10 apply unchanged): a gripped stand-in unit ignores new destinations and cannot fire
@@ -335,7 +330,7 @@ fn claim_23_stand_in_marks_are_released() {
     }
 }
 
-// spec: S-0607 claim 23 (revision 5, occupancy): a unit that never moves under its stand-in stands with no occupancy mark, so its cell does not block another vehicle's entry
+// spec: S-0607 claim 23 (revision 7, occupancy): a unit that never moves under its stand-in stands with no vehicle-present mark, but it stays listed in its cell and the listed occupants decide first: while it has the lifter as its destination an allied vehicle meets moving blocker (S-0209 claim 5 row VP22), so the missing mark does not let it in
 #[test]
 fn claim_23_unmoved_stand_in_holds_no_mark() {
     let (mut w, l, v) = scene(Some("walk"), true, "VICT");
@@ -351,8 +346,8 @@ fn claim_23_unmoved_stand_in_holds_no_mark() {
     let reference = glasnost_sim::occupancy::reference_level(&w, other);
     assert_eq!(
         glasnost_sim::occupancy::vehicle_outcome(&w, other, c, reference),
-        glasnost_sim::occupancy::Outcome::Clear,
-        "the seized unit does not block entry"
+        glasnost_sim::occupancy::Outcome::MovingBlocker,
+        "the listed seized unit still decides the entry"
     );
 }
 

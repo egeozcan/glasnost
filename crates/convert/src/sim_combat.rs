@@ -3039,8 +3039,7 @@ impl Builder<'_> {
             |v| format!("{name} Locomotor {v} names no known locomotor: the original stops with a fatal error when such a warhead seizes; our engine treats its hit as one with a locomotor that cannot stand in temporarily: the target stops and is not seized (S-0607 claim 22, a design departure)"),
         );
         if bool_of(key(t, "IsLocomotor")) == Some(true) {
-            // spec: S-0607 claim 22 (a malformed value on a seizing warhead is ignored and gives an importer warning; on a warhead without the seizing flag the value is unused and does not warn)
-            // Q-1341 interim: an empty value is no entry at all (S-0001 claim 8), so it reads as absent and does not warn
+            // spec: S-0607 claim 22 (revision 7: a malformed non-empty value on a seizing warhead is ignored and gives an importer warning; on a warhead without the seizing flag the value is unused and does not warn; an empty value makes no entry, S-0001 claim 8, so it reads as absent and gives no warning)
             self.each(
                 key(t, "Locomotor"),
                 |v| class_identifier(v).is_none(),

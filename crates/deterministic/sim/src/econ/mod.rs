@@ -74,7 +74,7 @@ pub fn assign_destination(
         crate::lift::lifter_accepts(w, id);
     } else {
         // spec: S-0607 claims 12 and 23 (a unit gripped with a stand-in that is given no destination: the grip ends at once and the unit is set down)
-        crate::lift::enforce(w, id);
+        crate::lift::given_no_destination(w, id);
     }
     // spec: S-0207 claim 20 (a) (the locomotor takes the destination at once) and S-0107 claim 15
     crate::infantry::destination_assigned(w, id, before);

@@ -124,8 +124,14 @@ pub fn removal_marks(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
         return Vec::new();
     };
     let actual = (o.pos.cell(), o.layer);
-    // spec: S-0209 claim 1 (a flying aircraft holds its object-present mark only while on the ground)
-    if let Some(m) = crate::air::removal_marks(w, id) {
+    // spec: S-0607 claim 23 (a walking stand-in, and a teleporting one with no landing point, hold no mark beyond what the seize left)
+    if let Some(m) = crate::lift::stand_in_marks(w, id) {
+        return m;
+    }
+    // spec: S-0209 claim 1 (a flying aircraft holds its object-present mark only while on the ground; a landed aircraft seized with the teleporting stand-in holds that stand-in's reservation instead, S-0607 claim 23)
+    if crate::lift::moving_stand_in(w, id) != Some(crate::lift::StandIn::Teleport)
+        && let Some(m) = crate::air::removal_marks(w, id)
+    {
         return m;
     }
     let Some(t) = o.teleport.as_ref() else {
@@ -245,12 +251,26 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
 pub fn stand_in_instruction(w: &mut World, id: ObjectId, dest: Target, dc: CellXY) {
     let Some(o) = w.obj(id) else { return };
     let st = o.teleport.clone().unwrap_or_default();
-    fix_landing(w, id, dest, dc, st);
+    // spec: S-0607 claims 5 and 23 (the seize has already given up the unit's own mark: fixing the landing point marks the landing cell and clears nothing)
+    fix_landing_with(w, id, dest, dc, st, false);
 }
 
 /// Fixes a vehicle's or aircraft's landing point for destination `dest` in
 /// cell `dc` (claim 20 a and b).
-fn fix_landing(w: &mut World, id: ObjectId, dest: Target, dc: CellXY, mut st: TeleportState) {
+fn fix_landing(w: &mut World, id: ObjectId, dest: Target, dc: CellXY, st: TeleportState) {
+    fix_landing_with(w, id, dest, dc, st, true);
+}
+
+/// [`fix_landing`]; `release_old`: the old point's mark is cleared as the
+/// mark moves to the landing cell.
+fn fix_landing_with(
+    w: &mut World,
+    id: ObjectId,
+    dest: Target,
+    dc: CellXY,
+    mut st: TeleportState,
+    release_old: bool,
+) {
     let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0207 claim 20 (b) (revision 34: warp-pending immobilization, Terms, leaves L unchanged, as a search that gives no cell does)
     let found = if crate::superweapons::warp_pending_or_leaving(w, id) {
@@ -261,8 +281,10 @@ fn fix_landing(w: &mut World, id: ObjectId, dest: Target, dc: CellXY, mut st: Te
     match found {
         Some(l) => {
             // spec: S-0207 claim 20 (a) (a vehicle's vehicle-present mark, an aircraft's object-present mark, moves at once from the old point's record to L's)
-            let (old, old_layer) = aircraft_mark(w, id);
-            reserve(w, o.kind, old, old_layer, false);
+            if release_old {
+                let (old, old_layer) = aircraft_mark(w, id);
+                reserve(w, o.kind, old, old_layer, false);
+            }
             // spec: S-0207 claim 20 (a) and Edge cases (the reservation at L is in the ground record at L's chosen height H, even on a high-bridge cell; quirk off: the eventual landing layer)
             let layer = if ground_reservation(w, o.kind) {
                 Layer::Ground

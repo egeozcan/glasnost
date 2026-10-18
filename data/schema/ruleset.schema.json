@@ -9058,6 +9058,11 @@
           "type": "boolean",
           "default": true
         },
+        "lift_standin_unmarked_cell": {
+          "description": "A unit seized with the driving, walking or ship stand-in locomotor gives up the vehicle-present mark of its cell at the seize and holds none until its stand-in's own movement starts a step into a neighbouring cell, so one that never moves stands unmarked for good; its listed presence still decides vehicle entry outcomes, but rules that read only the occupancy record, such as the nearby-cell search, see its cell as free; off: it keeps the vehicle-present mark of its own cell at the seize, as a vehicle at rest does (the teleporting stand-in is unchanged).",
+          "type": "boolean",
+          "default": true
+        },
         "low_bridge_wrong_axis_recheck": {
           "description": "A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated.",
           "type": "boolean",
