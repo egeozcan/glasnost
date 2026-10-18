@@ -84,7 +84,7 @@ fn lift_fields() {
         );
     }
     // An empty value is no entry (S-0001 claim 8): absent, and no warning
-    // (Q-1341 interim).
+    // (S-0607 claim 22, revision 7).
     assert_eq!(s.warheads["Blank"].locomotor, None);
     assert!(!warnings.iter().any(|m| m.contains("warheads Blank")));
     // Without the seizing flag the value is unused and does not warn.
@@ -118,7 +118,7 @@ fn lift_fields_absent() {
     assert!(s.warheads["Plain"].locomotor.is_none());
 }
 
-// spec: S-0607 claim 22 and Import mapping (an empty or malformed value in a later layer is ignored as if absent: the locomotor in force from the earlier layer stays; the malformed one warns on a seizing warhead, the empty one is no entry under S-0001 claim 8, Q-1341 interim)
+// spec: S-0607 claim 22 and Import mapping (an empty or malformed value in a later layer is ignored as if absent: the locomotor in force from the earlier layer stays; the malformed one warns on a seizing warhead, the empty one is no entry under S-0001 claim 8 and does not warn, revision 7)
 #[test]
 fn lift_locomotor_malformed_keeps_the_earlier_layer() {
     let inputs = Inputs {
