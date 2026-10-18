@@ -1700,6 +1700,10 @@ pub struct Quirks {
     // spec: S-0607 claim 16 and Edge cases
     #[serde(default = "on")]
     pub lift_deck_impact_reads_ground: bool,
+    /// A unit seized with the driving, walking, ship or teleporting stand-in locomotor is never restored, and one seized with the drop-pod stand-in gets its own locomotor back but stays seized, so either way it ignores destinations and cannot fire until it leaves play; off: claim 20's restoration applies to every stand-in, with that stand-in's own moving test, and clears the seized state.
+    // spec: S-0607 claim 24 and Edge cases
+    #[serde(default = "on")]
+    pub lift_standin_stays_seized: bool,
     /// A recycling building tests nothing about itself or its owner when an entrant arrives, so a building being sold, switched off or now owned by a house that does not count the entrant's house as allied still consumes the entrant and pays its owner; off: at consumption the building gives claim 2's docking answer to every entrant, infantry included, without the link-place row, and a refused entrant is not consumed, its destination is cleared and it falls back to rest.
     // spec: S-0603 claim 5 and Edge cases
     #[serde(default = "on")]
@@ -2291,6 +2295,7 @@ impl Default for Quirks {
             lift_impact_removes_survivor: true,
             lift_impact_double_credit: true,
             lift_deck_impact_reads_ground: true,
+            lift_standin_stays_seized: true,
             grinder_no_arrival_recheck: true,
             absorber_contact_no_capacity_recheck: true,
             absorber_release_bridge_ends_search: true,
@@ -3395,6 +3400,7 @@ impl Quirks {
                 "lift_deck_impact_reads_ground",
                 self.lift_deck_impact_reads_ground,
             ),
+            ("lift_standin_stays_seized", self.lift_standin_stays_seized),
             (
                 "grinder_no_arrival_recheck",
                 self.grinder_no_arrival_recheck,
