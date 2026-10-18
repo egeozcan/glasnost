@@ -3018,7 +3018,7 @@ impl Builder<'_> {
         if let Some(v) = self.verses(t) {
             rec.put("verses", v);
         }
-        // spec: S-0607 Import mapping and claim 22 (warhead Locomotor: a locomotor identifier, S-0207 claim 14's class identifier of table T3; an identifier the table does not list is kept as unknown, design); Q-1321 interim (a value of another form, an empty one included, keeps the value in force)
+        // spec: S-0607 Import mapping and claim 22 (warhead Locomotor: a locomotor identifier read as S-0207 claim 14 reads a type's locomotor field, blanks trimmed; a value without the form of a class identifier, an empty one included, is ignored as if the key were absent, so the value in force from an earlier layer stays; an identifier table T3 does not list is kept as unknown, design)
         let loco = fold(key(t, "Locomotor"), None, |v, _| {
             let id = class_identifier(v)?;
             Some(
@@ -3038,6 +3038,15 @@ impl Builder<'_> {
             |v| class_identifier(v).is_some_and(|id| !LOCOMOTORS.iter().any(|l| l.0 == id)),
             |v| format!("{name} Locomotor {v} names no known locomotor: the original stops with a fatal error when such a warhead seizes; our engine treats its hit as one with a locomotor that cannot stand in temporarily: the target stops and is not seized (S-0607 claim 22, a design departure)"),
         );
+        if bool_of(key(t, "IsLocomotor")) == Some(true) {
+            // spec: S-0607 claim 22 (a malformed value on a seizing warhead is ignored and gives an importer warning; on a warhead without the seizing flag the value is unused and does not warn)
+            // Q-1341 interim: an empty value is no entry at all (S-0001 claim 8), so it reads as absent and does not warn
+            self.each(
+                key(t, "Locomotor"),
+                |v| class_identifier(v).is_none(),
+                |v| format!("{name} Locomotor \"{v}\" is not a class identifier: it is ignored as if the key were absent, so this seizing warhead installs the locomotor in force from an earlier rules layer, else the teleporting locomotor (S-0607 claim 22)"),
+            );
+        }
         // spec: S-0303 Edge cases (a spread outside 0 to 11: clamped by our engine, the importer warns)
         self.each_dec(
             key(t, "CellSpread"),
