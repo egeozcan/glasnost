@@ -1,9 +1,9 @@
 ---
 id: Q-1344
 title: Which seized set-down units count as hovering under the no-cell switch-off rule
-status: open
+status: answered
 related: [S-0607, S-0502]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

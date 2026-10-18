@@ -2,13 +2,13 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-18
 measurements: []
-requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343]
+requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343, Q-1344]
 supersedes: []
 ---
 
@@ -273,9 +273,10 @@ New terms:
        is no longer moving, so it neither descends nor flies anywhere. It stays set down and
        seized. Claim 20 does not restore it while it hovers. At each fall-back to rest it
        repeats the stop's search instead (claim 20).
-     - **On the ground** (height 0 or less, the unit still moving because it was released before
-       its first jumpjet update): it stays grounded where it is, keeps no movement point and is
-       no longer moving. Claim 20 then restores it as any set-down unit.
+     - **On the ground** (height above the surface 0 or less): it stays where it is and its
+       flight state becomes *grounded*, even if it was *ascending* at height 0. It keeps no
+       movement point and is no longer moving. Claim 20 then restores it as any grounded
+       set-down unit.
      - With the switch on the unit is destroyed, and none of this arises.
    - With the jumpjet stand-in, its own locomotor does not return until claim 20 allows it; other stand-ins follow claims 23 and 24.
    - Backing: `unmeasured`: the destination refusals and the no-destination exception are traced,
@@ -554,12 +555,19 @@ New terms:
     returns, when the unit falls back to rest (S-0215 claim 13) and all of these hold:
     - its jumpjet movement is not moving (S-0502's *moving*, not *moving now*),
     - it is set down, or it is no longer seized,
-    - it is not a set-down unit hovering under claim 9's switch-off rule for no cell.
+    - it is not a seized set-down unit hovering with no movement point and no movement
+      commitment after S-0502 claim 17's no-cell outcome with
+      `quirks.jumpjet_no_cell_self_destruct` off.
 
-    **The hovering set-down unit (design).** At each fall-back to rest of a unit hovering under
-    claim 9's switch-off rule, restoration is not tested. The unit repeats the stop's search
-    instead: S-0502 claim 17's nearby-cell search around its current cell, for its type's own
-    locomotion class and movement zone, with no draw.
+    **The hovering set-down unit (design).** Every seized set-down unit in that switch-off
+    outcome follows this rule, whatever route brought it there, not only claim 9's
+    no-destination set-down. At each fall-back to rest, restoration is not tested. The unit
+    repeats the stop's search instead: S-0502 claim 17's nearby-cell search around its current
+    cell, for its type's own locomotion class and movement zone, with no draw.
+    This includes a set-down unit that kept its movement commitment, flew to its point, and
+    subsequently reached that no-cell outcome through a failed landing or another stop.
+    S-0502's switch-off height test applies: height above the surface 1 lepton or more hovers.
+    Height 0 or less stays put and becomes *grounded*, even from *ascending*.
     - **A cell is found.** It re-orders itself to that cell's centre through S-0502 claim 16,
       exactly as claim 13's stop does. It is then claim 13's set-down unit that is still moving:
       it flies to its point, descends and lands there, and is restored at a later fall-back to
@@ -575,9 +583,9 @@ New terms:
     human-house rule and may issue an ordinary harvest order after restoration; the neutral
     and special houses retain the original's non-human rule.
 
-    So a gripped unit hovering over its lifter is never restored. A unit set down by claims 9,
-    13 or 17 is restored on its first fall-back to rest after touchdown at which its jumpjet
-    movement is not moving.
+    So a gripped unit hovering over its lifter is never restored. Subject to the hovering
+    exclusion above, a unit set down by claims 9, 13 or 17 is restored on its first fall-back
+    to rest after touchdown at which its jumpjet movement is not moving.
     - **Set down does not pre-empt movement.** Being set down, or being grounded, does not
       by itself restore a unit whose jumpjet movement still has a movement commitment (claim
       13's still-moving set-down). That unit takes off and flies to its point first (S-0502
@@ -597,10 +605,12 @@ New terms:
     - Backing: `measurable` (scenarios L3 and L11) for restoration and orders. That a kept
       movement commitment delays restoration is `measurable` through conditional scenario L3
       run b (S-0502 claims 5 and 24); whether ordinary play reaches that case is not established.
-      The hovering set-down unit's retry is `unmeasured`: it is a design rule for a non-default
-      switch setting, which the original does not have.
+      The hovering exclusion, retry for every route and height-based grounded outcome are
+      `unmeasured`: they are design rules for a non-default switch setting, which the original
+      does not have. Scenario L14 checks these rules on our engine only.
     - Confidence: high (restoration conditions, only at rest, readiness, no restoration while
-      committed); medium (the two-order sequence)
+      committed, the route-independent switch-off design rule and its height boundary),
+      medium (the two-order sequence)
 
 ### The magnetic wave
 
@@ -887,8 +897,8 @@ Life of a seized unit:
 | dropped | fall ends, blocked on water (claim 17) | sinking | death credited to the dropper |
 | dropped | fall ends, blocked on land or beach | crashed, then removed | claim 18, unless crashable |
 | set down, movement commitment kept (claim 13) | next eligible jumpjet update | set down, ascending | flies to its point and lands there (S-0502 claims 5 and 24); not restored meanwhile |
-| set down | falls back to rest, jumpjet not moving (claim 20) | ordinary | own locomotor returns |
-| set down, hovering after no cell with the self-destruction switch off (claim 9) | falls back to rest (claim 20) | set down and moving if the repeated search finds a cell, otherwise unchanged | not restored; with a cell, flies there and lands |
+| set down, outside the hovering exclusion of claim 20 | falls back to rest, jumpjet not moving (claim 20) | ordinary | own locomotor returns |
+| seized and set down, hovering with no point or commitment after no cell with the self-destruction switch off (claim 20, any route) | falls back to rest (claim 20) | set down and moving if the repeated search finds a cell, otherwise unchanged | not restored; with a cell, flies there and lands |
 | gripped with the teleporting stand-in | jump (claim 23) | set down, seized | grip ends; the jump clears the lifter's target |
 | gripped with another ground stand-in | its own rules remove its destination (claim 23) | set down, seized | grip ends; the lifter keeps its target |
 | gripped with the drop-pod stand-in | the seize, in our engine (touchdown in the original) (claim 23) | set down, seized, own locomotor back | grip ends; the lifter's target is cleared |
@@ -946,10 +956,12 @@ Life of a seized unit:
   set-down one where it is. No quirk switch: there is no original behaviour to keep. A grip
   ended by claim 9's no-destination exception is not covered: the original survives it, and
   S-0502 claim 17 applies unchanged.
-- **No cell after a no-destination set-down, switch off** (claim 9, design). With
-  `quirks.jumpjet_no_cell_self_destruct` off, a unit in the air hovers over its current cell
-  rather than landing on a rejected cell, and retries the search at each fall-back to rest
-  (claim 20); one on the ground stays where it is and is restored normally.
+- **No cell for a seized set-down unit, switch off** (claims 9 and 20, design). After
+  S-0502 claim 17's switch-off outcome, every seized set-down unit hovering with no point or
+  commitment retries the search at each fall-back to rest instead of being restored, whatever
+  route brought it there. Height above the surface decides the outcome: 1 lepton or more
+  hovers; 0 or less stays where it is and becomes *grounded*, even from *ascending*, and is
+  eligible for ordinary restoration. Claim 13's lifter-ended safety departure is unchanged.
 - **A harvester driving temporarily is immune** (claim 4). This is not a quirk: it is the only way
   a resource gatherer on a temporary locomotor is treated.
 - **An infantry kill credited to the dropped unit** (claim 16) when there is neither a dropper nor a
@@ -957,6 +969,10 @@ Life of a seized unit:
   is kept.
 
 ## Import mapping
+
+Claims 9 and 20's switch-off design rules add no imported field or absent-key default.
+Their search uses the type's locomotion class and movement zone through S-0502 claim 17.
+S-0502 owns the corresponding import mapping and the shared self-destruction quirk.
 
 | Source | Key | Feeds | Form | Absent |
 |---|---|---|---|---|
@@ -1378,6 +1394,23 @@ establish a qualifying condition; a run lacking the required observations is inc
     - Falsified by: an unmoved seized vehicle's cell refused by the movement-point search when
       it was the only candidate, a cell the victim has driven into chosen, or the second
       vehicle entering the seized vehicle's cell.
+- **L14 No-cell switch-off design checks (claims 9 and 20; our engine only).**
+  - Use a small skirmish test map at speed index 2, a lifter and a seized vehicle, with the
+    self-destruction quirk off. These are design checks, not oracle measurements.
+  - Compare a no-destination set-down with a set-down unit that kept its commitment, flew
+    to its point and then reached a no-cell stop after a failed landing. Qualify the latter
+    only if that route actually reaches the stated outcome; the seized landing exceptions
+    can prevent it. In both runs record seized/set-down state, height, flight state, movement
+    point, commitment and each fall-back to rest.
+  - Expected at height 1 lepton or more with no point or commitment: no restoration at rest,
+    and another search with no draw. With no cell still available it keeps hovering; after a
+    qualifying cell becomes available it flies there and lands, and is restored only at a
+    later eligible fall-back to rest. The route into the outcome makes no difference.
+  - Separately stop at height 0 while *ascending*, and at height 0 while *grounded*, with no
+    cell. Both stay put, become *grounded*, clear point and commitment, and are eligible for
+    restoration at rest. Compare height 1: it must hover instead.
+  - A restoration while hovering, a route-dependent retry, or hovering at height 0 fails the
+    design check. A run that never reaches the required state is inconclusive.
 - **S-0502 carry items.** L2, L3 and L4 together give the held body facing (S-0502 claim 10), the
   hovering, landing and arrival exclusions (claims 12 to 15), the growing crash rate (claim 18),
   the cell-centre detour (claim 15 here), and the sinking-only-after-a-drop case (S-0502 claim 19,
