@@ -2,11 +2,11 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648]
 supersedes: []
@@ -738,7 +738,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
     makes no new one, until that system leaves play.
     This includes healing hits and hits that the stage 4 rows of claim 8 stop (no health on a target
     that is not a building, immune to all damage, zero amount), but not hits that its stage 1 to 3
-    rows stop, and not berserk hits.
+    rows stop, and not berserk hits. These are the hit-driven marks; S-0616 claim 1 owns the
+    additional damage-smoke marks after an object's own self-healing or a non-organic vehicle's
+    house-wide self-healing, including their health-ratio and below-surface tests.
 
     **Building fires and their draws.** After a hit that reports *now yellow* or *now red* on a
     building, when the hit's warhead is one that sets fires (the warhead's sparks flag, Import
