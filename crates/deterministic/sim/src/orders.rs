@@ -582,9 +582,12 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
         return;
     }
     // spec: S-0314 claims 20 and 23 (an order to a vehicle in depot contact, or an enter order on a depot that holds a contact)
-    if crate::depot::order_applied(w, actor, b, dest) {
-        return;
-    }
+    let dest = match crate::depot::order_applied(w, actor, b, dest) {
+        crate::depot::OrderEffect::Ends => return,
+        // spec: S-0314 claim 23 (a damaged vehicle's enter order on a depot holding a contact: the order's other effects, S-0213 table T3, with no destination; enter queued without an immediate start, S-0215 claim 12)
+        crate::depot::OrderEffect::NoDestination => None,
+        crate::depot::OrderEffect::Ordinary => dest,
+    };
     // spec: S-0213 table T3 (b) (a tethered actor keeps its link, unless it is in contact with a building of the unloading kind)
     let keeps = crate::econ::tethered(w, actor)
         && !w
