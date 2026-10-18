@@ -29,8 +29,10 @@ The simulation is deterministic: integers only and one seeded random stream. Nat
 
 **M6 is done.** In the local lane our AI plays itself to a winner on every stock map run (0, 2, 3, 5, 6, 7 and 8, the naval maps 0, 3 and 5 included), Allied against Allied and Allied against Soviet on all seven and Soviet against Soviet on maps 2 and 8, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game that exercises every M6c ability, natively and in WebAssembly.
 
-**Not there yet (M7 and beyond):**
-- mind control, psychic and genetic superweapons, and the other M7 abilities;
+**M7a (first part of M7) makes the Yuri side playable.** It adds psychic weapons (units driven berserk), the psychic sensor and the psychic reveal, mind control (taking over enemy units, the controller's limit and overload, release when the controller dies), gattling weapons that spin up and down, gas weapons and their particle clouds, the bio reactor that takes in infantry, the grinder that recycles units for credits, the tank bunker, and the magnetic lift that seizes vehicles and drops them. The opponent plays Yuri and uses each of these the way a person could. In the local lane, Yuri plays Allied and Soviet on maps 0, 2 and 8 to a winner, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game with a Yuri house, natively and in WebAssembly.
+
+**Not there yet (M7b and beyond):**
+- the floating disc's drain, the genetic mutator, the psychic dominator, the special hit effects and the cloning vats;
 - multiplayer over the network.
 
 ## You need your own copy of the game
