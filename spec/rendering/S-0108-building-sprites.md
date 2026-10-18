@@ -2,11 +2,11 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0540]
 supersedes: []
@@ -210,7 +210,7 @@ are out of scope.
    The construction range is set whenever the build-up sprite is loaded, with *B* as it is held at
    that moment: at every type read that loads the sprite (S-0007 claim 11), and again at the theater
    refresh for a building with the new-theater flag, which reloads all its sprites as at a type read
-   (S-0007 claim 12). No data marks a building to load its build-up sprite later than that.
+   (S-0007 claim 12).
 
    **Theater-flag buildings.** When the theater refresh reloads the build-up sprite of a building
    with the theater flag (S-0007 claim 12) and the file resolves, the construction range becomes
@@ -228,8 +228,8 @@ are out of scope.
      build-up runs, zero-delay completion and ranges that never complete; S-0408 S10 for
      stage-23 sale completion). Failed reload retaining the range
      is `unmeasured` (B19 supplies the file; a missing sprite hides its range).
-   - Confidence: high (the delay), medium (the exact tick of the switch to the body sprite, and the
-     theater-flag rule, which stock data does not use)
+   - Confidence: high (the delay), medium (the exact tick of the switch to the body sprite and the
+     theater-flag rule)
 
 6. **Body animation ranges and game speed.** A state change is either *immediate* or *deferred*.
    It is immediate when the building has no state yet, when the new state is *construction*, or
@@ -496,7 +496,12 @@ are out of scope.
 
     No building other than the kinds listed reacts to *special-1* or *special-3* ending.
     - Backing: `measurable` (B18 for natural completion during repair, leaving repair and
-      delayed fire; S-0603 scenario G10 for recycling-building completion and external removal).
+      delayed fire; S-0603 claim 12 and scenario G10 for recycling-building natural completion).
+      Recycling-building restart after external removal is `unmeasured`: no data-only fixture
+      establishes removal without the building itself stopping or replacing the slot animation.
+      Restart with the selected *active-1* variant absent is also `unmeasured`: no setup establishes
+      that absence at completion while allowing *active-1* to run at consumption and start
+      *special-1* (S-0603 claim 12).
       `unmeasured` for repair-depot non-natural removal of *special-1* and its completion while
       not repairing: B18 establishes neither event. The exhaustive other-types assertion is
       `unmeasured`: a finite set of types cannot establish it.
@@ -1288,19 +1293,17 @@ specified here.
   repair and upgrade specs. Only the image-frame mechanics are fixed here.
 - S-0405 claim 5 identifies the drain blackout of claim 14. A separate special-outage slot
   measurement during that blackout remains wanted.
-- Types marked as laser-fence posts or firestorm-wall sections take their body frame from a
-  separate per-building value that this spec does not cover. Stock YR is not known to use them.
+- Body-frame selection for types marked as laser-fence posts or firestorm-wall sections is
+  outside this spec's coverage.
 - Claim 5 computes the build-up delay with the build-up time held when the sprite is loaded. Within
   one rules layer, whether the game-wide build-up time is read before or after the building types is not
   traced, so whether a build-up time that only a game-mode file or a map sets reaches a building's
   delay in the same rules layer is open. A building with the new-theater flag gets the final value at the
   theater refresh either way.
-- A wall-tower-style building, its type named by a rules key, takes upgrades that switch its turret
-  slot animation among art named after the image name plus a letter. It is not known whether stock YR
-  uses this.
+- Turret-slot art selection for wall-tower-style upgrades remains outside this spec's coverage.
 - B1 tests the delay from the imported value. Single-first input conversion is S-0003's, not
-  a fresh binary64 conversion. No specific stock sprite count and imported value that distinguish
-  F1's arithmetic rounding modes are established here; that discrimination is unmeasured.
+  a fresh binary64 conversion. No specific test fixture combining a sprite count and imported value
+  that distinguish F1's arithmetic rounding modes is established here; that discrimination is unmeasured.
 - The charged-animation time uses S-0003's decimal conversion and percentage rule, with final
   single-precision narrowing toward zero (S-0205). A threshold-sensitive B9 run remains wanted.
   No completed measurement is claimed.
