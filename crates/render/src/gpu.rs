@@ -108,10 +108,19 @@ pub async fn request_adapter(
 /// sizes and buffer alignments taken from the adapter so atlases can grow to
 /// what the hardware offers (PLAN.md 4.1).
 pub fn core_limits(adapter: &wgpu::Adapter) -> wgpu::Limits {
-    let adapter_limits = adapter.limits();
+    limits_for(&adapter.limits())
+}
+
+/// [`core_limits`] for given adapter limits. No limit is requested beyond what
+/// the adapter reports: some browsers report less than the WebGL2 floor (a
+/// privacy mode can report WebGL1 minimums, such as 8 vertex attributes), and
+/// a device request above the adapter's limits fails outright. The renderer's
+/// pipelines stay within those lower values.
+pub fn limits_for(adapter_limits: &wgpu::Limits) -> wgpu::Limits {
     wgpu::Limits::downlevel_webgl2_defaults()
         .using_resolution(adapter_limits.clone())
-        .using_alignment(adapter_limits)
+        .using_alignment(adapter_limits.clone())
+        .or_worse_values_from(adapter_limits)
 }
 
 /// Opens a device with [`core_limits`] and no optional features. WebGPU-only
@@ -176,5 +185,30 @@ mod tests {
             floor.max_storage_buffers_per_shader_stage
         );
         assert_eq!(merged.max_compute_workgroups_per_dimension, 0);
+    }
+
+    #[test]
+    fn no_limit_above_the_adapter_is_requested() {
+        // a browser in a privacy mode reports WebGL1 minimums
+        let adapter = wgpu::Limits {
+            max_vertex_attributes: 8,
+            ..wgpu::Limits::downlevel_webgl2_defaults()
+        };
+        let requested = limits_for(&adapter);
+        assert_eq!(requested.max_vertex_attributes, 8);
+        assert!(requested.check_limits(&adapter));
+    }
+
+    #[test]
+    fn the_webgl2_floor_is_kept_on_a_capable_adapter() {
+        let adapter = wgpu::Limits::default();
+        let requested = limits_for(&adapter);
+        let floor = wgpu::Limits::downlevel_webgl2_defaults();
+        assert_eq!(requested.max_vertex_attributes, floor.max_vertex_attributes);
+        assert_eq!(
+            requested.max_texture_dimension_2d,
+            adapter.max_texture_dimension_2d
+        );
+        assert!(requested.check_limits(&adapter));
     }
 }
