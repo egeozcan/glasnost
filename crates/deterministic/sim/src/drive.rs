@@ -278,6 +278,7 @@ pub fn between_steps_or_chain(w: &World, id: ObjectId) -> bool {
         .and_then(|o| o.drive.as_ref())
         .is_some_and(|d| d.between_steps)
         || crate::hover::between_steps(w, id)
+        || crate::lift::stand_in_between_steps(w, id)
         || at_chain_point(w, id)
 }
 
