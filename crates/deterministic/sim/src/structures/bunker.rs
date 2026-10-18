@@ -16,8 +16,9 @@
 //! and 17), the destination refusal (claim 18), the release's open details
 //! (claim 12), the track ends (claim 21), other removals (claim 19, our
 //! departure) and a type that is also a repair depot (claim 20, whose
-//! outcome stays open). Q-1163 holds the interim order of claim 20's two
-//! processings.
+//! outcome stays open). Revision 7 answers Q-1163 (claim 20's order: one
+//! S1 row, then the depot's decision on the state it left) and Q-1164
+//! (claim 12: a released vehicle skips the deploy-fire rule).
 //!
 //! [`StructState::bunker_occupant`]: super::StructState::bunker_occupant
 //! [`StructState::bunkered_in`]: super::StructState::bunkered_in
@@ -896,9 +897,9 @@ pub fn process_unload(w: &mut World, v: ObjectId) -> i32 {
 /// S-0415 claim 1): an ordinary type does nothing more and chooses 450
 /// ticks, no draw; a type with the harvester or weeder flag, a deploy-into
 /// building type or the simple-deployer flag goes on with that property's
-/// *unload* rule, in that order of precedence. The passenger unloading of
-/// S-0507 is never reached. Whether the deploy-fire rule comes first is
-/// Q-1164 (interim: S-0415 claim 1, it does not apply).
+/// *unload* rule, in that order of precedence. Neither the passenger
+/// unloading of S-0507 nor the deploy-fire rule of S-0517 claim 2 is
+/// reached (revision 7, answering Q-1164).
 fn continue_unload(w: &mut World, v: ObjectId) -> i32 {
     let Some(o) = w.obj(v) else {
         return UNLOAD_DELAY;
@@ -906,7 +907,7 @@ fn continue_unload(w: &mut World, v: ObjectId) -> i32 {
     let Some(u) = w.rules().unit(o.kind, o.type_index).cloned() else {
         return UNLOAD_DELAY;
     };
-    // Q-1164 interim (S-0415 claim 1, revision 18: the deploy-fire rule does not apply to a bunkered vehicle; S-0606 claim 12, revision 5, would put it first)
+    // spec: S-0606 claim 12 (revision 7, Q-1164 answered: passenger unloading and the deploy-fire rule are skipped, even for a type with passenger capacity or the deploy-fire flag) and S-0415 claim 1
     // spec: S-0606 claim 12 and S-0415 claim 1 (the harvester or weeder flag: S-0402's unload rule)
     if u.harvester || u.raw.weeder.unwrap_or(false) {
         return crate::econ::harvest::process_unload(w, v);
@@ -916,11 +917,11 @@ fn continue_unload(w: &mut World, v: ObjectId) -> i32 {
         let _ = crate::econ::deploy::attempt(w, v, b);
         return crate::process::standard_delay(w, v);
     }
-    // spec: S-0606 claim 12 and S-0415 claim 1 (then the simple-deployer flag: S-0517's unload rule, the in-place cycle; whether a released vehicle reaches it is S-0606 Open questions item 6)
+    // spec: S-0606 claim 12 (revision 7) and S-0517 claim 1 (revision 10: then the simple-deployer flag: the in-place cycle in this same processing, whatever the passenger capacity; under quirks.deploy_transition_discards_orders its return to guard replaces the queued move, S-0517 claims 3 and 8)
     if u.simple_deployer {
         return crate::econ::inplace::process(w, v);
     }
-    // spec: S-0606 claim 12 and S-0415 claim 1 (none of these, a deploy-fire type included under Q-1164's interim: nothing more, exactly 450 ticks, no draw)
+    // spec: S-0606 claim 12 (revision 7: none of the three properties, a deploy-fire type included: nothing more, exactly 450 ticks, no draw) and S-0415 claim 1
     UNLOAD_DELAY
 }
 

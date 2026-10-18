@@ -2,13 +2,13 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 64
+revision: 67
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-18
 measurements: []
-requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1166]
+requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166]
 supersedes: []
 ---
 
@@ -127,6 +127,20 @@ is settled in S-0610 claim 6 for a berserk unit with no overload pulse: there th
 observable effect (backing `unmeasured`, confidence high). For an unlimited controller, whose overload
 pulse is involved, the place of the countdown step is S-0601 claim 16's, as S-0610 claim 6 states.
 This spec states no order of its own in either case. Q-1154 question 1 is answered by the Terms entry *enter-nearest instruction* and by claim 24: in our engine a unit of a neutral or special house holds the absorbing-building instruction, from the fate of S-0605 claim 16, and claim 26 row 3 applies to it. Question 2, whether a unit already waiting in line for the building is "already bound", is not answered here; it is listed under Open questions.
+
+Q-1160 question 1 is answered by claim 11: a completed body turn is already complete at
+that tick's first start, not only at its late start. S-0206 claim 1 already gives the
+turn's tick-based completion; B47 now distinguishes same-tick processing from a late start.
+Question 2 is answered by S-0207 claim 11, with proposed measurement D11 c:
+attack during the pre-step turn clears both destinations, leaves no heading point and
+cannot complete the cancelled step without a new locomotor destination. Cancellation
+itself neither stops nor retargets the body turn. Subsequent aiming can change its target
+facing independently; B47 retains its separate aiming and readiness qualifications.
+S-0213 claim 21 owns the order boundary and later approach.
+Q-1161 is answered in this spec's entirety by claim 11 and B48: an idle vehicle can start
+an ordered move before arrival despite already having a locomotor destination. A retained
+movement goal alone does not decide readiness. S-0207 claim 25 already owns when that
+locomotor destination is assigned and retained; it is not itself the readiness predicate.
 
 **Queueing wording.** Throughout this spec, "queues *b*" without further words means a queue
 request (claim 7) *without* an immediate start. A rule that asks for the readiness-dependent
@@ -897,9 +911,10 @@ Terms used by this spec:
     has left it; a behaviour that the second start makes current is not the one processed on that
     tick, and is first processed on the next tick (claim 3b); see the building rule below.
     Infantry and vehicles also have a **late start**, a further ready-and-start chance in the same
-    update, judged with that update's movement already counted. It makes current a queued behaviour
-    of a unit that is then ready under the readiness rules below, so "moving on this tick" includes
-    the movement of the same update. For an infantry unit the "in the middle of firing" test reads the
+    update, judged with the movement state that update has left. It makes current a queued behaviour
+    of a unit that is then ready under the readiness rules below. For a driving vehicle,
+    the test is the current predicate below, not a remembered indication that it displaced
+    earlier in the update. For an infantry unit the "in the middle of firing" test reads the
     firing state that earlier updates left and does not see the ordinary firing check of this update.
     No readiness condition of a vehicle depends on its firing or turret turning. A vehicle's body
     turning is different: see "moving" in the vehicle rules below.
@@ -912,23 +927,25 @@ Terms used by this spec:
     current late. After the expiry update of a berserk unit (S-0610 claim 5), for example, a queued
     *guard* can become current at the late start, but nothing of it (search, hold, processing) happens
     before the unit's next update. Unless something changes the unit's readiness, its slots or its orders between the late
-    start and the unit's next update, the late start has the same observable result as the first
-    start of the next update, which would make the same behaviour current and process it on that
-    update; the difference is the current behaviour that an actor updating later in the same tick
-    can read. A building and
+    start and the unit's next update, either start gives the same behaviour for processing
+    on that next update. The late start nevertheless has an earlier start tick and changes
+    the current behaviour that a recorder or an actor updating later in the same tick can read. A building and
     an aircraft do not have a late start; buildings have the second start above and aircraft
     the end-of-update start below. No quirk switch: it is the original's order, not a defect.
     Backing for the late start. (i) The expiry-update instance of a berserk unit that is infantry,
     moving, and ready: `measurable` by B46 below, which reads the current and queued behaviour after
-    the last update of the expiry tick. (ii) Every other late start, for its queued-behaviour effect: `unmeasured`, except the turn-end late start of a vehicle with the driving locomotor (claim 11), which is `measurable` by B47 (second part, confidence low). The fall-back to rest below has its own backing. In the unchanged case
+    the last update of the expiry tick. (ii) An otherwise-ready vehicle whose due *move*
+    processing queues ordinary rest: `measurable` by B3 e, which distinguishes the queue at
+    processing exit from the current behaviour at update end. (iii) Other late-start
+    queued-behaviour cases remain `unmeasured` here: no isolated setup is established for
+    their particular combination of readiness changes and queueing. B47 instead tests a driving
+    vehicle's first start at the tick-based end of a body turn, not a turn-end late start.
+    The empty-slot fall-back to rest below has its own backing. In the unchanged case
     the queued behaviour is also made current by the next update's first start before it is processed,
-    so the only other difference is the current behaviour seen after the update by actors that update
-    later in that tick (or after an intervening change of readiness, slots or orders). Observing it
-    needs a unit that has a queued behaviour left over at the end of its update while ready, and no
-    setup is known that makes that happen at a chosen update other than the berserk expiry of (i) and
-    the turn-end late start of (ii), so the reason does not depend on how the recorder reads.
-    Confidence: medium (that the readiness test counts this
-    update's movement, and for infantry the firing state that earlier updates left; the position
+    so the only difference is its earlier start tick and the state observable between those
+    starts, for example by actors updating later in the same tick or by a recorder at update end.
+    Confidence: medium (that readiness reads the movement state this
+    update leaves, and for infantry the firing state that earlier updates left; the position
     relative to a vehicle's firing and turret turning is not observable and is not asserted).
     Aircraft have a per-tick start after their processing and movement, not before processing:
     a behaviour made current there is first processed on a later tick (claim 3b). S-0501 claim 31
@@ -970,27 +987,48 @@ Terms used by this spec:
         by this condition,
       - the vehicle is moving on this tick and is not below the surface (its height above the
         surface is not negative, so a vehicle travelling underground does not meet this
-        condition). For a vehicle with the driving locomotor, "moving" here is true while the
-        vehicle's body is still turning towards the facing it has been given, for any reason (a turn in
-        place before a step, or a turn to face a target), and also while the
-        locomotor has a move destination, or a next point whose map coordinates (x, y) differ from the
-        vehicle's current ones, height ignored (both clauses of S-0206's term "locomotor moving the
-        vehicle", S-0206 Terms). This is wider than that term, which does not count a turn to face a
-        target; the turning clause is this spec's own, and the cross-spec changes it needs are listed
-        under "Cross-spec changes to confirm". A vehicle that
-        stands still while its body turns is therefore not ready, and becomes ready on the first
-        start or late start after the turn ends. The exceptions below apply to a turning vehicle in
+        condition). For a vehicle with the driving locomotor, "moving" here means either
+        that its body facing is still turning for any reason, or that all three of these hold:
+        its locomotor is moving it in S-0206's sense (Terms), its heading point is present
+        (S-0207 Terms), and its integer movement step *s* of S-0207 claim 2 is strictly
+        positive. That step is the integer progress earned per tick, not the speed fraction
+        and not a count of coordinates actually traversed. Its computation and truncations
+        remain S-0207 claim 2's. This readiness test is distinct from S-0206's term:
+        a retained locomotor destination alone is insufficient, while a body turning without
+        any movement destination still counts.
+
+        A body turn ends by tick number, as S-0206 claim 1 states. If its unchanged turn
+        starts at tick *t*₀ and lasts Θ ticks, it is no longer turning at either start of
+        tick *t*₀ + Θ. With no remaining positive-step movement condition or other blocker,
+        the queued behaviour therefore becomes current at that tick's first start and is
+        processed that tick (claim 3a), not first on the next tick. The late start does not
+        add a tick to a completed turn. A new turn or movement condition arising during
+        the update can still affect the late start independently.
+
+        Thus an otherwise ready vehicle standing in *area guard*, *sleep* or *attack* with
+        a target, with no heading point and no body turn, starts an ordered *move* at its
+        next first start even though destination assignment has already supplied a locomotor
+        destination (S-0207 claim 25). A blocked or retry-waiting vehicle is likewise ready
+        when no body turn remains and its heading point is absent or *s* is zero. Neither
+        a retained goal nor unused path steps alone holds it back. Conversely, a retained
+        heading point together with positive *s* and the locomotor-moving condition still
+        blocks readiness even without visible displacement. These are current-state tests,
+        not a blanket exemption for every blockage or retry wait. The exceptions below apply to a turning vehicle in
         the same way as to a travelling one. The condition does not hold in three cases: the queued behaviour is *enter*; the current behaviour
         is *guard*, or *attack* without a target; or the queued behaviour is a *guard* that one of
         two *unload* rules queued with an allowance to interrupt movement. Those two rules belong to other specs: a transport
         vehicle that reaches the last stage of unloading its passengers queues *guard* (S-0507
         claim 11), and a jumpjet vehicle in *unload* that is sent off again while it descends to land
         queues *guard* (movement specs). The allowance lasts until the slots next change (any
-        queue that takes effect, start, force, override or revert ends it). Confidence: medium for the
-        turning clause; the other rules of this condition keep the backing given in the Backing bullet
-        below. Backing of the turning clause: `measurable` by B47, whose first part (a turning vehicle
-        keeps a queued *attack*) is the claim (falsified by *attack* becoming current while the body
-        facing still changes) and whose second part is the tick-exact end of the turn (confidence low),
+        queue that takes effect, start, force, override or revert ends it). Confidence: high for the driving readiness predicate and tick-based turn-end start.
+        Backing: `measurable` by B47 for the isolated body-turn condition and same-tick
+        processing, and B48's fresh-move cases for a destination without a heading point.
+        The retained-goal blockage/retry comparisons, including a present heading point with
+        zero or positive integer movement step and no displacement, are `unmeasured`: B48
+        establishes no legal order that both preserves the required waiting state and leaves
+        a distinguishable behaviour queued. Its retained-goal part is a conditional investigation,
+        not backing for those branches. The other rules of this condition
+        keep the backing given in the Backing bullet below,
       - its unload or deploy cycle has not finished (never holds for vehicles, S-0517 claim 15),
       - it is in contact with a vehicle-factory building and the queued behaviour is neither *move*
         nor *enter*,
@@ -1071,8 +1109,10 @@ Terms used by this spec:
     timer are not changed by that queue request. The queued behaviour starts at the
     next per-tick start at which claim 11 permits it, without waiting for the old
     processing timer or path retry delay to expire. Its start expires the processing
-    timer, so that turn processes the newly current behaviour (claims 3a and 11).
-    A failure after that turn's per-tick start cannot use that already-passed start.
+    timer. A first per-tick start permits processing in that turn (claim 3a); a late
+    start instead leaves first processing to the next update (claim 3b).
+    A failure after that turn's first per-tick start cannot use that already-passed start,
+    but can still reach its late start if ready there.
     Until a start occurs, any processing still uses the current behaviour. Thus
     *guard* need not already be current on the failure tick, but a pending *guard*
     must not be treated as a promise of another *harvest* processing. Once *guard*
@@ -1083,6 +1123,9 @@ Terms used by this spec:
     S-0212 claim 23a and claim 38 here, not deferred until *area guard* processes.
     It does not queue *move* or force *area guard* to start.
     - Backing: `measurable` (B38; S-0402 H20 and S-0212 claim 23's failure scenarios)
+      for queueing and first-start timing. A failed-departure late start remains
+      `unmeasured`: B38 does not establish a failure that leaves the harvester ready
+      at that late start. Its conditional late-start recording is not such a fixture.
     - Confidence: high for queue/start separation and the absence of a docking-cell
       exception; medium for the path-failure categories, following S-0212 claim 23
 
@@ -1817,10 +1860,16 @@ apply in our engine to the actors of every player house.
       case of claim 17 to the chrono miners of every player house (S-0402, claim 17). In our engine row 4 never applies; the original's computer player
       uses it to deploy its base-building vehicles by themselves, which our AI does with a deploy
       order.
-    - Backing: `measurable` (scenario B10, scenario B21 for the enter-nearest instructions, including its part (d) for the waiting-line exception,
+    - Backing: `measurable` (scenario B10, scenario B21 parts a and b for the occupy instructions,
       scenario B24, case a for the distributed-fire row and case b for the charge target,
       supplemented by S-0518 claim 14's scenarios TC2 and TC4; scenario
-      B26, case a for the original-only sabotage rule). The vehicle table's row 1 is `measurable`
+      B26, case a for the original-only sabotage rule).
+      The absorbing-building instruction's repeat search, lapse, queue-only outcome and
+      already-bound exceptions are `unmeasured` here: B21 c leaves the instruction's input
+      path conditional, and B21 d supplies no established way to retain the required
+      waiting-line state at guard processing. Those parts are investigations only.
+      S-0605 claim 16 retains ownership of the fate's initial search and its backing.
+      The vehicle table's row 1 is `measurable`
       by S-0402 scenario H7 (the slave miner in *guard* after a stop order; its variants b to e for
       the parts of the wake-up rule), and row 2 by S-0402 scenario H5, parts C and D (the
       computer-controlled harvester's return to *harvest* and the no-field record), and scenario H8
@@ -2092,8 +2141,16 @@ apply in our engine to the actors of every player house.
     | permission given, not yet in contact | successful entry request | contact takes the first free place before physical arrival; the depot has max(d, 1) places for imported docking-place count d (S-0314 claim 17) |
     | a one-place depot already holds another vehicle's contact | second vehicle makes an ordinary click | permission fails; no second enter order, waiting queue or displacement of the first contact (S-0314 claims 16–17) |
     | approaching with contact | destination guidance | S-0314 claim 18 supplies the building destination and per-vehicle docking point for ordinary land depots and naval yards, and the separate obsolete-unloading exception |
-    | moving into the supplied docking-point cell | movement-arrival exchange | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start; exact horizontal alignment with the docking point and a pre-existing tether are not required (S-0314 claims 17–18) |
-    | completing entry | separate completed-entry confirmation, when supplied | confirmation can establish tether, but an ordinary repair depot without pad or unloading flags does not supply it to an untethered entering vehicle; the vehicle can turn toward 16384 facing units (map east) and reports arrival once no longer moving, already tethered to the contacted building and still in enter (S-0314 claim 17) |
+    | moving into the supplied docking-point cell | movement-arrival exchange | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start; no map-east body turn is requested, even when tethered; exact horizontal alignment with the docking point and a pre-existing tether are not required (S-0314 claims 17–18) |
+    | completing entry | separate completed-entry confirmation, when supplied | confirmation can establish tether and turn the vehicle toward 16384 facing units (map east), with arrival reported once no longer moving, already tethered to the contacted building and still in enter; an ordinary repair depot without resource-unloading or obsolete-unloading flags supplies no such confirmation through repeated entry requests, with or without the pad flag or an existing tether (S-0314 claim 17) |
+
+    Ordinary movement arrival schedules no later map-east turn merely because it queued
+    *sleep*. If ready at that update's late start (claim 11), the vehicle starts *sleep*
+    there without another *enter* processing. An already-turning driving vehicle can instead
+    hold *sleep* queued under claim 11's ordinary readiness rule until the first permitted
+    start after its turn ends. Arrival creates neither that turn nor another readiness gate.
+    Ship and hovering locomotion do not inherit the driving-only body-turn hold; their
+    other readiness conditions still apply (S-0314 claim 17).
 
     **Tank bunker.** The movement-arrival test applies also when the contacted building is a
     tank bunker: it is made when the vehicle's movement brings it into a cell, not by the
@@ -3355,7 +3412,7 @@ human-controlled owner):
 | Current | Event | Result |
 |---|---|---|
 | any | move order | *move* queued; current at the next per-tick start when ready (claim 12) |
-| *move* | destination reached, stopped, nothing queued | falls back to rest: usually *guard* or *area guard* queued, current on the next tick (claims 14, 15, 22) |
+| *move* | due processing finds no destination, no movement and nothing queued | falls back to rest: usually *guard* or *area guard* queued, then current at the next permitted start, including that update's late start if ready (claims 11, 14, 15, 22) |
 | *move* | stop order | no slot change; destination cleared; falls back to rest at a processing after it has stopped (claims 12, 22) |
 | *attack* | target gone | falls back to rest (claim 23) |
 | *guard* | attacked, retaliation allowed | override to *attack*; revert to *guard* at the killing hit on the attacker, or when the attacker goes off the map or changes owner (claims 10, 18) |
@@ -3514,6 +3571,7 @@ are fixed rules, not behaviour-rate or targeting-delay fields.
 | Data input | Concept | Parse form and absent-key result |
 |---|---|---|
 | none | route ownership and alliance perspective (claim 13, Q-0663) | fixed owner-routes departure, including both service alliance guards and non-allied fallback; no imported local-house setting or absent-key choice |
+| none | driving readiness, retained-goal waits and first start on the body-turn completion tick (claim 11, Q-1160, Q-1161) | fixed runtime predicate, no new key or absent-key default; body turn duration and integer movement step use S-0206 claims 1 and 6 and S-0207 claim 2, with their existing imports |
 | none | per-tick approach placement and independent eligibility (claim 37 a2) | not configurable through data; fixed as stated in that claim |
 | none | same-processing qualification of a newly taken own-cell guard spot, search and idle-action outcomes (claim 26, Q-0231) | fixed behaviour, no imported setting or absent-key choice; the existing behaviour-rate and targeting-delay fields still supply their delays |
 | none | ready mark from the grand opening at set-up placement and *guard* current from the first per-tick start (claim 1, Q-0241) | fixed behaviour, not a new data flag; it does not depend on any weapon, turret or upgrade field. Building map entry, upgrade, idle body and turret flag mappings stay with S-0009, S-0108 and the rows below |
@@ -3750,8 +3808,11 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   *attack* stays queued while the vehicle moves under *move* and becomes current only on a tick on
   which it is not moving. (c) Repeat (b) with an infantry unit; expected: the same. (d) Give a moving
   vehicle a second move order to another cell; expected: no slot changes, the destination changes.
-  (e) Let a vehicle arrive; expected: on the first processing after it stops, its resting
-  behaviour is queued and becomes current on the next tick. (f) Force: a vehicle of a computer-controlled
+  (e) Let a vehicle arrive; expected: on the first due processing with no destination,
+  no movement and nothing queued, its resting behaviour is queued. Record the slots and
+  processing timer at processing exit and update end. If otherwise ready at the late start,
+  rest is current at update end, without a second processing that turn; its first processing
+  follows on the next update. Otherwise it waits for the next permitted start (claim 11). (f) Force: a vehicle of a computer-controlled
   owner on a long move is taken over by a mind-control unit of the human-controlled house. Expected:
   on the tick of the takeover *guard* is current, nothing is queued and target and destination are empty, although the vehicle
   was moving (not ready to change). (g) Stop order: give a moving vehicle in *move* the stop order.
@@ -3787,8 +3848,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   current at the vehicle's first per-tick start after the order takes effect, or not being
   processed on the tick it becomes current (case a), by a queued behaviour
   becoming current while the actor moves (cases b, c), by no resting behaviour queued at the first
-  processing after the vehicle stops, or by one that does not become current on the next tick
-  (case e), by any slot change in (d) or (g) (except the harvester's *guard*, the slaves'
+  qualifying processing after the vehicle stops, by rest still queued at update end when
+  ready at the late start, or by a second processing in that same turn (case e), by any slot change in (d) or (g) (except the harvester's *guard*, the slaves'
   *guard*, and the *guard* of a slave master whose own type is a harvester in *harvest*),
   by a slave without *guard* current, or with a target or destination, on the tick of the stop
   order in (g), by *guard*
@@ -3891,7 +3952,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   infantry unit and the armed vehicle queue nothing, *move* stays current and the next processing
   comes 1 tick later, and so on over 20 processings (each one falls back to rest again and reaches
   row 6 or 9); the unarmed vehicle queues *guard* at that processing (row 7 comes before row 9),
-  which becomes current on the next tick. Expected in C: all three queue a resting behaviour at
+  which becomes current at the next permitted start, including that update's late start
+  when ready. Expected in C: all three queue a resting behaviour at
   that processing (*guard* for the infantry unit, *area guard* or *guard* for the armed vehicle by
   claim 15 rows 10 and 12, *guard* for the unarmed vehicle). A run in which the recorder shows a
   target, a destination or queued destinations at that processing is invalid. Falsified in Z or P
@@ -4114,8 +4176,14 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   First let an entry complete without further input. Expected: contact precedes arrival.
   movement arrival in the supplied docking-point cell queues repair/sleep without requiring
   exact horizontal alignment or a pre-existing tether, and without bypassing readiness.
-  Record map-east facing and the separate tethered, stationary completed-entry confirmation
-  independently; no reservation-only paid step. Reuse S-0314 H19's tether and off-centre
+  Arrival itself requests no map-east turn, including when tethered, and schedules none
+  for a later enter processing. If otherwise ready, sleep starts at that update's late
+  start. An existing driving turn can hold it queued under claim 11; ship or hover body
+  rotation alone cannot. Reuse S-0314 H16's three-locomotion-kind and existing-turn
+  controls, including its inconclusive rule for states the fixture cannot reach. A new
+  turn requested solely by movement arrival falsifies the claim. Record any separate
+  completed-entry confirmation independently; no reservation-only paid step.
+  Reuse S-0314 H19's tether and off-centre
   controls and H22's late-retry controls, with their expected results and falsifiers:
   same-turn destination assignment does not repeat movement or due behaviour processing,
   and competing retries use object-turn order. An early unarmed guard transition must meet
@@ -5110,8 +5178,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
   Expected: only the give-up case queues *guard*. It does not force a start or
   restart the processing timer at queueing. At the next permitted per-tick start,
-  *guard* becomes current and processes in that turn even if the old harvest delay
-  or route retry delay has not expired. In the other cases, if neither an order nor
+  *guard* becomes current even if the old harvest delay or route retry delay has not
+  expired. A first start processes it that turn; a late start first processes it on
+  the next update. Record both boundaries separately. The failure-specific late-start
+  comparison remains conditional under claim 11a's backing, not an established fixture. In the other cases, if neither an order nor
   another rule changes the behaviour, *harvest* remains current and its next
   processing follows S-0402 claim 3's interval and seeking rule. Record whether
   failure preceded or followed the turn's per-tick start rather than assuming
@@ -5353,28 +5423,77 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   and is reported to S-0610. This part does not test any other late start.
 
 - **B47 (claim 11: a vehicle whose body is still turning is not ready).** Proposed measurement,
-  not a result. Setup: a tiny map, one human-owned tracked or wheeled vehicle with a turret-less or
-  slow-turning body, a durable enemy structure with no weapon, stock data, speed index 2, no
-  external controller, read-only recorder. The vehicle is idle with *guard* current and faces away
-  from a free cell next to it, so that moving there needs a turn of about half a circle first.
-  It is ordered to move to that cell; the order starts *move* at the next update (the vehicle is
-  ready with *guard* current). On the first tick on which the recorder shows the body facing
-  changing, the player gives an attack order on the structure (claim 12: it queues *attack*
-  without an immediate start, and it carries no destination). The recorder reads, after every tick,
-  the body facing, the current and queued behaviour, the destination and the cell. A run is valid
-  only if *attack* is queued and *move* is current after the tick of the attack order and the body
-  facing was still changing at that read, and the vehicle has no locomotor move destination and no
-  next point at that read; any other run is void. Expected: while the body facing
-  changes from tick to tick the queued *attack* does not become current (the vehicle is moving
-  in the sense of claim 11 because its body is turning, with no locomotor move destination and no
-  next point left). After the turn ends, if the recorder shows no destination and no cell change, *attack*
-  is current after the tick *t* on which the body facing last changed (the late start counts that
-  update's turning) and was queued after every earlier tick; if the vehicle instead keeps a route and
-  steps, the run is void, because with a route left the turning clause is not tested. Falsified
-  by *attack* becoming current while the facing is still changing, or, in a run with no route left,
-  by *attack* not being current after tick *t*, or by *attack* already current after an earlier
-  tick. Runs: five valid runs. Confidence in the second
-  part is low until a run shows what the attack order does to the move in progress.
+  not a result. Setup: a tiny flat map, one human-owned turret-less driving vehicle,
+  a durable enemy structure without a weapon, stock data, speed index 2, with no external
+  controller or mods. Use scripted input and a read-only recorder, five valid runs. Begin with *guard*
+  current, no movement and no body turn. Put a free adjacent cell opposite the placement
+  facing, with the structure farther along that same direction but within weapon range.
+  Order the move, then issue attack on the first tick of its pre-step turn.
+
+  Record the order boundary and each tick's end: current and queued behaviour, body facing
+  and target facing, turn start and duration, processing timer, behaviour start tick,
+  order-level and locomotor destinations, heading point, cell and movement step. Keep
+  runs whose state immediately after order application, before the vehicle's next first
+  start, has *move* current, *attack* queued, no heading point or locomotor destination,
+  no displacement and an unfinished body turn. These are input-state qualifications,
+  not permission to discard an unexpectedly early start. Record other initial states
+  separately against S-0207 claim 11 and its scenario D11 c, which answer Q-1160
+  question 2's cancellation consequences; do not assume that cancelling the goal erased
+  every movement state. An independently caused approach destination, body re-aim or other
+  readiness blocker makes the later isolated comparison inconclusive. A change caused by
+  an unexpectedly early *attack* start is instead a falsification, not a void run. A target
+  along the turn's existing target direction avoids a facing-error change to a different
+  body target. If no ordinary input reaches the qualified state, record B47 untested.
+
+  Let *t* = *t*₀ + Θ for the recorded unchanged turn (S-0206 claim 1). Expected:
+  *attack* stays queued for tick numbers below *t*, but becomes current and processes
+  in tick *t*. Its start tick is *t* and its processing timer at tick end contains the
+  chosen attack delay rather than the expired-now timer of an unprocessed late start
+  (claims 3 and 6). For this timer comparison require a positive chosen standard delay,
+  recording its value rather than assuming it. Record the scenario random stream as a corroborating delay-draw
+  witness. A shot alone is not proof that *attack* processed: ordinary vehicle firing
+  can run while another behaviour is current. Falsifiers: a start before *t* with the
+  body turn unfinished, no start or no attack processing in tick *t* with no other
+  blocker, or a processing delay inconsistent with claims 6 and 23. In particular,
+  a timer left expired-now in tick *t* followed by the first attack processing in
+  tick *t* + 1 falsifies same-tick processing. A facing that changes from
+  its previous tick's value to its target in tick *t* is already finished at that tick's
+  first start and does not falsify the rule.
+
+- **B48 (claim 11, Q-1161: a movement goal is not sufficient to block a start).**
+  Proposed measurement, not a result. Use a tiny flat stock-data map at speed index 2,
+  with no external controller or mods, one human-owned driving vehicle, a durable enemy target and
+  friendly vehicles that can close a one-cell passage. Script input and record order
+  boundaries and each tick's end with a read-only recorder. Three valid runs per case.
+  Record both behaviour slots, processing timer, body turn state, order destination,
+  locomotor destination, heading point, integer movement step and position.
+  - Fresh move: begin stationary in *area guard*, then repeat from *attack* with a target
+    after aiming has finished, and from *sleep* after an ordinary repair-depot arrival
+    under S-0314 claim 17. Include a stock repair depot for that last case and wait for
+    the body's turn to end; repair-depot contact is not vehicle-factory contact. Order a free cell five cells away. Require the old heading
+    point to be absent and no body turn at the first start. Expected: the order boundary
+    already has a locomotor destination, but *move* becomes current and processes at the
+    next first start, before arrival. A due old area-guard processing does not run first
+    and send it back to its guard spot. Falsified by *move* not starting and processing
+    at that first start despite the verified readiness conditions, in particular by
+    keeping it queued solely until that destination disappears. If the depot run has another readiness blocker, repeat
+    after it ends, or report that comparison inconclusive rather than forcing *sleep*.
+  - Retained-goal wait (conditional investigation, `unmeasured` in claim 11): no
+    legal order preserving all prerequisites is established here. Try closing the passage after a move order and record a retained-goal
+    blockage or retry wait of S-0207 claim 25. Use an accepted ordinary behaviour order
+    that leaves a nonempty movement goal; record the actual references rather than
+    assuming an attack order retains the old goal. If a legal sequence reaches the state,
+    preserve that sequence and repeat it three times. With no body turn, and either no
+    heading point or integer movement step zero, expected: the queued behaviour starts
+    at the next eligible start despite the goal. If the recorded heading point remains
+    present and the step is positive while S-0206's locomotor-moving test holds,
+    expected instead: it stays queued unless claim 11's ordinary exceptions apply.
+    Falsifiers in a validated fixture: a behaviour remaining queued at an otherwise
+    eligible start with no body turn and either no heading point or zero step, or a
+    behaviour starting while all three positive-step movement conditions hold and no
+    readiness exception applies. A turn, contact, transition or readiness exception makes a run
+    unsuitable for that comparison. If no legal order retains the needed state,
+    report that subcase inconclusive; do not synthesize a queued slot.
 
 ## Open questions
 
@@ -5453,23 +5572,36 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   per-tick drop of claim 37 a, the only way an actor in those behaviours reaches the step, so they
   stay unmeasured; the *attack*, *area guard* and human-controlled *hunt* rows are backed by
   scenario B32 (c and c2).
-- **Q-1154, question 2.** Whether a unit already waiting in line for the absorbing building that the enter-nearest search has found is "already bound", so that its *guard* or *area guard* processing does not send it again (claim 24), or only a unit in contact with that building is. Claim 24 currently counts waiting in line; its confidence is low until scenario B21 (d) settles it.
+- **Q-1154, question 2.** Claim 24 counts a unit already waiting in line for the found
+  absorbing building as "already bound", so the processing does not send it again.
+  This remains low-confidence and `unmeasured`: B21 d does not establish the needed
+  legal waiting-line fixture. Validate that input sequence before using the proposed
+  expected result and falsifier to settle the question.
 
 ### Cross-spec changes to confirm
 
-- Claim 11's turning clause (a vehicle whose body is still turning, for any reason, is "moving" for
-  readiness) conflicts with approved S-0206 and S-0603, and changes the timing of starts in approved
-  S-0402 and S-0314. S-0215 therefore defines its own readiness test in claim 11, and S-0206's
-  term "locomotor moving the vehicle" and its claims 9 and 16 stay as they are (S-0206 only
-  points to claim 11 in its Terms),
-  because widening that term would stop claim 9's body turn after its first tick. S-0603: its
-  readiness claim (line 145) must drop "but not a body that only turns towards a target", and its
-  Terms entry (line 75, "a body that only turns does not") must take the readiness test of S-0215
-  claim 11 in place of S-0206's term. S-0402: the queued unload of a harvester that turns on the
-  spot before it starts is held until the turn ends (claim 11 here), so S-0402's start timing after
-  that turn needs the late-start rule of claim 11 cited; owner of S-0402 to confirm. S-0314: the
-  completed-entry turn toward 16384 facing units, after which *sleep* is queued and starts under
-  claim 11, now waits for the turn to end (claim 17); owner of S-0314 to confirm.
+- S-0206 Terms already distinguishes its locomotor-moving query from claim 11's readiness
+  query, and S-0603 claim 3 already delegates readiness here. Retain those distinctions.
+  S-0206 should clarify that the readiness query is not merely its own query plus body
+  turning: a non-turning driving vehicle additionally needs a present heading point and
+  a positive integer movement step to count as moving for readiness. Its claims 9 and 16
+  need no widening.
+- Q-1160 question 2 is now covered by S-0207 claim 11 and its scenario D11 c:
+  cancelling the pre-step destination leaves no heading point, cannot authorize the
+  cancelled step and does not itself stop or retarget the body turn. Retain that
+  matching contract, separately from B47's aiming and readiness qualifications.
+  No further S-0207 change is requested.
+- S-0402 claim 11's turning-body discussion and its later turn-end-late-start
+  outcomes should use claim 11 here: without another blocker, a tick-number turn
+  expiry permits that tick's first start and same-tick processing, not just a late
+  start. This replaces the earlier cross-spec note requesting late-start timing.
+  S-0314 claim 17 agrees with claim 29: ordinary depot arrival queues repair/sleep
+  without requesting a map-east turn, even when tethered. Only an actual existing driving
+  turn can impose claim 11's body-turn readiness hold; ship and hovering body rotation
+  alone cannot. Retain the matching contract; no further change is requested there.
+- S-0603 claim 3 should distinguish the movement state read at the late start from
+  a remembered displacement earlier in the update. For a driving vehicle, apply the
+  complete current predicate here, even after an update that moved the unit.
 
 - S-0009 claim 40, S-0108 claim 11 and S-0402 claim 18 already agree with claim 1:
   set-up queues *guard*, the grand opening sets readiness during placement, and the
@@ -5498,14 +5630,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   open until the complementary revisions are approved together.
 - S-0309's current claim 23 b already cites claim 13 here for assignments that can supersede
   the refresh result and for route-generated orders rather than immediate destination changes.
-- S-0610 claim 5 (its Effects section, its queued-behaviour bullet, which says the queued *guard* or
-  *hunt* does not start in the expiry update, and its Open questions) leaves open whether a per-tick
-  start after the countdown step can make the queued behaviour current in the expiry update, and says
-  B46 here decides it. Claim 11 here gives that as an example, "a queued *guard* can become
-  current at the late start", with backing `measurable` (B46). The joint hand-off must give S-0610
-  P9 part b the expected value of B46 (or cite B46) and drop its sentence that no expected value is
-  stated; S-0610's start-order question stays open until B46 is run, and the two specs are handed
-  off together.
+- S-0610 claim 5 and P9 part b already cite B46 for the expiry-update late start of
+  moving, ready infantry, including its expected value and falsifier. Retain that shared
+  proposal and the unmeasured qualification for other expiry cases; no further edit is
+  requested there. Its start-order question remains open until B46 is run.
 Joint hand-off checks: S-0213 claim 16 already supplies the route-order timing
 pointer. Confirm S-0207 claim 20 e and S-0208 claim 19 with claim 10's airstrike exception,
 not an erasing-lock exception, and its restored-target distinction. S-0307 claims 15 to 25 and S-0406

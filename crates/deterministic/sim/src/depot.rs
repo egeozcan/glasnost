@@ -70,10 +70,6 @@ mod phase {
     pub const WORKING: i32 = 2;
 }
 
-/// The facing a vehicle turns to in the completed entry exchange.
-// spec: S-0314 Constants (arrival body facing: 16384 facing units, map east)
-const ARRIVAL_FACING: u16 = 16384;
-
 /// The settling hold distance (S-0314 claim 21), strict.
 // spec: S-0314 Constants (settling hold distance: 200 leptons, strict, to the docking point)
 const SETTLING_HOLD: i32 = 200;
@@ -376,7 +372,6 @@ fn still(w: &World, id: ObjectId) -> bool {
 /// S-0314 claims 16 to 18). Returns the delay: every outcome chooses the
 /// standard delay (S-0215 claim 29).
 pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
-    let t = w.tick;
     let Some(o) = w.obj(id).cloned() else {
         return 1;
     };
@@ -431,33 +426,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         // spec: S-0314 claim 20 (revision 28: the processing of a docked vehicle's enter on its own depot is only claim 17's repeated entry request: the depot accepts the vehicle it already holds, a pad depot sets the tether again; nothing is queued, neither repair at the depot nor sleep at the vehicle, and no destination is given)
         return crate::process::standard_delay(w, id);
     }
-    if w.body_facing(id) != ARRIVAL_FACING {
-        let rate = w
-            .rules()
-            .unit(o.kind, o.type_index)
-            .map_or(0, |u| u.turn_rate);
-        if crate::occupancy::in_progress(w, id) {
-            return crate::process::standard_delay(w, id);
-        }
-        if let Some(ob) = w.obj_mut(id) {
-            // spec: S-0314 claim 17 and S-0215 claim 29 (in the completed entry exchange the vehicle turns toward 16384 facing units)
-            ob.body.turn_to(ARRIVAL_FACING, t, rate);
-        }
-        return crate::process::standard_delay(w, id);
-    }
-    if still(w, id)
-        && w.obj(id)
-            .is_some_and(|x| x.beh.current == Some(Behaviour::Enter))
-    {
-        // spec: S-0215 claim 29 and S-0314 claim 17 (the completed-entry exchange: no longer moving, tethered and still in enter, it reports arrival; the depot queues repair and sets its ready mark, the vehicle queues sleep, neither with an immediate start)
-        if let Some(b) = w.obj_mut(k) {
-            b.beh.queue(Some(Behaviour::Repair));
-            b.beh.ready_mark = true;
-        }
-        if let Some(ob) = w.obj_mut(id) {
-            ob.beh.queue(Some(Behaviour::Sleep));
-        }
-    }
+    // spec: S-0314 claim 17 (revision 29: an ordinary repair depot, without the resource-unloading or obsolete-unloading flag, supplies no completed-entry confirmation through its repeated entry request, with or without the pad flag or an existing tether: no turn toward 16384 facing units and no second arrival report; acceptance or the tether only lets entry continue)
     crate::process::standard_delay(w, id)
 }
 
@@ -557,17 +526,7 @@ pub fn movement_arrival(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.beh.queue(Some(Behaviour::Sleep));
     }
-    // spec: S-0314 claim 17 (revision 27: for a tethered vehicle, sleep is queued from arrival before the completed-entry exchange rotates it toward 16384 facing units; an untethered vehicle is not rotated); Q-1162 interim (the rotation begins at this arrival, right after sleep is queued, so S-0215 claim 11's turning clause holds sleep until the rotation ends)
-    if tethered(w, id) && w.body_facing(id) != ARRIVAL_FACING {
-        let t = w.tick;
-        let rate = w
-            .obj(id)
-            .and_then(|o| w.rules().unit(o.kind, o.type_index))
-            .map_or(0, |u| u.turn_rate);
-        if let Some(ob) = w.obj_mut(id) {
-            ob.body.turn_to(ARRIVAL_FACING, t, rate);
-        }
-    }
+    // spec: S-0314 claim 17 (revision 29, Q-1162 answered: arrival itself requests no map-east body turn, even for a tethered vehicle, and schedules none for a later enter processing; an existing driving turn holds sleep only under S-0215 claim 11's ordinary readiness test)
 }
 
 /// The processing delay *D* of a depot (S-0314 F1): the rate delay of

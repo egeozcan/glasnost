@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 28
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-18
 measurements: []
-requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158]
+requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162]
 supersedes: []
 ---
 
@@ -664,8 +664,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     itself erase the point already assigned by the accepted order.
     Without the pad flag this ordinary repeated-request exchange sets no tether.
     A separate completed-entry confirmation can establish tether when received, but an
-    ordinary repair depot without pad, resource-unloading or obsolete-unloading flags does
-    not supply that confirmation to an untethered entering vehicle. The movement-arrival
+    ordinary repair depot without resource-unloading or obsolete-unloading flags does
+    not supply that confirmation through its repeated entry request, whether or not it has
+    the pad flag or the vehicle is already tethered. The movement-arrival
     exchange below does not establish tether either. Such a vehicle can remain untethered
     throughout waiting, settling and working: paid repair does not require tether. Neither
     initial reservation nor occupying a foundation or docking-point cell by itself sets it.
@@ -676,15 +677,26 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     docking-point cell during movement sets the depot's ready mark and queues *repair* at
     the depot and *sleep* at the vehicle, neither with an immediate start. S-0215 claim 29
     already states this ready-mark effect; starts still follow S-0215 claim 11, rather than
-    a forced or synchronous repair processing. For a tethered vehicle, *sleep* is queued from arrival,
-    before the completed-entry exchange rotates the vehicle toward 16384 facing units (map east). It
-    does not become current while the body is still rotating. A body still rotating counts as moving
-    in the readiness sense of S-0215 claim 11. That is not the movement report of this claim, for
-    which a rotation in place is not sufficient. So *sleep* becomes current at the first start
-    opportunity after the rotation ends. The rotation is the only thing that delays it beyond that:
-    an untethered vehicle is not rotated by the exchange, so its *sleep* starts at the first start
-    opportunity after arrival. It does not require exact agreement with the docking point's horizontal coordinates or a
-    tether. Claim 6's waiting checks begin when the depot processes repair, not on the click.
+    a forced or synchronous repair processing.
+
+    **Arrival does not start a turn (Q-1162).** Docking-point-cell movement arrival itself
+    requests no map-east body turn, even for a tethered vehicle facing another way. There is
+    no turn scheduled for a later enter processing merely because arrival queued sleep.
+    An ordinary depot's repeated request, including the pad case above, does not provide
+    the separate turn-producing confirmation. Thus tether alone neither guarantees map-east
+    facing nor holds sleep pending such a turn. If the vehicle is ready at the arrival update's
+    late start, sleep becomes current there and no further enter processing is needed.
+    Neither exact agreement with the docking point's horizontal coordinates nor a tether
+    is required for the arrival queues.
+
+    **An existing turn and readiness.** If a driving vehicle is already turning when arrival
+    queues sleep, S-0215 claim 11's ordinary readiness test can hold that queue until its
+    first start opportunity after the turn ends. This is conditional on an actual existing
+    turn, not a command to create one at arrival. Ship and hovering locomotion do not inherit
+    that driving-only body-turn hold: body rotation alone does not prevent their sleep from
+    becoming current. Their movement and all other readiness conditions remain S-0215
+    claim 11's. In every case arrival supplies no extra depot-specific readiness gate.
+    Claim 6's waiting checks begin when the depot processes repair, not on the click.
     There is also an earlier start opportunity for an unarmed depot in the waiting stage of
     its guard processing, after initial idle-body selection (S-0215 claim 29): a contacted
     entering unit, standing still at a spatial distance strictly below 64 leptons from the
@@ -714,7 +726,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       among stock types; no observation of them is claimed.
     - Confidence: high (capacity, repeated request, cell test, movement reports, empty-place
       result, ready mark, same-cell destination assignment and absence of initial tether), medium (stock approach observations,
-      early guard start, the uninterrupted one-place approach and the rotation gate on a tethered vehicle's arrival sleep)
+      early guard start and the uninterrupted one-place approach); high (arrival itself requests no turn,
+      and no extra depot-specific readiness gate); the driving-only existing-turn hold inherits
+      S-0215 claim 11's confidence
 
 18. **Depot docking point and stopping (Q-0641, Q-0680).** For an ordinary repair depot,
     including a naval yard, without obsolete-unloading, resource-unloading or tank-bunker flags,
@@ -1089,7 +1103,7 @@ Backing and confidence are claim 15's.
 | Depot waiting distance, ship and hovering locomotors | 200 | leptons, strict upper bound | Claim 6 |
 | Waiting-to-settling delay | 3 | ticks | Claim 6 |
 | Early guard repair-start distance | 64 | leptons, strict upper bound | Claim 17; measured to foundation centre, not docking point |
-| Arrival body facing | 16384 | facing units | Claim 17; map east |
+| Separate confirmation's requested facing | 16384 | facing units | Claim 17; map east, not a movement-arrival requirement |
 | Settling hold distance | 200 | leptons, strict upper bound | Claim 21; measured to the docking point |
 | Settling recheck while moving | 1 | ticks | Claim 21 |
 | Serviced contact place | 0 | place index | Claims 20 to 23; Edge cases |
@@ -1109,7 +1123,7 @@ Backing and confidence are claim 15's.
 | State | Event | Result |
 |---|---|---|
 | no depot contact | successful entry request with a place free | contact assigned before arrival (claim 17) |
-| entering with contact, tether present or absent | arrival in the supplied docking-point cell | depot sets its ready mark and queues repair; vehicle queues sleep, neither with immediate start and without creating tether (claim 17; S-0215 claim 11 owns subsequent starts) |
+| entering with contact, tether present or absent | arrival in the supplied docking-point cell | depot sets its ready mark and queues repair; vehicle queues sleep, neither with immediate start and without creating tether or requesting a body turn (claim 17; S-0215 claim 11 owns subsequent starts) |
 | waiting for a contacted vehicle, tethered or not | processing finds it still within its starting distance | settling scheduled 3 ticks later (claim 6) |
 | waiting for a contacted vehicle, tethered or not | moving or outside its starting distance | waiting, next processing after *D* ticks |
 | settling scheduled | later processing finds the vehicle still and its locomotor settled | settling step (claim 3) |
@@ -1270,7 +1284,7 @@ alternatives are design rules, not claims of oracle measurements.
 | Rules, building section, `WeaponsFactory` | vehicle-factory flag: naval departure preferences (claim 25), not fixed docking-point selection | boolean | no |
 | Rules, building section, `Weeder` | obsolete-unloading flag: fixed docking point (claim 18); excluded from claim 17's ordinary pad exchange | boolean | no |
 | Rules, building section, `Helipad` | pad flag in claim 17's tether exchange, including its empty-place-0 and one-place cases; repair without it does not implicitly tether on arrival | boolean | no |
-| Rules, vehicle section, `Locomotor`, `SpeedType` | movement method selects claim 17's movement-report row, driving/ship same-cell assignment and claim 25's tests; driving covers wheeled and tracked classes, whose additional test is always free | movement-method identifier (S-0207); class name (S-0211 claim 3) | owned by S-0207 and S-0211; no repair-specific default |
+| Rules, vehicle section, `Locomotor`, `SpeedType` | movement method selects claim 17's movement-report row, driving/ship same-cell assignment, driving-only existing-turn readiness hold (S-0215 claim 11) and claim 25's tests; driving covers wheeled and tracked classes, whose additional test is always free | movement-method identifier (S-0207); class name (S-0211 claim 3) | owned by S-0207 and S-0211; no repair-specific default |
 | No additional key | driving/ship destination-point assignment and clearing, including same-cell depot entry (claims 17 and 18; S-0207 claim 25) | runtime integer-lepton point, separate from order destination; supplied docking point uses the displacement rows above | initially absent; no repair-specific override |
 | Rules, building section, `Refinery`, `Bunker` | resource-unloading and tank-bunker exclusions (claims 17 and 18); their separate entry rules are not redefined here | booleans | both no |
 | Rules, building section, `GDIBarracks`, `NODBarracks`, `YuriBarracks` | first, second and third barracks door kinds for claim 25's optional preferences | booleans | all no |
@@ -1807,9 +1821,9 @@ Repeat each part three times. A read-only recorder logs input action, issued ord
 body facing, contact places, tether, behaviour, building processing and health every tick.
 - *a, ordinary entry:* damage one vehicle and click the depot with it selected, from each
   accessible side. Expected: enter order, contact before arrival, destination directed to the
-  depot's supplied point, map-east arrival facing, depot repair and vehicle sleep at completed
-  entry, then claim 6's waiting and settling timing. Where the guard-start conditions of claim
-  17 occur first, record that earlier repair scheduling instead. Distinguish the unarmed
+  depot's supplied point, deferred depot repair and vehicle sleep queued at movement
+  arrival, then claim 6's waiting and settling timing; no compulsory map-east arrival facing.
+  Where the guard-start conditions of claim 17 occur first, record that earlier repair scheduling instead. Distinguish the unarmed
   depot's initial idle-body selection from its later guard waiting stage: the early transition
   is allowed only in the latter. Repeat with an otherwise identical armed depot supplied by
   named test-map overrides, with no enemy target in range: its guard processing must not take
@@ -1817,13 +1831,21 @@ body facing, contact places, tether, behaviour, building processing and health e
   Repair on the initial click,
   a neighbouring-water or exit-cell destination substituted for the docking point, a point
   changing with approach side, or a different recorded transition falsifies the relevant rule.
-  Map-east arrival facing in the expectation above applies only to a tethered vehicle (claim 17); an
-  untethered vehicle is not rotated by the completed-entry exchange, and its *sleep* starts at
-  the first start opportunity after arrival. For a tethered vehicle, expected: *sleep* becomes
-  current at the first start opportunity after its rotation toward 16384 facing units ends, and not
-  before. *Sleep* current while the rotation continues, or later than that first start opportunity,
-  falsifies claim 17's rotation gate. Map-east facing on an untethered vehicle falsifies the untethered
-  rule.
+  For Q-1162, add a named test-map pad-depot fixture with two contact places and a docking
+  displacement permitting a diagonal approach and tether before arrival. Approach facing away
+  from 16384 facing units. Repeat with driving, ship and hovering vehicles in suitable land or
+  water fixtures, and record both current and desired body facing, locomotor movement report,
+  destination, tether, processing ticks and current/queued behaviours before and after arrival
+  and the late start. Include arrivals between enter processings, varying the approach length
+  if needed. Expected: arrival queues sleep but introduces no new map-east turn, regardless of
+  tether. If otherwise ready, sleep is current at that turn's late start without another enter
+  processing. A newly requested map-east turn caused solely by movement arrival falsifies the
+  claim. A driving vehicle already turning is held only by S-0215 claim 11's readiness rule.
+  a ship or hovering vehicle with rotation alone is not held by that driving-only condition.
+  Compare the driving control with S-0215 B47. Report a fixture inconclusive if ordinary input
+  cannot produce the required tethered approach or existing-turn state; do not create either
+  by writing into the running game. No separate completed-entry confirmation is assumed from
+  an ordinary depot, with or without the pad flag.
 - *b, eligibility:* repeat at full health, then with no credits. Expected: entry is still allowed,
   full health leaves without payment at settling, and an injured unaffordable vehicle stays for
   retries. Repeat with a depot switched off and one in selling: no new enter action. Repeat on

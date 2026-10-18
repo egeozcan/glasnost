@@ -34,33 +34,63 @@ use crate::world::{AttackMoveMemory, Layer, ObjectId, Pos, Target, World};
 // spec: S-0215 claim 4 (nothing happens; a delay of exactly 450 ticks, no draw)
 const NO_RULE_DELAY: i32 = 450;
 
-/// Whether the actor is moving on this tick (S-0215 claim 11): its
-/// locomotor is moving, and for a vehicle with the driving locomotor also
-/// while its body is still turning towards the facing it has been given.
+/// Whether the actor is moving on this tick for readiness (S-0215 claim
+/// 11), read from its current movement state, not from a record of
+/// displacement earlier in the update. A vehicle with the driving
+/// locomotor has the claim's own predicate ([`drive_moving`]); every other
+/// actor is moving while its locomotor is moving it.
 fn moving(w: &World, id: ObjectId) -> bool {
-    occupancy::in_progress(w, id) || drive_body_turning(w, id)
+    if driving(w, id) {
+        return drive_moving(w, id);
+    }
+    // spec: S-0215 claim 11 (other locomotors: the actor is moving on this tick while its locomotor moves it; the driving predicate is the driving locomotor's only)
+    occupancy::in_progress(w, id)
 }
 
-/// The turning clause of S-0215 claim 11 (revision 63): a vehicle with the
-/// driving locomotor whose body is still turning, for any reason (a turn in
-/// place before a step, or a turn to face a target), is moving for
-/// readiness. It is S-0215's own test: S-0206's term "locomotor moving the
-/// vehicle" (`occupancy::in_progress`) is not widened.
-fn drive_body_turning(w: &World, id: ObjectId) -> bool {
+/// Whether `id` is a vehicle with the driving locomotor, by type or
+/// temporarily (S-0417 claim 5).
+fn driving(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     if o.kind != Kind::Vehicle {
         return false;
     }
-    // spec: S-0215 claim 11 (revision 63: only a vehicle with the driving locomotor; a ship, hovering, jumpjet or other locomotor is not covered) and S-0417 claim 5 (a vehicle that drives temporarily has the driving locomotor)
-    let driving = w
-        .rules()
+    // spec: S-0607 claim 5 (a seized unit moves by its linked jumpjet locomotor, not its own driving one, until claim 20 gives it back; Q-1331)
+    if crate::lift::seized(w, id) {
+        return false;
+    }
+    // spec: S-0215 claim 11 (revision 67: the predicate is for a vehicle with the driving locomotor; a ship, hovering, jumpjet or other locomotor is not covered) and S-0417 claim 5 (a vehicle that drives temporarily has the driving locomotor)
+    w.rules()
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Drive)
-        || crate::econ::release::temporary_drive(w, id);
-    // spec: S-0607 claim 5 (a seized unit's movement is its linked jumpjet locomotor, not its own driving one, until claim 20 gives it back)
-    let driving = driving && !crate::lift::seized(w, id);
-    // spec: S-0215 claim 11 (revision 63: moving while the body is still turning towards its target facing; ready on the first start or late start after the turn ends) and S-0206 Terms (turning: the facing differs from its target at this tick)
-    driving && o.body.turning(w.tick)
+        || crate::econ::release::temporary_drive(w, id)
+}
+
+/// "Moving" for the readiness of a vehicle with the driving locomotor
+/// (S-0215 claim 11, revision 67, which answers Q-1160 and Q-1161): its
+/// body is still turning, for any reason; or all three of: its locomotor
+/// is moving it in S-0206's sense, it has a heading point (the track
+/// target of the track it is on, S-0207 Terms) and its integer movement
+/// step *s* (S-0207 claim 2) is above 0. A retained locomotor
+/// destination, a stored path or a turn in place alone does not make it
+/// moving.
+fn drive_moving(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0215 claim 11 (revision 67: a body still turning, for any reason, is moving; a turn ends by tick number, S-0206 claim 1, so it is no longer turning at either start of tick t0 + Θ)
+    if o.body.turning(w.tick) {
+        return true;
+    }
+    let Some(track) = o.drive.as_ref().and_then(|d| d.track.as_ref()) else {
+        // spec: S-0215 claim 11 (revision 67: no heading point, so not moving without a body turn, whatever destination or path steps it keeps; S-0207 Terms: a drive vehicle that stands still, turns in place before a step, waits or is between two tracks has no heading point)
+        return false;
+    };
+    // spec: S-0215 claim 11 (revision 67: S-0206's locomotor moving the vehicle: a locomotor destination, or a next point whose map x and y differ from the vehicle's, height ignored)
+    let locomotor_moving =
+        crate::drive::goal_present(w, id) || track.target != (o.pos.x, o.pos.y);
+    let Some(u) = w.rules().unit(o.kind, o.type_index) else {
+        return false;
+    };
+    // spec: S-0215 claim 11 (revision 67: and the integer movement step s of S-0207 claim 2 strictly above 0, the progress earned per tick and not the speed fraction)
+    locomotor_moving && crate::drive::progress(w, id, u) > 0
 }
 
 /// Ready to change (S-0215 claim 11).
@@ -595,8 +625,9 @@ pub fn tail(w: &mut World, id: ObjectId) {
 }
 
 /// The late start of an infantry unit or vehicle (S-0215 claim 11): one
-/// more ready-and-start chance in its update, after its movement, so that
-/// readiness counts this update's movement. It makes a queued behaviour
+/// more ready-and-start chance in its update, after its movement, judged
+/// with the movement state that update has left (revision 67: the current
+/// predicate, not a remembered displacement earlier in the update). It makes a queued behaviour
 /// current; a ready infantry unit with neither a current nor a queued
 /// behaviour first falls back to rest, as at the first per-tick start
 /// (revision 59, which answers Q-1166 question 1). A behaviour made
@@ -616,7 +647,7 @@ pub fn late_start(w: &mut World, id: ObjectId) {
     if o.beh.queued.is_none() && !(kind == Kind::Infantry && empty) {
         return;
     }
-    // spec: S-0215 claim 11 (the late start: ready under the readiness rules, with this update's movement counted)
+    // spec: S-0215 claim 11 (the late start: ready under the readiness rules, judged with the movement state this update has left, revision 67)
     if !ready(w, id) {
         return;
     }
@@ -718,7 +749,7 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::depot::entering_depot(w, id) => {
             crate::depot::process_enter(w, id)
         }
-        // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: each processing carries out at most one row of table S1 and also runs the depot's repair processing; the delay is the depot's); Q-1163 interim (the S1 row first, then the depot's processing)
+        // spec: S-0606 claim 20 (revision 7, Q-1163 answered: a type that is both a repair depot and a bunker carries out at most one row of table S1, then the depot's repair decision on the contact, behaviour and movement that row left; the depot's own queued behaviour replaces S1's queued guard, S-0215 claim 7, otherwise that guard stays; the delay is the depot's)
         (Some(Behaviour::Repair), Kind::Building)
             if crate::depot::is_depot(w, id) && crate::structures::bunker::is_bunker(w, id) =>
         {

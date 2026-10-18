@@ -1,9 +1,9 @@
 ---
 id: Q-1162
 title: S-0314 claim 17's rotation gate, the moment at which the completed-entry exchange starts a tethered vehicle's rotation after movement arrival
-status: open
+status: answered
 related: [S-0314, S-0215]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need

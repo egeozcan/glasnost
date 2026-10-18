@@ -4,9 +4,12 @@
 
 use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{BuildingType, Decimal, LocomotionClass, UnitType, WarheadType};
+use glasnost_rules::sim::{
+    AnimationType, BuildingType, Decimal, LocomotionClass, UnitType, WarheadType,
+};
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::combat::effects::{Effect, Sound};
+use glasnost_sim::econ::inplace::{self, Form};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::structures::bunker::{self, BunkerTrack, Stage};
@@ -1100,9 +1103,30 @@ fn claim_20_combined_roles() {
     round_trip(&w);
 }
 
-// spec: S-0606 claim 12 and S-0415 claim 1 (revision 18: a bunkered deploy-fire type with no other property does nothing more after the release and chooses exactly 450 ticks); Q-1164 interim (S-0415 decides: the deploy-fire rule does not apply to a bunkered vehicle)
+// spec: S-0606 claim 20 (revision 7, Q-1163 answered: one S1 row, then the depot's decision on the state that row left; the depot's own request replaces S1's queued guard, here the no-vehicle row's guard by the depot's guard started at once with its 1-tick delay)
 #[test]
-fn claim_12_bunkered_deploy_fire_interim() {
+fn claim_20_one_s1_row_then_the_depot() {
+    let mut r = rules();
+    building(&mut r, "PITDEPOT", |t| t.unit_repair = Some(true));
+    let mut w = game_on(&r);
+    let b = pit(&mut w, "PITDEPOT");
+    w.obj_mut(b).unwrap().structure.bunker_stage = Stage::Waiting;
+    let o = w.obj_mut(b).unwrap();
+    o.beh.current = Some(Behaviour::Repair);
+    o.beh.queued = None;
+    o.beh.expired = true;
+    let t = w.tick;
+    tick::step(&mut w);
+    let o = w.obj(b).unwrap();
+    assert_eq!(stage(&w, b), Stage::Clearing, "S1's no-vehicle row ran");
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "the depot's guard, started");
+    assert_eq!(o.beh.queued, None, "S1's queued guard was replaced");
+    assert_eq!(o.beh.last, Some((t, 1)), "the depot's delay, not 15 ticks");
+}
+
+// spec: S-0606 claim 12 (revision 7, Q-1164 answered: a released deploy-fire type with none of the three continuation properties skips the deploy-fire rule, does nothing more and chooses exactly 450 ticks, no draw) and S-0415 claim 1 (revision 18)
+#[test]
+fn claim_12_bunkered_deploy_fire_is_skipped() {
     let mut r = rules();
     vehicle(&mut r, "FIRER", |t| t.deploy_fire = Some(true));
     let mut w = game_on(&r);
@@ -1110,7 +1134,79 @@ fn claim_12_bunkered_deploy_fire_interim() {
     let u = put(&mut w, Kind::Vehicle, "FIRER", 0, 1, 1);
     link(&mut w, b, u);
     w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Unload);
+    let draws = w.rng.taken();
     assert_eq!(bunker::process_unload(&mut w, u), 450);
+    assert_eq!(w.rng.taken(), draws, "no draw");
     assert!(!bunker::bunkered(&w, u));
     assert_eq!(queued(&w, u), Some(Behaviour::Move));
+}
+
+/// The ruleset with simple-deployer copies of TANK: SIMPLE, SIMPLEP (with
+/// passenger capacity) and SIMPLEA (with the deploying presentation DEPB).
+fn simple_rules() -> Ruleset {
+    let mut r = rules();
+    vehicle(&mut r, "SIMPLE", |t| t.is_simple_deployer = Some(true));
+    vehicle(&mut r, "SIMPLEP", |t| {
+        t.is_simple_deployer = Some(true);
+        t.passengers = Some(3);
+    });
+    vehicle(&mut r, "SIMPLEA", |t| {
+        t.is_simple_deployer = Some(true);
+        t.deploying_anim = Some("DEPB".into());
+    });
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push("DEPB".into());
+    r.sim.animations.insert(
+        "DEPB".into(),
+        AnimationType {
+            rate: Some(450),
+            end: Some(5),
+            start: Some(0),
+            ..Default::default()
+        },
+    );
+    r
+}
+
+// spec: S-0606 claim 12 (revision 7) and S-0517 claim 1 (revision 10: a released simple-deployer with no presentation reaches the in-place cycle in the release processing, whatever its passenger capacity; its first step deploys it, and under the default quirks.deploy_transition_discards_orders the return to guard replaces the release's queued move at once; the cycle's delay, S-0517 claim 3)
+#[test]
+fn claim_12_released_simple_deployer_deploys_in_place() {
+    let r = simple_rules();
+    assert!(r.globals.quirks.deploy_transition_discards_orders);
+    for name in ["SIMPLE", "SIMPLEP"] {
+        let mut w = game_on(&r);
+        let b = pit(&mut w, "PIT");
+        let u = put(&mut w, Kind::Vehicle, name, 0, 1, 1);
+        link(&mut w, b, u);
+        w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Unload);
+        let d = bunker::process_unload(&mut w, u);
+        assert!(!bunker::bunkered(&w, u), "{name}: released");
+        assert_eq!(inplace::form(&w, u), Form::Deployed, "{name}: first step");
+        assert_eq!(d, 450, "{name}: the in-place cycle's delay");
+        assert_eq!(cur(&w, u), Some(Behaviour::Guard), "{name}: guard started");
+        assert_eq!(queued(&w, u), None, "{name}: the move is replaced");
+        round_trip(&w);
+    }
+}
+
+// spec: S-0606 claim 12 (revision 7) and S-0517 claims 1, 3 and 8 (revision 10: with a deploying presentation the release processing's first step starts the transition, 1 tick; the queued move cannot start during it; at completion the return to guard replaces the move under the default quirk)
+#[test]
+fn claim_12_released_simple_deployer_with_presentation() {
+    let r = simple_rules();
+    let mut w = game_on(&r);
+    let b = pit(&mut w, "PIT");
+    let u = put(&mut w, Kind::Vehicle, "SIMPLEA", 0, 1, 1);
+    link(&mut w, b, u);
+    w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Unload);
+    let d = bunker::process_unload(&mut w, u);
+    assert!(!bunker::bunkered(&w, u));
+    assert!(matches!(inplace::form(&w, u), Form::Deploying { .. }), "first step");
+    assert_eq!(d, 1, "processing every tick during the transition");
+    assert_eq!(queued(&w, u), Some(Behaviour::Move));
+    assert!(until(&mut w, 400, |w| inplace::form(w, u) == Form::Deployed));
+    tick::step(&mut w);
+    assert_eq!(cur(&w, u), Some(Behaviour::Guard), "guard at completion");
+    assert_eq!(queued(&w, u), None, "the move is replaced");
 }

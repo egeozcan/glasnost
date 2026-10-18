@@ -228,7 +228,7 @@ fn claim_13_set_down_at_height_zero() {
     assert_eq!(health(&w, v), 100);
 }
 
-// spec: S-0607 claim 5 and S-0215 claim 11 (revision 63): a seized vehicle's movement is its jumpjet locomotor, so a set-down seized vehicle standing still in move is ready while its body turns
+// spec: S-0607 claim 5 and S-0215 claim 11 (revision 67) and Q-1331: a seized vehicle's movement is its jumpjet locomotor, so a set-down seized vehicle standing still in move is ready while its body turns
 #[test]
 fn claim_5_seized_turning_vehicle_is_ready() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
