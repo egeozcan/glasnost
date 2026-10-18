@@ -110,7 +110,7 @@ pub enum Coverage {
 /// 12 to 15; S-0513 claims 20 and 22).
 pub fn action_coverage(code: i32) -> Coverage {
     match code {
-        // spec: S-0011 I4 (the subset), S-0512 claims 12 to 15, S-0513 claims 20 and 22, S-0524 I1
+        // spec: S-0011 I4 (the subset), S-0512 claims 12 to 15, S-0513 claims 20 and 22, S-0524 I1, S-0011's particle-system actions table and S-0616 claim 1 (88, 89)
         11
         | 17
         | 19
@@ -125,6 +125,8 @@ pub fn action_coverage(code: i32) -> Coverage {
         | 63
         | 66
         | 73
+        | 88
+        | 89
         | 90
         | 95
         | 99

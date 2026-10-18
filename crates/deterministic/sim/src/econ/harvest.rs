@@ -1495,6 +1495,8 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
             x.counter.zero(t);
         }
         pay(w, b, tib, amount);
+        // spec: S-0616 claim 1 (refinery smoke at each unloading step of a delivery; the step is the payment row of S-0402 claim 11, interim Q-1401)
+        crate::emitters::refinery_smoke(w, b);
         return 1;
     }
     // spec: S-0402 claim 11 (load empty and the counter allows: finishing, the counter left as it is)

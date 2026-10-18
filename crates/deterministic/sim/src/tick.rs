@@ -314,6 +314,9 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none_or(crate::combat::damage::dead) {
         return;
     }
+    // spec: S-0616 claim 1 (damage sparks and the sparks of a deactivated vehicle, in its turn; the place in the turn is interim, Q-1404)
+    crate::emitters::damage_sparks(w, id);
+    crate::emitters::deactivated_sparks(w, id);
     // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)
     crate::econ::events::turn(w, id, moved);
     if kind == Kind::Aircraft {

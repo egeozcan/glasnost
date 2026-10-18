@@ -1,0 +1,614 @@
+//! The creators of particle systems of S-0616 claim 1 that belong to other
+//! parts of play, and the emitter places of S-0616 Terms.
+//!
+//! Built here: the effect weapons' fire, spark and railgun emitters with
+//! S-0301 claim 5's live-effect gate and the fire emitter's let-go events
+//! ([`effect_weapon_emitter`], [`own_effect_alive`],
+//! [`other_effect_alive`], [`let_go_fire`]); the barrel system of S-0303
+//! claim 19 ([`barrel_particle_system`]); the destruction smoke of S-0312
+//! claim 19 f ([`destruction_smoke`]); refinery smoke
+//! ([`refinery_smoke`]); natural smoke with S-0516 claim 18's cloak removal
+//! and uncloak rule ([`natural_smoke`], [`natural_smoke_cloaked`],
+//! [`natural_smoke_yellow`]); the damage sparks of cyborg infantry
+//! ([`damage_sparks`]); the sparks of a deactivated vehicle
+//! ([`deactivated_sparks`]); and the two trigger actions of S-0011 codes 88
+//! and 89 ([`trigger_create`], [`trigger_mark`]). The flame sweep, swing and
+//! insertion of a fire emitter are part of the fire kind's turn
+//! (`crate::particles::fire_turn`).
+//!
+//! Seams (no approved spec covers the owning part): [`electric_bolt_sparks`]
+//! and [`voxel_animation_system`].
+
+use glasnost_num::F64;
+
+use crate::combat::data::{WeaponId, WeaponRules};
+use crate::combat::state::FireEmitter;
+use crate::gas::Behaviour;
+use crate::rules::Kind;
+use glasnost_map::CellXY;
+
+use crate::world::{HouseId, ObjectId, Pos, Target, World};
+
+/// The top of a ranged draw over 0 … 2147483646 (claim 1, damage sparks).
+const DRAW_TOP: i32 = 2147483646; // spec: S-0616 claim 1 (one ranged draw R(0, 2147483646) each turn)
+
+/// The damage-sparks depth limit, leptons below the surface (claim 1).
+const SPARK_DEPTH: i32 = -10; // spec: S-0616 Constants (damage-sparks depth limit 10 leptons below the surface)
+
+/// The deactivated-vehicle spark period, ticks (claim 1).
+const DEACTIVATED_PERIOD: i32 = 30; // spec: S-0616 Constants (deactivated-vehicle spark period 30 ticks)
+
+/// The deactivated-vehicle cadence divisor, leptons (claim 1).
+const DEACTIVATED_DIVISOR: i32 = 10; // spec: S-0616 Constants (deactivated-vehicle cadence divisor 10)
+
+/// The weight of the *y* term of the deactivated-vehicle cadence (claim 1).
+const DEACTIVATED_WEIGHT: i32 = 65536; // spec: S-0616 Constants (deactivated-vehicle cadence weight 65536)
+
+/// The deactivated-vehicle spark displacement bound, leptons per axis.
+const DEACTIVATED_SPREAD: i32 = 100; // spec: S-0616 Constants (damage-spark displacement of a deactivated vehicle −100 … 100 leptons)
+
+/// The destruction smoke height limit, leptons below the terrain.
+const DESTRUCTION_DEPTH: i32 = -10; // spec: S-0312 claim 19 f (it stands higher than 10 leptons below the terrain)
+
+/// The refinery smoke points that count as unset (claim 1).
+// spec: S-0616 Constants (refinery smoke unset points (0, 0, 0) and (128, 128, 0))
+const UNSET_POINTS: [[i32; 3]; 2] = [[0, 0, 0], [128, 128, 0]];
+
+/// The emitter places of a weapon's effect (S-0616 Terms; S-0301 claim 5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Place {
+    /// The fire emitter place.
+    Fire,
+    /// The spark emitter place, shared with damage sparks.
+    Spark,
+    /// The railgun emitter place.
+    Railgun,
+}
+
+/// The emitter place of a weapon's effect, if it is a spark-particle,
+/// fire-particle or railgun weapon (S-0301 claim 5). A sonic weapon's wave
+/// is not modelled (S-0607 claim 21's note), so it has none here. A weapon
+/// with more than one of the flags takes the first of spark, fire, railgun
+/// (interim, Q-1403).
+pub fn place_of(wr: &WeaponRules) -> Option<Place> {
+    // spec: S-0301 Terms (effect weapon: a spark-particle or fire-particle emitter, or a railgun particle trail, each an imported weapon flag)
+    if wr.spark {
+        Some(Place::Spark)
+    } else if wr.fire_particles {
+        Some(Place::Fire)
+    } else if wr.railgun {
+        Some(Place::Railgun)
+    } else {
+        None
+    }
+}
+
+/// The system an object holds in an emitter place.
+pub fn held(w: &World, id: ObjectId, place: Place) -> Option<ObjectId> {
+    let c = &w.obj(id)?.combat;
+    match place {
+        Place::Fire => c.fire_emitter.map(|e| e.system),
+        Place::Spark => c.spark_emitter,
+        Place::Railgun => c.railgun_emitter,
+    }
+}
+
+/// S-0301 claim 5, first row: the asked weapon's own kind of effect is
+/// alive on the firer (*rearming*, rank 5).
+pub fn own_effect_alive(w: &World, firer: ObjectId, weapon: WeaponId) -> bool {
+    let wr = w.rules().combat.weapon(weapon);
+    // spec: S-0301 claim 5 (a live effect of the asked weapon's own kind: rearming) and S-0616 Terms (a particle emitter is alive while its place holds it)
+    place_of(wr).is_some_and(|p| held(w, firer, p).is_some())
+}
+
+/// S-0301 claim 5, second row: the kind of the asked weapon's other weapon
+/// is alive on the firer (*impossible*, rank 4).
+pub fn other_effect_alive(w: &World, firer: ObjectId, slot: usize) -> bool {
+    // spec: S-0301 claim 5 (the other weapon of slot 0 is slot 1; of any other slot, slot 0)
+    let other = if slot == 0 { 1 } else { 0 };
+    let Some(ow) = crate::combat::weapon::slot_weapon(w, firer, other) else {
+        return false;
+    };
+    let wr = w.rules().combat.weapon(ow);
+    // spec: S-0301 claim 5 (a live effect of the kind of the asked weapon's other weapon, whatever the asked weapon's own kind: impossible)
+    place_of(wr).is_some_and(|p| held(w, firer, p).is_some())
+}
+
+/// Clears every emitter place of `owner` that holds system `sys` (the
+/// system leaves play, S-0613 claim 17; S-0616 Terms: an object holds a
+/// system in its place until it leaves play).
+pub fn release_places(w: &mut World, owner: ObjectId, sys: ObjectId) {
+    let Some(ob) = w.obj_mut(owner) else { return };
+    let c = &mut ob.combat;
+    if c.damage_smoke == Some(sys) {
+        c.damage_smoke = None;
+    }
+    if c.spark_emitter == Some(sys) {
+        c.spark_emitter = None;
+    }
+    if c.railgun_emitter == Some(sys) {
+        c.railgun_emitter = None;
+    }
+    if c.fire_emitter.is_some_and(|e| e.system == sys) {
+        c.fire_emitter = None;
+    }
+}
+
+/// S-0616 claim 1, effect weapons: the emitter of an effect weapon's shot,
+/// made after the projectile. `fp` is the shot's fire point, `launched` its
+/// projectile. Creating it takes no draw.
+pub fn effect_weapon_emitter(
+    w: &mut World,
+    firer: ObjectId,
+    slot: usize,
+    weapon: WeaponId,
+    target: Target,
+    fp: Pos,
+    launched: Option<ObjectId>,
+) {
+    let rules = w.rules_arc();
+    let wr = rules.combat.weapon(weapon);
+    let Some(place) = place_of(wr) else { return };
+    // spec: S-0616 Terms (an object makes a new system only when the place is empty)
+    if held(w, firer, place).is_some() {
+        return;
+    }
+    let Some(name) = wr.attached_system.clone() else {
+        // spec: S-0616 Import mapping (an effect weapon without an attached system: no emitter; the importer warns)
+        return;
+    };
+    let Some(ti) = rules.gas.system(&name) else {
+        w.note(format!(
+            "S-0616 claim 1: the attached particle system {name} is not a listed type; no emitter is made"
+        ));
+        return;
+    };
+    let Some(o) = w.obj(firer).cloned() else {
+        return;
+    };
+    // spec: S-0616 claim 1 (the emitter is made at the weapon's fire point, or at the firer's position for a dropping projectile, S-0306 claim 5)
+    let dropping = rules
+        .combat
+        .projectile_of(weapon)
+        .is_some_and(|p| p.dropping);
+    let at = if dropping { o.pos } else { fp };
+    let object = match target {
+        Target::Object(x) if w.obj(x).is_some() => Some(x),
+        _ => None,
+    };
+    let point = match place {
+        // spec: S-0616 claim 1 (railgun: the end of the beam; interim, Q-1402: the projectile's stored impact point, as a magnetic beam's, S-0607 F3)
+        Place::Railgun => launched
+            .and_then(|p| w.projectiles.get(&p).map(|p| p.stored))
+            .unwrap_or_else(|| crate::process::target_pos(w, target)),
+        // spec: S-0616 claim 1 (fire and spark: the position of the firer's target object when the shot has one, else the world origin)
+        _ => object
+            .and_then(|x| w.obj(x))
+            .map_or(Pos::default(), |x| x.pos),
+    };
+    let Some(sys) = crate::particles::create(w, ti, at, o.owner) else {
+        return;
+    };
+    if let Some(s) = w.gas.systems.get_mut(&sys) {
+        // spec: S-0616 claim 1 (owner object: the firer; no first particle) and Terms (a system with an owner object takes the owner's current target as its target object)
+        s.owner_object = Some(firer);
+        s.target = point;
+        s.target_object = object;
+    }
+    let Some(ob) = w.obj_mut(firer) else { return };
+    // spec: S-0616 Terms (the emitter is held in the place of its kind)
+    match place {
+        Place::Fire => {
+            ob.combat.fire_emitter = Some(FireEmitter {
+                system: sys,
+                slot: u8::try_from(slot).unwrap_or(u8::MAX),
+                target: Some(target),
+            });
+        }
+        Place::Spark => ob.combat.spark_emitter = Some(sys),
+        Place::Railgun => ob.combat.railgun_emitter = Some(sys),
+    }
+}
+
+/// S-0616 claim 1: the fire emitter of `owner` is marked and let go (a new
+/// target not within reach, a move order, death). The system keeps its
+/// particles, which go on updating and moving (claim 22).
+pub fn let_go_fire(w: &mut World, owner: ObjectId) {
+    let Some(e) = w.obj_mut(owner).and_then(|o| o.combat.fire_emitter.take()) else {
+        return;
+    };
+    // spec: S-0616 claim 1 (a fire emitter is marked and let go)
+    crate::particles::mark(w, e.system);
+}
+
+/// S-0616 claim 1, the retarget let-go: in the fire system's turn, an owner
+/// whose target is no longer the one the emitter remembers lets the emitter
+/// go when the new target is not within reach (S-0307 claim 12's range
+/// test with the emitter's weapon); a new target within reach is
+/// remembered. Returns whether the emitter was let go.
+pub fn retarget_let_go(w: &mut World, owner: ObjectId, sys: ObjectId) -> bool {
+    let Some(o) = w.obj(owner) else { return false };
+    let Some(e) = o.combat.fire_emitter else {
+        return false;
+    };
+    if e.system != sys || o.target == e.target {
+        return false;
+    }
+    let now = o.target;
+    let Some(t) = now else {
+        // A cleared target is not a new target: the emitter stays (S-0301 Terms: let go on a retarget).
+        if let Some(ob) = w.obj_mut(owner)
+            && let Some(f) = ob.combat.fire_emitter.as_mut()
+        {
+            f.target = None;
+        }
+        return false;
+    };
+    let weapon = crate::combat::weapon::slot_weapon(w, owner, usize::from(e.slot));
+    // spec: S-0616 claim 1 (a new target that is not within reach: outside the weapon's range, the test of S-0307 claim 12)
+    if crate::combat::range::in_range(w, owner, weapon, Some(t), None) {
+        if let Some(ob) = w.obj_mut(owner)
+            && let Some(f) = ob.combat.fire_emitter.as_mut()
+        {
+            f.target = Some(t);
+        }
+        return false;
+    }
+    let_go_fire(w, owner);
+    true
+}
+
+/// S-0303 claim 19: the barrel particle system at `p` (the 25 % draw has
+/// passed). Made as a warhead's system (S-0616 claim 1, exploding overlay
+/// row: no owner object, target point P, a first particle when it has a
+/// held type), owned by the outer detonation's house (interim, Q-1403).
+pub fn barrel_particle_system(w: &mut World, p: Pos, house: Option<HouseId>) {
+    let Some(name) = w.rules().combat.general.barrel_particle.clone() else {
+        // spec: S-0303 claim 19 (no barrel particle system named: nothing appears)
+        return;
+    };
+    // spec: S-0303 claim 19 and S-0616 claim 1 (the system appears at P; its first particle by S-0613 claim 4)
+    crate::gas::warhead_system(w, &name, p, house);
+}
+
+/// Whether any emitter place of `id` holds a system (the "particle system
+/// attached already" of S-0312 claim 19 f; interim, Q-1400).
+fn has_attached(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        let c = &o.combat;
+        c.damage_smoke.is_some()
+            || c.spark_emitter.is_some()
+            || c.railgun_emitter.is_some()
+            || c.fire_emitter.is_some()
+    })
+}
+
+/// S-0312 claim 19 f and S-0616 claim 1: the destruction smoke of a
+/// destroyed building. Eligible entries (interim, Q-1400): the listed
+/// systems of the smoke kind.
+pub fn destruction_smoke(w: &mut World, id: ObjectId) {
+    let Some(tc) = crate::combat::veterancy::type_combat(w, id).cloned() else {
+        return;
+    };
+    let rules = w.rules_arc();
+    // spec: S-0312 claim 19 f (the eligible entries; which kinds are eligible is the particle specs', interim Q-1400: the smoke kind)
+    let eligible: Vec<u32> = tc
+        .destroy_systems
+        .iter()
+        .filter_map(|n| rules.gas.system(n))
+        .filter(|&i| rules.gas.systems[i as usize].kind == Some(Behaviour::Smoke))
+        .collect();
+    let m = eligible.len() as i32;
+    // spec: S-0312 claim 19 f (no particle system attached already, at least one eligible entry, higher than 10 leptons below the terrain)
+    if has_attached(w, id) || m == 0 || w.height_above_surface(id) <= DESTRUCTION_DEPTH {
+        return;
+    }
+    let half = rules.quirks.ranged_draw_half_span;
+    // spec: S-0312 claim 19 f (one ranged draw R(0, m − 1); the entries are counted from the end of the list)
+    let k = w.rng.ranged(0, m - 1, half);
+    let ti = eligible[(m - 1 - k) as usize];
+    let Some(o) = w.obj(id) else { return };
+    // spec: S-0312 claim 19 f (placed at its position moved by its type's destruction smoke displacement)
+    let pos = offset(o.pos, tc.destroy_offset);
+    let Some(sys) = crate::particles::create(w, ti, pos, None) else {
+        return;
+    };
+    if let Some(s) = w.gas.systems.get_mut(&sys) {
+        // spec: S-0616 claim 1 (destruction smoke: owner object the building, target point the world origin, no first particle)
+        s.owner_object = Some(id);
+        s.owner_offset = tc.destroy_offset;
+    }
+}
+
+// nocite: vector and matrix dimensions (three axes)
+fn offset(p: Pos, d: [i32; 3]) -> Pos {
+    Pos::new(
+        p.x.wrapping_add(d[0]),
+        p.y.wrapping_add(d[1]),
+        p.z.wrapping_add(d[2]), // nocite: vector and matrix dimensions (three axes)
+    )
+}
+
+/// S-0616 claim 1, refinery smoke: one system of the refinery's smoke type
+/// at each of its set smoke points, with the game-wide refinery-smoke time
+/// as its lifetime. Called once per payment row of S-0402 claim 11 and once
+/// per slave delivery of claim 14 (interim, Q-1401).
+pub fn refinery_smoke(w: &mut World, refinery: ObjectId) {
+    let Some(o) = w.obj(refinery).cloned() else {
+        return;
+    };
+    if o.kind != Kind::Building {
+        return;
+    }
+    let rules = w.rules_arc();
+    let Some(b) = rules.buildings.get(o.type_index as usize) else {
+        return;
+    };
+    let Some(ti) = b
+        .raw
+        .refinery_smoke_particle_system
+        .as_ref()
+        .and_then(|n| rules.gas.system(n))
+    else {
+        return;
+    };
+    let points = b.raw.refinery_smoke_offsets.clone().unwrap_or_default();
+    // spec: S-0616 claim 1 (a point of (0, 0, 0) or (128, 128, 0) counts as unset; up to four points)
+    for p in points.iter().take(4) {
+        if UNSET_POINTS.contains(p) {
+            continue;
+        }
+        let Some(sys) = crate::particles::create(w, ti, offset(o.pos, *p), None) else {
+            continue;
+        };
+        if let Some(s) = w.gas.systems.get_mut(&sys) {
+            // spec: S-0616 claim 1 (owner object the refinery; lifetime the game-wide refinery-smoke time, not its type's; no draw)
+            s.owner_object = Some(refinery);
+            s.owner_offset = *p;
+            s.lifetime = rules.gas.refinery_frames;
+        }
+    }
+}
+
+/// The building's natural smoke system, if it is still in play.
+fn natural_of(w: &World, id: ObjectId) -> Option<ObjectId> {
+    w.obj(id)?
+        .combat
+        .natural_smoke
+        .filter(|s| w.gas.systems.contains_key(s))
+}
+
+/// S-0616 claim 1, natural smoke: a building whose type names a natural
+/// particle system gets one when it is placed in play, if it has none, at
+/// its position plus the natural-smoke displacement. `uncloak`: the
+/// S-0516 claim 18 case, which also needs a displacement other than
+/// (0, 0, 0).
+pub fn natural_smoke(w: &mut World, id: ObjectId, uncloak: bool) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    if o.kind != Kind::Building {
+        return;
+    }
+    let Some(tc) = crate::combat::veterancy::type_combat(w, id).cloned() else {
+        return;
+    };
+    let Some(ti) = tc
+        .natural_system
+        .as_ref()
+        .and_then(|n| w.rules().gas.system(n))
+    else {
+        return;
+    };
+    // spec: S-0616 claim 1 (if it has none) and S-0516 claim 18 (at full uncloaking only when the displacement is not (0, 0, 0))
+    if natural_of(w, id).is_some() || (uncloak && tc.natural_offset == [0; 3]) {
+        return;
+    }
+    let Some(sys) = crate::particles::create(w, ti, offset(o.pos, tc.natural_offset), None) else {
+        return;
+    };
+    if let Some(s) = w.gas.systems.get_mut(&sys) {
+        // spec: S-0616 claim 1 (natural smoke: no owner object; target point a point of the building, its position, unused)
+        s.target = o.pos;
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        ob.combat.natural_smoke = Some(sys);
+    }
+}
+
+/// S-0516 claim 18 and S-0616 claim 1: a building reaching full cloaking
+/// loses its natural smoke system at once, with its particles.
+pub fn natural_smoke_cloaked(w: &mut World, id: ObjectId) {
+    let Some(sys) = natural_of(w, id) else { return };
+    // spec: S-0616 claim 1 and S-0516 claim 18 (full cloaking removes the system at once, with its particles; it is not a mark)
+    w.gas.systems.remove(&sys);
+    let skip = w.rules().quirks.update_order_removal_skip;
+    // spec: S-0203 claim 10 (a removal from the update order, counting during the turn pass)
+    w.update.leave(sys, skip);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.combat.natural_smoke = None;
+    }
+}
+
+/// S-0616 claim 1: when the building becomes yellow its natural smoke's
+/// emission timer is multiplied by 1.5, once; repair does not undo it.
+pub fn natural_smoke_yellow(w: &mut World, id: ObjectId) {
+    let Some(sys) = natural_of(w, id) else { return };
+    let m = w.rules().mode;
+    let Some(s) = w.gas.systems.get_mut(&sys) else {
+        return;
+    };
+    if s.yellowed {
+        return;
+    }
+    s.yellowed = true;
+    // spec: S-0616 claim 1 and Constants (natural-smoke yellow factor 1.5 on T, once; T is single precision)
+    s.timer = s
+        .timer
+        .to_f64()
+        .mul(crate::rules::nearest_double("1.5"), m)
+        .to_f32(m);
+}
+
+/// S-0616 claim 1, damage sparks: an infantry object of a cyborg type,
+/// strictly below the yellow ratio, higher than 10 leptons below the
+/// surface and holding no spark emitter, may make a spark system from the
+/// spark-kind entries of its damage list. Called in its turn (interim
+/// place in the turn, Q-1404).
+pub fn damage_sparks(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    if o.kind != Kind::Infantry || o.combat.spark_emitter.is_some() {
+        return;
+    }
+    let rules = w.rules_arc();
+    // spec: S-0616 Terms (the damage-sparks flag is the cyborg flag of S-0312 claim 2)
+    if !rules.unit(o.kind, o.type_index).is_some_and(|u| u.cyborg) {
+        return;
+    }
+    let m = rules.mode;
+    let s = crate::combat::damage::strength(w, id);
+    // spec: S-0214 Terms (health ratio: health / strength in floating point)
+    let ratio = F64::from_i64(i64::from(o.health), m).div(F64::from_i64(i64::from(s), m), m);
+    // spec: S-0616 claim 1 (strictly below the yellow ratio; height above the surface greater than −10 leptons)
+    if !ratio.lt(rules.general.condition_yellow) || w.height_above_surface(id) <= SPARK_DEPTH {
+        return;
+    }
+    let Some(tc) = crate::combat::veterancy::type_combat(w, id).cloned() else {
+        return;
+    };
+    let n = tc.spark_systems.len() as i32;
+    if n == 0 {
+        // spec: S-0616 claim 1 (no spark-kind entry: nothing is made, no draw)
+        return;
+    }
+    let half = rules.quirks.ranged_draw_half_span;
+    // spec: S-0616 claim 1 (one ranged draw R(0, 2147483646) each turn, times 4.656612877414201 × 10⁻¹⁰ in double precision)
+    let r = w.rng.ranged(0, DRAW_TOP, half);
+    let x = F64::from_i64(i64::from(r), m).mul(spark_scale(), m);
+    // spec: S-0616 claim 1 (the red probability when the health ratio is below the red ratio, the yellow one otherwise)
+    let p = if ratio.lt(rules.general.condition_red) {
+        rules.gas.sparking.0
+    } else {
+        rules.gas.sparking.1
+    };
+    if !x.lt(p) {
+        return;
+    }
+    // spec: S-0616 claim 1 (one ranged draw R(0, n − 1) picks a spark-kind entry, counted from the start of the list)
+    let k = w.rng.ranged(0, n - 1, half);
+    let Some(ti) = rules.gas.system(&tc.spark_systems[k as usize]) else {
+        return;
+    };
+    // spec: S-0616 claim 1 (at the object's position plus the type's damage-smoke displacement)
+    let Some(sys) = crate::particles::create(w, ti, offset(o.pos, tc.smoke_offset), None) else {
+        return;
+    };
+    if let Some(sy) = w.gas.systems.get_mut(&sys) {
+        // spec: S-0616 claim 1 (damage sparks: owner object the object, target point the world origin, no first particle)
+        sy.owner_object = Some(id);
+        sy.owner_offset = tc.smoke_offset;
+    }
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0616 claim 1 (held in the spark emitter place, shared with an effect weapon's spark emitter)
+        ob.combat.spark_emitter = Some(sys);
+    }
+}
+
+/// The spark chance scale of S-0616 claim 1 and F10.
+fn spark_scale() -> F64 {
+    // spec: S-0616 Constants (spark chance scale 4.656612877414201 × 10⁻¹⁰)
+    crate::rules::nearest_double("4.656612877414201e-10")
+}
+
+/// S-0616 claim 1, sparks of a deactivated vehicle: on the ticks for which
+/// (⌊x / 10⌋ + ⌊y / 10⌋ × 65536 + t + object number) is a multiple of 30,
+/// one system of the game-wide spark type, displaced by two draws
+/// R(−100, 100), y first. In our engine a deactivated vehicle is one
+/// disabled by the loss of its control building (S-0405 claim 13). Called
+/// in its turn (interim place in the turn, Q-1404).
+pub fn deactivated_sparks(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    if o.kind != Kind::Vehicle || !crate::econ::power::unit_disabled(w, id) {
+        return;
+    }
+    let t = w.tick;
+    // spec: S-0616 claim 1 (the cadence term, integer arithmetic truncating toward zero; the object-number phase is a departure)
+    let term = (o.pos.x / DEACTIVATED_DIVISOR)
+        .wrapping_add((o.pos.y / DEACTIVATED_DIVISOR).wrapping_mul(DEACTIVATED_WEIGHT))
+        .wrapping_add(t)
+        .wrapping_add(o.id.0 as i32);
+    if glasnost_num::int::rem(term, DEACTIVATED_PERIOD) != 0 {
+        return;
+    }
+    let Some(ti) = w.rules().gas.default_spark else {
+        // spec: S-0616 claim 1 (with no game-wide spark type nothing is created and no draw is taken)
+        return;
+    };
+    let half = w.rules().quirks.ranged_draw_half_span;
+    // spec: S-0616 claim 1 (two ranged draws R(−100, 100) give the y and then the x displacement)
+    let dy = w.rng.ranged(-DEACTIVATED_SPREAD, DEACTIVATED_SPREAD, half);
+    let dx = w.rng.ranged(-DEACTIVATED_SPREAD, DEACTIVATED_SPREAD, half);
+    // spec: S-0616 claim 1 (deactivated vehicle sparks: no owner object, target point unused, no first particle)
+    crate::particles::create(w, ti, offset(o.pos, [dx, dy, 0]), None);
+}
+
+/// S-0011 code 88 and S-0616 claim 1: one system of type `ti` (the number
+/// slot, a registration index) at the centre of cell `c`, at its ground
+/// surface height (no bridge lift), with no owner object, no owner house
+/// and no first particle.
+pub fn trigger_create(w: &mut World, ti: i32, c: CellXY) {
+    let Some(i) = u32::try_from(ti)
+        .ok()
+        .filter(|&i| (i as usize) < w.rules().gas.systems.len())
+    else {
+        w.note("S-0616 claim 1: the trigger action names no particle-system type; nothing is made");
+        return;
+    };
+    // spec: S-0616 claim 1 (at the centre of the cell of the action's waypoint, at the ground surface height of that cell, not raised on a bridge)
+    let p = crate::superweapons::cell_point(w, c, false);
+    crate::particles::create(w, i, p, None);
+}
+
+/// S-0011 code 89 and S-0616 claim 1: marks every particle system in play
+/// whose position lies in cell `c`, whatever its kind, type, owner or age.
+pub fn trigger_mark(w: &mut World, c: CellXY) {
+    // spec: S-0616 claim 1 (every particle system in play whose position lies in the waypoint's cell, gas systems and the shared gas system included; nothing is removed at once)
+    for s in w.gas.systems.values_mut() {
+        if s.pos.cell() == c {
+            s.ending = true;
+        }
+    }
+}
+
+/// Seam `electric_bolt_sparks` (S-0616 claim 1, electric bolt row): each
+/// electric-bolt shot makes one system of the game-wide spark type at the
+/// bolt's end. No approved spec covers it: no approved spec owns the
+/// electric-bolt shot (S-0616 Open questions), so no weapon makes one and
+/// nothing calls this.
+pub fn electric_bolt_sparks(_w: &mut World, _end: Pos) {}
+
+/// Seam `voxel_animation_system` (S-0616 claim 1, voxel-model animation
+/// row): a voxel-model animation type with an attached system makes it at
+/// the animation's start position and marks it when the animation is
+/// removed. No approved spec covers it: voxel animations are not objects
+/// of play in our engine (`crate::combat::effects`), no approved spec
+/// gives their lifetime and removal, and no import key is given for the
+/// attached system, so nothing calls this.
+pub fn voxel_animation_system(_w: &mut World, _start: Pos) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use glasnost_num::Rounding;
+
+    #[test]
+    fn unset_points() {
+        assert!(UNSET_POINTS.contains(&[128, 128, 0]));
+        assert!(!UNSET_POINTS.contains(&[128, 128, 1]));
+    }
+
+    #[test]
+    fn spark_scale_maps_the_top_to_one() {
+        let m = Rounding::Nearest;
+        let x = F64::from_i64(i64::from(DRAW_TOP), m).mul(spark_scale(), m);
+        assert!(x.eq_num(F64::from_i64(1, m)));
+    }
+}

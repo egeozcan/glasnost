@@ -519,16 +519,23 @@ fn step(w: &mut World, id: ObjectId) {
     match o.cloak.state {
         CloakState::Uncloaked => try_start(w, id),
         CloakState::Cloaking if building => {
+            let mut full = false;
             // spec: S-0516 claim 18 (a cloaking building rises one level per tick; level 15 is fully cloaked)
             if since >= 1
                 && let Some(ob) = w.obj_mut(id)
             {
                 ob.cloak.stage += 1;
                 ob.cloak.stepped = tick;
+                // spec: S-0516 claim 18 (fade level 15)
                 if ob.cloak.stage >= 15 {
                     ob.cloak.stage = 15; // spec: S-0516 claim 18 (fade level 15)
                     ob.cloak.state = CloakState::Cloaked;
+                    full = true;
                 }
+            }
+            if full {
+                // spec: S-0516 claim 18 and S-0616 claim 1 (at level 15 the natural smoke system is removed at once with its particles)
+                crate::emitters::natural_smoke_cloaked(w, id);
             }
         }
         CloakState::Cloaking => {
@@ -602,6 +609,9 @@ fn step(w: &mut World, id: ObjectId) {
                 if !building {
                     // spec: S-0516 claim 7 (the cloak delay D starts when the uncloak completes); claim 18 (not for a building)
                     ob.cloak.delay_until = tick.saturating_add(delay);
+                } else {
+                    // spec: S-0516 claim 18 and S-0616 claim 1 (at level 0 a new natural smoke system, only with a displacement other than (0, 0, 0))
+                    crate::emitters::natural_smoke(w, id, true);
                 }
             }
         }

@@ -581,6 +581,10 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     {
         return;
     }
+    if b == Behaviour::Move {
+        // spec: S-0616 claim 1 (a fire emitter is marked and let go when its firer is given a move order)
+        crate::emitters::let_go_fire(w, actor);
+    }
     // spec: S-0314 claims 20 and 23 (an order to a vehicle in depot contact, or an enter order on a depot that holds a contact)
     let dest = match crate::depot::order_applied(w, actor, b, dest) {
         crate::depot::OrderEffect::Ends => return,

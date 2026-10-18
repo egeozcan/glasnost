@@ -122,6 +122,35 @@ pub struct CombatState {
     /// claim 40).
     #[serde(default)]
     pub computer_repair: bool,
+    /// The fire emitter place (S-0616 Terms and claim 1): the effect
+    /// weapon's fire system while the object holds it.
+    #[serde(default)]
+    pub fire_emitter: Option<FireEmitter>,
+    /// The spark emitter place (S-0616 Terms): an effect weapon's spark
+    /// system or a damage-sparks system, until it leaves play.
+    #[serde(default)]
+    pub spark_emitter: Option<crate::world::ObjectId>,
+    /// The railgun emitter place (S-0616 Terms): an effect weapon's railgun
+    /// system, until it leaves play.
+    #[serde(default)]
+    pub railgun_emitter: Option<crate::world::ObjectId>,
+    /// A building's natural smoke system (S-0616 claim 1); a system that
+    /// has left play counts as none.
+    #[serde(default)]
+    pub natural_smoke: Option<crate::world::ObjectId>,
+}
+
+/// A held fire emitter (S-0616 claim 1): the system, the slot of the weapon
+/// whose shot made it and the target the firer held at the shot or last
+/// took within reach (for the let-go on a retarget).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FireEmitter {
+    /// The fire system.
+    pub system: crate::world::ObjectId,
+    /// The weapon slot of the shot.
+    pub slot: u8,
+    /// The firer's target as last seen by the emitter.
+    pub target: Option<Target>,
 }
 
 impl CombatState {
@@ -168,6 +197,10 @@ impl CombatState {
             hostile_hit: false,
             captured: false,
             computer_repair: false,
+            fire_emitter: None,
+            spark_emitter: None,
+            railgun_emitter: None,
+            natural_smoke: None,
         }
     }
 }

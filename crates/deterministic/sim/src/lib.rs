@@ -29,6 +29,7 @@ pub mod crush;
 pub mod depot;
 pub mod drive;
 pub mod econ;
+pub mod emitters;
 pub mod fall;
 pub mod gas;
 pub mod gattling;

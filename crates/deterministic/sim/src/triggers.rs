@@ -1032,6 +1032,18 @@ fn action(
         4 | 5 | 7 | 80 | 135 => {
             w.note("S-0011 claim 30: a trigger action hands over to a topic not built yet (teams, computer targeting); no effect");
         }
+        // spec: S-0011 particle-system actions table and S-0616 claim 1 (88: one system of the number slot's type at the waypoint's cell centre, ground surface height; always succeeds)
+        88 => {
+            if let Some(c) = waypoint_cell(w, a.waypoint) {
+                crate::emitters::trigger_create(w, a.number, c);
+            }
+        }
+        // spec: S-0011 particle-system actions table and S-0616 claim 1 (89: every system in the waypoint's cell is marked; always succeeds)
+        89 => {
+            if let Some(c) = waypoint_cell(w, a.waypoint) {
+                crate::emitters::trigger_mark(w, c);
+            }
+        }
         // spec: S-0524 claim 4 (108 create a crate at a waypoint: crates, S-0520, are a seam)
         108 => crate::mp_triggers::create_crate(w, a),
         // spec: S-0524 claim 5 and I1 (63 demolition blast: the number slot as waypoint number)

@@ -11,8 +11,9 @@
 //! a clone of the stream.
 //!
 //! Not tested (seams or not implemented): garrisoned buildings and tank
-//! bunkers (claim 7, F1 D₃ to D₅), live effects and their gates (claim 5
-//! second part, `quirks.shared_wave_slot`), cloaking (claim 12), ranks 1
+//! bunkers (claim 7, F1 D₃ to D₅), the sonic-wave live effect and its gate
+//! (claim 5 second part, `quirks.shared_wave_slot`; the particle emitters'
+//! gates are tested in `claims_s0616_emitters.rs`), cloaking (claim 12), ranks 1
 //! to 3, 8, 11 and 16 of claim 9 and its materialising and holding cases,
 //! tunnels (claim 13), the charge-turret image (claim 16, F5) and the
 //! campaign set-up (claim 3). See `docs/m4-claims/S-0301.md`.
