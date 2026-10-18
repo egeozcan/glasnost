@@ -11,6 +11,8 @@ use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::combat::effects::{Effect, Sound};
+use glasnost_sim::structures::bunker;
 use glasnost_sim::{gattling, mind, orders, save, testkit, tick, transport};
 
 const SIZE: i32 = 24;
@@ -37,7 +39,9 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 /// 30000), and for the absorber pairs BIO (a 2 × 2 infantry absorber for
 /// three, size limit 1, power 10, extra power 25), and for the grinder pairs
 /// GRND (a 2 × 2 recycling building), GRUNT's cost 400, a refund percentage
-/// of 0.5 and Betaland's infantry cost factor 0.5.
+/// of 0.5 and Betaland's infantry cost factor 0.5, and for the bunker pairs
+/// BUNK (a 2 × 2 tank bunker) and GATT (GAT with the turret flag set,
+/// which bunker eligibility reads).
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     r.sim.warheads.insert(
@@ -126,6 +130,21 @@ fn rules() -> Ruleset {
     };
     register(&mut r, "buildings", "GRND");
     r.sim.buildings.insert("GRND".into(), grnd);
+    // The bunker pairs (S-0606): BUNK, a 2 × 2 tank bunker with no
+    // impassable rows, and GATT, GAT with the turret flag (claim 1).
+    let bunk = BuildingType {
+        strength: Some(1000),
+        foundation: Some([2, 2]),
+        bunker: Some(true),
+        number_impassable_rows: Some(0),
+        ..Default::default()
+    };
+    register(&mut r, "buildings", "BUNK");
+    r.sim.buildings.insert("BUNK".into(), bunk);
+    let mut gatt = r.sim.vehicles["GAT"].clone();
+    gatt.turret = Some(true);
+    register(&mut r, "vehicles", "GATT");
+    r.sim.vehicles.insert("GATT".into(), gatt);
     r.sim.infantry.get_mut("GRUNT").unwrap().cost = Some(400);
     r.sim.general.economy.refund_percent = Some(dec("0.5"));
     r.sim.countries.get_mut("Betaland").unwrap().econ.cost_infantry_mult = Some(dec("0.5"));
@@ -585,4 +604,156 @@ fn a_released_neutral_unit_takes_the_grinder_fate() {
         "consumed"
     );
     assert_eq!(credits(&w, 2) - c0, 400, "P for the neutral house");
+}
+
+// Pairs with a tank bunker (S-0606).
+
+/// Sends vehicle `v` into bunker `b` with its owner's enter click and runs
+/// until it is bunkered.
+fn bunker_in(w: &mut World, v: ObjectId, b: ObjectId) {
+    let house = owner(w, v).unwrap();
+    assert_eq!(
+        targeting::cursor(w, HouseId(house), &[v], ClickOn::Object(b), Modifiers::default()),
+        Action::Enter
+    );
+    testkit::run(w, 5);
+    click(w, house, &[v], b);
+    assert!(
+        run_until(w, 1500, |w| bunker::bunkered_in(w, v) == Some(b)),
+        "bunkered"
+    );
+}
+
+/// The spin value's change in each tick from the first spin-up of `g`
+/// (attacking a target in range) to its top stage.
+fn climb(w: &mut World, g: ObjectId) -> Vec<i32> {
+    let mut steps = Vec::new();
+    let mut last = gattling::spin(w, g).value;
+    for _ in 0..900 {
+        tick::step(w);
+        let s = gattling::spin(w, g);
+        if s.value != last || !steps.is_empty() {
+            steps.push(s.value - last);
+        }
+        last = s.value;
+        if s.stage == 2 {
+            return steps;
+        }
+    }
+    panic!("no top stage");
+}
+
+// Pair: a gattling vehicle in a tank bunker.
+// spec: S-0609 claim 5 (being bunkered adds no firing-step exclusion or delay: the same per-tick spin rule applies) and its bunker variant (spin updates compared with an open-ground control of the same type; shot ticks may differ)
+// spec: S-0606 claims 1, 7 and 9 (a turreted, armed gattling vehicle is bunker-eligible; bunkered, it fires from its bunker at the bunker rate and range)
+#[test]
+fn a_gattling_in_a_bunker_spins_up_as_in_the_open() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let b = put(&mut w, Kind::Building, "BUNK", ALPHA, 0, 0);
+    let g = put(&mut w, Kind::Vehicle, "GATT", ALPHA, 6, 1);
+    bunker_in(&mut w, g, b);
+    let tgt = put(&mut w, Kind::Vehicle, "TGT", BETA, -4, 1);
+    attack(&mut w, ALPHA, g, tgt);
+    let inside = climb(&mut w, g);
+    assert_eq!(bunker::bunkered_in(&w, g), Some(b), "still bunkered");
+    assert_eq!(w.obj(g).unwrap().target, Some(Target::Object(tgt)));
+    round_trip(&w);
+
+    // The open-ground control: the same type and distance, no bunker.
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let g = put(&mut w, Kind::Vehicle, "GATT", ALPHA, 1, 1);
+    let tgt = put(&mut w, Kind::Vehicle, "TGT", BETA, -4, 1);
+    testkit::run(&mut w, 5);
+    attack(&mut w, ALPHA, g, tgt);
+    let open = climb(&mut w, g);
+    // One spin-up of 7 in every tick until the top stage, in the bunker as
+    // in the open: no missing or delayed update (the starting value may
+    // differ: the bunkered gattling may already have spun up in guard).
+    for (name, steps) in [("bunker", &inside), ("open", &open)] {
+        assert!(!steps.is_empty() && steps.iter().all(|&d| d == 7), "{name}: {steps:?}");
+    }
+}
+
+// Pair: a controlled vehicle goes into its controller's bunker.
+// spec: S-0601 claims 3 and 6 (a takeover makes the vehicle the controlling house's; the bunker row of claim 3 refuses taking over a vehicle in a tank bunker, not one that goes in after the takeover)
+// spec: S-0606 claims 2, 3 and 7 (the controlling house's enter click on its own bunker: permitted, the vehicle drives in and is bunkered)
+#[test]
+fn a_controlled_vehicle_goes_into_its_controllers_bunker() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let b = put(&mut w, Kind::Building, "BUNK", ALPHA, 0, 0);
+    let g = put(&mut w, Kind::Vehicle, "GATT", BETA, 6, 1);
+    let clone = put(&mut w, Kind::Infantry, "CLONE", ALPHA, 6, 4);
+    testkit::run(&mut w, 5);
+    assert!(mind::take(&mut w, clone, g));
+    tick::step(&mut w);
+    assert_eq!(owner(&w, g), Some(ALPHA));
+    bunker_in(&mut w, g, b);
+    assert!(mind::mind_controlled(&w, g), "still controlled inside");
+    assert_eq!(owner(&w, g), Some(ALPHA));
+    assert_eq!(bunker::occupant(&w, b), Some(g));
+    round_trip(&w);
+    // The bunker row of S-0601 claim 3 on an uncontrolled vehicle: Beta's
+    // controller may take Alpha's vehicle outside, not once it is bunkered.
+    let b2 = put(&mut w, Kind::Building, "BUNK", ALPHA, -6, -6);
+    let plain = put(&mut w, Kind::Vehicle, "GATT", ALPHA, -6, -2);
+    let other = put(&mut w, Kind::Infantry, "CLONE", BETA, -8, 10);
+    assert!(mind::can_take(&w, other, plain), "outside: legal");
+    bunker_in(&mut w, plain, b2);
+    assert!(!mind::can_take(&w, other, plain), "bunkered: refused");
+    round_trip(&w);
+}
+
+// Pair: a bunkered vehicle caught by a teleport warp.
+// spec: S-0513 claim 34 (a bunkered vehicle joins the warp group: its tank-bunker link ends in place with the walls-down effects; the bunker goes back to clearing)
+// spec: S-0606 claim 14 (the link ends in place: walls-down effects, the bunker at clearing with guard queued)
+#[test]
+fn a_warp_takes_a_bunkered_vehicle_out_of_its_bunker() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let b = put(&mut w, Kind::Building, "BUNK", ALPHA, 0, 0);
+    let g = put(&mut w, Kind::Vehicle, "GATT", ALPHA, 6, 1);
+    bunker_in(&mut w, g, b);
+    let from = w.obj(g).unwrap().pos.cell();
+    w.effects.clear();
+    glasnost_sim::superweapons::warp::launch(&mut w, HouseId(BETA), from, at(0, 8));
+    assert!(!bunker::bunkered(&w, g), "the link ends in place");
+    assert_eq!(bunker::occupant(&w, b), None);
+    assert_eq!(w.obj(b).unwrap().structure.bunker_stage, bunker::Stage::Clearing);
+    assert_eq!(w.obj(b).unwrap().beh.queued, Some(Behaviour::Guard));
+    assert!(w.effects.iter().any(|e| matches!(
+        e,
+        Effect::Sound {
+            sound: Sound::BunkerWallsDown,
+            ..
+        }
+    )));
+    assert!(w.obj(g).unwrap().sw.warp.is_some(), "in the warp group");
+    round_trip(&w);
+    assert!(run_until(&mut w, 600, |w| w
+        .obj(g)
+        .is_some_and(|o| o.sw.warp.is_none() && o.on_map)));
+    assert!(!bunker::bunkered(&w, g));
+    round_trip(&w);
+}
+
+// Pair: a berserk weapon against a bunkered vehicle and its bunker.
+// spec: S-0610 claim 3 (a berserk-causing weapon is illegal against a vehicle inside a tank bunker, or a tank bunker that holds a vehicle)
+// spec: S-0606 Terms (the bunker link)
+#[test]
+fn a_berserk_weapon_is_refused_at_a_bunkered_vehicle_and_its_bunker() {
+    // A bunker without psionics immunity (a building's default has it, S-0610
+    // Import mapping), so that only the bunker link refuses.
+    let mut r = rules();
+    r.sim.buildings.get_mut("BUNK").unwrap().combat.immune_to_psionics = Some(false);
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let b = put(&mut w, Kind::Building, "BUNK", ALPHA, 0, 0);
+    let g = put(&mut w, Kind::Vehicle, "GATT", ALPHA, 6, 1);
+    let firer = put(&mut w, Kind::Infantry, "GRUNT", BETA, -6, 6);
+    testkit::run(&mut w, 5);
+    let refused = |w: &World, x: ObjectId| {
+        glasnost_sim::psychic::firing_refused(w, firer, true, Target::Object(x))
+    };
+    assert!(!refused(&w, g) && !refused(&w, b), "outside, and an empty bunker");
+    bunker_in(&mut w, g, b);
+    assert!(refused(&w, g) && refused(&w, b));
+    round_trip(&w);
 }

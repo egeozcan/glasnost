@@ -126,3 +126,28 @@ fn grinder_fields() {
     assert_eq!(s.general.enter_grinder_sound, None);
     assert_eq!(s.general.leave_grinder_sound, None);
 }
+
+/// spec: S-0606 Import mapping (Bunker a boolean on a building type;
+/// Bunkerable a boolean on an actor type; [AudioVisual] BunkerWallsUpSound and
+/// BunkerWallsDownSound sound names; art SpecialAnimTwo to SpecialAnimFour and
+/// their damaged forms; every key absent leaves its field unset, read as the
+/// spec's absent value)
+#[test]
+fn bunker_fields() {
+    let s = sim("[BuildingTypes]\n1=Pit\n2=Shack\n\
+         [VehicleTypes]\n1=Tank\n2=Cart\n\
+         [Pit]\nBunker=yes\nNumberOfDocks=1\n\
+         [Shack]\nStrength=10\n\
+         [Tank]\nBunkerable=no\nTurret=yes\n\
+         [Cart]\nStrength=10\n\
+         [AudioVisual]\nBunkerWallsUpSound=Clang\nBunkerWallsDownSound=Clunk\n");
+    assert_eq!(s.buildings["Pit"].bunker, Some(true));
+    assert_eq!(s.buildings["Shack"].bunker, None);
+    assert_eq!(s.vehicles["Tank"].bunkerable, Some(false));
+    assert_eq!(s.vehicles["Cart"].bunkerable, None);
+    assert_eq!(s.general.bunker_walls_up_sound.as_deref(), Some("Clang"));
+    assert_eq!(s.general.bunker_walls_down_sound.as_deref(), Some("Clunk"));
+    let s = sim("[BuildingTypes]\n1=Shack\n[Shack]\nStrength=10\n");
+    assert_eq!(s.general.bunker_walls_up_sound, None);
+    assert_eq!(s.general.bunker_walls_down_sound, None);
+}

@@ -44,12 +44,19 @@ pub struct Track {
     /// of S-0207.
     #[serde(default)]
     pub exit: bool,
+    /// A tank bunker's entry or release track (S-0606 tables T1 and T2)
+    /// instead of a track of S-0207.
+    #[serde(default)]
+    pub bunker: Option<crate::structures::bunker::BunkerTrack>,
 }
 
 impl Track {
     /// The points before the target, in driven order.
     fn points(&self) -> Vec<Point> {
-        if self.exit {
+        if let Some(b) = self.bunker {
+            // spec: S-0606 Terms (the entry and release tracks of tables T1 and T2, special drive tracks under S-0207's track rules)
+            crate::structures::bunker::track_points(b)
+        } else if self.exit {
             // spec: S-0417 Terms (the exit track: table T1, distinct from the ordinary movement tracks)
             crate::econ::release::exit_track_points()
         } else {
@@ -146,9 +153,10 @@ fn supplied_point(w: &World, id: ObjectId, dest: Target) -> Option<Pos> {
             Some(Pos::new(x, y, w.surface_at(x, y) + lift))
         }
         // spec: S-0314 claims 17 and 18 (an accepted enter order supplies the depot's docking point, even in the vehicle's own cell)
-        Target::Object(t) => {
-            crate::depot::heading_point(w, id, t).or_else(|| w.obj(t).map(|x| x.pos))
-        }
+        // spec: S-0606 claim 4 (a vehicle approaching a bunker it is in contact with drives toward the docking point)
+        Target::Object(t) => crate::depot::heading_point(w, id, t)
+            .or_else(|| crate::structures::bunker::heading_point(w, id, t))
+            .or_else(|| w.obj(t).map(|x| x.pos)),
     }
 }
 
@@ -882,6 +890,7 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
                 cells: cells.clone(),
                 crush,
                 exit: false,
+                bunker: None,
             });
             dd.rho_t = rho_t;
         }
@@ -1312,6 +1321,8 @@ fn spend_and_stop(w: &mut World, id: ObjectId) -> bool {
     if ended {
         // spec: S-0314 claim 17 (reaching the docking-point cell during movement: the depot's movement-arrival exchange)
         crate::depot::movement_arrival(w, id);
+        // spec: S-0606 claim 5 (reaching the docking cell of the bunker it is in contact with: arrival)
+        crate::structures::bunker::arrival(w, id);
     }
     // spec: S-0207 claim 19 (a) (at a track target, not between track targets; it does not wait for a behaviour processing)
     if ended
@@ -1353,6 +1364,7 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
                 cells: vec![e],
                 crush: false,
                 exit: true,
+                bunker: None,
             });
             dd.turning_in_place = false;
             dd.turn = None;
@@ -1365,6 +1377,51 @@ pub fn begin_exit_track(w: &mut World, id: ObjectId, e: CellXY) {
     }
     // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once)
     claim(w, id, e);
+}
+
+/// Puts a vehicle on a tank bunker's entry or release track toward
+/// `target` (S-0606 claims 6, 12 and 13), without a path search: ρₜ and ρ
+/// are set to 1.0 and no locomotor destination point is supplied.
+pub fn begin_bunker_track(
+    w: &mut World,
+    id: ObjectId,
+    kind: crate::structures::bunker::BunkerTrack,
+    target: Pos,
+) {
+    let mode = w.rules().mode;
+    let t = w.tick;
+    let Some(o) = w.obj(id) else { return };
+    let (x, y) = (o.pos.x, o.pos.y);
+    let facing = o.body.value(t);
+    let cell = target.cell();
+    if let Some(ob) = w.obj_mut(id) {
+        ob.path.steps.clear();
+        if let Some(dd) = ob.drive.as_mut() {
+            dd.track = Some(Track {
+                // nocite: the step direction of the body facing, read by nothing on a bunker track
+                d: glasnost_num::geom::n_step(facing, 8) as u8,
+                e: None,
+                // spec: S-0606 tables T1 and T2 (the track target: the reference point, or F4)
+                target: (target.x, target.y),
+                target_cell: cell,
+                // spec: S-0606 F4 (height: the reference point's own)
+                height: target.z,
+                next: 0,
+                last: (x, y),
+                cells: vec![cell],
+                crush: false,
+                exit: false,
+                bunker: Some(kind),
+            });
+            dd.turning_in_place = false;
+            dd.turn = None;
+            // spec: S-0606 claims 6, 12 and 13 (ρₜ and ρ set to 1.0)
+            dd.rho_t = F64::from_i64(1, mode);
+            dd.rho = F64::from_i64(1, mode);
+        }
+    }
+    // spec: S-0209 claim 1 (a step sets the flag of the cell it enters at once)
+    claim(w, id, cell);
 }
 
 /// Spends the budget on the current track (S-0207 claims 3 to 5). Returns
@@ -1393,8 +1450,8 @@ fn spend(w: &mut World, id: ObjectId) -> bool {
     a -= 7 * k as i32; // spec: S-0207 claim 3 (7 of the budget per point)
     let mut next = tr.next + k;
     let mut last = tr.last;
-    if k > 0 && dd.between_steps {
-        // spec: S-0209 claim 1 (passing the first point of a track while between steps clears the flag of the cell it is leaving)
+    if k > 0 && dd.between_steps && o.pos.cell() != tr.target_cell {
+        // spec: S-0209 claim 1 (passing the first point of a track while between steps clears the flag of the cell it is leaving; a bunker track that ends in the cell it starts in leaves none, S-0606 tables T1 and T2)
         release(w, id, o.pos.cell());
         if let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut()) {
             // spec: S-0209 Terms (between steps until it next advances along a track)

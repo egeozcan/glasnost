@@ -280,8 +280,10 @@ pub fn step(w: &mut World, id: ObjectId) {
     }
     let ranged = in_range(w, id, t);
     if !ranged {
-        // spec: S-0215 claim 37 (d) (may approach: the can-approach property, and not draining, in a bunker or an open-topped passenger, all seams)
-        let may = u.is_none_or(|u| u.raw.can_approach_target.unwrap_or(true));
+        // spec: S-0215 claim 37 (d) (may approach: the can-approach property, and not draining, not sitting in a bunker, S-0606 claim 9; the open-topped passenger exclusion is a seam)
+        let may = u.is_none_or(|u| u.raw.can_approach_target.unwrap_or(true))
+            && !crate::structures::bunker::bunkered(w, id)
+            && !draining(w, id);
         // spec: S-0215 claim 37 (d) (the keep-or-drop table by current behaviour, may approach and owner)
         let keep = match o.beh.seen() {
             Some(Behaviour::Sticky) => false,
@@ -375,3 +377,12 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
 }
+
+/// Whether the actor is draining another object (S-0215 claim 37 (d)).
+/// Seam: S-0608 is not built (M7b). S-0606 claim 9 leaves the drain of a
+/// bunker building to S-0608, and claim 37 (d)'s draining exclusion needs
+/// it; no object drains yet.
+fn draining(_w: &World, _id: ObjectId) -> bool {
+    false
+}
+

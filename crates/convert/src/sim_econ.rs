@@ -218,6 +218,13 @@ const DOCK_ANIMS: &[(&str, &str)] = &[
     ("special_anim_damaged", "SpecialAnimDamaged"),
     ("production_anim", "ProductionAnim"),
     ("production_anim_damaged", "ProductionAnimDamaged"),
+    // spec: S-0606 Import mapping (special-2 to special-4 and their damaged forms, as S-0108)
+    ("special_anim_two", "SpecialAnimTwo"),
+    ("special_anim_two_damaged", "SpecialAnimTwoDamaged"),
+    ("special_anim_three", "SpecialAnimThree"),
+    ("special_anim_three_damaged", "SpecialAnimThreeDamaged"),
+    ("special_anim_four", "SpecialAnimFour"),
+    ("special_anim_four_damaged", "SpecialAnimFourDamaged"),
 ];
 
 /// The build-up sprite name's text limit (S-0108 Import mapping).
@@ -1117,7 +1124,16 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         "S-0412",
     ));
     for (_, k) in DOCK_ANIMS {
-        out.push(("art", (*k).to_owned(), "S-0402"));
+        // spec: S-0606 Import mapping (special-2 to special-4 read for the bunker walls)
+        let spec = if k.starts_with("SpecialAnimTwo")
+            || k.starts_with("SpecialAnimThree")
+            || k.starts_with("SpecialAnimFour")
+        {
+            "S-0606"
+        } else {
+            "S-0402"
+        };
+        out.push(("art", (*k).to_owned(), spec));
     }
     out.push(("art", "QueueingCell".to_owned(), "S-0402"));
     out.push(("art", "NumberOfDocks".to_owned(), "S-0402"));

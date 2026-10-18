@@ -776,12 +776,16 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
 }
 
 /// Whether `c` is one of the building's blocking cells (S-0209 Terms).
-fn blocking_cell(w: &World, b: ObjectId, c: CellXY) -> bool {
+pub fn blocking_cell(w: &World, b: ObjectId, c: CellXY) -> bool {
     let Some(o) = w.obj(b) else { return false };
     let rows = w.rules().buildings[o.type_index as usize]
         .raw
         .number_impassable_rows;
     let tl = o.pos.cell();
+    // spec: S-0209 Terms and S-0606 claim 7 (a bunker type in which a unit sits: every foundation cell blocks)
+    if crate::structures::bunker::is_bunker(w, b) && crate::structures::bunker::occupied(w, b) {
+        return true;
+    }
     match rows {
         // spec: S-0209 Terms (no impassable-rows value: every foundation cell blocks)
         None => true,

@@ -331,11 +331,15 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
         return;
     };
     let cur = o.beh.current;
-    // spec: S-0215 claim 15 (nothing is queued while patrol, area guard, unload or eaten is current)
+    // spec: S-0215 claim 15 (nothing is queued while patrol, area guard, unload or eaten is current, or while enter towards a bunker it is in contact with and not yet standing on that bunker's cell)
     let blocked = matches!(
         cur,
         Some(Behaviour::Patrol | Behaviour::AreaGuard | Behaviour::Unload | Behaviour::Eaten)
-    );
+    ) || (cur == Some(Behaviour::Enter)
+        && o.contact.is_some_and(|k| {
+            crate::structures::bunker::is_bunker(w, k)
+                && !crate::structures::bunker::standing_on(w, k, id)
+        }));
     let queue = |w: &mut World, b: Behaviour| {
         if !blocked && let Some(ob) = w.obj_mut(id) {
             ob.beh.queue(Some(b));
@@ -425,8 +429,12 @@ fn fall_back_vehicle(w: &mut World, id: ObjectId, placement: bool) {
         queue(w, Behaviour::Guard);
         return;
     }
-    // spec: S-0215 claim 15 row 12 (otherwise area guard)
-    queue(w, Behaviour::AreaGuard);
+    // spec: S-0215 claim 15 row 12 and S-0606 claim 7 (otherwise area guard, or guard if the vehicle sits in a bunker)
+    if crate::structures::bunker::bunkered(w, id) {
+        queue(w, Behaviour::Guard);
+    } else {
+        queue(w, Behaviour::AreaGuard);
+    }
 }
 
 /// One actor's behaviour part of its turn (S-0215 claims 2, 3, 11 and 33):
@@ -456,6 +464,8 @@ pub fn head(w: &mut World, id: ObjectId) {
     if kind == Kind::Vehicle {
         // spec: S-0517 claim 9 (a destination written by any rule while the vehicle is deployed or in transition is replaced by none)
         crate::econ::inplace::enforce(w, id);
+        // Q-1304 (interim: a destination written by any rule while the vehicle is bunkered is replaced by none)
+        crate::structures::bunker::enforce(w, id);
     }
     if kind == Kind::Building {
         door_update(w, id);
@@ -685,6 +695,16 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::Repair), Kind::Building) if crate::depot::is_depot(w, id) => {
             crate::depot::process_repair(w, id)
         }
+        // spec: S-0606 claims 3 to 5 and S-0215 claim 29 (a vehicle's enter toward a tank bunker; a bunker that is also a depot takes the depot's rules, Q-1308)
+        (Some(Behaviour::Enter), Kind::Vehicle)
+            if crate::structures::bunker::entering_bunker(w, id) =>
+        {
+            crate::structures::bunker::process_enter(w, id)
+        }
+        // spec: S-0606 claim 6 (a tank bunker's repair processing: the entry stages of table S1)
+        (Some(Behaviour::Repair), Kind::Building) if crate::structures::bunker::is_bunker(w, id) => {
+            crate::structures::bunker::process_repair(w, id)
+        }
         // spec: S-0215 claim 29 and S-0507 claim 5 (enter toward a transport: the loading exchange)
         (Some(Behaviour::Enter), Kind::Infantry | Kind::Vehicle)
             if crate::transport::entering_transport(w, id) =>
@@ -703,6 +723,10 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         }
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
             crate::econ::harvest::process_enter(w, id)
+        }
+        // spec: S-0606 claim 12 and S-0415 claim 1 (a bunkered vehicle's unload is the bunker release, not passenger unloading)
+        (Some(Behaviour::Unload), Kind::Vehicle) if crate::structures::bunker::bunkered(w, id) => {
+            crate::structures::bunker::process_unload(w, id)
         }
         // spec: S-0415 claim 1 rank 1 and S-0507 claims 8 to 12 (a vehicle with passenger capacity above 0 unloads passengers)
         (Some(Behaviour::Unload), Kind::Vehicle) if crate::transport::vehicle_transport(w, id) => {
@@ -1237,6 +1261,14 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     if o.kind == Kind::Vehicle && crate::seams::slave_wake_rule_holds(w, id) {
         crate::seams::wake_slaves(w, id);
         return standard_delay(w, id);
+    }
+    if crate::structures::bunker::bunkered(w, id) {
+        // spec: S-0215 claim 26 row 2 and S-0606 claim 7 (in a bunker: guard with an immediate start, readiness-dependent under claim 7; 1 tick)
+        let rd = ready(w, id);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.beh.queue_and_start(Some(Behaviour::Guard), rd, t, stale);
+        }
+        return 1;
     }
     if crate::structures::absorb::holds_instruction(w, id) {
         // spec: S-0605 claim 16 and S-0215 claim 26 row 3 (the enter-nearest instruction is carried out as in guard; in our engine only the absorbing-building one)

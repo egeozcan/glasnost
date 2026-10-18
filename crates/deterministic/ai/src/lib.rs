@@ -20,10 +20,14 @@
 //!   another goal instead of the same click every think (PLAN §4.7).
 //! - [`grinder`]: the recycling building built and fed with controlled
 //!   enemy units, badly damaged units and surplus infantry (S-0603).
+//! - [`bunker`]: tank bunkers built near the base, filled with suitable
+//!   vehicles and emptied by a deploy click to repair, retreat or attack
+//!   (S-0606).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod absorber;
 pub mod brain;
+pub mod bunker;
 pub mod chrono;
 pub mod crates;
 pub mod deployers;

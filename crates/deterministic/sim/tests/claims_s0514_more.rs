@@ -331,3 +331,56 @@ fn an_erasure_survives_a_save_and_load() {
     assert_eq!(glasnost_sim::save::state_hash(&w2), h);
     assert_eq!(w2.temporal, w.temporal);
 }
+
+// spec: S-0514 claim 1 and S-0309 claim 24 row 1 (a temporal shot at a vehicle in a tank bunker locks the bunker instead, S-0606 claim 9)
+// spec: S-0514 claim 12 and S-0606 claim 13 (the erased bunker lets its vehicle out at the completion of its erasure)
+#[test]
+fn a_temporal_shot_at_a_bunkered_vehicle_erases_its_bunker() {
+    let (mut w, a, v) = two(|r| {
+        // VICT armed, so that it is bunker-eligible (S-0606 claim 1), and
+        // PIT, a 2 × 2 tank bunker with no impassable rows.
+        r.sim.vehicles.get_mut("VICT").unwrap().primary = Some("Gun".into());
+        let pit = glasnost_rules::sim::BuildingType {
+            strength: Some(100),
+            foundation: Some([2, 2]),
+            bunker: Some(true),
+            number_impassable_rows: Some(0),
+            ..Default::default()
+        };
+        r.registries
+            .entry("buildings".into())
+            .or_default()
+            .push("PIT".into());
+        r.sim.buildings.insert("PIT".into(), pit);
+    });
+    let b = spawn(&mut w, Kind::Building, "PIT", 1, at(-4, 0));
+    testkit::run(&mut w, 5);
+    glasnost_sim::orders::issue(
+        &mut w,
+        HouseId(1),
+        glasnost_sim::orders::Order::Behaviour {
+            actor: v,
+            behaviour: glasnost_sim::rules::Behaviour::Enter,
+            attack_move: false,
+            target: None,
+            dest: Some(glasnost_sim::world::Target::Object(b)),
+        },
+    );
+    let mut n = 0;
+    while glasnost_sim::structures::bunker::bunkered_in(&w, v) != Some(b) {
+        testkit::run(&mut w, 1);
+        n += 1;
+        assert!(n < 1500, "bunkered");
+    }
+    erase(&mut w, a, v);
+    assert!(erased(&w, b), "the bunker is locked");
+    assert!(!erased(&w, v), "not the vehicle");
+    let mut n = 0;
+    while w.obj(b).is_some() {
+        testkit::run(&mut w, 1);
+        n += 1;
+        assert!(n < 3000, "the bunker is erased");
+    }
+    assert!(w.obj(v).is_some_and(|o| o.on_map), "let out");
+    assert!(!glasnost_sim::structures::bunker::bunkered(&w, v));
+}

@@ -329,7 +329,9 @@ pub fn idle(w: &World, id: ObjectId) -> bool {
             Some(_) => false,
         };
         // A deployed vehicle or one changing form takes no destination (S-0517 claim 9), so it is not free for a wave.
+        // A bunkered vehicle refuses a destination (S-0606; `bunker` lets it out first).
         arrived
+            && !glasnost_sim::structures::bunker::bunkered(w, id)
             && !glasnost_sim::econ::inplace::blocks_destination(w, id)
             && (o.target.is_none() || stale_guard_target(w, o))
             && matches!(

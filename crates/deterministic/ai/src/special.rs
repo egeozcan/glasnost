@@ -104,6 +104,16 @@ pub struct Uses {
     /// Units sent into an own recycling building (S-0603).
     #[serde(default)]
     pub grinds: u32,
+    /// Tank bunkers ordered (S-0606, `bunker`).
+    #[serde(default)]
+    pub bunker_builds: u32,
+    /// Vehicles sent into an own tank bunker (S-0606).
+    #[serde(default)]
+    pub bunker_entries: u32,
+    /// Deploy clicks given to bunkered vehicles to let them out (S-0606
+    /// claim 12).
+    #[serde(default)]
+    pub bunker_exits: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -112,6 +122,9 @@ pub struct Special {
     uses: Uses,
     /// The orders given and the ones that did not take (`memory`).
     pub(crate) memory: Memory,
+    /// What the tank bunkers remember between thinks (`bunker`).
+    #[serde(default)]
+    pub(crate) bunker: crate::bunker::Watch,
 }
 
 /// The click a person would give `unit` on `target`, as orders, when the
@@ -157,6 +170,7 @@ impl Special {
         self.mind_control(script, &own, w, out);
         self.absorbers(script, &own, w, out);
         self.grinders(script, &own, w, out);
+        self.bunkers(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -206,6 +220,21 @@ impl Special {
     /// Counts one unit sent into a recycling building (S-0603, `grinder`).
     pub(crate) fn count_grind(&mut self) {
         self.uses.grinds += 1;
+    }
+
+    /// Counts one tank bunker ordered (S-0606, `bunker`).
+    pub(crate) fn count_bunker_build(&mut self) {
+        self.uses.bunker_builds += 1;
+    }
+
+    /// Counts one vehicle sent into a tank bunker (S-0606, `bunker`).
+    pub(crate) fn count_bunker_entry(&mut self) {
+        self.uses.bunker_entries += 1;
+    }
+
+    /// Counts one bunkered vehicle let out (S-0606, `bunker`).
+    pub(crate) fn count_bunker_exit(&mut self) {
+        self.uses.bunker_exits += 1;
     }
 
     /// Counts one gattling defence building ordered (S-0609, `gattling`).

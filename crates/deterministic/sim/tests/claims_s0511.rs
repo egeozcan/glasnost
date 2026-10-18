@@ -1138,6 +1138,7 @@ fn claim_11_other_locomotion_kinds_never_head_to_the_cell() {
                 cells: vec![c],
                 crush: false,
                 exit: false,
+                bunker: None,
             });
         }
         assert_eq!(
@@ -1180,6 +1181,7 @@ fn claim_11_units_heading_onto_a_lost_deck() {
             cells: vec![c],
             crush: false,
             exit: false,
+            bunker: None,
         };
         {
             let o = w.obj_mut(tank).unwrap();
@@ -1210,6 +1212,7 @@ fn claim_11_units_heading_onto_a_lost_deck() {
         // tests that the exit instruction stores 0.)
         let exit_track = glasnost_sim::drive::Track {
             exit: true,
+            bunker: None,
             ..track_to_c(0)
         };
         let exit_up = spawn(&mut w, Kind::Vehicle, "CART", at(1, 0));

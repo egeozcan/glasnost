@@ -36,6 +36,8 @@
 //!   A skirmish drops
 //!   the structures a map gives a player's house (S-0009 claim 27), so the
 //!   houses start with units only.
+//! - Both sides (S-0606): BUNK, a tank bunker built by the AI, which
+//!   sends GUNR and GATV in and lets them out again.
 //!
 //! To add a type, insert it in [`ruleset`] (with `register`) and, for a
 //! start unit, add its name to [`INFANTRY`] or [`VEHICLES`]; the gate's
@@ -348,6 +350,15 @@ pub fn ruleset() -> Ruleset {
     grnd.econ.required_houses = only("Alphaland");
     register(&mut r, "buildings", "GRND");
     r.sim.buildings.insert("GRND".into(), grnd);
+    // Both sides' tank bunker (S-0606): BUNK, a 2 × 2 bunker with no
+    // impassable rows, built by the AI near its base; GUNR and Alpha's
+    // gattling GATV are turreted and armed, so they may go in.
+    let mut bunk = fixture::building(2, 2, 600, 0);
+    bunk.strength = Some(1500);
+    bunk.bunker = Some(true);
+    bunk.number_impassable_rows = Some(0);
+    register(&mut r, "buildings", "BUNK");
+    r.sim.buildings.insert("BUNK".into(), bunk);
     // HULK: an unarmed vehicle no house can build (tech level -1); Alpha
     // starts with a few of them, badly damaged ([`HULKS`]).
     let mut hulk = r.sim.vehicles["TRUK"].clone();

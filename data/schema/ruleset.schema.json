@@ -3330,6 +3330,54 @@
           ],
           "default": null
         },
+        "special_anim_four": {
+          "description": "Buildings: the art `SpecialAnimFour`, an animation type name as written (S-0606 Terms, *special-4*, S-0108); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "special_anim_four_damaged": {
+          "description": "Buildings: the art `SpecialAnimFourDamaged`, an animation type name as written (S-0606 Terms, the damaged variant); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "special_anim_three": {
+          "description": "Buildings: the art `SpecialAnimThree`, an animation type name as written (S-0606 Terms, *special-3*, S-0108); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "special_anim_three_damaged": {
+          "description": "Buildings: the art `SpecialAnimThreeDamaged`, an animation type name as written (S-0606 Terms, the damaged variant); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "special_anim_two": {
+          "description": "Buildings: the art `SpecialAnimTwo`, an animation type name as written (S-0606 Terms, *special-2*, S-0108); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "special_anim_two_damaged": {
+          "description": "Buildings: the art `SpecialAnimTwoDamaged`, an animation type name as written (S-0606 Terms, the damaged variant); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "spy_sat": {
           "description": "Buildings: `SpySat` (S-0409 claim 15); absent: no.",
           "type": [
@@ -4575,6 +4623,22 @@
               "type": "null"
             }
           ]
+        },
+        "bunker_walls_down_sound": {
+          "description": "`[AudioVisual] BunkerWallsDownSound`, the sound at a tank bunker's\nposition when its walls go down (S-0606 claims 12 and 14 and Import\nmapping; absent: none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "bunker_walls_up_sound": {
+          "description": "`[AudioVisual] BunkerWallsUpSound`, the sound at a tank bunker's\nposition when a vehicle becomes bunkered (S-0606 claim 7 and Import\nmapping; absent: none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "bunker_weapon_range_bonus": {
           "description": "`BunkerWeaponRangeBonus`, cells (S-0307 claim 5).",
@@ -8146,7 +8210,7 @@
           "default": true
         },
         "bunker_clear_nearest_only": {
-          "description": "The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left. Not implemented yet (wave 2).",
+          "description": "The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left.",
           "type": "boolean",
           "default": true
         },
@@ -11238,6 +11302,14 @@
         },
         "bombable": {
           "description": "`Bombable`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "bunkerable": {
+          "description": "`Bunkerable`, the bunkerable flag of a tank bunker's entrant (S-0606\nclaim 1 and Import mapping); absent: on for vehicle types, off for\ninfantry and aircraft types.",
           "type": [
             "boolean",
             "null"

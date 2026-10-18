@@ -4,7 +4,7 @@
 use glasnost_ai::{fixture, fixture_m7a as kit, game::Game};
 use glasnost_sim_gate::{M7A_SEED, M7A_TICKS, m7a};
 
-// spec: S-0610 (berserk hits, the psychic sensor, the psychic reveal), S-0402 claim 14 (slave miners), S-0609 claim 2 (gattling stages), S-0601 claim 6 (takeovers), S-0613 claims 2 to 4 and 13 (gas clouds and their hits), S-0605 claims 1 and 7 (infantry absorbed): the gate's M7a duel uses each of them, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
+// spec: S-0610 (berserk hits, the psychic sensor, the psychic reveal), S-0402 claim 14 (slave miners), S-0609 claim 2 (gattling stages), S-0601 claim 6 (takeovers), S-0613 claims 2 to 4 and 13 (gas clouds and their hits), S-0605 claims 1 and 7 (infantry absorbed), S-0606 claims 3, 7 and 12 (bunker entries, bunkered vehicles, exits): the gate's M7a duel uses each of them, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
 #[test]
 #[ignore = "long; run in release by `cargo xtask gate`"]
 fn every_m7a_ability_is_exercised_and_the_replay_reproduces_the_game() {

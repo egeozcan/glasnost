@@ -1308,6 +1308,7 @@ fn claim_17_driving_movement_report() {
         cells: vec![pos.cell()],
         crush: false,
         exit: false,
+        bunker: None,
     };
     // Stored steps, a turn in place and a track whose heading point is at
     // the current horizontal position (only its height differs) do not

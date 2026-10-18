@@ -368,8 +368,15 @@ fn full_delay(w: &mut World, firer: ObjectId, wr: &crate::combat::data::WeaponRu
     } else {
         d3
     };
-    // Bunkered vehicles (D₅) are a seam: no vehicle is bunkered.
-    d4
+    // spec: S-0301 claim 7 and F1 (D₅ = trunc(RZ₅₃(D₄ / b)) for a bunkered vehicle when b ≠ 0, else D₄)
+    let b = rules.combat.general.bunker_rof;
+    if crate::structures::bunker::bunkered(w, firer) && !b.eq_num(F64::ZERO) {
+        F64::from_i64(i64::from(d4), mode)
+            .div(b, mode)
+            .to_i32_common()
+    } else {
+        d4
+    }
 }
 
 /// The rules after a shot: distributed fire (S-0309 claim 20), fire-once

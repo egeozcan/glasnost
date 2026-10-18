@@ -70,9 +70,9 @@ fn d(n: i64, mode: Rounding) -> F64 {
 }
 
 /// The shot damage D_s of a weapon fired by an object (S-0302 claim 2,
-/// F1), fixed at the moment of firing. Bunkers and open-topped transports
-/// (M_b, M_t) are seams: no firer is in those situations; a garrisoned
-/// building's multiplier M_g applies (S-0508).
+/// F1), fixed at the moment of firing. A garrisoned building's multiplier
+/// M_g (S-0508) and a bunkered vehicle's M_b (S-0606) apply; the
+/// open-topped transport's M_t is a seam.
 pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
     let r = w.rules();
     let mode = r.mode;
@@ -92,9 +92,19 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
             e1
         }
     };
+    // spec: S-0302 F1 (E₃ = trunc(RZ₅₃(E₂ × M_b)) for a bunkered unit, whatever the sign of D; S-0606 claim 9)
+    let bunker = |e2: i32| {
+        if crate::structures::bunker::bunkered(w, firer) {
+            d(i64::from(e2), mode)
+                .mul(r.combat.general.damage_mult[1], mode)
+                .to_i32_common()
+        } else {
+            e2
+        }
+    };
     // spec: S-0302 F1 (E₀ = D for D ≤ 0: the multipliers leave it unchanged)
     if dmg <= 0 {
-        return garrison(dmg);
+        return bunker(garrison(dmg));
     }
     let Some(o) = w.obj(firer) else { return dmg };
     let fh = o
@@ -115,7 +125,7 @@ pub fn shot_damage(w: &World, firer: ObjectId, weapon: WeaponId) -> i32 {
     } else {
         e0
     };
-    garrison(e1)
+    bunker(garrison(e1))
 }
 
 /// The house armour factor A_h for a target (S-0302 claim 5): the factor of
@@ -371,8 +381,14 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
             || (h.poison && tc.immune_poison)
             || (!h.affects_allies && allied_attacker)
     });
-    // The two bunker rows of stage 2 need tank bunkers (structures specs).
-    if stage2 {
+    // spec: S-0302 claim 8 (stage 2 bunker rows, + and − hits: a tank bunker holding a bunkered unit hit by a bunker-penetrating warhead; a bunkered unit hit by a warhead that does not penetrate bunkers)
+    let penetrates = wh.as_ref().is_some_and(|h| h.penetrates_bunker);
+    let bunker_row = !ign
+        && ((crate::structures::bunker::is_bunker(w, target)
+            && crate::structures::bunker::occupied(w, target)
+            && penetrates)
+            || (crate::structures::bunker::bunkered(w, target) && !penetrates));
+    if stage2 || bunker_row {
         return HitResult::Unaffected;
     }
     // spec: S-0302 claim 10 (stage 3: a berserk warhead changes no health)

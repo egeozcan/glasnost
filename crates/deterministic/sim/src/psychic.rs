@@ -14,9 +14,9 @@
 //! at once (claim 9). The hostile-intent lines are a read-only query for the
 //! drawing ([`intent_lines`]).
 //!
+//! The bunker half of claim 3 is [`bunker_refusal`] (S-0606).
+//!
 //! Seams:
-//! - S-0606 (tank bunkers) is not built: the bunker half of claim 3 is
-//!   [`bunker_refusal`], which no object meets yet.
 //! - S-0613 (gas clouds): a gas particle's hit with a berserk-causing
 //!   warhead goes through damage resolution like any other hit
 //!   (`gas::damage_step`, S-0613 claim 13) and so reaches [`enter`].
@@ -123,13 +123,14 @@ pub fn countdown_turn(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Seam: S-0606 (tank bunkers) is not built. The bunker half of claim 3
-/// (a berserk weapon is illegal against a vehicle inside a tank bunker or a
-/// tank bunker that holds a vehicle) reads this. No building is a tank
-/// bunker yet (`transport::tank_bunker`), so no vehicle is inside one.
+/// The bunker half of claim 3: a berserk weapon is illegal against a
+/// vehicle inside a tank bunker or a tank bunker that holds a vehicle
+/// (S-0606 bunker link).
 fn bunker_refusal(w: &World, target: ObjectId) -> bool {
-    // spec: S-0610 claim 3 (a tank bunker that holds a vehicle, or a vehicle inside one; S-0606 is not built)
-    crate::transport::tank_bunker(w, target)
+    // spec: S-0610 claim 3 (a tank bunker that holds a vehicle, or a vehicle inside one)
+    crate::structures::bunker::bunkered(w, target)
+        || (crate::structures::bunker::is_bunker(w, target)
+            && crate::structures::bunker::occupied(w, target))
 }
 
 /// The firing refusals of S-0610 at rank 4 of S-0301 claim 9: a weapon
