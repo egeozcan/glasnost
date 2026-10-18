@@ -682,6 +682,8 @@ fn deliver(w: &mut World, master: ObjectId, s: ObjectId) {
             harvest::pay(w, master, tib, a);
         }
     }
+    // spec: S-0616 claim 1 (refinery smoke at each delivery of a resource-carrying slave, once per delivery; interim Q-1401)
+    crate::emitters::refinery_smoke(w, master);
     // spec: S-0402 claim 14 (it goes inside the miner)
     crate::objects::take_inside(w, s);
     set_slave(w, s, |x| {

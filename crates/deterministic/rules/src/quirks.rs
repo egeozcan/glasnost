@@ -1680,7 +1680,7 @@ pub struct Quirks {
     // spec: S-0616 claim 7 and Edge cases
     #[serde(default = "on")]
     pub smoke_deck_extra_update: bool,
-    /// The flame sweep's facing constants are 16383 and 65534; off: 16384 and 65536. Seam: `effect_weapon_emitter` (`glasnost_sim::particles`); the switch loads in both positions and changes nothing until that seam is filled.
+    /// The flame sweep's facing constants are 16383 and 65534; off: 16384 and 65536 (`glasnost_sim::particles::flame_sweep`).
     // spec: S-0616 F5 and Edge cases
     #[serde(default = "on")]
     pub flame_sweep_facing: bool,

@@ -128,6 +128,9 @@ pub struct WeaponRules {
     pub disguise_fake_blink: i32,
     /// The unlimited-control flag (S-0601 claim 1).
     pub infinite_mind_control: bool,
+    /// The effect weapon's emitter type, a particle-system name (S-0616
+    /// claim 1).
+    pub attached_system: Option<String>,
 }
 
 impl WeaponRules {
@@ -597,6 +600,17 @@ pub struct TypeCombat {
     pub smoke_systems: Vec<String>,
     /// The damage-smoke displacement, leptons (S-0616 claim 1).
     pub smoke_offset: [i32; 3], // nocite: vector and matrix dimensions (three axes)
+    /// The spark-kind damage particle systems, in list order (S-0616
+    /// claim 1, damage sparks).
+    pub spark_systems: Vec<String>,
+    /// The natural particle system (S-0616 claim 1).
+    pub natural_system: Option<String>,
+    /// The natural-smoke displacement, leptons (S-0616 claim 1).
+    pub natural_offset: [i32; 3], // nocite: vector and matrix dimensions (three axes)
+    /// The destruction particle-system list (S-0312 claim 19 f).
+    pub destroy_systems: Vec<String>,
+    /// The destruction smoke displacement, leptons (S-0312 claim 19 f).
+    pub destroy_offset: [i32; 3], // nocite: vector and matrix dimensions (three axes)
     /// Maximum debris X.
     pub max_debris: i32,
     /// Minimum debris Y.
@@ -1300,6 +1314,8 @@ pub fn tables(
                 disguise_fake_blink: w.disguise_fake_blink_time.unwrap_or(0),
                 // spec: S-0601 Import mapping (InfiniteMindControl absent: no)
                 infinite_mind_control: b(w.infinite_mind_control),
+                // spec: S-0616 Import mapping (AttachedParticleSystem absent: none)
+                attached_system: w.attached_particle_system.clone(),
             }
         })
         .collect();
@@ -1449,6 +1465,13 @@ pub fn type_combat(
         smoke_systems: c.damage_smoke_systems.clone().unwrap_or_default(),
         // spec: S-0616 Import mapping (DamageSmokeOffset absent 0, 0, 0)
         smoke_offset: c.damage_smoke_offset.unwrap_or([0; 3]),
+        spark_systems: c.damage_spark_systems.clone().unwrap_or_default(),
+        // spec: S-0616 Import mapping (NaturalParticleSystem absent: none; NaturalParticleLocation absent 0, 0, 0)
+        natural_system: c.natural_particle_system.clone(),
+        natural_offset: c.natural_particle_location.unwrap_or([0; 3]), // nocite: vector and matrix dimensions (three axes)
+        // spec: S-0312 Import mapping (DestroyParticleSystems absent: empty; DestroySmokeOffset absent 0, 0, 0)
+        destroy_systems: c.destroy_particle_systems.clone().unwrap_or_default(),
+        destroy_offset: c.destroy_smoke_offset.unwrap_or([0; 3]), // nocite: vector and matrix dimensions (three axes)
         // spec: S-0312 Import mapping (MaxDebris, MinDebris absent: 0, 0)
         max_debris: c.max_debris.unwrap_or(0),
         min_debris: c.min_debris.unwrap_or(0),

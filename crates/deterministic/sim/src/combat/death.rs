@@ -721,7 +721,8 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
         let name = tc.destroy_anim[k].clone();
         effects::anim(w, &name, o.pos);
     }
-    // (f) destruction particle systems: which kinds are eligible belongs to the particle specs; none is created.
+    // spec: S-0312 claim 19 (f) and S-0616 claim 1 (one destruction smoke system; the eligible kinds are interim, Q-1400)
+    crate::emitters::destruction_smoke(w, id);
     // spec: S-0312 claim 19 (g) and claim 24 (absorbed passengers come out, or die, before the survivors)
     crate::structures::absorb::destroyed(w, id, hit);
     survivors(w, id, hit);

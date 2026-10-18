@@ -1058,6 +1058,31 @@
           "format": "int32",
           "default": null
         },
+        "refinery_smoke_offsets": {
+          "description": "`RefinerySmokeOffsetOne` … `RefinerySmokeOffsetFour`, the smoke\npoints in leptons; a point not given is written as (0, 0, 0), which\ncounts as unset (S-0616 claim 1 and Import mapping).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "refinery_smoke_particle_system": {
+          "description": "`RefinerySmokeParticleSystem`, a particle-system name (S-0616 claim\n1, refinery smoke; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "repairable": {
           "description": "`Repairable`.",
           "type": [
@@ -1509,6 +1534,17 @@
             "type": "string"
           }
         },
+        "damage_spark_systems": {
+          "description": "`DamageParticleSystems`: the particle-system names of the spark\nkind, in list order (S-0616 claim 1, damage sparks).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "death_weapon": {
           "description": "`DeathWeapon` (S-0312 claim 6).",
           "type": [
@@ -1583,6 +1619,20 @@
           "items": {
             "type": "string"
           }
+        },
+        "destroy_smoke_offset": {
+          "description": "`DestroySmokeOffset`, the destruction smoke displacement in leptons\nper axis (S-0312 claim 19 f and Import mapping; absent 0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
         },
         "detect_disguise": {
           "description": "`DetectDisguise` (S-0309 table C).",
@@ -1854,6 +1904,28 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "natural_particle_location": {
+          "description": "`NaturalParticleLocation`, the natural-smoke displacement in leptons\nper axis (S-0616 Import mapping; absent 0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "natural_particle_system": {
+          "description": "`NaturalParticleSystem`, a particle-system name (S-0616 claim 1,\nnatural smoke; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "naval": {
@@ -4955,8 +5027,30 @@
             }
           ]
         },
+        "condition_red_sparking_probability": {
+          "description": "`[General] ConditionRedSparkingProbability`, the red sparking\nprobability of damage sparks, a double (S-0616 claim 1; absent 0.02).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "condition_yellow": {
           "description": "`[AudioVisual] ConditionYellow` (S-0108 F3, S-0207 claim 9).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "condition_yellow_sparking_probability": {
+          "description": "`[General] ConditionYellowSparkingProbability`, the yellow sparking\nprobability of damage sparks, a double (S-0616 claim 1; absent 0.01).",
           "anyOf": [
             {
               "$ref": "#/$defs/Decimal"
@@ -6023,6 +6117,15 @@
               "type": "null"
             }
           ]
+        },
+        "refinery_smoke_frames": {
+          "description": "`[General] RefinerySmokeFrames`, the refinery-smoke system lifetime\nin ticks (S-0616 claim 1 and Import mapping; absent 25).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "repair_bridge_sound": {
           "description": "`[AudioVisual] RepairBridgeSound`, a sound name (S-0511 claim 17).",
@@ -8769,7 +8872,7 @@
           "default": true
         },
         "flame_sweep_facing": {
-          "description": "The flame sweep's facing constants are 16383 and 65534; off: 16384 and 65536. Seam: `effect_weapon_emitter` (`glasnost_sim::particles`); the switch loads in both positions and changes nothing until that seam is filled.",
+          "description": "The flame sweep's facing constants are 16383 and 65534; off: 16384 and 65536 (`glasnost_sim::particles::flame_sweep`).",
           "type": "boolean",
           "default": true
         },
@@ -12955,6 +13058,14 @@
           "description": "`AreaFire`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "attached_particle_system": {
+          "description": "`AttachedParticleSystem`, the effect weapon's emitter type, a\nparticle-system name (S-0616 claim 1; absent none).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null

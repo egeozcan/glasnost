@@ -537,5 +537,8 @@ fn exploding_overlay(w: &mut World, centre: CellXY, det: &Detonation) {
             break;
         }
     }
-    let _particle = w.rng.percent() < 25; // spec: S-0303 Constants (barrel particle chance 25 percent)
+    if w.rng.percent() < 25 {
+        // spec: S-0303 Constants (barrel particle chance 25 percent) and claim 19 (the particle system appears at P; S-0616 claim 1)
+        crate::emitters::barrel_particle_system(w, det.point, det.house);
+    }
 }

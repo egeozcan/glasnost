@@ -457,27 +457,6 @@ fn claim_17_railgun_line() {
     assert_eq!(list(&w, s).len(), n, "a marked system emits no more");
 }
 
-/// spec: S-0616 F5 and Edge cases (quirks.flame_sweep_facing: the original's position on by default; it belongs to the effect-weapon emitter seam, so a fire system's turn is the same in both positions)
-#[test]
-fn flame_sweep_facing_changes_nothing_yet() {
-    assert!(glasnost_rules::quirks::Quirks::default().flame_sweep_facing);
-    let mut out = Vec::new();
-    for on in [true, false] {
-        let mut r = rules();
-        r.globals.quirks.flame_sweep_facing = on;
-        let mut w = game(&r);
-        let c = testkit::mid(SIZE, 0, 0);
-        let v = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, c, 0);
-        let s = system(&mut w, "BLAZE", Pos::centre(c, 0), Some(HouseId(1)));
-        w.gas.systems.get_mut(&s).unwrap().owner_object = Some(v);
-        for _ in 0..5 {
-            gas::system_turn(&mut w, s);
-        }
-        out.push((w.gas.systems.get(&s).cloned(), w.rng.clone()));
-    }
-    assert_eq!(out[0], out[1]);
-}
-
 /// spec: S-0616 claim 19 and F13 (without the normalised flag the type's stage-advance field; with it trunc(t / (δ_F + 1) + 1.0), t = |Pₓ − Qₓ| / aₓ; t = 9999.0 with no motion; a divisor of 0 gives 0; no draw)
 #[test]
 fn claim_19_normalised_stage_advance() {

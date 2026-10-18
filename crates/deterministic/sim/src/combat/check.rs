@@ -390,12 +390,20 @@ pub fn check(
     if let Some(a) = crate::lift::firing_answer(w, firer, wr.mag_beam, target) {
         return a;
     }
+    // spec: S-0301 claim 5 (a live effect of the kind of the asked weapon's other weapon: impossible, rank 4) and S-0616 claim 1 (the gate applies while the emitter is held)
+    if crate::emitters::other_effect_alive(w, firer, slot) {
+        return Answer::Impossible;
+    }
     let t = w.tick;
     let c = &o.combat;
     // spec: S-0301 claim 13 (the sync tick: the counter equals the sync frame for k mod B)
     let sync = sync_tick(w, firer, slot, weapon);
     // spec: S-0301 claim 1 and claim 9 rank 5 (the countdown runs below t + D, except in the sync tick)
     if t < c.rearm_until && !sync {
+        return Answer::Rearming;
+    }
+    // spec: S-0301 claim 5 (a live effect of the asked weapon's own kind: rearming, rank 5)
+    if crate::emitters::own_effect_alive(w, firer, weapon) {
         return Answer::Rearming;
     }
     // spec: S-0301 claim 13 (with a sync frame, the primary weapon gets rearming until the counter equals it)

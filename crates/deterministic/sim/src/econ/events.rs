@@ -40,6 +40,10 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
     crate::econ::shroud::entered_map(w, id);
     // spec: S-0516 claims 16, 22, 23 and 40 (entering play: a cloaked vehicle, sensor discs, arrays and detectors)
     crate::cloak::entered_map(w, id);
+    if kind == Kind::Building {
+        // spec: S-0616 claim 1 (natural smoke: a building whose type names a natural particle system gets one when placed in play, if it has none)
+        crate::emitters::natural_smoke(w, id, false);
+    }
     if let Some(h) = owner {
         if kind == Kind::Building {
             // spec: S-0407 claim 12 (a) (a building put on the map)

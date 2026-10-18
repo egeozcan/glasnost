@@ -305,6 +305,15 @@ pub enum Marker {
     /// A gas particle (S-0613): a green cloud, our placeholder for the
     /// particle's picture and translucency, which the view does not draw.
     Gas,
+    /// A particle of a smoke system (S-0616): a small white puff, our
+    /// placeholder like [`Marker::Gas`].
+    Smoke,
+    /// A particle of a fire system (S-0616): an orange flame dot.
+    Fire,
+    /// A particle of a spark system (S-0616): a small yellow dot.
+    Spark,
+    /// A particle of a railgun system (S-0616): a small cyan dot.
+    Rail,
 }
 
 /// Placeholder palette indices (our own colours).
@@ -487,6 +496,10 @@ fn marker_image(m: Marker) -> IndexedImage {
         Marker::Marked => disc(20, 10, Some(880), ink::CYAN, ink::CYAN),
         // A cloud twice as wide as high (S-0101 F1's ground projection).
         Marker::Gas => disc(14, 7, None, ink::GREEN, ink::OUTLINE),
+        Marker::Smoke => disc(8, 4, None, ink::WHITE, ink::OUTLINE),
+        Marker::Fire => disc(4, 3, None, ink::ORANGE, ink::RED),
+        Marker::Spark => disc(2, 2, None, ink::YELLOW, ink::WHITE),
+        Marker::Rail => disc(2, 2, None, ink::CYAN, ink::WHITE),
         Marker::Crate => {
             // A 13 × 11 box with an outline and a cross.
             let mut px = vec![0u8; 143];

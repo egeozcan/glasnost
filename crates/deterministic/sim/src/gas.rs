@@ -223,6 +223,11 @@ pub struct GasRules {
     pub default_spark: Option<u32>,
     /// Whether `DefaultSparkSystem` is present at all (S-0601 claim 16).
     pub default_spark_given: bool,
+    /// The game-wide refinery-smoke time, ticks (S-0616 claim 1).
+    pub refinery_frames: i32,
+    /// The red and yellow sparking probabilities of damage sparks, doubles
+    /// (S-0616 claim 1).
+    pub sparking: (F64, F64),
     /// The ramp matrices of S-0106 table C4 by slope shape 0 … 20.
     pub ramps: Vec<[[F32; 3]; 3]>, // nocite: vector and matrix dimensions (three axes)
 }
@@ -593,6 +598,11 @@ impl GasRules {
                 .position(|t| &t.name == n)
                 .and_then(|i| u32::try_from(i).ok())
         });
+        // spec: S-0616 Import mapping ([General] ConditionRedSparkingProbability and ConditionYellowSparkingProbability, doubles; absent 0.02 and 0.01)
+        let prob = |d: &Option<glasnost_rules::sim::Decimal>, absent: &str| {
+            d.as_ref()
+                .map_or_else(|| crate::rules::nearest_double(absent), |d| d.value(mode))
+        };
         GasRules {
             particles,
             systems,
@@ -600,6 +610,12 @@ impl GasRules {
             smoke_wind,
             default_spark,
             default_spark_given,
+            // spec: S-0616 Import mapping ([General] RefinerySmokeFrames absent 25)
+            refinery_frames: g.refinery_smoke_frames.unwrap_or(25),
+            sparking: (
+                prob(&g.condition_red_sparking_probability, "0.02"),
+                prob(&g.condition_yellow_sparking_probability, "0.01"),
+            ),
             virus: g.infantry_virus.clone(),
             wind,
             // spec: S-0613 Import mapping and Constants (Gravity absent 3 leptons per tick²)
@@ -675,6 +691,13 @@ pub struct ParticleSystem {
     pub timer: F32,
     /// The spark counter *K* (S-0616 Terms, claim 15).
     pub sparks: i32,
+    /// Its target object, if any (S-0616 Terms and claim 4).
+    #[serde(default)]
+    pub target_object: Option<ObjectId>,
+    /// A natural smoke system's yellow factor has been applied (S-0616
+    /// claim 1: once, repair does not undo it).
+    #[serde(default)]
+    pub yellowed: bool,
 }
 
 impl ParticleSystem {
@@ -696,6 +719,8 @@ impl ParticleSystem {
             // spec: S-0616 Terms (T starts at the type's spawn interval; K at its spark-turns field)
             timer: F64::from_i64(i64::from(t.spawn_frames), mode).to_f32(mode),
             sparks: t.spark_turns,
+            target_object: None,
+            yellowed: false,
         }
     }
 }
@@ -1051,12 +1076,9 @@ pub fn system_turn(w: &mut World, id: ObjectId) {
     if s.ending && s.particles.is_empty() {
         // spec: S-0613 claim 17 (then, in the same turn, a marked system that holds no particles leaves play; the shared system is not created again)
         let gone = w.gas.systems.remove(&id);
-        // spec: S-0616 claim 1 (a damage-smoke system stays in its owner's damage-smoke place until it leaves play)
-        if let Some(o) = gone.and_then(|g| g.owner_object)
-            && let Some(ob) = w.obj_mut(o)
-            && ob.combat.damage_smoke == Some(id)
-        {
-            ob.combat.damage_smoke = None;
+        // spec: S-0616 claim 1 and Terms (a system held in an emitter place, damage smoke included, stays there until it leaves play)
+        if let Some(o) = gone.and_then(|g| g.owner_object) {
+            crate::emitters::release_places(w, o, id);
         }
         if w.gas.shared == Some(id) {
             w.gas.shared = None;

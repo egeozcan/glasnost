@@ -417,8 +417,8 @@ fn default_spark_system_absent_warns() {
 }
 
 /// spec: S-0616 F5 and Edge cases (quirks.flame_sweep_facing: absent the original's position,
-/// on; an imported ruleset with a patch layer setting it loads either position. The switch is
-/// wired for the effect-weapon emitter seam and changes nothing until that seam is filled.)
+/// on; an imported ruleset with a patch layer setting it loads either position; the sim's
+/// flame sweep reads it, tested in claims_s0616.rs.)
 /// Every other S-0616 switch loads the same way.
 #[test]
 fn particle_quirks_load_in_both_positions() {
@@ -489,4 +489,95 @@ fn corridor_retry_quirk_loads_in_both_positions() {
             format!("{{\"globals\": {{\"quirks\": {{\"corridor_retry_no_fallback\": {on}}}}}}}");
         assert_eq!(load(Some(&text)).corridor_retry_no_fallback, on);
     }
+}
+
+/// spec: S-0616 Import mapping (weapon AttachedParticleSystem; object type NaturalParticleSystem
+/// and NaturalParticleLocation; building type RefinerySmokeParticleSystem and
+/// RefinerySmokeOffsetOne … Four, an absent point unset; [General] RefinerySmokeFrames and the
+/// two sparking probabilities; the spark-kind entries of DamageParticleSystems for damage
+/// sparks; absent keys give no value) and S-0312 Import mapping (DestroySmokeOffset)
+#[test]
+fn creator_keys() {
+    let base = "[Particles]\n0=Soot\n1=Ember\n[ParticleSystems]\n0=Plume\n1=Burst\n2=Flare\n\
+                [Soot]\nBehavesLike=Smoke\n[Ember]\nBehavesLike=Spark\n\
+                [Plume]\nBehavesLike=Smoke\nHoldsWhat=Soot\n\
+                [Burst]\nBehavesLike=Spark\nHoldsWhat=Ember\n\
+                [Flare]\nBehavesLike=Spark\nHoldsWhat=Ember\n\
+                [General]\nRefinerySmokeFrames=9\nConditionRedSparkingProbability=0.5\n\
+                ConditionYellowSparkingProbability=0.25\n\
+                [VehicleTypes]\n1=Tank\n\
+                [Tank]\nPrimary=Torch\nSecondary=Bare\nElitePrimary=Plainer\n\
+                [Torch]\nUseFireParticles=yes\nAttachedParticleSystem=Plume\n\
+                [Bare]\nIsRailgun=yes\n[Plainer]\nDamage=1\n\
+                [BuildingTypes]\n1=Mill\n2=Shed\n\
+                [Mill]\nNaturalParticleSystem=Plume\nNaturalParticleLocation=1,2,3\n\
+                RefinerySmokeParticleSystem=Plume\nRefinerySmokeOffsetTwo=40,0,5\n\
+                DestroySmokeOffset=8,-8,0\n[Shed]\nStrength=5\n\
+                [InfantryTypes]\n1=Borg\n\
+                [Borg]\nCyborg=yes\nDamageParticleSystems=Burst,Plume,Flare\n";
+    let (s, w) = sim(base, "", "");
+    assert_eq!(
+        s.weapons["Torch"].attached_particle_system.as_deref(),
+        Some("Plume")
+    );
+    assert_eq!(s.weapons["Bare"].attached_particle_system, None);
+    assert!(
+        warned(
+            &w,
+            "weapons Bare is a spark, fire or railgun weapon without an AttachedParticleSystem"
+        ),
+        "{w:?}"
+    );
+    assert!(!warned(&w, "weapons Plainer is a spark"), "{w:?}");
+    assert!(!warned(&w, "weapons Torch is a spark"), "{w:?}");
+    let mill = &s.buildings["Mill"];
+    assert_eq!(
+        mill.combat.natural_particle_system.as_deref(),
+        Some("Plume")
+    );
+    assert_eq!(mill.combat.natural_particle_location, Some([1, 2, 3]));
+    assert_eq!(mill.combat.destroy_smoke_offset, Some([8, -8, 0]));
+    assert_eq!(
+        mill.refinery_smoke_particle_system.as_deref(),
+        Some("Plume")
+    );
+    assert_eq!(
+        mill.refinery_smoke_offsets,
+        Some(vec![[0, 0, 0], [40, 0, 5], [0, 0, 0], [0, 0, 0]])
+    );
+    let shed = &s.buildings["Shed"];
+    assert_eq!(
+        (
+            shed.combat.natural_particle_system.as_ref(),
+            shed.combat.natural_particle_location,
+            shed.combat.destroy_smoke_offset,
+            shed.refinery_smoke_particle_system.as_ref(),
+            shed.refinery_smoke_offsets.as_ref()
+        ),
+        (None, None, None, None, None)
+    );
+    assert_eq!(s.general.refinery_smoke_frames, Some(9));
+    assert_eq!(
+        dec(&s.general.condition_red_sparking_probability),
+        Some("5e-1")
+    );
+    assert_eq!(
+        dec(&s.general.condition_yellow_sparking_probability),
+        Some("25e-2")
+    );
+    let borg = &s.infantry["Borg"].combat;
+    assert_eq!(
+        borg.damage_spark_systems,
+        Some(vec!["Burst".to_owned(), "Flare".to_owned()])
+    );
+    assert_eq!(borg.damage_smoke_systems, Some(vec!["Plume".to_owned()]));
+    let (s, _) = sim("[General]\nName=x\n", "", "");
+    assert_eq!(
+        (
+            s.general.refinery_smoke_frames,
+            s.general.condition_red_sparking_probability.as_ref(),
+            s.general.condition_yellow_sparking_probability.as_ref()
+        ),
+        (None, None, None)
+    );
 }

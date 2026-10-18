@@ -13,18 +13,9 @@
 //! Creators built here: a warhead's system ([`crate::gas::warhead_system`]),
 //! the damage smoke of S-0302 claim 13 ([`damage_smoke`]), the overload
 //! sparks of S-0601 claim 16 and the drone delivery sparks of S-0614 claim
-//! 9 ([`spark_system`]).
-//!
-//! Seams (claim 1's other creators, not built yet): `effect_weapon_emitter`
-//! (the fire, spark and railgun emitters of effect weapons, with the flame
-//! sweep F5, swing F6, insertion F7, the let-go events and S-0301 claim 5's
-//! live-effect gate; `quirks.flame_sweep_facing` waits for it), refinery
-//! smoke, natural smoke (with S-0516's cloak removal and uncloak rule),
-//! destruction smoke (S-0312 claim 19 f), electric-bolt sparks, the damage
-//! sparks of cyborg infantry, deactivated-vehicle sparks, voxel-animation
-//! systems and the two trigger actions (S-0011 codes 88 and 89, outside
-//! I4's supported subset). A system's target object (claim 4's second
-//! sentence) exists only for effect-weapon emitters and waits with them.
+//! 9 ([`spark_system`]). Claim 1's other creators, the emitter places and
+//! S-0301 claim 5's gate are in [`crate::emitters`]; the flame sweep F5,
+//! swing F6 and insertion F7 of a fire emitter are here ([`fire_turn`]).
 
 use glasnost_num::{F32, F64, Rounding};
 
@@ -187,7 +178,7 @@ pub fn own_advance(w: &World, t: &ParticleType, at: Pos, target: Pos, u: [F32; 3
 }
 
 /// A new system of type `ti` at `pos`, entered in the update order.
-fn create(w: &mut World, ti: u32, pos: Pos, house: Option<HouseId>) -> Option<ObjectId> {
+pub(crate) fn create(w: &mut World, ti: u32, pos: Pos, house: Option<HouseId>) -> Option<ObjectId> {
     let rules = w.rules_arc();
     let t = rules.gas.systems.get(ti as usize)?;
     let id = w.new_id();
@@ -252,6 +243,10 @@ pub fn owner_removed(w: &mut World, id: ObjectId) {
             // spec: S-0616 claim 4 (every system whose owner object is removed loses it and is marked, whatever its kind)
             s.owner_object = None;
             s.ending = true;
+        }
+        if s.target_object == Some(id) {
+            // spec: S-0616 claim 4 (a removed object is cleared from every system that names it as its target object)
+            s.target_object = None;
         }
     }
 }
@@ -595,10 +590,204 @@ pub fn fire_turn(w: &mut World, sys: ObjectId) {
     });
     if !alive {
         mark(w, sys);
+        if let Some(o) = owner {
+            // spec: S-0616 claim 1 (a fire emitter is marked and let go when its firer dies)
+            crate::emitters::release_places(w, o, sys);
+        }
     }
-    // Seam `effect_weapon_emitter`: a fire system with an alive owner object
-    // comes only from an effect weapon; its flame sweep (claim 11, F5) and
-    // emission (F6, F7) wait for that creator.
+    let mut swept = false;
+    if alive && let Some(o) = owner {
+        // spec: S-0616 claim 1 (a new target not within reach lets the fire emitter go)
+        crate::emitters::retarget_let_go(w, o, sys);
+        // spec: S-0616 Terms (a system with an owner object takes the owner's current target as its target object)
+        let to = match w.obj(o).and_then(|x| x.target) {
+            Some(crate::world::Target::Object(x)) if w.obj(x).is_some() => Some(x),
+            _ => None,
+        };
+        if let Some(s) = w.gas.systems.get_mut(&sys) {
+            s.target_object = to;
+        }
+        let turning = w.obj(o).is_some_and(|x| x.body.turning(w.tick));
+        if let Some(g) = to
+            && turning
+        {
+            // spec: S-0616 claim 10 (an alive owner with a target object whose body facing is turning makes a flame sweep, before the emission)
+            flame_sweep(w, sys, o, g);
+            swept = true;
+        }
+    }
+    let Some(s) = w.gas.systems.get(&sys) else {
+        return;
+    };
+    if s.ending {
+        // spec: S-0616 claim 10 (the emission takes place unless the system is marked)
+        return;
+    }
+    let Some(t) = sys_type(w, sys) else { return };
+    let tick = w.tick;
+    // spec: S-0616 claim 11 (emits when the tick is a multiple of the spawn interval, or a multiple of 3 in a turn that made a sweep)
+    let due = (t.spawn_frames != 0 && glasnost_num::int::rem(tick, t.spawn_frames) == 0)
+        || (swept && glasnost_num::int::rem(tick, SWEEP_CADENCE) == 0);
+    if due {
+        fire_emission(w, sys);
+    }
+}
+
+/// The sweep emission cadence, ticks (claim 11).
+const SWEEP_CADENCE: i32 = 3; // spec: S-0616 claim 11 (a multiple of 3 when this same turn made a sweep)
+
+/// The fire swing period, ticks (F6).
+const SWING_PERIOD: i32 = 500; // spec: S-0616 F6 (k = t rem 500; a table of 500 entries)
+
+/// The fire swing near distance, leptons (F6).
+const SWING_NEAR: i64 = 200; // spec: S-0616 F6 (m = 3 when ℓ < 200.0, otherwise 1)
+
+/// The fire insertion window (F7).
+const INSERT_WINDOW: usize = 4; // spec: S-0616 F7 (c = min(4, N))
+
+/// The fire side table *e*ₓ, *e*ᵧ by δ = 0 … 7 (F6).
+// spec: S-0616 Constants (fire side table eₓ 1, 1, 0, −1, −1, −1, 0, 1 and eᵧ 0, 1, 1, 1, 0, −1, −1, −1)
+const SIDE: [(i32, i32); 8] = [
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1),
+    (0, -1),
+    (1, -1),
+];
+
+/// Claim 11, F5: the flame sweep of fire system `sys` with owner `o` and
+/// its target object `g`.
+pub fn flame_sweep(w: &mut World, sys: ObjectId, o: ObjectId, g: ObjectId) {
+    let (Some(ob), Some(gb)) = (w.obj(o), w.obj(g)) else {
+        return;
+    };
+    let m = mode(w);
+    let (op, gp) = (ob.pos, gb.pos);
+    // spec: S-0616 F5 (f from 32768 up is taken as f − 65536)
+    let f = i64::from(ob.body.value(w.tick) as i16);
+    let table = w.rules().quirks.table_root_distance;
+    // spec: S-0616 F5 (d = trunc(r((Gₓ − Oₓ)² + (Gᵧ − Oᵧ)² + (G_z − O_z)²)), the table root of S-0204 F1)
+    let sum = [gp.x - op.x, gp.y - op.y, gp.z - op.z]
+        .iter()
+        .fold(d(0, m), |a, &v| {
+            let x = d(i64::from(v), m);
+            a.add(x.mul(x, m), m)
+        });
+    let dist = d(
+        i64::from(glasnost_num::geom::table_root_real(sum, table, m).to_i32_common()),
+        m,
+    );
+    // spec: S-0616 F5 and Edge cases (θ = (f − 16383) × (−2π / 65534) in double precision; quirks.flame_sweep_facing off: 16384 and 65536)
+    let (quarter, full) = if w.rules().quirks.flame_sweep_facing {
+        (16383, 65534)
+    } else {
+        (16384, 65536)
+    };
+    let theta = d(f - quarter, m).mul(crate::consts::TWO_PI.negated().div(d(full, m), m), m);
+    let (cos, sin) = (
+        glasnost_num::trig::cos_t(theta, m),
+        glasnost_num::trig::sin_t(theta, m),
+    );
+    // spec: S-0616 F5 (target point = (trunc(Oₓ + cosₜ(θ) × d), trunc(Oᵧ − sinₜ(θ) × d), O_z), double precision throughout)
+    let tx = d(i64::from(op.x), m)
+        .add(cos.mul(dist, m), m)
+        .to_i32_common();
+    let ty = d(i64::from(op.y), m)
+        .sub(sin.mul(dist, m), m)
+        .to_i32_common();
+    // spec: S-0616 claim 11 (the system's position becomes the owner's fire point for its first weapon)
+    let fp = crate::combat::position::fire_point(w, o, 0, 0);
+    if let Some(s) = w.gas.systems.get_mut(&sys) {
+        s.target = Pos::new(tx, ty, op.z);
+        s.pos = fp;
+    }
+}
+
+/// F6: the swing table entry *V*[*i*].
+pub fn swing(i: i32, m: Rounding) -> i32 {
+    // spec: S-0616 F6 (V[i] = trunc(sinₜ(0.125 × i) × 12.0 + 0.49), argument and sum in double precision)
+    let x = c("0.125").mul(d(i64::from(i), m), m);
+    glasnost_num::trig::sin_t(x, m)
+        .mul(c("12.0"), m)
+        .add(c("0.49"), m)
+        .to_i32_common()
+}
+
+/// F6: the 8-way step direction δ from `p` to `q`.
+pub fn step_direction(p: Pos, q: Pos, m: Rounding) -> usize {
+    let up = p.y - q.y;
+    let ahead = || if up > 0 { 0 } else { 4 }; // spec: S-0616 F6 (Qₓ = Pₓ: δ = 0 when Pᵧ − Qᵧ > 0, else 4)
+    if q.x == p.x {
+        // spec: S-0616 F6 (Qₓ = Pₓ: δ = 0 when Pᵧ − Qᵧ > 0, else 4)
+        return ahead();
+    }
+    let right = q.x > p.x;
+    // spec: S-0616 F6 (q = (Pᵧ − Qᵧ) / (Qₓ − Pₓ) and t₈ = sinₜ(π/8) / cosₜ(π/8), double precision)
+    let q_ = d(i64::from(up), m).div(d(i64::from(q.x) - i64::from(p.x), m), m);
+    let eighth = crate::consts::TWO_PI.div(d(16, m), m); // spec: S-0616 F6 (π/8 = 2π / 16)
+    let t8 = glasnost_num::trig::sin_t(eighth, m).div(glasnost_num::trig::cos_t(eighth, m), m);
+    let inv = d(1, m).div(t8, m);
+    let pick = |a: usize, b: usize| if right { a } else { b };
+    // spec: S-0616 F6 (the five ranges of q)
+    if q_.ge(inv) || q_.lt(inv.negated()) {
+        ahead()
+    } else if q_.ge(t8) {
+        pick(1, 5)
+    } else if q_.ge(t8.negated()) {
+        pick(2, 6)
+    } else {
+        pick(3, 7)
+    }
+}
+
+/// Claim 11, F6, F7: a fire emission.
+fn fire_emission(w: &mut World, sys: ObjectId) {
+    let Some(s) = w.gas.systems.get(&sys).cloned() else {
+        return;
+    };
+    let Some(ti) = sys_type(w, sys).and_then(|t| t.holds) else {
+        // spec: S-0616 claim 11 (with no held type nothing is made and nothing is drawn)
+        return;
+    };
+    let m = mode(w);
+    let (p, q) = (s.pos, s.target);
+    // spec: S-0616 F6 (k = t rem 500)
+    let k = glasnost_num::int::rem(w.tick, SWING_PERIOD);
+    let v = swing(k, m);
+    // spec: S-0616 F6 (ℓ = r(sum of squares in 32-bit integers), compared with 200.0 as a floating-point number)
+    let sum = [p.x - q.x, p.y - q.y, p.z - q.z]
+        .iter()
+        .fold(0i32, |a, &x| a.wrapping_add(x.wrapping_mul(x)));
+    let table = w.rules().quirks.table_root_distance;
+    let l = glasnost_num::geom::table_root_real(d(i64::from(sum), m), table, m);
+    let near = if l.lt(d(SWING_NEAR, m)) { 3 } else { 1 }; // spec: S-0616 F6 (m = 3 when ℓ < 200.0, otherwise 1)
+    // spec: S-0616 F6 (a = trunc(12 × V[k] / (3 × m)), the quotient in double precision)
+    let a = d(12 * i64::from(v), m)
+        .div(d(3 * near, m), m)
+        .to_i32_common();
+    let (ex, ey) = SIDE[step_direction(p, q, m)];
+    // spec: S-0616 F6 (the particle aims at Q + (a × eₓ(δ), a × eᵧ(δ), 0))
+    let aim = Pos::new(q.x.wrapping_add(a * ex), q.y.wrapping_add(a * ey), q.z);
+    // spec: S-0616 claim 11 (made 1 lepton above the system's position, with its creation draws)
+    let at = Pos::new(p.x, p.y, p.z.wrapping_add(1));
+    if crate::gas::add_particle(w, sys, ti, at, aim).is_none() {
+        return;
+    }
+    // spec: S-0616 F7 (c = min(4, N), one raw value r also when c = 1, j = |r| rem c; a negative j is taken as 0, our departure)
+    let n = w.gas.systems.get(&sys).map_or(0, |s| s.particles.len());
+    let window = n.min(INSERT_WINDOW);
+    let r = w.rng.raw() as i32;
+    let j = glasnost_num::int::rem(r.wrapping_abs(), window as i32).max(0) as usize;
+    if let Some(s) = w.gas.systems.get_mut(&sys)
+        && j > 0
+    {
+        // spec: S-0616 F7 (the new particle then has exactly j particles of the list newer than it)
+        let p = s.particles.remove(n - 1);
+        s.particles.insert(n - 1 - j, p);
+    }
 }
 
 /// Claim 12, F8: a fire particle's update.
