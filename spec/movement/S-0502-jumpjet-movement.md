@@ -2,11 +2,11 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031]
 supersedes: []
@@ -507,6 +507,10 @@ New terms:
 ### Orders
 
 16. **A move order.** When a jumpjet is given a destination point:
+    - **Magnetic seize.** This point-assignment rule also runs once at a successful magnetic
+      seize, using the lifter's point defined by S-0607 claim 7. Claim 23's search applies
+      then too. The resulting movement point stays fixed during the grip; arrival follows
+      S-0607 claim 8. This is not a new player order accepted while seized.
     - **Release.** It releases any landing reservation it holds, unless it is grounded or
       claim 24's safety refusal retains the preceding movement.
     - **No point.** Except for claim 24's safety refusal while moving now, an instruction
@@ -535,7 +539,8 @@ New terms:
     - A direct no-point instruction is distinct from an effective order-level destination
       clear: the latter invokes claim 17, not this claim's no-point row. Claim 24 specifies
       effective clears and redundant assignments that never reach movement.
-    - Backing: `measurable` (J10 and J16) for successful orders and re-ascent.
+    - Backing: `measurable` (J10 and J16) for successful orders and re-ascent, and
+      S-0607 scenario L2 for the initial seize's movement-point adjustment.
       Direct no-point and failed-adjustment consequences are `unmeasured` (diagnostic J17):
       ordinary clicks do not establish either condition independently of order handling.
     - Confidence: high for the snapping, exceptions, retained-point rule and re-ascent.
@@ -596,11 +601,13 @@ New terms:
       An ordinary jumpjet's impact then follows S-0312 claim 16. A dropped seized unit
       instead follows S-0607 claims 16 and 17: a clear cell leads to *descending*, not
       *crashed*, and blocked water can lead to sinking (claim 19).
-    - **Magnetic lift.** A seized unit does not spin. Its speeds are 0 and its
-      crash rate grows by 1 lepton per tick, each tick, with each new rate narrowed to single
-      precision under S-0205 claim 5 (S-0607 claim 15).
+    - **Magnetic lift.** A seized dropped unit does not spin. Its speeds are 0 and its
+      target height is 0 leptons in each crashing update, rather than the ordinary
+      −5-lepton target. Its crash rate starts afresh at its own type's crash value at
+      every seize (claim 1). At each crashing update, the extra drop is determined by the current crash rate, and the resulting world height is truncated toward zero. The crash rate for the next update is 1.0 lepton per tick greater than the current rate; the addition uses double precision and its result narrows to single precision under S-0205 claim 5. Consequently, the first extra drop uses the starting rate, and each later extra drop uses the rate increased by 1.0 lepton per tick per tick (S-0607 claim 15).
     - Backing: `measurable` (scenario J12 for ordinary crash motion; S-0607 scenarios L3
-      and L4 for the cell-centre detour, zero-speed fall, no spin and growing crash rate).
+      and L4 for the cell-centre detour, zero-speed fall, no spin, initial rate,
+      drop-before-growth ordering and zero target height).
       Crash requests on idle units share claim 3's `unmeasured` limitation.
     - Confidence: high (fall and spin); medium (the hand-over to S-0312's impact)
 
@@ -686,7 +693,11 @@ New terms:
     | Animated landing-first undeploy, S-0517 claim 6 | vehicle's current cell | type's own, winged counted as track | type's own, not simplified | centre's region for that zone, read for its deck when on deck; none if that read has no region | vehicle is on deck | no | allowed |
 
     The last row selects the undeploy destination before the subsequent claim-16 search.
-    S-0517 claim 6 owns when it is assigned.
+    S-0517 claim 6 owns when it is assigned. A magnetic seize also runs the applicable
+    claim-16 search once, centred on the lifter's point (S-0607 claim 7), not necessarily
+    its current position. The ordinary seized vehicle uses the non-balloon vehicle row:
+    its lifter's occupied cell normally fails, leaving a free nearby cell as the movement
+    point. Arrival drops it over that point (S-0607 claim 8), not necessarily onto the lifter.
 
     **Own-cell orders (Q-1011).** Claim 16's search does not excuse or lift a grounded
     unit's own occupancy. A nonempty searched occupancy record rejects the cell even
@@ -720,7 +731,8 @@ New terms:
       are taken, in which case adjustment fails.
     - An own-cell infantry order also takes this draw when adjustment is eligible. When a
       neighbour step reaches infantry adjustment, this draw follows claim 21's neighbour draw.
-    - Backing: `measurable` (J2 and J16, including the own-cell filter and occupancy test).
+    - Backing: `measurable` (J2 and J16, including the own-cell filter and occupancy test, and
+      S-0607 scenario L2 for the initial seize's nearby-cell search).
       The world-height-0 deck boundary is `unmeasured`
       (J16 diagnostic): a legal stock-map fixture at that boundary is not established.
     - Confidence: high for settings and choice rules.
@@ -1072,7 +1084,7 @@ round-toward-zero arithmetic.
 | wobble base rate | 15 | ticks per wobble at *W* = 1 | F2 |
 | take-off fraction | 1/4 (1/2 balloon-hover vehicle) | of target height | claim 7 |
 | ground-hold fraction | 1/2 | of desired height | F4 |
-| crash target height | −5 | leptons | claim 18 |
+| ordinary crash target height | −5 | leptons | claim 18; seized crash target is 0 |
 | crash spin lead | 11520 | facing units | claim 18 |
 | magnetic-lift crash growth | 1.0 | leptons per tick, per tick | claim 18 |
 | occupied-cell clearance | 85 | leptons | F3 |
@@ -1226,8 +1238,10 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   One run per subcase unless stated. No measurement is claimed yet.
 
 **Magnetic-lift coverage.** Use S-0607's common setup and scenarios, not J1's ordinary
-jumpjet setup: L2 tests retained facing and seized arrival (claims 10 and 12), L3 and L4
-record the cell-centre detour and accelerating fall (claim 18), and L5 and L6 test blocked,
+jumpjet setup: L2 tests retained facing, the initial movement-point search beside the
+lifter and seized arrival (claims 10, 12, 16 and 23). L3 and L4 record the cell-centre
+detour and accelerating fall, including L4's starting rate, drop-before-growth ordering
+and zero target height (claim 18), and L5 and L6 test blocked,
 clear, water, beach and deck impact outcomes (claim 19). L3 and L6 also exercise seized
 descent without the ordinary landing refusals (claims 14 and 15). The special seized
 simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there.
