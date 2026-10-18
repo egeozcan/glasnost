@@ -431,6 +431,10 @@ pub struct World {
     /// Burning walkers in play, by object number (S-0615 claims 4 to 11).
     #[serde(default)]
     pub walkers: BTreeMap<ObjectId, crate::walker::Walker>,
+    /// Drain links (S-0608): the drained buildings and each drainer's
+    /// partner.
+    #[serde(default)]
+    pub drain: crate::drain::DrainWorld,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.

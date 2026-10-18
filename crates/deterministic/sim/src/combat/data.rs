@@ -851,6 +851,17 @@ pub struct IvanRules {
     pub c4_delay: F64,
 }
 
+/// The game-wide drain settings (S-0608 Import mapping).
+#[derive(Clone, Debug, Default)]
+pub struct DrainRules {
+    /// The payout period *P* in ticks (F1).
+    pub period: i32,
+    /// The payout amount *A* in credits (F2).
+    pub amount: i32,
+    /// The drain animation (claim 5).
+    pub anim: Option<String>,
+}
+
 /// The game-wide prism support settings (S-0518 Import mapping).
 #[derive(Clone, Debug)]
 pub struct PrismRules {
@@ -912,6 +923,8 @@ pub struct CombatGeneral {
     pub chrono_sparkle: Option<String>,
     /// The open-topped warp distance *W*, cells (S-0514 F4).
     pub warp_distance: i32,
+    /// The drain settings (S-0608).
+    pub drain: DrainRules,
     /// The radiation settings (S-0525).
     pub radiation: RadRules,
     /// Maximum damage.
@@ -1764,6 +1777,14 @@ pub fn combat_rules(
         chrono_sparkle: g.chrono_sparkle.clone(),
         // spec: S-0514 Constants (warp distance default 5 cells) and Import mapping
         warp_distance: g.open_topped_warp_distance.unwrap_or(5),
+        drain: DrainRules {
+            // spec: S-0608 Import mapping and Constants (payout period absent: 100 ticks)
+            period: g.drain_money_frame_delay.unwrap_or(100),
+            // spec: S-0608 Import mapping and Constants (payout amount absent: 0 credits)
+            amount: g.drain_money_amount.unwrap_or(0),
+            // spec: S-0608 Import mapping (DrainAnimationType absent: no animation)
+            anim: g.drain_animation_type.clone(),
+        },
         // spec: S-0525 Import mapping (every [Radiation] value absent: the value in force, 0 or none at a fresh start)
         radiation: RadRules {
             duration_multiple: g.rad_duration_multiple.unwrap_or(0),

@@ -121,6 +121,12 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         crate::bomb::suicide(w, firer);
         return true;
     }
+    if rules.combat.weapon(weapon).drain {
+        // spec: S-0608 claim 1 (a shot with a draining weapon is a drain attempt: no projectile, no shot damage, no warhead effect, no ordinary-shot draws; no rearm countdown, no burst advance, no ammunition; the attempt is not counted as a shot made, so an aircraft spends no round on it)
+        // Q-1442 (interim: the drain test comes after the suicide test; the attempt neither sets the last-shot tick nor reveals the firer)
+        crate::drain::attempt(w, firer, target);
+        return false;
+    }
     // spec: S-0301 claim 13 (a shot made in the tick the counter equals the sync frame is a sync shot, whether or not the countdown runs)
     let was_sync = crate::combat::check::sync_tick(w, firer, slot, weapon);
     // spec: S-0501 claim 20 and S-0522 claim 11 (a shot of an aircraft that carries passengers is a drop attempt, exactly as S-0522 claim 9, with no projectile and no ordinary shot effects: no delay and no delay draw, no burst-counter advance, no weapon report, muzzle animation or spray draw, no projectile; a refused drop leaves the rearm countdown unchanged, a successful one expires it now; the ammunition and pass counter changes are the attempt's; it is not a void shot under S-0301 claim 15)
@@ -172,7 +178,6 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     let launched = if wr.spawner {
         None
     } else if wr.disk_laser {
-        // Seam: S-0608 is not built yet (M7b). The Floating Disc's draining weapon (S-0615 Summary) is S-0608's; only its disc laser is built here.
         // spec: S-0615 claim 12 (a disc-laser weapon's shot makes a disc laser instead of a projectile, holding D_s)
         crate::disc::shot(w, firer, weapon, shot_target, damage);
         None

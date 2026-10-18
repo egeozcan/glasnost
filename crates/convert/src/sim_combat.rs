@@ -171,7 +171,7 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
         "S-0519",
     ),
     ("bomb_sight", "BombSight", Int, "S-0519"),
-    ("drainable", "Drainable", Bool, "S-0308"),
+    ("drainable", "Drainable", Bool, "S-0308, S-0608"),
     ("spawns", "Spawns", Ref(Kind::Aircraft), "S-0506"),
     ("spawns_number", "SpawnsNumber", Int, "S-0506"),
     ("spawn_regen_rate", "SpawnRegenRate", Int, "S-0506"),
@@ -355,7 +355,7 @@ const WEAPON_COMBAT: &[Row] = &[
     ),
     ("lobber", "Lobber", Bool, "S-0306"),
     ("never_use", "NeverUse", Bool, "S-0308"),
-    ("drain_weapon", "DrainWeapon", Bool, "S-0308"),
+    ("drain_weapon", "DrainWeapon", Bool, "S-0308, S-0608"),
     ("fire_while_moving", "FireWhileMoving", Bool, "S-0310"),
     ("suicide", "Suicide", Bool, "S-0312"),
     (
@@ -1467,6 +1467,28 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         "OpenToppedWarpDistance",
         Int,
         "S-0514",
+    ),
+    // spec: S-0608 Import mapping (DrainMoneyFrameDelay and DrainMoneyAmount integers of ticks and credits; DrainAnimationType an animation name)
+    (
+        "drain_money_frame_delay",
+        COMBAT_DAMAGE,
+        "DrainMoneyFrameDelay",
+        Int,
+        "S-0608",
+    ),
+    (
+        "drain_money_amount",
+        COMBAT_DAMAGE,
+        "DrainMoneyAmount",
+        Int,
+        "S-0608",
+    ),
+    (
+        "drain_animation_type",
+        COMBAT_DAMAGE,
+        "DrainAnimationType",
+        Ref(Kind::Animations),
+        "S-0608",
     ),
     // spec: S-0525 Import mapping ([Radiation]: integers, three decimals held as doubles, the warhead name; RadColor is read apart)
     (
@@ -3528,6 +3550,11 @@ impl Builder<'_> {
         let flicker = self.global(COMBAT_DAMAGE, "IvanIconFlickerRate");
         self.each_int(flicker.as_ref(), |n| n == 0, |v| {
             format!("[CombatDamage] IvanIconFlickerRate {v} is 0: the original divides by zero while drawing the bomb icon; our engine uses frame bit 0 (S-0519 F3, a departure)")
+        });
+        let period = self.global(COMBAT_DAMAGE, "DrainMoneyFrameDelay");
+        // spec: S-0608 Questions for the project lead (a payout period of exactly 0: the original fails with a division fault; the proposed departure, pending the lead's choice: the importer warns and payouts never happen)
+        self.each_int(period.as_ref(), |n| n == 0, |v| {
+            format!("[CombatDamage] DrainMoneyFrameDelay {v} is 0: the original fails with a division fault when a drained resource-destination building pays; our engine makes no payouts (S-0608 F1, a proposed departure)")
         });
         let min = self.global(COMBAT_DAMAGE, "MinDamage");
         // spec: S-0302 Edge cases (the minimum-damage field has no effect; the importer warns when it is given)

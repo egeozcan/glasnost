@@ -290,6 +290,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     mark_killed(w, id);
+    // spec: S-0608 claim 13 (a killing hit on the drainer or the building ends their link at once, before the death effects that follow it)
+    crate::drain::killed(w, id);
     // spec: S-0606 claim 14 (a destroyed bunkered vehicle: walls-down effects, link and contact ended, the bunker back at clearing with guard queued, before its other death effects are resolved)
     crate::structures::bunker::release_in_place(w, id);
     if !o.on_map && crate::econ::production::is_item_object(w, id) {

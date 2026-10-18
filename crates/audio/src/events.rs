@@ -776,6 +776,22 @@ impl Audio {
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
             Effect::Walker { .. } => {}
+            // spec: S-0608 claim 5 and S-0109 claim 13 (the drain animation's creation: its type's start sound, at the drainer)
+            Effect::Drain {
+                drainer,
+                event:
+                    glasnost_sim::drain::DrainEvent::Formed {
+                        anim: Some(name), ..
+                    },
+                ..
+            } => {
+                let s = self.names.anim_report(name).map(str::to_owned);
+                if let Some(o) = w.obj(*drainer) {
+                    self.play_in(w, s.as_deref(), Where::Fixed(o.pos));
+                }
+            }
+            // spec: S-0608 claim 7 (a payout has no message and no sound; the link's end has none either)
+            Effect::Drain { .. } => {}
             Effect::Disc {
                 firer,
                 weapon,

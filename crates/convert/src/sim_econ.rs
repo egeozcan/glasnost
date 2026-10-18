@@ -126,7 +126,7 @@ const BUILDING_ECON: &[Row] = &[
         "resource_destination",
         "ResourceDestination",
         Bool,
-        "S-0308",
+        "S-0308, S-0608",
     ),
     // S-0402 claim 19: a building type that names a slave type creates a slave group.
     ("enslaves", "Enslaves", Ref(Kind::Infantry), "S-0402"),

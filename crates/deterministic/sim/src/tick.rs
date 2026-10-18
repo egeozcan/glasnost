@@ -163,6 +163,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::fire::reload_elapsed(w, id);
         return;
     }
+    // spec: S-0608 claims 11 and 12 (in every turn of the drainer: the alliance test, and the position check on its due ticks; a pulse-disabled drainer still checks). Q-1440 (interim: after the warp-only return, before the rest of the turn)
+    crate::drain::drainer_turn(w, id);
     // spec: S-0203 claim 4 (expected-health bookkeeping and protection-brightness phase processing are ordinary work: suppressed through arrival effects, eligible in the hold after its hold-end test, with no catch-up)
     // spec: S-0309 claim 15 (the expected remaining health changes in the object's own turn)
     crate::combat::acquire::expected_health_turn(w, id);
@@ -251,6 +253,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         }
         // spec: S-0518 claims 12 and 13 (a building's charger list and overpowered state, in its own turn)
         crate::linked::building_turn(w, id);
+        // spec: S-0608 claim 7 (a drained resource-destination building makes its payout in its own turn; claim 10: not while being erased, which returned above, or materialising). Q-1440 (interim: before the building's own power and economy turn)
+        crate::drain::building_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);
         // spec: S-0501 claim 26 (a pad's service step, in the pad's own turn)

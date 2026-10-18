@@ -374,8 +374,9 @@ pub fn choose_slot(w: &World, firer: ObjectId, target: Option<Target>) -> usize 
     if pri_h.is_some_and(|h| h.is_locomotor) && target_building {
         return 1;
     }
-    // spec: S-0308 table P row 8 (a draining secondary against a drainable, not allied target; the firer drains nothing in our engine)
+    // spec: S-0308 table P row 8 (a draining secondary against a drainable, not allied target, while the firer is draining nothing at present, S-0608 claim 4)
     if r.combat.weapon(sw).drain
+        && !crate::drain::draining(w, firer)
         && let Target::Object(x) = t
         && veterancy::type_combat(w, x).is_some_and(|c| c.drainable)
         && !w.allied(

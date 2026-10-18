@@ -2648,6 +2648,10 @@ mod radiation_tests;
 mod temporal_tests;
 
 #[cfg(test)]
+#[path = "sim_drain_tests.rs"]
+mod drain_tests;
+
+#[cfg(test)]
 #[path = "sim_linked_tests.rs"]
 mod linked_tests;
 

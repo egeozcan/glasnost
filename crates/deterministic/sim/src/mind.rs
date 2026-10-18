@@ -15,8 +15,8 @@
 //! [`trigger_owner_change`] and [`boarding`].
 //!
 //! Seams:
-//! - S-0608 (drain links, M7b): [`drain_link_formed`] releases every victim
-//!   of a drained controlling building; nothing calls it yet.
+//! - S-0608 (drain links): [`drain_link_formed`] releases every victim of
+//!   a drained controlling building, called by `drain` when a link forms.
 //! - S-0612 (psychic domination, M7b): [`dominate`] sets the permanent state
 //!   of claim 13; no superweapon calls it yet. Its own-house switch
 //!   `quirks.dominator_marks_own_objects` is S-0612's and is wired there.
@@ -748,8 +748,8 @@ pub fn erasing_hit(w: &mut World, x: ObjectId) {
     release_all(w, x);
 }
 
-/// Seam: S-0608 (drain links) is not built (M7b). A drain link that forms
-/// on a controlling building releases all its victims (claim 10); a failed
+/// A drain link that forms on a controlling building releases all its
+/// victims (claim 10; S-0608 claim 5, called by `crate::drain`); a failed
 /// attempt releases nothing.
 pub fn drain_link_formed(w: &mut World, building: ObjectId) {
     // spec: S-0601 claim 10 (a drain link forms on a controlling building, S-0608 claim 5)

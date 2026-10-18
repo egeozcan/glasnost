@@ -1996,6 +1996,31 @@ fn neutral_retaliation() {
     }
 }
 
+// spec: S-0309 claim 25 part h and S-0608 Terms (an object of the neutral or special house does not retaliate while it is draining; a player house's object is not held back by it)
+#[test]
+fn a_draining_neutral_object_does_not_retaliate() {
+    for role in [HouseRole::Neutral, HouseRole::Special, HouseRole::Player] {
+        for draining in [false, true] {
+            let mut w = game_role(&base(), role);
+            let a = veh(&mut w, "CART", 1, 0, 0);
+            let x = veh(&mut w, "T1", 0, 2, 0);
+            let b = put(&mut w, Kind::Building, "TOWER", 0, -3, 0);
+            if draining {
+                // A link of `a` to the building (the drain state is S-0608's).
+                w.drain.links.insert(b, a);
+                w.drain.partner.insert(a, b);
+            }
+            acquire::retaliate(&mut w, a, x);
+            let held_back = draining && role != HouseRole::Player;
+            assert_eq!(
+                retaliated(&w, a, x),
+                !held_back,
+                "{role:?}, draining {draining}"
+            );
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Claims 21 and 22
 
