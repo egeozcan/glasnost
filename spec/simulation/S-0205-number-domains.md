@@ -2,11 +2,11 @@
 id: S-0205
 title: Number domains (integers, floating point, the round-toward-zero mode, conversions)
 topic: simulation
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: []
 supersedes: []
@@ -374,6 +374,7 @@ Observable ordering: none; the mode applies to every calculation alike.
   | S-0213, claim 7 (group destinations: the points along a placement line) | Yes | The floating-point steps along the line round to nearest; the conversion of each point to a cell still truncates |
   | S-0215, F1 (rate delay) | Only for a rate with a percent sign | The product rounds to nearest: `6%` gives 54 ticks instead of 53. A rate without a percent sign gives the same ticks in both settings (a rate written as 0.06 gives 53, from its single-precision reading) |
   | S-0501, claim 4 and F3 (aircraft horizontal step), F4 (speed fraction) | Yes | Each sum and product rounds to nearest; the one-lepton sideways drift at body facings 32767 to 32772 and 49148 to 49155 disappears at positions of 1024 leptons and more (as S-0501 F3 states) |
+  | S-0616, claim 1 (railgun beam sampling) | Yes | Each arithmetic result and single-precision narrowing rounds to nearest: the last sample parameter is 1.0 instead of 1 − 2⁻²⁴. Earlier parameters and visited cells can differ too; the end point with no terrain stop remains the exact target point in both settings |
 
 - **Integer division by zero, and −2147483648 ÷ −1** (departure, claim 3).
 - **Squares from the library power function** (claim 5). Our engine uses the exact square rounded
