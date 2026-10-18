@@ -2,7 +2,7 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 49
+revision: 50
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1664,7 +1664,10 @@ Terms specific to this spec:
     The restoration-displacement, trigger-crate, random-crate, unit-crate fallback,
     transport-shore, vehicle-passenger-exit, bunker-exit, paradrop and air-strike rows
     allow bridge cells and ask for no no-overlay condition. S-0606 claim 12 owns
-    bunker-exit release and the still-unestablished outcome when that search finds no cell. For trigger and random crates, selection
+    bunker-exit release and its outcome when that search finds no cell: the vehicle's
+    destination is the placeholder map cell (0, 0), as for the transport-shore row
+    (S-0507 claim 8). S-0606 gives this outcome `unmeasured` backing and low confidence,
+    unlike the bunker-exit caller settings in the claim on search parameters. For trigger and random crates, selection
     is not placement: a selected cell outside the height-aware usable area or holding
     any overlay is refused without another nearby search around that centre. S-0524
     claim 4 owns trigger placement; S-0520 claim 3 owns random placement's subsequent
