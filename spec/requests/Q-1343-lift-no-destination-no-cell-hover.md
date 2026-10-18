@@ -1,9 +1,9 @@
 ---
 id: Q-1343
 title: With the no-cell quirk off, does a no-destination set-down still descend after it hovers again
-status: open
+status: answered
 related: [S-0607, S-0502]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

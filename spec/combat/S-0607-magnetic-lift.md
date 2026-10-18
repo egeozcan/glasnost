@@ -2,13 +2,13 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-18
 measurements: []
-requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341]
+requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343]
 supersedes: []
 ---
 
@@ -260,15 +260,29 @@ New terms:
 9. **Orders and destinations.** A seized unit ignores every new destination, from orders, approach
    steps or any other rule.
    - A rule that gives a gripped unit *no* destination is the exception. That ends its grip
-     without a drop, and the unit is set down where it is, at whatever height. It then descends
-     and lands under claim 17's clear-cell rule. Claim 13's jumpjet stop applies to it, so the
-     movement point it flies to before descending can be that stop's found point. Its design rule
-     for no cell does not: here the grip has already ended when the stop runs, and S-0502 claim
-     17's self-destruction, with its quirk switch and its lack of credit, applies unchanged.
+     without a drop, and the unit is set down where it is, at whatever height. Claim 13's jumpjet
+     stop applies to it, so when that stop finds a cell the unit flies to the found point and
+     descends and lands there. Claim 13's design rule for no cell does not apply: here the grip
+     has already ended when the stop runs, and S-0502 claim 17's self-destruction, with its
+     quirk switch and its lack of credit, applies unchanged.
+   - **No cell found, with `quirks.jumpjet_no_cell_self_destruct` off (design).** The unit is
+     not destroyed, and it never comes down onto a cell that the stop's search has just
+     rejected:
+     - **In the air** (height above the surface 1 lepton or more): it re-enters *hovering* over
+       its current cell (S-0502 Edge cases). It keeps no movement point and its jumpjet movement
+       is no longer moving, so it neither descends nor flies anywhere. It stays set down and
+       seized. Claim 20 does not restore it while it hovers. At each fall-back to rest it
+       repeats the stop's search instead (claim 20).
+     - **On the ground** (height 0 or less, the unit still moving because it was released before
+       its first jumpjet update): it stays grounded where it is, keeps no movement point and is
+       no longer moving. Claim 20 then restores it as any set-down unit.
+     - With the switch on the unit is destroyed, and none of this arises.
    - With the jumpjet stand-in, its own locomotor does not return until claim 20 allows it; other stand-ins follow claims 23 and 24.
    - Backing: `unmeasured`: the destination refusals and the no-destination exception are traced,
      but deselection prevents a fresh player order, and no ordinary order reaching this state
      has been established. Scenario L9 part a is a conditional protocol, not established backing.
+     The switch-off rule for no cell is `unmeasured`: it is a design rule, and the original has
+     only the switch-on behaviour.
    - Confidence: high (ignored destinations); medium (the no-destination exception)
 
 10. **No firing.** A seized unit gets *illegal* for every weapon and target, at S-0301 claim 9's
@@ -373,18 +387,27 @@ New terms:
           neighbour's. Its ordinary height step is taken towards that clearance rather than
           the direct ground reference, before S-0502 claim 18's extra crash drop. Its
           vertical motion can therefore differ from a fall whose point lies in its own cell,
-          for example when another object is listed in its own cell.
+          for example when another object is listed in its own cell. A dropped unit with no
+          movement point (no cell found, below) uses the direct ground reference throughout.
       - **No cell is found, grip ended by its lifter (design).** This covers every event of claim
         12 except a gripped unit given no destination (claim 9, below). S-0502 claim 17's
         self-destruction does not happen, whatever `quirks.jumpjet_no_cell_self_destruct` says.
-        A dropped unit falls as claim 15 says. A set-down unit stops: it keeps no movement point,
-        its jumpjet movement is no longer moving, it stays where it is, and claim 20 restores it.
+        In both cases the unit keeps no movement point (the one fixed at the seize is cleared)
+        and loses its movement commitment: its jumpjet movement is no longer moving.
+        - **A set-down unit** stays where it is, and claim 20 restores it.
+        - **A dropped unit** falls as claim 15 says. Over its cell centre it falls with no
+          movement point, so S-0502 claim 9's direct ground reference applies to its height,
+          not the look-ahead. Off its cell centre, claim 15's detour gives it that centre as its
+          point, which lies in its own cell. Losing its commitment does not hold back its fall:
+          it takes its jumpjet update every tick until its fall ends, also in a tick in which
+          it is *hovering*, so a unit dropped while hovering still starts claim 15's fall in
+          its next update.
         In the original the self-destruction kills the unit while its lifter is still letting go
         of it, and the letting go then fails: the game stops with a fatal error. No credit
         question arises, because the original never gets past that point.
       - **No cell is found, no destination (claim 9).** There the grip has ended before the stop
         runs, and S-0502 claim 17's self-destruction applies unchanged, with its quirk switch and
-        no credit.
+        no credit. With the switch off, claim 9 says how the unit then hovers or stays grounded.
       - **A set-down unit that is still moving.** A unit set down while its jumpjet movement is
         still moving (for example released in the tick of its seize, before its first jumpjet
         update) keeps the found point and its movement commitment; being set down clears
@@ -530,7 +553,22 @@ New terms:
 20. **Restoration.** A seized unit's temporary jumpjet locomotor ends, and its own locomotor
     returns, when the unit falls back to rest (S-0215 claim 13) and all of these hold:
     - its jumpjet movement is not moving (S-0502's *moving*, not *moving now*),
-    - it is set down, or it is no longer seized.
+    - it is set down, or it is no longer seized,
+    - it is not a set-down unit hovering under claim 9's switch-off rule for no cell.
+
+    **The hovering set-down unit (design).** At each fall-back to rest of a unit hovering under
+    claim 9's switch-off rule, restoration is not tested. The unit repeats the stop's search
+    instead: S-0502 claim 17's nearby-cell search around its current cell, for its type's own
+    locomotion class and movement zone, with no draw.
+    - **A cell is found.** It re-orders itself to that cell's centre through S-0502 claim 16,
+      exactly as claim 13's stop does. It is then claim 13's set-down unit that is still moving:
+      it flies to its point, descends and lands there, and is restored at a later fall-back to
+      rest once its commitment has ended.
+    - **No cell is found.** It keeps hovering and is not restored. It is not destroyed: the
+      switch is off.
+    - A hovering unit whose behaviour never falls back to rest therefore hovers indefinitely, as
+      a grounded set-down unit in *guard* stays seized (below). The refused move order of "The
+      first order after touchdown" below makes it fall back to rest, and so retries the search.
 
     Restoration clears *seized*, *set down* and the dropper. A seized resource gatherer of a
     computer-controlled house then queues *harvest* in the original. Our AI houses use the
@@ -559,6 +597,8 @@ New terms:
     - Backing: `measurable` (scenarios L3 and L11) for restoration and orders. That a kept
       movement commitment delays restoration is `measurable` through conditional scenario L3
       run b (S-0502 claims 5 and 24); whether ordinary play reaches that case is not established.
+      The hovering set-down unit's retry is `unmeasured`: it is a design rule for a non-default
+      switch setting, which the original does not have.
     - Confidence: high (restoration conditions, only at rest, readiness, no restoration while
       committed); medium (the two-order sequence)
 
@@ -848,6 +888,7 @@ Life of a seized unit:
 | dropped | fall ends, blocked on land or beach | crashed, then removed | claim 18, unless crashable |
 | set down, movement commitment kept (claim 13) | next eligible jumpjet update | set down, ascending | flies to its point and lands there (S-0502 claims 5 and 24); not restored meanwhile |
 | set down | falls back to rest, jumpjet not moving (claim 20) | ordinary | own locomotor returns |
+| set down, hovering after no cell with the self-destruction switch off (claim 9) | falls back to rest (claim 20) | set down and moving if the repeated search finds a cell, otherwise unchanged | not restored; with a cell, flies there and lands |
 | gripped with the teleporting stand-in | jump (claim 23) | set down, seized | grip ends; the jump clears the lifter's target |
 | gripped with another ground stand-in | its own rules remove its destination (claim 23) | set down, seized | grip ends; the lifter keeps its target |
 | gripped with the drop-pod stand-in | the seize, in our engine (touchdown in the original) (claim 23) | set down, seized, own locomotor back | grip ends; the lifter's target is cleared |
@@ -900,10 +941,15 @@ Life of a seized unit:
   - Fixed: it keeps the mark of its own cell at the seize, as a vehicle at rest does.
 - **No cell for the stop when a lifter lets go** (claim 13, design). The original fails with a
   fatal error when S-0502 claim 17's search finds no cell for a unit whose lifter is letting go
-  of it; our engine skips that claim's self-destruction there, lets a dropped unit fall and
-  stops a set-down one where it is. No quirk switch: there is no original behaviour to keep. A
-  grip ended by claim 9's no-destination exception is not covered: the original survives it,
-  and S-0502 claim 17 applies unchanged.
+  of it; our engine skips that claim's self-destruction there and clears the unit's movement
+  point and commitment, lets a dropped unit fall with the direct ground reference and stops a
+  set-down one where it is. No quirk switch: there is no original behaviour to keep. A grip
+  ended by claim 9's no-destination exception is not covered: the original survives it, and
+  S-0502 claim 17 applies unchanged.
+- **No cell after a no-destination set-down, switch off** (claim 9, design). With
+  `quirks.jumpjet_no_cell_self_destruct` off, a unit in the air hovers over its current cell
+  rather than landing on a rejected cell, and retries the search at each fall-back to rest
+  (claim 20); one on the ground stays where it is and is restored normally.
 - **A harvester driving temporarily is immune** (claim 4). This is not a quirk: it is the only way
   a resource gatherer on a temporary locomotor is treated.
 - **An infantry kill credited to the dropped unit** (claim 16) when there is neither a dropper nor a

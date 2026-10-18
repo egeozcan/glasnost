@@ -1,9 +1,9 @@
 ---
 id: Q-1342
 title: Does a dropped unit keep its movement point and commitment when the stop finds no cell
-status: open
+status: answered
 related: [S-0607, S-0502]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need
