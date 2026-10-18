@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405]
 supersedes: []
 ---
 
@@ -794,9 +794,9 @@ S-0501 claim 20.
     candidates are the objects of its bridge-deck layer when the sample's world height is at
     least (the cell's height level + 4) × 104 leptons, otherwise its ground layer. In other
     cells they are the ground-layer objects. Among these candidates, infantry, vehicles,
-    aircraft and buildings other than the firer qualify when they are the shot target or their
-    distance from the infinite three-dimensional line through the start and target positions
-    is strictly below the game-wide railgun hit distance (integer leptons). Buildings count
+    aircraft and buildings other than the firer qualify when they are the shot target or pass
+    the line-distance test below against the game-wide railgun hit distance (integer leptons).
+    For a finite distance the comparison is strictly less than. Buildings count
     as distance 0, whatever their position within the cell. No alliance test excludes friendly
     candidates. An object qualifies at most once even when listed in several visited cells.
     If the shot target is an object rather than a cell and was not encountered, it is included
@@ -804,11 +804,60 @@ S-0501 claim 20.
     be hit. Cell listing order is S-0209 claim 13's; hits are ordered by the first qualifying
     encounter in sample order, with that otherwise-unencountered target last.
 
-    The line-distance calculation is floating point, with single-precision coordinate values
-    and mixed single- and double-precision intermediate values, using the table square root
-    rather than an exact square root. It has no integer truncation before the strict comparison.
-    Exact rounding at this boundary and the zero-length or exactly collinear cases remain open
-    below; this claim does not substitute a rounded integer distance.
+    **Line distance and precision (Q-1405 questions 2 and 3).** Let *P*, *Q* and *C* be the
+    integer lepton positions of the beam start, shot target and candidate. For a non-building
+    candidate the distance is *D* below. Every subtraction, multiplication, addition and division
+    in these equations rounds to double precision toward zero after that individual operation
+    (S-0205 claims 4 and 5). RZ₂₄ additionally narrows to single precision. Parentheses fix the
+    grouping, and no multiply-add is fused. Integers enter double precision exactly, not through
+    a wrapping integer difference.
+
+    > *p* = (RZ₂₄(*P*ₓ), RZ₂₄(*P*ᵧ), RZ₂₄(*P*_z))
+    >
+    > *d* = (RZ₂₄(*Q*ₓ − *p*ₓ), RZ₂₄(RZ₂₄(*Q*ᵧ) − *p*ᵧ), RZ₂₄(RZ₂₄(*Q*_z) − *p*_z))
+    >
+    > *u* = (*C*ₓ − *p*ₓ, RZ₂₄(*C*ᵧ) − *p*ᵧ, RZ₂₄(*C*_z) − *p*_z)
+    >
+    > *a* = (*u*ᵧ × *d*_z − *u*_z × *d*ᵧ, *u*_z × *d*ₓ − *d*_z × *u*ₓ, *d*ᵧ × *u*ₓ − *u*ᵧ × *d*ₓ)
+    >
+    > *h*ₓ = RZ₂₄(*a*ᵧ × *d*_z − *a*_z × *d*ᵧ)
+    >
+    > *h*ᵧ = RZ₂₄(*a*_z × *d*ₓ − *d*_z × *a*ₓ)
+    >
+    > *h*_z = *d*ᵧ × *a*ₓ − *a*ᵧ × *d*ₓ
+    >
+    > *N* = RZ₂₄((*h*_z × *u*_z + *h*ᵧ × *u*ᵧ) + *h*ₓ × *u*ₓ)
+    >
+    > *L* = (*h*ᵧ × *h*ᵧ + *h*_z × *h*_z) + *h*ₓ × *h*ₓ
+    >
+    > *D* = |*N* / *r*(*L*)|
+
+    Thus *d* is single precision, *u* and *a* are double precision, *h*ₓ and *h*ᵧ are single
+    precision, *h*_z is double precision, *N* is single precision and *L* is double precision.
+    Single values widen exactly when used in an operation. The table square root *r* is S-0204
+    claim 5's real-input root, including its single-precision input narrowing. It is used only
+    on *L*, not on a separate beam length or numerator. *D* remains double precision, in
+    leptons, with no integer truncation before comparison. Geometrically this is the magnitude
+    of the projection of *u* on the double cross product (*u* × *d*) × *d*, not the simpler
+    cross-product-length quotient; replacing it with that quotient changes boundary results.
+    With `quirks.chop_rounding` off, RN₅₃ and RN₂₄ replace the respective toward-zero roundings
+    throughout, as in S-0205 claim 5.
+
+    **Degenerate comparisons.** When the calculated *h* is zero, *N* and *r*(*L*) are both 0,
+    so *D* is not a number. The original accepts this unordered comparison as a hit, even when
+    the hit distance is 0 or negative (`quirks.railgun_collinear_hits`, default on). In
+    particular, a non-target mobile candidate exactly on an axis-aligned beam qualifies, not
+    merely when the hit distance is positive. For a general diagonal, use the equations: exact
+    geometric collinearity need not survive their rounding. A building instead uses finite
+    distance 0 and, unless it is the shot target, qualifies only for a positive hit distance.
+    The shot target bypasses both comparisons.
+
+    With *P* = *Q* the geometric line has no direction; a non-building candidate tested against
+    the resulting zero *d* would get not-a-number, not its distance to *P*. But a zero-length
+    beam at ordinary legal map coordinates has every sample in the start cell, so no cell
+    contributes any candidates. Only the object shot target is hit through the target fallback,
+    not other occupants of that cell; a cell target adds no object. The emitter's end point
+    remains *Q* (S-0616 F14).
 
     **Damage.** When no sample stops in terrain, every qualifying object takes one ordinary
     hit of S-0302 claim 1: the weapon's integer damage field, without the firer's shot-damage
@@ -826,10 +875,10 @@ S-0501 claim 20.
     when the cell qualifies. These draws precede creation of the railgun emitter and its
     later particle draws (S-0616 claims 1 and 17).
     - Backing: `measurable` (P41 for hits, ordering, damage, terrain cancellation and draw gates,
-      with S-0616 scenario P22 for the samples and end point). Exact arithmetic boundary cases are
-      not asserted pending the investigation in Open questions.
-    - Confidence: high for the gates, candidate kinds, layer choice, unique hits, raw damage
-      and draw conditions; medium for line-distance arithmetic and observable hit ordering
+      with S-0616 scenario P22 for the samples and end point; P41 parts b and c for precision,
+      collinearity and zero-length beams). No oracle measurement is claimed.
+    - Confidence: high for the gates, candidate kinds, layer choice, unique hits, raw damage,
+      arithmetic, degenerate comparisons and draw conditions; medium for observable hit ordering
 
 ## Formulas
 
@@ -1223,6 +1272,13 @@ because a mod that wants the other behaviour gets it by changing that one value,
 says. The remaining entries (marked *no switch*) note behaviour that our engine reproduces and
 that no fix would change.
 
+- **`quirks.railgun_collinear_hits`** (proposed, default on). Claim 27 accepts a non-building
+  candidate whose calculated line distance is not a number, including exact collinearity,
+  regardless of the hit-distance threshold. Off: for a nonzero beam use the perpendicular
+  Euclidean distance to its infinite line, and for a zero-length beam use the Euclidean
+  distance to its start, with S-0204 claim 5's table root and double-precision arithmetic.
+  Require the resulting finite distance to be strictly below the threshold. Candidate-cell
+  sampling, the building distance of 0 and the shot-target bypass remain unchanged.
 - **`quirks.uphill_arc_45`** (default on). Arcing shots at a higher impact point are launched at 45°
   whatever F4 would give (claim 6 a). Off: F4 is solved for Δ*z* > 0 as for Δ*z* ≤ 0.
 - **`quirks.building_pitch_term`** (default on). Claim 6 c uses 200 × the building's height value
@@ -1362,7 +1418,7 @@ that no fix would change.
 | rules, weapon | `Speed` | the imported speed field: the shot speed and top speed of a projectile with ρ ≠ 0, and the top speed of a steering projectile; for ρ = 0 it is replaced by *v*(*R*₀, *g*) and read only through *S*_w (claims 1, 2, 11, 12, 21) | integer *v*; stored speed = min(trunc(256 × min(*v*, 100) / 100), 255) leptons per tick; −1 keeps the value in force, any other *v* ≤ 0 gives 0 | 0 |
 | rules, weapon | `IsRailgun` | railgun shot flag (claim 27) | boolean | no |
 | rules, weapon | `Damage` | unmodified damage of each railgun hit (claim 27) | integer health points | 0 |
-| rules, `[CombatDamage]` | `railgundamageradius` | railgun hit distance (claim 27) | integer leptons, not a cells-form value | 128 |
+| rules, `[CombatDamage]` | `railgundamageradius` | railgun hit distance (claim 27), including its finite-distance and unordered comparisons | signed integer leptons, not a cells-form value, no clamp at 0 | 128 |
 | rules, `[CombatDamage]` | `CollapseChance` | railgun cliff-collapse chance (claim 27) | integer percentage points, compared directly with R(0, 99) | 100 |
 | rules, weapon | `Lobber` | lob (claim 6 a) | boolean | no |
 | rules, weapon | `AreaFire` | area-fire flag (claim 3 a) | boolean | no |
@@ -2487,15 +2543,31 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   terrain-blocked hit or extra/missing collapse draw falsifies the corresponding rule.
 - Limits: if the installed stock data provides no railgun weapon or cannot isolate its direct
   damage, this fixture cannot validate those rows without a separately authorised test-data
-  variant. The mathematical boundary and degenerate-distance cases remain open, not measured.
+  variant. Do not treat the visible particle trail as an exact position recorder.
+- **Part b, distance arithmetic and collinearity (Q-1405 questions 2 and 3).** On the flat lane,
+  record exact integer start, target and bystander positions with the read-only recorder,
+  along with sampled cells and health before and after one shot. Sweep diagonal beams across
+  stationary mobile bystanders just inside and outside the imported threshold, and compare
+  the observed hit set against claim 27's equations, not rounded integer distances. Include
+  a mobile bystander exactly on an axis-aligned beam in a newly visited cell, then one lepton
+  off it. Expected: the collinear bystander qualifies despite the zero denominator, while the
+  displaced bystander is tested by the finite quotient. Repeat with buildings in visited cells.
+  A discrepancy in the predicted hit set falsifies the arithmetic or comparison. If stock
+  data cannot distinguish the mixed-precision formula from a simpler quotient, retain this
+  as a pending precision measurement. Thresholds of 0 and below additionally require a
+  separately authorised test-data variant: the collinear mobile still qualifies, a non-target
+  building does not, and the shot target still qualifies. The ordinary stock run does not
+  establish those threshold cases.
+- **Part c, zero-length beam (Q-1405 question 3).** Arrange the shot target's position exactly
+  at the fire point, with another occupant of that cell, using stock types where normal orders
+  and overlap allow it. Record the three-dimensional positions, sampled cells and beam-only
+  health deltas for one shot. Expected: no newly visited cell, only the object shot target
+  receives a beam hit, end point equal to the start. Any incidental hit falsifies that rule.
+  Merely sharing a cell is insufficient: the positions must coincide exactly. If no stock
+  fixture permits that coincidence, a separately authorised fixture is needed; no successful
+  stock setup or measurement is claimed here.
 
 ## Open questions
-
-- **Railgun distance boundary (claim 27).** The geometric test is a floating-point distance to
-  the infinite beam line, but the exact mixed-precision rounding, zero-length beam and exactly
-  collinear non-target comparisons are not specified yet. A boundary fixture must record the
-  precise start, target and candidate positions and distinguish adjacent representable results.
-  P41's ordinary hit tests do not establish these exceptional cases.
 
 - Whether a detonation can remove the projectile that causes it, which would end a cluster early
   (claim 21), is not established. S-0303 leaves the same case open (its claim on the animation
