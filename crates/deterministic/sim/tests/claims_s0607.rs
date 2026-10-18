@@ -575,6 +575,53 @@ fn quirk_lift_impact_double_credit_both_positions() {
     assert_eq!(on.2, 2 * off.2, "on: the score is doubled");
 }
 
+/// VICT with room for passengers and one TROOPER of house 1 aboard.
+fn loaded(
+    w: &mut glasnost_sim::world::World,
+    v: glasnost_sim::world::ObjectId,
+) -> glasnost_sim::world::ObjectId {
+    let p = spawn(w, Kind::Infantry, "TROOPER", 1, at(6, 2));
+    glasnost_sim::transport::board(w, p, v);
+    assert_eq!(glasnost_sim::transport::passengers(w, v), vec![p]);
+    p
+}
+
+// spec: S-0607 claim 18 (passengers: a dropped transport that a detonation kills loses its passengers under the ordinary rules for a dying object, S-0312 claim 5, credited to the attacker; one that survives and is removed loses them without attacker credit, S-0507 claim 16)
+#[test]
+fn claim_18_passengers_of_a_dropped_transport() {
+    // The dropper house's kills after a drop onto a blocker, and whether
+    // the passenger (if any) is gone.
+    let play = |kill: bool, aboard: bool| {
+        let (mut w, l, v) = seized_world(
+            |r| {
+                r.sim.vehicles.get_mut("VICT").unwrap().passengers = Some(3);
+                if kill {
+                    deadly(false)(r);
+                } else {
+                    armoured(true)(r);
+                }
+            },
+            "VICT",
+        );
+        let p = aboard.then(|| loaded(&mut w, v));
+        drop_on_blocker(&mut w, l, v);
+        run(&mut w, 5);
+        assert!(w.obj(v).is_none(), "the transport leaves play");
+        assert!(p.is_none_or(|p| w.obj(p).is_none()), "its passenger too");
+        kills(&w, 0)
+    };
+    assert_eq!(
+        play(true, true),
+        play(true, false) + 1,
+        "killed: the passenger's death is credited to the attacker"
+    );
+    assert_eq!(
+        play(false, true),
+        play(false, false),
+        "removed: no attacker credit for the passenger"
+    );
+}
+
 // spec: S-0607 claim 18: a crashable vehicle type takes the ordinary crash end instead (destroyed whatever its armour)
 #[test]
 fn claim_18_crashable_type_crashes() {
@@ -748,6 +795,47 @@ fn claim_11_gripped_unit_rearming_with_any_weapon() {
             "slot {slot}"
         );
     }
+}
+
+// spec: S-0607 claim 11: the magnetic beam's rearming answer against a target other than the gripped unit comes after the target's layer and projectile tests, so against an airborne target the beam cannot hit, that refusal wins
+#[test]
+fn claim_11_beam_answer_after_the_layer_tests() {
+    let (mut w, l, _v) = seized_world(|_| {}, "VICT");
+    assert!(lift::wave_alive(&w, l), "the shot made a wave");
+    // A second lifter lifts another vehicle into the air.
+    let l2 = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 6));
+    let v2 = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 6));
+    beam(&mut w, l2, v2);
+    assert!(lift::grips(&w, l2, v2));
+    assert!(run_until(&mut w, 200, |w| height(w, v2) > 300), "airborne");
+    let ground = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(0, 4));
+    assert_eq!(
+        check::check(&w, l, Some(Target::Object(ground)), 0, false),
+        Answer::Rearming,
+        "a ground target: rearming"
+    );
+    let a = check::check(&w, l, Some(Target::Object(v2)), 0, false);
+    assert!(
+        matches!(a, Answer::Illegal | Answer::Impossible),
+        "an airborne target: the layer refusal wins, got {a:?}"
+    );
+}
+
+// spec: S-0607 claim 21 (F3 is evaluated once, at creation, from the shot's points: later movement of firer or target does not re-test it)
+#[test]
+fn claim_21_f3_only_at_creation() {
+    let mut w = world(|_| {});
+    let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+    let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(1, 0));
+    let c = at(0, 0);
+    w.obj_mut(l).unwrap().target = Some(Target::Object(v));
+    lift::shot(&mut w, l, Target::Object(v), pos_at(c, 0), pos_at(c, 300));
+    assert!(lift::wave_alive(&w, l));
+    // The target is moved onto the firer's own spot.
+    let here = w.obj(l).unwrap().pos;
+    w.obj_mut(v).unwrap().pos = here;
+    run(&mut w, 10);
+    assert!(lift::wave_alive(&w, l), "no re-test: the wave goes on");
 }
 
 fn pos_at(c: glasnost_map::CellXY, dx: i32) -> Pos {
