@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 55
+revision: 56
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1711,12 +1711,12 @@ firing pass and a spy plane's overfly. It makes the aircraft not ready to change
 to the spy-plane approach exception of S-0501 claim 31.
 
 **seized.** A unit's state from a successful locomotor seize until it gets its own locomotor
-back. It survives the end of a grip and a drop, and is distinct from parasite-held.
-S-0607 claims 5, 12 and 20 own the state and restoration.
+back. It survives the end of a grip and a drop, and is distinct from *held*, the parasite
+countdown. S-0607 claims 5, 12 and 20 own the state and restoration.
 
 **seizing warhead.** A warhead with the imported locomotor flag, naming a temporary replacement
-for its target's own locomotor. S-0607 claim 1 owns its seizing hit; that spec covers the
-jumpjet replacement, not every possible named locomotor.
+for its target's own locomotor. S-0607 claim 1 owns its seizing hit and claim 22 the outcomes
+for other named locomotors; that spec covers movement under the jumpjet replacement only.
 
 **set down.** In magnetic lift, ending a grip at non-positive height above the surface, or a
 seized unit's touchdown at the end of descending flight. Being set down allows restoration
