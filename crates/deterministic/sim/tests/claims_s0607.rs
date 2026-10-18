@@ -226,6 +226,33 @@ fn claim_10_no_firing() {
     );
 }
 
+// spec: S-0607 claim 10 (deploying is not refused: being seized adds no refusal of its own, while set down before restoration) and claim 20 (a set-down unit in guard stays seized)
+#[test]
+fn claim_10_set_down_seized_unit_deploys() {
+    let (mut w, l, v) = seized_world(
+        |r| vehicle(r, "DEPV", |t| t.is_simple_deployer = Some(true)),
+        "DEPV",
+    );
+    order_lifter(&mut w, l);
+    assert!(run_until(&mut w, 50, |w| !lift::dropped(w, v)
+        && !glasnost_sim::jump::moving(w, v)));
+    assert!(lift::seized(&w, v), "set down, not restored yet");
+    while glasnost_sim::orders::blocked(&w) {
+        testkit::run(&mut w, 1);
+    }
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        glasnost_sim::world::HouseId(1),
+        glasnost_sim::orders::Order::Deploy { actor: v },
+    ));
+    assert!(
+        run_until(&mut w, 30, |w| glasnost_sim::econ::inplace::form(w, v)
+            != glasnost_sim::econ::inplace::Form::Mobile),
+        "the deploy starts"
+    );
+    assert!(lift::seized(&w, v), "while still seized");
+}
+
 // spec: S-0607 claims 12, 13, 15, 17 and 20: a lifter's accepted order drops the unit mid-pull; it flies to its cell centre, falls with a growing rate, finds the cell clear, descends and touches down unhurt, set down; its next fall-back to rest restores its own locomotor
 #[test]
 fn claim_17_release_over_clear_land() {
