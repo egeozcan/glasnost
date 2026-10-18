@@ -476,13 +476,11 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: Option<StandIn>
     }
     match stand_in {
         Some(StandIn::DropPod) => drop_pod_ends(w, lifter, x),
-        Some(_) => {
-            if w.obj(x).is_some_and(|o| o.dest.is_none()) {
-                // spec: S-0607 claim 23 (revision 7: when the teleporting stand-in's landing search finds no cell, S-0207 claim 20 b removes the destination while the seize itself assigns it, before the seized state begins; that removal does not end the grip: the unit stays where it is with no destination, never jumps, and the grip lasts until another event of claim 12)
-                upd(w, x, |l| l.grip_without_dest = true);
-            }
+        Some(_) if w.obj(x).is_some_and(|o| o.dest.is_none()) => {
+            // spec: S-0607 claim 23 (revision 7: when the teleporting stand-in's landing search finds no cell, S-0207 claim 20 b removes the destination while the seize itself assigns it, before the seized state begins; that removal does not end the grip: the unit stays where it is with no destination, never jumps, and the grip lasts until another event of claim 12)
+            upd(w, x, |l| l.grip_without_dest = true);
         }
-        None => {}
+        Some(_) | None => {}
     }
 }
 
