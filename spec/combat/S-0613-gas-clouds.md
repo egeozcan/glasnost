@@ -2,11 +2,11 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244]
 supersedes: []
@@ -121,6 +121,8 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
    event. With μ ≠ 0 the animation's particle count therefore plays no
    part, and the death leaves one cloud. With μ = 0 the creation middle event's particles (and its
    scorch mark or crater, S-0109 claim 14) come first, then the one extra particle.
+   The order of this extra virus effect relative to the other death effects is given by
+   S-0615 claim 1.
    - Backing: `measurable` (scenario G2, part b: one cloud where part a gives the particle count).
      The μ = 0 case uses G2 part c's named test art file.
    - Confidence: high
