@@ -2,11 +2,11 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707]
 supersedes: []
@@ -514,12 +514,20 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       overlays (claim 23),
     - (d) spills the resources it stores (claim 22),
     - (e) shows one entry of its destruction-animation list (one list pick),
-    - (f) creates one particle system from its type's destruction particle-system list, when the
-      building has no particle system attached already, at least one entry is eligible (the
-      particle-system specs say which kinds are) and it stands higher than 10 leptons below the
-      terrain: one ranged draw R(0, *m* − 1) over the *m* eligible entries, which are counted from
-      the end of the list (*r* = 0 picks the last eligible entry), placed at its position moved by
-      its type's destruction smoke displacement,
+    - (f) creates one smoke-kind particle system from its type's destruction particle-system
+      list, when no earlier destruction-smoke system of this same building remains in play,
+      at least one entry is eligible and it stands higher than 10 leptons below the terrain.
+      Only smoke-kind entries are eligible; damage smoke, natural smoke and other emitters do
+      not prevent this creation (S-0616 claim 1). One ranged draw R(0, *m* − 1) over the *m*
+      eligible entries picks the system, counted from the end of the list (*r* = 0 picks the
+      last eligible entry), placed at its position moved by its type's destruction smoke
+      displacement. With no eligible entries, no system is created and no selection draw is
+      taken. The system starts empty, with the building as owner object and no owner house
+      (S-0616 claim 1). Removal of the building marks it, stopping further emission
+      (S-0616 claim 4). Thus a building removed immediately under claim 21 makes destruction
+      smoke that never emits and leaves play in its first turn. A building awaiting removal,
+      including one destroyed while being sold, instead permits emission under S-0616 claim 9
+      until its removal; any particles already made then finish normally,
     - (g) releases its absorbed passengers (claim 24), then its survivors (claim 18). When *C* = 0
       (claim 18) nothing more happens in this item. Otherwise, the table below gives the survivor and smudge outcomes and their draws in claim 18's cell order, beginning after the cells used by absorbed passengers. The observable draw precedence is cell-ordered: the applicable draws for one cell precede those for the next. Every cell in that order has the smudge outcome, whether or not survivors remain to release and regardless of which survivor outcomes apply.
 
@@ -538,7 +546,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       gives the number of raw values taken, and through the statistics of the effects)
     - Confidence: medium (the list and the draws, and the building still being in its cells during
       the smudge steps); high for the order of the draws within a cell and for the cell the smudge
-      step tests; low for the eligibility in item f
+      step tests; high for item f's eligibility, attachment condition, selection, displacement
+      and emission lifetime
 
 20. **Rubble and crates beneath.** When a destroyed building's type leaves rubble and has a rubble
     image (a separate rubble building image, or a sprite with more than 7 image frames), each of its
@@ -969,7 +978,7 @@ otherwise. No measurement has been completed for this revision.
 | 17 | `unmeasured` for the exact ten-times-strength amount and no-escape marker: D12's contacts die, which alone cannot distinguish that amount from another lethal amount or test crew escape. Release of a non-helipad contact at or beyond 256 leptons is also unmeasured: D12 does not establish those contacts. Garrison eviction instead uses S-0508 G7 and G8's backing. |
 | 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. Failed survivor placement and the eight-cell 3 × 3 foundation are also unmeasured here: D13 uses free positions and a full nine-cell foundation and supplies no blocked-survivor or eight-cell run. |
 | 18 | `unmeasured`, low confidence, for equating the owner's survivor-suppression state with defeat: no setup separates the two possible moments in Open questions. Ordinary undefeated-owner runs test the rest. |
-| 19(f) | `unmeasured` for the exact eligibility kinds, suppression by an attached system and the below-terrain height boundary: D14 f tests creation and displacement only, not these conditions. |
+| 19(f) | `unmeasured` for the exact eligibility kinds, suppression by an earlier destruction-smoke system and the below-terrain height boundary: D14 f tests creation, displacement and marking at removal, not these conditions. |
 | 20 | `unmeasured` for the sprite-frame threshold: D14 b tests a type already having a rubble image, not the threshold. Crate contents use S-0520 claim 5 and scenario CR3. Remembering the building type for rubble drawing is a pointer to the rendering specs, not independently tested by D14 b. |
 | 24 | `unmeasured` for vehicle passenger placement and credit to a separately remembered planter: D16 establishes neither vehicle absorption nor a surviving planter for failed releases. |
 | 26, F2 | `unmeasured` for the zero-coordinate anchor, footprints beyond legal map cells and nearby-point fallback beyond coordinate 511: no reachable death/smudge setup exercising those boundaries is supplied. D17 tests fitting within the map. Negative tile numbers other than the no-tile marker retain claim 26's backing. |
@@ -1641,10 +1650,16 @@ entry at the building's position, matching its list-pick replay after the founda
 and any barrel-fire effects, with no resource-spill draws in these empty-storage setups. A
 missing or wrong entry, wrong position or replay mismatch falsifies this part.
 Variant f: a test building type with a destruction particle-system
-list containing one stock smoke-behaviour particle-system type, with no attached damage system
-before the kill and a named displacement of (32, 48, 64) leptons: one system appears at the
-building position plus that displacement. Absence, a second system or a different position
-falsifies this creation/displacement case; it does not settle the eligibility of other kinds.
+list containing one smoke-behaviour particle-system type defined by named test data, with no attached damage system
+before the kill and a named displacement of (32, 48, 64) leptons. Use the read-only recorder
+from the killing hit through the system's first turn. One empty system is created at the
+building position plus that displacement. For a type without the explodes flag, killed while
+not being sold, the building leaves play immediately: the system is marked before its first
+turn, emits no particles and leaves play in that turn. Repeat with the building being sold:
+it instead awaits removal under claim 21, and the system is marked when that removal occurs.
+Any emission before then must satisfy S-0616 claim 9. Absence, a second system, a different
+position, emission after immediate removal or a mark before the selling building's removal
+falsifies the corresponding case. This does not settle the eligibility of other kinds.
 Variant g (claim 21, the second round): a crewed 3 × 3 test building type with the explodes flag
 whose refund gives *C* = 1, destroyed 300 times, with the recorder running from the killing hit
 through the end of its removal turn, including the outcomes after it leaves play. *Expected of g:*
@@ -1984,8 +1999,9 @@ scenario makes no prediction for their untraced path. No measurement is claimed 
   (claim 22).
 - The relative order of resource spilling with other death effects of an exploding absorbing
   building (claim 1). This combined case is unmeasured until a storage-filling setup exists.
-- The destruction particle-system eligibility kinds and below-terrain boundary (claim 19(f)),
-  and the boundary cases excluded from measurement in Backing boundaries.
+- Measurement of the destruction particle-system below-terrain boundary (claim 19(f))
+  and the other boundary cases excluded from measurement in Backing boundaries remains wanted.
+  S-0616 claim 1 resolves the eligible kinds and the attachment condition.
 
 ## Questions for the project lead
 
