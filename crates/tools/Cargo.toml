@@ -14,6 +14,7 @@ glasnost-convert.workspace = true
 glasnost-rules.workspace = true
 glasnost-ini.workspace = true
 glasnost-map.workspace = true
+glasnost-num.workspace = true
 glasnost-sim.workspace = true
 glasnost-ai.workspace = true
 pollster = "0.4"

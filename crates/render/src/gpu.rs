@@ -212,3 +212,74 @@ mod tests {
         assert!(requested.check_limits(&adapter));
     }
 }
+
+/// A device, its queue and the adapter's description, shared by every
+/// caller in the process (see [`shared_device`]).
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Debug)]
+pub struct SharedDevice {
+    /// The device.
+    pub device: wgpu::Device,
+    /// Its queue.
+    pub queue: wgpu::Queue,
+    /// The adapter it was opened on.
+    pub info: wgpu::AdapterInfo,
+}
+
+/// Why [`shared_device`] has no device; the original errors as text, so
+/// every caller sees the same outcome.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Debug)]
+pub enum SharedGpuError {
+    /// No adapter matched (tests skip unless a GPU is required).
+    NoAdapter(String),
+    /// The adapter refused the device request.
+    NoDevice(String),
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl fmt::Display for SharedGpuError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoAdapter(e) | Self::NoDevice(e) => f.write_str(e),
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl std::error::Error for SharedGpuError {}
+
+/// One device for the whole process, opened on first use with
+/// [`BackendChoice::Auto`] (`WGPU_BACKEND` overrides) and never closed.
+///
+/// Offscreen tests and tools must use this instead of opening a device of
+/// their own. The test harness runs tests on several threads, and opening
+/// Vulkan devices on several threads at once crashed the process: the
+/// Vulkan loader segfaulted naming a debug object on one thread while
+/// another thread was inside device creation (M7b step 2c, 3 runs in 250
+/// of `map_gpu`). With one device per process no device is ever created
+/// while another is in use.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn shared_device() -> Result<SharedDevice, SharedGpuError> {
+    static SHARED: std::sync::OnceLock<Result<SharedDevice, SharedGpuError>> =
+        std::sync::OnceLock::new();
+    SHARED
+        .get_or_init(|| {
+            pollster::block_on(async {
+                let instance = create_instance(BackendChoice::Auto, None).await;
+                let adapter = request_adapter(&instance, None)
+                    .await
+                    .map_err(|e| SharedGpuError::NoAdapter(e.to_string()))?;
+                let info = adapter.get_info();
+                let (device, queue) = request_device(&adapter)
+                    .await
+                    .map_err(|e| SharedGpuError::NoDevice(e.to_string()))?;
+                Ok(SharedDevice {
+                    device,
+                    queue,
+                    info,
+                })
+            })
+        })
+        .clone()
+}

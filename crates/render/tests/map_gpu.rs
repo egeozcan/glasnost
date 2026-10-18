@@ -6,7 +6,7 @@
 
 use glasnost_fmt::image::IndexedImage;
 use glasnost_render::compose::{ComposeQuirks, DEPTH_REFERENCE, DepthTest, Paint, Profile};
-use glasnost_render::gpu::{self, BackendChoice};
+use glasnost_render::gpu;
 use glasnost_render::map_gpu::{MapRenderer, targets};
 use glasnost_render::offscreen::read_texture;
 use glasnost_render::scene::{Filter, Group, Item, ItemDepth, Scene, View};
@@ -16,18 +16,15 @@ fn gpu_required() -> bool {
 }
 
 fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
-    pollster::block_on(async {
-        let instance = gpu::create_instance(BackendChoice::Auto, None).await;
-        let adapter = match gpu::request_adapter(&instance, None).await {
-            Ok(a) => a,
-            Err(e) if !gpu_required() => {
-                eprintln!("skipping: {e}");
-                return None;
-            }
-            Err(e) => panic!("GLASNOST_REQUIRE_GPU=1 but {e}"),
-        };
-        Some(gpu::request_device(&adapter).await.expect("device opens"))
-    })
+    match gpu::shared_device() {
+        Ok(g) => Some((g.device, g.queue)),
+        Err(gpu::SharedGpuError::NoAdapter(e)) if !gpu_required() => {
+            eprintln!("skipping: {e} (set GLASNOST_REQUIRE_GPU=1 to make this fatal)");
+            None
+        }
+        Err(gpu::SharedGpuError::NoAdapter(e)) => panic!("GLASNOST_REQUIRE_GPU=1 but {e}"),
+        Err(e) => panic!("device opens: {e}"),
+    }
 }
 
 /// An invented diamond-ish image with a gradient of indices.

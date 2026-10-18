@@ -1574,11 +1574,10 @@ mod tests {
         mut ui: impl FnMut(&mut Ui),
     ) -> Option<Vec<u8>> {
         use glasnost_render::wgpu;
-        let instance = wgpu::Instance::default();
-        let adapter =
-            pollster::block_on(glasnost_render::gpu::request_adapter(&instance, None)).ok()?;
-        let (device, queue) =
-            pollster::block_on(glasnost_render::gpu::request_device(&adapter)).ok()?;
+        // The process's one shared device: these tests run on several
+        // threads, and opening devices concurrently crashed (M7b step 2c).
+        let glasnost_render::gpu::SharedDevice { device, queue, .. } =
+            glasnost_render::gpu::shared_device().ok()?;
         let format = wgpu::TextureFormat::Rgba8Unorm;
         let mut renderer = egui_wgpu::Renderer::new(
             &device,

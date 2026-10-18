@@ -334,8 +334,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Infantry && w.obj(id).is_some() {
         let in_progress = occupancy::in_progress(w, id);
         let has_dest = w.obj(id).is_some_and(|o| o.dest.is_some());
-        infantry::update(w, id, moved, in_progress, has_dest);
-        // spec: S-0107 claim 11 (firing, after the unit's sequence rules of the tick); S-0301 claim 9 rank 4 and S-0511 claim 10 (a unit still falling cannot fire, even with a firing sequence begun before the drop)
+        // spec: S-0107 State and ordering (the fear rules of a tick come before its firing rules: a sequence they start already holds for the firing rules)
+        infantry::fear_turn(w, id, in_progress, has_dest);
+        // spec: S-0107 claim 11 (firing); S-0107 State and ordering (judged against the sequence current before the tick's completion follow-up, so a fire frame equal to the count still releases the shot on the completion tick); S-0301 claim 9 rank 4 and S-0511 claim 10 (a unit still falling cannot fire, even with a firing sequence begun before the drop)
         crate::combat::behave::infantry_step(w, id);
+        // spec: S-0107 State and ordering (the completion follow-up after the firing rules; the movement rule after the follow-up)
+        infantry::sequence_turn(w, id, moved, in_progress);
     }
 }

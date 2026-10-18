@@ -29,12 +29,19 @@
 //!   map trigger event and action codes every map of the install uses
 //!   (S-0011), with the listed map indices' own counts; codes and counts
 //!   only, written to the git-ignored `local-lane/trigger-codes.txt`.
+//! - `glasnost-headless arena [options] "A:TYPE*n,…" "B:TYPE*n,…"`: arena
+//!   mode (M7b, `glasnost_tools::arena`): two groups meet on our own flat
+//!   map over N seeds; prints win rates, times to kill and survivors. On
+//!   the synthetic ruleset, or on the install's reference ruleset when
+//!   `GLASNOST_GAME_DIR` is set (then also written to the git-ignored
+//!   `local-lane/arena.txt`). `arena --records` runs every arena
+//!   measurement record's matchup and compares it with the record.
 
 use std::process::ExitCode;
 
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
-use glasnost_tools::{headless, skirmish_lane, trigger_lane};
+use glasnost_tools::{arena, headless, skirmish_lane, trigger_lane};
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
     args.get(i).and_then(|a| a.parse().ok()).unwrap_or(default)
@@ -201,9 +208,57 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("arena") => {
+            let cli = match arena::parse_cli(&args[1..]) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless arena: {e}\nusage: glasnost-headless {}",
+                        arena::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            let dir = std::env::var_os(GAME_DIR_VAR).filter(|_| !cli.synthetic);
+            let rules = match &dir {
+                None => arena::ArenaRules::Synthetic,
+                Some(d) => match arena::reference_rules(std::path::Path::new(d)) {
+                    Ok(Ok(r)) => arena::ArenaRules::Reference(r),
+                    Ok(Err(e)) => {
+                        eprintln!("glasnost-headless arena: the rules did not resolve: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "glasnost-headless arena: could not read the install ({:?})",
+                            e.kind()
+                        );
+                        return ExitCode::FAILURE;
+                    }
+                },
+            };
+            match arena::run_cli(&cli, &rules, std::path::Path::new("measurements")) {
+                Ok(report) => {
+                    print!("{report}");
+                    let out = std::path::Path::new("local-lane");
+                    if dir.is_some()
+                        && std::fs::create_dir_all(out).is_ok()
+                        && std::fs::write(out.join("arena.txt"), &report).is_ok()
+                    {
+                        println!("wrote local-lane/arena.txt (git-ignored; never commit it)");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless arena: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         _ => {
             eprintln!(
-                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …]"
+                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | {}",
+                arena::USAGE
             );
             ExitCode::from(2)
         }

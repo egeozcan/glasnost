@@ -49,16 +49,12 @@ fn files(dir: &std::path::Path) -> Vec<PickedFile> {
 }
 
 /// A GPU device, when an adapter exists (any backend `WGPU_BACKEND` picks).
+/// The process's one shared device (`gpu::shared_device`, M7b step 2c).
 fn gpu() -> Option<(wgpu::Device, wgpu::Queue, String)> {
-    use glasnost_render::gpu::{self, BackendChoice};
-    pollster::block_on(async {
-        let instance = gpu::create_instance(BackendChoice::Auto, None).await;
-        let adapter = gpu::request_adapter(&instance, None).await.ok()?;
-        let info = adapter.get_info();
-        let label = format!("{} on {}", gpu::backend_label(info.backend), info.name);
-        let (d, q) = gpu::request_device(&adapter).await.ok()?;
-        Some((d, q, label))
-    })
+    use glasnost_render::gpu;
+    let g = gpu::shared_device().ok()?;
+    let label = format!("{} on {}", gpu::backend_label(g.info.backend), g.info.name);
+    Some((g.device, g.queue, label))
 }
 
 /// Milliseconds per frame of `frames` GPU redraws of a 1280 × 720 view
