@@ -45,6 +45,8 @@ The step 1j and earlier ledgers are historical and stay as they were. The lead's
 
 Q-1165 is unused.
 
+**Answered at step 1l** ([step1l-m7a.md](step1l-m7a.md)): Q-1160 and Q-1161 by S-0215 revision 67 (and S-0207 revision 39 for Q-1160 question 2), Q-1162 by S-0314 revision 29, Q-1163 and Q-1164 by S-0606 revision 7. Their interims above are retired from the code and docs; the rows below that cite them record the step 1k state.
+
 **Callers of readiness.** `process::ready` is the only test of S-0215 claim 11's readiness. The other functions named `ready` are other specs' own conditions: `econ::inplace::ready` (S-0517 claim 8, the deploy transition, which `process::ready` also reads), `cloak::machine::ready` (S-0516 claim 4), `econ::deploy::deploy_ready` (S-0214 Terms, deploy readiness) and `air::ready` (aircraft, not driving). The direct `occupancy::in_progress` callers are "stops if moving" rows, S-0415 claim 2's own moving test, firing, scatter and path tests, none of them a start under claim 11. The first per-tick start (`process::turn`), the late start (`process::late_start`) and every "starts it if ready" in the code call it: S-0402's unload rows (`harvest`), S-0603's queued *guard* (the first start), S-0605's entrant (`absorb`), S-0314's retry (`depot::vehicle_turn`) and arrival *sleep* (the first start), mind control, the release rows and the bunker (`release`, `mind`, `bunker`). So the turning clause reaches all of them through `process::moving`, with no change at the callers. `occupancy::in_progress` (S-0206's term) is unchanged. Its callers keep the narrower term, as S-0215's cross-spec note asks.
 
 **Formats.** See the end of this file.

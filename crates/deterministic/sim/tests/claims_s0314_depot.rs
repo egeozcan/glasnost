@@ -1337,7 +1337,7 @@ fn arrived(w: &mut World, v: ObjectId, t: Target) {
     d.goal = None;
 }
 
-// spec: S-0314 claim 17 (a pad depot's repeated request tethers a vehicle in the foundation centre's cell with no moving destination; the completed-entry exchange then turns it toward 16384 facing units; an ordinary depot's request sets no tether)
+// spec: S-0314 claim 17 (a pad depot's repeated request tethers a vehicle in the foundation centre's cell with no moving destination; an ordinary depot's request sets no tether; revision 29: neither supplies the completed-entry confirmation, so later processings neither turn the tethered vehicle toward 16384 facing units nor queue sleep)
 #[test]
 fn claim_17_pad_depot_tethers_in_the_enter_processing() {
     for (name, want) in [("PAD", true), ("DEPOT", false)] {
@@ -1351,13 +1351,14 @@ fn claim_17_pad_depot_tethers_in_the_enter_processing() {
         arrived(&mut w, v, Target::Object(d));
         depot::process_enter(&mut w, v);
         assert_eq!(docked(&w, v), want, "{name}");
-        if want {
-            assert!(run_until(&mut w, 200, |w| w
-                .obj(v)
-                .unwrap()
-                .body
-                .value(w.tick)
-                == 16384));
+        for _ in 0..3 {
+            depot::process_enter(&mut w, v);
+            let t = w.tick;
+            let o = w.obj(v).unwrap();
+            assert!(!o.body.turning(t), "{name}: no turn");
+            assert_eq!(o.body.value(t), 0, "{name}: facing kept");
+            assert_eq!(o.beh.queued, None, "{name}: no sleep queued");
+            tick::step(&mut w);
         }
     }
 }
@@ -1618,9 +1619,9 @@ fn claim_17_movement_arrival_sets_the_ready_mark() {
     }
 }
 
-// spec: S-0314 claim 17 (revision 27: a tethered vehicle's sleep is queued from movement arrival before the rotation toward 16384 facing units and does not become current while the body rotates, but at the first start after the rotation ends; an untethered vehicle is not rotated and its sleep starts at the first start after arrival) and S-0215 claim 11 (the turning clause); Q-1162 interim (the rotation begins at the arrival)
+// spec: S-0314 claim 17 (revision 29, Q-1162: movement arrival itself requests no map-east body turn, tethered or not; sleep is queued and, the vehicle being ready, current at the next start) and S-0215 claim 29 (revision 67, the depot table's movement-arrival row)
 #[test]
-fn claim_17_rotation_gate_on_the_arrival_sleep() {
+fn claim_17_arrival_requests_no_turn() {
     for tethered in [true, false] {
         let r = rules();
         let mut w = game(&r);
@@ -1636,43 +1637,48 @@ fn claim_17_rotation_gate_on_the_arrival_sleep() {
         assert_eq!(w.body_facing(v), 0);
         depot::movement_arrival(&mut w, v);
         assert_eq!(w.obj(v).unwrap().beh.queued, Some(Behaviour::Sleep));
-        let t0 = w.tick;
-        assert_eq!(
-            w.obj(v).unwrap().body.turning(t0),
-            tethered,
-            "only a tethered vehicle is rotated"
-        );
-        if !tethered {
-            tick::step(&mut w);
-            assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
-            assert_eq!(w.body_facing(v), 0, "not rotated");
-            continue;
-        }
-        let mut ended = None;
-        for _ in 0..200 {
-            tick::step(&mut w);
-            let k = w.tick - 1;
-            let o = w.obj(v).unwrap();
-            if o.body.turning(k) {
-                assert_ne!(
-                    o.beh.current,
-                    Some(Behaviour::Sleep),
-                    "tick {k}: still rotating"
-                );
-            } else {
-                ended = Some(k);
-                assert_eq!(o.body.value(k), 16384);
-                assert_eq!(
-                    o.beh.current,
-                    Some(Behaviour::Sleep),
-                    "tick {k}: rotation ended"
-                );
-                break;
-            }
-        }
         assert!(
-            ended.is_some_and(|k| k > t0 + 1),
-            "the rotation takes several ticks"
+            !w.obj(v).unwrap().body.turning(w.tick),
+            "tethered {tethered}: arrival starts no turn"
         );
+        tick::step(&mut w);
+        assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
+        assert_eq!(w.body_facing(v), 0, "not rotated");
     }
+}
+
+// spec: S-0314 claim 17 (revision 29: a driving vehicle already turning when arrival queues sleep is held by S-0215 claim 11's ordinary readiness test until the first start after the turn ends; arrival adds no gate of its own) and S-0215 claim 11 (revision 67: the turn ends by tick number)
+#[test]
+fn claim_17_existing_turn_holds_the_arrival_sleep() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "DEPOT");
+    let v = truck(&mut w, 0, 1, 1, 300);
+    open(&mut w);
+    assert!(depot::request(&mut w, v, d, false));
+    w.obj_mut(v).unwrap().beh.current = Some(Behaviour::Enter);
+    arrived(&mut w, v, Target::Object(d));
+    let t0 = w.tick;
+    let rate = {
+        let o = w.obj(v).unwrap();
+        w.rules().unit(o.kind, o.type_index).unwrap().turn_rate
+    };
+    assert!(w.obj_mut(v).unwrap().body.turn_to(32768, t0, rate));
+    depot::movement_arrival(&mut w, v);
+    assert_eq!(w.obj(v).unwrap().beh.queued, Some(Behaviour::Sleep));
+    let mut ended = None;
+    for _ in 0..400 {
+        tick::step(&mut w);
+        let k = w.tick - 1;
+        let o = w.obj(v).unwrap();
+        if o.body.turning(k) {
+            assert_ne!(o.beh.current, Some(Behaviour::Sleep), "tick {k}: still turning");
+        } else {
+            assert_eq!(o.beh.current, Some(Behaviour::Sleep), "tick {k}: turn ended");
+            assert_eq!(o.beh.start_tick, k, "the first start of the end tick");
+            ended = Some(k);
+            break;
+        }
+    }
+    assert!(ended.is_some_and(|k| k > t0 + 1), "the turn takes several ticks");
 }
