@@ -776,6 +776,8 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
     let op = in_operation(w, id);
     // spec: S-0405 claim 9 and S-0601 claim 10 (a controller building not in operation releases its victims in its own turn; reconciled on every turn)
     crate::mind::building_turn(w, id, op);
+    // spec: S-0405 claim 9 and S-0607 claim 12 (row 4: a building lifter not in operation lets go of its held unit in its own turn)
+    crate::lift::building_turn(w, id, op);
     if prev == Some(op) {
         // spec: S-0405 claim 9 (the effects are reconciled on a turn even without an in-operation transition: a charged gap building switched off can generate again)
         crate::econ::shroud::gap_refresh(w, id);
@@ -798,7 +800,7 @@ pub fn building_turn(w: &mut World, id: ObjectId) {
                 make_due(w, h);
             }
         }
-        // S-0405 claim 9: the release of controlled units is `mind::building_turn` above; held units belong to other specs.
+        // S-0405 claim 9: the release of controlled units is `mind::building_turn` above; a held unit's, `lift::building_turn`.
     }
     // spec: S-0405 claim 9 and S-0409 claim 11 (the gap starts and stops with the building's operation)
     crate::econ::shroud::gap_refresh(w, id);

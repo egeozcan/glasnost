@@ -307,6 +307,9 @@ pub struct WarheadRules {
     pub bomb_disarm: bool,
     /// Locomotor warhead.
     pub is_locomotor: bool,
+    /// The seizing warhead names the jumpjet locomotor (S-0607 Terms and
+    /// Import mapping).
+    pub locomotor_jumpjet: bool,
     /// Registered under the nuclear warhead name (S-0306 claim 25).
     pub nuke: bool,
     /// Parasite flag (S-0614 Terms).
@@ -858,6 +861,10 @@ pub struct CombatGeneral {
     pub c4_warhead: Option<WarheadId>,
     /// Crushing warhead.
     pub crush_warhead: Option<WarheadId>,
+    /// The falling-damage multiplier *m*, a single widened (S-0607 F2).
+    pub falling_damage_multiplier: F64,
+    /// The current-strength switch (S-0607 F2).
+    pub current_strength_damage: bool,
     /// Ion-cannon warhead.
     pub ion_cannon_warhead: Option<WarheadId>,
     /// Bridge strength, bridge-strength points (S-0303 claims 18 and 24).
@@ -1157,6 +1164,8 @@ pub fn tables(
                 ivan_bomb: b(h.ivan_bomb),
                 bomb_disarm: b(h.bomb_disarm),
                 is_locomotor: b(h.is_locomotor),
+                // spec: S-0607 Import mapping (Locomotor absent: the teleporting locomotor, outside S-0607's jumpjet scope)
+                locomotor_jumpjet: h.locomotor.as_deref() == Some("jumpjet"),
                 // spec: S-0306 claim 25 and Import mapping (the nuclear warhead name, compared without regard to case)
                 nuke: n.eq_ignore_ascii_case("NUKE"),
                 // spec: S-0614 Import mapping (Parasite absent: no; Paralyzes absent: 0; Culling absent: no)
@@ -1680,6 +1689,10 @@ pub fn combat_rules(
         ],
         c4_warhead: warhead(&g.c4_warhead),
         crush_warhead: warhead(&g.crush_warhead),
+        // spec: S-0607 F2 and Constants (FallingDamageMultiplier absent: 1.0, a single)
+        falling_damage_multiplier: single(&g.falling_damage_multiplier, mode).unwrap_or(one),
+        // spec: S-0607 F2 and Constants (CurrentStrengthDamage absent: on)
+        current_strength_damage: g.current_strength_damage.unwrap_or(true),
         ion_cannon_warhead: warhead(&g.ion_cannon_warhead),
         // spec: S-0303 claim 24 (at a fresh program start the bridge strength is 1000 and the ammunition-crate damage 100; an omission keeps the value in force)
         bridge_strength: g.bridge_strength.unwrap_or(1000),

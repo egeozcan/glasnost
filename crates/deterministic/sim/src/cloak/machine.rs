@@ -58,11 +58,9 @@ fn disabled(w: &World, id: ObjectId) -> bool {
     crate::econ::power::under_pulse(w, id) || crate::econ::power::being_erased(w, id)
 }
 
-/// Seized (S-0607 claims 5, 12 and 20). Seam: the seizing specs are not
-/// built.
+/// Seized (S-0607 claims 5, 12 and 20).
 fn seized(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    crate::lift::seized(w, id)
 }
 
 /// A cloaking veterancy ability (S-0516 claim 2 (b), S-0311 claim 3).

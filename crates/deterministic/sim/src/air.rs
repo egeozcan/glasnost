@@ -589,6 +589,12 @@ pub fn clear_mark(w: &mut World, id: ObjectId) {
     }
 }
 
+/// Sets a landed aircraft's object-present mark again (S-0607 claim 20: a
+/// seized aircraft gets its own locomotor back).
+pub fn ground_mark(w: &mut World, id: ObjectId) {
+    set_mark(w, id);
+}
+
 fn set_mark(w: &mut World, id: ObjectId) {
     let Some(c) = w.obj(id).map(|o| o.pos.cell()) else {
         return;

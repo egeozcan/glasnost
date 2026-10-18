@@ -75,11 +75,11 @@ pub fn deployed(w: &World, id: ObjectId) -> bool {
 /// Whether a destination given to the vehicle is replaced by none (claim
 /// 9): it is deployed or in transition.
 pub fn blocks_destination(w: &World, id: ObjectId) -> bool {
-    // spec: S-0517 claim 9 (a deployed vehicle or one in transition cannot receive a destination; the seized exception is S-0607's, not built)
+    // spec: S-0517 claim 9 (a deployed vehicle or one in transition cannot receive a destination; outside the magnetic-grip case: while it remains gripped, being deployed does not itself clear its destination, and S-0607 claim 9 governs assignments)
     matches!(
         form(w, id),
         Form::Deploying { .. } | Form::Deployed | Form::Undeploying { .. }
-    )
+    ) && crate::lift::lifter_of(w, id).is_none()
 }
 
 /// Enforces claim 9 on a destination written without the assignment

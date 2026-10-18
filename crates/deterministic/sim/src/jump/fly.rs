@@ -69,17 +69,27 @@ fn physics(w: &mut World, id: ObjectId) {
     let entering = j.crash_started && !matches!(j.phase, Phase::Crashing | Phase::Crashed);
     j.crossed_deck = false;
     let mut dropped = None;
+    let held = seized(w, id);
     if crashing || entering {
         // spec: S-0502 claim 18 (the extra crash drop k after the ordinary height step, the resulting world height truncated toward zero; in the update that starts the crash the ordinary physics still used the preceding state)
         let before = z;
-        z = int(z, mode).sub(f.crash, mode).to_i32_common();
+        let rate = if held { crate::lift::rate(w, id) } else { None };
+        let k = rate.map_or(f.crash, |r| r.to_f64());
+        z = int(z, mode).sub(k, mode).to_i32_common();
+        if let Some(r) = rate {
+            // spec: S-0502 claim 18 (magnetic lift: the crash rate grows by 1 lepton per tick, each tick, each new rate narrowed to single precision; Q-1322: the drop uses the rate before it grows)
+            let grown = r.to_f64().add(int(1, mode), mode).to_f32(mode);
+            if let Some(o) = w.obj_mut(id) {
+                o.lift.rate = Some(grown);
+            }
+        }
         let deck = w.surface_at(p.x, p.y) + BRIDGE_HEIGHT;
         // spec: S-0502 claim 18 (over a high-bridge cell the drop ends the fall when its height before is at or above the deck and after it below)
         j.crossed_deck = w.high_bridge(p.cell()) && before >= deck && z < deck;
         dropped = Some((before, z));
     }
-    if crashing {
-        // spec: S-0502 claim 18 and S-0206 claim 14 (the heading's target is 11520 facing units clockwise ahead of its current value, turning at the heading's rate)
+    if crashing && !held {
+        // spec: S-0502 claim 18 (magnetic lift: a seized unit does not spin) and S-0206 claim 14 (the heading's target is 11520 facing units clockwise ahead of its current value, turning at the heading's rate)
         let target = (i32::from(heading) + CRASH_SPIN).rem_euclid(65536) as Facing;
         j.heading.turn_to(target, tick, f.omega);
     }
@@ -102,7 +112,6 @@ fn physics(w: &mut World, id: ObjectId) {
         j.heading = Turning::at(d);
     }
     let keeps = w.rules().quirks.set_facing_keeps_target;
-    let held = seized(w, id);
     // The ordinary step ends at the height before the crash drop.
     let step_z = dropped.map_or(z, |(before, _)| before);
     if let Some(o) = w.obj_mut(id) {
@@ -348,6 +357,8 @@ fn arrive(w: &mut World, id: ObjectId, d: Pos) {
     if seized(w, id) {
         // spec: S-0502 claim 12 (held by magnetic lift: target height 0 and descending; S-0607 claim 8 owns the arrival drop)
         start_descent(w, id);
+        // spec: S-0607 claims 8 and 15 (in the same update the lifter's grip ends; a dropped unit's detour ends over its cell centre and its fall begins)
+        crate::lift::arrived(w, id);
     } else if !target && !balloon && !deploy_to_land(w, id) {
         // spec: S-0502 claim 12 (no target, not a balloon-hover type, not a deploy-to-land vehicle: target height 0 and descending)
         start_descent(w, id);
@@ -521,6 +532,8 @@ fn touchdown(w: &mut World, id: ObjectId, d: Pos) {
         crate::econ::shroud::refresh_sight(w, id);
         crate_pickup(w, id);
     }
+    // spec: S-0607 Terms and claim 17 (a seized unit that touches down is set down and no longer dropped or crashing)
+    crate::lift::touched_down(w, id);
     // spec: S-0502 claim 15 and S-0516 claims 13 and 22 (a completed touchdown is a cell-arrival update: the sensor disc transfers to the landing cell and the adjacency-reveal test applies)
     crate::cloak::machine::cell_movement_completed(w, id);
 }
@@ -544,6 +557,11 @@ fn crashing_outcome(w: &mut World, id: ObjectId) {
     }
     // spec: S-0502 claim 18 (the ordinary crash end: the height above the surface below 1 lepton, or a drop that crosses a deck)
     if height_above(w, id) < 1 || j.crossed_deck {
+        if crate::lift::dropped(w, id) {
+            // spec: S-0502 claim 18 and S-0607 claims 15 to 17 (a dropped seized unit's fall ends: what lies underneath, then water, beach, clear or blocked, in the same update)
+            crate::lift::fall_ended(w, id);
+            return;
+        }
         release_slot(w, id);
         upd(w, id, |j| {
             j.vm = F64::ZERO;
@@ -559,7 +577,7 @@ fn crashing_outcome(w: &mut World, id: ObjectId) {
 /// still lives is destroyed by damage equal to its health, with the
 /// demolition warhead, ignoring defences, with the no-escape marker and no
 /// attacker.
-fn impact(w: &mut World, id: ObjectId) {
+pub fn impact(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0312 claim 16 (the impact is on the ground: the unit is at the surface under it, which also ends the crash for a unit that a deck crossing stopped above the terrain)
     let surface = w.surface_at(o.pos.x, o.pos.y);
@@ -641,6 +659,10 @@ pub fn start_crash(w: &mut World, id: ObjectId, hit: Option<&Hit>) -> bool {
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
     if !is_jumpjet(w, id) {
         return false;
+    }
+    if seized(w, id) {
+        // spec: S-0607 claims 7 and 9 (a seized unit's destination is its lifter or nothing)
+        crate::lift::steer(w, id);
     }
     // An order-level destination changed without the assignment hook (a rule that writes the field) is a new order.
     let dest = w.obj(id).and_then(|o| o.dest);

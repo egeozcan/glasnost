@@ -133,7 +133,7 @@ fn qualifies(w: &World, id: ObjectId, new: Option<Target>) -> bool {
         return false;
     }
     // spec: S-0207 claim 27 (no warp-pending immobilization, read whatever the current locomotor; no magnetic-lift source and not seized)
-    if immobilized(w, id) || crate::jump::seized(w, id) {
+    if immobilized(w, id) || crate::lift::seized(w, id) {
         return false;
     }
     // spec: S-0207 claim 27 (its current contact is a building permitting dock unloading)

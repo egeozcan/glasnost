@@ -198,6 +198,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none() {
         return;
     }
+    // spec: S-0607 claim 12 (row 2: a mobile lifter that accepted another non-empty destination by any rule this turn lets go)
+    crate::lift::lifter_destination(w, id);
+    // spec: S-0607 claim 21 and F4 (the wave's per-tick update; Q-1327: in its firer's own turn, after the behaviour processing)
+    crate::lift::wave_turn(w, id);
     if kind == Kind::Building {
         // spec: S-0609 claims 9 and 14 (a gattling building's animation advance and its passive spin-down follow the tick's behaviour processing)
         crate::gattling::building_turn(w, id);
@@ -260,6 +264,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         _ if crate::transport::riding(w, id).is_some() => false,
         // spec: S-0504 claim 5 (a sinking vessel makes no progress by its locomotor, turning and speed-fraction updates included)
         _ if sinking => false,
+        // spec: S-0607 claims 5 and 7 (a seized unit moves with its temporary jumpjet locomotor, whatever its own)
+        _ if crate::lift::seized(w, id) => crate::jump::tick(w, id),
         Some(Locomotor::Drive) if held => false,
         Some(Locomotor::Drive) => {
             let moved = drive::tick(w, id);

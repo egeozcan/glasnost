@@ -1415,6 +1415,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
             p.inviso,
             area,
             pr.target,
+            None,
         );
         let _ = res;
         if let Some(aw) = p.airburst_weapon {
@@ -1440,6 +1441,7 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
             p.inviso,
             area,
             pr.target,
+            None,
         );
         // spec: S-0306 claim 21 (after every detonation: R(256, 512), then one raw value for the nearby point)
         let lambda = w.rng.ranged(256, 512, half);
@@ -1522,7 +1524,7 @@ pub fn projectile_detonation(
     invisible: bool,
 ) -> DetonationResult {
     detonation_inner(
-        w, weapon, damage, point, attacker, house, q, invisible, true, None,
+        w, weapon, damage, point, attacker, house, q, invisible, true, None, None,
     )
 }
 
@@ -1542,6 +1544,7 @@ fn detonation_inner(
     invisible: bool,
     area: bool,
     target: Option<Target>,
+    warhead_as: Option<WarheadId>,
 ) -> DetonationResult {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
@@ -1551,13 +1554,18 @@ fn detonation_inner(
     } else {
         (attacker, house)
     };
-    let warhead = rules.combat.weapon(weapon).warhead;
+    // spec: S-0607 claim 18 (the impact detonations use the death weapon's projectile with the crushing or demolition warhead)
+    let warhead = warhead_as.or(rules.combat.weapon(weapon).warhead);
     let Some(h) = warhead else {
         // spec: S-0303 Edge cases (a projectile without a warhead does nothing, a departure)
         return DetonationResult::Missed;
     };
-    // spec: S-0514 claim 20 (one selected special hit: the first enabled row of the table wins, all later rows and ordinary damage are suppressed even when the selected effect cannot succeed; locomotor replacement is selected here and its effect is a seam, the locomotor specs are not built)
-    let special = special_of(w, weapon, target);
+    // spec: S-0514 claim 20 (one selected special hit: the first enabled row of the table wins, all later rows and ordinary damage are suppressed even when the selected effect cannot succeed; locomotor replacement is S-0607's seize)
+    let special = if warhead_as.is_some() {
+        None
+    } else {
+        special_of(w, weapon, target)
+    };
     match special {
         // spec: S-0601 claim 5 (takeover replaces damage and every other special hit; only the projectile's target can change owner)
         Some(Special::Takeover) => crate::mind::detonation(w, attacker, target),
@@ -1570,6 +1578,8 @@ fn detonation_inner(
         Some(Special::Disarm) => crate::bomb::disarm(w, target),
         // spec: S-0514 claims 1 and 21 (the erasing effect replaces ordinary damage; a firer with no beam makes no lock and no side effect)
         Some(Special::Erase) => crate::temporal::deliver(w, attacker, target),
+        // spec: S-0607 claim 1 (a seizing warhead's detonation seizes in place of ordinary damage)
+        Some(Special::Locomotor) => crate::lift::seize_hit(w, attacker, target, damage, h),
         _ => {}
     }
     // spec: S-0514 claim 20 (with no selected row ordinary damage applies; a selected row, built or not, replaces it)
@@ -1642,7 +1652,7 @@ pub enum Special {
     Parasite,
     /// Row 5, temporal erasure (S-0514 claims 1 to 4 and 21).
     Erase,
-    /// Row 6, locomotor replacement (selection only here; the effect is a seam).
+    /// Row 6, locomotor replacement (S-0607 claim 1).
     Locomotor,
     /// Row 7, air-strike designation (S-0519 claim 16).
     Airstrike,
@@ -1808,6 +1818,40 @@ pub fn detonate_weapon(
     // spec: S-0525 claim 1 (a death weapon's detonation leaves radiation at the dying object's position)
     crate::radiation::detonation(w, weapon, at.cell());
     projectile_detonation(w, weapon, damage, at, source, house, q, inviso);
+}
+
+/// A death weapon's projectile detonation with another warhead (S-0607
+/// claim 18): as [`detonate_weapon`], the projectile never placed.
+pub fn detonate_weapon_as(
+    w: &mut World,
+    weapon: WeaponId,
+    warhead: WarheadId,
+    damage: i32,
+    at: Pos,
+    source: Option<ObjectId>,
+    house: Option<HouseId>,
+) {
+    let unplaced = w.rules().quirks.death_weapon_unplaced_projectile;
+    // spec: S-0312 claim 6 (the unplaced projectile's default position, believed the origin; off: the object's position)
+    let q = if unplaced { Pos::default() } else { at };
+    let inviso = w
+        .rules()
+        .combat
+        .projectile_of(weapon)
+        .is_some_and(|p| p.inviso);
+    detonation_inner(
+        w,
+        weapon,
+        damage,
+        at,
+        source,
+        house,
+        q,
+        inviso,
+        true,
+        None,
+        Some(warhead),
+    );
 }
 
 /// A plain area detonation of a warhead (S-0303), with the explosion

@@ -14,7 +14,7 @@
 //! and [`owner_changed`].
 //!
 //! Seams to specs that are not built (each named where it is used):
-//! - S-0607 (seized), S-0214 (paralysed), the special-weapons specs (EMP
+//! - S-0214 (paralysed), the special-weapons specs (EMP
 //!   through `econ::power::under_pulse`, warping through
 //!   `econ::power::being_erased`; chrono warp is S-0514's);
 //! - S-0519 (C4 planting: [`machine::uncloak`] is the call it makes);

@@ -145,6 +145,12 @@ pub enum Effect {
         /// Its bunker.
         bunker: ObjectId,
     },
+    /// A unit was seized by magnetic lift (S-0607 claim 5): it is removed
+    /// from the selection.
+    Seized {
+        /// The seized unit.
+        unit: ObjectId,
+    },
     /// A gattling spin update or a gattling-flagged object leaving the map
     /// (S-0609 claim 13), for the spin sound the audio crate keeps.
     Spin {

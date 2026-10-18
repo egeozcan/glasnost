@@ -1496,8 +1496,8 @@ pub fn restore_locomotor(w: &mut World, id: ObjectId) -> bool {
 pub fn restorable(w: &World, id: ObjectId, assigning: bool) -> bool {
     // spec: S-0207 claim 27 (the suspended predecessor is present: the vehicle drives temporarily)
     temporary_drive(w, id)
-        // spec: S-0207 claim 27 (not seized; magnetic lift is a seam)
-        && !crate::jump::seized(w, id)
+        // spec: S-0207 claim 27 and S-0607 claim 20 (not seized)
+        && !crate::lift::seized(w, id)
         // spec: S-0207 Terms, Restoration lock (it starts absent on a new driving locomotor and nothing in the engine sets it, so it never holds)
         // spec: S-0417 claim 5 and S-0207 claim 27 (no driving movement report: no locomotor destination point and no heading point horizontally different from the actual position)
         && !crate::drive::movement_report(w, id, assigning)

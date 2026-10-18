@@ -376,6 +376,10 @@ impl Play {
                 // spec: S-0606 claim 7 (the bunkered vehicle is removed from the selection; the client has no control groups yet)
                 self.selection.retain(|&x| x != vehicle);
             }
+            if let Effect::Seized { unit } = *e {
+                // spec: S-0607 claim 5 (the seized unit is deselected)
+                self.selection.retain(|&x| x != unit);
+            }
         }
         self.captured_yard_cancels_placement();
         self.selection

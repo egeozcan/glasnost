@@ -9,7 +9,7 @@
 //!
 //! Seams, each answering "no" or "nothing" until its topic fills it in: the
 //! approach destinations of a vehicle (no rule fills them yet, S-0215 Open
-//! questions), the magnetic beam of part c, draining links, bunkers,
+//! questions), draining links, bunkers,
 //! open-topped passengers and teams.
 //! Every object on the map has the in-the-playfield mark (no object arrives
 //! from outside the usable area yet).
@@ -247,8 +247,12 @@ pub fn step(w: &mut World, id: ObjectId) {
     if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) {
         return;
     }
-    // spec: S-0215 claim 37 (c) (no target: nothing; the magnetic beam is a seam)
+    // spec: S-0215 claim 37 (c) (no target: nothing)
     let Some(t) = o.target else { return };
+    // spec: S-0215 claim 37 (c) (the target is the object that holds the actor with a magnetic beam: nothing)
+    if crate::lift::lifter_of(w, id).is_some_and(|l| t == Target::Object(l)) {
+        return;
+    }
     // spec: S-0215 claim 37 (h) and S-0210 claim 11 (before the other parts: a crushing approach takes the target object itself as destination, and nothing else of the step happens)
     if crushing_approach(w, id) {
         if let Some(ob) = w.obj_mut(id) {

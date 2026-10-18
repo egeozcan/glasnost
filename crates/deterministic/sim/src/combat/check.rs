@@ -301,6 +301,13 @@ pub fn check(
         return a;
     }
     let wr = r.combat.weapon(weapon);
+    // spec: S-0301 claim 9 rank 4 (the firer already holds this very target with a magnetic-beam weapon: early rearming; Q-1328: placed before the target tests, so a lifted target in the air keeps its lifter's attack)
+    if wr.mag_beam
+        && let Some(Target::Object(x)) = target
+        && crate::lift::grips(w, firer, x)
+    {
+        return Answer::Rearming;
+    }
     if let Some(t) = target
         && projectile_illegal(w, weapon, t)
     {
@@ -378,6 +385,10 @@ pub fn check(
         && crate::econ::inplace::beam_refused(w, x)
     {
         return Answer::Illegal;
+    }
+    // spec: S-0301 claim 9 rank 4 and S-0607 claims 10 and 11 (a seized firer: illegal; a magnetic-beam firer gripping a unit with a live wave against a target that is neither that unit nor a building: rearming; precedence among rank-4 answers unspecified, placed last)
+    if let Some(a) = crate::lift::firing_answer(w, firer, wr.mag_beam, target) {
+        return a;
     }
     let t = w.tick;
     let c = &o.combat;

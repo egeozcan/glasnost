@@ -129,6 +129,8 @@ pub fn sinking_turn(w: &mut World, id: ObjectId) -> bool {
     let terrain = w.surface_at(pos.x, pos.y);
     let h = pos.z - terrain;
     if h < SINKING_REMOVAL_HEIGHT {
+        // spec: S-0607 claim 17 (a unit set sinking by a magnetic-lift drop: its own coming death is credited to the dropper, else the dropper house)
+        crate::lift::sunk(w, id);
         // spec: S-0504 claim 4 (below −400 leptons, strictly: it leaves play at once, no draws; S-0312 claim 15) and claim 5 (no further destruction credit)
         crate::combat::death::leave_play(w, id);
         return true;

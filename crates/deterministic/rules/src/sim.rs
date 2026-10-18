@@ -935,6 +935,13 @@ pub struct General {
     /// `[CombatDamage] C4Delay`, minutes, a single (S-0519 Import mapping).
     #[serde(default)]
     pub c4_delay: Option<Decimal>,
+    /// `[CombatDamage] FallingDamageMultiplier`, a single (S-0607 F2;
+    /// absent: 1.0).
+    #[serde(default)]
+    pub falling_damage_multiplier: Option<Decimal>,
+    /// `[CombatDamage] CurrentStrengthDamage` (S-0607 F2; absent: yes).
+    #[serde(default)]
+    pub current_strength_damage: Option<bool>,
     /// `[General] PrismType`, the building type that supports and is
     /// supported (S-0518 Import mapping).
     #[serde(default)]
@@ -2922,6 +2929,11 @@ pub struct WarheadType {
     /// `IsLocomotor` (S-0308 row 7).
     #[serde(default)]
     pub is_locomotor: Option<bool>,
+    /// `Locomotor`, the locomotor a seizing warhead installs (S-0607
+    /// Import mapping): the name of S-0207 table T3's class identifier
+    /// (absent: the teleporting locomotor).
+    #[serde(default)]
+    pub locomotor: Option<String>,
     /// `MindControl`, the takeover selection of S-0514 claim 20 (absent: no).
     #[serde(default)]
     pub mind_control: Option<bool>,
