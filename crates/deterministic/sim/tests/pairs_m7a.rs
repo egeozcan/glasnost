@@ -876,7 +876,7 @@ fn lift_up(w: &mut World, l: ObjectId, v: ObjectId) {
 }
 
 // Pair: a lifter and a mind-controlled vehicle.
-// spec: S-0607 claims 3, 5, 8 and 18 (a controlled vehicle is not immune; arrival drops it on its lifter and the impact removes it)
+// spec: S-0607 claims 3, 5, 12, 13 and 18 (a controlled vehicle is not immune; dropped over a vehicle when its lifter takes an order, its impact removes it)
 // spec: S-0601 claim 12 (a victim leaving the game leaves its controller's list silently; the slot takes a new victim)
 #[test]
 fn a_lifted_controlled_vehicle_dies_and_frees_its_controllers_slot() {
@@ -894,9 +894,25 @@ fn a_lifted_controlled_vehicle_dies_and_frees_its_controllers_slot() {
         "still controlled while gripped"
     );
     round_trip(&w);
+    // The clone's own house: a blocker it will not take over.
+    let blocker = put(&mut w, Kind::Vehicle, "TGT", ALPHA, 2, 0);
+    let under = w.obj(blocker).unwrap().pos.cell();
+    assert!(
+        run_until(&mut w, 600, |w| w
+            .obj(v)
+            .is_some_and(|o| o.pos.cell() == under)
+            && w.height_above_surface(v) > 300),
+        "carried over the blocker"
+    );
+    let away = w.obj(l).unwrap().pos.cell();
+    glasnost_sim::econ::assign_destination(
+        &mut w,
+        l,
+        Some(Target::Cell(glasnost_map::CellXY::new(away.x, away.y + 2))),
+    );
     assert!(
         run_until(&mut w, 900, |w| w.obj(v).is_none()),
-        "dropped on its lifter"
+        "dropped onto the blocker"
     );
     assert!(mind::controller(&w, clone).is_none_or(|r| r.victims.is_empty()));
     let next = put(&mut w, Kind::Infantry, "GRUNT", BETA, 6, 7);
@@ -981,12 +997,14 @@ fn a_seized_vehicle_ignores_its_owners_recycle_click() {
     let l = put(&mut w, Kind::Vehicle, "MAGL", BETA, 6, 8);
     testkit::run(&mut w, 5);
     lift_up(&mut w, l, v);
+    let bound = w.obj(v).unwrap().dest;
+    assert!(matches!(bound, Some(Target::Cell(_))), "{bound:?}");
     click(&mut w, ALPHA, &[v], grnd);
     testkit::run(&mut w, 2);
     assert_eq!(
         w.obj(v).unwrap().dest,
-        Some(Target::Object(l)),
-        "still bound for its lifter"
+        bound,
+        "still bound for the cell of the movement point fixed at the seize"
     );
     round_trip(&w);
     let credits0 = credits(&w, ALPHA);

@@ -54,7 +54,7 @@ fn driving(w: &World, id: ObjectId) -> bool {
     if o.kind != Kind::Vehicle {
         return false;
     }
-    // spec: S-0607 claim 5 (a seized unit moves by its linked jumpjet locomotor, not its own driving one, until claim 20 gives it back; Q-1331)
+    // spec: S-0607 claim 5 (a seized unit moves by its linked jumpjet locomotor, not its own driving one, until claim 20 gives it back; claim 20: readiness while seized is the jumpjet's moving now)
     if crate::lift::seized(w, id) {
         return false;
     }

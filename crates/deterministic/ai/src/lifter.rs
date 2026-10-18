@@ -30,10 +30,9 @@
 //!   another vehicle or a building of a house it is not allied to, it gives
 //!   the lifter a move order to its own cell. That ends the grip and the
 //!   vehicle falls there (claims 12 and 17). A vehicle pulled all the way
-//!   would be dropped onto the lifter itself (claim 8), whose impact hurts
-//!   the lifter as much as the vehicle, so a vehicle within [`LET_GO`]
-//!   leptons of its lifter is let go the same way: it lands by the lifter,
-//!   inside the base's guns;
+//!   is dropped unhurt on a free cell beside the lifter (claim 8), so a
+//!   vehicle within [`LET_GO`] leptons of its lifter is let go the same way
+//!   before that: it lands by the lifter, inside the base's guns;
 //! - **leaves a holding lifter alone.** No other part of the brain gives a
 //!   lifter an order while it grips a unit, because any accepted
 //!   destination would let the vehicle go over clear ground

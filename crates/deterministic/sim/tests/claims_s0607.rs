@@ -13,7 +13,18 @@ use glasnost_sim::world::Pos;
 use glasnost_sim::world::Target;
 use lift_common::*;
 
-// spec: S-0607 claims 1 and 5: a seizing hit does no damage; the target stops, is seized with its destination the lifter, starts guard and is deselected
+/// The cell of the movement point fixed at the seize (S-0607 claim 7).
+fn fixed_cell(
+    w: &glasnost_sim::world::World,
+    v: glasnost_sim::world::ObjectId,
+) -> glasnost_map::CellXY {
+    match w.obj(v).unwrap().dest {
+        Some(Target::Cell(c)) => c,
+        other => panic!("the destination is not a cell: {other:?}"),
+    }
+}
+
+// spec: S-0607 claims 1, 5 and 7: a seizing hit does no damage; the target is seized; its order-level destination is the cell of a movement point fixed at the seize, a free cell next to the lifter's (S-0502 claim 16's search), not the lifter
 #[test]
 fn claim_5_the_seize() {
     let mut w = world(|_| {});
@@ -25,8 +36,39 @@ fn claim_5_the_seize() {
     assert_eq!(lift::lifter_of(&w, v), Some(l));
     assert!(lift::grips(&w, l, v));
     let o = w.obj(v).unwrap();
-    assert_eq!(o.dest, Some(Target::Object(l)));
     assert!(o.jump.is_some(), "the jumpjet locomotor is linked");
+    let c = fixed_cell(&w, v);
+    let lc = at(0, 0);
+    assert_ne!(c, lc, "not the lifter's own cell, which the lifter marks");
+    assert!(
+        (c.x - lc.x).abs() <= 1 && (c.y - lc.y).abs() <= 1,
+        "a cell next to the lifter's"
+    );
+    let p = o.jump.as_ref().unwrap().dest.unwrap();
+    assert_eq!(
+        (p.x, p.y),
+        (c.x * 256 + 128, c.y * 256 + 128),
+        "the movement point is that cell's centre"
+    );
+}
+
+// spec: S-0607 claim 7: the movement point is not refreshed while the grip lasts: when the lifter moves, the gripped unit keeps flying to the point fixed at the seize
+#[test]
+fn claim_7_point_fixed_at_the_seize() {
+    let (mut w, l, v) = seized_world(|_| {}, "VICT");
+    let c = fixed_cell(&w, v);
+    let p = w.obj(v).unwrap().jump.as_ref().unwrap().dest;
+    // The lifter is moved away without an order (an order would end the grip, claim 12).
+    let far = at(0, 8);
+    w.obj_mut(l).unwrap().pos = Pos::centre(far, 0);
+    run(&mut w, 30);
+    assert!(lift::grips(&w, l, v));
+    assert_eq!(fixed_cell(&w, v), c, "the order-level destination stays");
+    assert_eq!(
+        w.obj(v).unwrap().jump.as_ref().unwrap().dest,
+        p,
+        "the movement point stays"
+    );
 }
 
 /// Destructions credited to house `h` (S-0302 claim 14), by object or by
@@ -130,34 +172,39 @@ fn f1_size_below_damage_seizes() {
     assert!(lift::seized(&w, v));
 }
 
-// spec: S-0607 claims 7, 8, 16 and 18: the pull keeps the body facing; arrival drops the unit over its lifter, whose cell is blocked by the lifter; the impact hurts the lifter and removes the unit, credited to the lifter's house
+// spec: S-0607 claims 7, 8, 15 and 17: the pull keeps the body facing; arrival drops the unit over its movement point, a free cell beside its lifter, which claim 17 finds clear: the unit descends, is set down unhurt and gets its own locomotor back
 #[test]
-fn claim_8_arrival_drop_on_the_lifter() {
+fn claim_8_arrival_drops_beside_the_lifter() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
+    let c = fixed_cell(&w, v);
     let facing = w.obj(v).unwrap().body.value(w.tick);
     let mut max_h = 0;
-    let gone = run_until(&mut w, 600, |w| {
-        if let Some(o) = w.obj(v) {
-            assert_eq!(
-                o.body.value(w.tick),
-                facing,
-                "claim 7: the body facing is kept"
-            );
-        }
+    let let_go = run_until(&mut w, 600, |w| {
+        let o = w.obj(v).unwrap();
+        assert_eq!(
+            o.body.value(w.tick),
+            facing,
+            "claim 7: the body facing is kept"
+        );
         max_h = max_h.max(height(w, v));
-        w.obj(v).is_none()
+        !lift::grips(w, l, v)
     });
-    assert!(gone, "the dropped unit leaves play");
+    assert!(let_go, "arrival ends the grip");
     assert!(max_h > 300, "it was lifted");
     assert!(
-        health(&w, l) < 1000,
-        "claim 18: the lifter underneath is hurt"
+        run_until(&mut w, 400, |w| !lift::dropped(w, v)
+            && w.height_above_surface(v) == 0),
+        "it comes down"
     );
     assert_eq!(
-        kills(&w, 0),
-        2,
-        "claim 18: credited to the dropper's house, twice (quirks.lift_impact_double_credit)"
+        w.obj(v).unwrap().pos.cell(),
+        c,
+        "on the cell of its movement point"
     );
+    assert!(restored(&mut w, v), "set down and restored");
+    assert_eq!(health(&w, v), 100, "unhurt");
+    assert_eq!(health(&w, l), 1000, "the lifter is not hurt");
+    assert_eq!(kills(&w, 0), 0, "no destruction");
 }
 
 // spec: S-0607 claim 10: a seized unit gets illegal for every weapon and target
@@ -232,7 +279,7 @@ fn claim_13_set_down_at_height_zero() {
     assert_eq!(health(&w, v), 100);
 }
 
-// spec: S-0607 claim 5 and S-0215 claim 11 (revision 67) and Q-1331: a seized vehicle's movement is its jumpjet locomotor, so a set-down seized vehicle standing still in move is ready while its body turns
+// spec: S-0607 claim 5 and S-0215 claim 11 (revision 67) and S-0607 claim 20 (readiness while seized is the jumpjet's moving now): a seized vehicle's movement is its jumpjet locomotor, so a set-down seized vehicle standing still in move is ready while its body turns
 #[test]
 fn claim_5_seized_turning_vehicle_is_ready() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
@@ -264,8 +311,11 @@ fn claim_5_seized_turning_vehicle_is_ready() {
 #[test]
 fn claim_9_destinations_ignored() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
+    let c = fixed_cell(&w, v);
     glasnost_sim::econ::assign_destination(&mut w, v, Some(Target::Cell(at(10, 10))));
-    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(l)));
+    run(&mut w, 1);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Cell(c)));
+    assert!(lift::grips(&w, l, v));
 }
 
 // spec: S-0607 claim 9: no destination ends the grip without a drop: the unit is set down where it is, then descends and lands unhurt
@@ -362,6 +412,38 @@ fn quirk_lift_impact_removes_survivor_both_positions() {
     assert!(w.obj(v).is_some(), "off: stays in play");
     assert_eq!(health(&w, v), 100);
     assert!(restored(&mut w, v), "off: restored");
+}
+
+// spec: S-0607 claim 20: restoration only at rest: a set-down unit in guard stays seized; the first move order after touchdown is refused and restores the unit; a second one moves it
+#[test]
+fn claim_20_first_order_restores_second_moves() {
+    let (mut w, l, v) = seized_world(|_| {}, "VICT");
+    pull_over(&mut w, v, 4);
+    glasnost_sim::econ::assign_destination(&mut w, v, None);
+    assert!(
+        run_until(&mut w, 400, |w| w.height_above_surface(v) == 0
+            && !glasnost_sim::jump::moving(w, v)),
+        "touchdown"
+    );
+    // The lifter leaves, so it cannot seize the unit again once restored.
+    glasnost_sim::objects::remove(&mut w, l);
+    run(&mut w, 30);
+    assert!(lift::seized(&w, v), "left alone in guard: still seized");
+    let here = w.obj(v).unwrap().pos.cell();
+    let goal = glasnost_map::CellXY::new(here.x, here.y + 3);
+    assert!(order_move(&mut w, v, goal));
+    assert!(
+        run_until(&mut w, 40, |w| !lift::seized(w, v)),
+        "the first order restores it"
+    );
+    assert_eq!(w.obj(v).unwrap().dest, None, "its destination was refused");
+    run(&mut w, 30);
+    assert_eq!(w.obj(v).unwrap().pos.cell(), here, "it did not move");
+    assert!(order_move(&mut w, v, goal));
+    assert!(
+        run_until(&mut w, 300, |w| w.obj(v).unwrap().pos.cell() == goal),
+        "the second order moves it"
+    );
 }
 
 // spec: S-0607 claim 13: the stop on dropping clears the dropped unit's destination, route and target, breaks off its contact and deselects it

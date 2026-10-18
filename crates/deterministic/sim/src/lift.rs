@@ -276,7 +276,7 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
         return;
     }
     // spec: S-0607 claim 5 and claim 7 (its jumpjet locomotor is linked, with the jumpjet fields of the unit's own type)
-    crate::jump::link_lift(w, x, lifter);
+    crate::jump::link_lift(w, x);
     // spec: S-0607 claim 5 (the firer's previous grip ends without clearing the firer's target)
     end_grip(w, lifter, false);
     // spec: S-0607 claim 5 (a grip the unit itself held ends, clearing the unit's own target)
@@ -303,9 +303,12 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
             .and_then(|o| o.owner)
             .is_some_and(|h| crate::econ::setup::passive(w, h))
         && !harvester;
+    // spec: S-0607 claims 5 and 7 (the grip is made and the unit is given the lifter as its destination; its jumpjet movement turns this at once into a movement point fixed at the seize, from the lifter's point)
+    let p = lifter_point(w, lifter, x);
+    let cell = crate::jump::lift_point(w, x, p);
     if let Some(o) = w.obj_mut(x) {
-        // spec: S-0607 claim 5 (the grip is made and the unit's destination becomes the lifter)
-        o.dest = Some(Target::Object(lifter));
+        // spec: S-0607 claim 5 (its order-level destination becomes the cell of that point, not the lifter)
+        o.dest = Some(Target::Cell(cell));
     }
     // spec: S-0607 claim 5 (the unit is deselected)
     w.effects
@@ -320,6 +323,40 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
             Behaviour::Guard
         }));
     }
+}
+
+/// The lifter's point at the seize (S-0607 claim 7): a mobile lifter's
+/// heading point (Terms: its next movement point, or its position when it
+/// has none); a building's foundation centre, or its docking point when its
+/// type services docking units.
+fn lifter_point(w: &World, lifter: ObjectId, x: ObjectId) -> Pos {
+    let Some(o) = w.obj(lifter) else {
+        return Pos::default();
+    };
+    if o.kind == Kind::Building {
+        if crate::depot::is_depot(w, lifter) || crate::structures::bunker::is_bunker(w, lifter) {
+            // spec: S-0607 claim 7 (a building of a type that services docking units gives its docking point); Q-1333 interim (the repair depot and the bunker are those types, and the point is the one they would give the seized unit)
+            return crate::depot::docking_point(w, lifter, x);
+        }
+        // spec: S-0607 claim 7 (a building: the centre of its foundation)
+        return w.reference_point(lifter);
+    }
+    // spec: S-0607 Terms and claim 7 (a mobile lifter's heading point: the point its own movement is heading for, its next movement point; its position when it has none)
+    let next = o
+        .drive
+        .as_ref()
+        .and_then(|d| d.track.as_ref())
+        .map(|tr| {
+            Pos::new(
+                tr.target.0,
+                tr.target.1,
+                w.surface_at(tr.target.0, tr.target.1),
+            )
+        })
+        .or_else(|| o.walk.as_ref().and_then(|s| s.target))
+        .or_else(|| o.hover.as_ref().and_then(|h| h.point))
+        .or_else(|| o.jump.as_ref().and_then(|j| j.dest));
+    next.unwrap_or(o.pos)
 }
 
 /// The seized unit's own locomotor stops and gives up its occupancy (S-0607
@@ -590,10 +627,10 @@ pub fn removing(w: &mut World, id: ObjectId) {
 // The lift (claims 7 to 9)
 
 /// The steering of a seized unit before its jumpjet update (S-0607 claims
-/// 7 and 9): a gripped unit's destination is its lifter, refreshed to the
-/// lifter's current position; any other destination is ignored; no
-/// destination ends the grip without a drop. A seized unit that is not
-/// gripped keeps no destination.
+/// 7 and 9): a gripped unit keeps the movement point fixed at the seize
+/// and the cell of that point as its destination; any other destination is
+/// ignored; no destination ends the grip without a drop. A seized unit
+/// that is not gripped keeps no destination.
 pub fn steer(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let dest = o.dest;
@@ -610,16 +647,17 @@ pub fn steer(w: &mut World, id: ObjectId) {
                     set_down_here(w, id);
                     return;
                 }
-                Some(t) if t != Target::Object(l) => {
-                    // spec: S-0607 claim 9 (a seized unit ignores every new destination)
-                    if let Some(ob) = w.obj_mut(id) {
-                        ob.dest = Some(Target::Object(l));
+                Some(t) => {
+                    if let Some(fixed) = crate::jump::lift_order(w, id)
+                        && t != fixed
+                        && let Some(ob) = w.obj_mut(id)
+                    {
+                        // spec: S-0607 claim 9 (a seized unit ignores every new destination)
+                        ob.dest = Some(fixed);
                     }
                 }
-                Some(_) => {}
             }
-            // spec: S-0607 claim 7 (it cruises towards the lifter's current position; Q-1320: the exact position, refreshed each update)
-            crate::jump::pull(w, id, l);
+            // spec: S-0607 claim 7 (the movement point is fixed at the seize and not refreshed while the grip lasts: when the lifter moves, the gripped unit keeps flying to it)
         }
         _ => {
             if dest.is_some() {
