@@ -777,7 +777,7 @@ fn claim_11_rearming_while_gripping() {
     );
 }
 
-// spec: S-0607 claim 11: against its own gripped unit the lifter answers rearming with any weapon, ahead of the tests of the target's layer and height (the gripped unit is airborne)
+// spec: S-0607 claim 11 and S-0301 claim 9 (grip refusals within rank 4, r23): against its own gripped unit the lifter answers rearming with any weapon, ahead of the tests of the target's layer and height (the gripped unit is airborne)
 #[test]
 fn claim_11_gripped_unit_rearming_with_any_weapon() {
     let (mut w, l, v) = seized_world(
@@ -797,7 +797,7 @@ fn claim_11_gripped_unit_rearming_with_any_weapon() {
     }
 }
 
-// spec: S-0607 claim 11: the magnetic beam's rearming answer against a target other than the gripped unit comes after the target's layer and projectile tests, so against an airborne target the beam cannot hit, that refusal wins
+// spec: S-0607 claim 11 and S-0301 claim 9 (grip refusals within rank 4, r23): the magnetic beam's rearming answer against a target other than the gripped unit comes after the target's layer and projectile tests, so against an airborne target the beam cannot hit, that refusal wins
 #[test]
 fn claim_11_beam_answer_after_the_layer_tests() {
     let (mut w, l, _v) = seized_world(|_| {}, "VICT");
