@@ -1541,8 +1541,9 @@ pub fn touched_down(w: &mut World, id: ObjectId) {
 
 /// At a fall-back to rest (S-0215 claim 13 row 1): a seized unit whose
 /// jumpjet movement is not *moving* and that is set down gets its own
-/// locomotor back (S-0607 claim 20). A set-down unit hovering with no
-/// commitment is not restored: it repeats the stop's search instead.
+/// locomotor back (S-0607 claim 20). With the no-cell switch off, a
+/// set-down unit hovering with no commitment is not restored: it repeats
+/// the stop's search instead.
 /// Returns whether it was restored.
 pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
     let Some(l) = st(w, id).cloned() else {
@@ -1563,8 +1564,12 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
         restore(w, id);
         return true;
     }
-    if l.set_down && l.lifter.is_none() && crate::jump::hovering_uncommitted(w, id) {
-        // spec: S-0607 claim 20 (revision 8, the hovering set-down unit, design: restoration is not tested; the unit repeats the stop's search instead) and S-0502 Edge cases (revision 16: while hovering a seized set-down unit is not restored and retries the search at each fall-back to rest). Every seized set-down unit hovering with no commitment takes this rule, not only claim 9's: Q-1344 (interim)
+    if l.set_down
+        && l.lifter.is_none()
+        && !w.rules().quirks.jumpjet_no_cell_self_destruct
+        && crate::jump::hovering_uncommitted(w, id)
+    {
+        // spec: S-0607 claim 20 (revision 8, the hovering set-down unit under claim 9's switch-off rule, design: restoration is not tested; the unit repeats the stop's search instead) and S-0502 Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct off: while hovering a seized set-down unit is not restored and retries the search at each fall-back to rest). With the switch off, every seized set-down unit hovering with no commitment takes this rule, not only claim 9's: Q-1344 (interim)
         crate::jump::lift_retry_stop(w, id);
         return false;
     }

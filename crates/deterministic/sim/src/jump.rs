@@ -1031,8 +1031,8 @@ pub fn lift_release_stop(w: &mut World, id: ObjectId, lifter_ended: bool) {
     stop_with(w, id, false, lifter_ended);
 }
 
-/// Whether a seized set-down unit hovers with no movement commitment: the
-/// switch-off outcome of S-0502 claim 17 with no cell (S-0607 claims 9 and
+/// Whether a jumpjet hovers with no movement commitment; for a seized
+/// set-down unit with the no-cell switch off, the switch-off outcome of S-0502 claim 17 with no cell (S-0607 claims 9 and
 /// 20). Restoration is not tested for it; [`lift_retry_stop`] runs instead.
 pub fn hovering_uncommitted(w: &World, id: ObjectId) -> bool {
     st(w, id).is_some_and(|j| j.phase == Phase::Hovering && !j.moving)
