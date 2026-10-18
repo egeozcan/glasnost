@@ -303,7 +303,7 @@ fn quirk_lift_standin_stays_seized_off() {
     assert!(ever_restored(&mut w, v, 200), "drop_pod: restored");
 }
 
-// spec: S-0209 claim 1 and S-0607 claims 23 and 24 (the stand-in's marks): a unit that moved under the driving stand-in, or jumped under the teleporting one, and is then removed leaves no vehicle-present mark behind; Q-1338 interim (the stand-in starts holding the mark of the unit's cell)
+// spec: S-0209 claim 1 and S-0607 claims 5, 23 and 24 (revision 5, occupancy): the seize gives up the unit's mark and installing the stand-in marks no cell; a driving stand-in marks cells as its track enters them, a teleporting one by its own landing reservation (S-0207 claim 20); a unit that moved under the driving stand-in, or jumped under the teleporting one, and is then removed leaves no vehicle-present mark behind
 #[test]
 fn claim_23_stand_in_marks_are_released() {
     for loco in ["drive", "teleport", "walk"] {
@@ -312,17 +312,48 @@ fn claim_23_stand_in_marks_are_released() {
         let base = vehicle_marks(&w);
         let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 0));
         assert_eq!(vehicle_marks(&w), base + 1);
+        let c = w.obj(v).unwrap().pos.cell();
         beam(&mut w, l, v);
         assert_eq!(
-            vehicle_marks(&w),
-            base + 1,
-            "{loco}: one mark after the seize"
+            w.cells.occ(c, Layer::Ground).map_or(0, |o| o.vehicles),
+            0,
+            "{loco}: its own cell holds no mark after the seize"
         );
-        run(&mut w, 60);
+        let mut marked = vehicle_marks(&w) > base;
+        for _ in 0..60 {
+            run(&mut w, 1);
+            marked |= vehicle_marks(&w) > base;
+        }
+        assert_eq!(
+            marked,
+            loco != "walk",
+            "{loco}: only the stand-in's own movement marks a cell (the driving track, the teleporting landing reservation)"
+        );
         glasnost_sim::objects::remove(&mut w, v);
         run(&mut w, 1);
         assert_eq!(vehicle_marks(&w), base, "{loco}: none left");
     }
+}
+
+// spec: S-0607 claim 23 (revision 5, occupancy): a unit that never moves under its stand-in stands with no occupancy mark, so its cell does not block another vehicle's entry
+#[test]
+fn claim_23_unmoved_stand_in_holds_no_mark() {
+    let (mut w, l, v) = scene(Some("walk"), true, "VICT");
+    run(&mut w, 5);
+    assert!(lift::grips(&w, l, v));
+    let c = w.obj(v).unwrap().pos.cell();
+    assert_eq!(
+        w.cells.occ(c, Layer::Ground).map_or(0, |o| o.vehicles),
+        0,
+        "no vehicle-present mark"
+    );
+    let other = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 2));
+    let reference = glasnost_sim::occupancy::reference_level(&w, other);
+    assert_eq!(
+        glasnost_sim::occupancy::vehicle_outcome(&w, other, c, reference),
+        glasnost_sim::occupancy::Outcome::Clear,
+        "the seized unit does not block entry"
+    );
 }
 
 // spec: S-0215 claim 11 (revision 68): readiness asks the vehicle's current locomotor; while a temporary replacement is installed its report applies: the jumpjet while seized with it, the stand-in otherwise, the own locomotor once a drop-pod stand-in has ended
