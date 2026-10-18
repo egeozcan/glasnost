@@ -263,6 +263,11 @@ fn seek_contact(w: &mut World, u: ObjectId, b: ObjectId) {
     if w.obj(u).is_none_or(|o| o.contact.is_some()) {
         return;
     }
+    if w.obj(u).is_some_and(|o| o.kind == Kind::Vehicle) && vehicle_absorber(w, b) {
+        // spec: S-0605 claim 3 (a vehicle ordered in to a vehicle absorber, or assigned one by claim 16's fate, always starts waiting in line for it, whether or not the building holds contact: no destination and no contact, no remembered entry object, and no contact request; claim 4's approach and retry follow)
+        start_waiting(w, u, b);
+        return;
+    }
     if !contacts(w, b).is_empty() {
         // spec: S-0605 claim 3 (the building already holds any contact, whatever the number of link places: waiting in line, destination cleared, not told to walk yet)
         start_waiting(w, u, b);
@@ -292,13 +297,6 @@ pub fn order_entered(w: &mut World, u: ObjectId, b: Behaviour, dest: Option<Targ
         return;
     };
     if !is_absorber(w, k) || w.obj(u).is_none_or(|o| !o.kind.is_mobile()) {
-        return;
-    }
-    if w.obj(u).is_some_and(|o| o.kind == Kind::Vehicle && o.contact.is_none())
-        && vehicle_absorber(w, k)
-    {
-        // spec: S-0605 claim 3 (a vehicle ordered in to a vehicle absorber always starts waiting in line for it, whether or not the building holds contact: no destination and no contact at the order, no remembered entry object; claim 4's approach and retry follow)
-        start_waiting(w, u, k);
         return;
     }
     seek_contact(w, u, k);
