@@ -131,7 +131,7 @@ pub enum Effect {
         /// The building.
         building: ObjectId,
         /// The slots, 1 to 4.
-        slots: [u8; 2],
+        slots: [u8; 2], // spec: S-0606 claim 12 and table S1 (the walls' slots start and stop in pairs)
         /// Started (else stopped).
         start: bool,
         /// The damaged variant.

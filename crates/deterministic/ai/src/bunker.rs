@@ -195,9 +195,9 @@ fn percent(w: &World, id: ObjectId) -> i32 {
     let s = glasnost_sim::combat::damage::strength(w, id);
     w.obj(id).map_or(0, |o| {
         if s > 0 {
-            o.health.saturating_mul(100) / s
+            o.health.saturating_mul(100) / s // nocite: a percentage for our own tuning
         } else {
-            100
+            100 // nocite: a percentage for our own tuning
         }
     })
 }

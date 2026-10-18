@@ -926,7 +926,7 @@ pub fn enforce(w: &mut World, id: ObjectId) {
 /// (0, 0), included, so the track ends with that point's facing).
 pub fn track_points(t: BunkerTrack) -> Vec<Point> {
     match t {
-        BunkerTrack::Entry(row) => (1..=16)
+        BunkerTrack::Entry(row) => (1..=16) // spec: S-0606 table T1 (n = 1 … 16)
             .map(|n| {
                 // spec: S-0606 table T1 (B: point n = (−128 + 8n, 128 − 8n), facing 32)
                 let (x, y, f) = (-128 + 8 * n, 128 - 8 * n, 32i32);
@@ -951,10 +951,8 @@ pub fn track_points(t: BunkerTrack) -> Vec<Point> {
             const Y: [i32; 17] = [
                 -128, -112, -96, -80, -64, -57, -50, -44, -37, -32, -27, -22, -17, -12, -8, -4, 0,
             ];
-            (0..17)
-                // spec: S-0606 table T2 (facing 128 + 4 (n − 1), from 128 to 192)
-                .map(|i| (X[i], Y[i], (128 + 4 * i) as u8))
-                .collect()
+            // spec: S-0606 table T2 (points 1 to 17; facing 128 + 4 (n − 1), from 128 to 192)
+            (0..17).map(|i| (X[i], Y[i], (128 + 4 * i) as u8)).collect()
         }
     }
 }
