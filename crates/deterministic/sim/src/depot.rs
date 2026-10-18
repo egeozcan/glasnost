@@ -176,6 +176,10 @@ fn alliance_and_place(w: &World, k: ObjectId, id: ObjectId) -> Option<u32> {
 /// queued-entry retry ask it; the repeated entry request of an entering
 /// vehicle does not (claim 17).
 pub fn accepts(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bool {
+    if crate::structures::bunker::is_bunker(w, k) {
+        // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: claim 2's permission rows apply, and S-0314 claim 16's depot rows do not)
+        return is_depot(w, k) && crate::structures::bunker::permits(w, k, id);
+    }
     // spec: S-0314 claim 16 (no contact place free for this vehicle prevents acceptance)
     permits_but_place(w, k, id, standing) && free_place(w, k, id).is_some()
 }
@@ -268,6 +272,10 @@ fn repeated_request(w: &mut World, id: ObjectId, k: ObjectId) -> Reply {
     if !permits_but_place(w, k, id, false) {
         return Reply::Refused;
     }
+    // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: the repeated request is also refused when claim 3's eligibility check refuses it)
+    if crate::structures::bunker::is_bunker(w, k) && !crate::structures::bunker::eligible(w, id) {
+        return Reply::Refused;
+    }
     let Some(place) = free_place(w, k, id) else {
         // spec: S-0314 claim 23 (with no free place for this vehicle the depot answers accept and takes no contact; claim 16's free-place refusal governs the click and the retry, not this repeated request)
         return Reply::NoPlace;
@@ -315,6 +323,10 @@ fn obsolete_unloading(w: &World, k: ObjectId) -> bool {
 /// The docking point depot `k` supplies for vehicle `id` (S-0314 claim 18;
 /// S-0504 claim 12).
 pub fn docking_point(w: &World, k: ObjectId, id: ObjectId) -> Pos {
+    if crate::structures::bunker::is_bunker(w, k) {
+        // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: claim 4's quadrant point, not S-0314 claim 18's)
+        return crate::structures::bunker::docking_point(w, k, id);
+    }
     if obsolete_unloading(w, k) {
         // spec: S-0314 claim 18 and S-0504 claim 12 (the obsolete-unloading flag, not the vehicle-factory flag, selects the centre of the cell (2, 1) from the top-left cell, at the building's height, before pad displacements)
         if let Some(b) = w.obj(k) {
@@ -401,7 +413,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     }
     if !tethered(w, id) {
         if from_memory && o.dest.is_none() {
-            // spec: S-0314 claim 23 (the request that takes a free place: the retry later in the same turn finds the contact held, asks permission and, granted, assigns the depot as destination); Q-1158 interim (this processing gives no destination of its own)
+            // spec: S-0314 claim 23 (the request that takes a free place: the retry later in the same turn finds the contact held, asks permission and, granted, assigns the depot as destination and revision 28, Q-1158 answered: this processing gives no destination of its own)
             return crate::process::standard_delay(w, id);
         }
         let arrived = at_dock(w, k, id);
@@ -413,6 +425,10 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
                 ob.path.retry_at = 0;
             }
         }
+        return crate::process::standard_delay(w, id);
+    }
+    if o.depot.queued == Some(k) {
+        // spec: S-0314 claim 20 (revision 28: the processing of a docked vehicle's enter on its own depot is only claim 17's repeated entry request: the depot accepts the vehicle it already holds, a pad depot sets the tether again; nothing is queued, neither repair at the depot nor sleep at the vehicle, and no destination is given)
         return crate::process::standard_delay(w, id);
     }
     if w.body_facing(id) != ARRIVAL_FACING {
@@ -540,6 +556,17 @@ pub fn movement_arrival(w: &mut World, id: ObjectId) {
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.beh.queue(Some(Behaviour::Sleep));
+    }
+    // spec: S-0314 claim 17 (revision 27: for a tethered vehicle, sleep is queued from arrival before the completed-entry exchange rotates it toward 16384 facing units; an untethered vehicle is not rotated); Q-1162 interim (the rotation begins at this arrival, right after sleep is queued, so S-0215 claim 11's turning clause holds sleep until the rotation ends)
+    if tethered(w, id) && w.body_facing(id) != ARRIVAL_FACING {
+        let t = w.tick;
+        let rate = w
+            .obj(id)
+            .and_then(|o| w.rules().unit(o.kind, o.type_index))
+            .map_or(0, |u| u.turn_rate);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.body.turn_to(ARRIVAL_FACING, t, rate);
+        }
     }
 }
 
@@ -912,9 +939,13 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
         }
     } else {
         // spec: S-0314 claims 20 and 23 (refused: contact, queued entry and destination cleared; it falls back to rest)
+        let standing = standing_on(w, k, id);
         release(w, id);
         crate::econ::assign_destination(w, id, None);
-        crate::process::fall_back(w, id, false);
+        if !standing {
+            crate::process::fall_back(w, id, false);
+        }
+        // spec: S-0314 claim 20 (revision 28: refused for standing on the depot, claim 16, it queues no behaviour, and its enter falls back to rest at its next processing)
     }
 }
 
@@ -959,13 +990,17 @@ pub fn order_applied(
         && l.tethered
     {
         if target_depot == Some(l.depot) {
-            // spec: S-0314 claim 20 (an enter order on the same depot ends the docking: a damaged vehicle takes the queued entry, a full-health one loses its contact at once); Q-1158 interim (no enter queued and no depot remembered here)
+            // spec: S-0314 claim 20 (an enter order on the same depot ends the docking: a full-health vehicle loses its contact at once)
             if full {
                 release(w, id);
-            } else if let Some(ob) = w.obj_mut(id) {
-                ob.depot.queued = Some(l.depot);
+                return OrderEffect::Ends;
             }
-            return OrderEffect::Ends;
+            if let Some(ob) = w.obj_mut(id) {
+                // spec: S-0314 claim 20 (revision 28, Q-1158 answered: a damaged vehicle takes claim 23's queued entry in full although the depot holds its own contact: enter queued without an immediate start, the depot remembered, no destination given; the tether keeps the contact, S-0213 table T3 (b))
+                ob.depot.queued = Some(l.depot);
+                ob.depot.entering = Some(l.depot);
+            }
+            return OrderEffect::NoDestination;
         }
         if !w.rules().quirks.depot_remote_repair && matches!(b, Behaviour::Move | Behaviour::Attack)
         {

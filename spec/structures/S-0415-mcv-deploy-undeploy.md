@@ -2,11 +2,11 @@
 id: S-0415
 title: Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles)
 topic: structures
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0132, Q-0220]
 supersedes: []
@@ -85,6 +85,18 @@ vehicle's movement is heading to (S-0207). In addition:
    harvesting rules (S-0402). Only when none of these conditions applies does a type that deploys
    into a building make a deploy attempt. A deploying type meeting any of these higher-priority
    conditions therefore does not deploy through *unload*. The importer warns about such types.
+   Passenger capacity and the deploy-fire flag keep a vehicle that is not bunkered from deploying.
+   For a bunkered vehicle they do not: one that deploys into a building and has no harvester or
+   weeder flag makes its deploy attempt whatever its passenger capacity or deploy-fire flag.
+   A bunkered vehicle does not unload passengers. Its *unload* first releases it from the bunker
+   (S-0606 claim 12). Then, in the same processing, it goes on only if its type has one of three
+   properties, and only the rule of the first of them that it has applies: a harvester or weeder
+   follows the harvesting rules (S-0402); a type that deploys into a building makes the deploy
+   attempt of claims 2 to 6; a simple-deployer type follows its own unload rule (S-0517). So a
+   bunkered harvester that also deploys into a building harvests and does not deploy. A bunkered
+   vehicle with none of the three properties, a deploy-fire vehicle included, does nothing further,
+   with no draw, and chooses a delay of exactly 450 ticks. The deploy-fire rule above does not apply
+   to a bunkered vehicle.
    - Backing: `measurable` (scenarios D1 and D9; S-0517 scenario P2 for the deploy-fire weapon,
      own-cell target and delay, including P2 R for draw attribution); the bunkered condition is `unmeasured`
      (scenario D9, Not covered; S-0606 claim 11 establishes ordinary band-box exclusion,
@@ -96,7 +108,8 @@ vehicle's movement is heading to (S-0207). In addition:
      the bystander's draws keep the draw log from attributing the draw to it (Measurement scenarios)
    - Confidence: high (attempts at each processing; deploy-fire slot and delay); medium (the
      first-processing timing; deploy-fire draw after refusal); low (the
-     precedence of the other *unload* rules)
+     precedence of the other *unload* rules; the bunkered route, including its 450-tick delay and
+     the rules it continues with)
 
 2. **A deploy attempt.** Before a turn has begun, a moving deploying vehicle makes no attempt: it
    keeps *unload*, unless a queued behaviour other than *unload* is waiting, which then takes over.

@@ -1,9 +1,9 @@
 ---
 id: Q-1159
 title: S-0605 claim 3's still-driving vehicle against S-0215 claim 11's queued-enter exception
-status: open
+status: answered
 related: [S-0605, S-0215]
-answered-by: []
+answered-by: [S-0605]
 ---
 
 ## Need

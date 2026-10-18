@@ -1,9 +1,9 @@
 ---
 id: Q-1305
 title: Destination and delay of a bunker unload release when no nearby cell is found
-status: open
+status: answered
 related: [S-0606, S-0212]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need

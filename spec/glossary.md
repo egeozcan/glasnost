@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 54
+revision: 55
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1831,8 +1831,8 @@ contact, not its passenger or garrison occupant. S-0606 claims 6 and 7 own estab
 link; claims 12 to 14 own its releases.
 
 **bunkered, tank bunker.** A *tank bunker* is a building that a vehicle can drive into for
-protection, and a vehicle with a bunker link is *bunkered*. S-0606 claims 1 to 14 own entering,
-the bunkered state and leaving. S-0301, S-0302, S-0307 and S-0309 give what being bunkered
+protection, and a vehicle with a bunker link is *bunkered*. S-0606 claims 1 to 21 own entering,
+the bunkered state, orders while bunkered and leaving. S-0301, S-0302, S-0307 and S-0309 give what being bunkered
 changes in their topics.
 
 **cell test.** The test that a single cell passes or fails for a building type that is being

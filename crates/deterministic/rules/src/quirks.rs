@@ -1724,10 +1724,14 @@ pub struct Quirks {
     // spec: S-0605 claims 13 and 16 and Edge cases
     #[serde(default = "on")]
     pub enter_nearest_survives_absorption: bool,
-    /// The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left.
-    // spec: S-0606 claim 6 and Edge cases
+    /// The clearing and waiting rows of a tank bunker's entry look only at the single chosen object of each foundation cell (F5), so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every candidate other than the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left.
+    // spec: S-0606 claim 6 and Edge cases (revision 5: renamed from bunker_clear_nearest_only)
     #[serde(default = "on")]
-    pub bunker_clear_nearest_only: bool,
+    pub bunker_clear_chosen_only: bool,
+    /// A tank bunker's clearing and waiting rows choose each foundation cell's object by its distance from a point 896 leptons from the cell's top corner along each map axis, outside the cell, so the object nearest the cell's bottom corner is chosen; off: the distance is measured from the cell's centre (128 leptons per axis), with the same table root and tie rule.
+    // spec: S-0606 claim 6, F5 and Edge cases
+    #[serde(default = "on")]
+    pub bunker_clear_far_point: bool,
     /// A deploy order to an airborne in-place deploying type without the deploy-to-land flag is silently dropped; off: the order is kept until the vehicle is on the ground, and the next processing takes the ground deploy step of claim 4. Not implemented yet (wave 2).
     // spec: S-0517 claim 5 and Edge cases
     #[serde(default = "on")]
@@ -2289,7 +2293,8 @@ impl Default for Quirks {
             absorber_stale_contact_kept: true,
             absorber_removal_keeps_stale_power: true,
             enter_nearest_survives_absorption: true,
-            bunker_clear_nearest_only: true,
+            bunker_clear_chosen_only: true,
+            bunker_clear_far_point: true,
             airborne_deploy_order_dropped: true,
             drain_relink_strands_previous: true,
             drain_position_check_vehicles_only: true,
@@ -3409,7 +3414,8 @@ impl Quirks {
                 "enter_nearest_survives_absorption",
                 self.enter_nearest_survives_absorption,
             ),
-            ("bunker_clear_nearest_only", self.bunker_clear_nearest_only),
+            ("bunker_clear_chosen_only", self.bunker_clear_chosen_only),
+            ("bunker_clear_far_point", self.bunker_clear_far_point),
             (
                 "airborne_deploy_order_dropped",
                 self.airborne_deploy_order_dropped,

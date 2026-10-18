@@ -391,13 +391,9 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             }
             // spec: S-0213 claim 10 and S-0502 claim 28 (deploy makes one destination-clear request, while the target is still present, and no retry after the target is cleared: a balloon-hover vehicle can keep a nonempty destination and end with no target)
             let rejected = crate::jump::clear_rejected(w, actor);
-            // Q-1303 (interim: a bunkered vehicle keeps its contact with its bunker under orders, S-0606 claim 7)
-            let bunkered = crate::structures::bunker::bunkered(w, actor);
             if let Some(ob) = w.obj_mut(actor) {
-                // spec: S-0213 claim 10 (contact broken off, target and destination nothing, unload queued)
-                if !bunkered {
-                    ob.contact = None;
-                }
+                // spec: S-0213 claim 10 (contact broken off, target and destination nothing, unload queued) and S-0606 claim 17 (a bunkered vehicle's contact with its bunker ends too; the bunker link holds)
+                ob.contact = None;
                 // spec: S-0215 claim 12 and S-0506 claim 25 (an order's own-target clear obeys the spawner pending-target rule)
                 crate::spawn::explicit_clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
@@ -600,9 +596,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
             .and_then(|c| w.obj(c))
             .filter(|c| c.kind == Kind::Building)
             .and_then(|c| w.rules().buildings.get(c.type_index as usize))
-            .is_some_and(|b| b.raw.econ.dock_unload.unwrap_or(false))
-        // Q-1303 (interim: a bunkered vehicle keeps its contact with its bunker under orders, S-0606 claim 7)
-        || crate::structures::bunker::bunkered(w, actor);
+            .is_some_and(|b| b.raw.econ.dock_unload.unwrap_or(false));
+    // spec: S-0606 claims 16 and 17 (a vehicle entering a bunker or bunkered in one is not tethered: the order ends its contact; the bunker link holds)
     if b != Behaviour::Attack
         && ob.kind == Kind::Vehicle
         && crate::econ::slaves::is_master(w, actor)

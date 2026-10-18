@@ -1263,3 +1263,18 @@ fn bunker_foundation_warning() {
     assert!(warned(&w, "buildings Bare is a tank bunker with a 1x1 foundation"));
     assert!(!warned(&w, "buildings Shed"));
 }
+
+/// spec: S-0606 claim 20 and Edge cases (the importer warns when a type is both a tank bunker and a repair depot; not for either flag alone)
+#[test]
+fn bunker_depot_warning() {
+    let base = "[BuildingTypes]\n1=Both\n2=Pit\n3=Depot\n\
+                [Both]\nBunker=yes\nUnitRepair=yes\n[Pit]\nBunker=yes\n[Depot]\nUnitRepair=yes\n";
+    let art = "[Both]\nFoundation=2x2\n[Pit]\nFoundation=2x2\n[Depot]\nFoundation=2x2\n";
+    let (_, w) = sim(base, "", art);
+    assert!(warned(
+        &w,
+        "buildings Both is both a tank bunker and a repair depot"
+    ));
+    assert!(!warned(&w, "buildings Pit is both"));
+    assert!(!warned(&w, "buildings Depot is both"));
+}

@@ -61,7 +61,7 @@ pub fn assign_destination(
     let dest = if inplace::blocks_destination(w, id) {
         None
     } else if dest.is_some() && crate::structures::bunker::refuses_destination(w, id) {
-        // Q-1304 (interim: a bunkered vehicle refuses a non-empty destination; S-0207 claim 27 names the refusal)
+        // spec: S-0606 claim 18 (a bunkered vehicle refuses every non-empty destination, whatever its source; S-0207 claim 27 names the refusal)
         return;
     } else {
         dest

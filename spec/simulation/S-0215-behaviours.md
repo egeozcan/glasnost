@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 63
+revision: 64
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2094,6 +2094,14 @@ apply in our engine to the actors of every player house.
     | approaching with contact | destination guidance | S-0314 claim 18 supplies the building destination and per-vehicle docking point for ordinary land depots and naval yards, and the separate obsolete-unloading exception |
     | moving into the supplied docking-point cell | movement-arrival exchange | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start; exact horizontal alignment with the docking point and a pre-existing tether are not required (S-0314 claims 17–18) |
     | completing entry | separate completed-entry confirmation, when supplied | confirmation can establish tether, but an ordinary repair depot without pad or unloading flags does not supply it to an untethered entering vehicle; the vehicle can turn toward 16384 facing units (map east) and reports arrival once no longer moving, already tethered to the contacted building and still in enter (S-0314 claim 17) |
+
+    **Tank bunker.** The movement-arrival test applies also when the contacted building is a
+    tank bunker: it is made when the vehicle's movement brings it into a cell, not by the
+    *enter* processing. The "vehicle queues sleep" of the table above does not apply there: the
+    bunker sets its ready mark and queues *repair* without an immediate start, and the vehicle
+    stays in *enter* and queues nothing (the bunker's rules, including its refusal while selling,
+    are S-0606 claim 5). As at a depot, arrival does not clear the order-level destination (see
+    goal-cell equality below). Its backing and confidence are those of S-0606 claim 5.
 
     Behaviour starts still obey claims 3, 7 and 11: the completion is not a forced start of
     either queued behaviour. The movement-arrival exchange establishes no tether. At an ordinary
@@ -5451,8 +5459,9 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 
 - Claim 11's turning clause (a vehicle whose body is still turning, for any reason, is "moving" for
   readiness) conflicts with approved S-0206 and S-0603, and changes the timing of starts in approved
-  S-0402 and S-0314. S-0215 therefore defines its own readiness test in claim 11, and S-0206 is
-  not changed: its term "locomotor moving the vehicle" and its claims 9 and 16 stay as they are,
+  S-0402 and S-0314. S-0215 therefore defines its own readiness test in claim 11, and S-0206's
+  term "locomotor moving the vehicle" and its claims 9 and 16 stay as they are (S-0206 only
+  points to claim 11 in its Terms),
   because widening that term would stop claim 9's body turn after its first tick. S-0603: its
   readiness claim (line 145) must drop "but not a body that only turns towards a target", and its
   Terms entry (line 75, "a body that only turns does not") must take the readiness test of S-0215

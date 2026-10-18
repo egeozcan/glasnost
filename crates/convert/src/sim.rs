@@ -2407,6 +2407,16 @@ impl Builder<'_> {
                 size[1]
             ));
         }
+        let repair = fold(t.keys.get(&b"UnitRepair"[..]), None, |v, _| {
+            value::boolean(v)
+        });
+        // spec: S-0606 claim 20 and Edge cases (the importer warns when a type has both the bunker flag and the unit-repair flag: the combined outcome is not established)
+        if bunker == Some(true) && repair == Some(true) {
+            self.warn(0, 0, format!(
+                "buildings {} is both a tank bunker and a repair depot: the combined outcome is not established (S-0606 claim 20)",
+                show(&t.name)
+            ));
+        }
     }
 
     /// Whether a foundation value names the 8-cell 3 × 3 word (S-0406

@@ -373,7 +373,7 @@ fn claim_4_docking_point_from_four_sides() {
     }
 }
 
-// spec: S-0606 claim 5 (arrival at the docking cell: the vehicle stops, stays in enter and queues no sleep; the bunker queues repair)
+// spec: S-0606 claim 5 (arrival at the docking cell: the vehicle stops, keeps the bunker as destination, stays in enter and queues no sleep; the bunker queues repair)
 #[test]
 fn claim_5_arrival() {
     let mut w = game();
@@ -385,7 +385,8 @@ fn claim_5_arrival() {
         && w.obj(b).unwrap().beh.current == Some(Behaviour::Repair)));
     assert_eq!(cur(&w, u), Some(Behaviour::Enter));
     assert_ne!(queued(&w, u), Some(Behaviour::Sleep));
-    assert_eq!(w.obj(u).unwrap().dest, None);
+    // spec: S-0606 claim 5 (revision 4: the destination stays the bunker)
+    assert_eq!(w.obj(u).unwrap().dest, Some(Target::Object(b)));
     assert_eq!(w.obj(u).unwrap().contact, Some(b));
 }
 
@@ -506,18 +507,19 @@ fn claim_6_clearing_scatters_a_blocker() {
     assert!(!cells.contains(&w.obj(s).unwrap().pos.cell()), "scattered off the foundation");
 }
 
-// spec: S-0606 Edge cases (quirks.bunker_clear_nearest_only on: the vehicle is the nearest object in its docking cell, a second object there is neither asked to scatter nor waited for; off: it is asked to scatter and waited for)
+// spec: S-0606 Edge cases (quirks.bunker_clear_chosen_only on: the vehicle is the chosen object of its docking cell, a second object there is neither asked to scatter nor waited for; off: it is asked to scatter and waited for)
 #[test]
-fn claim_6_nearest_only_both_positions() {
+fn claim_6_chosen_only_both_positions() {
     for nearest in [true, false] {
-        let r = quirked(|q| q.bunker_clear_nearest_only = nearest);
+        let r = quirked(|q| q.bunker_clear_chosen_only = nearest);
         let mut w = game_on(&r);
         let b = pit(&mut w, "PIT");
         let u = tank(&mut w, 6, 1);
         send(&mut w, u, b);
-        // Arrived at the docking cell, before the clearing row has run.
+        // Arrived at the docking cell (the bunker has queued repair), before
+        // the clearing row has run.
         let dock = bunker::docking_point(&w, b, u);
-        assert!(until(&mut w, 1000, |w| cur(w, b) == Some(Behaviour::Repair)
+        assert!(until(&mut w, 1000, |w| queued(w, b) == Some(Behaviour::Repair)
             && w.obj(u).unwrap().pos == dock));
         assert_eq!(stage(&w, b), Stage::Clearing);
         // The second object stands in the docking cell, off the centre the
@@ -816,4 +818,299 @@ fn tables_t1_t2() {
     assert_eq!(t[0], (128, -128, 128));
     assert_eq!(t[9], (84, -32, 164));
     assert_eq!(t[16], (0, 0, 192));
+}
+
+// ---------------------------------------------------------------------------
+// Revision 4: the chosen object, the release details, orders, removal and
+// the combined depot role.
+
+// spec: S-0606 F5, Constants and Edge cases (quirks.bunker_clear_far_point on: e measured from 896 leptons per axis from the cell's top corner, a cell centre gives 1086 and the bottom corner (255, 255) the smallest, 906; off: from the cell centre, 128)
+#[test]
+fn f5_chosen_distance_both_positions() {
+    for far in [true, false] {
+        let w = game_on(&quirked(|q| q.bunker_clear_far_point = far));
+        let base = Pos::centre(at(0, 0), 0);
+        let (x0, y0) = (base.x - 128, base.y - 128);
+        let centre = bunker::chosen_distance(&w, Pos::new(x0 + 128, y0 + 128, 0));
+        let bottom = bunker::chosen_distance(&w, Pos::new(x0 + 255, y0 + 255, 0));
+        let top = bunker::chosen_distance(&w, Pos::new(x0, y0, 0));
+        let high = bunker::chosen_distance(&w, Pos::new(x0 + 128, y0 + 128, 999));
+        assert_eq!(high, centre, "z plays no part");
+        if far {
+            assert_eq!((centre, bottom), (1086, 906));
+            assert!(top > centre);
+        } else {
+            assert_eq!(centre, 0, "off: from the centre");
+            assert!(
+                bottom > 0 && bottom < top,
+                "off: the bottom corner is nearer than the top"
+            );
+        }
+    }
+}
+
+// spec: S-0606 claim 6 and Edge cases (quirks.bunker_clear_far_point: with the switch on the object nearest the cell's bottom corner is chosen, so an object there hides the entering vehicle at the centre and is asked to scatter; off, the vehicle at the centre is chosen and the object is neither asked nor waited for)
+#[test]
+fn claim_6_far_point_both_positions() {
+    for far in [true, false] {
+        let r = quirked(|q| q.bunker_clear_far_point = far);
+        let mut w = game_on(&r);
+        let b = pit(&mut w, "PIT");
+        let u = tank(&mut w, 6, 1);
+        send(&mut w, u, b);
+        let dock = bunker::docking_point(&w, b, u);
+        assert!(until(&mut w, 1000, |w| queued(w, b)
+            == Some(Behaviour::Repair)
+            && w.obj(u).unwrap().pos == dock));
+        assert_eq!(stage(&w, b), Stage::Clearing);
+        let s = testkit::spawn(&mut w, Kind::Infantry, "STAY", 0, dock.cell(), 0);
+        // Towards the bottom corner of the docking cell.
+        let near = Pos::new(dock.x + 100, dock.y + 100, dock.z);
+        w.obj_mut(s).unwrap().pos = near;
+        assert!(until(&mut w, 100, |w| stage(w, b) == Stage::Waiting));
+        let mut moved = false;
+        for _ in 0..200 {
+            tick::step(&mut w);
+            if !matches!(stage(&w, b), Stage::Waiting | Stage::TurningIn) {
+                break;
+            }
+            moved |= w.obj(s).unwrap().pos != near;
+        }
+        if far {
+            assert!(
+                moved,
+                "on: the object at the corner is chosen and asked to scatter"
+            );
+        } else {
+            assert!(!moved, "off: the vehicle at the centre is chosen");
+            assert_eq!(stage(&w, b), Stage::DrivingIn, "off: not waited for");
+        }
+    }
+}
+
+// spec: S-0606 claim 6 (candidates include buildings listed in the cell's ground layer, the bunker itself excepted: a building is chosen and asked to scatter, so waiting holds)
+#[test]
+fn claim_6_buildings_are_candidates() {
+    let mut w = game();
+    let b = pit(&mut w, "PIT");
+    let u = tank(&mut w, 6, 1);
+    send(&mut w, u, b);
+    let dock = bunker::docking_point(&w, b, u);
+    assert!(until(&mut w, 1000, |w| queued(w, b)
+        == Some(Behaviour::Repair)
+        && w.obj(u).unwrap().pos == dock));
+    // A building listed on a foundation cell other than the docking cell.
+    let other = foundation(at(0, 0))
+        .into_iter()
+        .find(|&c| c != dock.cell())
+        .unwrap();
+    let shed = put(&mut w, Kind::Building, "SHED", 0, 8, 8);
+    w.cells
+        .enter(other, glasnost_sim::world::Layer::Ground, shed, true);
+    assert!(until(&mut w, 100, |w| stage(w, b) == Stage::Waiting));
+    testkit::run(&mut w, 60);
+    assert_eq!(stage(&w, b), Stage::Waiting, "the building is waited for");
+}
+
+/// Sets bunker `b`'s link with vehicle `u` directly (claim 7's state), the
+/// bunker occupied.
+fn link(w: &mut World, b: ObjectId, u: ObjectId) {
+    w.obj_mut(b).unwrap().structure.bunker_occupant = Some(u);
+    w.obj_mut(b).unwrap().structure.bunker_stage = Stage::Occupied;
+    let o = w.obj_mut(u).unwrap();
+    o.structure.bunkered_in = Some(b);
+    o.contact = Some(b);
+}
+
+// spec: S-0606 claim 12 (revision 4: an ordinary type does nothing more and chooses exactly 450 ticks; the nearby cell becomes the destination and move is queued without an immediate start; the bunker ends contact with every vehicle in contact with it)
+#[test]
+fn claim_12_release_delay_and_contacts() {
+    let mut w = game();
+    let b = pit(&mut w, "PIT");
+    let u = fill(&mut w, b, 6, 1);
+    let x = tank(&mut w, 6, 4);
+    w.obj_mut(x).unwrap().contact = Some(b);
+    w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Unload);
+    let d = bunker::process_unload(&mut w, u);
+    assert_eq!(d, 450);
+    let o = w.obj(u).unwrap();
+    assert!(matches!(o.dest, Some(Target::Cell(_))));
+    assert_ne!(o.dest, Some(Target::Cell(CellXY::new(0, 0))));
+    assert_eq!(o.beh.queued, Some(Behaviour::Move));
+    assert_eq!(o.beh.current, Some(Behaviour::Unload), "no immediate start");
+    assert_eq!(o.contact, None);
+    assert_eq!(w.obj(x).unwrap().contact, None, "every contact ends");
+    assert_eq!(queued(&w, b), Some(Behaviour::Guard));
+    round_trip(&w);
+}
+
+// spec: S-0606 claim 12 (revision 4, no cell found: the placeholder map cell (0, 0) as destination, move still queued)
+#[test]
+fn claim_12_no_cell_placeholder() {
+    let mut r = rules();
+    vehicle(&mut r, "BARGE", |t| {
+        t.locomotion_class = Some(LocomotionClass::Float);
+    });
+    // No land type lets the float class through: the search finds no cell.
+    for row in r.sim.land_types.values_mut() {
+        row.float = Some(dec("0"));
+    }
+    let mut w = game_on(&r);
+    let b = pit(&mut w, "PIT");
+    let u = put(&mut w, Kind::Vehicle, "BARGE", 0, 1, 1);
+    link(&mut w, b, u);
+    let d = bunker::process_unload(&mut w, u);
+    assert_eq!(d, 450);
+    let o = w.obj(u).unwrap();
+    assert_eq!(
+        o.dest,
+        Some(Target::Cell(CellXY::new(0, 0))),
+        "no water cell anywhere"
+    );
+    assert_eq!(o.beh.queued, Some(Behaviour::Move));
+}
+
+// spec: S-0606 claim 16 (revision 4: an order to a vehicle still entering, after raising walls started special-1 and special-2, ends its contact; the bunker's next processing returns to clearing, queues guard, stops special-1 and special-2 with no sound and starts no special-3 or special-4; no link is set)
+#[test]
+fn claim_16_order_after_raising_walls() {
+    let mut w = game();
+    let b = pit(&mut w, "PIT");
+    let u = tank(&mut w, 6, 1);
+    send(&mut w, u, b);
+    assert!(until(&mut w, 1500, |w| stage(w, b) == Stage::RaisingWalls));
+    orders::issue(&mut w, ALPHA, Order::Stop { actor: u });
+    tick::step(&mut w);
+    assert_eq!(w.obj(u).unwrap().contact, None, "contact ends");
+    let mut fx: Vec<Effect> = Vec::new();
+    for _ in 0..20 {
+        tick::step(&mut w);
+        fx.extend(w.effects.iter().cloned());
+    }
+    assert_eq!(stage(&w, b), Stage::Clearing);
+    assert!(!inside(&w, u, b));
+    assert!(fx.iter().any(|e| matches!(e,
+        Effect::SpecialAnims { building, slots: [1, 2], start: false, .. } if *building == b)));
+    assert!(
+        !fx.iter()
+            .any(|e| matches!(e, Effect::SpecialAnims { slots: [3, 4], .. }))
+    );
+    assert!(
+        !fx.iter().any(|e| matches!(e, Effect::Sound { .. })),
+        "no sound"
+    );
+}
+
+// spec: S-0606 claim 17 (revision 4: an order to a bunkered vehicle ends its contact with the bunker; the link holds and the bunker stays occupied; a second vehicle can then take contact, and the deploy order's release ends that contact too)
+#[test]
+fn claim_17_orders_end_contact_link_holds() {
+    let mut w = game();
+    let b = pit(&mut w, "PIT");
+    let u = fill(&mut w, b, 6, 1);
+    orders::issue(&mut w, ALPHA, Order::Stop { actor: u });
+    tick::step(&mut w);
+    assert_eq!(w.obj(u).unwrap().contact, None, "contact ends");
+    assert!(inside(&w, u, b), "the link holds");
+    testkit::run(&mut w, 40);
+    assert_eq!(stage(&w, b), Stage::Occupied);
+    assert_eq!(bunker::occupant(&w, b), Some(u));
+    // A second vehicle takes contact.
+    let x = tank(&mut w, -5, 1);
+    send(&mut w, x, b);
+    assert_eq!(w.obj(x).unwrap().contact, Some(b), "contact taken");
+    testkit::run(&mut w, 60);
+    assert!(inside(&w, u, b));
+    assert_eq!(stage(&w, b), Stage::Occupied);
+    // Deploy: the release ends every contact. (The second vehicle is set
+    // to rest first, so that no enter processing of its own asks again.)
+    {
+        let o = w.obj_mut(x).unwrap();
+        o.beh.current = Some(Behaviour::Guard);
+        o.beh.queued = None;
+        o.dest = None;
+    }
+    assert_eq!(w.obj(x).unwrap().contact, Some(b));
+    orders::issue(&mut w, ALPHA, Order::Deploy { actor: u });
+    assert!(until(&mut w, 60, |w| !bunker::bunkered(w, u)));
+    assert_ne!(
+        w.obj(x).unwrap().contact,
+        Some(b),
+        "the second contact ends"
+    );
+    round_trip(&w);
+}
+
+// spec: S-0606 claim 19 (revision 4, our engine: removal of a bunkered vehicle by another route ends the link on both sides silently; the bunker returns to clearing and queues guard; removal of the bunker leaves the vehicle unlinked with no release track, behaviour or destination)
+#[test]
+fn claim_19_other_removal() {
+    let mut w = game();
+    let b = pit(&mut w, "PIT");
+    let u = fill(&mut w, b, 6, 1);
+    w.effects.clear();
+    glasnost_sim::objects::remove(&mut w, u);
+    assert_eq!(bunker::occupant(&w, b), None);
+    assert_eq!(stage(&w, b), Stage::Clearing);
+    assert_eq!(queued(&w, b), Some(Behaviour::Guard));
+    assert_eq!(sounds(&w, Sound::BunkerWallsDown), 0, "silent");
+    round_trip(&w);
+    // The other side: the bunker removed.
+    let mut w = game();
+    let b = pit(&mut w, "PIT");
+    let u = fill(&mut w, b, 6, 1);
+    let (cur0, q0, dest0) = {
+        let o = w.obj(u).unwrap();
+        (o.beh.current, o.beh.queued, o.dest)
+    };
+    glasnost_sim::objects::remove(&mut w, b);
+    let o = w.obj(u).unwrap();
+    assert!(!bunker::bunkered(&w, u));
+    assert_eq!(o.contact, None);
+    assert!(track(&w, u).is_none(), "no release track");
+    assert_eq!((o.beh.current, o.beh.queued, o.dest), (cur0, q0, dest0));
+    round_trip(&w);
+}
+
+// spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: claim 2's permission rows, claim 4's docking point, the depot's movement-arrival exchange, and the depot's delay; the importer warns)
+#[test]
+fn claim_20_combined_roles() {
+    let mut r = rules();
+    building(&mut r, "PITDEPOT", |t| t.unit_repair = Some(true));
+    let mut w = game_on(&r);
+    let b = pit(&mut w, "PITDEPOT");
+    let u = tank(&mut w, 6, 1);
+    let bug = put(&mut w, Kind::Vehicle, "BUGGY", 0, -5, -4);
+    // Permission: claim 2's rows (P8 refuses a vehicle that is not eligible).
+    assert!(glasnost_sim::depot::accepts(&w, b, u, true));
+    assert!(!glasnost_sim::depot::accepts(&w, b, bug, true), "P8");
+    // Docking point: claim 4's quadrant point.
+    assert_eq!(
+        glasnost_sim::depot::docking_point(&w, b, u),
+        bunker::docking_point(&w, b, u)
+    );
+    // Arrival: the depot's exchange, so the vehicle queues sleep.
+    send(&mut w, u, b);
+    let dock = bunker::docking_point(&w, b, u).cell();
+    assert!(until(&mut w, 1000, |w| w.obj(u).unwrap().pos.cell()
+        == dock
+        && w.obj(b).unwrap().beh.queued == Some(Behaviour::Repair)
+        || w.obj(b).unwrap().beh.current == Some(Behaviour::Repair)));
+    assert!(
+        queued(&w, u) == Some(Behaviour::Sleep) || cur(&w, u) == Some(Behaviour::Sleep),
+        "the depot's exchange queues sleep"
+    );
+    round_trip(&w);
+}
+
+// spec: S-0606 claim 12 and S-0415 claim 1 (revision 18: a bunkered deploy-fire type with no other property does nothing more after the release and chooses exactly 450 ticks); Q-1164 interim (S-0415 decides: the deploy-fire rule does not apply to a bunkered vehicle)
+#[test]
+fn claim_12_bunkered_deploy_fire_interim() {
+    let mut r = rules();
+    vehicle(&mut r, "FIRER", |t| t.deploy_fire = Some(true));
+    let mut w = game_on(&r);
+    let b = pit(&mut w, "PIT");
+    let u = put(&mut w, Kind::Vehicle, "FIRER", 0, 1, 1);
+    link(&mut w, b, u);
+    w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Unload);
+    assert_eq!(bunker::process_unload(&mut w, u), 450);
+    assert!(!bunker::bunkered(&w, u));
+    assert_eq!(queued(&w, u), Some(Behaviour::Move));
 }

@@ -1,9 +1,9 @@
 ---
 id: Q-1308
 title: A building type that is both a repair depot and a tank bunker
-status: open
+status: answered
 related: [S-0606, S-0314]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need

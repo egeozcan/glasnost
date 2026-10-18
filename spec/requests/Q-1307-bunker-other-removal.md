@@ -1,9 +1,9 @@
 ---
 id: Q-1307
 title: What happens to the bunker link when either side leaves play by an untraced route
-status: open
+status: answered
 related: [S-0606]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need
