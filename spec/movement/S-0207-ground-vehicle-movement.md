@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 38
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160]
 supersedes: []
 ---
 
@@ -514,10 +514,33 @@ The *order-level destination* is the destination that behaviours and factory rep
     comes to rest with *ρ* = 0. A vehicle at rest starts every move from *ρ* = 0, accelerating if its
     acceleration flag is on (unless an earlier case of claim 10 applies: a vehicle still in the
     crush-slowdown state, for example, starts at min(*ρ*ₜ, 0.2) at once).
+
+    **Cancellation during a pre-step turn (Q-1160 question 2).** An ordinary attack
+    order on an object removes the order-level destination at application (S-0213 claim 21).
+    For a driving vehicle turning in place before its first track, this also removes
+    its locomotor destination immediately (claim 25). There was no heading point during
+    that turn, and the cancellation creates none. The old path steps do not authorize
+    a track without a locomotor destination: the vehicle does not take the cancelled
+    step when its body finishes turning. Cancelling the destination need not erase
+    the old path steps themselves; their presence is not continued movement in
+    S-0206's sense (claim 9).
+
+    The cancellation itself neither stops the body's turn nor gives it a different
+    target facing. With no later aiming or other facing instruction, the body completes
+    its existing turn according to S-0206 claim 1, without displacement. Ordinary
+    firing may instead re-aim the body towards the attack target under S-0310 claim 9,
+    even before the queued *attack* becomes current. A later approach destination is
+    new movement, not completion of the cancelled step (S-0215 claim 37).
+    Behaviour readiness remains S-0215 claim 11's rule: the body turn can keep
+    *attack* queued even though neither movement point remains. Destination clearing
+    must not leave an independent pre-step movement hold waiting for a track to start.
+    This case does not change the completion of an already begun track above.
     - Backing: `measurable` (scenario D11: part a for a move stopped on a track, part b for *ρ* = 0
-      at rest and the next move from 0)
-    - Confidence: medium (the stopping rule was read; which orders lead to it belongs to S-0213
-      and S-0215)
+      at rest and the next move from 0, part c for cancellation during the pre-step turn)
+    - Confidence: medium for stopping on a track; high for the pre-step cancellation,
+      absent heading point, retained body target and absence of a further step without
+      a new destination. Order assignment and subsequent behaviour use S-0213 claim 21
+      and S-0215 claims 11 and 37
 
 12. **Ticks and track boundaries.** What a moving tick can do depends on whether the vehicle is on
     a track when the tick begins. A tick begins without a track when the vehicle starts moving from
@@ -2798,6 +2821,38 @@ cell wide, bounded by cells whose land multiplier for the vehicle's class is 0 (
 - *Falsified if:* in part a it stops at once, or finishes at full speed; in part b *ρ* is not 0 at
   rest, or the second move's first fraction is the fraction the vehicle had on arrival plus the
   factor, or any other value than the factor.
+
+**D11 c: attack during the pre-step turn (claim 11, Q-1160 question 2).**
+- *Setup:* a tiny flat map, stock data, speed index 2, no director or mods. Use a
+  human-owned turret-less armed driving vehicle, an enemy unarmed durable structure
+  within weapon range, and one bystander computer player kept away from the observed
+  lane. Place a free adjacent destination opposite the vehicle's initial body facing,
+  with the target structure farther along that same direction. No approach destinations,
+  tether, external movement hold or other orders are present.
+- *Procedure:* scripted input orders the adjacent move and then ordinary attack on
+  the structure on the first tick of the pre-step turn, before any track starts.
+  Repeat five valid runs. Repeat with the structure in a different in-range direction
+  to expose any later body re-aim. A control run receives no attack order.
+- *Observable:* a read-only recorder captures the order boundary and each tick's end:
+  world position, body facing and target facing, turn start and duration, both
+  destinations, heading point, stored path steps, current and queued behaviour,
+  and behaviour processing. Separate the order's effects from subsequent aiming
+  and any newly assigned approach destination. Void a run only for outside
+  interference or failure to issue attack before track start, not for a contrary result.
+- *Expected:* at the attack boundary both destinations are absent, the heading point
+  remains absent, and neither the body target nor the stored path is erased by the
+  destination cancellation. Despite retained path steps there is no old step after
+  the turn ends. Without a later facing instruction the existing turn completes
+  without displacement. A later aiming instruction can change the body target and
+  therefore the remaining turn; it is not a facing change made by cancellation.
+  The no-attack control completes the turn and starts its step. S-0215 claim 11
+  supplies readiness and same-tick processing expectations, independently of whether
+  an aiming instruction has changed the turn.
+- *Falsified if:* attack leaves either destination, installs a heading point, itself
+  stops or retargets the body turn, or the vehicle takes the cancelled step without
+  a new locomotor destination. Record any path erasure at the order boundary too:
+  it contradicts the proposed retention observation, although absence of movement
+  alone cannot distinguish retained from discarded inert steps.
 
 **D12: country factor, veteran factor and speed power-up (claims 2 and 13).**
 - *Setup:* as D1 (straight, field 20). Run 1: country speed factor for vehicles 0.5. Run 2: a map-placed

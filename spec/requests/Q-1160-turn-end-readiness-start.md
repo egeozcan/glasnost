@@ -3,7 +3,7 @@ id: Q-1160
 title: S-0215 claim 11's turning clause, the start at which a turn's end makes a driving vehicle ready, and a turn in place whose move is taken away
 status: answered
 related: [S-0215, S-0206, S-0207]
-answered-by: [S-0215]
+answered-by: [S-0215, S-0207]
 ---
 
 ## Need
