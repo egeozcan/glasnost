@@ -2,11 +2,11 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0984]
 supersedes: []
@@ -264,6 +264,8 @@ before joint hand-off.
     projectile detonation. The first enabled row wins; all later rows are suppressed even
     when the selected effect cannot succeed, has no suitable target or has lost its firer.
     This is precedence between observable outcomes, not successive attempts to apply them.
+    Selection is projectile-only: a disc laser's detonation selects none of these effects
+    and instead applies ordinary area damage (S-0615 claim 16).
 
     | Priority | Enabled effect | Detail owned elsewhere |
     |---|---|---|
@@ -296,7 +298,7 @@ before joint hand-off.
     Radiation creation and the shared detonation presentation are outside this exclusion:
     radiation can accompany any selected row, and an unsuccessful selected hit still permits
     the shared presentation of claim 1. This does not make the later special rows eligible.
-    - Backing: `measurable` (E13).
+    - Backing: `measurable` (E13; S-0615 claim 16's scenario DL7 for disc lasers).
     - Confidence: high.
 
 21. **Erasing delivery without a beam: safe rule.** In our engine, a firer with no temporal
