@@ -1617,7 +1617,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
             if dd.turning_in_place
                 && let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut())
             {
-                // spec: S-0206 Terms (a vehicle standing still with neither a move destination nor a next point is not being moved, even while its body turns) and S-0215 claim 11 (revision 63, scenario B47: with no route left, readiness waits only for the body's turn to end): a turn in place whose destination was removed is no longer a turn in place; the body keeps turning to its target
+                // spec: S-0207 claim 11 (revision 39, Q-1160 question 2: a destination cancelled during the pre-step turn leaves no heading point and no independent pre-step movement hold; the cancelled step is not taken; the cancellation neither stops the body's turn nor retargets it, so the body completes its existing turn without displacement) and S-0206 Terms (a vehicle standing still with neither a move destination nor a next point is not being moved, even while its body turns)
                 d2.turning_in_place = false;
                 d2.turn = None;
             }

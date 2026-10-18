@@ -173,12 +173,14 @@ fn read(w: &World, id: ObjectId) -> (i32, u16, Option<Behaviour>) {
     (k, o.body.value(k), o.beh.current)
 }
 
-// spec: S-0215 claim 11 (revision 63, scenario B47: a vehicle given a move that needs a half turn, then an attack order on the first tick of the turn, keeps attack queued while its body facing changes; attack is current after the tick on which the facing last changes and queued after every earlier tick)
+// spec: S-0215 claim 11 (revision 67, scenario B47: a vehicle given a move that needs a half turn, then an attack order on a target along the turn's direction on the first tick of the turn, keeps attack queued while its body facing changes; with t the tick on which the facing reaches its target, the turn is over at that tick's first start, so attack becomes current there, its start tick is t and it is processed in tick t with a positive delay) and S-0207 claim 11 (revision 39, scenario D11 c: the cancelled step is not taken, no destination is left)
 #[test]
 fn claim_11_b47_turning_vehicle_keeps_a_queued_attack() {
     let mut w = game();
     let cart = spawn(&mut w, Kind::Vehicle, "CART", 0, 0, 0);
-    let tower = spawn(&mut w, Kind::Building, "TOWER", 1, 3, 0);
+    // The target lies farther along the turn's direction (B47), so aiming at
+    // it does not give the body a different target facing.
+    let tower = spawn(&mut w, Kind::Building, "TOWER", 1, 0, 3);
     // Facing 0 (map north); the free cell to the south needs a half turn.
     orders::issue(
         &mut w,
@@ -224,10 +226,22 @@ fn claim_11_b47_turning_vehicle_keeps_a_queued_attack() {
     assert!(!glasnost_sim::drive::goal_present(&w, cart));
     // After every tick: the facing and the slots.
     let mut log = vec![read(&w, cart)];
+    // For each tick: whether attack was current and processed in it, and
+    // the delay its first processing chose.
+    let mut starts = std::collections::BTreeMap::new();
+    let mut start_delay = None;
     for _ in 0..300 {
         tick::step(&mut w);
+        let k = w.tick - 1;
         let o = w.obj(cart).unwrap();
         assert!(o.dest.is_none() && o.path.steps.is_empty(), "no route left");
+        let processed = o.beh.current == Some(Behaviour::Attack)
+            && o.beh.last.is_some_and(|l| l.0 == k)
+            && !o.beh.expired;
+        if processed && start_delay.is_none() {
+            start_delay = o.beh.last.map(|l| l.1);
+        }
+        starts.insert(k, processed);
         log.push(read(&w, cart));
     }
     // t: the tick on which the body facing last changed.
@@ -245,4 +259,10 @@ fn claim_11_b47_turning_vehicle_keeps_a_queued_attack() {
             assert_eq!(cur, Some(Behaviour::Attack), "tick {k}: attack current");
         }
     }
+    // Same-tick processing (revision 67): started at tick t's first start.
+    let o = w.obj(cart).unwrap();
+    assert_eq!(o.beh.start_tick, t, "attack started in tick t");
+    assert_eq!(starts.get(&t).copied(), Some(true), "processed in tick t");
+    assert!(start_delay.is_some_and(|d| d > 0), "a positive chosen delay");
+    assert_eq!(read(&w, cart).2, Some(Behaviour::Attack));
 }

@@ -15,6 +15,7 @@ use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::occupancy;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::psychic;
+use glasnost_sim::process;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
 use glasnost_sim::transport;
@@ -114,26 +115,29 @@ fn p9_b_vehicle_keeps_hunting_while_moving() {
     assert!(occupancy::in_progress(&w, v));
 }
 
-// spec: S-0215 claim 11 (the late start judges readiness with this update's movement counted: a vehicle that stops in its update is ready at the late start, and the queued behaviour is current at the end of that update without processing)
+// spec: S-0215 claim 11 (revision 67: readiness reads the current movement state at each start, the late start included, not a remembered displacement; a queued behaviour made current at a first start is processed in that tick, claim 3a, and one made current at the late start is first processed on the next update, claim 3b)
 #[test]
-fn claim_11_late_start_after_a_vehicle_stops() {
+fn claim_11_queued_guard_starts_by_the_current_predicate() {
     let mut w = game(&rules());
     let v = moving_under_hunt(&mut w, Kind::Vehicle, "BIG");
     w.obj_mut(v).unwrap().beh.queued = Some(Behaviour::Guard);
+    assert!(!process::ready(&w, v), "setting off: not ready");
     let mut started = None;
     for _ in 0..400 {
-        let was_moving = occupancy::in_progress(&w, v);
+        let ready_at_first = process::ready(&w, v);
         testkit::run(&mut w, 1);
         let o = w.obj(v).unwrap();
         if o.beh.current == Some(Behaviour::Guard) {
-            started = Some((was_moving, occupancy::in_progress(&w, v), o.beh.expired));
+            started = Some((ready_at_first, o.beh.expired));
             break;
         }
+        assert!(!ready_at_first, "a ready vehicle starts at its first start");
         assert_eq!(o.beh.current, Some(Behaviour::Hunt), "not ready while moving");
     }
-    let (was_moving, moving, expired) = started.expect("stopped and started guard");
-    assert!(was_moving && !moving, "the update in which it stopped");
-    assert!(expired, "made current at the late start, not processed");
+    let (ready_at_first, expired) = started.expect("guard starts");
+    // A first start processes the new behaviour in its tick; a late start
+    // leaves the timer expired-now for the next update.
+    assert_eq!(expired, !ready_at_first);
 }
 
 // spec: S-0610 claim 5 (A queued behaviour that never started: a unit never ready after the hit still has hunt queued; expiry replaces it by guard and the unit never hunts)

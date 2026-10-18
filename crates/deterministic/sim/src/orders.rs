@@ -650,6 +650,7 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     }
     if mobile && !retained {
         // A new destination starts a new path search (S-0212 claim 20).
+        // spec: S-0207 claim 11 (revision 39: a cancelled destination need not erase the old path steps, which are inert without a locomotor destination; ours are dropped with it, so no stored path keeps S-0206's in-progress test true)
         let Some(m) = w.obj_mut(actor) else { return };
         m.path.steps.clear();
         m.path.retry_at = 0;
