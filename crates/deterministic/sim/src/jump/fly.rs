@@ -60,6 +60,10 @@ fn physics(w: &mut World, id: ObjectId) {
         return;
     };
     let tick = w.tick;
+    if j.phase == Phase::Crashing && seized(w, id) {
+        // spec: S-0607 claim 15 (while a seized unit is crashing, its jumpjet target height is 0 in every update)
+        j.ht = 0;
+    }
     speed_step(&mut j, &f, mode);
     let mut z = height_step(w, id, &mut j, &f, mode);
     let p = pos(w, id);
@@ -77,7 +81,7 @@ fn physics(w: &mut World, id: ObjectId) {
         let k = rate.map_or(f.crash, |r| r.to_f64());
         z = int(z, mode).sub(k, mode).to_i32_common();
         if let Some(r) = rate {
-            // spec: S-0502 claim 18 (magnetic lift: the crash rate grows by 1 lepton per tick, each tick, each new rate narrowed to single precision; Q-1322: the drop uses the rate before it grows)
+            // spec: S-0502 claim 18 (magnetic lift: the crash rate grows by 1 lepton per tick, each tick, each new rate narrowed to single precision; S-0607 claim 15: the extra drop uses the current rate, and only after that drop does the rate grow by 1.0)
             let grown = r.to_f64().add(int(1, mode), mode).to_f32(mode);
             if let Some(o) = w.obj_mut(id) {
                 o.lift.rate = Some(grown);

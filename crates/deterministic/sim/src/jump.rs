@@ -1259,7 +1259,7 @@ pub fn crossed_deck(w: &World, id: ObjectId) -> bool {
 /// with the heading east (S-0206 claim 14), listed where it stands; a unit
 /// of a jumpjet type keeps its own state. Its own movement state is kept
 /// for restoration.
-pub fn link_lift(w: &mut World, id: ObjectId, lifter: ObjectId) {
+pub fn link_lift(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let (cell, layer) = (o.pos.cell(), o.layer);
     if o.jump.is_none() {
@@ -1279,28 +1279,35 @@ pub fn link_lift(w: &mut World, id: ObjectId, lifter: ObjectId) {
             j.landing_request = false;
         });
     }
-    pull(w, id, lifter);
 }
 
-/// The pull of a gripped unit (S-0607 claim 7): its movement point is its
-/// lifter's current position (Q-1320: exactly, refreshed in each update,
-/// with no nearby-cell adjustment) and it holds a move order.
-pub fn pull(w: &mut World, id: ObjectId, lifter: ObjectId) {
-    let Some(p) = w.obj(lifter).map(|o| o.pos) else {
-        return;
+/// The movement point of a gripped unit, fixed at the seize (S-0607 claim
+/// 7): S-0502 claim 16 applied to the lifter's point `p`. Returns the cell
+/// that becomes the unit's order-level destination.
+pub fn lift_point(w: &mut World, id: ObjectId, p: Pos) -> CellXY {
+    // spec: S-0607 claim 7 (S-0502 claim 16's nearby-cell search around the cell of the lifter's point, with S-0212 table T5's jumpjet movement-point row for a vehicle that is not balloon-hover)
+    let Some(c) = search(w, id, p.cell(), Use::MoveVehicle) else {
+        // spec: S-0607 claim 7 (no cell found: the movement point is the lifter's point itself, with S-0502 claim 16's no-result consequences: the moving flag, flight state, speeds and target height unchanged) and claim 5 (its order-level destination becomes the cell of that point)
+        upd(w, id, |j| {
+            j.dest = Some(p);
+            j.order = Some(Target::Cell(p.cell()));
+        });
+        return p.cell();
     };
-    let h = fields(w, id).map_or(0, |f| f.height);
-    let phase = st(w, id).map_or(Phase::Grounded, |j| j.phase);
+    let z = point_of(w, Target::Cell(c)).z;
+    // spec: S-0607 claim 7 (the centre of the cell found) and claim 5 (the order-level destination becomes the cell of that point, not the lifter)
     upd(w, id, |j| {
-        j.dest = Some(p);
-        j.order = Some(Target::Object(lifter));
+        j.dest = Some(Pos::centre(c, z));
+        j.order = Some(Target::Cell(c));
         j.moving = true;
-        if phase == Phase::Descending {
-            // spec: S-0502 claim 16 (a descending jumpjet given a destination goes back to ascending with target height H)
-            j.phase = Phase::Ascending;
-            j.ht = h;
-        }
     });
+    c
+}
+
+/// The fixed movement point's cell of a gripped unit (S-0607 claim 7), as
+/// [`lift_point`] recorded it.
+pub fn lift_order(w: &World, id: ObjectId) -> Option<Target> {
+    st(w, id).and_then(|j| j.order)
 }
 
 /// A seized unit that is not gripped keeps no order-level destination
@@ -1327,6 +1334,7 @@ pub fn lift_dropped(w: &mut World, id: ObjectId) -> bool {
         return false;
     }
     release_slot(w, id);
+    // spec: S-0607 claim 13 (its jumpjet movement is stopped by S-0502 claim 17's rule: the reservation is released); Q-1332 interim (no nearby-cell search and no self-destruct: claim 15's detour decides where it falls)
     release_reservation(w, id);
     // spec: S-0607 claim 15 (its destination becomes that centre and it keeps flying under S-0502's cruising rules)
     upd(w, id, |j| {
@@ -1338,13 +1346,13 @@ pub fn lift_dropped(w: &mut World, id: ObjectId) -> bool {
 }
 
 /// A dropped unit's fall begins (S-0607 claim 15, S-0502 claim 18):
-/// *crashing* with target height −5 leptons, speeds 0, no move order.
+/// *crashing* with target height 0, speeds 0, no move order.
 pub fn lift_fall(w: &mut World, id: ObjectId) {
     release_reservation(w, id);
-    // spec: S-0502 claim 18 (crashing with target height −5 leptons; a seized unit's speeds are 0)
+    // spec: S-0502 claim 18 (crashing; a seized unit's speeds are 0) and S-0607 claim 15 (while a seized unit is crashing, its jumpjet target height is 0 in every update, not the ordinary crash's −5)
     upd(w, id, |j| {
         j.phase = Phase::Crashing;
-        j.ht = CRASH_TARGET;
+        j.ht = 0;
         j.vc = F64::ZERO;
         j.vm = F64::ZERO;
         j.dest = None;
@@ -1378,7 +1386,7 @@ pub fn lift_onto_deck(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let deck = w.surface_at(o.pos.x, o.pos.y) + BRIDGE_HEIGHT;
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0607 claim 15 (the fall ends when it crosses a bridge deck from at or above to below) and claim 17 (the unit landed on a bridge deck); Q-1329 interim (it is put on the deck)
+        // spec: S-0607 claim 15 (the fall ends when it crosses a bridge deck from at or above to below) and claim 17 (the unit landed on a bridge deck) and Edge cases (a survivor kept in play stands on the deck if its fall ended crossing a deck: it is put on the deck)
         ob.pos.z = deck;
         ob.layer = Layer::Deck;
     }
@@ -1417,7 +1425,7 @@ pub fn lift_settle(w: &mut World, id: ObjectId) {
     if below < 0
         && let Some(ob) = w.obj_mut(id)
     {
-        // spec: S-0607 claim 13 and quirks.lift_impact_removes_survivor; Q-1329 interim (a survivor set down at its impact rests on the surface beneath it, not inside it)
+        // spec: S-0607 claim 13 and Edge cases (quirks.lift_impact_removes_survivor off: a survivor is placed on the surface below its impact point, grounded and set down)
         ob.pos.z -= below;
     }
     release_slot(w, id);

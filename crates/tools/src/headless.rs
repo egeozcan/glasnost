@@ -180,7 +180,8 @@ async fn smoke_async(
                         | Effect::GasHit { .. }
                         | Effect::SpecialAnims { .. }
                         | Effect::Bunkered { .. }
-                        | Effect::Seized { .. } => {}
+                        | Effect::Seized { .. }
+                        | Effect::Dropped { .. } => {}
                     }
                 }
                 fight[3] = fight[3].max(w.projectiles.len());

@@ -181,7 +181,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     if wr.mag_beam
         && let Some(pid) = launched
     {
-        // spec: S-0607 claim 21 and F3 (a magnetic-beam weapon's shot may create a magnetic wave, from the firing point to the impact point; Q-1327: the impact point is the projectile's stored target point)
+        // spec: S-0607 claim 21 and F3 (a magnetic-beam weapon's shot may create a magnetic wave, from the firing point to the impact point; claim 21 Its points: F3 is evaluated once, at creation, from the firing and impact points as computed when the shot is fired, the impact point being the projectile's stored target point)
         let k = w
             .projectiles
             .get(&pid)

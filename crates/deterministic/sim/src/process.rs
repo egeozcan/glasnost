@@ -54,7 +54,7 @@ fn driving(w: &World, id: ObjectId) -> bool {
     if o.kind != Kind::Vehicle {
         return false;
     }
-    // spec: S-0607 claim 5 (a seized unit moves by its linked jumpjet locomotor, not its own driving one, until claim 20 gives it back; Q-1331)
+    // spec: S-0607 claim 5 (a seized unit moves by its linked jumpjet locomotor, not its own driving one, until claim 20 gives it back; claim 20: readiness while seized is the jumpjet's moving now)
     if crate::lift::seized(w, id) {
         return false;
     }
@@ -523,6 +523,8 @@ pub fn head(w: &mut World, id: ObjectId) {
         // spec: S-0606 claim 18 (while the bunker link holds, a destination written by any rule is refused: it is replaced by none)
         crate::structures::bunker::enforce(w, id);
     }
+    // spec: S-0607 claims 9 and 22; Q-1334 interim (a unit seized with a stand-in locomotor has no jumpjet steering: a destination written by any rule is replaced by none here)
+    crate::lift::enforce(w, id);
     if kind == Kind::Building {
         door_update(w, id);
     }

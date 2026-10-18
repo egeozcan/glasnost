@@ -369,7 +369,7 @@ pub fn ruleset() -> Ruleset {
     // size 1 can be seized) has the seizing warhead MAGWH with the jumpjet
     // locomotor. The falls of S-0607 claim 18 detonate SQUASH (crushing)
     // and BLAST (demolition); the fixture has no game-wide death weapon, so
-    // they are plain area detonations (Q-1325).
+    // they are plain area detonations (S-0607 claim 18, the design rule).
     r.sim.warheads.insert(
         "MAGWH".into(),
         WarheadType {

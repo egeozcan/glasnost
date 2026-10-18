@@ -9,22 +9,28 @@
 //! decides when it starts, what destination it has and what happens at the
 //! ends of a lift. Every rule that tests the seized state reads [`seized`].
 //!
-//! Our engine supports the seizing warhead that names the jumpjet locomotor
-//! (the stock case); a warhead naming another locomotor, or none, seizes
-//! nothing (Q-1321). The team-membership removal of claim 5 belongs to the
+//! A seizing warhead that names another locomotor follows claim 22: one that
+//! can stand in temporarily seizes with the unit's own movement state kept
+//! (Q-1334), one that cannot (or an unknown identifier) stops the target
+//! without a seize. The team-membership removal of claim 5 belongs to the
 //! original's team system, which is out of scope.
 
 use glasnost_num::{F32, F64};
 use serde::{Deserialize, Serialize};
 
 use crate::combat::damage::{self, Hit};
+use crate::combat::data::SeizeLocomotor;
 use crate::rules::{Behaviour, Kind};
 use crate::world::{HouseId, HouseRole, Layer, ObjectId, Pos, Target, World};
 
 /// The magnetic wave of a magnetic-beam weapon's shot (S-0607 claim 21,
-/// F4): its target, the two fade accumulators and whether it has ended.
+/// F4): its firer, its target, the two fade accumulators and whether it has
+/// ended. A wave is an entry of the update order of its own
+/// (`World::waves`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Wave {
+    /// The firer whose shot made it.
+    pub firer: ObjectId,
     /// The shot's target (claim 21: the wave ends when its firer's target
     /// is no longer this one).
     pub target: Target,
@@ -62,10 +68,13 @@ pub struct LiftState {
     pub detour: bool,
     /// A falling dropped unit's crash rate, a single (S-0502 claim 18).
     pub rate: Option<F32>,
+    /// The unit was seized with a locomotor other than jumpjet that can
+    /// stand in temporarily (S-0607 claim 22); it keeps its own movement
+    /// state (Q-1334).
+    #[serde(default)]
+    pub stand_in: bool,
     /// A unit set sinking by claim 17: its coming death is credited.
     pub sink_credit: bool,
-    /// A firer's magnetic wave (claim 21).
-    pub wave: Option<Wave>,
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +114,12 @@ pub fn grips(w: &World, lifter: ObjectId, unit: ObjectId) -> bool {
     gripped_unit(w, lifter) == Some(unit)
 }
 
+/// Whether a seized unit was seized with a stand-in locomotor (S-0607
+/// claim 22).
+pub fn stand_in(w: &World, id: ObjectId) -> bool {
+    st(w, id).is_some_and(|l| l.seized && l.stand_in)
+}
+
 /// Whether the unit is *dropped* (S-0607 Terms).
 pub fn dropped(w: &World, id: ObjectId) -> bool {
     st(w, id).is_some_and(|l| l.dropped)
@@ -117,7 +132,16 @@ pub fn rate(w: &World, id: ObjectId) -> Option<F32> {
 
 /// Whether the firer's magnetic wave is alive (S-0607 claim 21).
 pub fn wave_alive(w: &World, id: ObjectId) -> bool {
-    st(w, id).is_some_and(|l| l.wave.is_some())
+    wave_of(w, id).is_some()
+}
+
+/// The live magnetic wave of a firer, by its number in the update order
+/// (S-0607 claim 21).
+pub fn wave_of(w: &World, firer: ObjectId) -> Option<ObjectId> {
+    w.waves
+        .iter()
+        .find(|(_, v)| v.firer == firer)
+        .map(|(&id, _)| id)
 }
 
 // ---------------------------------------------------------------------------
@@ -153,19 +177,47 @@ pub fn seize_hit(
     }
     // spec: S-0607 claim 2 (otherwise, before the target is tested, the firer's current grip ends as claim 13 says, the firer keeping its target, even when the target then turns out immune) and claim 12 (a new seizing detonation: the lifter's target is not cleared)
     end_grip(w, f, false);
-    // spec: S-0607 Terms and Import mapping (the seize installs the locomotor the warhead names; this spec covers the jumpjet locomotor; Q-1321: another or none seizes nothing)
-    if !w.rules().combat.warhead(warhead).locomotor_jumpjet {
-        return;
-    }
     let Some(x) = x else { return };
+    // spec: S-0607 claim 22 (claims 1 to 3 decide the seize the same way whatever locomotor the warhead names)
     if !eligible(w, x, damage) {
         return;
     }
-    // Q-1330 interim (question 1: claim 3's conditions are tested before claim 4's special case)
+    // spec: S-0607 State and ordering (a resource gatherer made immune by claim 3 keeps its temporary locomotor: claim 3's conditions come before claim 4's special case); Q-1336 interim (claim 4's special case comes first whatever locomotor the warhead names)
     if harvester_case(w, x) {
         return;
     }
-    seize(w, f, x);
+    match w.rules().combat.warhead(warhead).seize_locomotor {
+        SeizeLocomotor::Jumpjet => seize(w, f, x, false),
+        // spec: S-0607 claim 22 (a locomotor that can stand in temporarily: the target is seized as in claim 5, with that locomotor in place of its own)
+        SeizeLocomotor::StandIn => seize(w, f, x, true),
+        // spec: S-0607 claim 22 (a locomotor that cannot stand in temporarily, or an unknown identifier: claim 5's other effects, no seize)
+        SeizeLocomotor::NoStandIn => not_seized(w, x),
+    }
+}
+
+/// A hit whose warhead names a locomotor that cannot stand in temporarily
+/// (S-0607 claim 22): the eligible target stops, is put in *guard* and
+/// loses its spawned objects and its parasite, but is not seized: no
+/// locomotor is installed, it keeps moving with its own and can be hit
+/// again.
+fn not_seized(w: &mut World, x: ObjectId) {
+    let t = w.tick;
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    // spec: S-0607 claims 5 and 22 (it stops: its route is cleared and its destination becomes none, its own locomotor stopping by its own rules)
+    if let Some(o) = w.obj_mut(x) {
+        o.path.steps.clear();
+        o.queued_dests.clear();
+    }
+    crate::econ::assign_destination(w, x, None);
+    crate::drive::stop(w, x);
+    if let Some(o) = w.obj_mut(x) {
+        // spec: S-0607 claims 5 and 22 (it is put in guard with no target)
+        crate::spawn::clear_own_target(o);
+        o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        o.beh.force(Behaviour::Guard, t, stale);
+    }
+    // spec: S-0607 claims 5 and 22 (it loses its spawned objects and its parasite)
+    cleanup(w, x);
 }
 
 /// Whether a target can be seized by a hit of `damage` (S-0607 claim 3
@@ -257,11 +309,16 @@ fn non_human_rule(w: &World, h: Option<HouseId>) -> bool {
 }
 
 /// The seize itself (S-0607 claim 5).
-fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
+fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: bool) {
     let t = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    // spec: S-0607 claim 5 (it stops: its route is cleared, it gives up the occupancy mark of its cell and it stands still)
-    suspend_own(w, x);
+    if stand_in {
+        // spec: S-0607 claim 22 (how a unit seized with a stand-in locomotor moves is outside the spec); Q-1334 interim (it keeps its own movement state and marks, stops by its own rules and stays where it stands)
+        crate::drive::stop(w, x);
+    } else {
+        // spec: S-0607 claim 5 (it stops: its route is cleared, it gives up the occupancy mark of its cell and it stands still)
+        suspend_own(w, x);
+    }
     if let Some(o) = w.obj_mut(x) {
         o.path.steps.clear();
         o.queued_dests.clear();
@@ -275,8 +332,10 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
     if w.obj(x).is_none() {
         return;
     }
-    // spec: S-0607 claim 5 and claim 7 (its jumpjet locomotor is linked, with the jumpjet fields of the unit's own type)
-    crate::jump::link_lift(w, x, lifter);
+    if !stand_in {
+        // spec: S-0607 claim 5 and claim 7 (its jumpjet locomotor is linked, with the jumpjet fields of the unit's own type)
+        crate::jump::link_lift(w, x);
+    }
     // spec: S-0607 claim 5 (the firer's previous grip ends without clearing the firer's target)
     end_grip(w, lifter, false);
     // spec: S-0607 claim 5 (a grip the unit itself held ends, clearing the unit's own target)
@@ -295,6 +354,7 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
         l.dropper = None;
         l.dropper_house = None;
         l.rate = None;
+        l.stand_in = stand_in;
     });
     let harvester = resource_gatherer(w, x);
     let hunt = non_human_rule(w, w.obj(x).and_then(|o| o.owner))
@@ -303,9 +363,14 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
             .and_then(|o| o.owner)
             .is_some_and(|h| crate::econ::setup::passive(w, h))
         && !harvester;
-    if let Some(o) = w.obj_mut(x) {
-        // spec: S-0607 claim 5 (the grip is made and the unit's destination becomes the lifter)
-        o.dest = Some(Target::Object(lifter));
+    if !stand_in {
+        // spec: S-0607 claims 5 and 7 (the grip is made and the unit is given the lifter as its destination; its jumpjet movement turns this at once into a movement point fixed at the seize, from the lifter's point)
+        let p = lifter_point(w, lifter, x);
+        let cell = crate::jump::lift_point(w, x, p);
+        if let Some(o) = w.obj_mut(x) {
+            // spec: S-0607 claim 5 (its order-level destination becomes the cell of that point, not the lifter)
+            o.dest = Some(Target::Cell(cell));
+        }
     }
     // spec: S-0607 claim 5 (the unit is deselected)
     w.effects
@@ -320,6 +385,40 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
             Behaviour::Guard
         }));
     }
+}
+
+/// The lifter's point at the seize (S-0607 claim 7): a mobile lifter's
+/// heading point (Terms: its next movement point, or its position when it
+/// has none); a building's foundation centre, or its docking point when its
+/// type services docking units.
+fn lifter_point(w: &World, lifter: ObjectId, x: ObjectId) -> Pos {
+    let Some(o) = w.obj(lifter) else {
+        return Pos::default();
+    };
+    if o.kind == Kind::Building {
+        if crate::depot::is_depot(w, lifter) || crate::structures::bunker::is_bunker(w, lifter) {
+            // spec: S-0607 claim 7 (a building of a type that services docking units gives its docking point); Q-1333 interim (the repair depot and the bunker are those types, and the point is the one they would give the seized unit)
+            return crate::depot::docking_point(w, lifter, x);
+        }
+        // spec: S-0607 claim 7 (a building: the centre of its foundation)
+        return w.reference_point(lifter);
+    }
+    // spec: S-0607 Terms and claim 7 (a mobile lifter's heading point: the point its own movement is heading for, its next movement point; its position when it has none)
+    let next = o
+        .drive
+        .as_ref()
+        .and_then(|d| d.track.as_ref())
+        .map(|tr| {
+            Pos::new(
+                tr.target.0,
+                tr.target.1,
+                w.surface_at(tr.target.0, tr.target.1),
+            )
+        })
+        .or_else(|| o.walk.as_ref().and_then(|s| s.target))
+        .or_else(|| o.hover.as_ref().and_then(|h| h.point))
+        .or_else(|| o.jump.as_ref().and_then(|j| j.dest));
+    next.unwrap_or(o.pos)
 }
 
 /// The seized unit's own locomotor stops and gives up its occupancy (S-0607
@@ -382,6 +481,26 @@ fn break_contact(w: &mut World, x: ObjectId) {
     }
 }
 
+/// The dropped unit breaks off any contact (S-0607 claim 13): a contact
+/// with a building as claim 5 breaks it, any other on both sides.
+fn break_any_contact(w: &mut World, x: ObjectId) {
+    let Some(k) = w.obj(x).and_then(|o| o.contact) else {
+        return;
+    };
+    if w.obj(k).is_some_and(|b| b.kind == Kind::Building) {
+        break_contact(w, x);
+        return;
+    }
+    if let Some(o) = w.obj_mut(x) {
+        o.contact = None;
+    }
+    if let Some(b) = w.obj_mut(k)
+        && b.contact == Some(x)
+    {
+        b.contact = None;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Ending the grip (claims 12 to 14)
 
@@ -426,10 +545,17 @@ fn drop(w: &mut World, x: ObjectId, dropper: Option<ObjectId>, house: Option<Hou
         l.set_down = false;
     });
     if let Some(o) = w.obj_mut(x) {
-        // spec: S-0607 claim 13 (its orders stop: its destination becomes none and its route is cleared)
+        // spec: S-0607 claim 13 (the stop on dropping: its destination becomes none, its route is cleared and its target is cleared)
         o.dest = None;
         o.path.steps.clear();
+        crate::spawn::clear_own_target(o);
+        o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
+    // spec: S-0607 claim 13 (the stop on dropping: it breaks off any contact)
+    break_any_contact(w, x);
+    // spec: S-0607 claim 13 (the stop on dropping: it is deselected)
+    w.effects
+        .push(crate::combat::effects::Effect::Dropped { unit: x });
     // spec: S-0607 claim 15 (to its cell centre first when it is not exactly over it)
     let detour = crate::jump::lift_dropped(w, x);
     upd(w, x, |l| l.detour = detour);
@@ -442,7 +568,7 @@ fn drop(w: &mut World, x: ObjectId, dropper: Option<ObjectId>, house: Option<Hou
 fn start_fall(w: &mut World, x: ObjectId) {
     let mode = w.rules().mode;
     let k = crate::jump::fields(w, x).map_or(F64::ZERO, |f| f.crash);
-    // Q-1322 (interim: the growing crash rate starts at the type's crash rate k, narrowed to single precision)
+    // spec: S-0607 claim 15 (the crash rate starts at the unit's own type's jumpjet crash value, narrowed to single precision, afresh at every seize)
     upd(w, x, |l| {
         l.detour = false;
         l.rate = Some(k.to_f32(mode));
@@ -563,10 +689,10 @@ pub fn removing(w: &mut World, id: ObjectId) {
 // The lift (claims 7 to 9)
 
 /// The steering of a seized unit before its jumpjet update (S-0607 claims
-/// 7 and 9): a gripped unit's destination is its lifter, refreshed to the
-/// lifter's current position; any other destination is ignored; no
-/// destination ends the grip without a drop. A seized unit that is not
-/// gripped keeps no destination.
+/// 7 and 9): a gripped unit keeps the movement point fixed at the seize
+/// and the cell of that point as its destination; any other destination is
+/// ignored; no destination ends the grip without a drop. A seized unit
+/// that is not gripped keeps no destination.
 pub fn steer(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let dest = o.dest;
@@ -581,18 +707,18 @@ pub fn steer(w: &mut World, id: ObjectId) {
                     });
                     upd(w, id, |s| s.lifter = None);
                     set_down_here(w, id);
-                    return;
                 }
-                Some(t) if t != Target::Object(l) => {
-                    // spec: S-0607 claim 9 (a seized unit ignores every new destination)
-                    if let Some(ob) = w.obj_mut(id) {
-                        ob.dest = Some(Target::Object(l));
+                Some(t) => {
+                    if let Some(fixed) = crate::jump::lift_order(w, id)
+                        && t != fixed
+                        && let Some(ob) = w.obj_mut(id)
+                    {
+                        // spec: S-0607 claim 9 (a seized unit ignores every new destination)
+                        ob.dest = Some(fixed);
                     }
                 }
-                Some(_) => {}
             }
-            // spec: S-0607 claim 7 (it cruises towards the lifter's current position; Q-1320: the exact position, refreshed each update)
-            crate::jump::pull(w, id, l);
+            // spec: S-0607 claim 7 (the movement point is fixed at the seize and not refreshed while the grip lasts: when the lifter moves, the gripped unit keeps flying to it)
         }
         _ => {
             if dest.is_some() {
@@ -603,6 +729,20 @@ pub fn steer(w: &mut World, id: ObjectId) {
             }
             crate::jump::forget_order(w, id);
         }
+    }
+}
+
+/// Enforces claim 9 for a unit seized with a stand-in locomotor (S-0607
+/// claim 22, Q-1334 interim): a destination written without the assignment
+/// is replaced by none at the start of its behaviour turn.
+pub fn enforce(w: &mut World, id: ObjectId) {
+    if stand_in(w, id)
+        && let Some(o) = w.obj_mut(id)
+        && o.dest.is_some()
+    {
+        // spec: S-0607 claim 9 (a seized unit ignores every new destination)
+        o.dest = None;
+        o.path.steps.clear();
     }
 }
 
@@ -790,7 +930,7 @@ fn blocked(w: &World, id: ObjectId, on_deck: bool) -> bool {
     let Some(o) = w.obj(id) else { return true };
     let c = o.pos.cell();
     let reference = crate::occupancy::reference_level(w, id);
-    // spec: S-0607 claim 17 (the cell is blocked when the occupancy test that S-0209 owns finds an obstacle for the unit; Q-1323: every outcome but clear is an obstacle)
+    // spec: S-0607 claim 17 (the cell is blocked when the entry outcome that S-0209 claim 5 gives the dropped unit for the cell is anything other than clear: cloaked blocker, moving blocker, closed friendly gate, friendly obstacle, enemy obstacle, stationary friendly and blocked all count; a crushable occupant whose row gives clear does not block)
     let outcome = crate::occupancy::vehicle_outcome(w, id, c, reference);
     if outcome != crate::occupancy::Outcome::Clear {
         return true;
@@ -830,7 +970,7 @@ fn blocked(w: &World, id: ObjectId, on_deck: bool) -> bool {
 /// The unit is set sinking (S-0607 claim 17, blocked water).
 fn sink(w: &mut World, id: ObjectId) {
     crate::jump::lift_sinking(w, id);
-    // spec: S-0607 claim 17 and S-0504 claims 4 and 5 (set sinking; Q-1324: stunned adds nothing beyond sinking)
+    // spec: S-0607 claim 17 and S-0504 claims 4 and 5 (set sinking and stunned; the stun repeats claim 13's stop on dropping, so it adds nothing observable beyond the sinking)
     crate::naval::start_sinking(w, id);
     upd(w, id, |l| {
         l.sink_credit = true;
@@ -931,12 +1071,18 @@ fn impact(w: &mut World, id: ObjectId) {
     // spec: S-0607 claim 18 (the second at the unit's own position with the demolition warhead; both use the pre-impact amount)
     let at = w.obj(id).map_or(o.pos, |x| x.pos);
     detonate(w, death, c4, df, at, source, house);
-    let Some(o2) = w.obj(id) else { return };
-    if damage::dead(o2) {
+    let killed = w.obj(id).is_none_or(damage::dead);
+    if killed {
+        if w.rules().quirks.lift_impact_double_credit {
+            // spec: S-0607 claim 18 and quirks.lift_impact_double_credit (the impact credit is given whether or not the unit is already dead: a unit a detonation killed is credited a second time, in the kill and loss tallies, the score and the experience); switch off: skipped
+            impact_credit(w, id, &o);
+        }
         return;
     }
     if w.rules().quirks.lift_impact_removes_survivor {
-        // spec: S-0607 claim 18 and quirks.lift_impact_removes_survivor (the falling unit leaves play after these effects even if both detonations left it alive)
+        // spec: S-0607 claim 18 (a survivor removed under quirks.lift_impact_removes_survivor is credited once, to the dropper, else the retained dropper house)
+        impact_credit(w, id, &o);
+        // spec: S-0607 claim 18 and quirks.lift_impact_removes_survivor (the falling unit leaves play after these effects even if both detonations left it alive; a surviving transport loses its passengers without attacker credit, S-0507 claim 16)
         crate::combat::death::leave_play(w, id);
     } else {
         // spec: S-0607 Edge cases (switch off: a unit that survives both detonations stays in play, is set down, and is restored by claim 20)
@@ -944,8 +1090,44 @@ fn impact(w: &mut World, id: ObjectId) {
     }
 }
 
+/// The impact credit of claim 18: the destruction of the falling unit is
+/// credited to the dropper, else to the retained dropper house. `before` is
+/// the unit as it was before the detonations; a unit a detonation has
+/// already taken out of play is credited from it.
+fn impact_credit(w: &mut World, id: ObjectId, before: &crate::world::Object) {
+    let l = &before.lift;
+    let dropper = l.dropper.filter(|&d| w.obj(d).is_some());
+    // spec: S-0607 claim 18 (impact destruction is credited to the dropper, else to the retained dropper house)
+    let hit = Hit {
+        amount: 0,
+        warhead: None,
+        distance: 0,
+        attacker: dropper,
+        house: if dropper.is_some() {
+            None
+        } else {
+            l.dropper_house
+        },
+        ignore_defences: true,
+        no_escape: false,
+    };
+    if hit.attacker.is_none() && hit.house.is_none() {
+        return;
+    }
+    if w.obj(id).is_some() {
+        damage::credit(w, id, &hit);
+        return;
+    }
+    // The credit reads only the victim's owner, type and experience; the
+    // snapshot stands in for the removed unit for that read alone.
+    w.objects.insert(id, before.clone());
+    damage::credit(w, id, &hit);
+    w.objects.remove(&id);
+}
+
 /// One impact detonation of claim 18: the death weapon's projectile with the
-/// given warhead. With no death weapon, a plain area detonation (Q-1325).
+/// given warhead. With no death weapon, a plain area detonation (S-0607
+/// claim 18, the design rule).
 fn detonate(
     w: &mut World,
     weapon: Option<crate::combat::data::WeaponId>,
@@ -961,6 +1143,7 @@ fn detonate(
             crate::combat::projectile::detonate_weapon_as(w, wp, h, amount, at, source, house);
         }
         None => {
+            // spec: S-0607 claim 18 (no death weapon, design: each detonation becomes a plain area detonation of its warhead at its point, with the same amount, source and house, and no projectile effects)
             crate::combat::projectile::detonate_area(w, h, amount, at, source, house, true);
         }
     }
@@ -1005,6 +1188,20 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
 /// Gives a seized unit its own locomotor back (S-0607 claim 20).
 fn restore(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
+    if o.lift.stand_in {
+        // spec: S-0607 claim 22 (when a unit seized with a stand-in locomotor is restored is outside the spec); Q-1334 interim (claim 20's rule; its own movement state and marks were kept, so nothing is put back)
+        upd(w, id, |l| {
+            l.seized = false;
+            l.set_down = false;
+            l.dropped = false;
+            l.detour = false;
+            l.dropper = None;
+            l.dropper_house = None;
+            l.rate = None;
+            l.stand_in = false;
+        });
+        return;
+    }
     let jumpjet_type = w
         .rules()
         .unit(o.kind, o.type_index)
@@ -1113,49 +1310,58 @@ pub fn shot(w: &mut World, firer: ObjectId, target: Target, fire_point: Pos, imp
     let dx = impact.x.wrapping_sub(fire_point.x);
     let dy = impact.y.wrapping_sub(fire_point.y);
     let n = dx.wrapping_mul(dx).wrapping_add(dy.wrapping_mul(dy));
-    // Q-1326 (interim: a sum that wraps negative is outside the established domain; it creates no wave)
-    if n < 0 {
-        return;
-    }
     let mode = w.rules().mode;
-    // spec: S-0607 F3 (d = S-0204 claim 5's table square root, without integer truncation)
-    let d = glasnost_num::geom::table_root(n as u64, mode).to_f64();
+    // spec: S-0607 F3 (d = S-0204 claim 5's table square root, without integer truncation; for a sum that wraps negative, r(n) = r(−n): the root's input is made positive first)
+    let d = glasnost_num::geom::table_root(i64::from(n).unsigned_abs(), mode).to_f64();
     // spec: S-0607 F3 and Constants (no wave when d < 240 leptons)
     if d.lt(F64::from_i64(240, mode)) {
         return;
     }
-    upd(w, firer, |l| {
-        l.wave = Some(Wave {
+    let id = w.new_id();
+    w.waves.insert(
+        id,
+        Wave {
+            firer,
             target,
             a: F64::ZERO,
             b: F64::ZERO,
             ended: false,
-        });
-    });
-    // spec: S-0607 F4 (one update at creation as well as the per-tick updates)
-    wave_update(w, firer);
+        },
+    );
+    // spec: S-0607 claim 21 (the wave joins the update order when it is created, appended after every object already in play, S-0203 claims 2 and 3)
+    w.update.enter(id);
+    // spec: S-0607 claim 21 and F4 (one update at creation as well as the per-tick updates)
+    wave_update(w, id);
 }
 
-/// The per-tick update of a firer's wave (S-0607 claim 21, F4), in the
-/// firer's own turn (Q-1327).
+/// A wave's own turn in the update order (S-0607 claim 21, F4): each tick
+/// after the one it was created in, after its firer's turn.
 pub fn wave_turn(w: &mut World, id: ObjectId) {
-    if wave_alive(w, id) {
-        wave_update(w, id);
-    }
+    wave_update(w, id);
+}
+
+/// Whether an object is in play for the wave's end test (S-0607 claim 21):
+/// present and on the map, and not inside a transport, a bunker or a
+/// building.
+fn in_play(w: &World, x: ObjectId) -> bool {
+    w.obj(x).is_some_and(|o| {
+        o.on_map && o.structure.inside.is_none() && crate::transport::riding(w, x).is_none()
+    }) && crate::structures::bunker::bunkered_in(w, x).is_none()
 }
 
 fn wave_update(w: &mut World, id: ObjectId) {
-    let Some(mut v) = st(w, id).and_then(|l| l.wave) else {
+    let Some(mut v) = w.waves.get(&id).copied() else {
         return;
     };
     let mode = w.rules().mode;
     let q = fade_step(mode);
     let one = F64::from_i64(1, mode);
     if !v.ended {
-        let target_gone = matches!(v.target, Target::Object(t) if w.obj(t).is_none());
-        let retargeted = w.obj(id).and_then(|o| o.target) != Some(v.target);
-        // spec: S-0607 claim 21 (the wave ends when its target leaves play or its firer's target is no longer the wave's target; the firer leaving play takes the wave with it)
-        if target_gone || retargeted {
+        let firer_gone = !in_play(w, v.firer);
+        let target_gone = matches!(v.target, Target::Object(t) if !in_play(w, t));
+        let retargeted = w.obj(v.firer).and_then(|o| o.target) != Some(v.target);
+        // spec: S-0607 claim 21 (the wave ends when its firer or its target leaves play, going inside a transport, a bunker or a building included, or when its firer's target, as it stands at the wave's turn, is no longer the wave's target)
+        if firer_gone || target_gone || retargeted {
             v.ended = true;
         }
     }
@@ -1173,10 +1379,13 @@ fn wave_update(w: &mut World, id: ObjectId) {
         if v.b.le(v.a.add(q.mul(half, mode), mode)) {
             v.b = v.b.add(q, mode);
             if v.b.ge(v.a) {
-                upd(w, id, |l| l.wave = None);
+                w.waves.remove(&id);
+                let skip = w.rules().quirks.update_order_removal_skip;
+                // spec: S-0203 claim 10 (a removal from the update order, counting during the turn pass)
+                w.update.leave(id, skip);
                 return;
             }
         }
     }
-    upd(w, id, |l| l.wave = Some(v));
+    w.waves.insert(id, v);
 }

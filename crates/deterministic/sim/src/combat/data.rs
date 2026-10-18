@@ -307,9 +307,9 @@ pub struct WarheadRules {
     pub bomb_disarm: bool,
     /// Locomotor warhead.
     pub is_locomotor: bool,
-    /// The seizing warhead names the jumpjet locomotor (S-0607 Terms and
-    /// Import mapping).
-    pub locomotor_jumpjet: bool,
+    /// What the seize installs: the locomotor the seizing warhead names, by
+    /// its class in S-0607 claim 22.
+    pub seize_locomotor: SeizeLocomotor,
     /// Registered under the nuclear warhead name (S-0306 claim 25).
     pub nuke: bool,
     /// Parasite flag (S-0614 Terms).
@@ -351,6 +351,42 @@ impl WarheadRules {
 
 /// The eighteen veterancy abilities in the order of their import names
 /// (S-0311 Terms).
+/// The class of the locomotor a seizing warhead names (S-0607 claims 5 and
+/// 22).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SeizeLocomotor {
+    /// The jumpjet locomotor: the lift of claims 5 to 21.
+    Jumpjet,
+    /// One that can stand in temporarily (driving, walking, ship,
+    /// teleporting or drop-pod movement): the target is seized with it.
+    #[default]
+    StandIn,
+    /// One that cannot stand in temporarily (hovering, flying, rocket or
+    /// tunnelling movement), or an unknown identifier: claim 5's other
+    /// effects, no seize.
+    NoStandIn,
+}
+
+impl SeizeLocomotor {
+    /// The class of the imported locomotor name (`convert` writes the
+    /// names of S-0207 table T3, and `unknown` for an identifier that table
+    /// does not list).
+    pub fn of(name: Option<&str>) -> Self {
+        match name {
+            // spec: S-0607 claim 5 (the jumpjet locomotor)
+            Some("jumpjet") => Self::Jumpjet,
+            // spec: S-0607 claim 22 and Import mapping (an absent key means the teleporting locomotor, which can stand in)
+            None => Self::StandIn,
+            // spec: S-0607 claim 22 (driving, walking, ship, teleporting or drop-pod movement can stand in temporarily)
+            Some("drive" | "walk" | "ship" | "teleport" | "drop_pod") => Self::StandIn,
+            // spec: S-0607 claim 22 does not class the walking-vehicle locomotor; Q-1335 interim (it stands in, as the walking locomotor does)
+            Some("mech") => Self::StandIn,
+            // spec: S-0607 claim 22 (hovering, flying, rocket or tunnelling movement cannot stand in temporarily; an unknown identifier, design: treated as one that cannot)
+            Some(_) => Self::NoStandIn,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum Ability {
@@ -1164,8 +1200,7 @@ pub fn tables(
                 ivan_bomb: b(h.ivan_bomb),
                 bomb_disarm: b(h.bomb_disarm),
                 is_locomotor: b(h.is_locomotor),
-                // spec: S-0607 Import mapping (Locomotor absent: the teleporting locomotor, outside S-0607's jumpjet scope)
-                locomotor_jumpjet: h.locomotor.as_deref() == Some("jumpjet"),
+                seize_locomotor: SeizeLocomotor::of(h.locomotor.as_deref()),
                 // spec: S-0306 claim 25 and Import mapping (the nuclear warhead name, compared without regard to case)
                 nuke: n.eq_ignore_ascii_case("NUKE"),
                 // spec: S-0614 Import mapping (Parasite absent: no; Paralyzes absent: 0; Culling absent: no)

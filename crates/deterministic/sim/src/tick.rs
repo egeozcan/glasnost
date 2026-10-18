@@ -99,6 +99,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::gas::anim_turn(w, id);
         return;
     }
+    if w.waves.contains_key(&id) {
+        // spec: S-0607 claim 21 (a magnetic wave updates in its own turn of the update order)
+        crate::lift::wave_turn(w, id);
+        return;
+    }
     let Some(o) = w.obj(id) else { return };
     // A building in a delayed-kill countdown is killed but alive (S-0302 claim 16): it takes its whole turn.
     let dead = crate::combat::damage::dead(o);
@@ -200,8 +205,6 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0607 claim 12 (row 2: a mobile lifter that accepted another non-empty destination by any rule this turn lets go)
     crate::lift::lifter_destination(w, id);
-    // spec: S-0607 claim 21 and F4 (the wave's per-tick update; Q-1327: in its firer's own turn, after the behaviour processing)
-    crate::lift::wave_turn(w, id);
     if kind == Kind::Building {
         // spec: S-0609 claims 9 and 14 (a gattling building's animation advance and its passive spin-down follow the tick's behaviour processing)
         crate::gattling::building_turn(w, id);
@@ -264,8 +267,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
         _ if crate::transport::riding(w, id).is_some() => false,
         // spec: S-0504 claim 5 (a sinking vessel makes no progress by its locomotor, turning and speed-fraction updates included)
         _ if sinking => false,
-        // spec: S-0607 claims 5 and 7 (a seized unit moves with its temporary jumpjet locomotor, whatever its own)
-        _ if crate::lift::seized(w, id) => crate::jump::tick(w, id),
+        // spec: S-0607 claims 5 and 7 (a seized unit moves with its temporary jumpjet locomotor, whatever its own); claim 22 and Q-1334 interim (a unit seized with a stand-in locomotor keeps moving by its own)
+        _ if crate::lift::seized(w, id) && !crate::lift::stand_in(w, id) => {
+            crate::jump::tick(w, id)
+        }
         Some(Locomotor::Drive) if held => false,
         Some(Locomotor::Drive) => {
             let moved = drive::tick(w, id);

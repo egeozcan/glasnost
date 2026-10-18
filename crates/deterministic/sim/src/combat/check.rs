@@ -279,6 +279,13 @@ pub fn check(
     if kind == Kind::Vehicle && crate::spawn::launching_count(w, firer) > 0 {
         return Answer::Busy;
     }
+    // spec: S-0607 claim 11 (a firing check by the lifter against its own gripped unit answers rearming, with any weapon, ahead of every test of the target's layer, height, kind or armour and of every projectile test; of S-0301 claim 9's rank-4 answers only the materialising firer's rearming, which gives the same answer, and the refusal of a firer bound to a slave master, which our engine does not have, precede it)
+    if weapon.is_some()
+        && let Some(Target::Object(x)) = target
+        && crate::lift::grips(w, firer, x)
+    {
+        return Answer::Rearming;
+    }
     // spec: S-0310 claim 11 (an infantry healer: illegal when its target is absent, not infantry or at full health; above the general part)
     if kind == Kind::Infantry
         && let Some(wp) = weapon
@@ -301,13 +308,6 @@ pub fn check(
         return a;
     }
     let wr = r.combat.weapon(weapon);
-    // spec: S-0301 claim 9 rank 4 (the firer already holds this very target with a magnetic-beam weapon: early rearming; Q-1328: placed before the target tests, so a lifted target in the air keeps its lifter's attack)
-    if wr.mag_beam
-        && let Some(Target::Object(x)) = target
-        && crate::lift::grips(w, firer, x)
-    {
-        return Answer::Rearming;
-    }
     if let Some(t) = target
         && projectile_illegal(w, weapon, t)
     {
@@ -386,7 +386,7 @@ pub fn check(
     {
         return Answer::Illegal;
     }
-    // spec: S-0301 claim 9 rank 4 and S-0607 claims 10 and 11 (a seized firer: illegal; a magnetic-beam firer gripping a unit with a live wave against a target that is neither that unit nor a building: rearming; precedence among rank-4 answers unspecified, placed last)
+    // spec: S-0301 claim 9 rank 4 and S-0607 claims 10 and 11 (a seized firer: illegal; a magnetic-beam firer gripping a unit with a live wave against a target that is neither that unit nor a building: rearming, after the target's layer and projectile tests, so against an airborne target the beam cannot hit that refusal wins; placed last among the rank-4 answers)
     if let Some(a) = crate::lift::firing_answer(w, firer, wr.mag_beam, target) {
         return a;
     }
