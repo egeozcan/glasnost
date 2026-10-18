@@ -1,9 +1,9 @@
 ---
 id: Q-1404
 title: Where in an object's turn the damage sparks and deactivated-vehicle sparks come
-status: open
+status: answered
 related: [S-0616, S-0203, S-0405]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need

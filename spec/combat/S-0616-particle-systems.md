@@ -2,13 +2,13 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 7
+revision: 8
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-18
 measurements: []
-requests: [Q-1153, Q-1155, Q-1243]
+requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404]
 supersedes: []
 ---
 
@@ -22,6 +22,8 @@ terrain and objects, deal damage, change stage and end, and when the system itse
 particles deal damage; the other three kinds change play through their draws from the scenario
 random stream and through how long they stay in play, and a system or particle with no behaviour
 kind is covered by claims 2, 3, 21 and 22 below, with S-0613 claim 17 for its count-down.
+These claims cover skirmish only; network games and campaigns are out of scope.
+Damage follows the particle's own kind, including gas when kinds are mixed (claim 3).
 
 **What this spec does not restate.**
 - **The gas kind,** the shared gas system, and every system's lifetime count-down and leaving
@@ -82,9 +84,13 @@ stands alone. This spec adds the terms after them.
 - **Yellow ratio, red ratio.** The game-wide health-ratio thresholds of S-0302 claim 13 and its
   Import mapping. S-0302 claim 12's fixed half does not use them.
 - **Deactivated vehicle.** A vehicle that has lost what it needs to operate: the deactivated state
-  that S-0214 claim 12 and S-0701 claim 17 name for objects. Which events put a vehicle into it is other specs' business (Open questions).
-- **Resource-carrying slave.** A slave of a slave miner that delivers its load to a refinery
-  (S-0402, which names the slave miner). Only the delivery matters here (claim 1, refinery smoke).
+  that S-0214 claim 12 and S-0701 claim 17 name for objects. In play, a vehicle enters it only by
+  the disabling of S-0405 claim 13 (the house's last control building lost or stopping, or a
+  vehicle of a type that needs one entering a cell with no building while its house has none).
+  An electromagnetic pulse, paralysis and being without a driver are other states: they do not
+  make a vehicle deactivated here.
+- **Resource-carrying slave.** A slave of a slave miner that delivers its load to its master, the
+  slave miner (S-0402 claim 14). Only the delivery matters here (claim 1, refinery smoke).
 - **Electric bolt.** The instantaneous lightning-style shot of a weapon that is flagged as an
   electric-bolt weapon instead of launching a projectile; it is drawn by S-0102 (beam effects).
   This spec needs only that each such shot has an end point (claim 1). No approved spec owns the
@@ -93,8 +99,8 @@ stands alone. This spec adds the terms after them.
   drops towards the impact point (S-0306 claim 5; the glossary's *fire point*).
 - **Marked.** S-0613 claim 17's state of a system that is to end. A marked system makes no new
   particles and leaves play in the first turn in which it holds none. Besides the lifetime, claims
-  1 (the healing mark of damage smoke and the trigger action that marks the systems of a cell), 4, 9,
-  10, 15 and 17 mark systems.
+  1 (the healing marks of damage smoke and the trigger action that marks the systems of a cell), 4, 9,
+  10, 15, 17 and 20 (a spark counter of 0 or less) mark systems.
 - **Dead mark.** A particle's flag that it has ended. A particle with the dead mark is removed in
   the removal pass of its system's turn. S-0613 uses the same mark for gas.
 - **Particle speed** *S*. A single-precision value of each particle, in leptons per tick. It
@@ -123,12 +129,12 @@ stands alone. This spec adds the terms after them.
    | Creator | When (owner) | Owner object | Target point | First particle |
    |---|---|---|---|---|
    | A warhead that names a system | at the detonation (S-0303 claim 20; owner house: the source house) | none | the detonation point | yes (S-0613 claim 4) |
-   | Exploding overlay | after the nested detonation, 25 % chance (S-0303 claim 19) | none | the detonation point | yes when it has a held type (S-0613 claim 4; S-0303 claim 19 says only that the system appears) |
+   | Exploding overlay | after the nested detonation, 25 % chance (S-0303 claim 19; owner house: none) | none | the detonation point | yes when it has a held type (S-0613 claim 4; S-0303 claim 19 says only that the system appears) |
    | Damage smoke of a damaged object | on turning yellow or red (S-0302 claim 13) | the damaged object | the world origin, unused | no |
-   | Destruction smoke of a building | at destruction, when the building has no particle system attached already (S-0312 claim 19 f) | the building | the world origin, unused | no |
-   | Refinery smoke | at each unloading step of a resource delivery, one system per smoke point (this claim, below) | the refinery | the world origin, unused | no |
+   | Destruction smoke of a building | at destruction (S-0312 claim 19 f; which entries are eligible and what counts as attached already: this claim, below) | the building | the world origin, unused | no |
+   | Refinery smoke | at each unloading step of a resource delivery, one system per smoke point (this claim, below) | the building that makes it (this claim, below) | the world origin, unused | no |
    | Natural smoke of a building | when the building is placed in play, and again when it uncloaks (this claim, below; S-0516) | none | a point of the building (its position), unused | no |
-   | Effect weapon (fire, spark or railgun emitter) | at the shot, after the projectile (S-0301 claims 5 and 18) | the firer | fire and spark: the position of the firer's target object when the shot has one, else the world origin; railgun: the end of the beam | no |
+   | Effect weapon (fire, spark or railgun emitter) | at the shot, after the projectile (S-0301 claims 5 and 18) | the firer | fire and spark: the position of the firer's target object when the shot has one, else the world origin; railgun: the beam's end point (F14), fixed at the shot | no |
    | Mind-control overload | 5 spark systems per damaging pulse (S-0601 claim 16) | none | unused | no |
    | Electric bolt | at the bolt's end, after the bolt's own draw (this claim, below) | none | unused | no |
    | Drone parasite delivery | per delivery to a host that is not infantry (S-0614 claim 9) | none | unused | no |
@@ -140,23 +146,75 @@ stands alone. This spec adds the terms after them.
 
    An animation's particle request (S-0109 claim 14) makes a particle in the shared gas system,
    not a new system. The rows that no other spec owns:
-   - **Refinery smoke.** At each unloading step of a delivery to a refinery (and at each delivery
-     of a resource-carrying slave), the refinery makes one system of its smoke type at each of its
-     up to four smoke points that is set. A point of (0, 0, 0) or (128, 128, 0) counts as unset.
+   - **Refinery smoke.** A *smoke event* on a building makes one system of the building type's
+     refinery smoke type at each of its up to four smoke points that is set, with the building as
+     owner object. A point of (0, 0, 0) or (128, 128, 0) counts as unset.
      This is an engine constant, not a rules value.
      Each system's lifetime is set to the game-wide refinery-smoke time, not its type's. No draw.
+     A building whose type names no refinery smoke type makes nothing; no other property of the
+     building is tested (it need not be a refinery). A smoke event on a vehicle, infantry or
+     aircraft object makes nothing. The smoke events (Q-1401):
+     - **Harvester unloading.** One smoke event on the building in the neighbouring cell at each
+       processing of S-0402 claim 11 that falls in one of its two rows with the counter at or
+       above 900 × *D*: each payment row, and also the empty-load row that makes the harvester
+       *finishing*. So a harvester that carries *k*
+       different resources makes *k* + 1 smoke events in one unloading, and one that docks empty
+       makes one. Each smoke event comes before the payment of its processing.
+     - **Slave delivery.** One smoke event on the slave's master per delivery (S-0402 claim 14),
+       after all of that delivery's payments, and only when at least one of them paid a
+       positive amount; none per resource. A deployed slave miner is a building and makes the
+       smoke at its own smoke points when its type names a refinery smoke type. An undeployed
+       slave miner is a vehicle, so its slaves' deliveries make no refinery smoke.
+   - **Destruction smoke** (Q-1400). Only smoke-kind entries of the building type's destruction
+     list are eligible; entries of every other kind (gas, fire, spark, railgun, none) are
+     skipped. *Attached already* means only that a destruction-smoke system made earlier by
+     this same building is still in play; the building's damage smoke, natural smoke, effect
+     weapon emitters and damage sparks do not count. Since the building makes its destruction
+     smoke only at its destruction, in practice the condition never stops it. With *m* ≥ 1
+     eligible entries, and the building's height above the surface greater than −10 leptons, one
+     ranged draw R(0, *m* − 1) picks one, counted from the end of the list; with none eligible
+     nothing is made and nothing is drawn. The system is made at the building's position plus
+     the type's destruction-smoke displacement, with no owner house. Its owner object is the
+     building, so it is marked when the building is removed (claim 4):
+     - A building that does not explode leaves play at the end of its death effects (S-0312
+       claim 21), in the same tick as the smoke is made and before the system's first turn. Its
+       destruction smoke is marked at once, never emits, and leaves play in its first turn.
+     - A building that explodes stays in play until its own next turn (S-0312 claim 21). Its
+       destruction smoke emits in any turn before then that claim 9 allows, and is then marked. Particles
+       already made carry on until they end.
+     In neither case does it emit after the building has gone.
    - **Natural smoke.** A building whose type names a natural particle system gets one when it is
      placed in play, if it has none, at its position plus the type's natural-smoke displacement.
-     When the building becomes yellow its emission timer *T* is multiplied by the dimensionless factor 1.5 (once; repair does
-     not undo it). Nothing ends it when the building is sold or destroyed; it ends by its lifetime, by its
+     After each hit on the building that reports *now yellow* as S-0302 claim 12 gives it (health
+     crossing half the strength under its default, not the yellow ratio), its natural smoke's emission timer *T* is multiplied
+     by the dimensionless factor 1.5, in single precision. A hit that reports *now red* does not
+     multiply it, so a single hit from above half straight to red (which reports *now red*, S-0302
+     claim 12's precedence) leaves *T* unchanged. Repair does not undo the factor, and each later
+     *now yellow* hit (after a repair above half) multiplies *T* again, so the factor compounds.
+     A multiplied *T* can pass the spawn cut-off at its next growth and so mark the system (claim 9). Nothing ends it when the building is sold or destroyed; it ends by its lifetime, by its
      emission cut-off (claim 9, which marks a smoke system whose timer passes the cut-off), by full
      cloaking (below) or by the trigger action of this claim. S-0516 claim 18 states the same rule from the cloaking side: reaching full cloaking removes the system at
      once, with its particles (no lingering particles), and reaching full uncloaking makes a new
      system by the placement rule, but only when the type's natural-smoke displacement is not (0, 0, 0) (scenario P1, parts b and c).
    - **Effect weapons.** The emitter is made at the weapon's fire point, or at the firer's
-     position for a dropping projectile. While it is held, S-0301 claim 5's gate applies. A fire
+     position for a dropping projectile. The fire, spark and railgun flags of a weapon are tested
+     independently at the shot (Q-1403): for each flag the weapon has, in the order fire, spark,
+     railgun, an emitter of the weapon's system type is made when the firer's place for that kind
+     is empty. So a weapon with two or three flags makes up to two or three emitters at one shot,
+     made in that order (which sets their turn order, S-0203). S-0301 claim 5's gate refuses the
+     weapon while any place of its flags is held. For fire and spark emitters the creator passes
+     the shot's target object (target point: its position at the shot). For a railgun emitter it
+     passes no target object, and the target point is the beam's end point of F14, computed at the
+     shot from the emitter's position to the target's position. Like every system with an owner
+     object, the railgun emitter still takes the firer's current target as its target object
+     (Terms), but its turn uses only the target point, which is never recomputed from the target.
+     So later motion of the target changes nothing: the line (claim 17) is made in the system's
+     first turn, to that fixed point. A fire
      emitter is marked and let go when its firer takes a new target that is not within reach (outside the weapon's range, the test of S-0307 claim 12), is given a move order, or dies. A spark or railgun emitter is not let go by any of these; it is marked only by claim 4's owner removal, and otherwise ends by its own counter or line (claim 22).
-     Creating the emitter takes no draw. The railgun's beam is the shot itself (S-0306).
+     Creating the emitter takes no draw. The railgun's beam is the shot itself (S-0306). The
+     railgun shot's own effect (the objects it hits along the beam, and what happens where the
+     beam meets the terrain) is computed together with F14's end point, and only when the
+     railgun place is empty; no approved spec owns it yet (Open questions).
    - **Electric bolt.** Each electric-bolt shot makes one system of the game-wide spark type at
      the bolt's end. When the game-wide spark type is absent, nothing is created. This is a departure for an absent key, with no switch and an importer warning (Import mapping; Open questions).
    - **Trigger actions.** Two actions touch particle systems. The first names a particle system
@@ -176,7 +234,13 @@ stands alone. This spec adds the terms after them.
      is not specified (Open questions), and the importer warns and uses the displacement as given.
    - **Damage smoke ends by a mark.** When a hit leaves the object's health ratio above the yellow
      ratio (S-0302 claim 13, which gives the same state: the effect is marked, not removed), its
-     damage-smoke system is marked. The object keeps it in the
+     damage-smoke system is marked. There is also a mark that is not a hit. In a turn in which the
+     object gains health by its own self-healing (S-0314 claim 9), and in a turn in which a vehicle
+     that is not organic gains health by its house's self-healing (S-0314 claim 10), the
+     damage-smoke system is marked right after that gain when the health ratio is then above the
+     yellow ratio (strictly), or the object's height above the surface is below −10 leptons. An
+     infantry or organic object healed by its house's self-healing gets no such test in that turn,
+     so its damage smoke is marked only by a later hit or by its own self-healing. The object keeps it in the
      damage-smoke place, and so makes no new damage smoke, until the system leaves play (claim 22).
      The marked system makes no new particle; the particles it holds keep updating, moving and
      ending, and the system leaves in the first turn in which it holds none. Nothing is removed at
@@ -191,31 +255,51 @@ stands alone. This spec adds the terms after them.
      per-turn rule for them, with its own comparison with the yellow ratio: strictly below here,
      whereas S-0302 claim 13's smoke effect starts at or below it, at a hit. Backing for this row: scenario P16.
 
+     **Place in the object's turn** (Q-1404). The damage-sparks draws come in the general part of
+     the object's turn: after the draws of its due behaviour processing (S-0215 claim 2), with any
+     shots that processing makes, after any shot at a target of opportunity, after its mind-control
+     overload (S-0601 claim 16) and after its
+     own and its house's self-healing (S-0314 claims 9 and 10); and before its radiation hits
+     (S-0525), its ordinary movement, its parasite step (S-0614 claim 18) and the separate infantry
+     firing. A turn spent inside a tunnel, or with the object not on the map, makes no damage
+     sparks and takes none of their draws.
+
      | The object's damage particle-system list (conditions above hold) | Draws, in this order | Outcome |
      |---|---|---|
      | has no spark-kind entry | none | Nothing is made. |
      | has *n* ≥ 1 spark-kind entries | one ranged draw R(0, 2147483646) each turn: the system is made when that draw × 4.656612877414201 × 10⁻¹⁰, in double precision, is below the game-wide sparking probability, which is the red one when the health ratio is below the red ratio and the yellow one otherwise (Import mapping). If it is made, one ranged draw R(0, *n* − 1) picks one of the *n* spark-kind entries, counted from the start of the list (S-0302's smoke pick counts from the end). | The system is made at the object's position plus the type's damage-smoke displacement (as above) and held in the spark emitter place (Terms), shared with an effect weapon's spark emitter. |
 
    - **Deactivated vehicle sparks.** A deactivated vehicle makes one system of the game-wide spark
-     type on the ticks for which (⌊*x* / 10⌋ + ⌊*y* / 10⌋ × 65536 + *t* + its object number) is a
+     type on the ticks for which (trunc(*x* / 10) + trunc(*y* / 10) × 65536 + *t* + its object number) is a
      multiple of 30, where (*x*, *y*) is its position and *t* the tick number (integer, truncation
-     toward zero). Two ranged draws R(−100, 100) give the *y* and then the *x* displacement, in leptons. With no game-wide spark type, nothing is created and no draw is taken. This absent-key case is a departure with an importer warning (Import mapping; Open questions).
+     toward zero). The system is made at its position plus those displacements, *z* unchanged. Two ranged draws R(−100, 100) give the *y* and then the *x* displacement, in leptons. With no game-wide spark type, nothing is created and no draw is taken. This absent-key case is a departure with an importer warning (Import mapping; Open questions).
      The cadence in this row is a **departure** (no switch, no importer warning), of the kind S-0306 claim 13 records for
      its object-number phase: the original's object numbers come from its own scenario-wide
      creation counter, which our engine does not reproduce, so the phase of the 30-tick cadence can
      differ from the original's. The period of 30 ticks, the position terms and the displacement
      draws are the original's.
+
+     **Place in the vehicle's turn** (Q-1404). A deactivated vehicle still takes its turn, and the
+     rest of the turn is as for any vehicle. Its spark step comes first in the turn: its draws come
+     before every other draw of that vehicle's turn, including its behaviour processing,
+     self-healing, damage sparks, movement and firing. It also happens in turns that end early for
+     another reason (an electromagnetic pulse, paralysis, travel inside a tunnel), since it comes
+     before them.
    - **Animation with a voxel model.** A voxel-model animation type with an attached system makes it at the
      animation's start position. When the animation is removed the system is marked, as for the removal of an owner object
      (claim 4), and leaves play once it holds no particle (claim 22).
 
    - Backing: `measurable` (scenario P1, one run per row; P15 for the yellow factor of the
      natural-smoke row; P16 for the damage-sparks row and the damage-smoke position; P19 for
-     the healing mark)
-   - Confidence: high for the creators, owners and first particles. Medium for the three events
-     that let a fire emitter go, for the deactivated-vehicle row, for the shared gas system's position and for the natural-smoke uncloak
+     the healing marks; P20 for refinery smoke; P21 for destruction smoke; P22 for effect
+     weapons with several flags and the railgun end point; P23 for the place of both spark
+     steps in the turn)
+   - Confidence: high for the creators, owners and first particles, for the refinery smoke
+     events, the destruction-smoke rules, the natural-smoke factor, the effect-weapon flags and
+     the place of the damage sparks in the turn. Medium for the three events
+     that let a fire emitter go, for the self-healing mark of damage smoke, for the deactivated-vehicle row, for the shared gas system's position and for the natural-smoke uncloak
      rule (the displacement test). Medium for the damage-smoke position when the screen-relative
-     flag is off; the flag-on case is `unmeasured` (Open questions)
+     flag is off. The flag-on conversion is `unmeasured`: no validating scenario for that unresolved conversion is supplied here (Open questions). The below-surface self-healing mark is also `unmeasured`: no setup here isolates a healing gain below −10 leptons.
 
 2. **Which kinds change play.** Every kind changes play through the draws its turns take from the
    scenario random stream (claims 6, 8, 9, 11, 12, 15, 16, 17 and 18). An extra or missing draw
@@ -257,7 +341,7 @@ stands alone. This spec adds the terms after them.
    names a next particle type, whether successors are made, how many and where is decided by the
    kind of the system that holds the dead particle, whatever the particle's own kind:
    - **Gas system:** the dead particle, of any kind, gets one successor (at its position plus its type's
-     next-particle displacement, taking the dead particle's speed and its velocity and nothing else from it). S-0613 claim 7 gives the details of what is taken and its Terms entry for *Successor* is revised in the same round to match this rule, since they give the other kinds' successors to claim 8.
+     next-particle displacement, taking the dead particle's speed and its velocity and nothing else from it). S-0613 claim 7 gives the details of what is taken; its *Successor* term agrees that the system's kind chooses the successor rule.
    - **Smoke system:** the dead particle, of any kind, gets claim 8's two successors, with the
      draws of claim 8, *d* being taken from the dead particle's type.
    - **Fire, spark and railgun systems:** no successors for any particle, and no draw for them.
@@ -312,7 +396,7 @@ stands alone. This spec adds the terms after them.
    the delete-at-end flag, the particle gets the dead mark. The stage never passes the end stage
    here. Separately, when *S* > 3.0, *S* goes down by the type's slowing field, in single precision. So
    *S* stops changing once it is at or below 3.0 (or never changes when it starts there).
-   - Backing: `measurable` (scenario P5, with the random-state recorder)
+   - Backing: `measurable` (scenario P5, with the random-state recorder), except the raw value −2³¹ case, which is `unmeasured`: the recorder cannot force that rare draw and P5 does not practically isolate it.
    - Confidence: high
 
 7. **Smoke particle move.** A live smoke particle moves once per turn, after the turn's removal pass (claim 5), so that a particle that its move marks dead is removed in the next turn's removal pass: by the wind push, its horizontal velocity, its speed upward and its vertical velocity
@@ -327,7 +411,7 @@ stands alone. This spec adds the terms after them.
    with a wind effect of 0 is unaffected by the direction. For a nonzero wind effect and a direction
    outside 0 … 7 (including the absent value −1) the original's result is undefined. This is a **departure** as in S-0613 (importer warning, no wind push, no
    quirk switch); it is `unmeasured` because the original's result is undefined.
-   - Backing: `measurable` (scenario P6, wind part) for directions 0 … 7; `unmeasured` for the departure
+   - Backing: `measurable` (scenario P6 for the bridge stop and its wind part for directions 0 … 7); `unmeasured` for the departure
    - Confidence: high
 
 8. **Smoke successors.** A particle of any kind with the dead mark, in a smoke system, whose type names a next particle type
@@ -335,9 +419,9 @@ stands alone. This spec adds the terms after them.
    the displacements *o*ₓ, then *o*ᵧ (F3). The first successor is made at (*x* + *o*ₓ, *y* + *o*ᵧ, *z*)
    and the second at (*x* − *o*ₓ, *y* − *o*ᵧ, *z*), where (*x*, *y*, *z*) is the dead particle's
    position. Both have target point (0, 0, 0). Each takes its creation draws (S-0202 claim 15),
-   then one raw value *r*; its translucency is the dead particle's plus 25 percentage points when *r* rem 6 ≠ 0 (drawn only). Each successor's speed
+   then one raw value *r*; its translucency is the dead particle's plus 25 percentage points when *r* rem 6 ≠ 0, otherwise the dead particle's unchanged value (drawn only). Each successor's speed
    *S* is set to the dead particle's, but its flight direction and velocity are its own. Observably, the draws come in this order: *o*ₓ, then *o*ᵧ, then the first successor's creation draws and its translucency draw, then the second's; the dead particle is removed after both. This claim gives the successors made in a smoke system (claim 3); the successor made in a gas system is S-0613 claim 7's.
-   - Backing: `measurable` (scenario P7, test rules: no stock smoke type names a next type)
+   - Backing: `measurable` (scenario P7, whose named test rules explicitly supply a next type)
    - Confidence: high
 
 9. **Smoke emission and end.** A turn emits when all of these hold:
@@ -383,7 +467,10 @@ stands alone. This spec adds the terms after them.
     - **Sweep.** The target point is placed in the owner's body facing (the facing of the owner,
       not of its target), at the owner's current distance from its target object, measured from the
       owner's position (F5). The system's
-      position becomes the owner's fire point for its first weapon. Nothing is remembered: the
+      position becomes the owner's fire point for its first weapon, with no extra displacement
+      (S-0313 claims 1 and 2). Where that fire point alternates between bursts (S-0313 claim 2), the
+      burst counter used is the owner's current one at the sweep, not the one of the shot that made
+      the emitter and not 0 (Q-1403). Nothing is remembered: the
       sweep happens afresh in each turn in which the owner's body facing is turning.
     - **When.** A turn emits when the tick number is a multiple of the type's spawn interval, or
       when it is a multiple of 3 and this same turn made a sweep.
@@ -439,8 +526,8 @@ stands alone. This spec adds the terms after them.
 ### Spark
 
 15. **Spark system turn.** The draws of a turn depend on *K* at its start, as this table gives. A spark
-    system with a spark-turns field of 0 or less never bursts, never takes these draws and is never
-    marked by this claim.
+    system whose type's spark-turns field is 0 or less is bad data: claim 20 marks it in its first
+    turn, with no burst and no draw of this claim's table (its particles still update, claim 16).
 
     | *K* at the start of the turn | Draws, in this order | Outcome |
     |---|---|---|
@@ -477,7 +564,7 @@ stands alone. This spec adds the terms after them.
     ranged draw R(0, 2147483646) for the progress of its drawn colour along its type's colour list,
     whatever the list holds (this per-update draw is separate from the creation-time colour draw of S-0202 claim 15). So a live spark takes exactly one draw per update, and deals no
     damage.
-    - Backing: `measurable` (scenario P11)
+    - Backing: `measurable` (scenario P11 for motion, draws and deck contact; P17 for wall and ordinary-building contact)
     - Confidence: high for the draw, the motion and the ground contact. Medium for the deck
       placement. Low for the wall test (F11). The rule that every building stops a spark is medium; two possible exceptions (an open gate, one other state) are open (Open questions).
 
@@ -517,8 +604,7 @@ stands alone. This spec adds the terms after them.
       more than one step at that tick. P18 covers a last damaging stage of −1.)
     - Confidence: high for the rule; medium for the single-precision domain of F13, which P9 part b tests only to one step.
 
-20. **Zero divisors and missing held types.** In these cases the original stops, gives an undefined result or faults, on data the stock
-    rules never give. The fire insertion case (F7) is a fault on legal play, and the negative-radius case is one whose original behaviour is not known (Open questions). Each is a **departure** (no switch). The importer warns for the data cases, not for the fire insertion case. Integer divisions by zero follow S-0205 claim 3 (quotient 0, remainder equal to the
+20. **Zero divisors, missing held types and a spark-turns field of 0 or less.** These inputs can make the original stop, give an undefined result, fault or (for the spark-turns field) keep an emitter place held until another cause ends the system. The fire insertion case (F7) is a fault on legal play, and the negative-radius case is one whose original behaviour is not known (Open questions). Each is a **departure** (no switch). The importer warns for the data cases, not for the fire insertion case. Integer divisions by zero follow S-0205 claim 3 (quotient 0, remainder equal to the
     dividend) unless this claim says otherwise:
     - **Emission timer below 1** (⌊*T*⌋ = 0, for example a spawn interval of 0): by S-0205 claim 3
       the tick-number test passes only at tick 0, so the system emits at tick 0 only (or never,
@@ -541,9 +627,23 @@ stands alone. This spec adds the terms after them.
       division: the original uses a missing particle): our engine takes the decision draw, if any,
       and nothing else, and makes no particle. The railgun system is still marked, and the spark
       counter still counts down.
+    - **Spark-turns field of 0 or less** (claim 15; also the absent-key value, Import mapping):
+      the original does not stop here, but such a system is never marked by its counter. It ends
+      only by its owner's removal (claim 4), a positive lifetime or the trigger action of claim 1.
+      Neither a move order, nor a new target, nor the firer's death lets a spark emitter go
+      (claim 1), so in the original the firer's spark place stays held, and every weapon of its
+      that S-0301 claim 5's gate ties to that place stays refused while the system remains in play. Owner removal, a positive lifetime or a trigger mark can end that refusal.
+      Our engine fixes this outright (lead decision, no switch): such a system takes no burst and
+      no draw of claim 15 and is marked in its first turn. It then leaves play in the first turn
+      in which it holds no particle (claim 22), so an emitter, which starts empty, leaves in its
+      first turn and frees the spark place. This applies to every spark system of such a type,
+      whoever made it. For a damage-sparks system of such a type (claim 1) the fix frees the
+      spark place after one turn, so the object's per-turn decision draw resumes from its next
+      turn, where the original takes no further damage-sparks draw once the place is held: an
+      expected draw-count difference, not a mismatch. The importer warns for a nonpositive value, including the absent-key default.
 
-    - Backing: `unmeasured`: the original stops or faults in these cases, so there is no behaviour to compare; the negative-radius case is not known (Open questions).
-    - Confidence: high that the original stops; the replacement behaviour is a design choice.
+    - Backing: `unmeasured`: the original stops or faults in these cases, so there is no behaviour to compare; the negative-radius case is not known (Open questions). The spark-turns case is the exception: the original's behaviour is known and `measurable` (scenario P22, part c), and the fix departs from it by decision.
+    - Confidence: high that the original stops; the replacement behaviour is a design choice. High for the original's spark-turns behaviour.
 
 21. **Absent held-type key.** A particle system type section that is read without a held-type key
     names, as its held type, a particle type with the empty name. That type is registered by
@@ -559,7 +659,7 @@ stands alone. This spec adds the terms after them.
 22. **When systems leave play (Q-1243 question 2).** S-0613 claim 17 gives the common rule: a
     marked system leaves play in the first turn, after its count-down, in which it holds no
     particle, and a positive lifetime marks it. Claim 4 marks every system whose owner object is
-    removed, and claim 1's healing mark marks a damage-smoke system. Claim 1's trigger action marks
+    removed, and claim 1's healing marks (after a hit or a self-healing gain) mark a damage-smoke system. Claim 1's trigger action marks
     every system in the waypoint's cell, whatever its kind. Each kind adds its own marks, and
     claim 1's columns decide which can happen. Claim 1's cloak removal of natural smoke does not
     mark a system: it removes the system at once, with its particles. The table
@@ -567,15 +667,14 @@ stands alone. This spec adds the terms after them.
 
     | Kind | Starts empty, with an owner object | Starts empty, no owner object | Starts with a particle, no owner object (a detonation) |
     |---|---|---|---|
-    | Smoke | Marked when *T* passes the cut-off (claim 9), the owner is removed, or a hit heals the owner above the yellow ratio (claim 1; a damage-smoke system). | Marked when *T* passes the cut-off. | Marked when *T* passes the cut-off. The first particle (made at the detonation) is an extra particle beyond the emissions; the system leaves in the first turn after the mark in which it holds none. |
+    | Smoke | Marked when *T* passes the cut-off (claim 9), the owner is removed, or a damage-smoke healing mark of claim 1 occurs (including its below-surface test). | Marked when *T* passes the cut-off. | Marked when *T* passes the cut-off. The first particle (made at the detonation) is an extra particle beyond the emissions; the system leaves in the first turn after the mark in which it holds none. |
     | Fire | Marked when the owner is no longer alive (claim 10), is removed, or lets the emitter go (claim 1). | Marked in its first turn. Never emits. | Marked in its first turn. Never emits. Leaves when its first particle is gone. |
-    | Spark | Marked when *K* runs out (claim 15) or the owner is removed. | Marked when *K* runs out. | Marked when *K* runs out. The first particle falls from rest (claim 16). |
+    | Spark | Marked when *K* runs out (claim 15) or the owner is removed; in its first turn when the spark-turns field is 0 or less (claim 20). | Marked when *K* runs out, or in its first turn as in the column before. | Marked when *K* runs out, or in its first turn as in the first column. The first particle falls from rest (claim 16). |
     | Railgun | Marked after its line (claim 17) or when the owner is removed. | Marked after its line. | Marked in the first turn after its first particle is gone: its target point is its own position, so its line has no particle (claim 17). It leaves in that turn. |
     | No kind | Marked when the owner is removed or by the trigger action; leaves only if empty (claim 2). | Marked only by the trigger action (claim 1). | Leaves only after a trigger mark, once empty (claim 2). |
 
-    A spark system that never reaches its own mark (its counter is 0 or less) stays in play with no
-    particle and takes its turns until the end of the game, at no draw cost, unless a trigger action marks it
-    (claim 1). A smoke system that
+    A spark system whose type's spark-turns field is 0 or less is marked in its first turn by
+    claim 20 (in the original it would never reach its counter's mark, but owner removal, a positive lifetime or a trigger mark could still end it). A smoke system that
     claim 9 never marks keeps emitting, and each emission takes its two raw values whether or not
     the system has a held type (claim 9). With a positive lifetime the system is also marked in
     that turn (S-0613 claim 17).
@@ -745,6 +844,22 @@ form converts to 0; this is no departure (confidence
 medium; a zero divisor in floating point does not stop the original, unlike claim 20's integer
 divisions). With δ_F < −1 the divisor is negative and the formula applies unchanged.
 
+**F14. Railgun beam end point.** Computed once, at the shot that makes a railgun emitter (claim
+1). *P* is the emitter's position (the fire point, integers) and *Q* the target's position at the
+shot (integers; the target's own position, with no further raise). Let δ be the single-precision
+value nearest 1/49 (about 0.020408163). For *i* = 0 … 49:
+
+> *t*ᵢ = fl(*i* × δ), *s*ᵢ = trunc(*Q* × *t*ᵢ + *P* × (1 − *t*ᵢ)) per component,
+
+with each sum formed with no single-precision rounding of its intermediate results and truncated
+toward zero. *t*₀ = 0 and *t*₄₉ = 1.0 exactly, so *s*₀ = *P* and *s*₄₉ = *Q*. The samples are
+visited in the order of *i*. A sample is tested only when its cell (trunc(*x* / 256), trunc(*y* / 256))
+differs from the cell of the sample before it (for *i* = 0, the cell of *P*); a sample in the same
+cell as the one before it is not tested. A tested sample *s*ᵢ whose height is below the terrain
+height there, *s*ᵢ,z < *H*(*s*ᵢ,x, *s*ᵢ,y) (strictly), is the end point, and no later sample is
+visited. When no tested sample is below the terrain, the end point is *Q*. *H* is the terrain
+height of Terms, never a bridge deck, so a beam passing under or over a deck is not stopped by it.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -789,8 +904,12 @@ divisions). With δ_F < −1 the divisor is negative and the formula applies unc
 | Fire swing angle step | 0.125 | radians per table index | F6 |
 | Fire sweep facing constants | 16383 and 65534 (not 16384 and 65536) | facing units | F5 |
 | Counter modulus | 65536 | dimensionless | the modulus of the particle lifetime and damage counts (claims 3 and 12) |
-| Deactivated-vehicle cadence divisor | 10 | leptons per unit of the position term (floor division) | claim 1 |
+| Deactivated-vehicle cadence divisor | 10 | leptons per unit of the position term (division truncated toward zero) | claim 1 |
 | Deactivated-vehicle cadence weight | 65536 | dimensionless (weight of the *y* term) | claim 1 |
+| Railgun end-point samples | 50 (*i* = 0 … 49) | sample points along the beam | F14 |
+| Railgun end-point step | the single-precision value nearest 1/49 (about 0.020408163) | dimensionless fraction of the beam per sample | F14 |
+| Destruction-smoke depth limit | 10 | leptons below the surface | claim 1 |
+| Damage-smoke healing-mark depth | 10 | leptons below the surface (the mark applies below −10) | claim 1 |
 | Shared gas system position (hypothesis) | (2688, 2688, 0) | leptons | Not given by S-0613; decided by P1 part b. Its position is observable through the second trigger action of claim 1 (Open questions). |
 
 ## State and ordering
@@ -811,11 +930,11 @@ and fire, emission comes last, so a new particle's first update is in the next t
 
 | State | Event | Result |
 |---|---|---|
-| Active | kind mark (claims 9, 10, 15, 17), lifetime reaching 0, owner removed (claim 4), a trigger action on its cell (claim 1), or owner healed above the yellow ratio (claim 1, damage smoke) | Marked |
+| Active | kind mark (claims 9, 10, 15, 17), lifetime reaching 0, owner removed (claim 4), a trigger action on its cell (claim 1), a damage-smoke healing mark of claim 1 (including its below-surface test), or a spark-turns field of 0 or less at its first turn (claim 20) | Marked |
 | Active, natural smoke | building reaches full cloaking (claim 1) | Removed at once, with its particles |
 | Marked | particles remain | keeps taking turns, no emission; its particles keep updating, moving and ending |
 | Marked | holds no particle after the count-down | leaves play (S-0613 claim 17) |
-| Active, no kind, holds a particle | any | no change, for ever (claim 2) |
+| Active or marked, no kind, holds a particle | system turn | particle unchanged; system cannot leave while it holds the particle (claim 2). Other events can still mark the system. |
 
 **Draw order in one tick.** Systems take turns in the update order (S-0203 claims 2 and 3), and
 each system's draws are those of its claims in the order above. Draw order is observable here: within a smoke turn the
@@ -874,7 +993,7 @@ Rules file, particle system sections:
 | `SpawnTranslucencyCutoff` | smoke translucency cut-off τ | single-precision number | 0.0 |
 | `SpawnRadius` | smoke spawn radius σ | integer, leptons | 0 |
 | `ParticleCap` | spark particle cap κ | integer | 50 |
-| `SparkSpawnFrames` | spark counter start *K* | integer, turns | 0 |
+| `SparkSpawnFrames` | spark counter start *K* | integer, turns | 0. A value of 0 or less, including this absent value on a spark-kind type, is bad data: importer warning, claim 20 |
 | `SpawnSparkPercentage` | spark chance χ | double, as a fraction (1 = always) | 0.0 |
 | `SpawnDirection` | spark spawn direction *s* | three single-precision numbers | 0, 0, 0 |
 | `ParticlesPerCoord` | railgun particles per lepton *p* | double | 0.1 |
@@ -923,13 +1042,14 @@ Rules file, `[AudioVisual]`: `Gravity` (integer, leptons per tick per tick) for 
 as S-0613 gives it. `[General]`: `WindDirection` (integer 0 … 7) for F2, absent value −1 (claim 7).
 Object type sections, `DamageParticleSystems` (the list of damage-smoke and damage-sparks candidates
 that claim 1 reads): owned by S-0302 (Import mapping, claim 13), empty when absent. S-0312 owns
-`DestroyParticleSystems`.
+`DestroyParticleSystems` and `DestroySmokeOffset` (the destruction list and the destruction-smoke
+displacement of claim 1). S-0301 owns the weapon flags `UseFireParticles`, `UseSparkParticles` and
+`IsRailgun` (claim 1's effect weapons).
 
 ## Measurement scenarios
 
 All scenarios: stock data unless a test rules file is named, no engine add-on and no mods (the named test files of a scenario excepted),
-a tiny flat test map, and the random-state recorder (raw values
-taken per tick, with the taking object) where draws are counted. No scenario fixes the seed: each game start takes it from the host clock (S-0202 claim 8), and the recorder logs it with the draws. Each part of a scenario is one run unless the part states otherwise; P5, P9 and P11, whose results depend on the draws, are three runs per part, and each expected result must hold in every run.
+a tiny flat test map unless the part names terrain, game speed index 2, one human-controlled test house and one enemy bystander computer player kept outside the observed area (the test objects and their cells), with the glossary's bystander void rule. The recorder logs tick-indexed positions, particle counts, health and effect events where a part needs them, as well as random state. Scripted input and frame capture may be used. The random-state recorder logs raw values taken per tick, with the taking object, where draws are counted. No scenario fixes the seed: each game start takes it from the host clock (S-0202 claim 8), and the recorder logs it with the draws. Each part of a scenario is one run unless the part states otherwise; P5, P9 and P11, whose results depend on the draws, are three runs per part, and each expected result must hold in every run.
 
 - **P1. Creators.** One run per row of claim 1. Setup: the creator's situation (a warhead, a barrel, a damaged
   vehicle, a refinery unloading, an overload, an electric-bolt shot, a drone, a
@@ -952,12 +1072,12 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   through those draws. Falsified by a smoke particle changing an object's health. Part b: the same
   two-run comparison for a fire, a spark and a railgun system, each varied in its own timing field
   (the fire emission interval, the spark counter start, the railgun particles-per-lepton field).
-  Expected: each kind's draw count differs between the two runs. Falsified by equal draw counts.
+  Expected: each kind's draw count differs between the two runs. Falsified by equal draw counts. Part c: named test rules create no-kind systems, one empty through a trigger and one holding a short-lived smoke particle through a detonation, both with unlimited system lifetime. After 100 ticks, mark each through the cell trigger action and observe another 100 ticks. Expected: neither system updates its particles or takes turn draws; the empty system leaves on its first marked turn, while the populated one keeps its particle without motion, expiry or update draws even after marking. Falsified by a turn draw, a particle update or expiry, or either system leaving at another time.
 - **P3. Lifetime decrement.** A test spark type with a large vertical velocity minimum (so it does
   not land) and lifetime field 3. Observable: the tick at which the spark's draws stop. Expected:
   it takes 3 + *u* draws (*u* the lifetime variation), then none. Falsified by one more or fewer.
   Part b: a test rules file whose smoke system holds a fire particle type that has damage. Expected:
-  the fire particles hit (claim 14) and move by claim 13, in the smoke turn's order. Falsified by a fire particle that neither hits nor moves in that order.
+  the fire particles hit (claim 14) and move by claim 13, in the smoke turn's order. Falsified by a missing due hit, missing move, or an effect in another order.
   Part c (successors across kinds, claim 3): test rules with (i) a gas-kind system holding a smoke
   type with lifetime 3 and a next type, (ii) a smoke-kind system holding a gas type with lifetime 3
   and a next type, (iii) a fire-kind system holding a smoke type, and (iv) a spark-kind system holding
@@ -981,9 +1101,9 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   by draws on even ticks, by a cap on particles, by emissions after the mark, by a horizontal velocity outside −5 … 5, or by a particle speed that changes at or below 3.0. Part b: the same
   type with a particle-cap field smaller than the number of live particles. Expected: emissions
   continue and the particle count exceeds the cap (`quirks.smoke_ignores_particle_cap`). Falsified
-  by a count that stops at the cap.
+  by a count that stops at the cap. Part c: record each smoke particle's creation, stage, lifetime, speed, velocity and draws until removal, using named test rules with a finite lifetime, positive slowing, a next type, radius 40 and a delete-at-end flag. Predict every update from claims 3 and 6 and the logged raw values, including the stage cadence and the slowing threshold. Expected: updates oldest first, successor draws newest dead particle first after all update draws, then emission draws; emissions follow claim 9. Falsified by a stage, speed, velocity, removal tick, draw count or draw order that differs from that prediction.
 - **P6. Smoke at a bridge.** A smoke system under a bridge deck. Observable: the height at which
-  particles vanish and the extra update draws. Expected: they stop at 156 leptons above *H*, take
+  particles stop and the extra update draws. Expected: the first move whose proposed height reaches at least 156 leptons above *H* while starting below the deck is refused; they stay at their pre-move position, take
   one more update's draws and, if their type names a next type, split one turn after stopping
   (`quirks.smoke_deck_extra_update`). Falsified by particles passing through the deck, or by no
   further update draws after the stop. Part b (wind): a test smoke type with wind effect 3 on a
@@ -993,14 +1113,14 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   table, so at direction 3 it is 6 in x, not 3. Falsified by a wind part of 3 in x at direction 3.
 - **P7. Smoke successors.** A test rules file: a smoke type with a next type and radius 40 (so
   *d* = 5). Observable: successor positions relative to the dead particle and the draw order.
-  Expected: displacements in 6 … 9 or −9 … −5 per axis, mirrored for the second successor, and never +5. Falsified by a displacement of +5 or by one successor only.
+  Expected: displacements in 6 … 9 or −9 … −5 per axis, mirrored for the second successor, and never +5. Record each successor's speed, velocity, flight direction, translucency and creation draws too. Its speed equals the parent's, its velocity and direction are its own creation values, and its translucency equals the parent's plus the increment predicted from its post-creation raw value (claim 8). Falsified by a displacement outside those ranges, a count other than two, inherited velocity or direction, a different speed or translucency, or a draw order other than claim 8's.
 - **P8. Fire turn.** A test rules file giving a vehicle a weapon whose particle system is the
   fire kind, firing at a building while the vehicle turns on the spot. Observable: emission ticks before and
   after the turn starts, the system's position, the tick it is marked after the vehicle is
   killed. Expected: emissions every spawn interval, plus every third tick only on the ticks
   while the vehicle's body is turning; once it stops turning the extra emissions stop. Falsified by
   extra emissions that continue after the turn ends. Part b: a warhead that names a fire system: one particle, no emission, the system
-  leaves when that particle is gone. Falsified by an emission, or by the system staying in play after that particle is gone. Part c: the direction of each particle's first-tick displacement (it points along the particle's flight direction, toward the aim point of F6) and the list place of each particle that a sweep makes, over 500 ticks, against a fixed target. Expected: the direction is that of the F6 aim point from the creation position, to within the rounding of the whole-lepton displacement, and the list places follow F7. Falsified by a direction or list place that differs. 
+  leaves when that particle is gone. Falsified by an emission, or by the system staying in play after that particle is gone. Part c: the direction of each particle's first-tick displacement (it points along the particle's flight direction, toward the aim point of F6) and the list place of each particle that a sweep makes, over 500 ticks, against a fixed target. Expected: the direction is that of the F6 aim point from the creation position, to within the rounding of the whole-lepton displacement, and the list places follow F7. During sweeps, record the system position and compare it with the first weapon's fire point for the owner's current burst counter, including both parities with named test burst data. Falsified by a direction or list place that differs, or by a sweep position using the shot's saved burst parity instead of the current one.
 - **P9. Fire particle.** The fire system of P8 against a row of targets on level and rising
   ground. Observable: the tick and cell where each particle ends, and its hits. Expected: particles
   end at the first higher terrain height; hits only while the stage is at or below the last
@@ -1029,7 +1149,7 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   per live particle per update; the system leaves play when its last particle ends. Falsified by
   another particle count or draw count per particle.
 - **P13. Absent held type.** A test rules file: a smoke system type section with no held-type key,
-  made by a warhead. Give it a cut-off below its spawn interval, so that it is marked in its first
+  made by a warhead. Give it spawn interval 10 ticks and a cut-off below that interval, so that it is marked in its first
   turn. That first turn may still emit once, when the tick number is a multiple of ⌊*T*₀⌋ (claim 9),
   so choose a detonation tick that is not such a multiple; otherwise the one first particle
   becomes two. Observable: the draws in the detonation tick and the next, and
@@ -1041,11 +1161,17 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   first turn after its first particle ends, with no line and no draw of its own. Falsified by the
   system staying in play or by a line of particles.
 - **P15. Natural smoke turning yellow.** A building whose type names a natural particle system, with
-  a test rules file giving that system a known emission interval. Observable: the emission ticks
-  before and after the building turns yellow, and after repair brings it back above yellow. Expected:
-  the emission timer is multiplied by 1.5 once, when it turns yellow, and repair does not undo it.
-  Falsified by an emission interval that is not 1.5 times the first one, or by repair restoring the
-  first one. Three runs.
+  a test rules file giving that system an emission interval of 8, a slow-down of 0 and a spawn
+  cut-off of 100 (so that claim 9 does not mark it). Emission follows multiples of ⌊*T*⌋ (claim 9). Part a: a hit that
+  takes the building from full health to just below half. Part b: repair above half, then a second
+  hit below half. Part c: a new building, one hit from full health straight below the red ratio.
+  Observable: the emission ticks before and after each hit. Expected: part a, emissions on
+  multiples of 8 before the hit and of 12 after it; part b, still 12 after the repair, and 18 after
+  the second *now yellow* hit; part c, still 8 (the hit reports *now red*).
+  Falsified by another factor, by repair restoring the first interval, by no change at the second
+  hit, or by a change in part c. A fourth run with a cut-off of 15 expects the system to be marked
+  (emission stops) in the turn after the second hit, when *T* = 18 passes the cut-off. Three runs
+  each.
 - **P16. Damage sparks and damage-smoke position.** Part a: a cyborg-flag infantry type with a test
   rules file giving a damage list with two spark-kind entries and one smoke-kind entry, a
   displacement of (32, 48, 0) and sparking probabilities of 1.0 (yellow) and 0.0 (red), standing on
@@ -1059,10 +1185,10 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   damaged to yellow with a list of one smoke entry. Expected: the damage-smoke system at the
   vehicle's position plus (16, 0, 40). Falsified by another position. Part c: as part a with both probability keys absent from the rules file, over 5000 turns in 5 runs
   (three runs for part a), with the spark counter start of the test spark type set to 1. A made
-  spark system stays in the spark emitter place until it leaves play, and a counter of 0 never lets
-  it leave (claim 22), so with the default counter the place would stay held after the first success
-  and the rate could not be measured. With the counter at 1 the place is free again once the
-  system's sparks have ended. One set of runs at a ratio below the red ratio and one between the red
+  spark system stays in the spark emitter place until it leaves play, and in the original a counter
+  of 0 never lets it leave (claim 20), so with the absent counter the place would stay held after
+  the first success and the rate could not be measured. With the counter at 1 the place is free
+  again once the system's sparks have ended. One set of runs at a ratio below the red ratio and one between the red
   and yellow ratios. Observable: the turns on which no spark emitter is held, and how many of them
   make a system. Expected: about 0.02 of those turns make a system below the red ratio (red
   default), and about 0.01 between the red and yellow ratios. Falsified by a rate outside twice the
@@ -1074,8 +1200,8 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   field of 0. Expected: the stage sequence equals that of the second run, in both cases (claim 19:
   the particle's own advance value is 0). Falsified by a stage sequence that differs from it.
 - **P19. Healing mark on damage smoke.** A building with a damage-smoke type whose particles last
-  longer than a few ticks, damaged to red so that it makes damage smoke, then repaired above the
-  yellow ratio, then damaged below it again before the system's particles have gone. Observable:
+  longer than a few ticks, damaged to red so that it makes damage smoke, then healed above the
+  yellow ratio by hits from a test healing weapon, then damaged below it again before the system's particles have gone. Observable:
   the number of damage-smoke systems in play per tick, their emission, and the draws in the recorder.
   Expected: at the healing hit the system is marked: it makes no further particle, its particles
   carry on, and it leaves in the first turn in which it holds none. The second damage makes no
@@ -1083,6 +1209,56 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   makes a new one. Falsified by the system and its particles vanishing at the healing hit, by
   emission after it, by a second system made while the first is still in play, or by no new system
   after it has left play. Three runs.
+
+- **P20. Refinery smoke events.** A refinery type with one set smoke point and a test refinery smoke
+  type with a long emission interval, so each system is easy to count. Runs: a harvester carrying
+  one resource, one carrying two different resources, one docking empty, a slave delivery to a
+  deployed slave miner whose type names a refinery smoke type (one smoke point set), and a slave
+  delivery to an undeployed slave miner. Observable: the number of refinery smoke systems made per
+  unloading, the tick each is made and the tick of each payment (credits delta). Expected: 2, 3 and
+  1 systems for the three harvesters, each made in the same tick as and before its payment row, the
+  last one in the tick in which the harvester enters its finishing phase (not the later undocking tick); 1 system per slave delivery to the deployed
+  miner, at its smoke point, after the delivery's payments; none for the undeployed miner.
+  Falsified by one system per whole delivery, by no system for the empty-load row, or by any system
+  at the undeployed miner.
+- **P21. Destruction smoke.** A test rules file giving a building type a destruction list of one
+  smoke, one spark and one fire system, in that order and in other orders. Part a: a building of a
+  type that does not explode, destroyed 30 times. Part b: the same with a type that explodes.
+  Part c: a building that holds a damage-smoke system and a natural-smoke system, destroyed.
+  Observable: the kind of each destruction system made, the draws in the recorder, and the ticks in
+  which each emits and leaves play. Expected: only the smoke entry is ever made, with no pick draw
+  (one eligible entry gives the equal-bounds draw R(0, 0), which takes no raw value, S-0202 claim 4,
+  a second test type with two smoke entries shows one ranged draw R(0, 1)); in part a it never emits and leaves play in its first turn; in part b it may emit
+  until the building's next turn and is then marked, its particles carrying on; in part c it is made
+  all the same. Falsified by a spark or fire system made, by a missing smoke system in part c, or by
+  an emission after the building has gone.
+- **P22. Effect weapons with several flags, and the railgun end point.** A test rules file. Part a:
+  a weapon with the fire, spark and railgun flags and one named system type, firing at a vehicle. Observable:
+  the systems made at the shot, their emitter places and order, and the ticks at which the weapon fires again.
+  Expected: three emitters of that same system type at the shot, assigned in the order fire place, spark place, railgun place; the flags do not change the type's behaviour kind. The weapon fires again only
+  when all three places are empty. Falsified by one emitter only, or by a shot while any place is
+  held. Part b: a railgun weapon fired at a moving vehicle, and at a standing one across flat ground
+  and across a ridge higher than the beam. Enable the system's drawn laser in the named test rules. Observable: the laser end point from frame capture, checked against the recorded system target point, and the target's position at the shot and in the line's tick. The last helix particle is not assumed to lie at the beam end point. Expected: on flat ground the line runs to the
+  target's position at the shot, not its later one; across the ridge it ends at F14's first sample
+  below the terrain, in the first cell of the ridge that a sample enters. Falsified by a line to the
+  target's later position, or by an end point that is not one of F14's samples. Part c (claim 20): a
+  spark-kind emitter type with a spark-turns field of 0 and unlimited system lifetime on a weapon, in the original. Keep its cell free of system-marking trigger actions. Record shots, system persistence and emitter-place occupancy. Expected: after
+  the first shot the weapon never fires again, through a move order, a new target and 1000 ticks, and
+  fires again only after the firer is removed and a new one built. This records the original's
+  behaviour that claim 20 fixes; our engine's expected result is the reverse (the place is free in the
+  turn after the shot). Falsified by the original freeing the place or firing again while the same system survives, or by a burst or system-turn draw. Repeat with a negative spark-turns value. Separate controls apply a finite lifetime and a cell-marking trigger: each must free the empty system on its first marked turn, falsified by continued refusal after that removal.
+- **P23. Place of the spark steps in the turn.** The random-state recorder, with the taking object,
+  on (a) a cyborg-flag infantry below the yellow ratio with self-healing, moving and firing, standing
+  in a radiation field, and (b) a vehicle disabled by selling its house's last control building
+  (S-0405 claim 13), moving and self-healing, then hit by an electromagnetic pulse. Observable: the
+  order of each object's draws within its turn. Expected: (a) the damage-sparks decision draw comes
+  after the draws of its behaviour processing and self-healing, and before its radiation hit and its
+  firing draws; (b) the deactivated-vehicle displacement draws, on a spark tick, come before every
+  other draw of the vehicle's turn, and continue under the pulse. Falsified by any other order, or by
+  no deactivated sparks during the pulse. Part c (healing mark): a vehicle with self-healing, damaged
+  below the yellow ratio so that it makes damage smoke, then left to heal above it with no hit.
+  Expected: the damage-smoke system is marked in the turn its health ratio passes the yellow ratio,
+  stops emitting and leaves play once empty. Repeat with a building and infantry using their own self-healing, then with a non-organic vehicle receiving only house-wide healing. Controls use infantry and an organic vehicle receiving only house-wide healing, with no later hit or own self-healing: their damage smoke keeps emitting across the threshold. Use named test rules with no emission cut-off or finite system lifetime during the observation. Falsified by emission after the marking turn in a positive case, or by threshold marking in either control. Three runs per variant.
 
 ## Open questions
 
@@ -1094,11 +1270,12 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
 - **Spark building exceptions** (claim 16, F11): the original excepts at least two building states from stopping a spark: a gate whose door stands open far enough (the door stage is not known on S-0215 claim 35's scale), and one further state not identified. No claim is made for them. A measurement to take: a gate on flat ground with sparks falling on its cell while it is at rest closed, opening, at rest open and closing, recording per spark whether it ends at the gate and the gate's door stage in that tick (and, for the other state, the same over the other building types and states). A result would give a threshold or a state and add a claim.
 - **Screen-relative damage-smoke displacement** (claim 1): when the type's flag is on, the original
   converts the displacement from a screen frame into the world; the conversion is not specified
-  here. No stock-style data is known to use it. The importer warns and uses the plain displacement.
+  here. The importer warns and uses the plain displacement.
 - **Electric-bolt shot** (Terms, claim 1): no approved spec owns the shot itself (its range, damage
   and draw). This spec relies only on the shot having an end point.
-- **Deactivation sparks** (claim 1): which events deactivate a vehicle is other specs' business.
-  The spark row is reached only through them.
+- **Railgun shot's own effect** (claim 1, F14): the objects a railgun shot hits along its beam,
+  and what happens where the beam meets the terrain, are computed with F14's end point but owned by
+  no approved spec. This spec relies only on the end point.
 - **Absent game-wide spark type** (claim 1; Import mapping, game-wide spark type row): the original's result when that key is absent is not established. Our engine creates no spark system and takes no draw there, as a departure. S-0601 claim 16 has the same key and case. No measurement is proposed yet; a test rules file with the key absent, and an electric-bolt shot, would show the original's result.
 - **Shared gas system's position** (claim 1, Constants): the second trigger action of claim 1 makes the system's own position observable (S-0613 claim 1 says so). P1 part b decides the position.
 - **Rounding of a negative radius** (claim 20): the original's rounding is not known. Our engine rounds down, as F3 says. No measurement is proposed yet.

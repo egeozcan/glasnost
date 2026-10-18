@@ -1,9 +1,9 @@
 ---
 id: Q-1403
 title: Small creator details of S-0616 claim 1
-status: open
+status: answered
 related: [S-0616, S-0303, S-0301]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need

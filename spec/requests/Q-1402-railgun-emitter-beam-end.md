@@ -1,9 +1,9 @@
 ---
 id: Q-1402
 title: The railgun emitter's target point: where is "the end of the beam"
-status: open
+status: answered
 related: [S-0616, S-0306]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need

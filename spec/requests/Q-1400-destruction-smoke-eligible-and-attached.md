@@ -1,9 +1,9 @@
 ---
 id: Q-1400
 title: Which destruction particle systems are eligible, what counts as attached, and whether the smoke outlives a building that leaves at once
-status: open
+status: answered
 related: [S-0312, S-0616]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need

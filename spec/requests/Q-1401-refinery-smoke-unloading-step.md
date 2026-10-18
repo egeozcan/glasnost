@@ -1,9 +1,9 @@
 ---
 id: Q-1401
 title: What is one "unloading step" of refinery smoke
-status: open
+status: answered
 related: [S-0402, S-0616]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need
