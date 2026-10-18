@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1756,20 +1756,6 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   destination effect inconsistent with that claim falsifies the design rule. Repeat
   with and without a saved rally. Original skipped-window aftermath remains diagnostic
   under U14; no safe original fallback or stock fixture is asserted.
-
-## Changes for other specs
-
-- **S-0607 claim 13:** replace the open alternative for a successfully rerouted,
-  still-committed grounded set-down unit with claims 5 and 24 here: its next eligible
-  jumpjet update starts ascent towards the retained point. Set-down alone does not end
-  its commitment. Limit the found point's “no effect” statement to horizontal fall
-  placement: a different-cell point can change the crash height reference under claim 9
-  even at zero speed.
-- **S-0607 claim 20:** qualify the restoration summary: set-down alone cannot restore a
-  unit while its movement commitment remains; restoration still needs the stated
-  fall-back-to-rest event and absence of movement. Align claim 13's confidence/backing,
-  L3 and the related open questions with conditional measurements J27 a and b here.
-  Their backing is `measurable`; stock reachability is unsettled, not an observed result.
 
 ## Open questions
 
