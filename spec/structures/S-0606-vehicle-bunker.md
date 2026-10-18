@@ -2,7 +2,7 @@
 id: S-0606
 title: Vehicle bunker
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -208,7 +208,7 @@ combination with the repair-depot role; other combinations have not been fully t
      both ρₜ and ρ to 1.0.
    - **Occupied:** the vehicle becomes bunkered (claim 7).
    - Backing: `measurable` (scenario K1, including K1b for the chosen object, its distance and
-     the nearest-only quirk)
+     the chosen-only quirk)
    - Confidence: high (stage order, the delay, the facings, the track choice, the effects, the
      candidates, F5 and the tie rule), and medium (that only the chosen object of each cell is
      examined, Edge cases)
@@ -318,23 +318,32 @@ combination with the repair-depot role; other combinations have not been fully t
 
     **Delay (Q-1305).** The release takes effect in the tick in which the vehicle's *unload*
     processing runs; that processing's other rules then apply as set out below. For a vehicle
-    type with neither the harvester nor
-    the weeder flag, no deploy-into building type and no simple-deployer flag, it does nothing
-    more and chooses a delay of exactly 450 ticks, with no draw. The passenger unloading of S-0507
-    is never reached by a bunkered vehicle. A type with one of those properties goes on, in the
-    same processing, with the *unload* rule of that property (S-0402, S-0415 or S-0517), in this
-    order of precedence: harvester or weeder, then deploy-into building, then simple deployer.
+    type with none of these: the deploy-fire flag without the simple-deployer flag, the harvester
+    or weeder flag, a deploy-into building type, or the simple-deployer flag, it does nothing more
+    and chooses a delay of exactly 450 ticks, with no draw. The passenger unloading of S-0507
+    is never reached by a bunkered vehicle; of the rules of S-0415 (claim 1), a bunkered vehicle
+    skips only its passenger rule. A type to which one of these applies goes on, in the same
+    processing, with the *unload* rule of the first one in this list that applies to it: the
+    deploy-fire rule (S-0517 claim 2, with its own delay), the harvester or weeder rule (S-0402),
+    the deploy-into rule (S-0415) or the simple-deployer rule (S-0517). Where several apply, only
+    the first of them in that order takes effect. S-0415 claim 1 gives the order of the first three
+    rules, and S-0517 claim 1 places the simple-deployer rule after them. The precedence among
+    several rules is `unmeasured` (S-0415 scenario D9, which does not test it). The deploy-fire,
+    harvester and deploy-into rules choose their own delays. The simple-deployer rule is the
+    in-place cycle of S-0517 claim 3, whose delays and queued-behaviour effects that rule owns,
+    not this claim; whether a released vehicle reaches it is open (Open questions, item 6).
     The queued *move* starts under S-0215 claim 11, at the first tick on which the vehicle is
-    ready to change (normally when the release track has ended), whatever the delay.
+    ready to change (normally when the release track has ended), whatever the delay, unless the
+    vehicle reaches the simple-deployer rule, in which case Open questions, item 6 applies.
 
     The release applies to the bunker whose foundation holds the vehicle's cell, which is its own
     bunker. A vehicle in *unload* that is not bunkered is not affected by this claim.
     - Backing: `unmeasured`: no input is known that gives a bunkered vehicle *unload* (claim 11).
       The no-cell case would also need the whole search area around the exit cell to be
-      impassable for the vehicle, which no stock map provides
+      impassable for the vehicle
     - Confidence: high (the effects, as behaviour of the original); low (the placeholder
       destination and the 450-tick delay, which K6 records only if unload is reached,
-      reachability, and the other types' continuation)
+      reachability, the other types' continuation, and the in-place type's outcome)
 
 13. **Let out: bunker destroyed, sold or erased.** An occupied bunker lets its vehicle out at
     these moments:
@@ -447,15 +456,16 @@ combination with the repair-depot role; other combinations have not been fully t
     that deletes an object without destroying it).
     - **The original:** that removal does not end the bunker link on the side that remains,
       though the contact ends. The survivor keeps a link to an object that no longer exists, and
-      its later behaviour is undefined (it reads the deleted object).
+      its later behaviour is unspecified (it reads the deleted object).
     - **Our engine (documented departure, no switch):** the removal ends the bunker link on both
-      sides, silently. There are no walls-down effects and no release track. A surviving vehicle
+      sides, silently. The importer gives no warning for this: the cause is a runtime removal, not
+      a fault in the data. There are no walls-down effects and no release track. A surviving vehicle
       gets no new behaviour or destination and stays where it stands. A surviving bunker ends
       contact with the removed vehicle, returns to *clearing* and queues *guard* without an
       immediate start, so it can take a new vehicle in.
-    - Backing: `unmeasured`: the original's outcome is undefined, and no such route is
+    - Backing: `unmeasured`: the original's outcome is unspecified, and no such route is
       established in stock skirmish data
-    - Confidence: medium (the link is kept, but the original's later behaviour is undefined); the departure is a design choice
+    - Confidence: medium (the link is kept, but the original's later behaviour is unspecified); the departure is a design choice
 
 20. **A type that is both a repair depot and a bunker (Q-1308, in part).** For a building type
     with both the bunker flag and the unit-repair flag (S-0314):
@@ -623,7 +633,7 @@ Ordering consequences:
 
 ## Edge cases and quirks
 
-- **Only the chosen object per cell is examined** (`quirks.bunker_clear_nearest_only`). The
+- **Only the chosen object per cell is examined** (`quirks.bunker_clear_chosen_only`). The
   clearing and waiting rows look at the single chosen object of each foundation cell (claim 6,
   F5). When the entering vehicle is that object, a second object in the same cell is neither
   asked to scatter nor waited for, and stays on the foundation while the vehicle drives in. With
@@ -654,10 +664,12 @@ Ordering consequences:
   - Backing: `measurable` (K1c for the coordinates); the warning is an importer design choice.
   - Confidence: high (fixed displacements); medium (completion on other foundations)
 - **Removal by another route** (claim 19). The original keeps a link to the removed object, with
-  undefined results. Our engine ends the link silently on both sides. This is a documented
-  departure with no switch, because undefined behaviour cannot be reproduced.
+  unspecified results. Our engine ends the link silently on both sides. This is a documented
+  departure with no switch, because unspecified behaviour cannot be reproduced.
 - **Release with no nearby cell found** (claim 12). The vehicle sets off toward the placeholder
-  map cell (0, 0), as in S-0507 claim 8. This is original behaviour with no switch.
+  map cell (0, 0), as in S-0507 claim 8. This is the original's behaviour as S-0507 claim 8 states
+  it. It is not measured here (claim 12; Open questions, item 7), so it has low confidence, and it
+  has no switch.
 - **Walls-up animations after an abandoned entry** (claim 16). Fixed behaviour: they stop when
   the bunker returns to *clearing*. The original leaves them running with the bunker empty. This
   is a display defect, so it has no switch.
@@ -688,6 +700,7 @@ Ordering consequences:
 | Rules, building type sections | `UnitRepair` | the unit-repair (depot) flag of claim 20 | boolean (S-0314) | off |
 | Rules, vehicle type sections | `DeploysInto` | deploy-into building type, claim 12's delay condition | building type name (S-0415) | none |
 | Rules, vehicle type sections | `IsSimpleDeployer` | simple-deployer flag, claim 12's delay condition | boolean (S-0517) | off |
+| Rules, vehicle type sections | `DeployFire` | deploy-fire flag, claim 12's delay condition | boolean (S-0517) | off |
 | Rules, vehicle type sections | harvester and weeder flags (S-0402's Import mapping) | claim 12's delay condition | boolean | off |
 
 Weapon slots and elite replacement use S-0308 claims 1 and 2's import mapping. The rate-of-fire,
@@ -852,23 +865,27 @@ that the computer player gives no orders. Run three recorded seeds per case usin
    universal selection ban. K6 must test pointing, ordinary click selection and deploy
    separately to establish an end-to-end player-input route to claim 12's unload. Other
    hotkeys, pre-existing selections and queued orders have not been exhaustively checked.
-2. **No nearby cell (resolved).** Claim 12 gives the placeholder cell (0, 0).
-3. **Pulse and release (Edge cases).** Can the vehicle actually advance on its release track
+2. **Pulse and release (Edge cases).** Can the vehicle actually advance on its release track
    while disabled, despite other inactivity rules? What happens to locomotion power after
    the track and at pulse expiry?
-4. **Interruption during entry (resolved).** Claim 16: every order except the ignored repeated enter ends contact, so the bunker
-   does not stay stuck at its stage.
-5. **Psychic Dominator (resolved).** S-0612 claim 13 establishes conditional sweep eligibility
-   and reachability for a vehicle in a 2 × 2 bunker. Claim 15 records the retained link.
-6. **Re-asking the docking point (claim 4).** Whether the docking point is re-asked on every
+3. **Re-asking the docking point (claim 4).** Whether the docking point is re-asked on every
    route refresh or only when the route is built was not traced. The two give different docking
    cells for a vehicle that drives around the bunker.
-7. **Other removals (resolved).** Claim 19: the original keeps the link, and our engine departs
-   from this by ending it.
-8. **Depot and bunker on one type (claim 20).** Whether the vehicle ends up bunkered, repaired,
+4. **Depot and bunker on one type (claim 20).** Whether the vehicle ends up bunkered, repaired,
    or both, and whether it is ever released, was not traced to an outcome. K9 records it.
-9. **Destination at the track's end (claim 5).** Confidence is medium that the vehicle's
+5. **Destination at the track's end (claim 5).** Confidence is medium that the vehicle's
    destination still names the bunker when the entry track ends. K8 (c) tests the consequence.
+6. **Released in-place vehicle (claim 12).** Whether a bunkered vehicle of a simple-deployer
+   (in-place) type, once released, reaches the in-place cycle of S-0517 claim 3 is not established.
+   If it does, its unload uses that cycle's delays and its *guard* replaces the queued *move*. If it
+   does not, a reason is needed that the approved specs do not give. S-0517 claim 1 leaves the
+   bunkered branch to S-0415 claim 1, which does not cover it. K6 covers only an ordinary type; an
+   in-place variant would be needed to test this.
+7. **No nearby cell (claim 12).** The original's handling of a nearby-cell search with no result is
+   unchecked (Q-1305). The placeholder destination (0, 0) and the 450-tick delay stay low confidence
+   until K6 reaches unload.
+8. **Removal by another route (claim 19).** The original's behaviour for a surviving link after such
+   a removal is unspecified. Claim 19 records our departure, not the original's outcome.
 
 ## Questions for the project lead
 
