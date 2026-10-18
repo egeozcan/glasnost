@@ -2,13 +2,13 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-19
 measurements: []
-requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404]
+requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405]
 supersedes: []
 ---
 
@@ -850,19 +850,42 @@ divisions). With δ_F < −1 the divisor is negative and the formula applies unc
 
 **F14. Railgun beam end point.** Computed once, at the shot that makes a railgun emitter (claim
 1). *P* is the emitter's position (the fire point, integers) and *Q* the target's position at the
-shot (integers; the target's own position, with no further raise). Let δ be the single-precision
-value nearest 1/49 (about 0.020408163). For *i* = 0 … 49:
+shot (integers; the target's own position, with no further raise). Let δ be the fixed
+single-precision value nearest 1/49, exactly 10956549 / 536870912 (about 0.020408163).
+This constant is unchanged by the rounding mode; it is not a fresh division in that mode.
+For *i* = 0 … 49:
 
-> *t*ᵢ = fl(*i* × δ), *s*ᵢ = trunc(*Q* × *t*ᵢ + *P* × (1 − *t*ᵢ)) per component,
+> *t*ᵢ = fl(*i* × δ), *s*ᵢ = trunc((*Q* × *t*ᵢ) + (*P* × (1 − *t*ᵢ))) per component.
 
-with each sum formed with no single-precision rounding of its intermediate results and truncated
-toward zero. *t*₀ = 0 and *t*₄₉ = 1.0 exactly, so *s*₀ = *P* and *s*₄₉ = *Q*. The samples are
-visited in the order of *i*. A sample is tested only when its cell (trunc(*x* / 256), trunc(*y* / 256))
+The product for *t*ᵢ is formed in double precision and then narrowed to single precision.
+Every subtraction, product and sum in the sample position is formed in double precision,
+with no single-precision narrowing, followed by truncation toward zero to integer leptons.
+The integers enter those products exactly. Each arithmetic result and the narrowing follow
+S-0205 claims 4 and 5, including `quirks.chop_rounding`; no multiply-add is fused and the
+weighted sum is not replaced by a difference-based interpolation.
+
+**Last sample (Q-1405 question 1).** Every *t*ᵢ, including *t*₄₉, uses that same rounding rule:
+there is no special assignment of 1.0 at the last sample. With the original's round-toward-zero
+mode, *t*₄₉ = 1 − 2⁻²⁴, since the exact product 49 × δ = 1 − 11 × 2⁻²⁹ narrows downward.
+Thus *s*₀ = *P*, but *s*₄₉ need not equal *Q*. For example, *P* = (2688, 2688, 60) and
+*Q* = (3840, 2688, 0), in leptons, give *s*₄₉ = (3839, 2688, 0), in the cell before *Q*'s.
+With `quirks.chop_rounding` off, every product and narrowing rounds to nearest instead.
+*t*₄₉ is then 1.0 and *s*₄₉ = *Q*. Earlier parameters can differ too: *t*₃ is
+0.06122448667883873 in the original mode and 0.06122449040412903 with the switch off
+(the decimals denote the respective single-precision values).
+
+The samples are visited in the order of *i*. A sample is tested only when its cell (trunc(*x* / 256), trunc(*y* / 256))
 differs from the cell of the sample before it (for *i* = 0, the cell of *P*); a sample in the same
 cell as the one before it is not tested. A tested sample *s*ᵢ whose height is below the terrain
 height there, *s*ᵢ,z < *H*(*s*ᵢ,x, *s*ᵢ,y) (strictly), is the end point, and no later sample is
 visited. When no tested sample is below the terrain, the end point is *Q*. *H* is the terrain
 height of Terms, never a bridge deck, so a beam passing under or over a deck is not stopped by it.
+In particular the no-stop end point is the exact *Q*, not *s*₄₉, even when the samples never
+enter *Q*'s cell. Candidate hits and the target fallback remain S-0306 claim 27's rules,
+including its line-distance and degenerate-beam cases (Q-1405 questions 2 and 3).
+- Backing: `measurable` (P22 parts b and d for claim 1's sampling and end point).
+  No oracle measurement is claimed.
+- Confidence: high
 
 ## Constants
 
@@ -911,7 +934,7 @@ height of Terms, never a bridge deck, so a beam passing under or over a deck is 
 | Deactivated-vehicle cadence divisor | 10 | leptons per unit of the position term (division truncated toward zero) | claim 1 |
 | Deactivated-vehicle cadence weight | 65536 | dimensionless (weight of the *y* term) | claim 1 |
 | Railgun end-point samples | 50 (*i* = 0 … 49) | sample points along the beam | F14 |
-| Railgun end-point step | the single-precision value nearest 1/49 (about 0.020408163) | dimensionless fraction of the beam per sample | F14 |
+| Railgun end-point step | 10956549 / 536870912, the fixed single-precision value nearest 1/49 | dimensionless fraction of the beam per sample | F14 |
 | Destruction-smoke depth limit | 10 | leptons below the surface | claim 1 |
 | Damage-smoke healing-mark depth | 10 | leptons below the surface (the mark applies below −10) | claim 1 |
 | Shared gas system position (hypothesis) | (2688, 2688, 0) | leptons | Not given by S-0613; decided by P1 part b. Its position is observable through the second trigger action of claim 1 (Open questions). |
@@ -983,6 +1006,15 @@ files. Except for the `DefaultSparkSystem` row, which says otherwise in its own 
 and the two sparking probabilities hold their absent-key defaults from program start, before any
 file is read; the spark particle cap, the railgun particles-per-lepton field and the other per-type
 fallbacks are the absent-key defaults of the fields named below. Confidence high, except the `DamageSmokeOffset` row, which is medium (claim 1).
+
+Beam sampling (claim 1, F14):
+
+| Key | Feeds | Form | Absent |
+|---|---|---|---|
+| none (engine constants, not imported) | beam sample count and fraction δ | 50 samples, indices 0 … 49; fixed single-precision fraction 10956549 / 536870912 | always these constants; neither a weapon nor a particle-system field changes them |
+
+The game-wide railgun hit distance is imported by S-0306 claim 27's Import mapping; it does not
+set the sample spacing. Rounding follows S-0205 claim 5, not an INI field.
 
 Rules file, particle system sections:
 
@@ -1256,6 +1288,22 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   fires again only after the firer is removed and a new one built. This records the original's
   behaviour that claim 20 fixes; our engine's expected result is the reverse (the place is free in the
   turn after the shot). Falsified by the original freeing the place or firing again while the same system survives, or by a burst or system-turn draw. Repeat with a negative spark-turns value. Separate controls apply a finite lifetime and a cell-marking trigger: each must free the empty system on its first marked turn, falsified by continued refusal after that removal.
+  Part d (Q-1405 question 1): use a long flat lane and named test rules giving the railgun enough
+  range, a positive hit distance that includes all lane occupants, and nonlethal damage. Arrange
+  a shot with recorded fire point *P* = (2560, 2688, 60) and target position
+  *Q* = (15104, 2688, 0), in leptons. Use two non-target infantry, one listed only in cell
+  (12, 10), at its centre, and one listed only in the target cell (59, 10), at its centre.
+  Verify those positions and cell listings with the read-only recorder before the shot; no
+  bystander may occupy another sampled cell. Record health changes, hit order and the emitter's
+  target point. Expected in the original mode: sample 3 has x = 3327 leptons and visits cell
+  (12, 10), so the first bystander is hit; sample 49 has x = 15103 leptons and remains in cell
+  (58, 10), so the target-cell bystander is not hit. The shot target is nevertheless hit by
+  S-0306 claim 27's fallback, and the emitter's target point is the exact *Q*, not sample 49.
+  Rounding the sample parameters to nearest would instead skip cell (12, 10) at sample 3.
+  Pinning the last parameter to 1.0 would wrongly visit cell (59, 10). Either corresponding
+  bystander result, or an emitter target point short of *Q* on this flat lane, falsifies F14.
+  One shot per fresh run, three runs, with the director off; use the shared speed, houses and
+  recorder setup above. This is a proposed oracle test, not a recorded measurement.
 - **P23. Place of the spark steps in the turn.** The random-state recorder, with the taking object,
   on (a) a cyborg-flag infantry below the yellow ratio with self-healing, moving and firing, standing
   in a radiation field, and (b) a vehicle disabled by selling its house's last control building

@@ -3,7 +3,7 @@ id: Q-1405
 title: The railgun beam's arithmetic: F14's last sample under round-toward-zero, and the line distance
 status: answered
 related: [S-0616, S-0306, S-0205]
-answered-by: [S-0306]
+answered-by: [S-0306, S-0616]
 ---
 
 ## Need
