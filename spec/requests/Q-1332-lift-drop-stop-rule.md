@@ -1,9 +1,9 @@
 ---
 id: Q-1332
 title: What the stop on dropping takes from the jumpjet stop rule
-status: open
+status: answered
 related: [S-0607, S-0502]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

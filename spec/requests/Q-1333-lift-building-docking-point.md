@@ -1,9 +1,9 @@
 ---
 id: Q-1333
 title: Which buildings give their docking point as a lifter's point, and which point
-status: open
+status: answered
 related: [S-0607, S-0314, S-0606]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-1335
 title: Can the walking-vehicle locomotor stand in for a seize
-status: open
+status: answered
 related: [S-0607, S-0207]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

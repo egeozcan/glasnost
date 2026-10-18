@@ -1,9 +1,9 @@
 ---
 id: Q-1336
 title: Claim 4's harvester case under a warhead that names another locomotor
-status: open
+status: answered
 related: [S-0607]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-1334
 title: How a unit seized with a stand-in locomotor moves and is restored
-status: open
+status: answered
 related: [S-0607]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need
