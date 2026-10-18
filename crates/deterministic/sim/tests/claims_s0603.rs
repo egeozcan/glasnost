@@ -201,12 +201,6 @@ fn game() -> World {
     game_on(&rules())
 }
 
-fn game_on_sized(size: i32) -> World {
-    let mut w = testkit::game_with(&rules(), size, 7);
-    testkit::run(&mut w, 2);
-    w
-}
-
 fn at(dx: i32, dy: i32) -> CellXY {
     testkit::mid(SIZE, dx, dy)
 }
@@ -985,21 +979,42 @@ fn grinder_fate_end_to_end() {
 }
 
 
-/// Sends BUGGY from (-20, 0) towards `dest` with a north–south line of WALL
-/// buildings at x = -4 from y = -`half` to `half`; returns whether it was
-/// consumed and the tick its destination was first cleared, if it was.
-/// On a larger map than [`game`]'s (size 50), where the outcome depends on
-/// how the line falls in the corridor's blocks.
-fn past_a_line(half: i32, grinder: bool) -> (bool, Option<i32>) {
+/// What became of a unit sent past a line of buildings.
+#[derive(Debug)]
+struct PastALine {
+    /// It was consumed (or, for a move, reached its cell).
+    arrived: bool,
+    /// The tick its destination was first cleared, if it was.
+    lost: Option<i32>,
+    /// Its current and queued behaviours just after that, and 10 ticks later.
+    after: Option<(Option<Behaviour>, Option<Behaviour>)>,
+    later: Option<(Option<Behaviour>, Option<Behaviour>)>,
+}
+
+/// Sends a BUGGY (or, with `infantry`, a WALKER) from (-20, 0) towards the
+/// grinder at (0, 0) with the recycle order (`grinder`), or with a move to
+/// the cell (-2, 0), with a north–south line of WALL buildings at x = -4
+/// from y = `shift` − `half` to `shift` + `half`, under
+/// `quirks.corridor_retry_no_fallback` = `no_fallback`. On a larger map
+/// than [`game`]'s (size 50), where the outcome depends on how the line
+/// falls in the corridor's blocks.
+fn past_a_line(half: i32, shift: i32, grinder: bool, infantry: bool, no_fallback: bool) -> PastALine {
     const BIG: i32 = 50;
     let at = |dx, dy| testkit::mid(BIG, dx, dy);
-    let mut w = game_on_sized(BIG);
+    let mut r = rules();
+    r.globals.quirks.corridor_retry_no_fallback = no_fallback;
+    let mut w = testkit::game_with(&r, BIG, 7);
+    testkit::run(&mut w, 2);
     let b = testkit::spawn(&mut w, Kind::Building, "GRND", 0, at(0, 0), 0);
     for y in -half..=half {
-        testkit::spawn(&mut w, Kind::Building, "WALL", 0, at(-4, y), 0);
+        testkit::spawn(&mut w, Kind::Building, "WALL", 0, at(-4, y + shift), 0);
     }
     testkit::run(&mut w, 3);
-    let car = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, at(-20, 0), 0);
+    let car = if infantry {
+        testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(-20, 0), 0)
+    } else {
+        testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, at(-20, 0), 0)
+    };
     let (behaviour, dest) = if grinder {
         (Behaviour::Eaten, Target::Object(b))
     } else {
@@ -1010,28 +1025,75 @@ fn past_a_line(half: i32, grinder: bool) -> (bool, Option<i32>) {
         ALPHA,
         Order::Behaviour { actor: car, behaviour, attack_move: false, target: None, dest: Some(dest) },
     );
-    let mut lost = None;
-    for t in 0..600 {
+    let mut out = PastALine { arrived: false, lost: None, after: None, later: None };
+    let beh = |w: &World| w.obj(car).map(|o| (o.beh.current, o.beh.queued));
+    for t in 0..900 {
         tick::step(&mut w);
-        if gone(&w, car) {
-            return (true, lost);
+        if gone(&w, car) || (!grinder && w.obj(car).unwrap().pos.cell() == at(-2, 0)) {
+            out.arrived = true;
+            return out;
         }
-        if lost.is_none() && w.obj(car).unwrap().dest.is_none() {
-            lost = Some(t);
+        if out.lost.is_none() && w.obj(car).unwrap().dest.is_none() {
+            out.lost = Some(t);
+            out.after = beh(&w);
+        }
+        if out.lost.is_some_and(|l| t == l + 10) {
+            out.later = beh(&w);
         }
     }
-    (false, lost)
+    out
 }
 
-// spec: S-0603 claims 3 and 4 with S-0212 claims 1, 13 and 23 (the entrant's approach is an ordinary path computation to the building: past a short line of buildings it drives round and is consumed; past a line of seven the corridor's retries close the way round, the new coarse search fails, the computation fails and the destination is cleared on the first tick, exactly as for a move order to a cell behind the line; Q-1280 asks whether the game does this)
+// spec: S-0603 claims 3 and 4 and S-0212 Edge cases (short line of buildings, Q-1280 answered) with claims 1, 13 and 23 (the entrant's approach is an ordinary path computation to the building: round a line of three it is consumed; with quirks.corridor_retry_no_fallback on, the original, past a line of seven at this alignment the corridor's retries leave the level-2 corridor unchanged, the new coarse search fails, the computation fails and the destination is cleared at once, exactly as for a move order to a cell behind the line, for a vehicle and an infantry unit alike)
 #[test]
 fn claims_3_4_approach_past_a_line_of_buildings() {
-    assert_eq!(past_a_line(1, true).0, true, "round a line of three");
-    let (consumed, lost) = past_a_line(3, true);
-    assert!(!consumed, "not past a line of seven");
-    // The order applies in the next tick (S-0213 claim 1); the first path
-    // computation fails in the one after.
-    assert_eq!(lost, Some(1), "the destination is cleared at once");
-    let (_, lost) = past_a_line(3, false);
-    assert_eq!(lost, Some(1), "a move to a cell behind the line fails alike");
+    assert!(past_a_line(1, 0, true, false, true).arrived, "round a line of three");
+    assert!(past_a_line(2, 0, true, false, true).arrived, "round a line of five");
+    for infantry in [false, true] {
+        let x = past_a_line(3, 0, true, infantry, true);
+        assert!(!x.arrived, "not past a line of seven (infantry {infantry})");
+        // The order applies in the next tick (S-0213 claim 1); the first path
+        // computation fails in the one after.
+        assert_eq!(x.lost, Some(1), "the destination is cleared at once (infantry {infantry})");
+        let m = past_a_line(3, 0, false, infantry, true);
+        assert_eq!(m.lost, Some(1), "a move to a cell behind the line fails alike (infantry {infantry})");
+    }
+}
+
+// spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off: a failed repeated coarse search is followed by one cell search without a corridor, so an open way round a short line is found at every alignment) and S-0603 claims 3 and 4
+#[test]
+fn corridor_retry_no_fallback_off_passes_the_line() {
+    for shift in 0..8 {
+        assert!(past_a_line(3, shift, true, false, false).arrived, "a line of seven, shift {shift}");
+    }
+    assert!(past_a_line(4, 0, true, false, false).arrived, "a line of nine");
+    assert!(past_a_line(3, 0, true, true, false).arrived, "infantry past a line of seven");
+    assert!(past_a_line(3, 0, false, false, false).arrived, "a move past a line of seven");
+}
+
+// spec: S-0212 Edge cases (short line of buildings) and scenario P12 run S with quirks.corridor_retry_no_fallback on (lines of 3 and 5 are passed at all eight shifts; some shift of the 7- and 9-lines fails at once; in this synthetic geometry the 7-line fails at shifts 0 and 1 and the 9-line at shift 0)
+#[test]
+fn run_s_shifts_with_the_switch_on() {
+    let mut fails = Vec::new();
+    for half in 1..=4 {
+        for shift in 0..8 {
+            let x = past_a_line(half, shift, true, false, true);
+            if !x.arrived {
+                assert_eq!(x.lost, Some(1), "an immediate failure: line {} shift {shift}", 2 * half + 1);
+                fails.push((2 * half + 1, shift));
+            }
+        }
+    }
+    assert_eq!(fails, vec![(7, 0), (7, 1), (9, 0)]);
+}
+
+// spec: S-0603 claim 3 and S-0212 claim 23 row 2 and Departure D5 (an entrant whose approach search failed more than 1 cell from the building gives up: its destination is cleared and it queues guard, an AI house's unit as a human-controlled one); Q-1157 interim (the queued guard starts by S-0215's ordinary rules: it is current in the failure tick and 10 ticks later)
+#[test]
+fn claim_3_failed_approach_gives_up() {
+    for infantry in [false, true] {
+        let x = past_a_line(3, 0, true, infantry, true);
+        assert_eq!(x.lost, Some(1));
+        assert_eq!(x.after, Some((Some(Behaviour::Guard), None)), "infantry {infantry}");
+        assert_eq!(x.later, Some((Some(Behaviour::Guard), None)), "infantry {infantry}");
+    }
 }

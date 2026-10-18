@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 24
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
-requests: [Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794]
+requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794]
 supersedes: []
 ---
 
@@ -76,6 +76,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
   driving and ship locomotion; S-0503 claim 16 for hovering).
 - **Queued entry.** A vehicle's standing intention to enter one depot. While it holds one, the
   vehicle requests a contact place again on every tick (claim 23).
+- **Remembered entry object.** The object an actor remembers as the one it is entering. For a
+  damaged vehicle that holds a queued entry for a repair depot (claim 23), it is that depot. The
+  term is S-0605's (Terms), and the glossary does not define it.
 - **Locomotion class.** The class name of a mobile type, as S-0211 claim 3 gives it (see Import
   mapping).
 - **Docking point.** The world position the depot supplies for that vehicle's approach and
@@ -826,15 +829,22 @@ only the vehicle in that place.
     place and takes contact (claim 17). For a later enter order on a depot that holds *any*
     contact, whatever its place count:
     - a vehicle below full health (health ratio below 1) gets no depot destination and no contact
-      from the order. It stays where it is, for now, with a *queued entry* for that depot. At its
-      first processing of *enter* (S-0215 claim 29) after that, while it holds no contact and
-      remembers no object it is entering (the condition of S-0605 claim 4), it chooses a free
-      location near the depot's centre cell that its own locomotion class can stand on (the
-      nearby-location search of S-0605 claim 12; its tie-breaks are open, see Open questions),
-      assigns it as destination, queues *move* and starts it at once (S-0605 claim 4), so it walks
-      to a cell next to the depot and rests there; the queued entry is not cleared by this walk.
-      Which cell it picks is left to the implementation, which must make the same choice from the
-      same game state.
+      from the order. The order queues *enter* without an immediate start (S-0215 claim 12),
+      records the depot as the object the vehicle is entering, and gives it a *queued entry* for
+      that depot. The vehicle does not move because of the order: it has no destination, and it
+      does not walk to a cell near the depot, because the depot is now its remembered entry object. *Enter* becomes current
+      at the vehicle's next per-tick start at which it is ready to change (S-0215 claims 11 and 12),
+      which is its first turn after the order takes effect, at the earliest the next tick (S-0215
+      claim 12), and is processed in that same turn (S-0215 claim 3(a)). While it is current it
+      repeats its entry request to the remembered
+      depot at each processing (S-0215 claim 29). With no free place for this vehicle the
+      depot answers accept and takes no contact (claim 16's free-place refusal governs the click
+      and the retry, not this repeated request; claim 17), so the vehicle stays where it is, in
+      *enter*, with no destination, and chooses the standard delay. If a place is free when a processing runs,
+      that request takes the contact; the retry below, which comes later in the same turn, then
+      finds the contact already held and goes on to ask permission. If the depot refuses the
+      request (for example it is switched off), the vehicle, having no tether, ends contact and
+      falls back to rest; its queued entry stays and the retry below still runs.
       Once per eligible vehicle turn
       it asks again for a contact place (claim 16's alliance and free-place tests). While none is free it keeps
       waiting. When one is free it takes it and asks permission. If permission is granted, it
@@ -862,8 +872,10 @@ only the vehicle in that place.
     position updates caused by this turn's movement occur with the position change, before
     the retry, not in a new passenger-sync phase after it (S-0507 claim 14).
     An inactive remembered depot clears
-    the queued entry. A newly current *enter* is first eligible for due processing on a later
-    vehicle turn; movement already performed this turn is not repeated.
+    the queued entry. A newly current *enter* granted by the retry above is first eligible for due
+    processing on a later vehicle turn; movement already performed this turn is not repeated. An
+    *enter* made current by the order of the first bullet of claim 23 is processed in its first turn
+    (S-0215 claim 3(a)).
 
     A place freed before this retry is available immediately, including release by an earlier
     object turn in the same tick. A place freed after the retry waits for a later tick. If
@@ -879,9 +891,9 @@ only the vehicle in that place.
       next-turn processing and the state/parasite/passenger distinctions). The inactive-reference
       case is `unmeasured`: a stock-only setup distinguishing that check has not been established.
     - Confidence: high (event order, retry position, queue/start distinction and automatic
-      entry), medium (stock observations of refusal and the full-health case; the walk to a
-      free cell near the depot, proposed in H18 f(ii) and S-0605 scenario A2c, with its cell
-      left open under Open questions)
+      entry), medium (stock observations of refusal and the full-health case; that *enter* is
+      current during the wait and that no walk happens, which H18 f(ii) records tick by tick; the
+      depot's accepting reply while it is full, and the request taking a free place before the retry)
 
 24. **No automatic return for repair.** No original rule sends a damaged vehicle of a player
     house to a depot by itself, at any health. The only automatic movements related to a depot
@@ -1074,7 +1086,7 @@ Backing and confidence are claim 15's.
 | any phase | depot starts selling | run-away notice to every contact; contacts released at the next processing (claim 22) |
 | any phase | depot destroyed | contacts released; docked vehicle stays in *sleep* (claim 22) |
 | depot holds any contact | enter order for a damaged vehicle | queued entry; no destination (claim 23) |
-| queued entry, no contact, no remembered object | first processing of *enter* (claim 23) | walks to a free cell near the depot's centre cell as destination (*move* started at once); queued entry kept |
+| queued entry, *enter* queued | vehicle's next ready per-tick start (claim 23) | *enter* current and processed that turn; its request to the remembered depot is accepted without contact while no place is free; no destination, no walk |
 | queued entry | tick with a free place and permission | contact taken; *enter* (claim 23) |
 | queued entry | tick with a free place, permission refused | gives up (claim 23) |
 | infantry inside a hospital | a step falls due (claim 7) | repair step at cost 0 |
@@ -1834,12 +1846,12 @@ damaged to half strength unless a part says otherwise.
   damaged vehicles and click the depot once, so both orders are issued before either vehicle
   takes contact. The first applied enter order takes contact before the second is applied
   (S-0213 claim 3).
-  Expected: one approaches; the other walks to a free cell near the depot (claim 23; S-0605
-  scenario A2c) with a queued entry and enters by itself at most
+  Expected: one approaches; the other stays where it was ordered, with *enter* current from its
+  first turn after the order takes effect and no destination (claim 23), with a queued entry, and enters by itself at most
   one tick after the first leaves. Repeat with the second at full health: it stays put and never
   enters. Repeat with the depot switched off before the first leaves: the queued vehicle gives
-  up when the place frees. Record the second vehicle's destination and behaviour each tick.
-  *Falsified if:* the second stays where it was ordered, enters before the first leaves, or, with
+  up when the place frees. Record the second vehicle's cell, destination and current and queued behaviour every tick from the order on (answers Q-1156).
+  *Falsified if:* the second walks to another cell or has any destination before the first leaves, has a current behaviour other than *enter* while waiting, enters before the first leaves, or, with
   the depot switched off, does not give up when the place frees.
 - *g, no automatic return:* leave a damaged vehicle of the human house idle near the depot for
   9000 ticks with no orders. Expected: it never enters. Any automatic entry falsifies claim 24.
@@ -2057,24 +2069,12 @@ The measurement scenario requires a read-only record of the ordered events; end-
 - Whether passengers inside a transport (not a hospital) self-heal: the original is believed not to
   heal them while they are inside. This question covers open-topped transports too, whose
   passengers are in play and take turns (glossary, *in play*); no measurement has settled it for them.
+- Whether the depot's reply to a full-depot entry request has any side effect besides answering accept
+  (claim 23). Only the answer is established; H18 f(ii) would show any effect.
 - Hospital-specific cross-creator suppression remains unmeasured (claim 7); S-0701 claim 28,
   G7 proposes tests for the *unit repaired* row and trigger/depot pair, not every creator.
   No completed measurement is claimed. Zoom progression and cadence are specified by
   S-0410 claims 14–15, with their exact floating-point equality boundaries still unmeasured.
   The post-zoom tail begins at the completion frame's tick number. There is no separate
   unresolved zoom-duration rule here.
-- Which free cell the depot walk of claim 23 picks, and its tie-breaks. S-0605 claim 4 and its
-  Open questions say no approved spec owns the nearby-location search and that its owner is a
-  lead decision. Until it is decided, claim 23 leaves the cell to the implementation.
-- Whether a queued depot entry has *enter* as its current behaviour during the wait. The walk is
-  triggered by a processing of *enter* (S-0215 claim 29), while S-0215's text on the queued depot
-  entry describes its retry as separate from the current *enter* processing. H18 f(ii) records it.
-- Whether a queued depot vehicle with no contact and nothing remembered falls back to rest, as
-  the no-contact case of S-0215 claim 29 would give, or walks as claim 23 says. S-0215 leaves that
-  case to the entry specs, so this spec states it: it walks (medium confidence, H18 f(ii)).
-- Within one turn, whether the walk or the same turn's contact retry comes first when both are
-  due. Option A: the walk is taken only when the retry does not grant contact. Option B: the walk
-  is taken first, and a grant then reassigns the destination. Claim 23 places behaviour
-  processing before the retry, which favours option B; H18 f(ii) distinguishes them by the
-  recorded destinations.
 

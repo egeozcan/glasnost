@@ -409,3 +409,31 @@ fn particle_quirks_load_in_both_positions() {
         );
     }
 }
+
+/// spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback: absent the
+/// original's position, on; an imported ruleset with a patch layer setting it loads either
+/// position).
+#[test]
+fn corridor_retry_quirk_loads_in_both_positions() {
+    let load = |layer: Option<&str>| {
+        let i = import("", "", "");
+        let sources: Vec<glasnost_rules::resolve::Source> = layer
+            .iter()
+            .map(|text| glasnost_rules::resolve::Source {
+                layer: "patch",
+                file: "patch.jsonc",
+                text,
+            })
+            .collect();
+        glasnost_rules::resolve_ruleset(Some((i.tree, i.provenance)), &sources)
+            .unwrap_or_else(|e| panic!("{e}"))
+            .ruleset
+            .globals
+            .quirks
+    };
+    assert!(load(None).corridor_retry_no_fallback, "absent: on");
+    for on in [false, true] {
+        let text = format!("{{\"globals\": {{\"quirks\": {{\"corridor_retry_no_fallback\": {on}}}}}}}");
+        assert_eq!(load(Some(&text)).corridor_retry_no_fallback, on);
+    }
+}

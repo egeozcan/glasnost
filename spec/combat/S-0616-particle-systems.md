@@ -2,13 +2,13 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 5
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
-requests: [Q-1243]
+requests: [Q-1153, Q-1155, Q-1243]
 supersedes: []
 ---
 
@@ -252,8 +252,21 @@ stands alone. This spec adds the terms after them.
    chooses the move: gas (S-0613), smoke (claim 7) or fire (claim 13). Spark, railgun and no-kind
    particles do not move there. Spark and railgun turns have no move pass. So a particle type put
    into a system of another kind keeps its own update and move, with the system's turn order.
-   - Backing: `measurable` (scenario P3, part b, test rules)
-   - Confidence: high
+
+   **Successors follow the system's kind, not the particle's** (Q-1155). When a dead particle's type
+   names a next particle type, whether successors are made, how many and where is decided by the
+   kind of the system that holds the dead particle, whatever the particle's own kind:
+   - **Gas system:** the dead particle, of any kind, gets one successor (at its position plus its type's
+     next-particle displacement, taking the dead particle's speed and its velocity and nothing else from it). S-0613 claim 7 gives the details of what is taken and its Terms entry for *Successor* is revised in the same round to match this rule, since they give the other kinds' successors to claim 8.
+   - **Smoke system:** the dead particle, of any kind, gets claim 8's two successors, with the
+     draws of claim 8, *d* being taken from the dead particle's type.
+   - **Fire, spark and railgun systems:** no successors for any particle, and no draw for them.
+   So a smoke particle that dies in a gas system gets the gas rule's one successor and no draw
+   from claim 8; a gas particle that dies in a smoke system gets claim 8's two successors; a smoke
+   or gas particle that dies in a fire, spark or railgun system is removed with none. The
+   successor's kind is that of the next type named, and it then updates by its own kind.
+   - Backing: `measurable` (scenario P3, parts b and c, test rules; the speed part of a gas successor: S-0613 claim 7's scenario G5-speed)
+   - Confidence: high for the successors' count, kind, position and draws; medium for a gas successor's speed, which takes the medium confidence of S-0613 claim 7 until G5-speed has run
 
 4. **Removal of the owner object marks the system.** When an object is removed (S-0203 claims 6 and 10),
    every particle system whose owner object it is loses its owner object and is marked. This holds
@@ -317,14 +330,13 @@ stands alone. This spec adds the terms after them.
    - Backing: `measurable` (scenario P6, wind part) for directions 0 … 7; `unmeasured` for the departure
    - Confidence: high
 
-8. **Smoke successors.** A smoke particle with the dead mark whose type names a next particle type
+8. **Smoke successors.** A particle of any kind with the dead mark, in a smoke system, whose type names a next particle type
    splits into two successors of that type when the removal pass reaches it. Two raw values give
    the displacements *o*ₓ, then *o*ᵧ (F3). The first successor is made at (*x* + *o*ₓ, *y* + *o*ᵧ, *z*)
    and the second at (*x* − *o*ₓ, *y* − *o*ᵧ, *z*), where (*x*, *y*, *z*) is the dead particle's
    position. Both have target point (0, 0, 0). Each takes its creation draws (S-0202 claim 15),
    then one raw value *r*; its translucency is the dead particle's plus 25 percentage points when *r* rem 6 ≠ 0 (drawn only). Each successor's speed
-   *S* is set to the dead particle's, but its flight direction and velocity are its own. Observably, the draws come in this order: *o*ₓ, then *o*ᵧ, then the first successor's creation draws and its translucency draw, then the second's; the dead particle is removed after both. This claim gives the successors of the smoke kind; the gas
-   kind's successor is S-0613 claim 7's.
+   *S* is set to the dead particle's, but its flight direction and velocity are its own. Observably, the draws come in this order: *o*ₓ, then *o*ᵧ, then the first successor's creation draws and its translucency draw, then the second's; the dead particle is removed after both. This claim gives the successors made in a smoke system (claim 3); the successor made in a gas system is S-0613 claim 7's.
    - Backing: `measurable` (scenario P7, test rules: no stock smoke type names a next type)
    - Confidence: high
 
@@ -356,8 +368,7 @@ stands alone. This spec adds the terms after them.
       draw and no particle affects another's move, so the order of the moves among the particles is
       not observable.
     - Particles with the dead mark are removed in a second pass, before the emission, so the
-      emission's particle count (F7) excludes them. Fire particles have no successors, whatever
-      their type names.
+      emission's particle count (F7) excludes them. In a fire system no particle has a successor, whatever its kind or its type names (claim 3).
     - The owner decides the system's mark. A system with no owner object, or with one that is not an
       infantry, vehicle, aircraft or building object, is marked, and so is one whose owner is no longer
       alive. An alive owner that has a target object and whose body facing is turning makes a flame
@@ -515,7 +526,7 @@ stands alone. This spec adds the terms after them.
       *T* to 1 or more, the system emits as claim 9 says.
     - **Fire spawn interval 0:** likewise, the interval test passes only at tick 0. A turn with a
       sweep still emits on every third tick.
-    - **Smoke successor with *d* = 0** (F3: a radius field from 0 to 7 on a smoke type that names a
+    - **Smoke successor with *d* = 0** (F3: a radius field from 0 to 7 on the type of a particle of any kind that dies in a smoke system and whose type names a
       next type): by S-0205 claim 3, *q* is the raw value itself and *o* = *q*. Both raw values are
       still taken.
     - **Spark velocity fields of 0** (F10) and a smoke spawn radius of −1 (F4): the remainder is
@@ -947,6 +958,11 @@ taken per tick, with the taking object) where draws are counted. No scenario fix
   it takes 3 + *u* draws (*u* the lifetime variation), then none. Falsified by one more or fewer.
   Part b: a test rules file whose smoke system holds a fire particle type that has damage. Expected:
   the fire particles hit (claim 14) and move by claim 13, in the smoke turn's order. Falsified by a fire particle that neither hits nor moves in that order.
+  Part c (successors across kinds, claim 3): test rules with (i) a gas-kind system holding a smoke
+  type with lifetime 3 and a next type, (ii) a smoke-kind system holding a gas type with lifetime 3
+  and a next type, (iii) a fire-kind system holding a smoke type, and (iv) a spark-kind system holding
+  a gas type, both with a next type. Observable: the particle count and positions after the first
+  particle dies, and the raw values taken in that turn. Expected: (i) one successor at the displacement of S-0613 claim 7, with its creation draws (S-0202 claim 15) and no draw of this spec's claim 8; (ii) two successors mirrored about the dead particle's position, with this spec's claim 8 draws; (iii) and (iv) no successor and no successor draw, the turn's other draws as claims 3, 10 and 15 give. Falsified by any other count or successor draw.
 - **P4. Owner removal.** A building with a damage smoke system (S-0312 claim 19 f or S-0302
   claim 13), sold or destroyed while the system holds particles. Observable: the tick in which the
   system leaves play. Expected: it stops emitting at once and leaves in the turn its last

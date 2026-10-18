@@ -1,9 +1,9 @@
 ---
 id: Q-1156
 title: When a queued depot vehicle makes the walk of S-0314 claim 23
-status: open
+status: answered
 related: [S-0314, S-0215, S-0605]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need

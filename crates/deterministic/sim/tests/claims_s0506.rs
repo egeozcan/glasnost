@@ -816,7 +816,7 @@ fn claim_20_interception() {
     }
 }
 
-// spec: S-0506 claim 18 and Edge cases quirks.rocket_stalls_at_map_edge (a step into an illegal cell is not taken)
+// spec: S-0506 claim 18 and Edge cases quirks.rocket_stalls_at_map_edge (a step into an illegal cell is not taken; the missile keeps its position, its speed updates still proceed)
 #[test]
 fn claim_18_map_edge() {
     let r = rules();
@@ -839,6 +839,12 @@ fn claim_18_map_edge() {
         (p1.x, p1.y),
         (p0.x, p0.y),
         "the step out of the map is not taken"
+    );
+    // spec: S-0506 claim 18 (revision 10: the phase, speed and pitch updates still proceed in the stalled tick)
+    let speed = w.obj(x).unwrap().rocket.as_ref().unwrap().speed;
+    assert!(
+        speed.gt(glasnost_num::F64::from_i64(40, glasnost_num::Rounding::TowardZero)),
+        "the ascent still accelerates"
     );
 }
 
@@ -1592,6 +1598,85 @@ fn carrier_slot_cycle() {
     spawn::pass(&mut w, car);
     assert_eq!(controller(&w, car).slots[0].state, SlotState::Returning);
     assert_eq!(w.obj(x).unwrap().dest, Some(Target::Object(car)));
+}
+
+/// A two-slot carrier CAR2 of HAWK aircraft (flagged with the missile-spawn
+/// flag when `flagged`, never a rocket type), the carrier itself without
+/// the flag (launch spacing 20: one launch every second pass). Returns the
+/// world, the carrier, the victim and a second target.
+fn carrier2(flagged: bool) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut r = rules();
+    r.registries.entry("aircraft".into()).or_default().push("HAWK".into());
+    r.sim.aircraft.insert(
+        "HAWK".into(),
+        UnitType {
+            strength: Some(80),
+            speed: Some(10),
+            spawned: Some(true),
+            missile_spawn: Some(flagged),
+            ..Default::default()
+        },
+    );
+    r.sim.vehicles.insert("CAR2".into(), launcher("HAWK", 2, "Launch"));
+    r.sim.vehicles.get_mut("CAR2").unwrap().missile_spawn = Some(false);
+    r.registries.get_mut("vehicles").unwrap().push("CAR2".into());
+    let mut w = game(&r);
+    let car = spawn_at(&mut w, "CAR2", 0, 0, 0, 0);
+    let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
+    let other = spawn_at(&mut w, "VICTIM", 1, 8, 4, 0);
+    (w, car, victim, other)
+}
+
+// spec: S-0506 Terms (missile slot: the flag does not make a slot a missile slot), claims 3, 6, 7 and 8 and the Slot table (a flagged type that is not a rocket type has a non-missile slot: it launches while the carrier moves, is sent to the step direction 0 neighbour of the spawner's cell, is not re-sent by the preparing rows, a pending target adopted while it is preparing replaces the controller target, and claim 8 releases it); scenario variant of the flag/type distinction
+#[test]
+fn flagged_non_rocket_slot() {
+    for flagged in [true, false] {
+        let (mut w, car, victim, other) = carrier2(flagged);
+        let x0 = controller(&w, car).slots[0].object.unwrap();
+        w.obj_mut(car).unwrap().target = Some(Target::Object(victim));
+        // The carrier moves (claim 6's motion lockout is for rocket slots only).
+        open(&mut w);
+        assert!(orders::issue(
+            &mut w,
+            ALPHA,
+            orders::Order::Behaviour {
+                actor: car,
+                behaviour: glasnost_sim::rules::Behaviour::Move,
+                attack_move: false,
+                target: None,
+                dest: Some(Target::Cell(testkit::mid(SIZE, -12, 0))),
+            },
+        ));
+        testkit::run(&mut w, 3);
+        spawn::shot(&mut w, car, Target::Object(victim));
+        // The aircraft's own flight is a seam here: the hooks are read straight after a pass.
+        assert!(testkit_run_until(&mut w, 120, |w| controller(w, car).state == ControllerState::Launching));
+        assert!(glasnost_sim::occupancy::in_progress(&w, car), "the carrier is moving");
+        spawn::pass(&mut w, car);
+        assert_eq!(controller(&w, car).slots[0].state, SlotState::Preparing, "launched while moving (flagged {flagged})");
+        let cell = w.obj(car).unwrap().pos.cell();
+        let (dx, dy) = glasnost_sim::regions::STEPS[0];
+        let first = Some(Target::Cell(glasnost_map::CellXY::new(cell.x + dx, cell.y + dy)));
+        assert_eq!(w.obj(x0).unwrap().dest, first, "claim 7: the step direction 0 neighbour");
+        // A pending target, then one pass with slot 0 preparing and slot 1 docked.
+        spawn::shot(&mut w, car, Target::Object(other));
+        spawn::pass(&mut w, car);
+        assert_eq!(controller(&w, car).slots[0].state, SlotState::Preparing);
+        assert_eq!(controller(&w, car).target, Some(Target::Object(other)), "claim 3");
+        let (sx, sy) = glasnost_sim::regions::STEPS[4];
+        let now = w.obj(car).unwrap().pos.cell();
+        let resent = Some(Target::Cell(glasnost_map::CellXY::new(now.x + sx, now.y + sy)));
+        if flagged {
+            assert_eq!(w.obj(x0).unwrap().dest, first, "the preparing rows do not move it");
+        } else {
+            assert_eq!(w.obj(x0).unwrap().dest, resent, "an unflagged object is re-sent");
+        }
+        // Claim 8: once every slot is preparing, a flagged one is detached (its slot empty), an unflagged one attacks.
+        // A few passes later slot 1 launches and every slot is preparing.
+        assert!(testkit_run_until(&mut w, 200, |w| controller(w, car).slots[0].state != SlotState::Preparing));
+        let want = if flagged { SlotState::Empty } else { SlotState::Attacking };
+        assert_eq!(controller(&w, car).slots[0].state, want, "flagged {flagged}");
+    }
 }
 
 // spec: S-0506 Edge cases and S-0303 claim 6 (quirks.ground_detonation_misses_aircraft: a blast at the terrain surface does not search flying objects; off: it does, at half distance for an object in the air)

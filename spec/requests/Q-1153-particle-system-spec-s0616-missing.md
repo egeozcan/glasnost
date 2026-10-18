@@ -1,9 +1,9 @@
 ---
 id: Q-1153
 title: S-0616 (particle systems of the other kinds) is referenced but not in spec/
-status: open
+status: answered
 related: [S-0301, S-0302, S-0613, S-0004, S-0616]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need

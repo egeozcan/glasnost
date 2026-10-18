@@ -8299,6 +8299,11 @@
           "type": "boolean",
           "default": true
         },
+        "corridor_retry_no_fallback": {
+          "description": "A failed new coarse search after a corridor retry fails the path\ncomputation, with no further cell search.",
+          "type": "boolean",
+          "default": true
+        },
         "corridor_split_probe": {
           "description": "Whether the progress sector is split is decided at the probe cell.",
           "type": "boolean",

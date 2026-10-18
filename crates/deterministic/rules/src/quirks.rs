@@ -351,6 +351,11 @@ pub struct Quirks {
     // spec: S-0212 claim 13a
     #[serde(default = "on")]
     pub corridor_split_probe: bool,
+    /// A failed new coarse search after a corridor retry fails the path
+    /// computation, with no further cell search.
+    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback)
+    #[serde(default = "on")]
+    pub corridor_retry_no_fallback: bool,
     /// Cells of an unusable category belong to the free part.
     // spec: S-0212 claim 13a
     #[serde(default = "on")]
@@ -1947,6 +1952,7 @@ impl Default for Quirks {
             detour_after_tunnel_position: true,
             path_congestion_toggle: true,
             corridor_split_probe: true,
+            corridor_retry_no_fallback: true,
             corridor_free_part_unusable_cells: true,
             substitution_centre_ground_level: true,
             substitution_distance_flat_destination: true,
@@ -2520,6 +2526,10 @@ impl Quirks {
             ),
             ("path_congestion_toggle", self.path_congestion_toggle),
             ("corridor_split_probe", self.corridor_split_probe),
+            (
+                "corridor_retry_no_fallback",
+                self.corridor_retry_no_fallback,
+            ),
             (
                 "corridor_free_part_unusable_cells",
                 self.corridor_free_part_unusable_cells,
