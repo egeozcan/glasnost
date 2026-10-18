@@ -1,34 +1,51 @@
 ---
 id: Q-1159
-title: S-0605 claim 3 refers to a "Flag F1" that the spec does not have
+title: S-0605 claim 3's still-driving vehicle against S-0215 claim 11's queued-enter exception
 status: open
-related: [S-0605]
+related: [S-0605, S-0215]
 answered-by: []
 ---
 
 ## Need
 
-S-0605 revision 6, claim 3, has a new vehicle bullet: "a vehicle ordered in to a vehicle
-absorber always starts waiting in line". It says that at an empty building "the walk it makes
-is at most its movement in that turn (or none, if the retry comes before *enter* is current;
-see Flag F1)". The spec has no flag F1. Its F1 is the capacity test (Formulas), which has
-nothing to do with the order of the retry and the start of *enter*. Our code follows the turn
-order of claim 4 and S-0215 claim 11. If a vehicle is not ready at its first per-tick start
-after the order, *enter* is not current yet. The retry still runs after movement, grants
-contact and queues *enter* with an immediate start. No approach is made.
+S-0605 revision 7, claim 3, splits a vehicle ordered in to a vehicle absorber into two cases,
+according to whether it is ready to change at its first per-tick start after the order
+(S-0215 claim 11). In the case where it is not ready, the claim's example is "a vehicle still
+driving from an earlier order". There, *enter* is not current at that start, no approach step
+is made, and the vehicle ends the update with contact, *enter* queued and the building as its
+destination. Scenario A2c's vehicle variant tests this: "a step in the driving case"
+falsifies it.
+
+S-0215 claim 11 makes a moving vehicle not ready to change except in three cases, and the
+first of them is "the queued behaviour is *enter*". The order has just queued *enter*. So a
+vehicle that is still driving is ready by S-0215 claim 11: *enter* becomes current at that
+start and the approach step is made, which is the other case of S-0605 claim 3. The two specs
+disagree on the example. Our code follows S-0215 claim 11 (`process::ready`), so in our engine
+the driving case makes the approach step. A vehicle that is not ready for another reason (for
+example in a deploy or unload state) behaves as S-0605's second case says.
+
+(This file first asked about a "see Flag F1" reference in S-0605 revision 6, claim 3.
+Revision 7 removed that reference, so that question is withdrawn.)
 
 ## Questions
 
-1. What does "see Flag F1" in claim 3 point to?
-2. Does that flag hold any rule beyond the turn order of claim 4 (retry after behaviour
-   processing and movement) and S-0215 claims 7 and 11?
+1. A vehicle is still driving from an earlier move order when an *enter* order on an empty
+   vehicle absorber takes effect. In its first update after the order, does it make *enter*
+   current at the first per-tick start and take a step toward a cell next to the building, or
+   not?
+2. If it does not, which condition makes it not ready to change, given that its queued
+   behaviour is *enter*?
 
 ## Possible observation
 
-None needed if the reference is editorial. Otherwise, scenario A2c's vehicle variant, with
-the vehicle moving when the order takes effect (not ready at its first start).
+S-0605 scenario A2c's vehicle variant, the still-driving case, as written. Record the
+vehicle's current and queued behaviour at the start of its first update after the order, and
+its position change in that update.
 
 ## Current workaround
 
-None needed. The behaviour is as built: `absorb::order_entered` and `absorb::waiting_turn`,
-`claim_3_vehicle_always_waits_in_line`. The request is noted in `docs/m7-claims/S-0605.md`.
+Interim rule, cited as "Q-1159 interim" in `docs/m7-claims/S-0605.md` and
+`docs/development.md` (Simulation, M7a: Infantry absorber): S-0215 claim 11 decides. A
+driving vehicle whose queued behaviour is *enter* is ready to change, so it makes *enter*
+current and takes the approach step. Only a vehicle that is not ready for another reason makes
+no step.
