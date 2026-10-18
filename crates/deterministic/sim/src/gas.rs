@@ -408,23 +408,38 @@ pub fn nearest_single(text: &str) -> F32 {
     crate::rules::nearest_double(text).to_f32(Rounding::Nearest)
 }
 
-fn identity() -> [[F32; 3]; 3] { // nocite: vector and matrix dimensions (three axes)
+// nocite: vector and matrix dimensions (three axes)
+fn identity() -> [[F32; 3]; 3] {
     let one = nearest_single("1");
     let zero = nearest_single("0");
     [[one, zero, zero], [zero, one, zero], [zero, zero, one]]
 }
 
 /// The ramp matrices by shape 0 … 20 (S-0106 table C4).
-pub fn ramps() -> Vec<[[F32; 3]; 3]> { // nocite: vector and matrix dimensions (three axes)
+// nocite: vector and matrix dimensions (three axes)
+pub fn ramps() -> Vec<[[F32; 3]; 3]> {
     let mut out = vec![identity(); 21]; // spec: S-0106 table C4 (ramp shapes 0 … 20)
     for (s, e) in C4 {
         let m = [
-            [nearest_single(e[0]), nearest_single(e[1]), nearest_single(e[2])], // nocite: vector and matrix dimensions (three axes)
-            [nearest_single(e[3]), nearest_single(e[4]), nearest_single(e[5])], // nocite: vector and matrix dimensions (three axes)
-            [nearest_single(e[6]), nearest_single(e[7]), nearest_single(e[8])], // nocite: vector and matrix dimensions (three axes)
+            [
+                nearest_single(e[0]),
+                nearest_single(e[1]),
+                nearest_single(e[2]),
+            ], // nocite: vector and matrix dimensions (three axes)
+            [
+                nearest_single(e[3]),
+                nearest_single(e[4]),
+                nearest_single(e[5]),
+            ], // nocite: vector and matrix dimensions (three axes)
+            [
+                nearest_single(e[6]),
+                nearest_single(e[7]),
+                nearest_single(e[8]),
+            ], // nocite: vector and matrix dimensions (three axes)
         ];
         out[usize::from(s)] = m;
-        if (5..=8).contains(&s) { // spec: S-0106 C4 (shapes 9 … 12 equal 5 … 8)
+        // spec: S-0106 C4 (shapes 9 … 12 equal 5 … 8)
+        if (5..=8).contains(&s) {
             // spec: S-0106 C4 (shapes 9 … 12 equal 5 … 8)
             out[usize::from(s) + 4] = m;
         }
@@ -559,7 +574,8 @@ impl GasRules {
             .ok()
             .and_then(|d| WIND.get(d).copied())
             .map(|(dx, dy)| {
-                if direction == 3 && !quirks.wind_southeast_short { // spec: S-0613 Edge cases (the short step of direction 3)
+                // spec: S-0613 Edge cases (the short step of direction 3)
+                if direction == 3 && !quirks.wind_southeast_short {
                     (WIND_3_FULL, dy)
                 } else {
                     (dx, dy)
@@ -784,7 +800,7 @@ pub(crate) fn add_particle(
         dir,
         // spec: S-0616 Terms (a new particle's velocity starts at zero, whatever its kind)
         fvel: [F32(0); 3], // nocite: vector and matrix dimensions (three axes)
-        step: [0; 3], // nocite: vector and matrix dimensions (three axes)
+        step: [0; 3],      // nocite: vector and matrix dimensions (three axes)
         advance,
     };
     // spec: S-0613 claim 5 (a new particle is added at the end of its system's list)
@@ -804,11 +820,7 @@ pub(crate) fn creation_draws(w: &mut World, p: ParticleRules) -> (u16, i32) {
     }
     // spec: S-0202 claim 15 (every particle: one raw value for its lifetime variation, magnitude after signed remainder, modulo 10 for railgun behaviour, otherwise modulo the lifetime field)
     let r = w.rng.raw() as i32;
-    let modulus = if p.railgun {
-        RAILGUN_MODULUS
-    } else {
-        p.max_ec
-    };
+    let modulus = if p.railgun { RAILGUN_MODULUS } else { p.max_ec };
     // spec: S-0613 F9, S-0202 claim 15 and S-0205 claim 3 (u = |r rem E_max|, in 0 … |m| − 1 for a nonzero modulus m, the remainder first; a remainder by 0 is the dividend, our engine's departure; the importer warns)
     let u = magnitude(glasnost_num::int::rem(r, modulus));
     if p.colour_draw {
@@ -1101,7 +1113,9 @@ pub(crate) fn gas_update(w: &mut World, sys: ObjectId, i: usize) {
     }
     put(w, sys, i, p);
     damage_step(w, sys, i);
-    let Some(mut p) = particle(w, sys, i) else { return };
+    let Some(mut p) = particle(w, sys, i) else {
+        return;
+    };
     stage_step(t, &mut p);
     put(w, sys, i, p);
 }
@@ -1110,7 +1124,8 @@ pub(crate) fn gas_update(w: &mut World, sys: ObjectId, i: usize) {
 fn drift(w: &mut World, p: &mut Particle) {
     // spec: S-0613 F2 (one raw value r₁; with the low three bits of m(r₁) zero, two more)
     let r1 = w.rng.raw() as i32;
-    if magnitude(r1) & 7 != 0 { // spec: S-0613 F2 (the low three bits of m(r₁))
+    // spec: S-0613 F2 (the low three bits of m(r₁))
+    if magnitude(r1) & 7 != 0 {
         return;
     }
     let r2 = w.rng.raw() as i32;
@@ -1161,13 +1176,17 @@ fn obstacle(w: &World, c: CellXY) -> bool {
         return true;
     }
     // spec: S-0613 claim 10 (in a cell without a building, one of the three wall overlays)
-    !building && w.cells.cell(c).is_some_and(|cell| WALLS.contains(&cell.overlay))
+    !building
+        && w.cells
+            .cell(c)
+            .is_some_and(|cell| WALLS.contains(&cell.overlay))
 }
 
 /// m · v for a single-precision matrix and vector (F3): products and sums
 /// in double precision, grouped (a_y + a_z) + a_x for x and (a_y + a_x) +
 /// a_z for y and z, each completed component stored as a single.
-fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] { // nocite: vector and matrix dimensions (three axes)
+// nocite: vector and matrix dimensions (three axes)
+fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] {
     let mut out = [F32(0); 3]; // nocite: vector and matrix dimensions (three axes)
     for (i, row) in m.iter().enumerate() {
         let a: [F64; 3] = [0, 1, 2].map(|j| row[j].to_f64().mul(v[j].to_f64(), mode)); // nocite: vector and matrix dimensions (three axes)
@@ -1183,7 +1202,8 @@ fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] { // no
     out
 }
 
-fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] { // nocite: vector and matrix dimensions (three axes)
+// nocite: vector and matrix dimensions (three axes)
+fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] {
     let mut t = *m;
     for (i, row) in t.iter_mut().enumerate() {
         for (j, e) in row.iter_mut().enumerate() {
@@ -1193,7 +1213,8 @@ fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] { // nocite: vector and matrix
     t
 }
 
-fn diagonal(a: &str, b: &str, c: &str) -> [[F32; 3]; 3] { // nocite: vector and matrix dimensions (three axes)
+// nocite: vector and matrix dimensions (three axes)
+fn diagonal(a: &str, b: &str, c: &str) -> [[F32; 3]; 3] {
     let z = nearest_single("0");
     [
         [nearest_single(a), z, z],
@@ -1203,7 +1224,8 @@ fn diagonal(a: &str, b: &str, c: &str) -> [[F32; 3]; 3] { // nocite: vector and 
 }
 
 /// Claim 10, F3: the deflection of a particle at `p` on an even tick.
-pub fn deflection(w: &World, p: Pos) -> [F32; 2] { // nocite: the two horizontal axes
+// nocite: the two horizontal axes
+pub fn deflection(w: &World, p: Pos) -> [F32; 2] {
     let rules = w.rules();
     let g = rules.gas.gravity;
     let mode = rules.quirks.rounding();
@@ -1221,12 +1243,7 @@ pub fn deflection(w: &World, p: Pos) -> [F32; 2] { // nocite: the two horizontal
         return [F32(0); 2];
     }
     let shape = w.cells.cell(c).map_or(0, |cell| usize::from(cell.slope));
-    let m = rules
-        .gas
-        .ramps
-        .get(shape)
-        .copied()
-        .unwrap_or_else(identity);
+    let m = rules.gas.ramps.get(shape).copied().unwrap_or_else(identity);
     // spec: S-0613 F3 (v⁰ = (0, 0, −2 − G) in single precision)
     let v0 = [
         F32(0),
@@ -1279,7 +1296,9 @@ fn damage_step(w: &mut World, sys: ObjectId, i: usize) {
         }
         let at = o.pos;
         // spec: S-0613 F7 (D = L(|xₒ − x| + |yₒ − y|), S-0409 F2's lift applied to the horizontal sum, used as the lepton distance)
-        let sum = (at.x - pos.x).wrapping_abs().wrapping_add((at.y - pos.y).wrapping_abs());
+        let sum = (at.x - pos.x)
+            .wrapping_abs()
+            .wrapping_add((at.y - pos.y).wrapping_abs());
         let d = crate::econ::shroud::height_lift(sum, mode);
         let hit = Hit {
             amount: t.damage,

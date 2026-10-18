@@ -137,8 +137,7 @@ pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
 fn wounded(w: &World, id: ObjectId, depot: bool) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let strength = i64::from(glasnost_sim::combat::damage::strength(w, id));
-    !(depot && o.kind == Kind::Vehicle)
-        && i64::from(o.health) * 100 <= strength * WOUNDED_PERCENT // nocite: a percentage, tuning of our own opponent
+    !(depot && o.kind == Kind::Vehicle) && i64::from(o.health) * 100 <= strength * WOUNDED_PERCENT // nocite: a percentage, tuning of our own opponent
 }
 
 /// Whether unit `id` is bound for a recycling building: *eaten* current or
@@ -165,13 +164,14 @@ fn free(w: &World, id: ObjectId) -> bool {
     // A controlled enemy harvester, engineer or the like does no work for
     // the house while it stands idle, so only the house's own are kept.
     let own_kind_kept = !mind::mind_controlled(w, id)
-        && (w.rules().unit(o.kind, o.type_index).is_some_and(|u| {
-            u.harvester || u.engineer || u.raw.agent.unwrap_or(false)
-        }) || scripted::is_slave_miner(w, t)
+        && (w
+            .rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.harvester || u.engineer || u.raw.agent.unwrap_or(false))
+            || scripted::is_slave_miner(w, t)
             || slaves::is_slave(w, id)
             || scripted::deploys_into_yard(w, o.kind, o.type_index));
-    let kept =
-        own_kind_kept || mind::controller(w, id).is_some() || transport::count(w, id) > 0;
+    let kept = own_kind_kept || mind::controller(w, id).is_some() || transport::count(w, id) > 0;
     !kept && scripted::idle(w, id) && targeting::selectable(w, id)
 }
 
@@ -199,9 +199,7 @@ impl Special {
         let free: Vec<ObjectId> = own
             .iter()
             .copied()
-            .filter(|&id| {
-                (!ordered.contains(&id) || mind::mind_controlled(w, id)) && free(w, id)
-            })
+            .filter(|&id| (!ordered.contains(&id) || mind::mind_controlled(w, id)) && free(w, id))
             .collect();
         let absorber_room = crate::absorber::room_left(w, house);
         let controlled: Vec<ObjectId> = free
@@ -222,8 +220,7 @@ impl Special {
             .filter(|&id| wounded(w, id, depot))
             .collect();
         let mut surplus: Vec<ObjectId> = Vec::new();
-        if !absorber_room && glasnost_sim::seams::available_credits(w, house) < LOW_MONEY
-        {
+        if !absorber_room && glasnost_sim::seams::available_credits(w, house) < LOW_MONEY {
             let cost = |id: ObjectId| {
                 w.obj(id)
                     .map_or(0, |o| production::cost_field(w, tech::type_of(o)))

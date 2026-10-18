@@ -249,7 +249,11 @@ fn hit(w: &World, id: ObjectId, warhead_name: Option<&str>, amount: i32) -> Hit 
 /// non-penetrating one does not hurt a bunkered vehicle).
 fn lethal(w: &World, id: ObjectId) -> Hit {
     let o = w.obj(id).unwrap();
-    let wh = if o.kind == Kind::Building { "FLAT" } else { "PEN" };
+    let wh = if o.kind == Kind::Building {
+        "FLAT"
+    } else {
+        "PEN"
+    };
     hit(w, id, Some(wh), o.health * 10)
 }
 
@@ -310,7 +314,9 @@ fn entry_timeline_end_to_end() {
     assert_eq!(w.body_facing(u), 32768);
     assert_eq!(o.contact, Some(b));
     assert!(o.on_map);
-    assert!(matches!(cur(&w, u), Some(Behaviour::Guard)) || queued(&w, u) == Some(Behaviour::Guard));
+    assert!(
+        matches!(cur(&w, u), Some(Behaviour::Guard)) || queued(&w, u) == Some(Behaviour::Guard)
+    );
     assert_eq!(cur(&w, b), Some(Behaviour::Repair));
     // spec: S-0606 claims 6 and 7 (special-1 and special-2 start, the bunkered notice and the walls-up sound)
     assert!(effects.iter().any(|e| matches!(e,
@@ -320,7 +326,13 @@ fn entry_timeline_end_to_end() {
     assert_eq!(
         effects
             .iter()
-            .filter(|e| matches!(e, Effect::Sound { sound: Sound::BunkerWallsUp, .. }))
+            .filter(|e| matches!(
+                e,
+                Effect::Sound {
+                    sound: Sound::BunkerWallsUp,
+                    ..
+                }
+            ))
             .count(),
         1
     );
@@ -344,7 +356,10 @@ fn claim_6_driving_in_waits_for_the_track() {
     assert!(track(&w, u).is_some(), "on the entry track");
     let tr = track(&w, u).unwrap();
     assert!(matches!(tr.bunker, Some(BunkerTrack::Entry(_))));
-    assert_eq!((tr.target.0, tr.target.1), (w.reference_point(b).x, w.reference_point(b).y));
+    assert_eq!(
+        (tr.target.0, tr.target.1),
+        (w.reference_point(b).x, w.reference_point(b).y)
+    );
     // Held while the track runs.
     while track(&w, u).is_some() {
         assert_eq!(stage(&w, b), Stage::DrivingIn);
@@ -384,7 +399,8 @@ fn claim_5_arrival() {
     let u = tank(&mut w, 6, 1);
     send(&mut w, u, b);
     let dock = bunker::docking_point(&w, b, u).cell();
-    assert!(until(&mut w, 1000, |w| w.obj(u).unwrap().pos.cell() == dock
+    assert!(until(&mut w, 1000, |w| w.obj(u).unwrap().pos.cell()
+        == dock
         && w.obj(b).unwrap().beh.current == Some(Behaviour::Repair)));
     assert_eq!(cur(&w, u), Some(Behaviour::Enter));
     assert_ne!(queued(&w, u), Some(Behaviour::Sleep));
@@ -399,9 +415,17 @@ fn claim_7_occupied_foundation_blocks() {
     let mut w = game();
     let b = pit(&mut w, "PIT");
     let cells = foundation(at(0, 0));
-    assert!(cells.iter().all(|&c| !glasnost_sim::occupancy::blocking_cell(&w, b, c)));
+    assert!(
+        cells
+            .iter()
+            .all(|&c| !glasnost_sim::occupancy::blocking_cell(&w, b, c))
+    );
     fill(&mut w, b, 6, 1);
-    assert!(cells.iter().all(|&c| glasnost_sim::occupancy::blocking_cell(&w, b, c)));
+    assert!(
+        cells
+            .iter()
+            .all(|&c| glasnost_sim::occupancy::blocking_cell(&w, b, c))
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +447,10 @@ fn claim_1_eligibility() {
     assert!(!bunker::eligible(&w, tur), "no turret");
     assert!(!bunker::eligible(&w, hov), "hover");
     assert!(!bunker::eligible(&w, bug), "no turret weapon");
-    assert!(!bunker::eligible(&w, walker), "infantry: the flag is off by default");
+    assert!(
+        !bunker::eligible(&w, walker),
+        "infantry: the flag is off by default"
+    );
 }
 
 // spec: S-0606 claim 2 (rows P1, P2, P6, P7, P8, P9 and P10; first match wins)
@@ -507,7 +534,10 @@ fn claim_6_clearing_scatters_a_blocker() {
     send(&mut w, u, b);
     assert!(until(&mut w, 1500, |w| inside(w, u, b)));
     let cells = foundation(at(0, 0));
-    assert!(!cells.contains(&w.obj(s).unwrap().pos.cell()), "scattered off the foundation");
+    assert!(
+        !cells.contains(&w.obj(s).unwrap().pos.cell()),
+        "scattered off the foundation"
+    );
 }
 
 // spec: S-0606 Edge cases (quirks.bunker_clear_chosen_only on: the vehicle is the chosen object of its docking cell, a second object there is neither asked to scatter nor waited for; off: it is asked to scatter and waited for)
@@ -522,7 +552,8 @@ fn claim_6_chosen_only_both_positions() {
         // Arrived at the docking cell (the bunker has queued repair), before
         // the clearing row has run.
         let dock = bunker::docking_point(&w, b, u);
-        assert!(until(&mut w, 1000, |w| queued(w, b) == Some(Behaviour::Repair)
+        assert!(until(&mut w, 1000, |w| queued(w, b)
+            == Some(Behaviour::Repair)
             && w.obj(u).unwrap().pos == dock));
         assert_eq!(stage(&w, b), Stage::Clearing);
         // The second object stands in the docking cell, off the centre the
@@ -588,9 +619,18 @@ fn claim_11_selection() {
     let free = tank(&mut w, 6, 6);
     let u = fill(&mut w, b, 6, 1);
     assert!(targeting::box_eligible(&w, ALPHA, &[], free));
-    assert!(!targeting::box_eligible(&w, ALPHA, &[], u), "bunkered vehicle");
-    assert!(!targeting::box_eligible(&w, ALPHA, &[], b), "occupied bunker");
-    assert!(targeting::selectable_by(&w, u, Some(ALPHA)), "click selection stays");
+    assert!(
+        !targeting::box_eligible(&w, ALPHA, &[], u),
+        "bunkered vehicle"
+    );
+    assert!(
+        !targeting::box_eligible(&w, ALPHA, &[], b),
+        "occupied bunker"
+    );
+    assert!(
+        targeting::selectable_by(&w, u, Some(ALPHA)),
+        "click selection stays"
+    );
     assert!(targeting::movable(&w, ALPHA, free));
     assert!(!targeting::movable(&w, ALPHA, u));
 }
@@ -689,14 +729,52 @@ fn claim_12_unload_release() {
     assert_eq!(stage(&w, b), Stage::Clearing);
     assert_ne!(w.obj(u).unwrap().contact, Some(b));
     // Walls-down: special-1/2 stop, sound, special-3/4 start, in that order.
-    let i_stop = fx.iter().position(|e| matches!(e, Effect::SpecialAnims { slots: [1, 2], start: false, .. })).expect("stop");
-    let i_snd = fx.iter().position(|e| matches!(e, Effect::Sound { sound: Sound::BunkerWallsDown, .. })).expect("sound");
-    let i_go = fx.iter().position(|e| matches!(e, Effect::SpecialAnims { slots: [3, 4], start: true, .. })).expect("start");
+    let i_stop = fx
+        .iter()
+        .position(|e| {
+            matches!(
+                e,
+                Effect::SpecialAnims {
+                    slots: [1, 2],
+                    start: false,
+                    ..
+                }
+            )
+        })
+        .expect("stop");
+    let i_snd = fx
+        .iter()
+        .position(|e| {
+            matches!(
+                e,
+                Effect::Sound {
+                    sound: Sound::BunkerWallsDown,
+                    ..
+                }
+            )
+        })
+        .expect("sound");
+    let i_go = fx
+        .iter()
+        .position(|e| {
+            matches!(
+                e,
+                Effect::SpecialAnims {
+                    slots: [3, 4],
+                    start: true,
+                    ..
+                }
+            )
+        })
+        .expect("start");
     assert!(i_stop < i_snd && i_snd < i_go);
     // Then it moves to the nearby-cell result, off the foundation.
     testkit::run(&mut w, 400);
     let cells = foundation(at(0, 0));
-    assert!(!cells.contains(&w.obj(u).unwrap().pos.cell()), "left the foundation");
+    assert!(
+        !cells.contains(&w.obj(u).unwrap().pos.cell()),
+        "left the foundation"
+    );
     round_trip(&w);
     // The bunker can take a vehicle again.
     assert!(bunker::permits(&w, b, u));
@@ -716,12 +794,19 @@ fn claim_13_destroyed_bunker_lets_out() {
     assert!(!bunker::bunkered(&w, u), "within the hit");
     assert_eq!(w.obj(u).unwrap().contact, None);
     assert!(track(&w, u).is_some_and(|t| t.bunker == Some(BunkerTrack::Release)));
-    assert_eq!(sounds(&w, Sound::BunkerWallsDown), 0, "no walls-down effects");
+    assert_eq!(
+        sounds(&w, Sound::BunkerWallsDown),
+        0,
+        "no walls-down effects"
+    );
     testkit::run(&mut w, 80);
     let o = w.obj(u).expect("alive");
     assert_eq!(o.health, hu, "not hurt by the demolition");
     assert_eq!((o.pos.x - c.x, o.pos.y - c.y), (-128, 128));
-    assert!(matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::AreaGuard)));
+    assert!(matches!(
+        o.beh.current,
+        Some(Behaviour::Guard | Behaviour::AreaGuard)
+    ));
 }
 
 // spec: S-0606 claim 13 (a vehicle still entering, contact and no link, at a docking-cell centre is within 256 leptons and gets S-0312 claim 17's demolition damage)
@@ -764,7 +849,19 @@ fn claim_14_vehicle_death_releases_in_place() {
     assert_eq!(bunker::occupant(&w, b), None);
     assert_eq!(stage(&w, b), Stage::Clearing);
     assert_eq!(queued(&w, b), Some(Behaviour::Guard));
-    let i_snd = w.effects.iter().position(|e| matches!(e, Effect::Sound { sound: Sound::BunkerWallsDown, .. })).expect("walls down");
+    let i_snd = w
+        .effects
+        .iter()
+        .position(|e| {
+            matches!(
+                e,
+                Effect::Sound {
+                    sound: Sound::BunkerWallsDown,
+                    ..
+                }
+            )
+        })
+        .expect("walls down");
     // Before the death effects (the death animations and detonations);
     // the killed marking itself comes first (S-0312).
     if let Some(i_death) = w
@@ -1119,7 +1216,11 @@ fn claim_20_one_s1_row_then_the_depot() {
     tick::step(&mut w);
     let o = w.obj(b).unwrap();
     assert_eq!(stage(&w, b), Stage::Clearing, "S1's no-vehicle row ran");
-    assert_eq!(o.beh.current, Some(Behaviour::Guard), "the depot's guard, started");
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Guard),
+        "the depot's guard, started"
+    );
     assert_eq!(o.beh.queued, None, "S1's queued guard was replaced");
     assert_eq!(o.beh.last, Some((t, 1)), "the depot's delay, not 15 ticks");
 }
@@ -1202,7 +1303,10 @@ fn claim_12_released_simple_deployer_with_presentation() {
     w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Unload);
     let d = bunker::process_unload(&mut w, u);
     assert!(!bunker::bunkered(&w, u));
-    assert!(matches!(inplace::form(&w, u), Form::Deploying { .. }), "first step");
+    assert!(
+        matches!(inplace::form(&w, u), Form::Deploying { .. }),
+        "first step"
+    );
     assert_eq!(d, 1, "processing every tick during the transition");
     assert_eq!(queued(&w, u), Some(Behaviour::Move));
     assert!(until(&mut w, 400, |w| inplace::form(w, u) == Form::Deployed));

@@ -67,10 +67,12 @@ pub fn original_orientation(shape: u8) -> Quat {
 
 /// The tilt angle of the original for shapes 1 … 4 and 13 … 16, *τ_A*
 /// (S-0106 F2), for oracle comparisons.
+#[allow(clippy::excessive_precision)] // the digits as S-0106 F2 gives them
 pub const TAU_A: f64 = 0.511_634_767_055_511_47; // spec: S-0106 F2 (τ_A = A₂₃)
 
 /// The tilt angle of the original for shapes 5 … 12, *τ_B* (S-0106 F2), for
 /// oracle comparisons.
+#[allow(clippy::excessive_precision)] // the digits as S-0106 F2 gives them
 pub const TAU_B: f64 = 0.372_388_541_698_455_81; // spec: S-0106 F2 (τ_B = A₁₆)
 
 /// C3's construction rule (S-0106): the rotation about the horizontal axis

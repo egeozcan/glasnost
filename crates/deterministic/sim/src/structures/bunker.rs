@@ -641,7 +641,9 @@ fn walls_down(w: &mut World, k: ObjectId) {
 pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
     let t = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    let stage = w.obj(k).map_or(Stage::Clearing, |b| b.structure.bunker_stage);
+    let stage = w
+        .obj(k)
+        .map_or(Stage::Clearing, |b| b.structure.bunker_stage);
     let v = taken_in(w, k).filter(|&v| w.obj(v).is_some_and(|o| o.kind == Kind::Vehicle));
     let Some(v) = v else {
         if stage == Stage::RaisingWalls {
@@ -762,7 +764,8 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
             // spec: S-0606 claim 7 (the vehicle queues guard with an immediate start, S-0215 claim 7)
             let ready = crate::process::ready(w, v);
             if let Some(o) = w.obj_mut(v) {
-                o.beh.queue_and_start(Some(Behaviour::Guard), ready, t, stale);
+                o.beh
+                    .queue_and_start(Some(Behaviour::Guard), ready, t, stale);
             }
             // spec: S-0606 claim 7 (the imported walls-up sound at the bunker's position, if one is set)
             walls_sound(w, k, Sound::BunkerWallsUp);

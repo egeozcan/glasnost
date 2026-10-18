@@ -535,7 +535,12 @@ fn claim_5_g1_through_ticks() {
         assert_eq!(vs(&w, a), *want, "tick {}", k + 1);
         for wpn in shots(&w, a) {
             let slot = (before * 2) as usize;
-            assert_eq!(Some(wpn), weapon::slot_weapon(&w, a, slot), "tick {}", k + 1);
+            assert_eq!(
+                Some(wpn),
+                weapon::slot_weapon(&w, a, slot),
+                "tick {}",
+                k + 1
+            );
             fired.push(wpn);
         }
     }
@@ -679,7 +684,12 @@ fn claim_11_temporal_locks_spin_down_once_each() {
     set(&mut w, g, 150, 1);
     let mut downs = 0;
     let t0 = w.tick;
-    assert!(glasnost_sim::combat::fire::shot(&mut w, e1, 0, Target::Object(g)));
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        e1,
+        0,
+        Target::Object(g)
+    ));
     while tc::amount(&w, g).is_none() {
         tick(&mut w);
         downs += spin_events(&w, g)
@@ -701,7 +711,12 @@ fn claim_11_temporal_locks_spin_down_once_each() {
     // The joiner's lock: one more spin-down.
     let t1 = w.tick;
     let held = |w: &World| glasnost_sim::temporal::holds(w, e2, g);
-    assert!(glasnost_sim::combat::fire::shot(&mut w, e2, 0, Target::Object(g)));
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        e2,
+        0,
+        Target::Object(g)
+    ));
     let mut downs = 0;
     while !held(&w) {
         tick(&mut w);
@@ -804,7 +819,14 @@ fn claim_8_guard_spins_down_by_c() {
         set(&mut w, b, 20, 1);
         w.obj_mut(b).unwrap().beh.elapsed = 4;
         gattling::building_guard(&mut w, b);
-        assert_eq!(gattling::spin(&w, b), Spin { value: 16, stage: 1, elapsed: 0 });
+        assert_eq!(
+            gattling::spin(&w, b),
+            Spin {
+                value: 16,
+                stage: 1,
+                elapsed: 0
+            }
+        );
         assert_eq!(spin_events(&w, b), vec![SpinEvent::Down]);
         // Through ticks: no shot for a while, so no passive spin-down yet;
         // every elapsed tick is counted once by the guard processings, so
@@ -907,13 +929,19 @@ fn claim_13_spin_effects() {
     let w2 = weapon_named(&w, "W2");
     assert_eq!(
         spin_events(&w, a),
-        vec![SpinEvent::Up { raised: true, weapon: Some(w2) }]
+        vec![SpinEvent::Up {
+            raised: true,
+            weapon: Some(w2)
+        }]
     );
     w.effects.clear();
     gattling::spin_up(&mut w, a, 1);
     assert_eq!(
         spin_events(&w, a),
-        vec![SpinEvent::Up { raised: false, weapon: Some(w2) }]
+        vec![SpinEvent::Up {
+            raised: false,
+            weapon: Some(w2)
+        }]
     );
     experience(&mut w, a, 2);
     w.effects.clear();
@@ -921,7 +949,10 @@ fn claim_13_spin_effects() {
     let x4 = weapon_named(&w, "X4");
     assert_eq!(
         spin_events(&w, a),
-        vec![SpinEvent::Up { raised: true, weapon: Some(x4) }],
+        vec![SpinEvent::Up {
+            raised: true,
+            weapon: Some(x4)
+        }],
         "elite replacement, stage 2"
     );
     w.effects.clear();
@@ -937,7 +968,10 @@ fn claim_13_spin_effects() {
     gattling::spin_up(&mut w, e, 1);
     assert_eq!(
         spin_events(&w, e),
-        vec![SpinEvent::Up { raised: false, weapon: None }]
+        vec![SpinEvent::Up {
+            raised: false,
+            weapon: None
+        }]
     );
 }
 
@@ -950,7 +984,9 @@ fn claim_13_shots_are_marked() {
     for _ in 0..10 {
         tick(&mut w);
         for e in &w.effects {
-            if let Effect::Shot { firer, gattling, .. } = e
+            if let Effect::Shot {
+                firer, gattling, ..
+            } = e
                 && *firer == a
             {
                 assert!(*gattling);
@@ -1016,5 +1052,3 @@ fn save_round_trip() {
     m.obj_mut(b).unwrap().beh.elapsed = 4;
     assert_ne!(save::state_hash(&m), h);
 }
-
-

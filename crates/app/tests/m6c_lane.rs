@@ -1312,7 +1312,7 @@ fn crate_pickup(lane: &mut Lane) {
             .values()
             .filter(|p| p.trigger)
             .map(|p| p.cell)
-            .last();
+            .next_back();
         let Some(target) = target else { continue };
         let orders = lane.order(local, unit, glasnost_sim::targeting::ClickOn::Cell(target));
         println!("click on the crate cell: {orders} orders");

@@ -14,8 +14,8 @@ use glasnost_rules::schema::Ruleset;
 use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::occupancy;
 use glasnost_sim::orders::{self, Order};
-use glasnost_sim::psychic;
 use glasnost_sim::process;
+use glasnost_sim::psychic;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;
 use glasnost_sim::transport;
@@ -95,9 +95,18 @@ fn b46_infantry_expiry_late_start() {
     assert_eq!(o.combat.berserk, None, "expired");
     assert_eq!(o.beh.current, Some(Behaviour::Guard), "late start");
     assert_eq!(o.beh.queued, None);
-    assert!(o.beh.expired, "made current, not processed in the expiry update");
-    assert!(o.dest.is_some(), "the hunt move is not ended by a guard processing");
-    assert!(occupancy::in_progress(&w, u), "still moving at the end of the expiry update");
+    assert!(
+        o.beh.expired,
+        "made current, not processed in the expiry update"
+    );
+    assert!(
+        o.dest.is_some(),
+        "the hunt move is not ended by a guard processing"
+    );
+    assert!(
+        occupancy::in_progress(&w, u),
+        "still moving at the end of the expiry update"
+    );
 }
 
 // spec: S-0610 claim 5 (Effects: a vehicle moving under hunt is not ready, so it keeps hunting with guard queued until it stops; scenario P9 b)
@@ -132,7 +141,11 @@ fn claim_11_queued_guard_starts_by_the_current_predicate() {
             break;
         }
         assert!(!ready_at_first, "a ready vehicle starts at its first start");
-        assert_eq!(o.beh.current, Some(Behaviour::Hunt), "not ready while moving");
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::Hunt),
+            "not ready while moving"
+        );
     }
     let (ready_at_first, expired) = started.expect("guard starts");
     // A first start processes the new behaviour in its tick; a late start
@@ -209,7 +222,9 @@ fn shots(berserk: i32, n: i32) -> Vec<i32> {
 #[test]
 fn p9_a_no_berserk_shot_in_the_expiry_update() {
     let always = shots(100_000, 60);
-    let first = *always.first().expect("a berserk tank fires at its own house's unit");
+    let first = *always
+        .first()
+        .expect("a berserk tank fires at its own house's unit");
     // Berserk ends on the run of the first shot: no shot then or later.
     assert_eq!(shots(first, 60), Vec::<i32>::new());
     // One more update of berserk: that shot is fired (t = 1 after its step).

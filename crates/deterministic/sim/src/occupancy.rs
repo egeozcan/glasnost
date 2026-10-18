@@ -568,7 +568,10 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             over = true;
             v = Some(Outcome::Clear);
         } else if o.kind == Kind::Building
-            && r.buildings[o.type_index as usize].raw.grinding.unwrap_or(false)
+            && r.buildings[o.type_index as usize]
+                .raw
+                .grinding
+                .unwrap_or(false)
             && m.beh.seen() == Some(Behaviour::Eaten)
             && m.dest == Some(Target::Object(oid))
             && !crate::econ::power::being_erased(w, oid)
@@ -577,7 +580,10 @@ pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) ->
             over = true;
             v = Some(Outcome::Clear);
         } else if o.kind == Kind::Building
-            && r.buildings[o.type_index as usize].raw.grinding.unwrap_or(false)
+            && r.buildings[o.type_index as usize]
+                .raw
+                .grinding
+                .unwrap_or(false)
             && w.cells.list(m.pos.cell(), Layer::Ground).contains(&oid)
         {
             // spec: S-0209 claim 5 (row VP7: a building that grinds units and is also listed in the cell the vehicle stands in: overrides, clear) and S-0603 claim 4

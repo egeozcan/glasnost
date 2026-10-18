@@ -40,10 +40,7 @@ fn ruleset() -> Ruleset {
                 ..Default::default()
             },
         );
-        r.registries
-            .get_mut("vehicles")
-            .unwrap()
-            .push(name.into());
+        r.registries.get_mut("vehicles").unwrap().push(name.into());
     }
     r
 }
@@ -249,7 +246,7 @@ fn claim_11_b47_turning_vehicle_keeps_a_queued_attack() {
         .windows(2)
         .filter(|p| p[0].1 != p[1].1)
         .map(|p| p[1].0)
-        .last()
+        .next_back()
         .expect("the facing changes");
     assert!(t < log.last().unwrap().0 - 10, "the turn ends in the run");
     for &(k, _, cur) in &log {
@@ -263,6 +260,9 @@ fn claim_11_b47_turning_vehicle_keeps_a_queued_attack() {
     let o = w.obj(cart).unwrap();
     assert_eq!(o.beh.start_tick, t, "attack started in tick t");
     assert_eq!(starts.get(&t).copied(), Some(true), "processed in tick t");
-    assert!(start_delay.is_some_and(|d| d > 0), "a positive chosen delay");
+    assert!(
+        start_delay.is_some_and(|d| d > 0),
+        "a positive chosen delay"
+    );
     assert_eq!(read(&w, cart).2, Some(Behaviour::Attack));
 }

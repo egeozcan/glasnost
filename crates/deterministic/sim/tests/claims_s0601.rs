@@ -1288,7 +1288,12 @@ fn claim_16_pulse_timing_and_draws() {
     assert_eq!(w.rng, expect, "10 spark draws then the rocking draw");
     // spec: S-0601 F3 and S-0616 claim 1 (five systems of the default spark type around the controller, no owner object, no first particle)
     let sparky = w.rules().gas.system("SPARKY").unwrap();
-    let made: Vec<_> = w.gas.systems.values().filter(|s| s.type_index == sparky).collect();
+    let made: Vec<_> = w
+        .gas
+        .systems
+        .values()
+        .filter(|s| s.type_index == sparky)
+        .collect();
     assert_eq!(made.len(), 5);
     let at = w.obj(m).unwrap().pos;
     for s in &made {

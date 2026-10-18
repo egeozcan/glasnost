@@ -178,7 +178,9 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     if launched.is_none() && wr.projectile.is_some() && !wr.spawner {
         return false;
     }
-    if wr.mag_beam && let Some(pid) = launched {
+    if wr.mag_beam
+        && let Some(pid) = launched
+    {
         // spec: S-0607 claim 21 and F3 (a magnetic-beam weapon's shot may create a magnetic wave, from the firing point to the impact point; Q-1327: the impact point is the projectile's stored target point)
         let k = w
             .projectiles

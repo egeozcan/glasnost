@@ -67,9 +67,7 @@ pub fn look(w: &World, id: ObjectId, v: Option<HouseId>) -> Look {
             // spec: S-0516 claim 28 (fading by x: < 64 25 %; 64 to 191 50 %; 192 to 254 rippling, the owner 50 %; ≥ 255 not drawn, the owner 50 %; sensors play no part)
             if x < 64 {
                 Look::Translucent25
-            } else if x < 192 {
-                Look::Translucent50
-            } else if owner {
+            } else if x < 192 || owner {
                 Look::Translucent50
             } else if x < 255 {
                 Look::Rippling

@@ -843,7 +843,10 @@ fn claim_18_map_edge() {
     // spec: S-0506 claim 18 (revision 10: the phase, speed and pitch updates still proceed in the stalled tick)
     let speed = w.obj(x).unwrap().rocket.as_ref().unwrap().speed;
     assert!(
-        speed.gt(glasnost_num::F64::from_i64(40, glasnost_num::Rounding::TowardZero)),
+        speed.gt(glasnost_num::F64::from_i64(
+            40,
+            glasnost_num::Rounding::TowardZero
+        )),
         "the ascent still accelerates"
     );
 }
@@ -1606,7 +1609,10 @@ fn carrier_slot_cycle() {
 /// world, the carrier, the victim and a second target.
 fn carrier2(flagged: bool) -> (World, ObjectId, ObjectId, ObjectId) {
     let mut r = rules();
-    r.registries.entry("aircraft".into()).or_default().push("HAWK".into());
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("HAWK".into());
     r.sim.aircraft.insert(
         "HAWK".into(),
         UnitType {
@@ -1617,9 +1623,14 @@ fn carrier2(flagged: bool) -> (World, ObjectId, ObjectId, ObjectId) {
             ..Default::default()
         },
     );
-    r.sim.vehicles.insert("CAR2".into(), launcher("HAWK", 2, "Launch"));
+    r.sim
+        .vehicles
+        .insert("CAR2".into(), launcher("HAWK", 2, "Launch"));
     r.sim.vehicles.get_mut("CAR2").unwrap().missile_spawn = Some(false);
-    r.registries.get_mut("vehicles").unwrap().push("CAR2".into());
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("CAR2".into());
     let mut w = game(&r);
     let car = spawn_at(&mut w, "CAR2", 0, 0, 0, 0);
     let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
@@ -1650,32 +1661,73 @@ fn flagged_non_rocket_slot() {
         testkit::run(&mut w, 3);
         spawn::shot(&mut w, car, Target::Object(victim));
         // The aircraft's own flight is a seam here: the hooks are read straight after a pass.
-        assert!(testkit_run_until(&mut w, 120, |w| controller(w, car).state == ControllerState::Launching));
-        assert!(glasnost_sim::occupancy::in_progress(&w, car), "the carrier is moving");
+        assert!(testkit_run_until(&mut w, 120, |w| controller(w, car).state
+            == ControllerState::Launching));
+        assert!(
+            glasnost_sim::occupancy::in_progress(&w, car),
+            "the carrier is moving"
+        );
         spawn::pass(&mut w, car);
-        assert_eq!(controller(&w, car).slots[0].state, SlotState::Preparing, "launched while moving (flagged {flagged})");
+        assert_eq!(
+            controller(&w, car).slots[0].state,
+            SlotState::Preparing,
+            "launched while moving (flagged {flagged})"
+        );
         let cell = w.obj(car).unwrap().pos.cell();
         let (dx, dy) = glasnost_sim::regions::STEPS[0];
-        let first = Some(Target::Cell(glasnost_map::CellXY::new(cell.x + dx, cell.y + dy)));
-        assert_eq!(w.obj(x0).unwrap().dest, first, "claim 7: the step direction 0 neighbour");
+        let first = Some(Target::Cell(glasnost_map::CellXY::new(
+            cell.x + dx,
+            cell.y + dy,
+        )));
+        assert_eq!(
+            w.obj(x0).unwrap().dest,
+            first,
+            "claim 7: the step direction 0 neighbour"
+        );
         // A pending target, then one pass with slot 0 preparing and slot 1 docked.
         spawn::shot(&mut w, car, Target::Object(other));
         spawn::pass(&mut w, car);
         assert_eq!(controller(&w, car).slots[0].state, SlotState::Preparing);
-        assert_eq!(controller(&w, car).target, Some(Target::Object(other)), "claim 3");
+        assert_eq!(
+            controller(&w, car).target,
+            Some(Target::Object(other)),
+            "claim 3"
+        );
         let (sx, sy) = glasnost_sim::regions::STEPS[4];
         let now = w.obj(car).unwrap().pos.cell();
-        let resent = Some(Target::Cell(glasnost_map::CellXY::new(now.x + sx, now.y + sy)));
+        let resent = Some(Target::Cell(glasnost_map::CellXY::new(
+            now.x + sx,
+            now.y + sy,
+        )));
         if flagged {
-            assert_eq!(w.obj(x0).unwrap().dest, first, "the preparing rows do not move it");
+            assert_eq!(
+                w.obj(x0).unwrap().dest,
+                first,
+                "the preparing rows do not move it"
+            );
         } else {
-            assert_eq!(w.obj(x0).unwrap().dest, resent, "an unflagged object is re-sent");
+            assert_eq!(
+                w.obj(x0).unwrap().dest,
+                resent,
+                "an unflagged object is re-sent"
+            );
         }
         // Claim 8: once every slot is preparing, a flagged one is detached (its slot empty), an unflagged one attacks.
         // A few passes later slot 1 launches and every slot is preparing.
-        assert!(testkit_run_until(&mut w, 200, |w| controller(w, car).slots[0].state != SlotState::Preparing));
-        let want = if flagged { SlotState::Empty } else { SlotState::Attacking };
-        assert_eq!(controller(&w, car).slots[0].state, want, "flagged {flagged}");
+        assert!(testkit_run_until(&mut w, 200, |w| controller(w, car).slots
+            [0]
+        .state
+            != SlotState::Preparing));
+        let want = if flagged {
+            SlotState::Empty
+        } else {
+            SlotState::Attacking
+        };
+        assert_eq!(
+            controller(&w, car).slots[0].state,
+            want,
+            "flagged {flagged}"
+        );
     }
 }
 
@@ -2235,7 +2287,11 @@ fn drawing_reads_the_current_pitch() {
     let victim = spawn_at(&mut w, "VICTIM", 1, 8, 0, 0);
     assert_eq!(glasnost_sim::rocket::drawing(&w, victim), None);
     let missile = controller(&w, lna).slots[0].object.unwrap();
-    assert_eq!(glasnost_sim::rocket::drawing(&w, missile), None, "docked: no flight state yet");
+    assert_eq!(
+        glasnost_sim::rocket::drawing(&w, missile),
+        None,
+        "docked: no flight state yet"
+    );
     click_attack(&mut w, lna, victim);
     assert!(testkit_run_until(&mut w, 200, |w| w
         .obj(missile)
@@ -2249,7 +2305,10 @@ fn drawing_reads_the_current_pitch() {
         assert_eq!(d.pitch, rs.pitch.0, "the current pitch");
         seen.insert(d.pitch);
         let set = w.rules().missiles.set(rs.set);
-        assert_eq!((d.initial, d.final_), (set.pitch_initial.0, set.pitch_final.0));
+        assert_eq!(
+            (d.initial, d.final_),
+            (set.pitch_initial.0, set.pitch_final.0)
+        );
     }
     assert!(seen.len() > 3, "the pitch changes through the flight");
 }

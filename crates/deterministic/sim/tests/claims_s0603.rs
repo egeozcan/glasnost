@@ -157,7 +157,9 @@ fn rules() -> Ruleset {
         t.cost = Some(1000);
     });
     infantry(&mut r, "PSY", |t| t.primary = Some("Ray".into()));
-    r.sim.projectiles.insert("Hop".into(), ProjectileType::default());
+    r.sim
+        .projectiles
+        .insert("Hop".into(), ProjectileType::default());
     r.sim.weapons.insert(
         "Latch".into(),
         WeaponType {
@@ -334,11 +336,27 @@ fn claim_1_who_may_be_sent_in() {
     let car = put(&mut w, Kind::Vehicle, "BUGGY", 0, -4, 4);
     let fly = put(&mut w, Kind::Vehicle, "FLY", 0, -5, 4);
     testkit::run(&mut w, 2);
-    assert_eq!(cursor_as(&w, ALPHA, &[walker], own), Action::Recycle, "I26 own");
-    assert_ne!(cursor_as(&w, ALPHA, &[walker], theirs), Action::Recycle, "I26 an ally's");
-    assert_eq!(cursor_as(&w, ALPHA, &[eng], theirs), Action::Recycle, "I5 an ally's");
+    assert_eq!(
+        cursor_as(&w, ALPHA, &[walker], own),
+        Action::Recycle,
+        "I26 own"
+    );
+    assert_ne!(
+        cursor_as(&w, ALPHA, &[walker], theirs),
+        Action::Recycle,
+        "I26 an ally's"
+    );
+    assert_eq!(
+        cursor_as(&w, ALPHA, &[eng], theirs),
+        Action::Recycle,
+        "I5 an ally's"
+    );
     assert_eq!(cursor_as(&w, ALPHA, &[car], own), Action::Recycle, "n2 own");
-    assert_eq!(cursor_as(&w, ALPHA, &[car], theirs), Action::Recycle, "n2 an ally's");
+    assert_eq!(
+        cursor_as(&w, ALPHA, &[car], theirs),
+        Action::Recycle,
+        "n2 an ally's"
+    );
     assert_eq!(cursor_as(&w, ALPHA, &[fly], own), Action::NoEnter, "n1 fly");
     // An enemy's building offers no recycling.
     let foe = grnd(&mut w, "GRND", 1, -8, -8);
@@ -379,28 +397,75 @@ fn claim_2_docking_answer_rows() {
     let ctrl = put(&mut w, Kind::Vehicle, "CTRL", 0, -3, -5);
     let held = put(&mut w, Kind::Infantry, "WALKER", 1, -3, -4);
     assert!(mind::take(&mut w, ctrl, held));
-    assert!(glasnost_sim::econ::power::low_power(&w, ALPHA), "a drain alone: low power");
-    assert_eq!(grinder::answer(&w, b, car), Answer::Accepts, "low power does not refuse");
-    assert_eq!(grinder::answer(&w, b, cart), Answer::Accepts, "a loaded vehicle");
-    assert_eq!(grinder::answer(&w, b, ctrl), Answer::Accepts, "a controller with a victim");
-    assert_eq!(grinder::answer(&w, b, held), Answer::Accepts, "infantry: no kind test");
+    assert!(
+        glasnost_sim::econ::power::low_power(&w, ALPHA),
+        "a drain alone: low power"
+    );
+    assert_eq!(
+        grinder::answer(&w, b, car),
+        Answer::Accepts,
+        "low power does not refuse"
+    );
+    assert_eq!(
+        grinder::answer(&w, b, cart),
+        Answer::Accepts,
+        "a loaded vehicle"
+    );
+    assert_eq!(
+        grinder::answer(&w, b, ctrl),
+        Answer::Accepts,
+        "a controller with a victim"
+    );
+    assert_eq!(
+        grinder::answer(&w, b, held),
+        Answer::Accepts,
+        "infantry: no kind test"
+    );
     assert_eq!(grinder::answer(&w, b, foe), Answer::Refuses, "not allied");
     // One-way: the building's owner must count the entrant's house as allied.
     ally(&mut w, BETA, ALPHA);
-    assert_eq!(grinder::answer(&w, b, foe), Answer::Refuses, "Beta's alliance alone");
+    assert_eq!(
+        grinder::answer(&w, b, foe),
+        Answer::Refuses,
+        "Beta's alliance alone"
+    );
     ally(&mut w, ALPHA, BETA);
-    assert_eq!(grinder::answer(&w, b, foe), Answer::Accepts, "Alpha counts Beta allied");
-    assert_eq!(grinder::answer(&w, b, bal), Answer::Refuses, "balloon hover");
-    assert_eq!(grinder::answer(&w, b, boat), Answer::Refuses, "naval mismatch");
+    assert_eq!(
+        grinder::answer(&w, b, foe),
+        Answer::Accepts,
+        "Alpha counts Beta allied"
+    );
+    assert_eq!(
+        grinder::answer(&w, b, bal),
+        Answer::Refuses,
+        "balloon hover"
+    );
+    assert_eq!(
+        grinder::answer(&w, b, boat),
+        Answer::Refuses,
+        "naval mismatch"
+    );
     assert_eq!(grinder::answer(&w, b, amph), Answer::Accepts, "amphibious");
     // spec: S-0603 claim 2 and F2 (link places max(d, 1); a place held by U counts as free)
     w.obj_mut(foe).unwrap().contact = Some(b);
-    assert_eq!(grinder::answer(&w, b, car), Answer::Refuses, "every link place held");
-    assert_eq!(grinder::answer(&w, b, foe), Answer::Accepts, "its own place is free");
+    assert_eq!(
+        grinder::answer(&w, b, car),
+        Answer::Refuses,
+        "every link place held"
+    );
+    assert_eq!(
+        grinder::answer(&w, b, foe),
+        Answer::Accepts,
+        "its own place is free"
+    );
     w.obj_mut(foe).unwrap().contact = None;
     let b2 = grnd(&mut w, "GRND2", 0, 8, -8);
     w.obj_mut(foe).unwrap().contact = Some(b2);
-    assert_eq!(grinder::answer(&w, b2, car), Answer::Accepts, "two docks: one free");
+    assert_eq!(
+        grinder::answer(&w, b2, car),
+        Answer::Accepts,
+        "two docks: one free"
+    );
     w.obj_mut(foe).unwrap().contact = None;
     // Switched off refuses.
     power_off(&mut w, ALPHA, b);
@@ -444,12 +509,20 @@ fn claim_2_both_features() {
         }
     }
     assert_eq!(glasnost_sim::structures::absorb::count(&w, b), 1);
-    assert_eq!(grinder::answer(&w, b, u), Answer::Accepts, "capacity full, recycling applies");
+    assert_eq!(
+        grinder::answer(&w, b, u),
+        Answer::Accepts,
+        "capacity full, recycling applies"
+    );
     // An infantry controller holding a victim is refused (S-0605 claim 1).
     let psy = put(&mut w, Kind::Infantry, "PSY", 0, -4, 3);
     let held = put(&mut w, Kind::Infantry, "WALKER", 1, -4, 4);
     assert!(mind::take(&mut w, psy, held));
-    assert_eq!(grinder::answer(&w, b, psy), Answer::Refuses, "a controller holding a victim");
+    assert_eq!(
+        grinder::answer(&w, b, psy),
+        Answer::Refuses,
+        "a controller holding a victim"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -472,8 +545,14 @@ fn click_walk_in_end_to_end() {
     assert!(w.obj(u).is_none(), "removed from the game");
     // Coming from the east, it was consumed at the arrival update of a step into an eastern foundation cell, not the building's own cell.
     let foundation = damage::foundation_order(at(0, 0), (2, 2));
-    assert!(last.is_some_and(|c| foundation.contains(&c) && c != at(0, 0)), "{last:?}");
-    assert_eq!(credits(&w, ALPHA) - c0, refund(&w, ALPHA, Kind::Infantry, "WALKER"));
+    assert!(
+        last.is_some_and(|c| foundation.contains(&c) && c != at(0, 0)),
+        "{last:?}"
+    );
+    assert_eq!(
+        credits(&w, ALPHA) - c0,
+        refund(&w, ALPHA, Kind::Infantry, "WALKER")
+    );
     // F1 by hand: trunc(trunc(300 × 1 × 1) × 0.5) = 150.
     assert_eq!(credits(&w, ALPHA) - c0, 150);
 }
@@ -496,7 +575,11 @@ fn claim_4_5_vehicle_consumed_on_the_foundation() {
     }
     assert!(gone(&w, car), "consumed");
     // Driving west along the row of the building's top-left cell, the first foundation cell is its east one; the building's own cell is never reached.
-    assert_eq!(last, Some(at(1, 0)), "consumed in the first foundation cell");
+    assert_eq!(
+        last,
+        Some(at(1, 0)),
+        "consumed in the first foundation cell"
+    );
     // F1 by hand: trunc(trunc(700 × 1 × 1) × 0.5) = 350.
     assert_eq!(credits(&w, ALPHA) - c0, 350);
 }
@@ -525,7 +608,10 @@ fn claim_3_no_contact() {
     for _ in 0..600 {
         tick::step(&mut w);
         for u in [a, c] {
-            assert!(w.obj(u).is_none_or(|o| o.contact.is_none()), "never a contact");
+            assert!(
+                w.obj(u).is_none_or(|o| o.contact.is_none()),
+                "never a contact"
+            );
         }
         assert!(glasnost_sim::structures::absorb::contacts(&w, b).is_empty());
         if gone(&w, a) && gone(&w, c) {
@@ -548,9 +634,17 @@ fn claim_3_fall_back_without_destination() {
         o.dest = None;
     }
     testkit::run(&mut w, 60);
-    assert_ne!(w.obj(u).unwrap().beh.current, Some(Behaviour::Eaten), "infantry rests");
+    assert_ne!(
+        w.obj(u).unwrap().beh.current,
+        Some(Behaviour::Eaten),
+        "infantry rests"
+    );
     let o = w.obj(v).unwrap();
-    assert_eq!(o.beh.current, Some(Behaviour::Eaten), "the vehicle stays in eaten");
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Eaten),
+        "the vehicle stays in eaten"
+    );
     assert_eq!(o.beh.queued, None, "nothing queued");
 }
 
@@ -574,7 +668,10 @@ fn claim_8_payment_ignores_health_and_uses_the_override() {
     until_gone(&mut w, soy, 600);
     // v ≠ 0: trunc(77 × a) with a = 1, no refund percentage.
     assert_eq!(credits(&w, ALPHA) - c1, 77);
-    assert_eq!(credits(&w, ALPHA) - c1, refund(&w, ALPHA, Kind::Infantry, "SOY"));
+    assert_eq!(
+        credits(&w, ALPHA) - c1,
+        refund(&w, ALPHA, Kind::Infantry, "SOY")
+    );
 }
 
 /// A tagged game: entry triggers ENT (var 0), DIE (var 1), DIE_CARRY (var 2).
@@ -624,13 +721,22 @@ fn claim_6_8_10_11_allys_loaded_vehicle() {
             tick_of = Some(w.tick);
             break;
         }
-        assert!(!w.triggers.variables[0] && !w.triggers.variables[1], "nothing before");
+        assert!(
+            !w.triggers.variables[0] && !w.triggers.variables[1],
+            "nothing before"
+        );
     }
     assert!(tick_of.is_some(), "consumed");
     assert_eq!(credits(&w, ALPHA) - ca, expected);
     assert_eq!(credits(&w, BETA), cb, "nothing to the vehicle's owner");
-    assert!(w.triggers.variables[0], "the entry raise in the consumption tick");
-    assert!(w.triggers.variables[1], "the entrant's destroyed-by-anything raise");
+    assert!(
+        w.triggers.variables[0],
+        "the entry raise in the consumption tick"
+    );
+    assert!(
+        w.triggers.variables[1],
+        "the entrant's destroyed-by-anything raise"
+    );
     assert!(!w.triggers.variables[2], "no raise on the passengers' tags");
     for p in [cart, p1, p2] {
         assert!(w.obj(p).is_none(), "removed");
@@ -639,8 +745,18 @@ fn claim_6_8_10_11_allys_loaded_vehicle() {
     // spec: S-0603 claim 7 (one consumption effect, for the entrant only: passengers get no sounds; no death effects)
     let c = consumed(&fx);
     assert_eq!(c.len(), 1);
-    assert!(matches!(c[0], Effect::Consumed { owner: Some(BETA), grinding: true, .. }));
-    assert!(!fx.iter().any(|e| matches!(e, Effect::Killed { .. })), "not a death");
+    assert!(matches!(
+        c[0],
+        Effect::Consumed {
+            owner: Some(BETA),
+            grinding: true,
+            ..
+        }
+    ));
+    assert!(
+        !fx.iter().any(|e| matches!(e, Effect::Killed { .. })),
+        "not a death"
+    );
 }
 
 // spec: S-0603 claims 8 and 10 and Edge cases (passengers of passengers are paid for with their own owner's factors; only two levels)
@@ -662,7 +778,10 @@ fn claim_10_passengers_of_passengers() {
     send(&mut w, big, b);
     until_gone(&mut w, big, 600);
     assert_eq!(credits(&w, ALPHA) - c0, expected);
-    assert!(w.obj(cart).is_none() && w.obj(p).is_none(), "removed with it");
+    assert!(
+        w.obj(cart).is_none() && w.obj(p).is_none(),
+        "removed with it"
+    );
 }
 
 // spec: S-0603 claims 8 and 10 (a vehicle with a parasite attached: the parasite's refund with its own owner's factors, then S-0614 claim 12's release, which removes it silently; no second payment)
@@ -681,17 +800,28 @@ fn claim_8_10_parasite() {
     }
     assert_eq!(parasite::parasite_of(&w, host), Some(drone), "latched");
     w.obj_mut(host).unwrap().health = 1000;
-    let expected = refund(&w, ALPHA, Kind::Vehicle, "BUGGY") + refund(&w, BETA, Kind::Vehicle, "DRONE");
+    let expected =
+        refund(&w, ALPHA, Kind::Vehicle, "BUGGY") + refund(&w, BETA, Kind::Vehicle, "DRONE");
     // By hand: 350 + trunc(trunc(200 × 0.6) × 0.5) = 350 + 60.
     assert_eq!(expected, 410);
     let c0 = credits(&w, ALPHA);
     send(&mut w, host, b);
     let (fx, _) = until_gone(&mut w, host, 600);
     assert_eq!(credits(&w, ALPHA) - c0, expected);
-    assert!(w.obj(drone).is_none_or(|o| !o.on_map), "the parasite does not survive");
-    assert_eq!(consumed(&fx).len(), 1, "no consumption effect for the parasite");
+    assert!(
+        w.obj(drone).is_none_or(|o| !o.on_map),
+        "the parasite does not survive"
+    );
+    assert_eq!(
+        consumed(&fx).len(),
+        1,
+        "no consumption effect for the parasite"
+    );
     testkit::run(&mut w, 60);
-    assert!(w.obj(drone).is_none_or(|o| !o.on_map), "and does not come back");
+    assert!(
+        w.obj(drone).is_none_or(|o| !o.on_map),
+        "and does not come back"
+    );
     assert_eq!(credits(&w, ALPHA) - c0, expected, "no second payment");
 }
 
@@ -717,7 +847,13 @@ fn claim_9_controlled_entrant() {
     assert!(mind::controller(&w, ctrl).is_none_or(|r| r.victims.is_empty()));
     assert!(!mind::at_capacity(&w, ctrl), "the slot is free");
     assert!(
-        !fx.iter().any(|e| matches!(e, Effect::Mind { sound: MindSound::Cleared, .. })),
+        !fx.iter().any(|e| matches!(
+            e,
+            Effect::Mind {
+                sound: MindSound::Cleared,
+                ..
+            }
+        )),
         "no release sound"
     );
     let next = put(&mut w, Kind::Vehicle, "BUGGY", 0, -9, 1);
@@ -736,9 +872,16 @@ fn claim_9_controller_entrant_releases() {
     let c0 = credits(&w, ALPHA);
     send(&mut w, ctrl, b);
     until_gone(&mut w, ctrl, 600);
-    assert_eq!(credits(&w, ALPHA) - c0, refund(&w, ALPHA, Kind::Vehicle, "CTRL"));
+    assert_eq!(
+        credits(&w, ALPHA) - c0,
+        refund(&w, ALPHA, Kind::Vehicle, "CTRL")
+    );
     assert_eq!(credits(&w, ALPHA) - c0, 500);
-    assert_eq!(w.obj(v).unwrap().owner, Some(BETA), "its victim is released");
+    assert_eq!(
+        w.obj(v).unwrap().owner,
+        Some(BETA),
+        "its victim is released"
+    );
 }
 
 // spec: S-0603 claim 7 (the consumption effect: the entrant's type and owner at its position, with the enter-grinder sound at a recycling building)
@@ -777,7 +920,13 @@ fn claim_13_non_grinding_destination() {
     assert_eq!(credits(&w, ALPHA) - c0, 150);
     let c = consumed(&fx);
     assert_eq!(c.len(), 1);
-    assert!(matches!(c[0], Effect::Consumed { grinding: false, .. }));
+    assert!(matches!(
+        c[0],
+        Effect::Consumed {
+            grinding: false,
+            ..
+        }
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -837,7 +986,11 @@ fn quirk_no_arrival_recheck_both_positions() {
         }
         assert_eq!(eaten, on, "owner change, quirk {on}");
         if on {
-            assert_eq!(credits(&w, BETA) - cb, 150, "the capturer is paid with Alpha's factors");
+            assert_eq!(
+                credits(&w, BETA) - cb,
+                150,
+                "the capturer is paid with Alpha's factors"
+            );
         }
     }
 }
@@ -892,9 +1045,17 @@ fn claim_15_destroyed_building() {
     }
     round_trip(&w);
     testkit::run(&mut w, 300);
-    assert_ne!(w.obj(u).unwrap().beh.current, Some(Behaviour::Eaten), "infantry rests");
+    assert_ne!(
+        w.obj(u).unwrap().beh.current,
+        Some(Behaviour::Eaten),
+        "infantry rests"
+    );
     let o = w.obj(car).unwrap();
-    assert_eq!(o.beh.current, Some(Behaviour::Eaten), "the vehicle stays in eaten");
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Eaten),
+        "the vehicle stays in eaten"
+    );
     assert_eq!(o.beh.queued, None);
     assert!(o.on_map);
 }
@@ -938,15 +1099,27 @@ fn claim_14_search() {
     let _theirs = grnd(&mut w, "GRND", 1, 0, -3);
     assert!(grinder::grinder_fate(&mut w, n));
     let o = w.obj(n).unwrap();
-    assert_eq!(o.dest, Some(Target::Object(near)), "the nearest, switched off or not");
+    assert_eq!(
+        o.dest,
+        Some(Target::Object(near)),
+        "the nearest, switched off or not"
+    );
     assert_eq!(o.beh.queued, Some(Behaviour::Eaten), "queued");
     assert_ne!(o.beh.current, Some(Behaviour::Eaten), "not started at once");
     round_trip(&w);
     // Without the nearest one: east and west tie; the one placed last wins.
     glasnost_sim::objects::remove(&mut w, near);
-    assert_eq!(w.obj(n).unwrap().dest, None, "removal clears a queued entrant's destination");
+    assert_eq!(
+        w.obj(n).unwrap().dest,
+        None,
+        "removal clears a queued entrant's destination"
+    );
     assert!(grinder::grinder_fate(&mut w, n));
-    assert_eq!(w.obj(n).unwrap().dest, Some(Target::Object(west)), "placed last");
+    assert_eq!(
+        w.obj(n).unwrap().dest,
+        Some(Target::Object(west)),
+        "placed last"
+    );
     let _ = east;
     // No recycling building of its own: the assignment fails.
     let mut w = testkit::game_with_non_players(&rules(), SIZE, 3);
@@ -975,9 +1148,12 @@ fn grinder_fate_end_to_end() {
     assert_eq!(w.obj(n).unwrap().dest, Some(Target::Object(near)));
     let c0 = credits(&w, HouseId(2));
     until_gone(&mut w, n, 600);
-    assert_eq!(credits(&w, HouseId(2)) - c0, 300, "P for a non-player house");
+    assert_eq!(
+        credits(&w, HouseId(2)) - c0,
+        300,
+        "P for a non-player house"
+    );
 }
-
 
 /// What became of a unit sent past a line of buildings.
 #[derive(Debug)]
@@ -998,7 +1174,13 @@ struct PastALine {
 /// `quirks.corridor_retry_no_fallback` = `no_fallback`. On a larger map
 /// than [`game`]'s (size 50), where the outcome depends on how the line
 /// falls in the corridor's blocks.
-fn past_a_line(half: i32, shift: i32, grinder: bool, infantry: bool, no_fallback: bool) -> PastALine {
+fn past_a_line(
+    half: i32,
+    shift: i32,
+    grinder: bool,
+    infantry: bool,
+    no_fallback: bool,
+) -> PastALine {
     const BIG: i32 = 50;
     let at = |dx, dy| testkit::mid(BIG, dx, dy);
     let mut r = rules();
@@ -1023,9 +1205,20 @@ fn past_a_line(half: i32, shift: i32, grinder: bool, infantry: bool, no_fallback
     orders::issue(
         &mut w,
         ALPHA,
-        Order::Behaviour { actor: car, behaviour, attack_move: false, target: None, dest: Some(dest) },
+        Order::Behaviour {
+            actor: car,
+            behaviour,
+            attack_move: false,
+            target: None,
+            dest: Some(dest),
+        },
     );
-    let mut out = PastALine { arrived: false, lost: None, after: None, later: None };
+    let mut out = PastALine {
+        arrived: false,
+        lost: None,
+        after: None,
+        later: None,
+    };
     let beh = |w: &World| w.obj(car).map(|o| (o.beh.current, o.beh.queued));
     for t in 0..900 {
         tick::step(&mut w);
@@ -1047,16 +1240,30 @@ fn past_a_line(half: i32, shift: i32, grinder: bool, infantry: bool, no_fallback
 // spec: S-0603 claims 3 and 4 and S-0212 Edge cases (short line of buildings, Q-1280 answered) with claims 1, 13 and 23 (the entrant's approach is an ordinary path computation to the building: round a line of three it is consumed; with quirks.corridor_retry_no_fallback on, the original, past a line of seven at this alignment the corridor's retries leave the level-2 corridor unchanged, the new coarse search fails, the computation fails and the destination is cleared at once, exactly as for a move order to a cell behind the line, for a vehicle and an infantry unit alike)
 #[test]
 fn claims_3_4_approach_past_a_line_of_buildings() {
-    assert!(past_a_line(1, 0, true, false, true).arrived, "round a line of three");
-    assert!(past_a_line(2, 0, true, false, true).arrived, "round a line of five");
+    assert!(
+        past_a_line(1, 0, true, false, true).arrived,
+        "round a line of three"
+    );
+    assert!(
+        past_a_line(2, 0, true, false, true).arrived,
+        "round a line of five"
+    );
     for infantry in [false, true] {
         let x = past_a_line(3, 0, true, infantry, true);
         assert!(!x.arrived, "not past a line of seven (infantry {infantry})");
         // The order applies in the next tick (S-0213 claim 1); the first path
         // computation fails in the one after.
-        assert_eq!(x.lost, Some(1), "the destination is cleared at once (infantry {infantry})");
+        assert_eq!(
+            x.lost,
+            Some(1),
+            "the destination is cleared at once (infantry {infantry})"
+        );
         let m = past_a_line(3, 0, false, infantry, true);
-        assert_eq!(m.lost, Some(1), "a move to a cell behind the line fails alike (infantry {infantry})");
+        assert_eq!(
+            m.lost,
+            Some(1),
+            "a move to a cell behind the line fails alike (infantry {infantry})"
+        );
     }
 }
 
@@ -1064,11 +1271,23 @@ fn claims_3_4_approach_past_a_line_of_buildings() {
 #[test]
 fn corridor_retry_no_fallback_off_passes_the_line() {
     for shift in 0..8 {
-        assert!(past_a_line(3, shift, true, false, false).arrived, "a line of seven, shift {shift}");
+        assert!(
+            past_a_line(3, shift, true, false, false).arrived,
+            "a line of seven, shift {shift}"
+        );
     }
-    assert!(past_a_line(4, 0, true, false, false).arrived, "a line of nine");
-    assert!(past_a_line(3, 0, true, true, false).arrived, "infantry past a line of seven");
-    assert!(past_a_line(3, 0, false, false, false).arrived, "a move past a line of seven");
+    assert!(
+        past_a_line(4, 0, true, false, false).arrived,
+        "a line of nine"
+    );
+    assert!(
+        past_a_line(3, 0, true, true, false).arrived,
+        "infantry past a line of seven"
+    );
+    assert!(
+        past_a_line(3, 0, false, false, false).arrived,
+        "a move past a line of seven"
+    );
 }
 
 // spec: S-0212 Edge cases (short line of buildings) and scenario P12 run S with quirks.corridor_retry_no_fallback on (lines of 3 and 5 are passed at all eight shifts; some shift of the 7- and 9-lines fails at once; in this synthetic geometry the 7-line fails at shifts 0 and 1 and the 9-line at shift 0)
@@ -1079,7 +1298,12 @@ fn run_s_shifts_with_the_switch_on() {
         for shift in 0..8 {
             let x = past_a_line(half, shift, true, false, true);
             if !x.arrived {
-                assert_eq!(x.lost, Some(1), "an immediate failure: line {} shift {shift}", 2 * half + 1);
+                assert_eq!(
+                    x.lost,
+                    Some(1),
+                    "an immediate failure: line {} shift {shift}",
+                    2 * half + 1
+                );
                 fails.push((2 * half + 1, shift));
             }
         }
@@ -1093,7 +1317,15 @@ fn claim_3_failed_approach_gives_up() {
     for infantry in [false, true] {
         let x = past_a_line(3, 0, true, infantry, true);
         assert_eq!(x.lost, Some(1));
-        assert_eq!(x.after, Some((Some(Behaviour::Guard), None)), "infantry {infantry}");
-        assert_eq!(x.later, Some((Some(Behaviour::Guard), None)), "infantry {infantry}");
+        assert_eq!(
+            x.after,
+            Some((Some(Behaviour::Guard), None)),
+            "infantry {infantry}"
+        );
+        assert_eq!(
+            x.later,
+            Some((Some(Behaviour::Guard), None)),
+            "infantry {infantry}"
+        );
     }
 }

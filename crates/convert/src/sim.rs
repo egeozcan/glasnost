@@ -731,14 +731,44 @@ const GENERAL_FIELDS: &[(&str, &[u8], &str, Form)] = &[
     ("chrono_out_sound", b"AudioVisual", "ChronoOutSound", Text),
     ("chrono_in_sound", b"AudioVisual", "ChronoInSound", Text),
     // spec: S-0605 Import mapping (absent: none)
-    ("enter_bio_reactor_sound", b"AudioVisual", "EnterBioReactorSound", Text),
-    ("leave_bio_reactor_sound", b"AudioVisual", "LeaveBioReactorSound", Text),
+    (
+        "enter_bio_reactor_sound",
+        b"AudioVisual",
+        "EnterBioReactorSound",
+        Text,
+    ),
+    (
+        "leave_bio_reactor_sound",
+        b"AudioVisual",
+        "LeaveBioReactorSound",
+        Text,
+    ),
     // spec: S-0606 Import mapping (the walls-up and walls-down sounds; absent: none)
-    ("bunker_walls_up_sound", b"AudioVisual", "BunkerWallsUpSound", Text),
-    ("bunker_walls_down_sound", b"AudioVisual", "BunkerWallsDownSound", Text),
+    (
+        "bunker_walls_up_sound",
+        b"AudioVisual",
+        "BunkerWallsUpSound",
+        Text,
+    ),
+    (
+        "bunker_walls_down_sound",
+        b"AudioVisual",
+        "BunkerWallsDownSound",
+        Text,
+    ),
     // spec: S-0603 Import mapping (the rules-wide enter-grinder and leave-grinder sounds; absent: none)
-    ("enter_grinder_sound", b"AudioVisual", "EnterGrinderSound", Text),
-    ("leave_grinder_sound", b"AudioVisual", "LeaveGrinderSound", Text),
+    (
+        "enter_grinder_sound",
+        b"AudioVisual",
+        "EnterGrinderSound",
+        Text,
+    ),
+    (
+        "leave_grinder_sound",
+        b"AudioVisual",
+        "LeaveGrinderSound",
+        Text,
+    ),
     // spec: S-0213 Import mapping
     ("maximum_cheer_rate", b"General", "MaximumCheerRate", Int),
     // spec: S-0209, S-0215, S-0210 Import mapping ([IQ])
@@ -2030,7 +2060,9 @@ impl Builder<'_> {
                 if d == 0 {
                     bad.push("a smoke type with a next type and a radius below 8 divides its successor draw by 0".to_owned());
                 } else if d < 0 {
-                    bad.push("a negative radius: our engine rounds the division by 8 down".to_owned());
+                    bad.push(
+                        "a negative radius: our engine rounds the division by 8 down".to_owned(),
+                    );
                 }
             }
             if kind.as_deref() == Some("spark") {
@@ -2044,16 +2076,25 @@ impl Builder<'_> {
                 && int_of("Damage").is_some_and(|d| d != 0)
                 && !t.keys.contains_key(&b"Warhead"[..])
             {
-                bad.push("a fire type with damage and no warhead: our engine's hits deal no damage".to_owned());
+                bad.push(
+                    "a fire type with damage and no warhead: our engine's hits deal no damage"
+                        .to_owned(),
+                );
             }
             for b in bad {
-                self.warn(line, 0, format!(
-                    "particle {}: {b} (S-0616 claim 20, a departure)",
-                    show(&t.name)
-                ));
+                self.warn(
+                    line,
+                    0,
+                    format!(
+                        "particle {}: {b} (S-0616 claim 20, a departure)",
+                        show(&t.name)
+                    ),
+                );
             }
         }
-        let advance = fold(t.keys.get(&b"StateAIAdvance"[..]), None, |v, _| value::integer(v));
+        let advance = fold(t.keys.get(&b"StateAIAdvance"[..]), None, |v, _| {
+            value::integer(v)
+        });
         if let Some(a) = advance {
             // spec: S-0613 Import mapping (StateAIAdvance reduced to signed 8-bit) and F8 (the divisor is the object-number parity plus A)
             let reduced = i32::from(a as i8);
@@ -2143,7 +2184,9 @@ impl Builder<'_> {
         {
             match &e.what {
                 What::Set(v) => {
-                    let mut out = held.clone().unwrap_or_else(|| ["0".into(), "0".into(), "0".into()]);
+                    let mut out = held
+                        .clone()
+                        .unwrap_or_else(|| ["0".into(), "0".into(), "0".into()]);
                     for (slot, item) in out.iter_mut().zip(v.split(|&b| b == b',')) {
                         if let Some(d) = decimal_text(item) {
                             *slot = d;
@@ -2177,14 +2220,20 @@ impl Builder<'_> {
         if kind.as_deref() == Some("fire") && int_of("SpawnFrames") == Some(0) {
             bad.push("a fire spawn interval of 0 passes the interval test only at tick 0");
         }
-        if kind.as_deref() == Some("spark") && int_of("ParticleCap").is_some_and(|c| (-1..=1).contains(&c)) {
+        if kind.as_deref() == Some("spark")
+            && int_of("ParticleCap").is_some_and(|c| (-1..=1).contains(&c))
+        {
             bad.push("a spark particle cap of -1, 0 or 1 makes no spark");
         }
         for b in bad {
-            self.warn(line, 0, format!(
-                "particle system {}: {b} (S-0616 claim 20, a departure)",
-                show(&t.name)
-            ));
+            self.warn(
+                line,
+                0,
+                format!(
+                    "particle system {}: {b} (S-0616 claim 20, a departure)",
+                    show(&t.name)
+                ),
+            );
         }
     }
 

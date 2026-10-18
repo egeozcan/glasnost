@@ -297,7 +297,12 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
         || (crate::structures::bunker::is_bunker(w, id)
             && crate::structures::bunker::occupied(w, id));
     // spec: S-0214 claim 19 (in play, selectable, not being erased, not already selected; enemy and allied objects never added)
-    kind_ok && own(w, house, id) && selectable(w, id) && !selection.contains(&id) && !tether && !bunker
+    kind_ok
+        && own(w, house, id)
+        && selectable(w, id)
+        && !selection.contains(&id)
+        && !tether
+        && !bunker
 }
 
 /// Rally-capable (S-0214 Terms): a factory of infantry or vehicles, a
@@ -695,7 +700,10 @@ fn building_passengers(w: &World, id: ObjectId) -> Option<i32> {
     if o.kind != Kind::Building {
         return None;
     }
-    w.rules().buildings.get(o.type_index as usize).map(|b| b.absorb.capacity)
+    w.rules()
+        .buildings
+        .get(o.type_index as usize)
+        .map(|b| b.absorb.capacity)
 }
 
 fn immune(w: &World, id: ObjectId) -> bool {

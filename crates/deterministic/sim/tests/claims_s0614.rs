@@ -728,7 +728,10 @@ fn claim_9_delivery_spark_system() {
     for given in [true, false] {
         let mut r = ruleset();
         if given {
-            r.registries.entry("particle_systems".into()).or_default().push("FIZZ".into());
+            r.registries
+                .entry("particle_systems".into())
+                .or_default()
+                .push("FIZZ".into());
             r.sim.particle_systems.insert(
                 "FIZZ".into(),
                 glasnost_rules::sim::ParticleSystemType {
@@ -746,7 +749,10 @@ fn claim_9_delivery_spark_system() {
         let mut expect = w.rng.clone();
         next_hit(&mut w, host, 5).unwrap();
         let _ = expect.ranged(0, 1, w.rules().quirks.ranged_draw_half_span);
-        assert_eq!(w.rng, expect, "the spark system takes no draw (given {given})");
+        assert_eq!(
+            w.rng, expect,
+            "the spark system takes no draw (given {given})"
+        );
         let at = w.obj(host).unwrap().pos;
         let made: Vec<_> = w.gas.systems.values().skip(n).collect();
         if given {
@@ -1731,11 +1737,17 @@ fn claim_24_a_higher_hit_strands_the_carried_parasite() {
                 glasnost_sim::objects::remove(&mut w, host);
             }
             shoot_to_end(&mut w, p);
-            let o = w.obj(p).unwrap_or_else(|| panic!("{name} {case}: never removed"));
+            let o = w
+                .obj(p)
+                .unwrap_or_else(|| panic!("{name} {case}: never removed"));
             assert!(!o.on_map, "{name} {case}: off the map");
             assert_eq!(parasite::host_of(&w, p), None, "{name} {case}");
             assert_eq!(health(&w, p), h0, "{name} {case}");
-            assert_eq!(ps(&w, p).hold_until, None, "{name} {case}: no recovery timer");
+            assert_eq!(
+                ps(&w, p).hold_until,
+                None,
+                "{name} {case}: no recovery timer"
+            );
             testkit::run(&mut w, 300);
             assert!(
                 w.obj(p).is_some_and(|o| !o.on_map && health(&w, p) == h0),

@@ -108,7 +108,10 @@ fn a_charger_keeps_the_guard_delay_after_taking_a_building() {
             // Attack is only queued by the processing; the late start after the unit's movement makes it current at the end of the update (S-0215 claim 11, revision 57), not processed before the unit's next update (claim 3b).
             assert_eq!(o.beh.current, Some(Behaviour::Attack), "late start");
             assert_eq!(o.beh.queued, None);
-            assert!(o.beh.expired, "started (timer expired now), not yet processed");
+            assert!(
+                o.beh.expired,
+                "started (timer expired now), not yet processed"
+            );
             break;
         }
     }

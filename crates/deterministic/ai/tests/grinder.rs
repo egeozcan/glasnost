@@ -153,7 +153,11 @@ fn a_controlled_enemy_vehicle_is_recycled() {
     let mut br = brain(&w);
     let orders = br.think(&w);
     assert_eq!(sent(&orders, foe, Behaviour::Eaten), Some(b), "{orders:?}");
-    assert_eq!(sent(&orders, clone, Behaviour::Eaten), None, "the controller is kept");
+    assert_eq!(
+        sent(&orders, clone, Behaviour::Eaten),
+        None,
+        "the controller is kept"
+    );
     assert_eq!(br.special_uses().grinds, 1);
 }
 
@@ -170,7 +174,11 @@ fn controlled_infantry_go_to_an_absorber_first() {
         settle(&mut w);
         let orders = brain(&w).think(&w);
         if let Some(bio) = bio {
-            assert_eq!(sent(&orders, foe, Behaviour::Enter), Some(bio), "{orders:?}");
+            assert_eq!(
+                sent(&orders, foe, Behaviour::Enter),
+                Some(bio),
+                "{orders:?}"
+            );
         } else {
             assert_eq!(sent(&orders, foe, Behaviour::Eaten), Some(b), "{orders:?}");
         }
@@ -244,7 +252,9 @@ fn the_house_builds_one_grinder_when_it_has_a_use() {
     let count = |w: &World| {
         w.objects
             .values()
-            .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Building && o.type_index == grnd)
+            .filter(|o| {
+                o.owner == Some(HouseId(0)) && o.kind == Kind::Building && o.type_index == grnd
+            })
             .count()
     };
     for _ in 0..3000 {
@@ -354,13 +364,20 @@ fn a_far_unit_is_moved_to_the_grinder_first() {
     let mut br = brain(&w);
     let orders = br.think(&w);
     let side = orders.iter().rev().find_map(|o| match o {
-        Order::Behaviour { actor, behaviour: Behaviour::Move, dest: Some(Target::Cell(c)), .. }
-            if *actor == far => Some(*c),
+        Order::Behaviour {
+            actor,
+            behaviour: Behaviour::Move,
+            dest: Some(Target::Cell(c)),
+            ..
+        } if *actor == far => Some(*c),
         _ => None,
     });
     let g0 = w.obj(b).unwrap().pos.cell();
     let side = side.unwrap_or_else(|| panic!("moved first: {orders:?}"));
-    assert!((side.x - g0.x).abs().max((side.y - g0.y).abs()) <= 4, "{side:?} by {g0:?}");
+    assert!(
+        (side.x - g0.x).abs().max((side.y - g0.y).abs()) <= 4,
+        "{side:?} by {g0:?}"
+    );
     assert_eq!(br.special_uses().grinds, 0);
     for o in orders {
         glasnost_sim::orders::issue(&mut w, HouseId(0), o);

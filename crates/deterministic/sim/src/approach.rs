@@ -389,4 +389,3 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
 fn draining(_w: &World, _id: ObjectId) -> bool {
     false
 }
-

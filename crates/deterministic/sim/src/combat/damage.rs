@@ -578,7 +578,10 @@ fn damage_effect_reaction(
         // spec: S-0616 claim 1 (an object holds at most one damage-smoke system and makes a new one only when its place is empty)
         if at_or_below && o.combat.damage_smoke.is_none() && o.kind != Kind::Building {
             let tc = type_combat(w, id).cloned();
-            let list = tc.as_ref().map(|t| t.smoke_systems.clone()).unwrap_or_default();
+            let list = tc
+                .as_ref()
+                .map(|t| t.smoke_systems.clone())
+                .unwrap_or_default();
             let n = list.len() as i32;
             // spec: S-0302 claim 13 (a draw over 0 … n − 1 when n > 0 and the height is above −10 leptons)
             if n > 0 && w.height_above_surface(id) > -10 {

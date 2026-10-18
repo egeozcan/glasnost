@@ -113,7 +113,9 @@ pub enum SpinEvent {
 /// The spin settings of an object of a gattling-flagged type; `None` for
 /// any other object.
 pub fn spin_type(w: &World, id: ObjectId) -> Option<&SpinType> {
-    type_combat(w, id).filter(|tc| tc.gattling).map(|tc| &tc.spin)
+    type_combat(w, id)
+        .filter(|tc| tc.gattling)
+        .map(|tc| &tc.spin)
 }
 
 /// Whether an object's type has the gattling flag (Terms).
@@ -158,7 +160,14 @@ pub fn f1(st: &SpinType, thr: &[i32; MAX_STAGES], v: i32, s: i32, m: i32) -> (i3
 
 /// F2 on a value and stage: the new value and stage. `empties` is
 /// `quirks.gattling_zero_spin_down_empties`.
-pub fn f2(st: &SpinType, thr: &[i32; MAX_STAGES], v: i32, s: i32, m: i32, empties: bool) -> (i32, i32) {
+pub fn f2(
+    st: &SpinType,
+    thr: &[i32; MAX_STAGES],
+    v: i32,
+    s: i32,
+    m: i32,
+    empties: bool,
+) -> (i32, i32) {
     // spec: S-0609 claim 3 and F2 (a = d × m) and Edge cases (engine rule: the product saturates at 2³¹ − 1)
     let a = st.down.saturating_mul(m);
     let v2 = if a != 0 {
@@ -211,7 +220,14 @@ pub fn spin_down(w: &mut World, id: ObjectId, m: i32, sound: bool) {
     let thr = in_force(w, id, &st);
     let empties = w.rules().quirks.gattling_zero_spin_down_empties;
     let Some(o) = w.obj(id) else { return };
-    let (v, s) = f2(&st, &thr, o.combat.spin, o.combat.gattling_stage, m, empties);
+    let (v, s) = f2(
+        &st,
+        &thr,
+        o.combat.spin,
+        o.combat.gattling_stage,
+        m,
+        empties,
+    );
     let pos = o.pos;
     if let Some(ob) = w.obj_mut(id) {
         ob.combat.spin = v;
@@ -421,6 +437,8 @@ pub fn spin(w: &World, id: ObjectId) -> Spin {
 pub fn at_top(w: &World, id: ObjectId) -> bool {
     spin_type(w, id).is_some_and(|st| {
         // spec: S-0609 Edge cases (a stage count of 0 or 1 has no stage above 0) and claim 2 (stages 0 … N − 1)
-        st.stages >= 2 && w.obj(id).is_some_and(|o| o.combat.gattling_stage >= st.stages - 1)
+        st.stages >= 2
+            && w.obj(id)
+                .is_some_and(|o| o.combat.gattling_stage >= st.stages - 1)
     })
 }

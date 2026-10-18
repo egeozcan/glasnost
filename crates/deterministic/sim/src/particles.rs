@@ -130,7 +130,8 @@ pub fn mark(w: &mut World, sys: ObjectId) {
 // Creation (claim 1, F1, F13)
 
 /// F1: the flight direction from `at` to `target`.
-pub fn heading(w: &World, at: Pos, target: Pos) -> [F32; 3] { // nocite: vector and matrix dimensions (three axes)
+// nocite: vector and matrix dimensions (three axes)
+pub fn heading(w: &World, at: Pos, target: Pos) -> [F32; 3] {
     let m = mode(w);
     let v = [target.x - at.x, target.y - at.y, target.z - at.z];
     // spec: S-0616 F1 (v = Q − P per component in single precision; m = r(vₓ² + vᵧ² + v_z²), the sum in double precision)
@@ -149,7 +150,8 @@ pub fn heading(w: &World, at: Pos, target: Pos) -> [F32; 3] { // nocite: vector 
 }
 
 /// Claim 19, F13: a particle's own stage-advance value.
-pub fn own_advance(w: &World, t: &ParticleType, at: Pos, target: Pos, u: [F32; 3], s: F32) -> i8 { // nocite: vector and matrix dimensions (three axes)
+// nocite: vector and matrix dimensions (three axes)
+pub fn own_advance(w: &World, t: &ParticleType, at: Pos, target: Pos, u: [F32; 3], s: F32) -> i8 {
     if !t.normalized {
         // spec: S-0616 claim 19 (the type's stage-advance field)
         return t.advance;
@@ -166,8 +168,12 @@ pub fn own_advance(w: &World, t: &ParticleType, at: Pos, target: Pos, u: [F32; 3
     let none = c("9999.0"); // spec: S-0616 Constants (normalised no-motion time 9999.0 ticks)
     let dist = |p: i32, q: i32| single(d(i64::from(p), m).sub(d(i64::from(q), m), m).abs());
     // spec: S-0616 F13 (tₓ = fl(|Pₓ − Qₓ| / aₓ) when aₓ > 10⁻⁶; t_y likewise; t from the four cases)
-    let tx = ax.gt(threshold).then(|| single(dist(at.x, target.x).div(ax, m)));
-    let ty = ay.gt(threshold).then(|| single(dist(at.y, target.y).div(ay, m)));
+    let tx = ax
+        .gt(threshold)
+        .then(|| single(dist(at.x, target.x).div(ax, m)));
+    let ty = ay
+        .gt(threshold)
+        .then(|| single(dist(at.y, target.y).div(ay, m)));
     let t_ = match (tx, ty) {
         (None, None) => none,
         (Some(x), None) => x,
@@ -210,7 +216,8 @@ pub fn spark_system(w: &mut World, pos: Pos) {
 /// The damage smoke of S-0302 claim 13 (S-0616 claim 1): a system of the
 /// picked type named `name` at the object's position plus `offset`, owned
 /// by the object and held in its damage-smoke place.
-pub fn damage_smoke(w: &mut World, id: ObjectId, name: &str, offset: [i32; 3]) { // nocite: vector and matrix dimensions (three axes)
+// nocite: vector and matrix dimensions (three axes)
+pub fn damage_smoke(w: &mut World, id: ObjectId, name: &str, offset: [i32; 3]) {
     let Some(ti) = w.rules().gas.system(name) else {
         w.note(format!(
             "S-0302 claim 13: the damage particle system {name} is not a listed type; no system is made"
@@ -305,7 +312,11 @@ pub fn move_one(w: &World, p: &mut Particle) -> bool {
 /// Claim 5: a smoke system's turn.
 pub fn smoke_turn(w: &mut World, sys: ObjectId) {
     // spec: S-0616 claim 5 (the position follows an owner object that is not a building, at the displacement it had at creation)
-    let owner = w.gas.systems.get(&sys).and_then(|s| s.owner_object.map(|o| (o, s.owner_offset)));
+    let owner = w
+        .gas
+        .systems
+        .get(&sys)
+        .and_then(|s| s.owner_object.map(|o| (o, s.owner_offset)));
     if let Some((o, off)) = owner
         && let Some(ob) = w.obj(o)
         && ob.kind != Kind::Building
@@ -327,7 +338,9 @@ pub fn smoke_turn(w: &mut World, sys: ObjectId) {
     // spec: S-0616 claim 5 (the removal pass, newest first, before any move: a dead particle splits into successors, claim 8, and is removed)
     removal_pass(w, sys);
     // spec: S-0616 claims 5 and 7 (then each particle without the dead mark moves)
-    let Some(s) = w.gas.systems.get(&sys) else { return };
+    let Some(s) = w.gas.systems.get(&sys) else {
+        return;
+    };
     let mut list = s.particles.clone();
     let mut stopped = Vec::new();
     for (i, p) in list.iter_mut().enumerate() {
@@ -350,7 +363,9 @@ pub fn smoke_turn(w: &mut World, sys: ObjectId) {
 /// The removal pass of claim 5: newest first, each particle with the dead
 /// mark at the start of the pass splits (claim 8) and is removed.
 fn removal_pass(w: &mut World, sys: ObjectId) {
-    let Some(s) = w.gas.systems.get(&sys) else { return };
+    let Some(s) = w.gas.systems.get(&sys) else {
+        return;
+    };
     let dead: Vec<usize> = s
         .particles
         .iter()
@@ -367,7 +382,9 @@ fn removal_pass(w: &mut World, sys: ObjectId) {
 /// when its type names a next type, whatever its own kind (claim 3), then
 /// it is removed. The successors go at the end of the list.
 fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
-    let Some(p) = crate::gas::particle(w, sys, i) else { return };
+    let Some(p) = crate::gas::particle(w, sys, i) else {
+        return;
+    };
     // spec: S-0616 claims 3 and 8 (successors follow the system's kind, not the particle's: a dead particle of any kind in a smoke system whose type names a next type splits, d taken from the dead particle's type)
     if let Some(t) = ptype(w, &p)
         && let Some(next) = t.next
@@ -376,7 +393,11 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         let dv = t.radius.div_euclid(RADIUS_DIVISOR);
         let offset = |r: i32| {
             let q = glasnost_num::int::rem(r, dv);
-            if q >= 1 { q.wrapping_add(dv) } else { q.wrapping_sub(dv) }
+            if q >= 1 {
+                q.wrapping_add(dv)
+            } else {
+                q.wrapping_sub(dv)
+            }
         };
         // spec: S-0616 claim 8 (two raw values give oₓ, then o_y)
         let ox = offset(w.rng.raw() as i32);
@@ -390,7 +411,11 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
                 p.pos.z,
             );
             if crate::gas::add_particle(w, sys, next, at, origin).is_some()
-                && let Some(q) = w.gas.systems.get_mut(&sys).and_then(|s| s.particles.last_mut())
+                && let Some(q) = w
+                    .gas
+                    .systems
+                    .get_mut(&sys)
+                    .and_then(|s| s.particles.last_mut())
             {
                 // spec: S-0616 claim 8 (each successor's speed is the dead particle's; its direction and velocity are its own)
                 q.speed = p.speed;
@@ -409,7 +434,9 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
 
 /// Claim 6: a smoke particle's update.
 fn smoke_update(w: &mut World, sys: ObjectId, i: usize) {
-    let Some(mut p) = crate::gas::particle(w, sys, i) else { return };
+    let Some(mut p) = crate::gas::particle(w, sys, i) else {
+        return;
+    };
     let Some(t) = ptype(w, &p) else { return };
     let m = mode(w);
     // spec: S-0616 claim 6 (draws on odd ticks only)
@@ -458,17 +485,18 @@ fn smoke_move(w: &World, t: &ParticleType, p: &mut Particle) -> bool {
         w.rules().gas.smoke_wind.unwrap_or((0, 0))
     };
     // spec: S-0616 F2 (x′ = x + Δₓ(ω) × W + vₓ, y′ likewise, z′ = z + trunc(S) + v_z, integer arithmetic)
-    let x2 = x.wrapping_add(dx.wrapping_mul(t.wind_effect)).wrapping_add(p.vel[0]);
-    let y2 = y.wrapping_add(dy.wrapping_mul(t.wind_effect)).wrapping_add(p.vel[1]);
+    let x2 = x
+        .wrapping_add(dx.wrapping_mul(t.wind_effect))
+        .wrapping_add(p.vel[0]);
+    let y2 = y
+        .wrapping_add(dy.wrapping_mul(t.wind_effect))
+        .wrapping_add(p.vel[1]);
     let z2 = z
         .wrapping_add(p.speed.to_f64().to_i32_common())
         .wrapping_add(p.vel[2]); // nocite: vector and matrix dimensions (three axes)
     let h0 = w.surface_at(x, y);
     // spec: S-0616 F2 (stopped and marked when the cell at (x, y) is a bridge cell, z < H₀ + 416 and z′ ≥ H₀ + 416 − 260)
-    if w.high_bridge(p.pos.cell())
-        && z < h0 + DECK
-        && z2 >= h0 + DECK - SMOKE_DECK_MARGIN
-    {
+    if w.high_bridge(p.pos.cell()) && z < h0 + DECK && z2 >= h0 + DECK - SMOKE_DECK_MARGIN {
         p.dead = true;
         return true;
     }
@@ -479,7 +507,9 @@ fn smoke_move(w: &World, t: &ParticleType, p: &mut Particle) -> bool {
 /// Claim 9, F4: a smoke system's emission and timer growth.
 fn smoke_emission(w: &mut World, sys: ObjectId) {
     let Some(t) = sys_type(w, sys) else { return };
-    let Some(s) = w.gas.systems.get(&sys).cloned() else { return };
+    let Some(s) = w.gas.systems.get(&sys).cloned() else {
+        return;
+    };
     let m = mode(w);
     let tick = w.tick;
     // spec: S-0616 claim 9 (an owner that is an infantry, vehicle or aircraft object inside a tunnel stops emission; tunnels, S-0212, are not built, so no owner is inside one)
@@ -503,7 +533,11 @@ fn smoke_emission(w: &mut World, sys: ObjectId) {
                 s.pos.z.wrapping_add(SMOKE_EMIT_HEIGHT),
             );
             if crate::gas::add_particle(w, sys, held, at, s.target).is_some()
-                && let Some(p) = w.gas.systems.get_mut(&sys).and_then(|x| x.particles.last_mut())
+                && let Some(p) = w
+                    .gas
+                    .systems
+                    .get_mut(&sys)
+                    .and_then(|x| x.particles.last_mut())
             {
                 // spec: S-0616 F4 and Constants (S = S − (T − T₀) × 0.35 in double precision, stored in single, raised to 2.0 below 2.0)
                 let loss = s
@@ -538,7 +572,9 @@ pub fn fire_turn(w: &mut World, sys: ObjectId) {
     for i in (0..n).rev() {
         update_one(w, sys, i);
     }
-    let Some(s) = w.gas.systems.get(&sys) else { return };
+    let Some(s) = w.gas.systems.get(&sys) else {
+        return;
+    };
     let mut list = s.particles.clone();
     for p in list.iter_mut() {
         // spec: S-0616 claim 10 (a particle marked dead in its update still moves in that turn)
@@ -552,8 +588,10 @@ pub fn fire_turn(w: &mut World, sys: ObjectId) {
     }
     // spec: S-0616 claim 10 (no owner object, one that is not an infantry, vehicle, aircraft or building object, or one no longer alive: marked)
     let alive = owner.and_then(|o| w.obj(o)).is_some_and(|o| {
-        matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building)
-            && o.health > 0
+        matches!(
+            o.kind,
+            Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+        ) && o.health > 0
     });
     if !alive {
         mark(w, sys);
@@ -565,7 +603,9 @@ pub fn fire_turn(w: &mut World, sys: ObjectId) {
 
 /// Claim 12, F8: a fire particle's update.
 fn fire_update(w: &mut World, sys: ObjectId, i: usize) {
-    let Some(mut p) = crate::gas::particle(w, sys, i) else { return };
+    let Some(mut p) = crate::gas::particle(w, sys, i) else {
+        return;
+    };
     let Some(t) = ptype(w, &p) else { return };
     let m = mode(w);
     let zero = d(0, m);
@@ -582,7 +622,13 @@ fn fire_update(w: &mut World, sys: ObjectId, i: usize) {
     let phi = d(i64::from(k), m).mul(c("0.02"), m).add(d(1, m), m);
     let sp = p.speed.to_f64();
     // spec: S-0616 F8 (step = (trunc(fl(φ × uₓ) × S), trunc(fl(φ × u_y) × S), trunc(φ × u_z × S)))
-    let xy = |u: F32| phi.mul(u.to_f64(), m).to_f32(m).to_f64().mul(sp, m).to_i32_common();
+    let xy = |u: F32| {
+        phi.mul(u.to_f64(), m)
+            .to_f32(m)
+            .to_f64()
+            .mul(sp, m)
+            .to_i32_common()
+    };
     p.step = [
         xy(p.dir[0]),
         xy(p.dir[1]),
@@ -648,7 +694,11 @@ fn fire_hit(w: &mut World, sys: ObjectId, t: &ParticleType, pos: Pos) {
         .get(&sys)
         .map_or((None, None), |s| (s.owner_object, s.owner));
     // spec: S-0616 claim 14 and Edge cases (no attacking house, quirks.fire_particle_no_house; off: the system's owner house)
-    let house = if w.rules().quirks.fire_particle_no_house { None } else { house };
+    let house = if w.rules().quirks.fire_particle_no_house {
+        None
+    } else {
+        house
+    };
     let m = mode(w);
     let table = w.rules().quirks.table_root_distance;
     let list: Vec<ObjectId> = w.cells.list(cell, layer).to_vec();
@@ -668,7 +718,10 @@ fn fire_hit(w: &mut World, sys: ObjectId, t: &ParticleType, pos: Pos) {
         };
         // spec: S-0616 F9 (R = trunc(r(Δₓ² + Δᵧ² + Δ_z²)); the hit's distance trunc(R / 10))
         let dl = [o.pos.x - pos.x, o.pos.y - pos.y, o.pos.z - pos.z];
-        let sum: u64 = dl.iter().map(|&v| (i64::from(v) * i64::from(v)) as u64).sum();
+        let sum: u64 = dl
+            .iter()
+            .map(|&v| (i64::from(v) * i64::from(v)) as u64)
+            .sum();
         let r = glasnost_num::geom::root_floor(sum, table, m) as i32;
         let hit = crate::combat::damage::Hit {
             amount: t.damage,
@@ -691,7 +744,9 @@ fn fire_hit(w: &mut World, sys: ObjectId, t: &ParticleType, pos: Pos) {
 /// Claim 15, F10: a spark system's turn.
 pub fn spark_turn(w: &mut World, sys: ObjectId) {
     let Some(t) = sys_type(w, sys) else { return };
-    let Some(s) = w.gas.systems.get(&sys).cloned() else { return };
+    let Some(s) = w.gas.systems.get(&sys).cloned() else {
+        return;
+    };
     let half = w.rules().quirks.ranged_draw_half_span;
     let m = mode(w);
     let k = s.sparks;
@@ -770,7 +825,8 @@ fn spark_burst(w: &mut World, sys: ObjectId, t: &crate::gas::SystemType, held: u
             glasnost_num::int::rem(rz.wrapping_abs(), zrange).wrapping_add(zmin),
         ]
         .map(|v| d(i64::from(v), m).to_f32(m));
-        let sq = |v: &[F32; 3]| { // nocite: vector and matrix dimensions (three axes)
+        // nocite: vector and matrix dimensions (three axes)
+        let sq = |v: &[F32; 3]| {
             v.iter()
                 .fold(d(0, m), |a, x| a.add(x.to_f64().mul(x.to_f64(), m), m))
         };
@@ -786,7 +842,12 @@ fn spark_burst(w: &mut World, sys: ObjectId, t: &crate::gas::SystemType, held: u
         } else {
             w2.map(|x| mu.mul(x.to_f64(), m).div(mu2, m).to_f32(m))
         };
-        if let Some(p) = w.gas.systems.get_mut(&sys).and_then(|s| s.particles.last_mut()) {
+        if let Some(p) = w
+            .gas
+            .systems
+            .get_mut(&sys)
+            .and_then(|s| s.particles.last_mut())
+        {
             p.fvel = vel;
         }
     }
@@ -794,7 +855,9 @@ fn spark_burst(w: &mut World, sys: ObjectId, t: &crate::gas::SystemType, held: u
 
 /// Claim 16, F11: a spark's update.
 fn spark_update(w: &mut World, sys: ObjectId, i: usize) {
-    let Some(mut p) = crate::gas::particle(w, sys, i) else { return };
+    let Some(mut p) = crate::gas::particle(w, sys, i) else {
+        return;
+    };
     let m = mode(w);
     let half = w.rules().quirks.ranged_draw_half_span;
     let g = d(i64::from(w.rules().gas.gravity), m);
@@ -808,8 +871,14 @@ fn spark_update(w: &mut World, sys: ObjectId, i: usize) {
         vz2.to_f64()
     };
     // spec: S-0616 F11 (p = fl(A + (vₓ, v_y, step)) per component; B = trunc(p))
-    let px = d(i64::from(a.x), m).add(p.fvel[0].to_f64(), m).to_f32(m).to_f64();
-    let py = d(i64::from(a.y), m).add(p.fvel[1].to_f64(), m).to_f32(m).to_f64();
+    let px = d(i64::from(a.x), m)
+        .add(p.fvel[0].to_f64(), m)
+        .to_f32(m)
+        .to_f64();
+    let py = d(i64::from(a.y), m)
+        .add(p.fvel[1].to_f64(), m)
+        .to_f32(m)
+        .to_f64();
     let pz = d(i64::from(a.z), m).add(step_z, m).to_f32(m).to_f64();
     let b = Pos::new(px.to_i32_common(), py.to_i32_common(), pz.to_i32_common());
     let f = w.surface_at(b.x, b.y);
@@ -829,7 +898,9 @@ fn spark_update(w: &mut World, sys: ObjectId, i: usize) {
         } else {
             Some(pz)
         }
-    } else if pz.sub(d(i64::from(SPARK_BAND), m), m).lt(d(i64::from(f), m))
+    } else if pz
+        .sub(d(i64::from(SPARK_BAND), m), m)
+        .lt(d(i64::from(f), m))
         && stops_spark(w, b)
     {
         // spec: S-0616 F11 (F ≤ p_z < F + 150, tested as p_z − 150.0 < F, in a cell holding a building or a wall: the height becomes F)
@@ -873,13 +944,22 @@ fn stops_spark(w: &World, b: Pos) -> bool {
 /// Claim 17, F12: a railgun system's turn.
 pub fn railgun_turn(w: &mut World, sys: ObjectId) {
     let Some(t) = sys_type(w, sys) else { return };
-    let Some(s) = w.gas.systems.get(&sys).cloned() else { return };
+    let Some(s) = w.gas.systems.get(&sys).cloned() else {
+        return;
+    };
     let half = w.rules().quirks.ranged_draw_half_span;
     let m = mode(w);
     if !s.ending && s.particles.is_empty() {
         // spec: S-0616 F12 (L = trunc(r(Δₓ² + Δᵧ² + Δ_z²)), n = trunc(L × p) in double precision)
-        let dl = [s.target.x - s.pos.x, s.target.y - s.pos.y, s.target.z - s.pos.z];
-        let sum: u64 = dl.iter().map(|&v| (i64::from(v) * i64::from(v)) as u64).sum();
+        let dl = [
+            s.target.x - s.pos.x,
+            s.target.y - s.pos.y,
+            s.target.z - s.pos.z,
+        ];
+        let sum: u64 = dl
+            .iter()
+            .map(|&v| (i64::from(v) * i64::from(v)) as u64)
+            .sum();
         let table = w.rules().quirks.table_root_distance;
         let l = glasnost_num::geom::root_floor(sum, table, m);
         let n = d(l as i64, m).mul(t.per_coord, m).to_i32_common();

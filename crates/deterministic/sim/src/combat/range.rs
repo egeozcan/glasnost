@@ -183,7 +183,8 @@ pub fn in_range(
     };
     // spec: S-0307 claim 5 and F1 (R = R_b + 256 B_k when the firer is bunkered and is not a building; signed 32-bit wrapping, S-0205 claim 1)
     let rr = if crate::structures::bunker::bunkered(w, firer)
-        && w.obj(firer).is_some_and(|o| o.kind != crate::rules::Kind::Building)
+        && w.obj(firer)
+            .is_some_and(|o| o.kind != crate::rules::Kind::Building)
     {
         wrap(i64::from(rr) + 256 * i64::from(r.combat.general.bunker_range_bonus))
     } else {

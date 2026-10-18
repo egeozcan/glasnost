@@ -706,7 +706,7 @@ fn claim_34_retreat_leaves_the_map() {
     let all: Vec<_> = cells.iter().map(|(c, _)| c).collect();
     for c in all {
         if let (Some(cell), Some(old)) = (cells.get_mut(c), m.cells.get(c)) {
-            *cell = old.clone();
+            *cell = *old;
         }
     }
     m.footprint = fp;

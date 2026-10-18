@@ -314,8 +314,11 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
     break_contact(w, x);
     if let Some(o) = w.obj_mut(x) {
         // spec: S-0607 claims 5 and 6 (it queues guard; a seized unit of a non-passive computer-controlled house queues hunt instead, a resource gatherer excepted; our AI houses take the human rule, the neutral and special houses the original's)
-        o.beh
-            .queue(Some(if hunt { Behaviour::Hunt } else { Behaviour::Guard }));
+        o.beh.queue(Some(if hunt {
+            Behaviour::Hunt
+        } else {
+            Behaviour::Guard
+        }));
     }
 }
 
@@ -736,7 +739,9 @@ fn underneath(w: &mut World, id: ObjectId, on_deck: bool) -> bool {
             let hit = erase_hit(w, id);
             let at = o.pos;
             for v in victims {
-                let Some(vo) = w.obj(v).cloned() else { continue };
+                let Some(vo) = w.obj(v).cloned() else {
+                    continue;
+                };
                 // spec: S-0607 claim 16 (removed at once, without death effects or death animations, each credited as a kill)
                 crate::combat::death::passenger_death(w, v, &hit);
                 // spec: S-0607 claim 16 (the crush sound of each one's type plays at the dropped unit's position)
@@ -1147,8 +1152,7 @@ fn wave_update(w: &mut World, id: ObjectId) {
     let q = fade_step(mode);
     let one = F64::from_i64(1, mode);
     if !v.ended {
-        let target_gone =
-            matches!(v.target, Target::Object(t) if w.obj(t).is_none());
+        let target_gone = matches!(v.target, Target::Object(t) if w.obj(t).is_none());
         let retargeted = w.obj(id).and_then(|o| o.target) != Some(v.target);
         // spec: S-0607 claim 21 (the wave ends when its target leaves play or its firer's target is no longer the wave's target; the firer leaving play takes the wave with it)
         if target_gone || retargeted {

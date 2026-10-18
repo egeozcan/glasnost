@@ -249,15 +249,34 @@ fn claim_3_particle_kind_chooses_the_update() {
 #[test]
 fn claim_4_and_5_owner_object() {
     let mut w = game(&rules());
-    let v = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, testkit::mid(SIZE, 0, 0), 0);
+    let v = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     particles::damage_smoke(&mut w, v, "PLUME", [10, -20, 30]);
-    let s = w.obj(v).unwrap().combat.damage_smoke.expect("a damage-smoke system");
+    let s = w
+        .obj(v)
+        .unwrap()
+        .combat
+        .damage_smoke
+        .expect("a damage-smoke system");
     let at = w.obj(v).unwrap().pos;
-    assert_eq!(w.gas.systems[&s].pos, Pos::new(at.x + 10, at.y - 20, at.z + 30));
+    assert_eq!(
+        w.gas.systems[&s].pos,
+        Pos::new(at.x + 10, at.y - 20, at.z + 30)
+    );
     assert!(w.gas.systems[&s].particles.is_empty(), "no first particle");
     w.obj_mut(v).unwrap().pos.x += 256;
     gas::system_turn(&mut w, s);
-    assert_eq!(w.gas.systems[&s].pos.x, at.x + 256 + 10, "it follows its owner");
+    assert_eq!(
+        w.gas.systems[&s].pos.x,
+        at.x + 256 + 10,
+        "it follows its owner"
+    );
     objects::remove(&mut w, v);
     let sys = &w.gas.systems[&s];
     assert_eq!(sys.owner_object, None);
@@ -385,7 +404,11 @@ fn spark_burst_and_double_gravity_both_positions() {
         let s = system(&mut w, "BURST", p, None);
         gas::system_turn(&mut w, s);
         let l = list(&w, s);
-        assert!((4..=6).contains(&l.len()), "1 + c with c in 3 … 5: {}", l.len());
+        assert!(
+            (4..=6).contains(&l.len()),
+            "1 + c with c in 3 … 5: {}",
+            l.len()
+        );
         assert!(w.gas.systems[&s].ending);
         assert_eq!(w.gas.systems[&s].sparks, 0);
         zs.push((l.iter().map(|p| p.pos.z).collect::<Vec<_>>(), w.rng.clone()));
@@ -468,7 +491,11 @@ fn claim_19_normalised_stage_advance() {
         .unwrap();
     let mut t = w.rules().gas.particles[ti].clone();
     let at = Pos { x: 0, y: 0, z: 0 };
-    let to = Pos { x: 1000, y: 0, z: 0 };
+    let to = Pos {
+        x: 1000,
+        y: 0,
+        z: 0,
+    };
     let one = glasnost_sim::rules::nearest_double("1.0").to_f32(m());
     let zero = glasnost_sim::rules::nearest_double("0.0").to_f32(m());
     let s = glasnost_sim::rules::nearest_double("10.0").to_f32(m());
@@ -502,8 +529,17 @@ fn dying_turn(name: &str) -> (Particle, Vec<Particle>, usize, u64) {
     let taken = w.rng.taken();
     gas::system_turn(&mut w, s);
     let drawn = w.rng.taken() - taken;
-    let all = w.gas.systems.get(&s).map(|x| x.particles.clone()).unwrap_or_default();
-    let ash: Vec<Particle> = all.iter().filter(|p| named(&w, p) == "ASH").cloned().collect();
+    let all = w
+        .gas
+        .systems
+        .get(&s)
+        .map(|x| x.particles.clone())
+        .unwrap_or_default();
+    let ash: Vec<Particle> = all
+        .iter()
+        .filter(|p| named(&w, p) == "ASH")
+        .cloned()
+        .collect();
     (dead, ash, all.len(), drawn)
 }
 
@@ -519,7 +555,10 @@ fn claim_3_successors_follow_the_system_kind() {
     // SOOT names no displacement: the successor is at the dead particle's position.
     assert_eq!((l[0].pos.x, l[0].pos.y), (dead.pos.x, dead.pos.y));
     assert_eq!(l[0].vel, dead.vel, "the dead particle's velocity");
-    assert_eq!(l[0].speed, dead.speed, "the dead particle's speed (S-0613 claim 7, revision 10)");
+    assert_eq!(
+        l[0].speed, dead.speed,
+        "the dead particle's speed (S-0613 claim 7, revision 10)"
+    );
     let creation = with - without;
     assert!(creation > 0, "the successor's creation draws");
     // (ii) Smoke system, gas particle: claim 8's two successors.
@@ -528,9 +567,16 @@ fn claim_3_successors_follow_the_system_kind() {
     assert!(lx.is_empty());
     assert_eq!(l.len(), 2, "two successors");
     assert_eq!(n, nx + 2);
-    assert_eq!(l[0].pos.x + l[1].pos.x, 2 * dead.pos.x, "mirrored, not the gas displacement");
+    assert_eq!(
+        l[0].pos.x + l[1].pos.x,
+        2 * dead.pos.x,
+        "mirrored, not the gas displacement"
+    );
     assert_eq!(l[0].pos.y + l[1].pos.y, 2 * dead.pos.y);
-    assert_ne!(l[0].pos.x, dead.pos.x, "d = 5 from the dead particle's type: never 0");
+    assert_ne!(
+        l[0].pos.x, dead.pos.x,
+        "d = 5 from the dead particle's type: never 0"
+    );
     // oₓ and o_y, then per successor its creation draws and one translucency draw.
     assert_eq!(with - without, 2 + 2 * (creation + 1), "claim 8's draws");
     // (iii) Fire system, smoke particle; (iv) spark system, gas particle: none.
@@ -549,8 +595,15 @@ fn gas_successor_takes_the_dead_particles_speed() {
     let (dead, l, _, _) = dying_turn("MIST");
     assert_eq!(l.len(), 1, "one smoke successor of the gas particle");
     let ash = &l[0];
-    assert_eq!(ash.speed, dead.speed, "the gas parent's speed, not the smoke type's own");
-    assert_ne!(dead.speed.to_f64(), F64::from_i64(0, m()), "VAPOR's speed field is 2.0");
+    assert_eq!(
+        ash.speed, dead.speed,
+        "the gas parent's speed, not the smoke type's own"
+    );
+    assert_ne!(
+        dead.speed.to_f64(),
+        F64::from_i64(0, m()),
+        "VAPOR's speed field is 2.0"
+    );
     assert_eq!(ash.vel, dead.vel);
     assert_eq!(ash.stage, 0, "its own start stage");
 }

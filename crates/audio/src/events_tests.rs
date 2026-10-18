@@ -1710,7 +1710,10 @@ fn bio_reactor_sounds() {
         house: Some(HouseId(1)),
         pos: Some(at),
     };
-    for (sound, name) in [(Sound::EnterBioReactor, "Gulp"), (Sound::LeaveBioReactor, "Burp")] {
+    for (sound, name) in [
+        (Sound::EnterBioReactor, "Gulp"),
+        (Sound::LeaveBioReactor, "Burp"),
+    ] {
         let mut a = audio(&w, &["Gulp", "Burp"]);
         a.set_names(n.clone());
         a.tick(&w, &[fx(sound)], &mut Rng::new(1));
@@ -1736,7 +1739,10 @@ fn bunker_walls_sounds() {
         house: Some(HouseId(1)),
         pos: Some(at),
     };
-    for (sound, name) in [(Sound::BunkerWallsUp, "Up"), (Sound::BunkerWallsDown, "Down")] {
+    for (sound, name) in [
+        (Sound::BunkerWallsUp, "Up"),
+        (Sound::BunkerWallsDown, "Down"),
+    ] {
         let mut a = audio(&w, &["Up", "Down"]);
         a.set_names(n.clone());
         a.tick(&w, &[fx(sound)], &mut Rng::new(1));
@@ -1978,5 +1984,9 @@ fn grinder_consumption_sounds() {
     let before = u.taken();
     b.tick(&w, &[fx(1, false)], &mut u);
     assert_eq!(u.taken(), before + 1, "another house: the death sound only");
-    assert_eq!(heard(&mut b, 0), ["Boom0"], "no enter-grinder sound without the flag");
+    assert_eq!(
+        heard(&mut b, 0),
+        ["Boom0"],
+        "no enter-grinder sound without the flag"
+    );
 }

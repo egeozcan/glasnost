@@ -260,12 +260,11 @@ fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos 
     };
     let (u, v, wz) = (tm.0[0][3], tm.0[1][3], tm.0[2][3]); // spec: S-0313 F1 (the translation column of the 3 × 4 matrix)
     // spec: S-0313 F1 (shift = (trunc u, trunc(−v), trunc w))
-    let p = Pos::new(
+    Pos::new(
         base.x + u.to_i32_common(),
         base.y + v.negated().to_i32_common(),
         base.z + wz.to_i32_common(),
-    );
-    p
+    )
 }
 
 /// The eight spray shifts (S-0313 F4).

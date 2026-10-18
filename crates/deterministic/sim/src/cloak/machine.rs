@@ -650,11 +650,13 @@ fn aircraft_target(w: &mut World, id: ObjectId) {
     let owner = o.owner;
     let Some(to) = w.obj(t) else { return };
     // spec: S-0516 claim 25 (fully cloaked, not allied with the aircraft, not sensed by its house)
-    if to.cloak.state == CloakState::Cloaked && !w.allied(owner, to.owner) && !senses(w, owner, t) {
-        if let Some(ob) = w.obj_mut(id) {
-            crate::spawn::clear_own_target(ob);
-            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-        }
+    if to.cloak.state == CloakState::Cloaked
+        && !w.allied(owner, to.owner)
+        && !senses(w, owner, t)
+        && let Some(ob) = w.obj_mut(id)
+    {
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
 }
 

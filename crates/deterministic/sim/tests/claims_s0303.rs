@@ -1362,7 +1362,7 @@ fn debris_case(maxima: &[i32], lo: i32, hi: i32, seed: u32) -> (Vec<i32>, Vec<i3
         let raw = i64::from(rng.raw() as i32);
         // The model: |raw| wrapped to 32 bits, the divisor u + 1 wrapped,
         // the remainder truncated toward zero, a zero divisor giving |raw|.
-        let a = i64::from((raw.abs() as u32) as i32);
+        let a = i64::from(raw.unsigned_abs() as u32 as i32);
         let b = i64::from((maxima[i] as i64 + 1) as u32 as i32);
         let r = if b == 0 { a } else { a % b };
         let g = r.min(left);

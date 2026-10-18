@@ -394,7 +394,10 @@ fn follow_spin(
                 s.value,
                 s.stage,
                 aim.is_some(),
-                targets.iter().filter(|&&t| lane.world().obj(t).is_some()).count()
+                targets
+                    .iter()
+                    .filter(|&&t| lane.world().obj(t).is_some())
+                    .count()
             );
         }
         if s.stage != last {
@@ -434,8 +437,18 @@ fn gattling_spin(lane: &mut Lane) {
     let home = lane.home();
     if let Some((gname, _)) = unit {
         let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
-        let g = lane.spawn(Kind::Vehicle, &gname, local, CellXY::new(spot.x - 2, spot.y));
-        let v = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(spot.x + 1, spot.y));
+        let g = lane.spawn(
+            Kind::Vehicle,
+            &gname,
+            local,
+            CellXY::new(spot.x - 2, spot.y),
+        );
+        let v = lane.spawn(
+            Kind::Vehicle,
+            &vname,
+            enemy,
+            CellXY::new(spot.x + 1, spot.y),
+        );
         lane.look_at(spot);
         lane.ticks(2);
         lane.save("gattling-before");
@@ -648,7 +661,12 @@ fn absorber(lane: &mut Lane) {
     lane.ticks(20);
     let out: Vec<_> = units
         .iter()
-        .filter_map(|&u| lane.world().obj(u).filter(|o| o.on_map).map(|o| o.pos.cell()))
+        .filter_map(|&u| {
+            lane.world()
+                .obj(u)
+                .filter(|o| o.on_map)
+                .map(|o| o.pos.cell())
+        })
         .collect();
     println!(
         "released {} of 3 at {out:?} (building at {at:?}, size {size:?}); output back {}",
@@ -720,7 +738,13 @@ fn grinder(lane: &mut Lane) {
     let credits = |lane: &Lane| lane.world().houses[usize::from(local.0)].credits;
     let start = credits(lane);
     for &u in &units {
-        let cursor = targeting::cursor(lane.world(), local, &[u], ClickOn::Object(b), Modifiers::default());
+        let cursor = targeting::cursor(
+            lane.world(),
+            local,
+            &[u],
+            ClickOn::Object(b),
+            Modifiers::default(),
+        );
         let n = lane.order(local, u, ClickOn::Object(b));
         println!("click on the grinder: cursor {cursor:?}, {n} orders");
     }
@@ -733,7 +757,11 @@ fn grinder(lane: &mut Lane) {
             .filter(|&&u| lane.world().obj(u).is_some_and(|o| o.on_map))
             .count();
         if now < left {
-            println!("{} consumed after {t} ticks; house paid {}", left - now, credits(lane) > start);
+            println!(
+                "{} consumed after {t} ticks; house paid {}",
+                left - now,
+                credits(lane) > start
+            );
             left = now;
         }
         if t == 20 && !shot {
@@ -810,12 +838,23 @@ fn bunker(lane: &mut Lane) {
     };
     let b = lane.spawn(Kind::Building, &bname, local, at);
     lane.ticks(4);
-    let v = lane.spawn(Kind::Vehicle, &vname, local, CellXY::new(at.x + size.0 + 3, at.y + 1));
+    let v = lane.spawn(
+        Kind::Vehicle,
+        &vname,
+        local,
+        CellXY::new(at.x + size.0 + 3, at.y + 1),
+    );
     lane.ticks(2);
     lane.look_at(CellXY::new(at.x + 1, at.y + 1));
     lane.ticks(2);
     lane.save("bunker-before");
-    let cursor = targeting::cursor(lane.world(), local, &[v], ClickOn::Object(b), Modifiers::default());
+    let cursor = targeting::cursor(
+        lane.world(),
+        local,
+        &[v],
+        ClickOn::Object(b),
+        Modifiers::default(),
+    );
     let n = lane.order(local, v, ClickOn::Object(b));
     println!("click on the bunker: cursor {cursor:?}, {n} orders");
     let stage = |lane: &Lane| lane.world().obj(b).map(|o| o.structure.bunker_stage);
@@ -848,7 +887,12 @@ fn bunker(lane: &mut Lane) {
     println!("bunkered vehicle body facing {facing:?}");
     lane.save("bunker-occupied");
     if let (Some(fname), Some(enemy)) = (foe_ty, lane.enemy()) {
-        let foe = lane.spawn(Kind::Vehicle, &fname, enemy, CellXY::new(at.x - 4, at.y + 1));
+        let foe = lane.spawn(
+            Kind::Vehicle,
+            &fname,
+            enemy,
+            CellXY::new(at.x - 4, at.y + 1),
+        );
         let full = lane.full_health(foe);
         let mut shot = false;
         for t in 0..600 {
@@ -866,7 +910,13 @@ fn bunker(lane: &mut Lane) {
         }
         println!("enemy vehicle hit from the bunker: {shot}");
     }
-    let cursor = targeting::cursor(lane.world(), local, &[v], ClickOn::Object(v), Modifiers::default());
+    let cursor = targeting::cursor(
+        lane.world(),
+        local,
+        &[v],
+        ClickOn::Object(v),
+        Modifiers::default(),
+    );
     let n = lane.order(local, v, ClickOn::Object(v));
     println!("click on the bunkered vehicle: cursor {cursor:?}, {n} orders");
     for t in 0..600 {
@@ -960,7 +1010,13 @@ fn magnetic_lift(lane: &mut Lane) {
     lane.look_at(CellXY::new(at.x + 3, at.y));
     lane.ticks(2);
     lane.save("lift-before");
-    let cursor = targeting::cursor(lane.world(), local, &[l], ClickOn::Object(v), Modifiers::default());
+    let cursor = targeting::cursor(
+        lane.world(),
+        local,
+        &[l],
+        ClickOn::Object(v),
+        Modifiers::default(),
+    );
     let n = lane.order(local, l, ClickOn::Object(v));
     println!("click on the enemy vehicle: cursor {cursor:?}, {n} orders");
     let full = lane.full_health(v);
@@ -981,7 +1037,10 @@ fn magnetic_lift(lane: &mut Lane) {
             break;
         }
         let pos = w.obj(v).map(|o| o.pos.cell());
-        if lift::grips(w, l, v) && pos == Some(CellXY::new(at.x + 3, at.y)) && w.height_above_surface(v) > 200 {
+        if lift::grips(w, l, v)
+            && pos == Some(CellXY::new(at.x + 3, at.y))
+            && w.height_above_surface(v) > 200
+        {
             println!(
                 "over the second vehicle after {t} ticks at height {}",
                 w.height_above_surface(v)
@@ -1055,9 +1114,21 @@ fn gas_clouds(lane: &mut Lane) {
     let Some(enemy) = lane.enemy() else { return };
     let home = lane.home();
     let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
-    let v = lane.spawn(Kind::Infantry, &vname, local, CellXY::new(spot.x - 3, spot.y));
+    let v = lane.spawn(
+        Kind::Infantry,
+        &vname,
+        local,
+        CellXY::new(spot.x - 3, spot.y),
+    );
     let foes: Vec<ObjectId> = (0..4)
-        .map(|i| lane.spawn(Kind::Infantry, &iname, enemy, CellXY::new(spot.x + 1, spot.y - 1 + i)))
+        .map(|i| {
+            lane.spawn(
+                Kind::Infantry,
+                &iname,
+                enemy,
+                CellXY::new(spot.x + 1, spot.y - 1 + i),
+            )
+        })
         .collect();
     lane.look_at(spot);
     lane.ticks(4);

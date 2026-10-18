@@ -410,7 +410,6 @@ fn claim_13_house_wide_hunt_action() {
     }
 }
 
-
 fn kill_inside(w: &mut World, id: ObjectId) {
     let hit = damage::Hit {
         amount: 10_000,

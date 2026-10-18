@@ -169,7 +169,8 @@ fn liftable(w: &World, l: ObjectId, e: ObjectId) -> bool {
         return false;
     };
     let damage = w.rules().combat.weapon(wp).damage;
-    lift::eligible(w, e, damage) && check::check(w, l, Some(Target::Object(e)), 0, false) != Answer::Illegal
+    lift::eligible(w, e, damage)
+        && check::check(w, l, Some(Target::Object(e)), 0, false) != Answer::Illegal
 }
 
 impl Special {

@@ -83,7 +83,11 @@ fn a_lifter_goes_for_the_dearest_enemy_vehicle_never_infantry() {
         let o = w.obj(id).unwrap();
         glasnost_sim::econ::production::cost_field(&w, glasnost_sim::econ::tech::type_of(o))
     };
-    let want = if price(dear) >= price(cheap) { dear } else { cheap };
+    let want = if price(dear) >= price(cheap) {
+        dear
+    } else {
+        cheap
+    };
     assert_eq!(attacked(&out, l), Some(want));
     assert_eq!(br.special_uses().lift_orders, 1);
 }
@@ -121,7 +125,10 @@ fn a_holding_lifter_lets_go_over_an_enemy_building() {
     assert!(held, "the lifter seized the vehicle");
     assert!(w.obj(v).is_none(), "the held vehicle fell to its death");
     assert!(br.special_uses().lift_drops >= 1, "let go by a move order");
-    assert!(w.obj(l).is_some_and(|o| o.health == 400), "the lifter is unhurt");
+    assert!(
+        w.obj(l).is_some_and(|o| o.health == 400),
+        "the lifter is unhurt"
+    );
     let _ = under;
 }
 

@@ -442,7 +442,7 @@ fn gas_hits_nine_cells() {
     let _ = pick(&mut w, v, 16);
     for id in victims {
         assert!(
-            w.obj(id).map_or(true, |o| o.health < 400),
+            w.obj(id).is_none_or(|o| o.health < 400),
             "every cell was hit"
         );
     }

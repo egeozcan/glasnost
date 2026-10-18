@@ -157,7 +157,11 @@ fn a_firing_gattling_keeps_its_target() {
     let g = game(rules(false));
     let (w, u, a, _) = scene(g, "GATG");
     assert_eq!(w.obj(u).unwrap().target, Some(Target::Object(a)));
-    assert!(gattling::spin(&w, u).value > 0, "{:?}", gattling::spin(&w, u));
+    assert!(
+        gattling::spin(&w, u).value > 0,
+        "{:?}",
+        gattling::spin(&w, u)
+    );
     assert!(glasnost_ai::gattling::engaged(&w, u));
     let mut b = Brain::new(&w, &fixture::map(), HouseId(0));
     let orders = b.think(&w);
@@ -205,8 +209,17 @@ fn builds_gattling_defences() {
     while g.world.tick < 20_000 && g.outcome().is_none() && count(&g.world, 0, "GDEF") < wanted {
         g.step();
     }
-    assert_eq!(count(&g.world, 0, "GDEF"), wanted, "by tick {}", g.world.tick);
-    assert!(g.special_uses().iter().any(|(_, u)| u.gattling_defences >= 1));
+    assert_eq!(
+        count(&g.world, 0, "GDEF"),
+        wanted,
+        "by tick {}",
+        g.world.tick
+    );
+    assert!(
+        g.special_uses()
+            .iter()
+            .any(|(_, u)| u.gattling_defences >= 1)
+    );
     for _ in 0..3000 {
         g.step();
     }
@@ -223,6 +236,9 @@ fn no_defence_when_not_buildable() {
         g.step();
     }
     assert_eq!(count(&g.world, 0, "GDEF"), 0);
-    assert!(g.special_uses().iter().all(|(_, u)| u.gattling_defences == 0));
+    assert!(
+        g.special_uses()
+            .iter()
+            .all(|(_, u)| u.gattling_defences == 0)
+    );
 }
-

@@ -104,10 +104,7 @@ impl Exercise {
             ),
             ("slaves at work (S-0402 claim 14)", self.slave_ticks),
             ("gattling stage rises (S-0609 claim 2)", self.stage_rises),
-            (
-                "gattling at its top stage (S-0609 claim 2)",
-                self.top_ticks,
-            ),
+            ("gattling at its top stage (S-0609 claim 2)", self.top_ticks),
             ("takeover orders (S-0601)", u.takeovers),
             ("takeovers (S-0601 claim 6)", self.takeovers),
             ("gas clouds (S-0613 claims 2 to 4)", self.gas_clouds),
@@ -253,8 +250,12 @@ impl Exercise {
         self.building_spin_ticks += u32::from(building);
         first |= watch.first(building, "gattling building");
         // Mind control: links that formed in this tick.
-        let victims: BTreeSet<(ObjectId, ObjectId)> =
-            w.mind.victims.iter().map(|(&v, r)| (v, r.controller)).collect();
+        let victims: BTreeSet<(ObjectId, ObjectId)> = w
+            .mind
+            .victims
+            .iter()
+            .map(|(&v, r)| (v, r.controller))
+            .collect();
         self.takeovers +=
             u32::try_from(victims.difference(&watch.victims).count()).unwrap_or(u32::MAX);
         first |= watch.first(!victims.is_empty(), "takeover");

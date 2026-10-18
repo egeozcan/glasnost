@@ -87,8 +87,7 @@ pub fn en_route(w: &World, b: ObjectId) -> usize {
             o.on_map
                 && o.id != b
                 && (absorb::waiting_for(w, o.id) == Some(b)
-                    || entering(o)
-                        && (o.contact == Some(b) || o.dest == Some(Target::Object(b))))
+                    || entering(o) && (o.contact == Some(b) || o.dest == Some(Target::Object(b))))
         })
         .count()
 }

@@ -212,7 +212,9 @@ pub fn order_move(w: &mut World, actor: ObjectId, c: CellXY) -> bool {
 /// its own locomotor (S-0607 claim 20); whether it did.
 pub fn restored(w: &mut World, id: ObjectId) -> bool {
     if !run_until(w, 400, |w| {
-        !glasnost_sim::lift::dropped(w, id) && w.height_above_surface(id) == 0 && !glasnost_sim::jump::moving(w, id)
+        !glasnost_sim::lift::dropped(w, id)
+            && w.height_above_surface(id) == 0
+            && !glasnost_sim::jump::moving(w, id)
     }) {
         return false;
     }

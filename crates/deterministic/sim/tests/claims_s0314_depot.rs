@@ -709,7 +709,11 @@ fn claim_20_same_depot_enter_while_docked() {
     assert_eq!(o.depot.queued, None);
     assert_eq!(o.dest, None, "no destination");
     assert_ne!(o.beh.queued, Some(Behaviour::Sleep), "no sleep queued");
-    assert_eq!(w.obj(d).unwrap().beh.queued, dq, "the depot queues no new repair");
+    assert_eq!(
+        w.obj(d).unwrap().beh.queued,
+        dq,
+        "the depot queues no new repair"
+    );
     // Enter falls back to rest at its next processing.
     assert!(run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current
         != Some(Behaviour::Enter)));
@@ -952,7 +956,8 @@ fn s0214_group_click_first_selected_takes_contact() {
     let b = truck(&mut w, 0, 6, 4, 300);
     open(&mut w);
     // Selected b first, then a.
-    let orders = targeting::click(&w, ALPHA, &[b, a], ClickOn::Object(d), Modifiers::default()).orders;
+    let orders =
+        targeting::click(&w, ALPHA, &[b, a], ClickOn::Object(d), Modifiers::default()).orders;
     assert_eq!(orders.len(), 2, "one enter order each");
     for o in orders {
         assert!(orders::issue(&mut w, ALPHA, o));
@@ -1007,7 +1012,11 @@ fn claim_23_queued_enter_current_no_walk() {
         let o = w.obj(b).unwrap();
         assert_eq!(o.beh.current, Some(Behaviour::Enter), "tick {}", w.tick);
         assert_eq!(o.dest, None, "tick {}", w.tick);
-        assert_eq!(o.contact, None, "tick {}: not before the first leaves", w.tick);
+        assert_eq!(
+            o.contact, None,
+            "tick {}: not before the first leaves",
+            w.tick
+        );
         assert_eq!(o.pos, start, "tick {}: no walk", w.tick);
         assert_eq!(o.depot.queued, Some(d));
         assert_eq!(o.depot.entering, Some(d));
@@ -1015,9 +1024,16 @@ fn claim_23_queued_enter_current_no_walk() {
     }
     let left = left.expect("the first leaves");
     assert!(run_until(&mut w, 2, |w| contact(w, b) == Some(d)));
-    assert!(w.tick - left <= 1, "enters at most one tick after the first leaves");
+    assert!(
+        w.tick - left <= 1,
+        "enters at most one tick after the first leaves"
+    );
     let o = w.obj(b).unwrap();
-    assert_eq!(o.dest, Some(Target::Object(d)), "the retry assigns the depot");
+    assert_eq!(
+        o.dest,
+        Some(Target::Object(d)),
+        "the retry assigns the depot"
+    );
     assert_eq!(o.depot.queued, None);
     assert!(run_until(&mut w, 6000, |w| health(w, b) == 600));
 }
@@ -1037,11 +1053,20 @@ fn claim_23_switched_off_queued_vehicle() {
     w.obj_mut(d).unwrap().econ.building.switched_off = true;
     assert!(run_until(&mut w, 30, |w| w.obj(b).unwrap().beh.current
         != Some(Behaviour::Enter)));
-    assert_eq!(w.obj(b).unwrap().depot.queued, Some(d), "the queued entry stays");
+    assert_eq!(
+        w.obj(b).unwrap().depot.queued,
+        Some(d),
+        "the queued entry stays"
+    );
     assert_eq!(contact(&w, b), None);
     assert_ne!(contact(&w, a), None, "the first is still serviced");
     assert!(run_until(&mut w, 3000, |w| contact(w, a).is_none()));
-    assert!(run_until(&mut w, 2, |w| w.obj(b).unwrap().depot.queued.is_none()));
+    assert!(run_until(&mut w, 2, |w| w
+        .obj(b)
+        .unwrap()
+        .depot
+        .queued
+        .is_none()));
     let o = w.obj(b).unwrap();
     assert_eq!(o.contact, None, "gives up");
     assert_eq!(o.dest, None);
@@ -1065,7 +1090,11 @@ fn claim_23_free_place_taken_by_the_processing() {
     assert_eq!(contact(&w, a), Some(d));
     let start = w.obj(b).unwrap().pos;
     if contact(&w, b).is_none() {
-        assert_eq!(w.obj(b).unwrap().depot.queued, Some(d), "queued though a place is free");
+        assert_eq!(
+            w.obj(b).unwrap().depot.queued,
+            Some(d),
+            "queued though a place is free"
+        );
         assert_eq!(w.obj(b).unwrap().dest, None);
     }
     assert!(run_until(&mut w, 2, |w| contact(w, b) == Some(d)));
@@ -1111,7 +1140,11 @@ fn claim_23_later_order_clears_queued_entry() {
     assert!(orders::issue(&mut w, ALPHA, mv(b, 9, 9)));
     tick::step(&mut w);
     assert_eq!(w.obj(b).unwrap().depot.queued, None);
-    assert_eq!(w.obj(b).unwrap().depot.entering, None, "the remembered depot is replaced");
+    assert_eq!(
+        w.obj(b).unwrap().depot.entering,
+        None,
+        "the remembered depot is replaced"
+    );
 }
 
 // spec: S-0314 claim 24 (no automatic return: a damaged vehicle next to a depot is not sent to it)
@@ -1672,13 +1705,24 @@ fn claim_17_existing_turn_holds_the_arrival_sleep() {
         let k = w.tick - 1;
         let o = w.obj(v).unwrap();
         if o.body.turning(k) {
-            assert_ne!(o.beh.current, Some(Behaviour::Sleep), "tick {k}: still turning");
+            assert_ne!(
+                o.beh.current,
+                Some(Behaviour::Sleep),
+                "tick {k}: still turning"
+            );
         } else {
-            assert_eq!(o.beh.current, Some(Behaviour::Sleep), "tick {k}: turn ended");
+            assert_eq!(
+                o.beh.current,
+                Some(Behaviour::Sleep),
+                "tick {k}: turn ended"
+            );
             assert_eq!(o.beh.start_tick, k, "the first start of the end tick");
             ended = Some(k);
             break;
         }
     }
-    assert!(ended.is_some_and(|k| k > t0 + 1), "the turn takes several ticks");
+    assert!(
+        ended.is_some_and(|k| k > t0 + 1),
+        "the turn takes several ticks"
+    );
 }

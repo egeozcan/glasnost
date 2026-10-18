@@ -151,7 +151,10 @@ fn sends_spare_infantry_beyond_the_ones_kept() {
     assert!(out > drain, "power to spare: {out} {drain}");
     let mut br = brain(&w);
     let orders = br.think(&w);
-    let sent = u.iter().filter(|&&x| entered(&orders, x) == Some(b)).count();
+    let sent = u
+        .iter()
+        .filter(|&&x| entered(&orders, x) == Some(b))
+        .count();
     assert_eq!(sent, 2, "{orders:?}");
     assert_eq!(br.special_uses().absorbs, 2);
 }
@@ -163,7 +166,10 @@ fn keeps_its_infantry_when_power_is_enough() {
     let (w, b, u) = scene(&g, "BIOR", "WALKER", KEEP);
     let mut br = brain(&w);
     let orders = br.think(&w);
-    assert!(u.iter().all(|&x| entered(&orders, x) != Some(b)), "{orders:?}");
+    assert!(
+        u.iter().all(|&x| entered(&orders, x) != Some(b)),
+        "{orders:?}"
+    );
     assert_eq!(br.special_uses().absorbs, 0);
 }
 
@@ -176,7 +182,10 @@ fn short_of_power_sends_them_all_the_room_permitting() {
     assert!(out <= drain, "short of power: {out} {drain}");
     let mut br = brain(&w);
     let orders = br.think(&w);
-    let sent = u.iter().filter(|&&x| entered(&orders, x) == Some(b)).count();
+    let sent = u
+        .iter()
+        .filter(|&&x| entered(&orders, x) == Some(b))
+        .count();
     assert_eq!(sent, 2, "capacity 2: {orders:?}");
 }
 
@@ -187,7 +196,10 @@ fn engineers_are_kept() {
     let (w, b, u) = scene(&g, "BIOD", "ENGI", 3);
     let mut br = brain(&w);
     let orders = br.think(&w);
-    assert!(u.iter().all(|&x| entered(&orders, x) != Some(b)), "{orders:?}");
+    assert!(
+        u.iter().all(|&x| entered(&orders, x) != Some(b)),
+        "{orders:?}"
+    );
 }
 
 // S-0605 claims 7 and 10 and S-0601 claim 9, PLAN §4.7: a controlled enemy infantry unit is sent in whatever the house keeps.
@@ -196,7 +208,14 @@ fn a_controlled_enemy_is_sent_in() {
     let g = game(10);
     let (mut w, b, u) = scene(&g, "BIOR", "CLONE", 1);
     let h = home(&w);
-    let foe = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, CellXY::new(h.x + 3, h.y + 9), 0);
+    let foe = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        1,
+        CellXY::new(h.x + 3, h.y + 9),
+        0,
+    );
     assert!(mind::take(&mut w, u[0], foe));
     while w.tick % 15 != 0 {
         testkit::run(&mut w, 1);
@@ -204,7 +223,11 @@ fn a_controlled_enemy_is_sent_in() {
     let mut br = brain(&w);
     let orders = br.think(&w);
     assert_eq!(entered(&orders, foe), Some(b), "{orders:?}");
-    assert_eq!(entered(&orders, u[0]), None, "a controller holding a victim is refused");
+    assert_eq!(
+        entered(&orders, u[0]),
+        None,
+        "a controller holding a victim is refused"
+    );
 }
 
 // S-0601 claims 1 and 2, PLAN §4.7: mind controllers are kept for their own work, even short of power.
@@ -214,7 +237,10 @@ fn controllers_are_kept() {
     let (w, b, u) = scene(&g, "BIOD", "CLONE", 3);
     let mut br = brain(&w);
     let orders = br.think(&w);
-    assert!(u.iter().all(|&x| entered(&orders, x) != Some(b)), "{orders:?}");
+    assert!(
+        u.iter().all(|&x| entered(&orders, x) != Some(b)),
+        "{orders:?}"
+    );
 }
 
 // S-0605 claims 3 and 4, PLAN §4.7: a unit already waiting in line is not sent again (a new order would end its wait).
@@ -224,7 +250,12 @@ fn a_unit_waiting_in_line_is_not_sent_again() {
     let (mut w, b, u) = scene(&g, "BIOD", "WALKER", 2);
     let mut br = brain(&w);
     let orders = br.think(&w);
-    assert_eq!(u.iter().filter(|&&x| entered(&orders, x) == Some(b)).count(), 2);
+    assert_eq!(
+        u.iter()
+            .filter(|&&x| entered(&orders, x) == Some(b))
+            .count(),
+        2
+    );
     for o in orders {
         glasnost_sim::orders::issue(&mut w, HouseId(0), o);
     }
@@ -240,7 +271,10 @@ fn a_unit_waiting_in_line_is_not_sent_again() {
     }
     // As seen in AI games: the one waiting rests in guard while it waits.
     w.obj_mut(waiting[0]).unwrap().beh.current = Some(Behaviour::Guard);
-    assert_eq!(glasnost_sim::structures::absorb::waiting_for(&w, waiting[0]), Some(b));
+    assert_eq!(
+        glasnost_sim::structures::absorb::waiting_for(&w, waiting[0]),
+        Some(b)
+    );
     // A fresh brain: no memory of the first order.
     let orders = brain(&w).think(&w);
     assert_eq!(entered(&orders, waiting[0]), None, "{orders:?}");
@@ -256,7 +290,11 @@ fn a_stalled_entrant_is_sent_again() {
         glasnost_sim::orders::issue(&mut w, HouseId(0), o);
     }
     testkit::run(&mut w, 1);
-    let holder = u.iter().copied().find(|&x| w.obj(x).unwrap().contact == Some(b)).expect("one in contact");
+    let holder = u
+        .iter()
+        .copied()
+        .find(|&x| w.obj(x).unwrap().contact == Some(b))
+        .expect("one in contact");
     // Taken out of enter with its contact intact.
     {
         let o = w.obj_mut(holder).unwrap();

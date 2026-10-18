@@ -74,10 +74,10 @@ fn scene_at(
         .iter()
         .position(|o| o.crate_)
         .map(|i| i as u8);
-    if let Some(o) = o {
-        if let Some(cell) = w.cells.grid.get_mut(c) {
-            cell.overlay = o;
-        }
+    if let Some(o) = o
+        && let Some(cell) = w.cells.grid.get_mut(c)
+    {
+        cell.overlay = o;
     }
     w.crates.places.insert(
         0,

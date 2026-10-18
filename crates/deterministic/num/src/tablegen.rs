@@ -196,7 +196,8 @@ mod tests {
     fn raw_atan_test_values() {
         let u = raw_tangents();
         let t = raw_atan_table();
-        let cases: [(usize, (u64, u32), (u64, u32)); 5] = [
+        type Raw = (u64, u32);
+        let cases: [(usize, Raw, Raw); 5] = [
             (0, (0, 0), (0, 0)),
             (1, (3276705, 27), (1638027, 26)),
             (40, (511985, 19), (6488809, 23)),

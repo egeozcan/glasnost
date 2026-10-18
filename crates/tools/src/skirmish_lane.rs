@@ -30,6 +30,13 @@ use glasnost_sim::rules::{Kind, Locomotor, SimRules};
 use glasnost_sim::save;
 use glasnost_sim::world::{HouseId, World};
 
+/// A unit type as the unit-class counts key it: class, kind, type index.
+type UnitKey = (&'static str, u8, u32);
+
+/// What the lane notes of an offered unit type: the first tick it was
+/// buildable, whether it is armed, and its AI role.
+type Offer = (i32, bool, Option<Role>);
+
 /// Players of the lane's games.
 const PLAYERS: usize = 2;
 
@@ -171,8 +178,8 @@ struct Game {
     /// could build at some sampled tick and the ones it had a new object
     /// of (not a starting unit), by [`unit_class`] (PLAN 4.7: the own AI
     /// builds every unit class its side can build).
-    offered: [BTreeMap<(&'static str, u8, u32), (i32, bool, Option<Role>)>; PLAYERS],
-    made: [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
+    offered: [BTreeMap<UnitKey, Offer>; PLAYERS],
+    made: [BTreeSet<UnitKey>; PLAYERS],
     /// Counts-only state of a game that is not over at the end (the own
     /// AI's games): per house its objects by kind, the resource left on the
     /// map and the brain's own diagnostic.
@@ -951,8 +958,8 @@ impl Tally {
                 self.controllers[usize::from(h.0)].insert(c.0);
             }
         }
-        for h in 0..PLAYERS {
-            self.controlled_max[h] = self.controlled_max[h].max(held[h]);
+        for (m, n) in self.controlled_max.iter_mut().zip(held) {
+            *m = (*m).max(n);
         }
         let mut top = [false; PLAYERS];
         for o in w.objects.values() {
@@ -965,8 +972,8 @@ impl Tally {
             self.gattling_types[h].insert((kind_code(o.kind), o.type_index));
             top[h] |= glasnost_sim::gattling::at_top(w, o.id);
         }
-        for h in 0..PLAYERS {
-            self.top_ticks[h] += usize::from(top[h]);
+        for (t, at) in self.top_ticks.iter_mut().zip(top) {
+            *t += usize::from(at);
         }
         self.intent_ticks += (0..PLAYERS)
             .filter(|&h| !glasnost_sim::psychic::intent_lines(w, HouseId(h as u8)).is_empty())
@@ -1066,8 +1073,8 @@ impl Tally {
                 self.bunkers[h].insert(o.id.0);
             }
         }
-        for h in 0..PLAYERS {
-            self.passengers_max[h] = self.passengers_max[h].max(held[h]);
+        for (m, n) in self.passengers_max.iter_mut().zip(held) {
+            *m = (*m).max(n);
         }
     }
 }
@@ -1737,8 +1744,8 @@ fn occasions(w: &World, occ: &mut [Occasions; PLAYERS]) {
 fn classes(
     w: &World,
     starting: &BTreeSet<u32>,
-    offered: &mut [BTreeMap<(&'static str, u8, u32), (i32, bool, Option<Role>)>; PLAYERS],
-    made: &mut [BTreeSet<(&'static str, u8, u32)>; PLAYERS],
+    offered: &mut [BTreeMap<UnitKey, Offer>; PLAYERS],
+    made: &mut [BTreeSet<UnitKey>; PLAYERS],
 ) {
     let units = |t: &glasnost_sim::econ::TypeRef| {
         matches!(t.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)

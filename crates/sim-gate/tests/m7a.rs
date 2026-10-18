@@ -80,7 +80,9 @@ fn m7a_seed_sweep() {
             .collect();
         for h in hs {
             let (s, (hashes, g, ex)) = h.join().expect("the run finished");
-            let won = g.outcome().map_or("none".into(), |o| format!("{:?}", o.results));
+            let won = g
+                .outcome()
+                .map_or("none".into(), |o| format!("{:?}", o.results));
             runs.push((s, hashes.len(), ex, won));
         }
     }
@@ -97,7 +99,10 @@ fn m7a_seed_sweep() {
     let names = runs[0].2.counters().map(|(name, _)| name);
     let mut worst = u32::MAX;
     for (i, name) in names.iter().enumerate() {
-        let mut v: Vec<u32> = runs.iter().map(|(_, _, ex, _)| ex.counters()[i].1).collect();
+        let mut v: Vec<u32> = runs
+            .iter()
+            .map(|(_, _, ex, _)| ex.counters()[i].1)
+            .collect();
         v.sort_unstable();
         worst = worst.min(v[0]);
         println!(

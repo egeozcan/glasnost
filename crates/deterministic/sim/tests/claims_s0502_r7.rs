@@ -93,7 +93,11 @@ fn claim_24_infantry_empty_to_empty_reroutes_every_time() {
     assert!(j(&w, u).moving, "the commitment survives the reroute");
     let t1 = w.rng.taken();
     assign_destination(&mut w, u, None);
-    assert_eq!(w.rng.taken() - t1, one, "the second empty assignment reroutes too");
+    assert_eq!(
+        w.rng.taken() - t1,
+        one,
+        "the second empty assignment reroutes too"
+    );
     let v = cruising(&mut w, "JV", Kind::Vehicle, -4);
     assign_destination(&mut w, v, None);
     let t2 = w.rng.taken();
@@ -184,7 +188,11 @@ fn claim_28_the_angle_bound_is_inclusive() {
         );
         attack_order(&mut w, u, enemy);
         if retained {
-            assert_eq!(w.obj(u).unwrap().dest, dest, "offset {offset}: destination kept");
+            assert_eq!(
+                w.obj(u).unwrap().dest,
+                dest,
+                "offset {offset}: destination kept"
+            );
             assert_eq!(j(&w, u).dest, point, "offset {offset}: point kept");
             assert!(j(&w, u).moving, "offset {offset}: commitment kept");
             assert_eq!(draws, 0, "offset {offset}: no draw");
@@ -247,7 +255,11 @@ fn claim_28_the_behaviour_result() {
     w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Attack);
     w.obj_mut(u).unwrap().beh.queued = Some(Behaviour::Guard);
     assert!(jump::clear_rejected(&mut w, u));
-    assert_eq!(w.obj(u).unwrap().beh.queued, Some(Behaviour::Guard), "left alone");
+    assert_eq!(
+        w.obj(u).unwrap().beh.queued,
+        Some(Behaviour::Guard),
+        "left alone"
+    );
     let mut w = game();
     let (u, _) = balloon_with_target(&mut w, 0);
     w.obj_mut(u).unwrap().beh.current = None;
@@ -274,14 +286,21 @@ fn claim_28_stop_ends_empty_after_a_rejection() {
     let o = w.obj(u).unwrap();
     assert!(o.dest.is_none(), "stop ends with an empty destination");
     assert!(o.target.is_none());
-    assert!(w.rng.taken() > taken, "the second request is effective: one reroute");
+    assert!(
+        w.rng.taken() > taken,
+        "the second request is effective: one reroute"
+    );
     assert!(j(&w, u).moving, "the commitment survives the reroute");
     assert_eq!(
         j(&w, u).dest.map(|d| d.cell()),
         Some(pos(&w, u).cell()),
         "a replacement point in the current cell"
     );
-    assert_eq!(w.obj(u).unwrap().beh.seen(), Some(Behaviour::Attack), "the interim attack survives");
+    assert_eq!(
+        w.obj(u).unwrap().beh.seen(),
+        Some(Behaviour::Attack),
+        "the interim attack survives"
+    );
 }
 
 // spec: S-0502 claim 28 and S-0213 claim 8 (revision 7): when the first stop request is effective (no qualifying row), the balloon-hover vehicle's second, unchanged empty assignment is suppressed: one reroute in all
@@ -299,7 +318,11 @@ fn claim_28_stop_without_a_rejection_reroutes_once() {
     let p = pos(&w, u);
     w.obj_mut(u).unwrap().pos = Pos::new(p.x + 256 * 3, p.y, p.z);
     assign_destination(&mut w, u, None);
-    assert_eq!(j(&w, u).dest, kept, "another empty assignment is suppressed");
+    assert_eq!(
+        j(&w, u).dest,
+        kept,
+        "another empty assignment is suppressed"
+    );
 }
 
 // spec: S-0502 claim 28, S-0517 claim 5 and S-0213 claim 10 (revisions 7, 8 and 36): deploy makes a single clear request, before the target is cleared and unload is queued, and no retry: a qualifying balloon-hover vehicle keeps its nonempty destination, point and commitment, ends with no target and attack made current before unload is queued
@@ -328,14 +351,26 @@ fn claim_28_deploy_keeps_the_destination_without_a_retry() {
     let taken = bare.rng.taken();
     unblock(&mut bare);
     step(&mut bare);
-    assert_eq!(spent, bare.rng.taken() - taken, "the deploy clear costs no draw");
+    assert_eq!(
+        spent,
+        bare.rng.taken() - taken,
+        "the deploy clear costs no draw"
+    );
     let o = w.obj(u).unwrap();
     assert_eq!(o.dest, dest, "the nonempty destination survives");
     assert!(o.target.is_none(), "the target is cleared all the same");
     assert_eq!(j(&w, u).dest, point);
     assert!(j(&w, u).moving);
-    assert_eq!(o.beh.current, Some(Behaviour::Attack), "attack was made current");
-    assert_eq!(o.beh.queued, Some(Behaviour::Unload), "then unload is queued");
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Attack),
+        "attack was made current"
+    );
+    assert_eq!(
+        o.beh.queued,
+        Some(Behaviour::Unload),
+        "then unload is queued"
+    );
 }
 
 // spec: S-0213 claim 10 (revision 36): deploy of a balloon-hover vehicle with no qualifying row clears the destination at once, as for any vehicle

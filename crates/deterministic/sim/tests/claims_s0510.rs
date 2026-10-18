@@ -351,9 +351,7 @@ fn claim_5_factory_flags() {
 #[test]
 fn claim_5_veterans_from_infiltrated_factories() {
     let mut r = ruleset();
-    for n in ["WALKER"] {
-        r.sim.infantry.get_mut(n).unwrap().combat.trainable = Some(true);
-    }
+    r.sim.infantry.get_mut("WALKER").unwrap().combat.trainable = Some(true);
     r.sim.vehicles.get_mut("CART").unwrap().combat.trainable = Some(true);
     r.sim.buildings.get_mut("VLIKE").unwrap().combat.trainable = Some(true);
     r.sim.vehicles.get_mut("CRUSHER").unwrap().combat.trainable = Some(false);
@@ -475,7 +473,7 @@ fn claim_7_same_tick_thefts_are_serial() {
     assert!(glasnost_sim::structures::entry::arrival(&mut w, s1));
     assert!(glasnost_sim::structures::entry::arrival(&mut w, s2));
     assert_eq!(w.houses[1].credits, 250, "1000 → 500 → 250");
-    assert_eq!(w.houses[0].credits, 750 + 0, "500 and then 250");
+    assert_eq!(w.houses[0].credits, 750, "500 and then 250");
 }
 
 // spec: S-0510 claim 8 (an infiltration leaves no mark on the building and shows nothing about it: no state is recorded; the building's discovery or its production is untouched)

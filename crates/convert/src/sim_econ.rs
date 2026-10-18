@@ -1362,7 +1362,7 @@ impl Builder<'_> {
             Some((value::integer(v), e.layer, e.line))
         });
         // spec: S-0402 Import mapping (Storage absent: 0)
-        let (c, layer, line) = storage.map_or((Some(0), 0, 0), |(c, l, n)| (c, l, n));
+        let (c, layer, line) = storage.unwrap_or((Some(0), 0, 0));
         if c == Some(0) {
             // spec: S-0402 claim 1 and Import mapping (zero vehicle capacity warns in either setting)
             self.warn(layer, line, format!(

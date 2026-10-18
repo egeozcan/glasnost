@@ -125,7 +125,10 @@ fn claim_11_b48_fresh_move_from_area_guard() {
     // queues move.
     tick::step(&mut w);
     assert_eq!(w.obj(cart).unwrap().beh.queued, Some(Behaviour::Move));
-    assert!(glasnost_sim::drive::goal_present(&w, cart), "a locomotor destination");
+    assert!(
+        glasnost_sim::drive::goal_present(&w, cart),
+        "a locomotor destination"
+    );
     assert!(process::ready(&w, cart), "ready despite the destination");
     let t = w.tick;
     tick::step(&mut w);

@@ -1053,7 +1053,7 @@ pub fn pad_position_at(w: &World, k: ObjectId, place: u32) -> Pos {
     } else {
         Some(at(place as usize))
     };
-    let p = match d {
+    match d {
         // spec: S-0404 claim 15 (c + d_i component by component, signed 32-bit wrapping, not rotated)
         Some(d) => Pos::new(
             c.x.wrapping_add(d[0]),
@@ -1061,8 +1061,7 @@ pub fn pad_position_at(w: &World, k: ObjectId, place: u32) -> Pos {
             c.z.wrapping_add(d[2]),
         ),
         None => c,
-    };
-    p
+    }
 }
 
 /// The stages of a factory's unloading (S-0417 table S1), kept in the

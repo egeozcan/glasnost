@@ -824,7 +824,9 @@ pub fn clear_rejected(w: &mut World, id: ObjectId) -> bool {
         // spec: S-0502 claim 28 (row 1: the destination is the target object itself)
         (Target::Object(d), Target::Object(t)) if d == t => true,
         // spec: S-0502 claim 28 (row 2: the destination is a cell and the target is its first ground-layer listed object)
-        (Target::Cell(c), Target::Object(t)) if w.cells.list(c, Layer::Ground).first() == Some(&t) => {
+        (Target::Cell(c), Target::Object(t))
+            if w.cells.list(c, Layer::Ground).first() == Some(&t) =>
+        {
             true
         }
         _ => false,

@@ -1124,7 +1124,10 @@ fn animation_properties_are_the_own_sections() {
     assert_eq!(damaged.num_particles, None);
     assert_eq!(damaged.random_rate, None);
     let omits = &s.animations["OMITS"];
-    assert_eq!(omits.start, None, "an empty own value: the default, never 7");
+    assert_eq!(
+        omits.start, None,
+        "an empty own value: the default, never 7"
+    );
     assert_eq!(omits.rate, None);
     assert_eq!(omits.shadow, None);
 }
@@ -1259,8 +1262,14 @@ fn bunker_foundation_warning() {
     let (s, w) = sim(base, "", art);
     assert_eq!(s.buildings["Pit"].bunker, Some(true));
     assert!(!warned(&w, "buildings Pit is a tank bunker"));
-    assert!(warned(&w, "buildings Big is a tank bunker with a 3x2 foundation"));
-    assert!(warned(&w, "buildings Bare is a tank bunker with a 1x1 foundation"));
+    assert!(warned(
+        &w,
+        "buildings Big is a tank bunker with a 3x2 foundation"
+    ));
+    assert!(warned(
+        &w,
+        "buildings Bare is a tank bunker with a 1x1 foundation"
+    ));
     assert!(!warned(&w, "buildings Shed"));
 }
 

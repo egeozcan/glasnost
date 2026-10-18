@@ -7,7 +7,6 @@ use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
 use glasnost_num::F64;
 use glasnost_sim::cells::Marker;
-use glasnost_sim::combat::damage::{self, Hit};
 use glasnost_sim::jump::{self, JumpState, Phase};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::testkit;

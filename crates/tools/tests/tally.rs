@@ -302,7 +302,14 @@ fn counts_virus_units_and_gas_clouds() {
     tally.observe(&g.world);
     assert_eq!(tally.clouds, 0, "the shared gas system is not a new cloud");
     assert_eq!(tally.virus_armed[0].len(), 0);
-    testkit::spawn(&mut g.world, Kind::Infantry, "VIRUS", 0, fixture::at(4, 4), 0);
+    testkit::spawn(
+        &mut g.world,
+        Kind::Infantry,
+        "VIRUS",
+        0,
+        fixture::at(4, 4),
+        0,
+    );
     let p = glasnost_sim::world::Pos::centre(fixture::at(6, 6), 0);
     glasnost_sim::gas::warhead_system(&mut g.world, "VAPOUR", p, Some(HouseId(0)));
     tally.observe(&g.world);
@@ -343,8 +350,22 @@ fn counts_absorber_entries_and_releases() {
     .expect("the synthetic skirmish loads");
     let mut tally = Tally::default();
     g.step();
-    let bio = testkit::spawn(&mut g.world, Kind::Building, "BIOR", 0, fixture::at(0, 6), 0);
-    let u = testkit::spawn(&mut g.world, Kind::Infantry, "WALKER", 0, fixture::at(4, 6), 0);
+    let bio = testkit::spawn(
+        &mut g.world,
+        Kind::Building,
+        "BIOR",
+        0,
+        fixture::at(0, 6),
+        0,
+    );
+    let u = testkit::spawn(
+        &mut g.world,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        fixture::at(4, 6),
+        0,
+    );
     for _ in 0..3 {
         g.step();
     }
@@ -407,7 +428,14 @@ fn counts_recycling_buildings() {
     g.step();
     tally.observe(&g.world);
     assert!(tally.grinders[0].is_empty(), "{tally:?}");
-    testkit::spawn(&mut g.world, Kind::Building, "GRND", 0, fixture::at(0, 6), 0);
+    testkit::spawn(
+        &mut g.world,
+        Kind::Building,
+        "GRND",
+        0,
+        fixture::at(0, 6),
+        0,
+    );
     g.step();
     tally.observe(&g.world);
     assert_eq!(tally.grinders[0].len(), 1, "{tally:?}");
@@ -440,7 +468,14 @@ fn counts_bunkered_vehicles_and_releases() {
     .expect("the synthetic skirmish loads");
     let mut tally = Tally::default();
     g.step();
-    let bunk = testkit::spawn(&mut g.world, Kind::Building, "BUNK", 0, fixture::at(0, 6), 0);
+    let bunk = testkit::spawn(
+        &mut g.world,
+        Kind::Building,
+        "BUNK",
+        0,
+        fixture::at(0, 6),
+        0,
+    );
     let v = testkit::spawn(&mut g.world, Kind::Vehicle, "GUNR", 0, fixture::at(5, 7), 0);
     for _ in 0..3 {
         g.step();

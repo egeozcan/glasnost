@@ -288,5 +288,8 @@ fn let_out_to_join_after_a_long_sit() {
         }
     }
     let t = sent_back.expect("sent back in after the pause");
-    assert!(t - let_out >= bunker::REENTRY_PAUSE, "the re-entry pause: {t}");
+    assert!(
+        t - let_out >= bunker::REENTRY_PAUSE,
+        "the re-entry pause: {t}"
+    );
 }

@@ -84,8 +84,7 @@ fn drive_moving(w: &World, id: ObjectId) -> bool {
         return false;
     };
     // spec: S-0215 claim 11 (revision 67: S-0206's locomotor moving the vehicle: a locomotor destination, or a next point whose map x and y differ from the vehicle's, height ignored)
-    let locomotor_moving =
-        crate::drive::goal_present(w, id) || track.target != (o.pos.x, o.pos.y);
+    let locomotor_moving = crate::drive::goal_present(w, id) || track.target != (o.pos.x, o.pos.y);
     let Some(u) = w.rules().unit(o.kind, o.type_index) else {
         return false;
     };
@@ -767,7 +766,9 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             crate::structures::bunker::process_enter(w, id)
         }
         // spec: S-0606 claim 6 (a tank bunker's repair processing: the entry stages of table S1)
-        (Some(Behaviour::Repair), Kind::Building) if crate::structures::bunker::is_bunker(w, id) => {
+        (Some(Behaviour::Repair), Kind::Building)
+            if crate::structures::bunker::is_bunker(w, id) =>
+        {
             crate::structures::bunker::process_repair(w, id)
         }
         // spec: S-0215 claim 29 and S-0507 claim 5 (enter toward a transport: the loading exchange)

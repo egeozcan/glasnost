@@ -646,7 +646,12 @@ pub fn rocket_pitch_class(p: f32, initial: f32, final_: f32, quirks: &VoxelQuirk
 }
 
 /// [`rocket_pitch_class`] with the two endpoint pitches already formed.
-fn classify_rocket_pitch(p: f32, p_initial: f64, p_final: f32, quirks: &VoxelQuirks) -> RocketPitch {
+fn classify_rocket_pitch(
+    p: f32,
+    p_initial: f64,
+    p_final: f32,
+    quirks: &VoxelQuirks,
+) -> RocketPitch {
     // spec: S-0105 claim 41 (zero pitch is eligible for the level class)
     if p == 0.0 {
         return RocketPitch::Level;
@@ -3431,9 +3436,15 @@ mod tests {
         let level = rocket_body_pose(raw32(5), 0.0, &q());
         let up = rocket_body_pose(raw32(5), 0.7, &q());
         assert_eq!(level.shadow, up.shadow);
-        assert_eq!(level.shadow, vehicle_parts(raw32(5), 0, 0, ELEVATION_LEVEL, &q()).body);
+        assert_eq!(
+            level.shadow,
+            vehicle_parts(raw32(5), 0, 0, ELEVATION_LEVEL, &q()).body
+        );
         assert_ne!(level.body, up.body);
-        assert_eq!(level.body, level.shadow, "level: the body is the heading alone");
+        assert_eq!(
+            level.body, level.shadow,
+            "level: the body is the heading alone"
+        );
     }
 
     /// spec: S-0105 claim 41 (reuse classes: zero is level; nonzero equality with
@@ -3449,7 +3460,11 @@ mod tests {
         // differs from the double one is not initial.
         let p_i = mul_rz(f64::from(pi), QUARTER_TURN);
         let narrowed = to_f32_rz(p_i);
-        assert_ne!(f64::from(narrowed), p_i, "the double product is not a single");
+        assert_ne!(
+            f64::from(narrowed),
+            p_i,
+            "the double product is not a single"
+        );
         assert_eq!(
             rocket_pitch_class(narrowed, pi, pf, &quirks),
             RocketPitch::Fresh(table_step(-f64::from(narrowed), &quirks))
@@ -3470,8 +3485,14 @@ mod tests {
             RocketPitch::Initial
         );
         // Zero is level, even with an initial of 0 or a final of 0 (coincident values).
-        assert_eq!(classify_rocket_pitch(0.0, 0.0, 0.0, &quirks), RocketPitch::Level);
-        assert_eq!(rocket_pitch_class(-0.0, pi, pf, &quirks), RocketPitch::Level);
+        assert_eq!(
+            classify_rocket_pitch(0.0, 0.0, 0.0, &quirks),
+            RocketPitch::Level
+        );
+        assert_eq!(
+            rocket_pitch_class(-0.0, pi, pf, &quirks),
+            RocketPitch::Level
+        );
         // Any other pitch is fresh, keyed by its table step.
         assert!(matches!(
             rocket_pitch_class(0.123, pi, pf, &quirks),
@@ -3510,7 +3531,10 @@ mod tests {
         // Level at nonpositive height or speed at or below the threshold.
         for (h, s) in [(0, 1.0), (-5, 1.0), (100, 0.25), (100, 0.0)] {
             let a = at(h, s, 1);
-            assert_eq!((a.alpha, a.beta, a.pitched, a.bank), (0.0, 0.0, false, Bank::None));
+            assert_eq!(
+                (a.alpha, a.beta, a.pitched, a.bank),
+                (0.0, 0.0, false, Bank::None)
+            );
         }
         // Just above the threshold: the configured pitch.
         let a = at(1, 0.2500001, 0);
@@ -3519,10 +3543,17 @@ mod tests {
         // Bank by the turn direction, a discrete state.
         let cw = at(100, 1.0, 1);
         let ccw = at(100, 1.0, -1);
-        assert_eq!((cw.bank, ccw.bank), (Bank::Clockwise, Bank::Counterclockwise));
+        assert_eq!(
+            (cw.bank, ccw.bank),
+            (Bank::Clockwise, Bank::Counterclockwise)
+        );
         assert_eq!(cw.beta, f64::from(to_f32_rz(ba)));
         assert_eq!(ccw.beta, -cw.beta);
-        assert_eq!(at(100, 1.0, 40).beta, cw.beta, "not proportional to anything");
+        assert_eq!(
+            at(100, 1.0, 40).beta,
+            cw.beta,
+            "not proportional to anything"
+        );
         // Zero configured pitch: no pitch state but the bank remains.
         let z = flight_attitude(100, 1.0, 1, 0.25, 0.0, ba);
         assert!(!z.pitched && z.alpha == 0.0 && z.bank == Bank::Clockwise);
@@ -3543,8 +3574,14 @@ mod tests {
         };
         let a = flight_attitude(100, 1.0, 1, 0.25, 0.3490658503988659, 0.5235987755982988);
         let d = flying_body_local(raw32(8), &a, &q());
-        assert!(d.apply([1.0, 0.0, 0.0])[2] < -0.3, "positive α lowers the nose");
-        assert!(d.apply([0.0, 1.0, 0.0])[2] > 0.3, "a positive bank raises +y");
+        assert!(
+            d.apply([1.0, 0.0, 0.0])[2] < -0.3,
+            "positive α lowers the nose"
+        );
+        assert!(
+            d.apply([0.0, 1.0, 0.0])[2] > 0.3,
+            "a positive bank raises +y"
+        );
         assert_eq!(
             d,
             Mat34::IDENTITY
@@ -3570,7 +3607,8 @@ mod tests {
     fn flying_body_keys() {
         let a = |h, s, t| flight_attitude(h, s, t, 0.25, 0.35, 0.52);
         let key = |h, frame, at: &FlightAttitude| flying_body_key(h, frame, at);
-        let (level, pitched, cw, ccw) = (a(0, 1.0, 0), a(10, 1.0, 0), a(10, 1.0, 1), a(10, 1.0, -1));
+        let (level, pitched, cw, ccw) =
+            (a(0, 1.0, 0), a(10, 1.0, 0), a(10, 1.0, 1), a(10, 1.0, -1));
         let ks = [
             key(0, 0, &level),
             key(0, 0, &pitched),
@@ -3583,7 +3621,10 @@ mod tests {
         assert_eq!(distinct.len(), ks.len());
         assert_eq!(key(0, 0, &level), key(500, 0, &level));
         // The flying shadow's key is the heading alone (claim 42): the vehicle shadow key.
-        assert_eq!(shadow_key(RAMP_FLAT, raw32(3)), shadow_key(RAMP_FLAT, raw32(3) + 100));
+        assert_eq!(
+            shadow_key(RAMP_FLAT, raw32(3)),
+            shadow_key(RAMP_FLAT, raw32(3) + 100)
+        );
     }
 
     // --- F9 ---

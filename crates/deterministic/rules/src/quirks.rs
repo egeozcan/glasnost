@@ -3370,7 +3370,10 @@ impl Quirks {
             ),
             ("wind_southeast_short", self.wind_southeast_short),
             ("fire_particle_no_house", self.fire_particle_no_house),
-            ("smoke_ignores_particle_cap", self.smoke_ignores_particle_cap),
+            (
+                "smoke_ignores_particle_cap",
+                self.smoke_ignores_particle_cap,
+            ),
             ("spark_double_gravity", self.spark_double_gravity),
             ("smoke_deck_extra_update", self.smoke_deck_extra_update),
             ("flame_sweep_facing", self.flame_sweep_facing),

@@ -597,7 +597,9 @@ impl Audio {
                     return;
                 }
                 let name = weapon.map(|x| w.rules().combat.weapon(x).name.clone());
-                let list = name.map(|n| self.names.report(&n).to_vec()).unwrap_or_default();
+                let list = name
+                    .map(|n| self.names.report(&n).to_vec())
+                    .unwrap_or_default();
                 // spec: S-0609 claim 13 (one raw value of the unsynchronised stream picks the entry, S-0701 claim 21 and F5, which takes none for an empty list)
                 let Some(entry) = self.choose(&list, unsync) else {
                     // spec: S-0609 claim 13 and Edge cases (an empty report list, or an empty slot 2s: nothing started, no draw, the mark stays clear)

@@ -8,11 +8,11 @@ use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{BuildingType, Decimal, UnitType, WarheadType, WeaponType};
 use glasnost_sim::combat::damage::{self, Hit};
+use glasnost_sim::combat::effects::{Effect, Sound};
 use glasnost_sim::rules::{Behaviour, Kind};
+use glasnost_sim::structures::bunker;
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
-use glasnost_sim::combat::effects::{Effect, Sound};
-use glasnost_sim::structures::bunker;
 use glasnost_sim::{gattling, lift, mind, orders, save, testkit, tick, transport};
 
 const SIZE: i32 = 24;
@@ -209,7 +209,12 @@ fn rules() -> Ruleset {
     r.sim.vehicles.insert("DRONE".into(), drone);
     r.sim.infantry.get_mut("GRUNT").unwrap().cost = Some(400);
     r.sim.general.economy.refund_percent = Some(dec("0.5"));
-    r.sim.countries.get_mut("Betaland").unwrap().econ.cost_infantry_mult = Some(dec("0.5"));
+    r.sim
+        .countries
+        .get_mut("Betaland")
+        .unwrap()
+        .econ
+        .cost_infantry_mult = Some(dec("0.5"));
     r
 }
 
@@ -457,7 +462,11 @@ fn a_controlled_enemy_goes_into_an_absorber_and_comes_out_an_enemy() {
         run_until(&mut w, 900, |w| absorb::absorbed_in(w, grunt) == Some(bio)),
         "goes in"
     );
-    assert_eq!(owner(&w, grunt), Some(ALPHA), "inside as its original owner's unit");
+    assert_eq!(
+        owner(&w, grunt),
+        Some(ALPHA),
+        "inside as its original owner's unit"
+    );
     assert!(!mind::mind_controlled(&w, grunt));
     assert!(mind::controller(&w, clone).is_none_or(|r| r.victims.is_empty()));
     testkit::run(&mut w, 3);
@@ -602,15 +611,28 @@ fn a_controlled_enemy_is_ground_for_its_controllers_house() {
         fx.extend(w.effects.iter().cloned());
     }
     assert!(w.obj(grunt).is_none(), "consumed");
-    assert_eq!(credits(&w, BETA) - cb, beta_value, "the controller's house is paid");
+    assert_eq!(
+        credits(&w, BETA) - cb,
+        beta_value,
+        "the controller's house is paid"
+    );
     assert_eq!(credits(&w, ALPHA), ca, "the original owner gets nothing");
     assert_eq!(stats(&w), s0, "no kill, no loss");
     assert!(mind::controller(&w, clone).is_none_or(|r| r.victims.is_empty()));
     assert!(
-        !fx.iter().any(|e| matches!(e, Effect::Mind { sound: MindSound::Cleared, .. })),
+        !fx.iter().any(|e| matches!(
+            e,
+            Effect::Mind {
+                sound: MindSound::Cleared,
+                ..
+            }
+        )),
         "no release sound"
     );
-    assert!(fx.iter().any(|e| matches!(e, Effect::Consumed { grinding: true, .. })));
+    assert!(
+        fx.iter()
+            .any(|e| matches!(e, Effect::Consumed { grinding: true, .. }))
+    );
     // The freed slot takes a new victim.
     let next = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 4, 3);
     testkit::run(&mut w, 2);
@@ -658,13 +680,14 @@ fn a_released_neutral_unit_takes_the_grinder_fate() {
     );
     testkit::run(&mut w, 2);
     assert_eq!(owner(&w, civ), Some(2));
-    assert_eq!(w.obj(civ).unwrap().dest, Some(Target::Object(grnd)), "the grinder fate");
+    assert_eq!(
+        w.obj(civ).unwrap().dest,
+        Some(Target::Object(grnd)),
+        "the grinder fate"
+    );
     round_trip(&w);
     let c0 = credits(&w, 2);
-    assert!(
-        run_until(&mut w, 900, |w| w.obj(civ).is_none()),
-        "consumed"
-    );
+    assert!(run_until(&mut w, 900, |w| w.obj(civ).is_none()), "consumed");
     assert_eq!(credits(&w, 2) - c0, 400, "P for the neutral house");
 }
 
@@ -675,7 +698,13 @@ fn a_released_neutral_unit_takes_the_grinder_fate() {
 fn bunker_in(w: &mut World, v: ObjectId, b: ObjectId) {
     let house = owner(w, v).unwrap();
     assert_eq!(
-        targeting::cursor(w, HouseId(house), &[v], ClickOn::Object(b), Modifiers::default()),
+        targeting::cursor(
+            w,
+            HouseId(house),
+            &[v],
+            ClickOn::Object(b),
+            Modifiers::default()
+        ),
         Action::Enter
     );
     testkit::run(w, 5);
@@ -732,7 +761,10 @@ fn a_gattling_in_a_bunker_spins_up_as_in_the_open() {
     // in the open: no missing or delayed update (the starting value may
     // differ: the bunkered gattling may already have spun up in guard).
     for (name, steps) in [("bunker", &inside), ("open", &open)] {
-        assert!(!steps.is_empty() && steps.iter().all(|&d| d == 7), "{name}: {steps:?}");
+        assert!(
+            !steps.is_empty() && steps.iter().all(|&d| d == 7),
+            "{name}: {steps:?}"
+        );
     }
 }
 
@@ -779,7 +811,10 @@ fn a_warp_takes_a_bunkered_vehicle_out_of_its_bunker() {
     glasnost_sim::superweapons::warp::launch(&mut w, HouseId(BETA), from, at(0, 8));
     assert!(!bunker::bunkered(&w, g), "the link ends in place");
     assert_eq!(bunker::occupant(&w, b), None);
-    assert_eq!(w.obj(b).unwrap().structure.bunker_stage, bunker::Stage::Clearing);
+    assert_eq!(
+        w.obj(b).unwrap().structure.bunker_stage,
+        bunker::Stage::Clearing
+    );
     assert_eq!(w.obj(b).unwrap().beh.queued, Some(Behaviour::Guard));
     assert!(w.effects.iter().any(|e| matches!(
         e,
@@ -790,9 +825,11 @@ fn a_warp_takes_a_bunkered_vehicle_out_of_its_bunker() {
     )));
     assert!(w.obj(g).unwrap().sw.warp.is_some(), "in the warp group");
     round_trip(&w);
-    assert!(run_until(&mut w, 600, |w| w
-        .obj(g)
-        .is_some_and(|o| o.sw.warp.is_none() && o.on_map)));
+    assert!(run_until(&mut w, 600, |w| w.obj(g).is_some_and(|o| o
+        .sw
+        .warp
+        .is_none()
+        && o.on_map)));
     assert!(!bunker::bunkered(&w, g));
     round_trip(&w);
 }
@@ -805,7 +842,12 @@ fn a_berserk_weapon_is_refused_at_a_bunkered_vehicle_and_its_bunker() {
     // A bunker without psionics immunity (a building's default has it, S-0610
     // Import mapping), so that only the bunker link refuses.
     let mut r = rules();
-    r.sim.buildings.get_mut("BUNK").unwrap().combat.immune_to_psionics = Some(false);
+    r.sim
+        .buildings
+        .get_mut("BUNK")
+        .unwrap()
+        .combat
+        .immune_to_psionics = Some(false);
     let mut w = testkit::game_with(&r, SIZE, 1);
     let b = put(&mut w, Kind::Building, "BUNK", ALPHA, 0, 0);
     let g = put(&mut w, Kind::Vehicle, "GATT", ALPHA, 6, 1);
@@ -814,7 +856,10 @@ fn a_berserk_weapon_is_refused_at_a_bunkered_vehicle_and_its_bunker() {
     let refused = |w: &World, x: ObjectId| {
         glasnost_sim::psychic::firing_refused(w, firer, true, Target::Object(x))
     };
-    assert!(!refused(&w, g) && !refused(&w, b), "outside, and an empty bunker");
+    assert!(
+        !refused(&w, g) && !refused(&w, b),
+        "outside, and an empty bunker"
+    );
     bunker_in(&mut w, g, b);
     assert!(refused(&w, g) && refused(&w, b));
     round_trip(&w);
@@ -844,14 +889,23 @@ fn a_lifted_controlled_vehicle_dies_and_frees_its_controllers_slot() {
     tick::step(&mut w);
     assert_eq!(owner(&w, v), Some(ALPHA));
     lift_up(&mut w, l, v);
-    assert!(mind::mind_controlled(&w, v), "still controlled while gripped");
+    assert!(
+        mind::mind_controlled(&w, v),
+        "still controlled while gripped"
+    );
     round_trip(&w);
-    assert!(run_until(&mut w, 900, |w| w.obj(v).is_none()), "dropped on its lifter");
+    assert!(
+        run_until(&mut w, 900, |w| w.obj(v).is_none()),
+        "dropped on its lifter"
+    );
     assert!(mind::controller(&w, clone).is_none_or(|r| r.victims.is_empty()));
     let next = put(&mut w, Kind::Infantry, "GRUNT", BETA, 6, 7);
     testkit::run(&mut w, 2);
     attack(&mut w, ALPHA, clone, next);
-    assert!(run_until(&mut w, 900, |w| mind::mind_controlled(w, next)), "takes again");
+    assert!(
+        run_until(&mut w, 900, |w| mind::mind_controlled(w, next)),
+        "takes again"
+    );
     round_trip(&w);
 }
 
@@ -878,7 +932,11 @@ fn a_lift_attack_on_a_bunkered_vehicle_goes_to_its_bunker() {
     assert!(fired, "the lifter fired");
     assert!(!lift::seized(&w, g) && !lift::seized(&w, b));
     assert_eq!(bunker::bunkered_in(&w, g), Some(b), "still bunkered");
-    assert_eq!((w.obj(b).unwrap().health, w.obj(g).unwrap().health), (hb, hg), "no damage");
+    assert_eq!(
+        (w.obj(b).unwrap().health, w.obj(g).unwrap().health),
+        (hb, hg),
+        "no damage"
+    );
 }
 
 // Pair: a gattling vehicle seized while spun up.
@@ -906,7 +964,10 @@ fn a_seized_gattling_spins_down() {
         steps.push(s - last);
         last = s;
     }
-    assert!(steps.len() >= 10 && steps.iter().all(|&d| d == -1), "{steps:?}");
+    assert!(
+        steps.len() >= 10 && steps.iter().all(|&d| d == -1),
+        "{steps:?}"
+    );
 }
 
 // Pair: a seized vehicle and its owner's recycling building.
@@ -922,11 +983,19 @@ fn a_seized_vehicle_ignores_its_owners_recycle_click() {
     lift_up(&mut w, l, v);
     click(&mut w, ALPHA, &[v], grnd);
     testkit::run(&mut w, 2);
-    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(l)), "still bound for its lifter");
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        Some(Target::Object(l)),
+        "still bound for its lifter"
+    );
     round_trip(&w);
     let credits0 = credits(&w, ALPHA);
     testkit::run(&mut w, 60);
-    assert!(lift::grips(&w, l, v) || w.obj(v).is_none_or(|o| o.dest != Some(Target::Object(grnd))));
+    assert!(
+        lift::grips(&w, l, v)
+            || w.obj(v)
+                .is_none_or(|o| o.dest != Some(Target::Object(grnd)))
+    );
     assert_eq!(credits(&w, ALPHA), credits0, "not ground");
 }
 
@@ -942,11 +1011,16 @@ fn a_drone_stays_on_a_seized_host() {
     testkit::run(&mut w, 2);
     attack(&mut w, ALPHA, drone, host);
     assert!(
-        run_until(&mut w, 300, |w| glasnost_sim::parasite::host_of(w, drone) == Some(host)),
+        run_until(&mut w, 300, |w| glasnost_sim::parasite::host_of(w, drone)
+            == Some(host)),
         "latched"
     );
     lift_up(&mut w, l, host);
-    assert_eq!(glasnost_sim::parasite::host_of(&w, drone), Some(host), "stays attached");
+    assert_eq!(
+        glasnost_sim::parasite::host_of(&w, drone),
+        Some(host),
+        "stays attached"
+    );
     round_trip(&w);
     testkit::run(&mut w, 10);
     if lift::seized(&w, host) {

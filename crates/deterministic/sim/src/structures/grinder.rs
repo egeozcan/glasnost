@@ -150,7 +150,9 @@ pub fn process_eaten(w: &mut World, id: ObjectId) -> i32 {
         dest = None;
     }
     let target_building = match o.target {
-        Some(Target::Object(t)) => w.obj(t).is_some_and(|x| x.kind == Kind::Building && x.on_map),
+        Some(Target::Object(t)) => w
+            .obj(t)
+            .is_some_and(|x| x.kind == Kind::Building && x.on_map),
         _ => false,
     };
     if dest.is_none() {

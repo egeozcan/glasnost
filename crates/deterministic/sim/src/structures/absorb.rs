@@ -128,8 +128,8 @@ fn fits(w: &World, b: ObjectId, u: ObjectId) -> bool {
     let Some(r) = absorb_rules(w, b) else {
         return false;
     };
-    // spec: S-0605 F1 and claim 2 (passengers counted, not sizes: exact integers; s ≤ L compared directly as doubles)
-    i64::from(count(w, b)) + 1 <= i64::from(r.capacity) && size(w, u).le(r.size_limit)
+    // spec: S-0605 F1 and claim 2 (passengers counted, not sizes: exact integers, so n + 1 ≤ c is n < c; s ≤ L compared directly as doubles)
+    i64::from(count(w, b)) < i64::from(r.capacity) && size(w, u).le(r.size_limit)
 }
 
 /// The acceptance test (claim 1): the building's docking answer to would-be
@@ -322,7 +322,9 @@ pub fn waiting_turn(w: &mut World, u: ObjectId) {
     }
     let Some(b) = waiting_for(w, u) else { return };
     // spec: S-0605 claim 3 and scenario A13 (g) (a vehicle victim put in line by claim 16's fate sends no contact request in the tick of the release; its first request is a later update's retry)
-    if w.obj(u).is_some_and(|o| o.structure.fate_tick == Some(w.tick)) {
+    if w.obj(u)
+        .is_some_and(|o| o.structure.fate_tick == Some(w.tick))
+    {
         return;
     }
     // spec: S-0605 claim 4 (a building that has left the game ends the wait)
@@ -347,7 +349,8 @@ pub fn waiting_turn(w: &mut World, u: ObjectId) {
         let ready = crate::process::ready(w, u);
         // spec: S-0605 claim 4 and S-0215 claim 7 (accept: enter queued with an immediate start, current at once when ready; the building as destination; waiting ends)
         if let Some(ob) = w.obj_mut(u) {
-            ob.beh.queue_and_start(Some(Behaviour::Enter), ready, t, stale);
+            ob.beh
+                .queue_and_start(Some(Behaviour::Enter), ready, t, stale);
             ob.path.steps.clear();
             ob.path.retry_at = 0;
         }
@@ -503,7 +506,8 @@ pub fn arrival(w: &mut World, u: ObjectId) -> bool {
     }
     // spec: S-0605 claim 6 (the infantry absorber agrees unless it is being sold; nothing more happens at this arrival when it does not)
     let selling = w.obj(b).is_some_and(|o| {
-        o.econ.sale.is_some() || crate::econ::placement::seen_behaviour(o) == Some(Behaviour::Selling)
+        o.econ.sale.is_some()
+            || crate::econ::placement::seen_behaviour(o) == Some(Behaviour::Selling)
     });
     if selling {
         return false;
@@ -905,9 +909,7 @@ pub fn sold(w: &mut World, b: ObjectId) {
     let cells = crate::combat::damage::foundation_order(bo.pos.cell(), bo.foundation);
     for (i, &p) in list.iter().enumerate() {
         // spec: S-0408 claim 8 (one per foundation cell in the cell order, front first, even if an earlier placement fails; beyond the last cell, S-0312 Edge cases)
-        let placed = cells
-            .get(i)
-            .is_some_and(|&c| place_released(w, b, p, c));
+        let placed = cells.get(i).is_some_and(|&c| place_released(w, b, p, c));
         if !placed {
             leave_order(w, b, p);
             // spec: S-0408 claim 8 (a passenger that cannot be placed is deleted)

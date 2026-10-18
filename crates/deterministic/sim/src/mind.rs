@@ -942,7 +942,11 @@ pub fn overload_turn(w: &mut World, id: ObjectId) {
         });
     }
     // spec: S-0601 claim 16 and Import mapping (the spark type key absent: no spark systems and no placement draws)
-    let sparks = if w.rules().gas.default_spark_given { SPARKS } else { 0 };
+    let sparks = if w.rules().gas.default_spark_given {
+        SPARKS
+    } else {
+        0
+    };
     // spec: S-0601 claim 16 and F3 (five spark systems, even after a lethal hit; per system y then x in [−200, 200])
     for _ in 0..sparks {
         let y = w.rng.ranged(-SPARK_SPREAD, SPARK_SPREAD, half);

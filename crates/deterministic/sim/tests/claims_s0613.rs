@@ -222,7 +222,10 @@ fn claim_1_shared_system_at_game_start() {
 /// spec: S-0613 claim 1 and S-0203 claim 3 (the shared system is the last object of the game-start step to enter play: appended to the update order after every map-placed object; an object created in play comes after it)
 #[test]
 fn claim_1_shared_system_enters_play_last() {
-    let rules = Arc::new(glasnost_sim::rules::SimRules::new(&rules(), "synthetic-gas"));
+    let rules = Arc::new(glasnost_sim::rules::SimRules::new(
+        &rules(),
+        "synthetic-gas",
+    ));
     let mut w = glasnost_sim::load::new_game(
         rules,
         &testkit::map(),
@@ -233,8 +236,15 @@ fn claim_1_shared_system_enters_play_last() {
     let s = shared(&w);
     let placed: Vec<ObjectId> = w.objects.keys().copied().collect();
     assert!(placed.len() > 5, "the scenario map places objects");
-    assert_eq!(w.update.order.last(), Some(&s), "after every map-placed object");
-    assert!(placed.iter().all(|&id| id < s), "map objects keep the lower numbers");
+    assert_eq!(
+        w.update.order.last(),
+        Some(&s),
+        "after every map-placed object"
+    );
+    assert!(
+        placed.iter().all(|&id| id < s),
+        "map objects keep the lower numbers"
+    );
     assert_eq!(placed.first(), Some(&ObjectId(1)), "map objects start at 1");
     let later = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, testkit::cell(0, 6), 0);
     assert!(later > s);
@@ -262,7 +272,10 @@ fn edge_loading_request_makes_no_cloud() {
     };
     register(&mut r, "overlays", "VENT");
     r.sim.overlays.insert("VENT".into(), ov);
-    let index = r.registries["overlays"].iter().position(|n| n == "VENT").unwrap() as u8;
+    let index = r.registries["overlays"]
+        .iter()
+        .position(|n| n == "VENT")
+        .unwrap() as u8;
     let mut map = testkit::empty_map(SIZE);
     let c = testkit::mid(SIZE, 0, 0);
     map.cells.get_mut(c).expect("a map cell").overlay = index;
@@ -272,7 +285,10 @@ fn edge_loading_request_makes_no_cloud() {
             .expect("loads")
     };
     let w = load(&r);
-    assert!(w.gas.systems[&shared(&w)].particles.is_empty(), "no cloud from loading");
+    assert!(
+        w.gas.systems[&shared(&w)].particles.is_empty(),
+        "no cloud from loading"
+    );
     // The same map and overlay with no particle requested: only the two
     // requests' creation draws (one raw value each, S-0202 claim 15) differ.
     let mut none = r.clone();
@@ -306,13 +322,19 @@ fn edge_loading_tile_animation_request_makes_no_cloud() {
     });
     let cat = Arc::new(cat);
     let mut map = testkit::empty_map(SIZE);
-    map.cells.get_mut(testkit::mid(SIZE, 0, 0)).expect("a map cell").tile = 1;
+    map.cells
+        .get_mut(testkit::mid(SIZE, 0, 0))
+        .expect("a map cell")
+        .tile = 1;
     let load = |r: &Ruleset| {
         let rules = Arc::new(glasnost_sim::rules::SimRules::new(r, "synthetic-gas"));
         glasnost_sim::load::new_game(rules, &map, cat.clone(), &testkit::setup(7)).expect("loads")
     };
     let w = load(&r);
-    assert!(w.gas.systems[&shared(&w)].particles.is_empty(), "no cloud from loading");
+    assert!(
+        w.gas.systems[&shared(&w)].particles.is_empty(),
+        "no cloud from loading"
+    );
     // The same tile animation with no particle requested. It starts twice
     // while loading (its cell's first recalculation and the second pass,
     // S-0010 claim 19), and each start's two requests take one raw value
@@ -345,7 +367,14 @@ fn claim_1_finite_shared_lifetime() {
     assert!(!w.update.contains(s));
     assert_eq!(w.gas.shared, None);
     // A not-human virus death: one particle requested at once (claim 3).
-    let victim = testkit::spawn(&mut w, Kind::Infantry, "DRONE", 1, testkit::mid(SIZE, 0, 0), 0);
+    let victim = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "DRONE",
+        1,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     let rng = w.rng.clone();
     venom(&mut w, victim, None, None);
     assert_ne!(w.rng, rng, "the draws are taken");
@@ -373,7 +402,14 @@ fn claim_2_virus_animation_delivers_its_count_later() {
     let mut w = game(&rules());
     let c = testkit::mid(SIZE, 0, 0);
     let victim = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, c, 0);
-    let killer = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, testkit::mid(SIZE, 3, 0), 0);
+    let killer = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(SIZE, 3, 0),
+        0,
+    );
     let at = w.obj(victim).unwrap().pos;
     venom(&mut w, victim, Some(killer), None);
     assert!(w.obj(victim).is_none_or(|o| !o.on_map), "removed at once");
@@ -381,9 +417,12 @@ fn claim_2_virus_animation_delivers_its_count_later() {
     let (&anim, v) = w.gas.anims.iter().next().unwrap();
     assert_eq!(v.pos, at);
     assert_eq!(v.owner, Some(HouseId(0)), "the attacker's house");
-    assert!(list(&w, shared(&w)).is_empty(), "no particle before the middle event");
+    assert!(
+        list(&w, shared(&w)).is_empty(),
+        "no particle before the middle event"
+    );
     // First update: no advance; then one advance per tick (d = 1): k = μ after μ + 1 updates.
-    testkit::run(&mut w, MU as i32);
+    testkit::run(&mut w, MU);
     assert!(list(&w, shared(&w)).is_empty());
     testkit::run(&mut w, 1);
     let l = list(&w, shared(&w));
@@ -400,7 +439,14 @@ fn claim_2_virus_animation_delivers_its_count_later() {
 #[test]
 fn claim_2_owner_without_attacker() {
     let mut w = game(&rules());
-    let victim = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, testkit::mid(SIZE, 0, 0), 0);
+    let victim = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        1,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     venom(&mut w, victim, None, Some(HouseId(1)));
     assert_eq!(w.gas.anims.values().next().unwrap().owner, Some(HouseId(1)));
 }
@@ -409,7 +455,14 @@ fn claim_2_owner_without_attacker() {
 #[test]
 fn claim_3_not_human_leaves_one_cloud() {
     let mut w = game(&rules());
-    let victim = testkit::spawn(&mut w, Kind::Infantry, "DRONE", 1, testkit::mid(SIZE, 0, 0), 0);
+    let victim = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "DRONE",
+        1,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     let at = w.obj(victim).unwrap().pos;
     venom(&mut w, victim, None, None);
     assert!(w.gas.anims.is_empty());
@@ -426,7 +479,14 @@ fn claim_3_mu_zero_adds_the_count_then_one() {
     let mut r = rules();
     r.sim.animations.get_mut("PLAGUE").unwrap().middle_frame = Some(0);
     let mut w = game(&r);
-    let victim = testkit::spawn(&mut w, Kind::Infantry, "DRONE", 1, testkit::mid(SIZE, 0, 0), 0);
+    let victim = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "DRONE",
+        1,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     venom(&mut w, victim, None, None);
     assert_eq!(list(&w, shared(&w)).len(), COUNT as usize + 1);
 }
@@ -437,7 +497,14 @@ fn edge_virus_animation_without_particle_type() {
     let mut r = rules();
     r.sim.animations.get_mut("PLAGUE").unwrap().spawns_particle = None;
     let mut w = game(&r);
-    let victim = testkit::spawn(&mut w, Kind::Infantry, "DRONE", 1, testkit::mid(SIZE, 0, 0), 0);
+    let victim = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "DRONE",
+        1,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     venom(&mut w, victim, None, None);
     assert!(list(&w, shared(&w)).is_empty());
 }
@@ -463,13 +530,19 @@ fn claim_4_warhead_system_and_first_particle() {
     let n = w.gas.systems.len();
     gas::warhead_system(&mut w, "BARE", p, None);
     assert_eq!(w.gas.systems.len(), n + 1);
-    assert!(w.gas.systems.values().any(|s| s.particles.is_empty() && s.owner.is_none() && s.type_index == w.rules().gas.system("BARE").unwrap()));
+    assert!(w.gas.systems.values().any(|s| s.particles.is_empty()
+        && s.owner.is_none()
+        && s.type_index == w.rules().gas.system("BARE").unwrap()));
     let rng = w.rng.clone();
     gas::warhead_system(&mut w, "SOOT", p, None);
     assert_eq!(w.gas.systems.len(), n + 2, "a smoke system is kept");
     let soot = *w.gas.systems.keys().last().unwrap();
     assert!(w.update.contains(soot), "and takes its turns");
-    assert_eq!(w.gas.systems[&soot].particles.len(), 1, "its first particle is kept (S-0616 claim 1)");
+    assert_eq!(
+        w.gas.systems[&soot].particles.len(),
+        1,
+        "its first particle is kept (S-0616 claim 1)"
+    );
     assert!(!gas::is_cloud(&w, soot));
     assert_ne!(w.rng, rng, "its first particle's creation draws are taken");
     // A gas system with lifetime −1 stays, inert, after its last particle is gone.
@@ -500,7 +573,12 @@ fn claim_4_detonation_creates_the_system() {
         },
     );
     assert_eq!(w.gas.systems.len(), n + 1);
-    let s = w.gas.systems.values().find(|s| s.owner == Some(HouseId(0))).unwrap();
+    let s = w
+        .gas
+        .systems
+        .values()
+        .find(|s| s.owner == Some(HouseId(0)))
+        .unwrap();
     assert_eq!(s.particles.len(), 1);
 }
 
@@ -518,7 +596,10 @@ fn claim_5_particle_creation() {
     assert_eq!(p.stage, 0);
     assert_eq!(p.pos.z, 0, "raised to the terrain");
     assert_eq!(p.vel, [0, 0, 0]);
-    assert_eq!(w.rng, rng, "one raw value for a gas particle without colours");
+    assert_eq!(
+        w.rng, rng,
+        "one raw value for a gas particle without colours"
+    );
 }
 
 /// spec: S-0613 claim 6 (the update pass runs newest particle first; the lifetime goes down by one each turn and 0 marks the particle dead and removes it in that turn)
@@ -593,7 +674,11 @@ fn claim_8_drift_draws() {
 fn claim_9_vertical_speed() {
     let mut w = game(&rules());
     to_even(&mut w);
-    let i = puff(&mut w, "WISP", Pos::new(centre(0, 0).x, centre(0, 0).y, 200));
+    let i = puff(
+        &mut w,
+        "WISP",
+        Pos::new(centre(0, 0).x, centre(0, 0).y, 200),
+    );
     edit(&mut w, i, |p| p.life = 1000);
     let s = shared(&w);
     gas::system_turn(&mut w, s);
@@ -610,7 +695,10 @@ fn claim_9_vertical_speed() {
 fn claim_10_deflection_downhill() {
     let mut w = game(&rules());
     let p = centre(0, 0);
-    assert_eq!(gas::deflection(&w, Pos::new(p.x, p.y, 5)), [glasnost_num::F32(0); 2]);
+    assert_eq!(
+        gas::deflection(&w, Pos::new(p.x, p.y, 5)),
+        [glasnost_num::F32(0); 2]
+    );
     // Shape 2 rises toward +y (S-0106 table C2: b = 1), so downhill is −y.
     let c = p.cell();
     if let Some(cell) = w.cells.grid.get_mut(c) {
@@ -621,7 +709,10 @@ fn claim_10_deflection_downhill() {
     let zero = glasnost_num::F64::ZERO;
     assert!(d[1].to_f64().lt(zero), "downhill is −y: {d:?}");
     // High above the terrain nothing deflects it.
-    assert_eq!(gas::deflection(&w, Pos::new(p.x, p.y, h + 300)), [glasnost_num::F32(0); 2]);
+    assert_eq!(
+        gas::deflection(&w, Pos::new(p.x, p.y, h + 300)),
+        [glasnost_num::F32(0); 2]
+    );
 }
 
 /// spec: S-0613 claim 11 and F5 (after an odd-tick move the height is never below 5 above the terrain; on even ticks the height is unchanged)
@@ -685,11 +776,16 @@ fn claim_13_damage_cadence() {
         // Keep the cloud in its cell: no drift.
         edit(&mut w, i, |p| p.vel = [0, 0, 0]);
         let at = list(&w, s)[i].pos;
-        edit(&mut w, i, |p| p.pos = Pos::new(Pos::centre(c, 0).x, Pos::centre(c, 0).y, at.z));
+        edit(&mut w, i, |p| {
+            p.pos = Pos::new(Pos::centre(c, 0).x, Pos::centre(c, 0).y, at.z)
+        });
         w.effects.clear();
         gas::system_turn(&mut w, s);
         w.tick += 1;
-        if w.effects.iter().any(|e| matches!(e, Effect::GasHit { id, .. } if *id == target)) {
+        if w.effects
+            .iter()
+            .any(|e| matches!(e, Effect::GasHit { id, .. } if *id == target))
+        {
             hits.push(n);
         }
     }
@@ -766,7 +862,14 @@ fn chain_death_from_a_cloud() {
 #[test]
 fn save_load_round_trip() {
     let mut w = game(&rules());
-    let victim = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, testkit::mid(SIZE, 0, 0), 0);
+    let victim = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        1,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
     venom(&mut w, victim, None, None);
     testkit::run(&mut w, 5);
     assert!(!list(&w, shared(&w)).is_empty());
@@ -869,7 +972,11 @@ fn f9_initial_lifetime() {
         let mut rng: Rng = w.rng.clone();
         let i = puff(&mut w, "WISP", centre(0, 0));
         let raw = rng.raw() as i32;
-        let u = if field == 0 { raw.wrapping_abs() } else { (raw % field).wrapping_abs() };
+        let u = if field == 0 {
+            raw.wrapping_abs()
+        } else {
+            (raw % field).wrapping_abs()
+        };
         let e = field.wrapping_add(u) as u16;
         assert_eq!(list(&w, shared(&w))[i].life, e, "field {field}");
         if field == 1 {
@@ -931,12 +1038,18 @@ fn claim_17_lifetime_one() {
     testkit::run(&mut w, 3);
     assert!(w.gas.systems.contains_key(&s), "still holds its particle");
     testkit::run(&mut w, 1);
-    assert!(!w.gas.systems.contains_key(&s), "left play in the turn its particle was removed");
+    assert!(
+        !w.gas.systems.contains_key(&s),
+        "left play in the turn its particle was removed"
+    );
     assert!(!w.update.contains(s));
     // G13 part a, fifth variant: a 1-tick particle empties it in the first turn.
     let s = system(&mut w, "CLOUD", Some(1));
     testkit::run(&mut w, 1);
-    assert!(!w.gas.systems.contains_key(&s), "left play in its first turn");
+    assert!(
+        !w.gas.systems.contains_key(&s),
+        "left play in its first turn"
+    );
 }
 
 /// spec: S-0613 claim 17 (lifetime 3: marked in its third turn, kept while it holds particles)
@@ -949,7 +1062,10 @@ fn claim_17_lifetime_three() {
     testkit::run(&mut w, 1);
     assert!(w.gas.systems[&s].ending, "marked in its third turn");
     testkit::run(&mut w, 20);
-    assert!(w.gas.systems.contains_key(&s), "its particle is still there");
+    assert!(
+        w.gas.systems.contains_key(&s),
+        "its particle is still there"
+    );
 }
 
 /// spec: S-0613 claim 17 (lifetime 0 goes to −1 in the first turn and is never marked; every negative lifetime goes down each turn and is never marked)
@@ -962,7 +1078,11 @@ fn claim_17_zero_and_negative_never_end() {
         let sys = &w.gas.systems[&s];
         assert!(!sys.ending, "lifetime {lifetime}");
         assert!(sys.particles.is_empty());
-        assert_eq!(sys.lifetime, lifetime - 60, "goes down by 1 whatever its value");
+        assert_eq!(
+            sys.lifetime,
+            lifetime - 60,
+            "goes down by 1 whatever its value"
+        );
     }
     // The shared system's −1 counts down too.
     let mut w = game(&rules());
@@ -985,10 +1105,16 @@ fn claim_17_kinds_and_no_kind() {
     let before = w.gas.systems[&still].particles.clone();
     assert_eq!(before.len(), 1);
     testkit::run(&mut w, 1);
-    assert!(!w.gas.systems.contains_key(&soot), "the smoke system left play in its first turn");
+    assert!(
+        !w.gas.systems.contains_key(&soot),
+        "the smoke system left play in its first turn"
+    );
     assert!(w.gas.systems[&still].ending, "the no-kind system is marked");
     testkit::run(&mut w, 30);
-    assert_eq!(w.gas.systems[&still].particles, before, "its particle neither moves nor expires");
+    assert_eq!(
+        w.gas.systems[&still].particles, before,
+        "its particle neither moves nor expires"
+    );
     // Without particles a no-kind system leaves play like any other.
     let empty = system(&mut w, "STILL", None);
     w.gas.systems.get_mut(&empty).unwrap().particles.clear();
@@ -1026,7 +1152,10 @@ fn claim_18_drift_draws_before_death_draws() {
     let expected = drift_with(&mut a, [0, 0, 0]);
     let s = shared(&w);
     gas::system_turn(&mut w, s);
-    assert!(w.obj(victim).is_none_or(|o| !o.on_map), "the hit killed the unit");
+    assert!(
+        w.obj(victim).is_none_or(|o| !o.on_map),
+        "the hit killed the unit"
+    );
     assert_eq!(w.gas.anims.len(), 1, "a death with draws of its own");
     let v = list(&w, s)[i].vel;
     assert_eq!([v[0], v[1]], [expected[0], expected[1]], "drift drew first");

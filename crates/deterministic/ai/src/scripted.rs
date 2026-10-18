@@ -249,9 +249,7 @@ fn plays(w: &World, t: TypeRef, role: Role) -> bool {
             let moves = u.locomotor != Locomotor::None;
             match role {
                 Role::Harvester => (u.harvester || is_slave_miner(w, t)) && moves,
-                Role::Army => {
-                    armed(u) && !u.harvester && !is_slave_miner(w, t) && ground && moves
-                }
+                Role::Army => armed(u) && !u.harvester && !is_slave_miner(w, t) && ground && moves,
                 _ => false,
             }
         }

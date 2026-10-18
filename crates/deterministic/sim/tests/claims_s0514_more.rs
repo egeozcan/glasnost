@@ -78,14 +78,13 @@ fn an_untrainable_leader_gets_no_direct_gain() {
         w.obj(a).unwrap().combat.experience.to_f64().to_i32_common(),
         0
     );
-    assert_eq!(
+    assert!(
         w.obj(a)
             .unwrap()
             .combat
             .experience
             .to_f64()
-            .eq_num(glasnost_num::F64::ZERO),
-        true
+            .eq_num(glasnost_num::F64::ZERO)
     );
 }
 

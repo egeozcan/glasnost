@@ -2213,7 +2213,8 @@ fn s0308_claim_12_upgrades_supply_weapons() {
 // spec: S-0215 claim 32 and S-0406 claim 12 (the gate: position 1's upgrade, its ordinary weapons; a primary, and both slots the same type, a primary burst above 1, or a secondary burst above 1)
 #[test]
 fn s0215_claim_32_upgrade_gate_predicate() {
-    let cases: [(Option<&str>, Option<&str>, Option<[&str; 2]>, bool); 8] = [
+    type Case<'a> = (Option<&'a str>, Option<&'a str>, Option<[&'a str; 2]>, bool);
+    let cases: [Case; 8] = [
         (Some("ZAP"), None, None, false),
         (Some("ZAP"), Some("ZAP"), None, true),
         (Some("ZAPB"), None, None, true),

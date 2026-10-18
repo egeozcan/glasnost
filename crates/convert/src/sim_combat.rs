@@ -1189,7 +1189,13 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         Dec,
         "S-0309",
     ),
-    ("gravity", AUDIO_VISUAL, "Gravity", Int, "S-0306, S-0503, S-0613"),
+    (
+        "gravity",
+        AUDIO_VISUAL,
+        "Gravity",
+        Int,
+        "S-0306, S-0503, S-0613",
+    ),
     // spec: S-0613 Import mapping ([General] InfantryVirus an animation name; WindDirection an integer table index, absent −1)
     (
         "infantry_virus",
@@ -1848,7 +1854,11 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         ]),
         "S-0616",
     );
-    keyed(&UNITS, &s(&["DamageSmokeOffset", "DamSmkOffScrnRel"]), "S-0616");
+    keyed(
+        &UNITS,
+        &s(&["DamageSmokeOffset", "DamSmkOffScrnRel"]),
+        "S-0616",
+    );
     let crews: Vec<String> = CREWS.iter().map(|c| c.1.to_owned()).collect();
     keyed(&["global:General"], &crews, "S-0312");
     keyed(&UNITS, &s(&["DamageParticleSystems"]), "S-0302");
@@ -2423,7 +2433,9 @@ impl Builder<'_> {
         if let Some(o) = held {
             Self::put_tuple(combat, "damage_smoke_offset", o);
         }
-        let rel = fold(t.keys.get(&b"DamSmkOffScrnRel"[..]), None, |v, _| value::boolean(v));
+        let rel = fold(t.keys.get(&b"DamSmkOffScrnRel"[..]), None, |v, _| {
+            value::boolean(v)
+        });
         if rel == Some(true) {
             // spec: S-0616 claim 1 and Open questions (the screen-relative flag on: not specified; the importer warns and uses the displacement as given)
             let line = t.reads.last().copied().unwrap_or(t.created_in);
@@ -2499,7 +2511,9 @@ impl Builder<'_> {
             let top = n.min(SPIN_STAGES as i32) as usize;
             for (row, prefix) in [(0, "Stage"), (1, "EliteStage")] {
                 for k in 1..=top {
-                    if let Some(v) = given_at(t, &format!("{prefix}{k}"), r).and_then(value::integer) {
+                    if let Some(v) =
+                        given_at(t, &format!("{prefix}{k}"), r).and_then(value::integer)
+                    {
                         // spec: S-0609 Import mapping (integer each; a later layer's value replaces the held one)
                         rows[row][k - 1] = v;
                         given[row] = true;
@@ -2510,7 +2524,10 @@ impl Builder<'_> {
         }
         for (row, field) in [(0, "stage_thresholds"), (1, "elite_stage_thresholds")] {
             if given[row] {
-                combat.put(field, jsonc::array(rows[row].iter().map(|&v| int_node(v)).collect()));
+                combat.put(
+                    field,
+                    jsonc::array(rows[row].iter().map(|&v| int_node(v)).collect()),
+                );
             }
         }
         let name = format!("{} {}", kind.key(), show(&t.name));
@@ -2536,9 +2553,11 @@ impl Builder<'_> {
             negative.push(format!("EliteStage{k}"));
         }
         for k in negative {
-            self.each_int(key(t, &k), |n| n < 0, |v| {
-                format!("{name} {k} {v} is negative; our engine uses 0 (S-0609 Edge cases)")
-            });
+            self.each_int(
+                key(t, &k),
+                |n| n < 0,
+                |v| format!("{name} {k} {v} is negative; our engine uses 0 (S-0609 Edge cases)"),
+            );
         }
     }
 
@@ -2550,7 +2569,9 @@ impl Builder<'_> {
             return;
         }
         // spec: S-0609 Edge cases (stage count 0 or 1: the stage stays 0 and the sound comes from slot 0; above 6: 6)
-        let n = int_of(key(t, "WeaponStages")).unwrap_or(0).clamp(1, SPIN_STAGES as i32) as usize;
+        let n = int_of(key(t, "WeaponStages"))
+            .unwrap_or(0)
+            .clamp(1, SPIN_STAGES as i32) as usize;
         let empty: Vec<String> = (0..n)
             .filter(|s| slots.get(2 * s).is_none_or(String::is_empty))
             .map(|s| (2 * s).to_string())
@@ -3511,7 +3532,8 @@ impl Builder<'_> {
         let outcome = self.i.outcome;
         let empty = Vec::new();
         let virus = self.global(GENERAL, "InfantryVirus");
-        if let Some(name) = text_of(virus.as_ref()).filter(|n| !n.is_empty() && !value::is_no_type(n))
+        if let Some(name) =
+            text_of(virus.as_ref()).filter(|n| !n.is_empty() && !value::is_no_type(n))
         {
             let spawns = find_in(outcome, Kind::Animations, &name)
                 .and_then(|t| self.art_section(&t.name))
@@ -3529,7 +3551,8 @@ impl Builder<'_> {
         let mut windy = false;
         for t in particles {
             let w = int_of(key(t, "WindEffect")).unwrap_or(0);
-            let smoke = text_of(key(t, "BehavesLike")).is_some_and(|b| b.eq_ignore_ascii_case(b"Smoke"));
+            let smoke =
+                text_of(key(t, "BehavesLike")).is_some_and(|b| b.eq_ignore_ascii_case(b"Smoke"));
             // spec: S-0613 Edge cases (gas: a positive wind effect) and S-0616 claim 7 (smoke: any nonzero wind effect) with a direction outside 0 … 7: no push, the importer warns
             windy |= w > 0 || (smoke && w != 0);
             // spec: S-0613 F6 and S-0205 claim 3 (W above 10 makes the cadence divisor 0: the original fails; our engine takes the remainder as the tick number and the importer warns)
@@ -3549,9 +3572,15 @@ impl Builder<'_> {
                 "[General] WindDirection {direction} is outside 0–7 while a particle type has a wind effect: the original's result is undefined, our engine applies no wind push (S-0613 Edge cases, a departure)"
             ));
         }
-        let systems = outcome.registries.get(&Kind::ParticleSystems).unwrap_or(&empty);
+        let systems = outcome
+            .registries
+            .get(&Kind::ParticleSystems)
+            .unwrap_or(&empty);
         // spec: S-0613 Import mapping (the shared gas system's type is the particle-system type named GasCloudSys)
-        if let Some(t) = systems.iter().find(|t| value::type_name_eq(&t.name, b"GasCloudSys")) {
+        if let Some(t) = systems
+            .iter()
+            .find(|t| value::type_name_eq(&t.name, b"GasCloudSys"))
+        {
             let lifetime = int_of(key(t, "Lifetime"));
             if let Some(l) = lifetime.filter(|&l| l > 0) {
                 // spec: S-0613 claim 17 (the shared system leaves play after a positive lifetime and is not created again; the original then stops on the next particle request, our engine creates no particle; the importer warns when its lifetime is positive)
@@ -3583,19 +3612,26 @@ impl Builder<'_> {
         let overlays = outcome.registries.get(&Kind::Overlays).unwrap_or(&empty);
         let mut seen: Vec<usize> = Vec::new();
         for o in overlays {
-            let Some(name) = text_of(key(o, "CellAnim")).filter(|n| !n.is_empty() && !value::is_no_type(n)) else {
+            let Some(name) =
+                text_of(key(o, "CellAnim")).filter(|n| !n.is_empty() && !value::is_no_type(n))
+            else {
                 continue;
             };
-            let Some(i) = anims.iter().position(|a| value::type_name_eq(&a.name, &name)) else {
+            let Some(i) = anims
+                .iter()
+                .position(|a| value::type_name_eq(&a.name, &name))
+            else {
                 continue;
             };
             if seen.contains(&i) {
                 continue;
             }
             // spec: S-0109 claims 14 and 25 (μ = ⌊n / 2⌋ of the last sprite found; 0 when none was found)
-            let mu = arts.get(&(Kind::Animations, i)).and_then(|a| match (&a.middle_sprite, a.middle_sprite_frames) {
-                (None, _) => Some(0),
-                (Some(_), n) => n.map(|n| n / 2),
+            let mu = arts.get(&(Kind::Animations, i)).and_then(|a| {
+                match (&a.middle_sprite, a.middle_sprite_frames) {
+                    (None, _) => Some(0),
+                    (Some(_), n) => n.map(|n| n / 2),
+                }
             });
             if mu != Some(0) {
                 continue;
@@ -3608,7 +3644,10 @@ impl Builder<'_> {
                 .map(<[u8]>::to_vec)
                 .and_then(|v| self.particle_ref(&v, crate::refs::NEXT_PARTICLE_LIMIT));
             // spec: S-0202 Import mapping (NumParticles: an integer count; absent 0)
-            let count = sec.value(b"NumParticles").and_then(value::integer).unwrap_or(0);
+            let count = sec
+                .value(b"NumParticles")
+                .and_then(value::integer)
+                .unwrap_or(0);
             if spawns.is_none() || count <= 0 {
                 continue;
             }

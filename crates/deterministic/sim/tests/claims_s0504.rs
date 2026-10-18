@@ -1298,7 +1298,7 @@ fn ship_docked_at_yard() -> (World, ObjectId, ObjectId) {
     w.obj_mut(skiff).unwrap().health = 200;
     open(&mut w);
     let r = targeting::click(
-        &mut w,
+        &w,
         ALPHA,
         &[skiff],
         ClickOn::Object(yard),

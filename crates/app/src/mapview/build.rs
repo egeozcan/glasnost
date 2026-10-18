@@ -1015,6 +1015,9 @@ type TileImages = (
 /// canvas size.
 type SpriteFrame = (u32, (i32, i32), (i32, i32));
 
+/// One animation's draw: its layer, ground-layer sort key and items.
+type SlotItems = (slots::Layer, i64, Vec<Item>);
+
 /// A playing animation of the live game to draw (S-0109).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AnimDraw {
@@ -4284,10 +4287,7 @@ impl Painter {
         inputs: &Inputs,
         scene: &mut Scene,
         list: &[AnimDraw],
-    ) -> (
-        Vec<Option<(slots::Layer, i64, Vec<Item>)>>,
-        BTreeSet<String>,
-    ) {
+    ) -> (Vec<Option<SlotItems>>, BTreeSet<String>) {
         let mut b = Builder {
             map: inputs.map,
             rules: inputs.rules,

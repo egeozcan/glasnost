@@ -819,7 +819,7 @@ fn claim_25_positions_ten_and_later_use_the_remainder() {
     assert_eq!(anims[21 - 1 - 11], at_point(1));
     assert_eq!(anims[21 - 1 - 20], at_point(0));
     // Point 0 omitted and point 1 set: position 10 is the default pair, not another point.
-    let (anims, w, b) = assault_animations(12, vec![[0, 0], [9, 13]], 0);
+    let (anims, w, _) = assault_animations(12, vec![[0, 0], [9, 13]], 0);
     let _ = w;
     assert_eq!(anims[12 - 1 - 10], (256 * b0.x, 256 * b0.y));
 }

@@ -2747,16 +2747,20 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
         }
     }
     // spec: S-0501 claim 29 (an armed aircraft below cruise height, not full and without contact: a pad search; enter, target forgotten)
-    if armed && !ground && h < t.cruise && !full_ammo(w, id) && o.contact.is_none() {
-        if let Some(k) = seek_pad(w, id) {
-            set_dest(w, id, Some(Target::Object(k)));
-            if let Some(ob) = w.obj_mut(id) {
-                crate::spawn::clear_own_target(ob);
-                ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
-            }
-            queue(w, id, Behaviour::Enter);
-            return standard(w, id);
+    if armed
+        && !ground
+        && h < t.cruise
+        && !full_ammo(w, id)
+        && o.contact.is_none()
+        && let Some(k) = seek_pad(w, id)
+    {
+        set_dest(w, id, Some(Target::Object(k)));
+        if let Some(ob) = w.obj_mut(id) {
+            crate::spawn::clear_own_target(ob);
+            ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
         }
+        queue(w, id, Behaviour::Enter);
+        return standard(w, id);
     }
     if !ground && h >= t.cruise {
         if o.dest.is_some() {
@@ -2983,11 +2987,11 @@ pub fn strafe_wait(range: i32, speed: i32) -> i32 {
 fn attack(w: &mut World, id: ObjectId) -> i32 {
     let start = w.obj(id).map_or(0, |o| o.beh.start_tick);
     let a = st(w, id);
-    if a.run_of != Some(start) {
-        if let Some(s) = st_mut(w, id) {
-            s.run_of = Some(start);
-            s.stage = Stage::Start;
-        }
+    if a.run_of != Some(start)
+        && let Some(s) = st_mut(w, id)
+    {
+        s.run_of = Some(start);
+        s.stage = Stage::Start;
     }
     // Rows without a delay go straight on to the next stage in the same processing.
     // nocite: a loop bound of our own (a few stage changes per processing)

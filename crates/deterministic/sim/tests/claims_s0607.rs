@@ -32,7 +32,7 @@ fn claim_5_the_seize() {
 /// Destructions credited to house `h` (S-0302 claim 14), by object or by
 /// house alone.
 fn kills(w: &glasnost_sim::world::World, h: usize) -> i32 {
-    w.houses[h].combat.kills as i32
+    w.houses[h].combat.kills
 }
 
 /// A world with LIFTER (house 0) at (0, 0) and a victim of `name` (house 1)

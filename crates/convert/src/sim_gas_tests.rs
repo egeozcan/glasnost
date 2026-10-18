@@ -122,10 +122,21 @@ fn absent_holds_what_in_a_read_section_names_the_empty_type() {
     assert_eq!(names.len(), 2, "Puff, then the empty-named type: {names:?}");
     assert_ne!(empty, "Puff");
     let plain = &s.particle_systems["Plain"];
-    assert_eq!(plain.holds_what.as_ref(), Some(empty), "read without HoldsWhat");
-    let unread = s.particle_systems.get("Unread").cloned().unwrap_or_default();
+    assert_eq!(
+        plain.holds_what.as_ref(),
+        Some(empty),
+        "read without HoldsWhat"
+    );
+    let unread = s
+        .particle_systems
+        .get("Unread")
+        .cloned()
+        .unwrap_or_default();
     assert_eq!(unread.holds_what, None, "never read");
-    assert_eq!(s.particle_systems["GasCloudSys"].holds_what, None, "never read");
+    assert_eq!(
+        s.particle_systems["GasCloudSys"].holds_what, None,
+        "never read"
+    );
 }
 
 /// spec: S-0613 Import mapping ([General] InfantryVirus an animation name,
@@ -207,10 +218,16 @@ fn gas_coverage() {
 fn shared_system_positive_lifetime_warns() {
     let with = |l: &str| format!("[ParticleSystems]\n0=GasCloudSys\n[GasCloudSys]\nLifetime={l}\n");
     let (_, w) = sim(&with("3"), "", "");
-    assert!(warned(&w, "particle system GasCloudSys Lifetime 3"), "{w:?}");
+    assert!(
+        warned(&w, "particle system GasCloudSys Lifetime 3"),
+        "{w:?}"
+    );
     for l in ["-1", "0"] {
         let (_, w) = sim(&with(l), "", "");
-        assert!(!warned(&w, "particle system GasCloudSys Lifetime"), "{l}: {w:?}");
+        assert!(
+            !warned(&w, "particle system GasCloudSys Lifetime"),
+            "{l}: {w:?}"
+        );
     }
     // Another system's positive lifetime is ordinary.
     let (_, w) = sim("[ParticleSystems]\n0=Cloud\n[Cloud]\nLifetime=3\n", "", "");
@@ -239,7 +256,13 @@ fn loading_time_particle_request_warns() {
         doc: Document::parse(base.as_bytes(), Default::default(), &mut Vec::new()),
     }];
     let art = Document::parse(art_text.as_bytes(), Default::default(), &mut Vec::new());
-    let outcome = apply(&layers, &art, "art.ini", Default::default(), &Default::default());
+    let outcome = apply(
+        &layers,
+        &art,
+        "art.ini",
+        Default::default(),
+        &Default::default(),
+    );
     // μ: Seep and Dry found no middle sprite (μ = 0); Late's has 8 frames (μ = 4).
     let late = TypeArt {
         middle_sprite: Some(b"late.shp".to_vec()),
@@ -288,29 +311,54 @@ fn particle_system_kind_fields() {
                 [Hulk]\nDamageSmokeOffset=10,-20,30\n[Plain]\nStrength=5\n";
     let (s, w) = sim(base, "", "");
     let soot = &s.particles["Soot"];
-    assert_eq!((dec(&soot.velocity), dec(&soot.deacc)), (Some("45e-1"), Some("25e-2")));
+    assert_eq!(
+        (dec(&soot.velocity), dec(&soot.deacc)),
+        (Some("45e-1"), Some("25e-2"))
+    );
     assert_eq!(soot.radius, Some(40));
     assert_eq!((soot.final_damage_state, soot.normalized), (None, None));
     let ember = &s.particles["Ember"];
-    assert_eq!((ember.final_damage_state, ember.normalized), (Some(3), Some(true)));
     assert_eq!(
-        (ember.x_velocity, ember.y_velocity, ember.min_z_velocity, ember.z_velocity_range),
+        (ember.final_damage_state, ember.normalized),
+        (Some(3), Some(true))
+    );
+    assert_eq!(
+        (
+            ember.x_velocity,
+            ember.y_velocity,
+            ember.min_z_velocity,
+            ember.z_velocity_range
+        ),
         (Some(7), Some(-6), Some(2), Some(9))
     );
     assert_eq!((ember.velocity.as_ref(), ember.radius), (None, None));
     let plume = &s.particle_systems["Plume"];
     assert_eq!(plume.spawn_frames, Some(3));
-    assert_eq!((dec(&plume.slowdown), dec(&plume.spawn_cutoff)), (Some("5e-1"), Some("125e-1")));
-    assert_eq!((plume.spawn_radius, plume.particle_cap), (Some(20), Some(6)));
+    assert_eq!(
+        (dec(&plume.slowdown), dec(&plume.spawn_cutoff)),
+        (Some("5e-1"), Some("125e-1"))
+    );
+    assert_eq!(
+        (plume.spawn_radius, plume.particle_cap),
+        (Some(20), Some(6))
+    );
     assert_eq!(dec(&plume.particles_per_coord), Some("25e-2"));
     assert_eq!(plume.spawn_direction, None);
     let burst = &s.particle_systems["Burst"];
     assert_eq!(burst.spark_spawn_frames, Some(4));
     assert_eq!(dec(&burst.spawn_spark_percentage), Some("75e-2"));
     // A value with two numbers keeps the value in force, 0, for the third (S-0003 claim 9).
-    let dir: Vec<&str> = burst.spawn_direction.iter().flatten().map(|d| d.0.as_str()).collect();
+    let dir: Vec<&str> = burst
+        .spawn_direction
+        .iter()
+        .flatten()
+        .map(|d| d.0.as_str())
+        .collect();
     assert_eq!(dir, ["15e-1", "-2", "0"]);
-    assert_eq!(s.vehicles["Hulk"].combat.damage_smoke_offset, Some([10, -20, 30]));
+    assert_eq!(
+        s.vehicles["Hulk"].combat.damage_smoke_offset,
+        Some([10, -20, 30])
+    );
     assert_eq!(s.vehicles["Plain"].combat.damage_smoke_offset, None);
     assert!(!warned(&w, "S-0616 claim 20"), "{w:?}");
 }
@@ -352,7 +400,11 @@ fn particle_system_kind_warnings() {
 /// overload placement draws; the importer warns) and S-0616 Import mapping
 #[test]
 fn default_spark_system_absent_warns() {
-    let (s, w) = sim("[ParticleSystems]\n0=Fizz\n[Fizz]\nBehavesLike=Spark\n", "", "");
+    let (s, w) = sim(
+        "[ParticleSystems]\n0=Fizz\n[Fizz]\nBehavesLike=Spark\n",
+        "",
+        "",
+    );
     assert_eq!(s.general.default_spark_system, None);
     assert!(warned(&w, "DefaultSparkSystem is absent"), "{w:?}");
     let (s, w) = sim(
@@ -433,7 +485,8 @@ fn corridor_retry_quirk_loads_in_both_positions() {
     };
     assert!(load(None).corridor_retry_no_fallback, "absent: on");
     for on in [false, true] {
-        let text = format!("{{\"globals\": {{\"quirks\": {{\"corridor_retry_no_fallback\": {on}}}}}}}");
+        let text =
+            format!("{{\"globals\": {{\"quirks\": {{\"corridor_retry_no_fallback\": {on}}}}}}}");
         assert_eq!(load(Some(&text)).corridor_retry_no_fallback, on);
     }
 }
