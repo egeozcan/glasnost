@@ -1,9 +1,9 @@
 ---
 id: Q-1328
 title: Order of the gripping lifter's rearming against the target tests
-status: open
+status: answered
 related: [S-0607, S-0301]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

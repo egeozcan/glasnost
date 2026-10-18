@@ -1,9 +1,9 @@
 ---
 id: Q-1325
 title: Falling-damage detonations with no game-wide death weapon
-status: open
+status: answered
 related: [S-0607]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

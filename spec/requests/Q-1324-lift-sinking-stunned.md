@@ -1,9 +1,9 @@
 ---
 id: Q-1324
 title: What "stunned" adds for a dropped unit set sinking
-status: open
+status: answered
 related: [S-0607, S-0504]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

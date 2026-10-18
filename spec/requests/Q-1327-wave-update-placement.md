@@ -1,9 +1,9 @@
 ---
 id: Q-1327
 title: When in the tick a magnetic wave updates, and its impact point
-status: open
+status: answered
 related: [S-0607, S-0313, S-0306]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-1323
 title: Which occupancy outcomes make a drop cell blocked
-status: open
+status: answered
 related: [S-0607, S-0209]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

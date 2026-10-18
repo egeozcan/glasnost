@@ -1,9 +1,9 @@
 ---
 id: Q-1331
 title: Readiness of a seized driving vehicle
-status: open
+status: answered
 related: [S-0607, S-0215]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

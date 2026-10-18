@@ -1,9 +1,9 @@
 ---
 id: Q-1322
 title: Starting crash rate of a dropped unit, and drop before growth
-status: open
+status: answered
 related: [S-0607, S-0502]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

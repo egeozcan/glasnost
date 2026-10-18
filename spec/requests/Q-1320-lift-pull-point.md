@@ -1,9 +1,9 @@
 ---
 id: Q-1320
 title: Which point a gripped unit flies towards
-status: open
+status: answered
 related: [S-0607, S-0502]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

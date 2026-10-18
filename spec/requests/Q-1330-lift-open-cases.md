@@ -1,9 +1,9 @@
 ---
 id: Q-1330
 title: Magnetic lift: claim 3 and 4 order, passengers, deploying, wave "leaves play"
-status: open
+status: answered
 related: [S-0607]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

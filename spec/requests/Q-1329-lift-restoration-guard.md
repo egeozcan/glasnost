@@ -1,9 +1,9 @@
 ---
 id: Q-1329
 title: Restoration of a set-down unit that stays in guard
-status: open
+status: answered
 related: [S-0607, S-0215]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

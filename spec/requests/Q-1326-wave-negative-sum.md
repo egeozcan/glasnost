@@ -1,9 +1,9 @@
 ---
 id: Q-1326
 title: Magnetic wave when F3's wrapped sum is negative
-status: open
+status: answered
 related: [S-0607]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need
