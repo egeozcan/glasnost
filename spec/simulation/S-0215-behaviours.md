@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 62
+revision: 63
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -41,7 +41,10 @@ defines them. *Turn* and *turn pass* are used as S-0203 (tick order) defines the
 suppression* is S-0207 claim 27's point suppression that has not yet been consumed: a one-application
 skip of the next otherwise due nonempty point application. It is not the unchanged-destination
 suppression of S-0502. *Late start* is the further per-tick start of an infantry unit or vehicle that
-claim 11 defines.
+claim 11 defines. *Body facing*, *target facing* and *next point* are used as S-0206 (Terms)
+and S-0207 define them: the body facing is the direction the vehicle's body points, the target
+facing is the facing the body has been given and turns towards, and the next point is the next
+position of the locomotor's path.
 
 *Overload pulse* is the periodic self-damage of an unlimited controller, a mind controller whose
 primary weapon gives unlimited control. S-0601 owns it (its Terms and claim 16).
@@ -898,7 +901,8 @@ Terms used by this spec:
     of a unit that is then ready under the readiness rules below, so "moving on this tick" includes
     the movement of the same update. For an infantry unit the "in the middle of firing" test reads the
     firing state that earlier updates left and does not see the ordinary firing check of this update.
-    No readiness condition of a vehicle depends on its firing or turret turning.
+    No readiness condition of a vehicle depends on its firing or turret turning. A vehicle's body
+    turning is different: see "moving" in the vehicle rules below.
     A behaviour made current there is processed as claim 3b states for a start after the actor's
     processing (on the unit's next update). It is a per-tick start for claim 2's exclusions: it takes
     no effect on a tunnel, erasing or leaving-stage tick, and in our engine none on a tick that
@@ -916,13 +920,13 @@ Terms used by this spec:
     the end-of-update start below. No quirk switch: it is the original's order, not a defect.
     Backing for the late start. (i) The expiry-update instance of a berserk unit that is infantry,
     moving, and ready: `measurable` by B46 below, which reads the current and queued behaviour after
-    the last update of the expiry tick. (ii) Every other late start, for its queued-behaviour effect: `unmeasured`. The fall-back to rest below has its own backing. In the unchanged case
+    the last update of the expiry tick. (ii) Every other late start, for its queued-behaviour effect: `unmeasured`, except the turn-end late start of a vehicle with the driving locomotor (claim 11), which is `measurable` by B47 (second part, confidence low). The fall-back to rest below has its own backing. In the unchanged case
     the queued behaviour is also made current by the next update's first start before it is processed,
     so the only other difference is the current behaviour seen after the update by actors that update
     later in that tick (or after an intervening change of readiness, slots or orders). Observing it
     needs a unit that has a queued behaviour left over at the end of its update while ready, and no
-    setup is known that makes that happen at a chosen update other than the berserk expiry of (i), so
-    the reason does not depend on how the recorder reads.
+    setup is known that makes that happen at a chosen update other than the berserk expiry of (i) and
+    the turn-end late start of (ii), so the reason does not depend on how the recorder reads.
     Confidence: medium (that the readiness test counts this
     update's movement, and for infantry the firing state that earlier updates left; the position
     relative to a vehicle's firing and turret turning is not observable and is not asserted).
@@ -966,13 +970,27 @@ Terms used by this spec:
         by this condition,
       - the vehicle is moving on this tick and is not below the surface (its height above the
         surface is not negative, so a vehicle travelling underground does not meet this
-        condition), except in three cases: the queued behaviour is *enter*; the current behaviour
+        condition). For a vehicle with the driving locomotor, "moving" here is true while the
+        vehicle's body is still turning towards the facing it has been given, for any reason (a turn in
+        place before a step, or a turn to face a target), and also while the
+        locomotor has a move destination, or a next point whose map coordinates (x, y) differ from the
+        vehicle's current ones, height ignored (both clauses of S-0206's term "locomotor moving the
+        vehicle", S-0206 Terms). This is wider than that term, which does not count a turn to face a
+        target; the turning clause is this spec's own, and the cross-spec changes it needs are listed
+        under "Cross-spec changes to confirm". A vehicle that
+        stands still while its body turns is therefore not ready, and becomes ready on the first
+        start or late start after the turn ends. The exceptions below apply to a turning vehicle in
+        the same way as to a travelling one. The condition does not hold in three cases: the queued behaviour is *enter*; the current behaviour
         is *guard*, or *attack* without a target; or the queued behaviour is a *guard* that one of
         two *unload* rules queued with an allowance to interrupt movement. Those two rules belong to other specs: a transport
         vehicle that reaches the last stage of unloading its passengers queues *guard* (S-0507
         claim 11), and a jumpjet vehicle in *unload* that is sent off again while it descends to land
         queues *guard* (movement specs). The allowance lasts until the slots next change (any
-        queue that takes effect, start, force, override or revert ends it),
+        queue that takes effect, start, force, override or revert ends it). Confidence: medium for the
+        turning clause; the other rules of this condition keep the backing given in the Backing bullet
+        below. Backing of the turning clause: `measurable` by B47, whose first part (a turning vehicle
+        keeps a queued *attack*) is the claim (falsified by *attack* becoming current while the body
+        facing still changes) and whose second part is the tick-exact end of the turn (confidence low),
       - its unload or deploy cycle has not finished (never holds for vehicles, S-0517 claim 15),
       - it is in contact with a vehicle-factory building and the queued behaviour is neither *move*
         nor *enter*,
@@ -5326,6 +5344,30 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   If *guard* is neither current nor queued at either read, the run shows a different expiry rule
   and is reported to S-0610. This part does not test any other late start.
 
+- **B47 (claim 11: a vehicle whose body is still turning is not ready).** Proposed measurement,
+  not a result. Setup: a tiny map, one human-owned tracked or wheeled vehicle with a turret-less or
+  slow-turning body, a durable enemy structure with no weapon, stock data, speed index 2, no
+  external controller, read-only recorder. The vehicle is idle with *guard* current and faces away
+  from a free cell next to it, so that moving there needs a turn of about half a circle first.
+  It is ordered to move to that cell; the order starts *move* at the next update (the vehicle is
+  ready with *guard* current). On the first tick on which the recorder shows the body facing
+  changing, the player gives an attack order on the structure (claim 12: it queues *attack*
+  without an immediate start, and it carries no destination). The recorder reads, after every tick,
+  the body facing, the current and queued behaviour, the destination and the cell. A run is valid
+  only if *attack* is queued and *move* is current after the tick of the attack order and the body
+  facing was still changing at that read, and the vehicle has no locomotor move destination and no
+  next point at that read; any other run is void. Expected: while the body facing
+  changes from tick to tick the queued *attack* does not become current (the vehicle is moving
+  in the sense of claim 11 because its body is turning, with no locomotor move destination and no
+  next point left). After the turn ends, if the recorder shows no destination and no cell change, *attack*
+  is current after the tick *t* on which the body facing last changed (the late start counts that
+  update's turning) and was queued after every earlier tick; if the vehicle instead keeps a route and
+  steps, the run is void, because with a route left the turning clause is not tested. Falsified
+  by *attack* becoming current while the facing is still changing, or, in a run with no route left,
+  by *attack* not being current after tick *t*, or by *attack* already current after an earlier
+  tick. Runs: five valid runs. Confidence in the second
+  part is low until a run shows what the attack order does to the move in progress.
+
 ## Open questions
 
 - **Q-0238 hand-off:** claim 38 and F11–F12 now complete the centre, radius and no-base
@@ -5406,6 +5448,19 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
 - **Q-1154, question 2.** Whether a unit already waiting in line for the absorbing building that the enter-nearest search has found is "already bound", so that its *guard* or *area guard* processing does not send it again (claim 24), or only a unit in contact with that building is. Claim 24 currently counts waiting in line; its confidence is low until scenario B21 (d) settles it.
 
 ### Cross-spec changes to confirm
+
+- Claim 11's turning clause (a vehicle whose body is still turning, for any reason, is "moving" for
+  readiness) conflicts with approved S-0206 and S-0603, and changes the timing of starts in approved
+  S-0402 and S-0314. S-0215 therefore defines its own readiness test in claim 11, and S-0206 is
+  not changed: its term "locomotor moving the vehicle" and its claims 9 and 16 stay as they are,
+  because widening that term would stop claim 9's body turn after its first tick. S-0603: its
+  readiness claim (line 145) must drop "but not a body that only turns towards a target", and its
+  Terms entry (line 75, "a body that only turns does not") must take the readiness test of S-0215
+  claim 11 in place of S-0206's term. S-0402: the queued unload of a harvester that turns on the
+  spot before it starts is held until the turn ends (claim 11 here), so S-0402's start timing after
+  that turn needs the late-start rule of claim 11 cited; owner of S-0402 to confirm. S-0314: the
+  completed-entry turn toward 16384 facing units, after which *sleep* is queued and starts under
+  claim 11, now waits for the turn to end (claim 17); owner of S-0314 to confirm.
 
 - S-0009 claim 40, S-0108 claim 11 and S-0402 claim 18 already agree with claim 1:
   set-up queues *guard*, the grand opening sets readiness during placement, and the
