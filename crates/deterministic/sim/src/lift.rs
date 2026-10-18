@@ -707,7 +707,6 @@ pub fn steer(w: &mut World, id: ObjectId) {
                     });
                     upd(w, id, |s| s.lifter = None);
                     set_down_here(w, id);
-                    return;
                 }
                 Some(t) => {
                     if let Some(fixed) = crate::jump::lift_order(w, id)
