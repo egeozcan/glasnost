@@ -599,8 +599,9 @@ const TERRAIN_OBJECT_FIELDS: &[(&str, &str, Form)] = &[
 const WEAPON_FIELDS: &[(&str, &str, Form)] = &[
     ("damage", "Damage", Int),
     ("ambient_damage", "AmbientDamage", Int),
-    ("projectile", "Projectile", Text),
-    ("warhead", "Warhead", Text),
+    // spec: S-0004 claims 2 and 13 (a weapon's `Projectile` and `Warhead` name types, compared without regard to letter case: the key of the type named)
+    ("projectile", "Projectile", Ref(Kind::Projectiles)),
+    ("warhead", "Warhead", Ref(Kind::Warheads)),
     ("omni_fire", "OmniFire", Bool),
     ("area_fire", "AreaFire", Bool),
     ("rad_level", "RadLevel", Int),

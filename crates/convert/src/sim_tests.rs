@@ -843,6 +843,21 @@ fn every_record_kind_resolves() {
     assert_eq!(s.projectiles.keys().collect::<Vec<_>>(), ["Dart"]);
 }
 
+/// spec: S-0004 claims 2 and 13 (a weapon's projectile and warhead references find the existing type without regard to letter case; the ruleset holds that type's key)
+#[test]
+fn weapon_references_ignore_letter_case() {
+    let base = "[BuildingTypes]\n1=Hut\n[Warheads]\n1=Pow\n\
+                [Hut]\nPrimary=Zap\nSecondary=Zip\n\
+                [Zap]\nProjectile=Dart\nWarhead=Pow\n\
+                [Zip]\nProjectile=dART\nWarhead=pOW\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(s.projectiles.keys().collect::<Vec<_>>(), ["Dart"]);
+    for w in ["Zap", "Zip"] {
+        assert_eq!(s.weapons[w].projectile.as_deref(), Some("Dart"), "{w}");
+        assert_eq!(s.weapons[w].warhead.as_deref(), Some("Pow"), "{w}");
+    }
+}
+
 /// Weapon and projectile records carry valid field names (the record is
 /// put in both registries by hand, so that one section feeds both).
 /// spec: S-0004 claim 3
