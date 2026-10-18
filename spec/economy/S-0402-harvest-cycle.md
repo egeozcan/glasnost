@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -620,6 +620,13 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     | Finishing, with a destination and a queued behaviour other than *harvest* | leaves the unloading state; stops if moving; starts the queued behaviour if it is ready to change; contact is kept | standard delay of the behaviour then current (one draw) |
     | Finishing, otherwise | leaves the unloading state; queues *harvest* without an immediate start; if it is ready to change, breaks off contact and starts the queued behaviour | standard delay of the behaviour then current (one draw) |
 
+    **Refinery smoke.** Each payment row and the empty-load row that starts *finishing*
+    produces one smoke event on the building in the neighbouring cell, as defined by
+    S-0616 claim 1. By the time payment is applied at that processing, the smoke event has occurred. Thus an uninterrupted
+    unloading of *k* different tiberiums produces *k* + 1 events, including one when docking
+    empty. Whether an event creates smoke systems is S-0616 claim 1's rule, independent of
+    the docking, payment and unloading animations above.
+
     While the harvester unloads, the step counter follows the schedule of claim 5 (Formulas F6)
     with a period of 1 tick. Unloading starts the period at its processing in tick *u*₀, so the
     counter rises in every tick from *u*₀ + 1 on, and before the first payment a processing in tick
@@ -694,11 +701,13 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     for a destination and a queued behaviour applies), but orders of S-0213 never reach it, since
     only a dock-unload refinery queues *unload* and an order breaks off that contact first.
     - Backing: `measurable` (scenario H1; its variant e for the three animations; H12 for the sale,
-      contact lost while unloading, an order while unloading and the free dock slot).
+      contact lost while unloading, an order while unloading and the free dock slot; for
+      refinery smoke, S-0616 claim 1, scenario P20).
       The order-ending route with contact kept is `unmeasured`: the orders in S-0213
       break this contact before that route could be observed, and no other reachable
       input is known to preserve it.
-    - Confidence: high for the payment per tiberium and the dump threshold; medium for the exact
+    - Confidence: high for the payment per tiberium, the dump threshold and the smoke events.
+      Medium for the exact
       tick of each payment and the 1-tick intervals, for the extra interval before *finishing* and
       for the one-tick difference of the first payment; medium for the unloading animation being
       the one the harvester waits for and the other two not delaying it; low for the damaged forms
@@ -823,7 +832,11 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       each tiberium it carries in turn (lowest index first, main payment then bonus), goes inside
       the miner, and starts the slave reload field's delay in ticks. At the first group update
       after that delay has elapsed, its health is restored to its strength and it is ready to
-      leave again (claim 21).
+      leave again (claim 21). After all payments of a delivery, the master receives one
+      refinery smoke event under S-0616 claim 1, only when at least one payment was for a
+      positive amount of resource. It is one event per delivery, not per tiberium. A deployed
+      master's building type determines whether smoke systems appear; an undeployed vehicle
+      master makes no refinery smoke.
     - **Lost slaves.** A slave that is killed or lost starts the slave regeneration field's
       delay in ticks; a replacement is created inside the miner at the first group update after
       that delay has elapsed (claims 19 and 21).
@@ -832,8 +845,10 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       claim 25 gives relocation-failure inputs and the immediate post-pack-up destination.
     - Backing: `measurable` (scenario H7; its variant b for the kick wrap and its switch, variant e
       for the group's rest tick, variant f for the deployed miner and the slaves' health, and
-      S-0215 scenario B31 for the separate area-guard effect)
-    - Confidence: medium for the slave cycle and the wake-up rule; low for the miner's own
+      S-0215 scenario B31 for the separate area-guard effect; S-0616 claim 1, scenario P20
+      for refinery smoke)
+    - Confidence: high for the smoke events; medium for the slave cycle and the wake-up rule.
+      Low for the miner's own
       movement
 
 15. **Loads of several tiberiums.** A harvester may carry bales of several tiberiums; each is
