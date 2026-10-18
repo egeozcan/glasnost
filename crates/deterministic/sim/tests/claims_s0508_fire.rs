@@ -65,6 +65,13 @@ fn shots(
         .into_iter()
         .filter_map(|e| match e {
             Effect::Shot { weapon, from, .. } => Some((weapon, from)),
+            // A disc laser's shot has no report or projectile (S-0615 claim 12): its own event.
+            Effect::Disc {
+                weapon,
+                event: glasnost_sim::combat::effects::DiscEvent::Shot,
+                pos,
+                ..
+            } => Some((weapon, pos)),
             _ => None,
         })
         .collect()

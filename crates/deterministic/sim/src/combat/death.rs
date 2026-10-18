@@ -470,9 +470,11 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
         .attacker
         .and_then(|a| w.obj(a))
         .map_or(hit.house, |a| a.owner);
+    // The extra virus effect comes before the kind-3 explosion of a parachutist (interim, Q-1421).
     if extra {
         crate::gas::virus_death(w, o.pos, owner, true);
     }
+    // Seam: S-0611 is not built yet (M7b). Death kind 9 (mutation, S-0615 claim 1) plays die-2 here until it is.
     // spec: S-0107 claim 17 rows 4 to 7 (not human: die-1; w = 1: die-1; w = 2 or 9: die-2)
     let request = if not_human {
         Some(Seq::Die1)
@@ -487,6 +489,13 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
         if virus(kind) {
             // spec: S-0107 claim 17 row 8 (w = 8: the virus-death animation and particle delivery of S-0613 claim 2)
             crate::gas::virus_death(w, o.pos, owner, false);
+        } else {
+            // spec: S-0615 claims 1 and 2 (kinds 3 to 7 and 10: one death animation at the unit's position; S-0615 claim 3: kind 0 and 11 and above, none)
+            death_kind_effect(w, kind, o.pos);
+        }
+        // spec: S-0615 claims 2 and 3 and S-0107 claim 17 (the unit is removed in the same processing, or begins its crash if its type has the crash flag)
+        if u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
+            return;
         }
         // spec: S-0107 claim 17 row 8 (other kinds: no sequence, removed at once)
         leave_play(w, id);
@@ -503,6 +512,43 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
         leave_play(w, id);
     }
     // Otherwise the unit stays in play while its death sequence plays (S-0203 claim 6c).
+}
+
+/// The animation of death kind `kind` (S-0615 claims 1 to 3): kinds 3, 4,
+/// 6, 7 and 10 the game-wide death animation, kind 5 the animation type at
+/// registration index 1, each at `pos` with no owner and no attachment.
+/// The game-wide burning death animation is a burning walker when its type
+/// has the flag (claims 4 to 11). Other kinds, and a kind whose type is not
+/// given or not listed, make none. The dispatch takes no draw.
+pub fn death_kind_effect(w: &mut World, kind: i32, pos: Pos) {
+    let rules = w.rules_arc();
+    let g = &rules.combat.general;
+    // spec: S-0615 claim 1 (the death-kind table); a negative kind makes none, as kind 0 (interim, Q-1423)
+    let name = match kind {
+        3 => g.infantry_explode.clone(),
+        4 => g.flaming_infantry.clone(),
+        // spec: S-0615 claim 1 and Edge cases (kind 5: the animation type at registration index 1, S-0004 claim 4; no dedicated key)
+        5 => rules.animations.get(1).map(|a| a.name.clone()),
+        6 => g.infantry_head_pop.clone(),
+        7 => g.infantry_nuked.clone(),
+        10 => g.infantry_brute.clone(),
+        _ => None,
+    };
+    // spec: S-0615 claim 2 (missing type: when the rules data names none, or names a type that is not listed and so cannot be created, no animation; the unit is still removed)
+    let Some(name) = name.filter(|n| rules.animation(n).is_some()) else {
+        return;
+    };
+    let walker = rules
+        .animations
+        .iter()
+        .position(|a| a.name.eq_ignore_ascii_case(&name))
+        .filter(|&i| rules.animations[i].flaming);
+    match walker {
+        // spec: S-0615 claim 1 (kind 4's type is a burning walker when it has the burning-walker flag; the flag decides, whatever the kind, claims 4 to 11)
+        Some(i) => crate::walker::create(w, u32::try_from(i).unwrap_or(u32::MAX), pos),
+        // spec: S-0615 claim 2 (no loop delay, repeat factor 1, no house, unattached, at the unit's position; S-0109 playback from then on)
+        None => crate::combat::effects::anim(w, &name, pos),
+    }
 }
 
 /// An infantry unit in a completed death sequence leaves play (S-0107

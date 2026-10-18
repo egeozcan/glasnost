@@ -184,6 +184,17 @@
           ],
           "default": null
         },
+        "damage": {
+          "description": "`Damage`, the damage value δ of S-0109 claim 17 (art data, a\ndecimal); absent: 0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "end": {
           "description": "`End`, the end field *E* as written (S-0109 Import mapping: absent\nor −1 take the sprite's value).",
           "type": [
@@ -200,6 +211,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "is_flaming_guy": {
+          "description": "`IsFlamingGuy`, the burning-walker flag (S-0615 Import mapping, art\ndata); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "is_meteor": {
@@ -252,6 +271,15 @@
         },
         "rate": {
           "description": "`Rate`, the image frames per game minute (S-0109 claim 2); absent\nor −1: not given.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "running_frames": {
+          "description": "`RunningFrames`, the running frames *R* of a burning walker (S-0615\nImport mapping, art data); absent: 0.",
           "type": [
             "integer",
             "null"
@@ -5306,6 +5334,14 @@
             "format": "int32"
           }
         },
+        "disk_laser_charge_up": {
+          "description": "`[AudioVisual] DiskLaserChargeUp`, the disc laser's charge-up sound\n(S-0615 claim 15); absent: silent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "economy": {
           "description": "Game-wide economy values (M5, S-0401 to S-0416).",
           "$ref": "#/$defs/EconGeneral"
@@ -5408,6 +5444,22 @@
               "type": "null"
             }
           ]
+        },
+        "flame_damage2": {
+          "description": "`[CombatDamage] FlameDamage2`, the warhead of an animation's damage\nover time (S-0109 claim 17 and Import mapping); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "flaming_infantry": {
+          "description": "`[General] FlamingInfantry`, the death-kind 4 animation (S-0615\nclaim 1); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         },
         "gravity": {
           "description": "`[AudioVisual] Gravity` (S-0306 Terms; *g* of S-0503 F6).",
@@ -5553,8 +5605,32 @@
           "format": "int32",
           "default": null
         },
+        "infantry_brute": {
+          "description": "`[General] InfantryBrute`, the death-kind 10 animation (S-0615\nclaim 1); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "infantry_explode": {
-          "description": "`[General] InfantryExplode`, an animation name (S-0302 claim 15).",
+          "description": "`[General] InfantryExplode`, an animation name (S-0302 claim 15;\ndeath kind 3 of S-0615 claim 1).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "infantry_head_pop": {
+          "description": "`[General] InfantryHeadPop`, the death-kind 6 animation (S-0615\nclaim 1); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "infantry_nuked": {
+          "description": "`[General] InfantryNuked`, the death-kind 7 animation (S-0615 claim\n1); absent: none.",
           "type": [
             "string",
             "null"
@@ -8186,6 +8262,11 @@
           "type": "boolean",
           "default": true
         },
+        "anim_damage_starts_at_one": {
+          "description": "A damaging animation's damage accumulator starts at 1.0, so its first advance already delivers 1 when δ < 1; off: it starts at 0.0. Implemented for the burning walker's expiring advances (S-0615 claim 11), the only animation the simulation plays with damage.",
+          "type": "boolean",
+          "default": true
+        },
         "anim_fast_rate_freezes": {
           "description": "A rate above 900 converts to a stage delay of ⌊900 / ρ⌋ = 0, so the animation never advances or ends through playback; off: a positive rate gives max(1, ⌊900 / ρ⌋). Rates of 0 or below give 0 in both settings. Built for the random-rate conversion of an animation's creation draw (S-0109 claim 3); animation playback and the S-0517 claim 7 deploy delay are not implemented yet.",
           "type": "boolean",
@@ -8662,7 +8743,7 @@
           "default": true
         },
         "disc_laser_no_house": {
-          "description": "A disc laser's detonation names the firer as attacker but no attacking house; off: the attacking house is the firer's owner, as for a projectile's detonation. Not implemented yet (wave 2).",
+          "description": "A disc laser's detonation names the firer as attacker but no attacking house; off: the attacking house is the firer's owner, as for a projectile's detonation.",
           "type": "boolean",
           "default": true
         },
@@ -13122,7 +13203,7 @@
           "default": null
         },
         "disk_laser": {
-          "description": "`DiskLaser` (S-0301 claim 8).",
+          "description": "`DiskLaser` (S-0301 claim 8; S-0615 claim 12).",
           "type": [
             "boolean",
             "null"
@@ -13161,6 +13242,14 @@
           ],
           "default": null
         },
+        "is_house_color": {
+          "description": "`IsHouseColor`, the house-colour flag (S-0615 claim 15); absent:\nno.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "is_mag_beam": {
           "description": "`IsMagBeam` (S-0301 claim 5).",
           "type": [
@@ -13184,6 +13273,57 @@
             "null"
           ],
           "default": null
+        },
+        "laser_duration": {
+          "description": "`LaserDuration`, the disc laser's final beam duration in ticks\n(S-0615 claim 16); absent: 10.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "laser_inner_color": {
+          "description": "`LaserInnerColor`, three colour channels (S-0615 claim 15); absent:\n(0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "laser_outer_color": {
+          "description": "`LaserOuterColor`, three colour channels (S-0615 claim 15); absent:\n(0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "laser_outer_spread": {
+          "description": "`LaserOuterSpread`, three colour channels (S-0615 claim 15);\nabsent: (0, 0, 0).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
         },
         "limbo_launch": {
           "description": "`LimboLaunch`, the launch-inside flag (S-0614 Terms); absent: no.",

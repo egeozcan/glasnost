@@ -96,6 +96,12 @@ pub struct WeaponRules {
     pub spawner: bool,
     /// Disc laser weapon.
     pub disk_laser: bool,
+    /// The final beam's duration in ticks (S-0615 claim 16).
+    pub laser_duration: i32,
+    /// The inner, outer and spread laser colours (S-0615 claim 15).
+    pub laser_colours: [[i32; 3]; 3], // spec: S-0615 Import mapping (three integer colour channels, S-0003)
+    /// The house-colour flag (S-0615 claim 15).
+    pub house_colour: bool,
     /// Fire-only-visible flag.
     pub decloak_to_fire: bool,
     /// Lobber flag.
@@ -958,8 +964,22 @@ pub struct CombatGeneral {
     pub veteran_cap: F64,
     /// Damage-fire animations.
     pub damage_fire_types: Vec<String>,
-    /// Infantry-explosion animation.
+    /// Infantry-explosion animation (S-0302 claim 15; death kind 3 of
+    /// S-0615 claim 1).
     pub infantry_explode: Option<String>,
+    /// The burning death animation, death kind 4 (S-0615 claim 1).
+    pub flaming_infantry: Option<String>,
+    /// The head-pop death animation, death kind 6 (S-0615 claim 1).
+    pub infantry_head_pop: Option<String>,
+    /// The nuked death animation, death kind 7 (S-0615 claim 1).
+    pub infantry_nuked: Option<String>,
+    /// The crushing-blow death animation, death kind 10 (S-0615 claim 1).
+    pub infantry_brute: Option<String>,
+    /// The warhead of an animation's damage over time (S-0109 claim 17,
+    /// `FlameDamage2`).
+    pub flame_damage2: Option<WarheadId>,
+    /// The disc laser's charge-up sound (S-0615 claim 15).
+    pub disk_laser_charge_up: Option<String>,
     /// Missile turn variation m.
     pub missile_rot_var: F64,
     /// Missile safety altitude.
@@ -1292,6 +1312,16 @@ pub fn tables(
                 mag_beam: b(w.is_mag_beam),
                 spawner: b(w.spawner),
                 disk_laser: b(w.disk_laser),
+                // spec: S-0615 Import mapping (LaserDuration absent: 10 ticks)
+                laser_duration: w.laser_duration.unwrap_or(10),
+                // spec: S-0615 Import mapping (LaserInnerColor, LaserOuterColor, LaserOuterSpread: each absent (0, 0, 0))
+                laser_colours: [
+                    w.laser_inner_color.unwrap_or([0; 3]),
+                    w.laser_outer_color.unwrap_or([0; 3]),
+                    w.laser_outer_spread.unwrap_or([0; 3]),
+                ],
+                // spec: S-0615 Import mapping (IsHouseColor absent: no)
+                house_colour: b(w.is_house_color),
                 // spec: S-0301 Import mapping (DecloakToFire absent: yes)
                 decloak_to_fire: w.decloak_to_fire.unwrap_or(true),
                 lobber: b(w.lobber),
@@ -1789,6 +1819,14 @@ pub fn combat_rules(
         veteran_cap: dec(&g.veteran_cap, mode).unwrap_or(one),
         damage_fire_types: g.damage_fire_types.clone().unwrap_or_default(),
         infantry_explode: g.infantry_explode.clone(),
+        // spec: S-0615 Import mapping (the game-wide death animations of kinds 4, 6, 7 and 10: absent none; the charge-up sound: absent silent)
+        flaming_infantry: g.flaming_infantry.clone(),
+        infantry_head_pop: g.infantry_head_pop.clone(),
+        infantry_nuked: g.infantry_nuked.clone(),
+        infantry_brute: g.infantry_brute.clone(),
+        disk_laser_charge_up: g.disk_laser_charge_up.clone(),
+        // spec: S-0109 Import mapping (FlameDamage2 absent: none, no damage is done)
+        flame_damage2: warhead(&g.flame_damage2),
         // spec: S-0306 Constants (missile turn variation absent: 0.25; safety altitude 500 leptons)
         missile_rot_var: dec(&g.missile_rot_var, mode).unwrap_or_else(|| nearest_double("0.25")),
         missile_safety_altitude: g.missile_safety_altitude.unwrap_or(500), // spec: S-0306 Constants (missile safety altitude absent: 500 leptons)
