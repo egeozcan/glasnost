@@ -10,8 +10,9 @@
 //! - **builds a few lifters, since every side fields vehicles.** It keeps
 //!   up to [`WANTED`] lifters, the cheapest type it can build. A lifter is
 //!   any vehicle type whose primary weapon's warhead is a locomotor warhead
-//!   ([`lifter_type`]). It orders one when it holds [`RESERVE`] times the
-//!   price ([`build_type`]);
+//!   ([`lifter_type`]). The first is queued behind whatever the war factory
+//!   builds and paid as the money comes; a further one waits for a free
+//!   line and [`RESERVE`] times the price in hand ([`build_type`]);
 //! - **keeps them at home, by its own defences.** A lifter is not sent with
 //!   the waves. It goes back towards the construction yard when it is more
 //!   than [`HOME_REACH`] cells away with nothing to lift, so its pulls drag
@@ -133,16 +134,21 @@ fn count(w: &World, house: HouseId) -> usize {
 /// than [`WANTED`] and can pay [`RESERVE`] times the price.
 pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
     let house = script.house;
-    if count(w, house) >= WANTED {
+    let have = count(w, house);
+    if have >= WANTED {
         return None;
     }
     let credits = glasnost_sim::seams::available_credits(w, house);
+    // The first lifter is queued behind whatever the war factory builds,
+    // paid as the money comes; a further one waits for a free line and the
+    // reserve.
+    let first = have == 0;
     all_types(w)
         .into_iter()
         .filter(|&t| lifter_type(w, t))
         .filter(|&t| tech::buildable(w, house, t))
-        .filter(|&t| !script.busy(w, t))
-        .filter(|&t| credits >= production::cost_field(w, t).saturating_mul(RESERVE))
+        .filter(|&t| first || !script.busy(w, t))
+        .filter(|&t| first || credits >= production::cost_field(w, t).saturating_mul(RESERVE))
         .min_by_key(|&t| (production::cost_field(w, t), t.index))
 }
 
