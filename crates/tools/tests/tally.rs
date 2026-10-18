@@ -476,3 +476,63 @@ fn counts_bunkered_vehicles_and_releases() {
     assert_eq!(tally.bunkered, 1, "{tally:?}");
     assert_eq!(tally.bunker_releases, 1, "{tally:?}");
 }
+
+// A unit that becomes seized is counted once, and once more when it is
+// dropped (S-0607 claims 5 and 13), on the synthetic M7a skirmish's lifter.
+#[test]
+fn counts_seized_and_dropped_units() {
+    use glasnost_ai::fixture_m7a as kit;
+    use glasnost_sim::world::Target;
+    let mut g = Game::new(
+        kit::rules(),
+        &kit::map(),
+        kit::MAP_NAME,
+        fixture::catalogue(),
+        kit::setup(5),
+    )
+    .expect("the M7a skirmish loads");
+    g.step();
+    let mut tally = Tally::default();
+    let l = testkit::spawn(&mut g.world, Kind::Vehicle, "MAGN", 0, fixture::at(0, 6), 0);
+    let v = testkit::spawn(&mut g.world, Kind::Vehicle, "GUNR", 1, fixture::at(5, 6), 0);
+    g.world.houses[0].pending.clear();
+    glasnost_sim::orders::issue(
+        &mut g.world,
+        HouseId(0),
+        Order::Behaviour {
+            actor: l,
+            behaviour: glasnost_sim::rules::Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(v)),
+            dest: None,
+        },
+    );
+    let mut lifted = false;
+    for _ in 0..600 {
+        glasnost_sim::tick::step(&mut g.world);
+        tally.observe(&g.world);
+        if glasnost_sim::lift::grips(&g.world, l, v) && g.world.height_above_surface(v) > 200 {
+            lifted = true;
+            break;
+        }
+    }
+    assert!(lifted, "{tally:?}");
+    assert_eq!((tally.seized, tally.dropped), (1, 0), "{tally:?}");
+    let c = g.world.obj(l).unwrap().pos.cell();
+    glasnost_sim::orders::issue(
+        &mut g.world,
+        HouseId(0),
+        Order::Behaviour {
+            actor: l,
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(glasnost_map::CellXY::new(c.x, c.y + 1))),
+        },
+    );
+    for _ in 0..5 {
+        glasnost_sim::tick::step(&mut g.world);
+        tally.observe(&g.world);
+    }
+    assert_eq!((tally.seized, tally.dropped), (1, 1), "{tally:?}");
+}
