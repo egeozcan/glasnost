@@ -1526,6 +1526,30 @@ M7a is the first part of M7, the Yuri faction (session of 2026-10-17). Baseline:
 
 Request numbers for M7a: Q-1150 to Q-1179 (M6c leftovers and the Yuri audit), Q-1180 and up (one block of 20 per spec, in step order: S-0610 Q-1180, S-0601 Q-1200, S-0609 Q-1220, S-0613 Q-1240, S-0605 Q-1260, S-0603 Q-1280, S-0606 Q-1300, S-0607 Q-1320).
 
+## M7b step ledger
+
+M7b is the last part of M7, the Yuri faction (session of 2026-10-18). Baseline: main d49546a; the last spec commit is a0ea7eb (S-0502 revision 17), the one M7a took in. Resume from this table; only the main session edits it (agents give their row text in their reports), and it is updated when a step is merged to main. Save format, AI game format, the sim-gate goldens and this table change only on main, at merge. Agent briefs: `.claude/worktrees/COMMON-BRIEF-M7B.md` and `SPEC-CHECKLIST-M7B.md` (untracked).
+
+| Step | Scope | Status | Notes |
+|---|---|---|---|
+| 1 | Spec revisions since a0ea7eb, interim rules of requests answered since | done at start; re-checked before each merge | `git log a0ea7eb.. -- spec/` is empty at the start of the session; all 440 requests read `status: answered`, none answered since a0ea7eb. |
+| 2a | Clear ability margins in the `duel-m7a` gate (every counter ≥ 3 on the gate seed, none 0 over seeds 1–16) | pending | |
+| 2b | Psychic sensor and grinder in the stock lane | pending | |
+| 2c | `glasnost-render --test map_gpu` segfault | pending | |
+| 2d | Intake briefs: one writer of the step ledger | done | The M7a intake briefs (INTAKE2, 8 to 13) told agents to add step-ledger rows, which COMMON-BRIEF forbade; they now say to give the row text in the report. COMMON-BRIEF-M7B.md and SPEC-CHECKLIST-M7B.md written for M7b (checklist item 5 now says to fill every seam naming the agent's spec). The briefs are untracked files under `.claude/worktrees/`. |
+| 3.1 | S-0616 Particle systems (the rest) | pending | |
+| 3.2 | S-0615 Special-hit effects | pending | |
+| 3.3 | S-0608 Drain | pending | |
+| 3.4 | S-0611 Mutation | pending | |
+| 3.5 | S-0612 Psychic Dominator | pending | |
+| 4a | Interaction-pair scenario tests of the M7b pairs | pending | |
+| 4b | Local relation tests of every pair on the reference ruleset | pending | |
+| 4c | Arena mode and the statistical comparison (PLAN §6 layer 2B) | pending | |
+| 4d | Full skirmishes, Yuri against each side, maps 2, 8 and 0 | pending | |
+| 5 | Determinism gate (`duel-m7b`), screenshots, README Status | pending | |
+
+Request numbers for M7b: Q-1400 to Q-1419 (S-0616), Q-1420 (S-0615), Q-1440 (S-0608), Q-1460 (S-0611), Q-1480 (S-0612), Q-1500 to Q-1519 (steps 2 and 4), Q-1520 and up (main session).
+
 ## Tests
 
 ```sh
