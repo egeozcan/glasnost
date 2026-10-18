@@ -2,11 +2,11 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 42
+revision: 43
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560]
 supersedes: []
@@ -448,6 +448,18 @@ rank* and *elite weapon*), *n*
      occupant rows of claims 4 and 5 (row VP1 for the vehicle itself) still see it. Moving into a
      new cell during a track clears nothing. When ships and walking vehicles clear their flags
      is not established (Open questions).
+   - *Seized vehicles with a ground stand-in.* S-0607 claim 23 owns the exception
+     to ordinary resting occupancy for a vehicle seized with a driving, walking or ship
+     stand-in locomotor. With `quirks.lift_standin_unmarked_cell` on (default original),
+     the seize clears its vehicle-present flag and installing the stand-in marks no cell.
+     It holds no vehicle-present flag until that stand-in's movement sets one; a vehicle
+     that never moves remains unmarked even after its grip ends. It stays listed, so the
+     missing flag does not by itself bypass the occupant rows of claim 5. With the switch
+     off, the vehicle keeps its own cell's flag at the seize, and subsequent movement
+     clears and marks normally. The teleporting stand-in instead reserves its landing
+     point as S-0607 claim 23 and S-0207 claim 20 specify. This pointer inherits medium
+     confidence for the marks, low confidence for the composed movement consequences,
+     and `measurable` backing (S-0607 scenario L13, part f).
    - *Hovering vehicles.* S-0503 claims 13 and 15 own their reservations, between-steps state
      and arrival outcomes. A clear heading-point choice reserves that point's cell before
      physical entry. Replacing or abandoning the point clears its old reservation, except for
