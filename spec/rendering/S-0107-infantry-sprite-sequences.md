@@ -2,11 +2,11 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 16
+revision: 17
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0087, Q-0212]
 supersedes: []
@@ -110,6 +110,10 @@ used by this spec only:
   behaviour attempts it.
   Claim 14 only says what an attempt does. The *guard* behaviour is not to be confused with the
   sequence kind guard, which no stock behaviour starts (claim 20).
+- **Cow-designated type:** any infantry type whose registry name matches the engine's fixed
+  idle-designation text (Import mapping). This is a name-based compatibility rule, not a claim
+  about the contents or properties of any shipped type. Below, "cow" is shorthand for this
+  designation, including an invented type that matches it.
 - **Selected:** the unit is in the local player's current selection (picked with the mouse or a
   hotkey). Here it only matters for the idle comment of claim 14, which a selected unit does not
   make.
@@ -218,7 +222,10 @@ used by this spec only:
    new speed. A normalised kind therefore lasts about the same real time at every game speed, while
    the others last a fixed number of ticks. The switch is `quirks.speed_normalised_delays`, shared
    with S-0108 (glossary claim G3).
-   - Backing: `measurable` (scenario M3)
+   - Backing: `measurable` (scenario M3 for walking, the two land idle kinds and changing
+     speed during an idle). The remaining kind-specific entries of T1 and their normalisation
+     are `unmeasured` here: no scenario part isolates each remaining kind's stage cadence
+     across speeds. Other scenarios can check particular durations without covering that table.
    - Confidence: high
 
 6. **Starting a sequence.** A request to start kind *q* has the outcome of the first row of this
@@ -234,7 +241,10 @@ used by this spec only:
    | 6 | Any other case | The resulting kind becomes the current sequence, the stage is set to 0 and its timer starts on this tick | Updated |
 
    Every start sets the stage to 0. No start takes a random draw.
-   - Backing: `measurable` (scenarios M1, M4)
+   - Backing: `measurable` (scenarios M1, M4; M9(b) checks the absence of additional
+     sequence-start draws during its recorded idle requests). The absence of draws for
+     every other start kind is `unmeasured` here: those start boundaries are not isolated
+     from all unrelated draws by the proposed recordings.
    - Confidence: high
 
 7. **Substitutions made when a sequence starts.** Four rules can change the requested kind:
@@ -409,7 +419,7 @@ used by this spec only:
     | Unit | Effect | Draws, in stream order |
     |---|---|---|
     | A fraidycat whose fear level is above 50 and whose owner is not human-controlled (see below) | It scatters, and nothing else happens | The timer draw only |
-    | The hard-coded "cow" type (see Import mapping) | The outcome of *r* in the table below, except that when *e* < 5 it is the outcome of *r* = 8, whatever *r* was (`quirks.cow_idle`) | The timer draw, *r*, *e*, then δ when the outcome is a turn |
+    | A cow-designated type (see Import mapping) | The outcome of *r* in the table below, except that when *e* < 5 it is the outcome of *r* = 8, whatever *r* was (`quirks.cow_idle`) | The timer draw, *r*, *e*, then δ when the outcome is a turn |
     | Any other unit | The outcome of *r* in the table below | The timer draw, *r*, then δ when the outcome is a turn |
 
     *r* and *e* are integers, each drawn uniformly from 0 to 10 inclusive.
@@ -446,12 +456,13 @@ used by this spec only:
     random stream (an integer drawn from 0 to 2, a comment on 0), and only the type's first comment
     sound is ever used (`quirks.first_comment_only`).
     - Backing: `measurable` (scenario M9: part (a) for the timer bounds and the outcome ratios,
-      measured statistically over many games; part (b) for the streams used, the number and the
+      tested statistically over many games; part (b) for the streams used, the number and the
       order of the draws, read with a *recorder* (glossary) that reads the random streams'
-      state; part (c) for the *hunt* trigger; part (d) for the cow identifier and the
-      exclusion of display and image names)
-    - Confidence: high (outcomes, the streams used, the draw order, and that the four behaviours
-      named are the only ones whose processing attempts an idle action)
+      state; part (c) for the *hunt* trigger; part (d) for the cow designation and the
+      exclusion of display and image names). The assertion that no other behaviour attempts
+      idle actions is `unmeasured`: these scenarios do not exercise every behaviour path.
+    - Confidence: high (outcomes, the streams used and the draw order), medium (the exhaustive
+      list of behaviours that attempt idle actions)
 
 15. **Fear selects prone, get-up and panic.** Write *f* for a unit's fear level at the start of a
     tick and *f*′ for that start-of-tick level once that tick's decay has applied to it: *f*′ = *f* − 1 when *f* > 0 and
@@ -565,7 +576,7 @@ used by this spec only:
     | 1 | The unit's height above the surface (Terms) is less than 11 leptons, the land type of its cell is water (beach does not count), and a further per-object condition holds that has not been identified | Splash animations; no sequence |
     | 2 | Its type is a cyborg and it is prone, or its type is a jumpjet type (whatever its current locomotor) | A general death animation (rules data, another spec); no sequence |
     | 3 | Its type has its own list of death animations | Entry *w* of that list, where *w* is the death kind below (entry 0 when *w* is outside the list or entry *w* is empty); no sequence |
-    | 4 | Its type is marked "not human" | A forced request for *die-1*, whatever the death kind *w* (0, 3, 5 and 8 included). When *w* = 8, the extra virus-death animation and particle delivery of S-0613 claim 3 also apply |
+    | 4 | Its type is marked "not human" | A forced request for *die-1*, whatever the death kind *w* (0, 3, 5 and 8 included). When *w* = 8, the extra virus-death animation and particle delivery of S-0613 claim 3 follow that request (S-0615 claim 1). A parachutist instead gets only the earlier virus effect described below |
     | 5 | Any other case, with *w* = 1 | A forced request for *die-1* |
     | 6 | Any other case, with *w* = 2 | A forced request for *die-2* |
     | 7 | Any other case, with *w* = 9 | A forced request for *die-2*, unless that kind's own replacement effect (S-0611 claims 6 and 7) takes place, in which case there is no sequence |
@@ -608,7 +619,15 @@ used by this spec only:
     warhead. When rows 1 and 2 do not apply, a unit killed while its current sequence is
     *parachute* by a warhead of infantry-death kind 8 also receives the extra virus-death
     animation and particle delivery of S-0613 claim 3, whatever *w* then is (so also with a
-    laser-fence killer). S-0613 claims 2 and 3 own the clouds these cases create, including
+    laser-fence killer). This extra virus effect precedes the other death-kind effects of this
+    table: row 3's own-list animation, row 4's *die-1* request, or row 8's kind 3 or kind 5
+    animation. Its creation draws and presentation events therefore precede those of the later
+    death animation (S-0615 claim 1). A parachutist marked "not human" gets exactly one virus
+    effect, not a second one in row 4, because *w* is then 3 or 5 rather than 8. In contrast,
+    a ground unit marked "not human" with *w* = 8 takes row 4's *die-1* request before its virus
+    effect. If that ground type has its own death-animation list, row 3 takes precedence:
+    it gets the kind-8 entry (or entry 0), no *die-1* request and no virus effect. S-0615 claim 1
+    owns this ordering; S-0613 claims 2 and 3 own the clouds these cases create, including
     their count and timing; this claim decides which death case applies.
 
     **Cyborgs and damage that ignores defences.** When the killing damage ignores defences (Terms)
@@ -630,7 +649,12 @@ used by this spec only:
     - Backing: `measurable` (scenario M10: part (a) for the tested death kinds and falling
       paratroopers, part (b) for the switch's default, part (c) for the removal of a cyborg killed by
       damage that ignores defences, part (d) for corpse-list precedence and the raw draw,
-      part (e) for the type's death-animation list); `unmeasured` (row 1, the water case, and the sentence of the cyborg paragraph that
+      part (e) for the type's death-animation list, part (f) for virus-effect ordering and count, and
+      S-0615 claim 3's scenario DK1 for the crash exception in the ordinary-human no-animation
+      cases); `unmeasured` (the crash exception in the other no-sequence cases: no controlled
+      fixture in these scenarios distinguishes crashing from removal for each such case, and
+      the exhaustive absence of starts of *die-3* to *die-5*: finite runs can falsify that
+      absence but cannot confirm every start path; row 1, the water case, and the sentence of the cyborg paragraph that
       depends on its per-object condition: that condition is not identified, so no scenario can
       set it up, and M10 only records the water-cell outcome to help identify it; and a general
       corpse list left over from an earlier game, Import mapping: the original's result is
@@ -657,7 +681,9 @@ used by this spec only:
     - a sequence started by the movement rule never plays a frame-0 cue on its start tick. If its
       stage delay is 0 (*stand*), it never plays any cue. Otherwise its frame-0 cue first plays when
       the stage wraps, so a one-shot started that way never plays it.
-    - Backing: `measurable` (scenario M14)
+    - Backing: `measurable` (scenario M14). Frame-0 cues of sequences started by idle actions
+      or orders are `unmeasured` here: M14 does not isolate those start boundaries relative to
+      stage advancement.
     - Confidence: high (the rule), medium (when sequences started by other behaviour, such as idle
       actions and orders, play a frame-0 cue, which depends on when that behaviour runs in the tick)
 
@@ -672,7 +698,10 @@ used by this spec only:
     a further condition on the neighbouring cells that is not specified here. No game option or
     data turns the body-sprite shadow off for all units.
     - Backing: `measurable` (scenario M11); `unmeasured` (the neighbouring-cell condition of the
-      case above a bridge deck: it is not identified, so no scenario can set it up)
+      case above a bridge deck: it is not identified, so no scenario can set it up, and
+      the negative-height case: M11 has no controlled below-surface placement, and
+      the absence of a global body-shadow disable: the proposed screenshots do not exhaust
+      all options and data)
     - Confidence: high (on the ground and on a bridge deck), medium (the generic shadow and its
       image frame number, and that nothing turns the body-sprite shadow off for all units), low
       (the case above a bridge deck)
@@ -977,7 +1006,7 @@ completion tick, also when the follow-up replaces that kind on the same tick.
   first, different or repeated. Clearing a destination still makes no request, and the owner,
   type exceptions and sequence refusal rules are unchanged. No request is tied to physical
   movement starting.
-- **`quirks.cow_idle`** (default: on). The hard-coded cow type is singled out in two ways when it
+- **`quirks.cow_idle`** (default: on). A cow-designated type is singled out in two ways when it
   idles (claim 14): it takes the second draw *e*, and *e* < 5 gives the outcome of *r* = 8; and on
   the outcome of *r* = 8 it scatters after the facing change, whether or not it is a fraidycat. So
   it turns and wanders more often than other types. Off: no type is singled out by its identifier,
@@ -1161,12 +1190,15 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   "Infantry type" means the infantry type's own section in the rules file. "Any unit type" and
   "any object type" mean the same section, through keys that other kinds of type also have; their
   other uses belong to other specs. `Cyborg` also selects the cyborg death case of claim 17.
-- **Hard-coded identifiers:** Claim 14 singles out the cow infantry type using the following
-  data-name mapping (Q-0212). It is an engine comparison, not an absent-key default.
+- **Engine-defined idle designation (claim 14, Q-0212).** The comparison text is the fixed
+  engine constant `COW` (three ASCII characters, compared case-insensitively), not a value
+  imported from a shipped rules, art or map entry. The imported input is a type's registry
+  name; matching it to that fixed text grants the cow designation. No stock type, stock
+  properties, registry position or stock art is required.
 
   | Input | Form | Match | Use |
   |---|---|---|---|
-  | Infantry type name registered from `[InfantryTypes]`, naming its rules section | type identifier, as imported by S-0004 | `COW`, case-insensitive | cow-specific idle draw and scatter of claim 14 |
+  | Infantry type name registered from `[InfantryTypes]`, naming its rules section | type identifier, as imported by S-0004 | engine-defined idle-designation text above | cow-specific idle draw and scatter of claim 14 |
   | `Name`, `UIName`, `Image` in the infantry rules section | display-name or image-name inputs, owned by their respective specs | not tested | changing these cannot grant or remove the cow designation |
 
   No matching registered type means no unit receives this designation. Any infantry type
@@ -1183,7 +1215,7 @@ rules; hidden removal and the no-recipient damage path make no such request. A s
 transfer without the request, or a release cheer request on either excluded path, falsifies
 this claim. A refused request need not produce a visible cheer.
 
-Common setup: skirmish, game speed 6 unless a part varies it, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and the glossary's measurement setup (an unmodified install with stock data, no loose
+Common setup: skirmish, game speed 6 unless a part varies it, 800 × 600, director off, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and the glossary's measurement setup (an unmodified install with stock data, no loose
 override files and no engine add-ons), a tiny flat map with clear terrain and one water and beach
 strip, and a fixed game speed unless stated otherwise. Include one distant bystander computer
 player unless a part already includes a computer-controlled test owner. The observed area contains
@@ -1442,8 +1474,10 @@ whose …") means any stock type with that property; the property is a precondit
     F4. Falsified by two consecutive visible outcomes less than ⌊450·R⌋ ticks
     apart, or by a chi-square test of the pooled visible-outcome counts (from the first visible turn
     on) against 6 : 6 : 7 (2 degrees of freedom) that rejects at the 1% level. Runs: 50 games, as stated.
-    The cow (`quirks.cow_idle`): in the same 50 games, also leave one unit of the hard-coded cow type
-    (Import mapping), owned by a computer-controlled house, idle on open ground, never hurt, so that
+    The cow designation (`quirks.cow_idle`): named test rules register an invented infantry
+    type under the engine-defined idle-designation text of Import mapping, using a copy of
+    the test soldier's fields and art. In the same 50 games, leave one unit of that type,
+    owned by a computer-controlled house, idle on open ground, never hurt, so that
     its fear level stays 0. Its *stand*
     entry must have *M* > 0 so that turns can be seen (test art gives it one otherwise). Count the
     attempts that end in a scatter (the cow wanders off) and the plain visible turns with no
@@ -1473,8 +1507,8 @@ whose …") means any stock type with that property; the property is a precondit
     draw from that run's recorded state and account separately for identifiable presentation
     draws. Leave a tick out of the comparison if those unrelated draws cannot be accounted for,
     for example during a music-track change whose intervening draws are not isolated. In separate games,
-    the test map then places: (1) one unit of the hard-coded cow type, owned by the neutral house,
-    never hurt; (2) one unit of a fraidycat type, owned by the neutral house, after test rules data
+    the test map then places: (1) one unit of M9(a)'s invented cow-designated type, owned by the
+    neutral house, never hurt; (2) one unit of a fraidycat type, owned by the neutral house, after test rules data
     has made the type fearless and it has been hit once, as in M6(c), so that its fear level stays
     300, with the attacker removed after the hit and the recording counted from that
     removal; (3) one soldier of the local player whose type has at least one comment sound, left unselected,
@@ -1499,7 +1533,8 @@ whose …") means any stock type with that property; the property is a precondit
     eligible behaviour processing makes the next attempt; the comment heard is always the type's first comment sound; a selected unit takes
     no draw from the unsynchronised stream at its attempts. Falsified by any other advance (for
     example an *r* draw in case (2), no *e* draw in case (1), or an unsynchronised draw from a
-    selected unit), by an outcome that differs from the prediction, or by an attempt before expiry or at a different eligible processing. Runs: one game per case, until at least 30 attempts of the unit have been recorded. Timer
+    selected unit), by an extra draw at a sequence start, by an outcome that differs from the
+    prediction, or by an attempt before expiry or at a different eligible processing. Runs: one game per case, until at least 30 attempts of the unit have been recorded. Timer
     expiry only enables an attempt: if expiry falls between behaviour processings, or the unit
     is moving or playing an ineligible sequence then, the next attempt is the first later
     processing that meets every eligibility condition of claim 14, not necessarily the expiry tick.
@@ -1514,13 +1549,15 @@ whose …") means any stock type with that property; the property is a precondit
     Runs: three games.
 - **M9(d) (claim 14, Q-0212).** On a tiny flat skirmish map at game speed 6, with one
   distant bystander computer player, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), use named test rules data
-  to register an invented infantry type under the designated cow identifier of Import
-  mapping and a copy of the stock cow under an unrelated invented identifier. Give both
+  to register two copies of one soldier type with identical fields and art: one under the
+  engine-defined idle-designation text of Import mapping, the other under an unrelated
+  invented identifier. Neither copy requires any shipped cow type or its fields. Give both
   to the human player, keep them unselected, unhurt and without targets, and use clear
-  open areas where scatter is legal. Keep the invented type's display and image names
-  unrelated to the cow identifier. For the renamed copy, test separately retaining the
-  cow's original display and image names and setting those inputs to the designated
-  identifier. In separate runs change only the letter case of the matching registry name.
+  open areas where scatter is legal. First keep both copies' display and image names
+  unrelated to the designation. Then give only the nonmatching copy display and image
+  names that match the designation, separately and together; named test art keeps its
+  resulting sequence table and sprite identical across these variants. In separate runs
+  change only the letter case of the matching registry name.
   Record idle attempts, positions and the scenario random stream with the read-only
   recorder, accounting separately for scatter-destination draws (S-0208).
   Expected: only the matching registry name takes the extra idle draw *e* and the
@@ -1553,8 +1590,8 @@ whose …") means any stock type with that property; the property is a precondit
   image frames ever appear. Also kill an amphibious-destroyer soldier with a warhead of kind 1, 2 or
   9, once on a beach cell and once on a water cell. Expected on the beach: *wet-die*. The water-cell
   result is only recorded: it has no expected value, because it is meant to settle the open
-  condition of claim 17 (low confidence). Runs: three kills per case; the corpse pick is the only death-specific draw in these cases; unrelated behaviour draws
-  are accounted for separately.
+  condition of claim 17 (low confidence). Runs: three kills per case. Account separately for
+  corpse-pick draws, animation and particle creation draws, and unrelated behaviour draws.
   - (b) The default of `quirks.refused_death_keeps_unit` (claim 17). Test art empties the *die-1* entry of
     one infantry type (*C* = 0). Kill a unit of it on a land cell with a warhead of infantry-death
     kind 1. In a second run, empty the *die-1* entry of the "not human" type used above and kill
@@ -1590,7 +1627,21 @@ whose …") means any stock type with that property; the property is a precondit
     Expected: the indexed animation for 1 and 2, entry 0 for the outside kind, no body death
     sequence and removal on the death tick. Repeat after marking the type not human:
     the list still takes precedence over *die-1*. Any body death sequence, different list
-    entry or delayed removal falsifies this rule. Runs: three per variant.
+    entry or delayed removal falsifies this rule. Repeat with an empty entry at an in-range
+    death-kind index: expect entry 0, not a body sequence or no animation. A different
+    outcome also falsifies the rule. Runs: three per variant.
+  - (f) Virus-effect ordering and count. Use the common setup and the named test data of
+    S-0615 scenario DK3, with a read-only recorder of both random streams and animation,
+    particle and sequence-start events. Kill a parachuting ordinary soldier with a kind-8
+    warhead: expect the virus effect's creation draws and particle before the kind-3 death
+    animation's creation. Repeat with a laser-fence killer carrying kind-8 damage: expect the
+    kind-5 animation after the virus effect. Repeat with an own death-animation list: expect
+    its selected entry after the virus effect. A parachuting "not human" type gets exactly
+    one virus effect, before its refused *die-1* request. On dry ground, the same type without
+    an own list makes its *die-1* request before the virus effect. With an own list it gets
+    the kind-8 entry (or entry 0), no *die-1* request and no virus effect. Runs: three kills
+    per variant. Reversed event or draw order, a second virus effect for the parachutist,
+    or any virus effect for the ground own-list variant falsifies the respective rule.
 - **M11 (claim 19).** Screenshot a soldier standing on the ground, one standing on a bridge deck,
   and a jumpjet soldier hovering. Expected: the two standing soldiers show their own shadow, image
   frame *frame* + ⌊L/2⌋. The hovering one has the generic shadow on the ground below it, drawn as
@@ -1606,7 +1657,10 @@ whose …") means any stock type with that property; the property is a precondit
   follows the direction to the vehicle tick by tick, although the body facing changes only when a
   shot snaps it (claim 11). Repeat with test data that allows jumpjet turning. Expected: the drawn
   group then follows the body facing. Falsified if, in the first run, the drawn group changes only
-  at the shots. Runs: one circuit of the vehicle per data set.
+  at the shots, or if the turning-enabled variant follows the target direction rather than
+  a measurably different body facing between shots. Record body facing with the read-only
+  recorder; intervals where the two directions occupy the same facing group do not
+  discriminate the rules. Runs: one circuit of the vehicle per data set.
 - **M13 (claim 13).** Use an infantry type that can disguise, disguised as a type whose walk entry
   has a different frame count; named test art may supply distinct counts. In separate skirmish
   runs, observe a walking unit owned by the local player and one owned by an enemy
