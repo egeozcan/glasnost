@@ -246,7 +246,7 @@ fn claim_13_no_cell_lifter_set_down_stops() {
     }
 }
 
-// spec: S-0607 claim 9 (revision 5) and S-0502 claim 17 and Edge cases (quirks.jumpjet_no_cell_self_destruct): a grip ended by the no-destination exception keeps S-0502 claim 17's ordinary no-cell outcome: on, the unit destroys itself with no credit; off, it stays alive in the air (claim 17's hovering re-entry, tested at the stop itself in claims_s0502_land)
+// spec: S-0607 claim 9 (revision 5) and S-0502 claim 17 and Edge cases (quirks.jumpjet_no_cell_self_destruct): a grip ended by the no-destination exception keeps S-0502 claim 17's ordinary no-cell outcome: on, the unit destroys itself with no credit; off, it hovers again over its current cell with no movement point and no commitment; whether claim 9's set-down descent then follows is open (Q-1343, interim: it does)
 #[test]
 fn claim_9_no_cell_keeps_the_ordinary_outcome() {
     for on in [true, false] {
@@ -265,7 +265,15 @@ fn claim_9_no_cell_keeps_the_ordinary_outcome() {
             assert_eq!(w.houses[0].combat.kills, kills_before, "no credit");
         } else {
             assert_eq!(health(&w, v), 100, "quirk off: alive");
-            assert!(height(&w, v) > 0, "quirk off: still in the air");
+            assert!(!jump::moving(&w, v), "quirk off: no movement commitment");
+            let c = w.obj(v).unwrap().pos.cell();
+            assert!(
+                point(&w, v).is_none_or(|d| d.cell() == c),
+                "quirk off: no point elsewhere"
+            );
+            // Q-1343 (interim): claim 9's set-down descent follows the hover re-entry.
+            assert!(run_until(&mut w, 200, |w| height(w, v) == 0));
+            assert_eq!(health(&w, v), 100, "quirk off: lands unhurt");
         }
     }
 }

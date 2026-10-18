@@ -837,7 +837,7 @@ fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
         return;
     }
     if crate::jump::height_above(w, x) > 0 {
-        // spec: S-0607 claim 9 (set down at whatever height, it then descends and lands under claim 17's clear-cell rule)
+        // spec: S-0607 claim 9 (set down at whatever height, it then descends and lands under claim 17's clear-cell rule). After S-0502 claim 17's hovering re-entry with quirks.jumpjet_no_cell_self_destruct off, whether this descent still follows is open: Q-1343 (interim: it does)
         crate::jump::lift_descend(w, x);
     } else {
         // spec: S-0607 claim 13 (no cell found for a grip ended by its lifter, design: a set-down unit stops where it is, with no movement point, its jumpjet movement no longer moving)

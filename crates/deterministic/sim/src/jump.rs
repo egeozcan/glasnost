@@ -1057,12 +1057,15 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool)
         return;
     }
     if !w.rules().quirks.jumpjet_no_cell_self_destruct {
-        // spec: S-0502 Edge cases (quirks.jumpjet_no_cell_self_destruct off: it re-enters hovering over its current cell)
+        // spec: S-0502 Edge cases (quirks.jumpjet_no_cell_self_destruct off: it re-enters hovering over its current cell, so it keeps no movement point elsewhere and no movement commitment)
         claim_slot(w, id, here);
         let h = fields(w, id).map_or(0, |f| f.height);
         upd(w, id, |j| {
             j.phase = Phase::Hovering;
             j.ht = h;
+            j.dest = None;
+            j.order = None;
+            j.moving = false;
         });
         return;
     }
