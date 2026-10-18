@@ -1391,7 +1391,7 @@ fn second_pass(w: &mut World, sys: ObjectId) {
         };
         let Some(next) = t.next else { continue };
         let [ox, oy, oz] = t.next_offset;
-        // spec: S-0613 claim 7 (at the dead particle's position plus the displacement, by claim 5; then it takes the dead particle's velocity)
+        // spec: S-0613 claim 7 (at the dead particle's position plus the displacement, by claim 5; then it takes exactly the dead particle's speed and velocity, overwriting its own creation's, and nothing else) and S-0616 claim 3
         let at = Pos::new(
             d.pos.x.wrapping_add(ox),
             d.pos.y.wrapping_add(oy),
@@ -1405,6 +1405,7 @@ fn second_pass(w: &mut World, sys: ObjectId) {
                 .get_mut(&sys)
                 .and_then(|s| s.particles.last_mut())
         {
+            p.speed = d.speed;
             p.vel = d.vel;
         }
     }
