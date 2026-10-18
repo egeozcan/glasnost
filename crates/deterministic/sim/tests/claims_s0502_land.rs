@@ -527,6 +527,14 @@ fn claim_17_no_cell_self_destruct() {
         } else {
             assert_eq!(phase(&w, u), Phase::Hovering);
             assert!(w.obj(u).unwrap().health > 0);
+            // spec: S-0502 Edge cases (over its current cell: no movement point elsewhere, no movement commitment)
+            assert!(!jump::moving(&w, u), "no movement commitment");
+            let c = w.obj(u).unwrap().pos.cell();
+            for _ in 0..10 {
+                step(&mut w);
+            }
+            assert_eq!(phase(&w, u), Phase::Hovering);
+            assert_eq!(w.obj(u).unwrap().pos.cell(), c, "over its current cell");
         }
     }
 }

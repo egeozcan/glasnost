@@ -17,6 +17,7 @@
 //! team-membership removal of claim 5 belongs to the original's team
 //! system, which is out of scope.
 
+use glasnost_map::CellXY;
 use glasnost_num::{F32, F64};
 use serde::{Deserialize, Serialize};
 
@@ -258,7 +259,7 @@ pub fn seize_hit(
     if !eligible(w, x, damage) {
         return;
     }
-    // spec: S-0607 State and ordering (a resource gatherer made immune by claim 3 keeps its temporary locomotor: claim 3's conditions come before claim 4's special case); Q-1336 interim (claim 4's special case comes first whatever locomotor the warhead names)
+    // spec: S-0607 State and ordering (a resource gatherer made immune by claim 3 keeps its temporary locomotor: claim 3's conditions come before claim 4's special case) and claims 4 and 22 (revision 5: claim 4's case is decided before the warhead's locomotor is considered, whichever locomotor it names, an unknown identifier included)
     if harvester_case(w, x) {
         return;
     }
@@ -476,7 +477,8 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: Option<StandIn>
 
 /// Installs a stand-in locomotor on a seized unit (S-0607 claims 22 and
 /// 23): its own movement states are kept aside and the stand-in starts
-/// afresh, at rest in the unit's cell. A drop-pod stand-in ends at once and
+/// afresh, at rest in the unit's cell, holding no occupancy mark until its
+/// own movement next marks a cell. A drop-pod stand-in ends at once and
 /// installs nothing ([`drop_pod_ends`]); a landed aircraft keeps its own
 /// states and stays where it is.
 fn install_stand_in(w: &mut World, x: ObjectId, k: StandIn) {
@@ -503,12 +505,7 @@ fn install_stand_in(w: &mut World, x: ObjectId, k: StandIn) {
         StandIn::Teleport => o.teleport = Some(crate::teleport::TeleportState::default()),
         StandIn::Walk | StandIn::DropPod => {}
     }
-    let (c, layer) = (o.pos.cell(), o.layer);
-    // spec: S-0607 claims 5 and 23 do not say whether the stand-in marks the cell the unit gave up; Q-1338 interim (it starts at rest in that cell and holds its vehicle-present mark, as S-0209 claim 1 says a vehicle at rest does)
-    w.cells.claim_vehicle(c, layer, true);
-    if let Some(d) = w.obj_mut(x).and_then(|o| o.drive.as_mut()) {
-        d.claims = vec![c];
-    }
+    // spec: S-0607 claim 23 (revision 5, occupancy: installing the stand-in marks no cell; the unit holds no occupancy mark until its stand-in's own movement next marks a cell under that stand-in's rules, for driving when its track enters a cell, S-0207)
 }
 
 /// The stand-in takes the lifter's point as its movement instruction
@@ -539,7 +536,7 @@ fn instruct_stand_in(w: &mut World, x: ObjectId, k: StandIn, lifter: ObjectId, p
 /// design): the unit stays where it is, gets its own locomotor back and
 /// the grip ends with it set down. It stays seized (claim 24).
 fn drop_pod_ends(w: &mut World, lifter: ObjectId, x: ObjectId) {
-    // spec: S-0607 claims 23 and 24 (our engine ends the drop-pod stand-in at once at the seize: the unit stays where it is and gets its own locomotor back)
+    // spec: S-0607 claims 23 and 24 (our engine ends the drop-pod stand-in at once at the seize: the unit stays where it is and gets its own locomotor back, marking its cell again as it returns)
     own_marks_back(w, x);
     // spec: S-0607 claim 23 (the grip ends with the unit set down); claim 12 gives no row for this end; Q-1337 interim (the lifter's target is not cleared, as for a gripped unit given no destination)
     upd(w, lifter, |s| {
@@ -552,18 +549,31 @@ fn drop_pod_ends(w: &mut World, lifter: ObjectId, x: ObjectId) {
 
 /// The lifter's point at the seize (S-0607 claim 7): a mobile lifter's
 /// heading point (Terms: its next movement point, or its position when it
-/// has none); a building's foundation centre, or its docking point when its
-/// type services docking units.
-fn lifter_point(w: &World, lifter: ObjectId, x: ObjectId) -> Pos {
+/// has none); a building's foundation centre, or its docking point
+/// ([`docking_point`]) when its type has the pad, the repair-depot or the
+/// vehicle-bunker flag.
+pub fn lifter_point(w: &World, lifter: ObjectId, x: ObjectId) -> Pos {
     let Some(o) = w.obj(lifter) else {
         return Pos::default();
     };
     if o.kind == Kind::Building {
-        if crate::depot::is_depot(w, lifter) || crate::structures::bunker::is_bunker(w, lifter) {
-            // spec: S-0607 claim 7 (a building of a type that services docking units gives its docking point); Q-1333 interim (the repair depot and the bunker are those types, and the point is the one they would give the seized unit)
-            return crate::depot::docking_point(w, lifter, x);
+        let flags = w
+            .rules()
+            .buildings
+            .get(o.type_index as usize)
+            .map(|b| {
+                (
+                    b.raw.helipad.unwrap_or(false),
+                    b.raw.unit_repair.unwrap_or(false),
+                    b.raw.bunker.unwrap_or(false),
+                )
+            })
+            .unwrap_or_default();
+        // spec: S-0607 claim 7 and Import mapping (revision 5: a building gives its docking point only when its type has the pad flag, the repair-depot flag or the vehicle-bunker flag, each absent no; every other building, a refinery included, gives the centre of its foundation)
+        if flags.0 || flags.1 || flags.2 {
+            return docking_point(w, lifter, x);
         }
-        // spec: S-0607 claim 7 (a building: the centre of its foundation)
+        // spec: S-0607 claim 7 (a building: the centre of its foundation, at its world height)
         return w.reference_point(lifter);
     }
     // spec: S-0607 Terms and claim 7 (a mobile lifter's heading point: the point its own movement is heading for, its next movement point; its position when it has none)
@@ -582,6 +592,58 @@ fn lifter_point(w: &World, lifter: ObjectId, x: ObjectId) -> Pos {
         .or_else(|| o.hover.as_ref().and_then(|h| h.point))
         .or_else(|| o.jump.as_ref().and_then(|j| j.dest));
     next.unwrap_or(o.pos)
+}
+
+/// The docking point a building lifter gives (S-0607 claim 7, revision
+/// 5): the one it would give the seized unit itself, by claim 7's
+/// precedence: the obsolete-unloading flag's fixed point, else the
+/// resource-unloading flag's point, else the vehicle-bunker quadrant
+/// point, else the docking-place rule.
+fn docking_point(w: &World, k: ObjectId, x: ObjectId) -> Pos {
+    let Some(b) = w.obj(k) else {
+        return Pos::default();
+    };
+    let Some(t) = w.rules().buildings.get(b.type_index as usize) else {
+        return w.reference_point(k);
+    };
+    let centre = w.reference_point(k);
+    // spec: S-0607 claim 7 (first, with the obsolete-unloading flag: the fixed point of S-0314 claim 18, the centre of the cell displaced by (2, 1) cells from the top-left foundation cell, at the building's height) and Import mapping (Weeder, absent no)
+    if t.raw.econ.weeder.unwrap_or(false) {
+        let c = b.pos.cell();
+        return Pos::centre(
+            CellXY::new(c.x.wrapping_add(2), c.y.wrapping_add(1)),
+            b.pos.z,
+        );
+    }
+    // spec: S-0607 claim 7 (else with the resource-unloading flag: the foundation centre displaced by +128 leptons along x) and Import mapping (Refinery, absent no)
+    if t.raw.econ.refinery.unwrap_or(false) {
+        return Pos::new(centre.x + 128, centre.y, centre.z);
+    }
+    // spec: S-0607 claim 7 (else with the vehicle-bunker flag: the bunker's quadrant point on the seized unit's side, S-0606 claim 4, from the seized unit's position at the seize)
+    if t.raw.bunker.unwrap_or(false) {
+        return crate::structures::bunker::docking_point(w, k, x);
+    }
+    // spec: S-0607 claim 7 (else the docking-place rule of S-0314 claim 18 and S-0404 claim 15: with a greater count than 1, the place the seized unit holds through a contact with that building, the foundation centre when it holds none; the seize breaks that contact only after this point is taken, claim 5)
+    // spec: S-0404 Import mapping (NumberOfDocks, rules, absent 1)
+    let count = t.raw.econ.number_of_docks.unwrap_or(1);
+    let held = crate::depot::link(w, x)
+        .filter(|l| l.depot == k)
+        .map(|l| l.place)
+        .or_else(|| {
+            w.obj(x)
+                .filter(|o| o.contact == Some(k))
+                .and_then(|o| o.econ.exit)
+                .filter(|e| e.factory == k)
+                .map(|e| e.place)
+        });
+    match (count, held) {
+        // spec: S-0607 claim 7 (a docking-place count of 0: the foundation centre; of 1: the centre plus the sole docking displacement)
+        (c, _) if c <= 1 => crate::econ::release::pad_position_at(w, k, 0),
+        // spec: S-0607 claim 7 (a greater count: the displacement of the place held through a contact with that building)
+        (_, Some(place)) => crate::econ::release::pad_position_at(w, k, place),
+        // spec: S-0607 claim 7 (a greater count and no place held: the foundation centre)
+        (_, None) => centre,
+    }
 }
 
 /// The seized unit's own locomotor stops and gives up its occupancy (S-0607
@@ -693,7 +755,8 @@ pub fn end_grip(w: &mut World, lifter: ObjectId, clear_target: bool) {
     if crate::jump::height_above(w, x) >= 1 {
         drop(w, x, Some(lifter), house);
     } else {
-        set_down_here(w, x);
+        // spec: S-0607 claim 13 (a grip ended by its lifter: the jumpjet stop with the design rule for no cell)
+        set_down_released(w, x, true);
     }
 }
 
@@ -719,6 +782,8 @@ fn drop(w: &mut World, x: ObjectId, dropper: Option<ObjectId>, house: Option<Hou
     // spec: S-0607 claim 13 (the stop on dropping: it is deselected)
     w.effects
         .push(crate::combat::effects::Effect::Dropped { unit: x });
+    // spec: S-0607 claim 13 (revision 5: clearing the destination is an effective order-level clear, so in the same update S-0502 claim 17's stopped-movement rule runs on its jumpjet movement; a grip ended by its lifter takes the design rule for no cell: no self-destruction, it falls as claim 15 says)
+    crate::jump::lift_release_stop(w, x, true);
     // spec: S-0607 claim 15 (to its cell centre first when it is not exactly over it)
     let detour = crate::jump::lift_dropped(w, x);
     upd(w, x, |l| l.detour = detour);
@@ -737,6 +802,47 @@ fn start_fall(w: &mut World, x: ObjectId) {
         l.rate = Some(k.to_f32(mode));
     });
     crate::jump::lift_fall(w, x);
+}
+
+/// A gripped unit is set down where it is at the end of its grip (S-0607
+/// claims 9 and 13): its destination becomes none and the jumpjet stop of
+/// claim 13 runs (`lifter_ended`: with its design rule for no cell; claim
+/// 9's no-destination exception: S-0502 claim 17 unchanged). A unit whose
+/// jumpjet movement is still moving afterwards keeps the found point and
+/// its commitment: S-0502 claims 5 and 24 take it off, fly it to the point
+/// and land it there, and claim 20 restores it only after that. Otherwise
+/// it descends and lands from above the surface, or stays where it is.
+fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
+    upd(w, x, |l| {
+        l.set_down = true;
+        l.dropped = false;
+        l.detour = false;
+        l.rate = None;
+    });
+    if let Some(o) = w.obj_mut(x) {
+        // spec: S-0607 claims 9 and 13 (set down: its destination becomes none)
+        o.dest = None;
+    }
+    if w.obj(x).is_none_or(|o| o.jump.is_none()) {
+        // spec: S-0607 claim 23 (a unit on another stand-in is set down where it stands: no jumpjet stop, descent or touchdown)
+        return;
+    }
+    // spec: S-0607 claim 13 (revision 5, the jumpjet stop in both cases: an effective order-level clear runs S-0502 claim 17's stopped-movement rule in the same update) and claim 9 (the no-destination exception: the grip has already ended when the stop runs, so S-0502 claim 17's self-destruction applies unchanged, with its quirk switch and no credit)
+    crate::jump::lift_release_stop(w, x, lifter_ended);
+    if w.obj(x).is_none_or(damage::dead) {
+        return;
+    }
+    if crate::jump::moving(w, x) {
+        // spec: S-0607 claim 13 (revision 6: a set-down unit still moving keeps the found point and its movement commitment; being set down clears neither) and S-0502 claims 5 and 24 (revision 14: its next eligible jumpjet update takes off, then ordinary flight and arrival towards that point)
+        return;
+    }
+    if crate::jump::height_above(w, x) > 0 {
+        // spec: S-0607 claim 9 (set down at whatever height, it then descends and lands under claim 17's clear-cell rule). After S-0502 claim 17's hovering re-entry with quirks.jumpjet_no_cell_self_destruct off, whether this descent still follows is open: Q-1343 (interim: it does)
+        crate::jump::lift_descend(w, x);
+    } else {
+        // spec: S-0607 claim 13 (no cell found for a grip ended by its lifter, design: a set-down unit stops where it is, with no movement point, its jumpjet movement no longer moving)
+        crate::jump::lift_settle(w, x);
+    }
 }
 
 /// The unit is set down where it is (S-0607 claims 9 and 13): its
@@ -873,7 +979,8 @@ pub fn steer(w: &mut World, id: ObjectId) {
                         s.grip_dest = None;
                     });
                     upd(w, id, |s| s.lifter = None);
-                    set_down_here(w, id);
+                    // spec: S-0607 claim 9 (claim 13's jumpjet stop applies, but not its design rule for no cell)
+                    set_down_released(w, id, false);
                 }
                 Some(t) => {
                     if let Some(fixed) = crate::jump::lift_order(w, id)

@@ -234,7 +234,9 @@ fn claim_10_set_down_seized_unit_deploys() {
         "DEPV",
     );
     order_lifter(&mut w, l);
-    assert!(run_until(&mut w, 50, |w| !lift::dropped(w, v)
+    // S-0607 claim 13 (revision 6): set down while its jumpjet movement is
+    // still moving, it first flies to the stop's found point and lands.
+    assert!(run_until(&mut w, 400, |w| !lift::dropped(w, v)
         && !glasnost_sim::jump::moving(w, v)));
     assert!(lift::seized(&w, v), "set down, not restored yet");
     while glasnost_sim::orders::blocked(&w) {

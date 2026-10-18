@@ -757,7 +757,7 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
         }
         None => {
             // spec: S-0502 claims 16, 17 and 24 (an effective order-level destination clear is not claim 16's direct no-point instruction: for a jumpjet with a movement commitment, whatever caused the clear, it invokes claim 17's reroute, which assigns a replacement movement point; with none, claim 17 does nothing; Q-1012 answered by revision 6)
-            stop_with(w, id, false);
+            stop_with(w, id, false, false);
         }
     }
 }
@@ -924,7 +924,8 @@ fn order_point(w: &mut World, id: ObjectId, t: Target) {
         j.dest = Some(d);
         j.moving = true;
     });
-    if phase == Phase::Descending {
+    // spec: S-0607 claim 13 (the stop's re-order changes neither a seized unit's flight state nor its speeds or target height)
+    if phase == Phase::Descending && !seized(w, id) {
         // spec: S-0502 claim 16 (a descending jumpjet goes back to ascending with target height H; its landing request ends)
         let h = fields(w, id).map_or(0, |f| f.height);
         upd(w, id, |j| {
@@ -983,7 +984,7 @@ fn neighbour_step(w: &mut World, id: ObjectId) {
 /// centre; not found, it destroys itself with no credit (or, with
 /// `quirks.jumpjet_no_cell_self_destruct` off, hovers again).
 pub fn stop(w: &mut World, id: ObjectId) {
-    stop_with(w, id, true);
+    stop_with(w, id, true, false);
 }
 
 /// A stop order (S-0213 claim 8, S-0502 claim 24) after it has cleared the
@@ -1005,10 +1006,31 @@ pub fn stop_ordered(w: &mut World, id: ObjectId) {
     }
     // The order-level destination is empty, so the locomotor has nothing new to take from it.
     upd(w, id, |j| j.order = None);
-    stop_with(w, id, false);
+    stop_with(w, id, false, false);
 }
 
-fn stop_with(w: &mut World, id: ObjectId, order_level: bool) {
+/// The stop that clearing a seized unit's destination runs when its grip
+/// ends (S-0607 claim 13; S-0502 claims 17 and 24): an effective
+/// order-level clear, so claim 17's stopped-movement rule runs on its
+/// jumpjet movement in the same update. Not moving: nothing. A cell found:
+/// its movement point becomes the re-order's point and it keeps its
+/// movement commitment, with its flight state, speeds and target height
+/// unchanged. No cell found: `lifter_ended` (every grip end of claim 12 but
+/// claim 9's no-destination exception) takes S-0502 claim 17's
+/// magnetic-release safety departure: no self-destruction, whatever
+/// `quirks.jumpjet_no_cell_self_destruct` says, and the unit keeps no
+/// movement point and is no longer moving; otherwise claim 17's ordinary
+/// no-cell outcome applies, with its quirk switch and no credit.
+pub fn lift_release_stop(w: &mut World, id: ObjectId, lifter_ended: bool) {
+    if !is_jumpjet(w, id) {
+        return;
+    }
+    // spec: S-0607 claim 13 (its destination becomes none: an effective order-level clear, S-0502 claim 24; the locomotor's record of the order follows)
+    upd(w, id, |j| j.order = None);
+    stop_with(w, id, false, lifter_ended);
+}
+
+fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool) {
     if !moving(w, id) {
         // spec: S-0502 claim 17 (stopping a jumpjet that is not moving does nothing)
         return;
@@ -1025,13 +1047,25 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool) {
         }
         return;
     }
+    if lifter_ended {
+        // spec: S-0502 claim 17 (magnetic-release safety departure, design) and S-0607 claim 13 (no cell found for a grip ended by its lifter: no self-destruction, whatever quirks.jumpjet_no_cell_self_destruct says; the unit keeps no movement point and its jumpjet movement is no longer moving; a dropped unit falls as claim 15 says, a set-down one stays where it is). Whether a dropped unit keeps the seize's point and commitment here is open: Q-1342 (interim: cleared, as for a set-down unit)
+        upd(w, id, |j| {
+            j.dest = None;
+            j.order = None;
+            j.moving = false;
+        });
+        return;
+    }
     if !w.rules().quirks.jumpjet_no_cell_self_destruct {
-        // spec: S-0502 Edge cases (quirks.jumpjet_no_cell_self_destruct off: it re-enters hovering over its current cell)
+        // spec: S-0502 Edge cases (quirks.jumpjet_no_cell_self_destruct off: it re-enters hovering over its current cell, so it keeps no movement point elsewhere and no movement commitment)
         claim_slot(w, id, here);
         let h = fields(w, id).map_or(0, |f| f.height);
         upd(w, id, |j| {
             j.phase = Phase::Hovering;
             j.ht = h;
+            j.dest = None;
+            j.order = None;
+            j.moving = false;
         });
         return;
     }
@@ -1185,9 +1219,10 @@ fn height_step(w: &World, id: ObjectId, j: &mut JumpState, f: &JumpFields, mode:
         .to_i32_common();
     let direct = direct_reference(w, p, f.crash, mode);
     let over_dest = j.dest.is_some_and(|d| d.cell() == p.cell());
-    // spec: S-0502 claim 9 (the look-ahead in every state except grounded and descending when the jumpjet is not over its destination cell, and always for a balloon-hover type; otherwise the direct reference)
+    // spec: S-0502 claim 9 and F3 (revision 14: the look-ahead in every state except grounded and descending, crashing included even at zero speed, when the movement point, not the order-level destination, is in another cell, and always for a balloon-hover type; otherwise, no movement point included, the direct reference)
+    let elsewhere = j.dest.is_some_and(|d| d.cell() != p.cell());
     let look = !matches!(phase, Phase::Grounded | Phase::Descending)
-        && (!over_dest || balloon_vehicle(w, id));
+        && (elsewhere || balloon_vehicle(w, id));
     let g = if look {
         look_ahead(w, id, j, mode)
     } else {
@@ -1352,9 +1387,8 @@ pub fn lift_dropped(w: &mut World, id: ObjectId) -> bool {
         return false;
     }
     release_slot(w, id);
-    // spec: S-0607 claim 13 (its jumpjet movement is stopped by S-0502 claim 17's rule: the reservation is released); Q-1332 interim (no nearby-cell search and no self-destruct: claim 15's detour decides where it falls)
     release_reservation(w, id);
-    // spec: S-0607 claim 15 (its destination becomes that centre and it keeps flying under S-0502's cruising rules)
+    // spec: S-0607 claims 13 and 15 (off its cell centre the detour replaces the stop's found point before the unit is steered by it: its destination becomes that centre and it keeps flying under S-0502's cruising rules)
     upd(w, id, |j| {
         j.dest = Some(centre);
         j.moving = true;
@@ -1364,18 +1398,18 @@ pub fn lift_dropped(w: &mut World, id: ObjectId) -> bool {
 }
 
 /// A dropped unit's fall begins (S-0607 claim 15, S-0502 claim 18):
-/// *crashing* with target height 0, speeds 0, no move order.
+/// *crashing* with target height 0, speeds 0, no move order. Its movement
+/// point and commitment stay (S-0607 claim 13): a kept point in another
+/// cell gives the fall S-0502 claim 9's look-ahead reference.
 pub fn lift_fall(w: &mut World, id: ObjectId) {
     release_reservation(w, id);
-    // spec: S-0502 claim 18 (crashing; a seized unit's speeds are 0) and S-0607 claim 15 (while a seized unit is crashing, its jumpjet target height is 0 in every update, not the ordinary crash's −5)
+    // spec: S-0502 claim 18 (crashing; a seized unit's speeds are 0) and S-0607 claim 15 (while a seized unit is crashing, its jumpjet target height is 0 in every update, not the ordinary crash's −5); S-0607 claim 13 (over its cell centre the fall begins with zero horizontal speed and the found point and the movement commitment are kept)
     upd(w, id, |j| {
         j.phase = Phase::Crashing;
         j.ht = 0;
         j.vc = F64::ZERO;
         j.vm = F64::ZERO;
-        j.dest = None;
         j.order = None;
-        j.moving = false;
         j.crash_started = false;
     });
 }
