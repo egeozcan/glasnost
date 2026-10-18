@@ -2,7 +2,7 @@
 id: S-0606
 title: Vehicle bunker
 topic: structures
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -329,8 +329,12 @@ combination with the repair-depot role; other combinations have not been fully t
     harvester or weeder, makes the building-deploy attempt rather than firing. This agrees
     with S-0415 claim 1 (Q-1164).
     The harvesting and building-deploy rules choose their own delays. A released simple-deployer
-    reaches the in-place cycle when neither earlier rule applies; its delays and replacement
-    of queued *move* by *guard* follow S-0517 claims 3 and 8. Otherwise, the queued *move*
+    reaches the in-place cycle in that same processing when neither earlier rule applies,
+    regardless of passenger capacity (S-0517 claim 1). Its delays follow S-0517 claim 3.
+    With `quirks.deploy_transition_discards_orders` on (default original), the cycle's return
+    to *guard* replaces the release's queued *move*, immediately for a step leaving no
+    transition or landing, or at completion otherwise (S-0517 claims 3 and 8). The switch's
+    off behaviour is owned by S-0517 claim 8. Otherwise, the queued *move*
     starts under S-0215 claim 11, at the first tick on which the vehicle is ready to change
     (normally when the release track has ended), unless the continuation replaces that queue.
 
@@ -617,7 +621,7 @@ point and no early release point.
 
 | Cause | Walls-down effects | Vehicle moved | Vehicle's new behaviour | Bunker afterwards |
 |---|---|---|---|---|
-| vehicle's *unload* (claim 12) | yes | release track, then *move* to the nearby-cell result | *move* | *clearing*, *guard* |
+| vehicle's *unload* (claim 12) | yes | release track; then toward the nearby-cell result only if the queued *move* survives continuation | *move* queued, subject to claim 12's continuation; the in-place cycle returns to *guard* under its default quirk | *clearing*, *guard* |
 | bunker destroyed, sold or erased (claim 13) | no | release track | none (keeps *guard*) | being removed |
 | vehicle destroyed, erased or warped (claim 14) | yes | no | n/a | *clearing*, *guard* |
 | bunker changes owner (claim 15) | n/a: the link holds | no | no | still occupied |
@@ -825,16 +829,21 @@ that the computer player gives no orders. Run three recorded seeds per case usin
 - **K6b. Release continuation (claim 12, Q-1164).** If K6 establishes unload input, repeat
   its release in `bunker-tests.map` with eligible copies of the same tank: a deploy-fire type
   without any of the three continuation properties; the same type also deploying into a
-  building; a simple-deployer type; and a harvester type also deploying into a building.
+  building; a simple-deployer type with and without passenger capacity, each with and without
+  a deploying presentation; and a harvester type also deploying into a building.
   Keep the general setup and recorded seeds. Record the release tick, deploy-weapon shots,
   processing delay, random draws, building-deploy attempts, harvesting effects, in-place
   transition and queued behaviour. *Expected:* the first type makes no deploy-fire shot and
   chooses 450 ticks without a draw. The second reaches the building-deploy rule, not deploy-fire.
-  the third reaches S-0517 claim 3's in-place cycle; the fourth reaches harvesting, not a
-  building-deploy attempt. Reaching an attempt is not a promise of its success: the release
-  track and destination still constrain it. A deploy-fire shot caused by this unload, the
-  deploy-fire delay draw, or a lower-priority continuation instead of the applicable earlier
-  rule falsifies the corresponding claim. If no input route is reached, log these cases as
+  The third reaches S-0517 claim 3's first in-place step in the release processing, regardless
+  of passenger capacity, then follows that cycle's delays. Under its default transition quirk,
+  the return to *guard* replaces the release's queued *move*. Compare S-0517 claim 1 and
+  scenario P8(a). The fourth reaches harvesting, not a building-deploy attempt. Reaching an
+  attempt is not a promise of its success: the release track and destination still constrain
+  it. A deploy-fire shot caused by this unload, the deploy-fire delay draw, a missing first
+  in-place step in the release processing, a retained queued *move* at the default cycle's
+  return to *guard*, or a lower-priority continuation instead of the applicable earlier rule
+  falsifies the corresponding claim. If no input route is reached, log these cases as
   unmeasured rather than inferring their outcome.
 - **K8. Orders, repeated arrival and destinations (claims 5 and 16 to 18).**
   - (a) Order an entering tank away by a move order at each entry stage in turn, in separate
