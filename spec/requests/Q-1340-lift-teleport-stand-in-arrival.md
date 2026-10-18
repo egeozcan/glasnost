@@ -1,9 +1,9 @@
 ---
 id: Q-1340
 title: Does the teleporting stand-in's jump, or a driving stand-in's arrival, end the grip
-status: open
+status: answered
 related: [S-0607, S-0207]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

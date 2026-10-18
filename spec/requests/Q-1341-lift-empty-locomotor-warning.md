@@ -1,9 +1,9 @@
 ---
 id: Q-1341
 title: The importer warning for an empty warhead locomotor value
-status: open
+status: answered
 related: [S-0607, S-0001]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

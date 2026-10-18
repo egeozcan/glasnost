@@ -1,9 +1,9 @@
 ---
 id: Q-1337
 title: What the drop-pod stand-in's grip end does to the lifter
-status: open
+status: answered
 related: [S-0607]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

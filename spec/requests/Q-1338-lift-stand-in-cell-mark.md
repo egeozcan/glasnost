@@ -1,9 +1,9 @@
 ---
 id: Q-1338
 title: Whether a unit seized with a ground stand-in holds its cell's occupancy mark
-status: open
+status: answered
 related: [S-0607, S-0209, S-0207]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

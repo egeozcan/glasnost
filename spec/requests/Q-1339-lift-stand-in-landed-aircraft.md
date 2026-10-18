@@ -1,9 +1,9 @@
 ---
 id: Q-1339
 title: A landed aircraft seized with a ground stand-in
-status: open
+status: answered
 related: [S-0607, S-0501]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need
