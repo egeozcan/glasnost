@@ -2,13 +2,13 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 4
+revision: 5
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-18
 measurements: []
-requests: []
+requests: [Q-1157]
 supersedes: []
 ---
 
@@ -132,15 +132,25 @@ Cross-spec changes required at hand-off:
    the original; with it off the failure is expected at fewer alignments, S-0212 claim 13a). A unit whose search failed this way, more than 1 cell from
    the building, is not handled by the no-destination fall-back above: it gives up as S-0212
    claim 23 row 2 gives (it leaves its team and queues *guard*; an AI house's unit is treated as
-   human-controlled there). Whether that queued *guard* ever starts while *eaten* is current is
-   S-0215's rule and not established (S-0215 claims 14 and 15 queue nothing from their own
-   fall-back tables during *eaten*, but those tables are not the queue of S-0212 claim 23). The
-   unit therefore may stay in *eaten* with *guard* queued, or may start *guard*.
+   human-controlled there). The queued *guard* is not held back by *eaten*: neither the infantry readiness test nor the vehicle
+   one of S-0215 claim 11 mentions the *eaten* behaviour, so the ordinary start rule applies to it as
+   to any queued behaviour. The unit leaves *eaten* and *guard* becomes current at the first
+   per-tick start or late start (S-0215 claim 11) at which the unit is ready. After the failure the
+   unit has stopped, so it is ready (an infantry unit is not moving on this tick, and a vehicle is not
+   moving) unless one of the other readiness conditions holds. Whether the failure is found while the
+   unit moves or earlier in its update, *guard* is current when that tick ends and is first processed
+   on the unit's next update (S-0215 claims 3b and 11). The queued *guard* is never dropped while
+   *eaten* is current, and, unless the vehicle case below applies, *eaten* is not processed again.
+   Infantry and vehicles behave the same as to *eaten*. The only difference involving *eaten* is a
+   vehicle that is in contact with a vehicle-factory building (S-0215 claim 11): it is not ready while
+   *guard* is the queued behaviour, so it stays in *eaten* with *guard* queued until that contact ends.
+   No recycle order reaches this state in stock play, which is why the case is only noted.
    - Backing: `measurable` (scenario G9, approach-failure test; S-0212 scenario P12, run S, sets up
      the same order). Which shifts fail is not predicted by this claim and is tracked in Open questions.
-   - Confidence: high (no contact; the destination is cleared on a failed search); medium (that a
-     short line makes the approach fail at once); low (which lengths and alignments fail; whether the
-     queued *guard* starts in *eaten*)
+   - Confidence: high (no contact; the destination is cleared on a failed search; that *eaten* does
+     not block the queued *guard*, both readiness tests read from the program); medium (that a
+     short line makes the approach fail at once; that the failure is found before the late start of
+     the same update); low (which lengths and alignments fail)
 
 4. **Onto the foundation.** The entrant may move onto the building's foundation cells: an infantry
    unit because the building is its mission target (S-0209 claim 4 row WP3), a vehicle by S-0209
@@ -504,12 +514,14 @@ Each order is the recycle order into that building (no target). Each unit is als
 the same cell on the same map, for comparison. Observable, for each order: whether the unit moves in the
 tick of the order or its destination is cleared in that tick, and then, over about 10 processings after
 the failure, its current behaviour, its queued behaviours and its destination on each tick. The
-observable settles whether the queued *guard* of claim 3 starts. *Expected:* a recycle order and a plain
+observable confirms that the queued *guard* of claim 3 becomes current by the end of the failing tick.
+*Expected:* a recycle order and a plain
 move pass or fail on the same placements; lengths 3 and 5 are passed; at least one 7-line and one 9-line
 placement fails at once; the vehicle and the infantry agree on each map; the failed unit has *guard*
-queued. *Falsified by:* any 3- or 5-line placement failing, every 7- and 9-line placement passing, a recycle
+current by the end of the failing tick and nothing queued. *Falsified by:* a failed unit whose *guard* is not current at the end of the failing tick, or still in *eaten*
+with *guard* queued two ticks after the failure, any 3- or 5-line placement failing, every 7- and 9-line placement passing, a recycle
 order and a plain move differing on one placement, the vehicle and the infantry differing on one map, or
-nothing queued after a failure.
+nothing queued and nothing current after a failure.
 
 **G10. Sounds and animation** (claims 7, 12). With the building's *active-1* running, send in an
 infantry unit of the local player's house; use G11's fate fixture separately for a non-local
@@ -546,4 +558,4 @@ respective prediction.
   the parasite is released by S-0614 claim 15. Low confidence.
 - Whether the harvester load really pays nothing (claim 8) should be confirmed by a measurement:
   recycle a full harvester and an empty one (scenario G1 variant).
-- Which lengths and alignments of a short line of buildings make the approach fail, and whether the queued *guard* of claim 3 starts while *eaten* is current (claim 3). Low confidence. Tracked by Q-1280.
+- Which lengths and alignments of a short line of buildings make the approach fail. Low confidence. Tracked by Q-1280.

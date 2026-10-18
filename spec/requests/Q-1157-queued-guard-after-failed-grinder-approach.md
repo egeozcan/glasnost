@@ -1,9 +1,9 @@
 ---
 id: Q-1157
 title: Does the guard queued by a failed recycle approach start while eaten is current?
-status: open
+status: answered
 related: [S-0603, S-0212, S-0215]
-answered-by: []
+answered-by: [S-0603]
 ---
 
 ## Need
