@@ -21,6 +21,9 @@
 //! one at a time and the house's output rises; deployed, it lets them out.
 //! S-0603 (grinder): three infantry, an own vehicle and a mind-controlled
 //! enemy vehicle are clicked into a recycling building and consumed.
+//! S-0606 (vehicle bunker): a turreted vehicle is clicked into a tank
+//! bunker, drives in, fires at an enemy from inside and is let out by the
+//! deploy click.
 //!
 //! Run with `cargo test --release -p glasnost-app --test m7a_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -60,6 +63,7 @@ const SCENES: &[Scene] = &[
     ("gas", gas_clouds),
     ("absorber", absorber),
     ("grinder", grinder),
+    ("bunker", bunker),
 ];
 
 #[test]
@@ -746,6 +750,131 @@ fn grinder(lane: &mut Lane) {
     );
     lane.ticks(10);
     lane.save("grinder-after");
+}
+
+fn bunker_type(w: &World) -> Option<(String, (i32, i32))> {
+    w.rules()
+        .buildings
+        .iter()
+        .find(|b| b.raw.bunker.unwrap_or(false))
+        .map(|b| (b.name.clone(), b.foundation))
+}
+
+/// A vehicle type that may go into a tank bunker by its type's flags (S-0606
+/// claim 1: bunkerable, turret, a first weapon, not hover), not a harvester.
+fn bunker_vehicle(w: &World) -> Option<String> {
+    let r = w.rules();
+    (0..r.vehicles.len())
+        .find(|&i| {
+            r.unit(Kind::Vehicle, i as u32).is_some_and(|u| {
+                u.raw.bunkerable.unwrap_or(true)
+                    && u.turret
+                    && u.combat.slots[0].is_some()
+                    && u.class != Some(glasnost_rules::sim::LocomotionClass::Hover)
+                    && !u.harvester
+                    && u.strength > 0
+            })
+        })
+        .map(|i| r.vehicles[i].name.clone())
+}
+
+/// S-0606 claims 3 to 7, 9, 11 and 12: a tank bunker of the local house and
+/// a vehicle it accepts; the enter click (cursor *enter*) sends it in, the
+/// bunker clears, turns it and drives it in along its track, and it is
+/// bunkered facing south; an enemy vehicle comes into range and is fired at
+/// from inside; the deploy click on the vehicle (cursor *deploy*) lets it
+/// out along the release track. Stages with their ticks; five screens.
+fn bunker(lane: &mut Lane) {
+    use glasnost_sim::structures::bunker::{self, Stage};
+    let w = lane.world();
+    let ty = bunker_type(w);
+    let veh = bunker_vehicle(w);
+    let foe_ty = plain_vehicle(w);
+    println!(
+        "bunker type found: {}, accepted vehicle type found: {}",
+        ty.is_some(),
+        veh.is_some()
+    );
+    let (Some((bname, size)), Some(vname)) = (ty, veh) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let near = CellXY::new(home.x + 8, home.y + 8);
+    let Some(at) = lane.area(near, size, 5, |l| l != land::WATER && l != land::ROCK) else {
+        println!("no room for the bunker");
+        return;
+    };
+    let b = lane.spawn(Kind::Building, &bname, local, at);
+    lane.ticks(4);
+    let v = lane.spawn(Kind::Vehicle, &vname, local, CellXY::new(at.x + size.0 + 3, at.y + 1));
+    lane.ticks(2);
+    lane.look_at(CellXY::new(at.x + 1, at.y + 1));
+    lane.ticks(2);
+    lane.save("bunker-before");
+    let cursor = targeting::cursor(lane.world(), local, &[v], ClickOn::Object(b), Modifiers::default());
+    let n = lane.order(local, v, ClickOn::Object(b));
+    println!("click on the bunker: cursor {cursor:?}, {n} orders");
+    let stage = |lane: &Lane| lane.world().obj(b).map(|o| o.structure.bunker_stage);
+    let mut last = stage(lane);
+    let mut driving_shot = false;
+    let mut inside = false;
+    for t in 0..1500 {
+        lane.ticks(1);
+        let s = stage(lane);
+        if s != last {
+            println!("bunker stage {s:?} after {t} ticks");
+            last = s;
+        }
+        if s == Some(Stage::DrivingIn) && !driving_shot {
+            lane.save("bunker-driving-in");
+            driving_shot = true;
+        }
+        if bunker::bunkered_in(lane.world(), v) == Some(b) {
+            println!("bunkered after {t} ticks");
+            inside = true;
+            break;
+        }
+    }
+    if !inside {
+        println!("not bunkered");
+        return;
+    }
+    lane.ticks(10);
+    let facing = lane.world().obj(v).map(|o| o.body.target);
+    println!("bunkered vehicle body facing {facing:?}");
+    lane.save("bunker-occupied");
+    if let (Some(fname), Some(enemy)) = (foe_ty, lane.enemy()) {
+        let foe = lane.spawn(Kind::Vehicle, &fname, enemy, CellXY::new(at.x - 4, at.y + 1));
+        let full = lane.full_health(foe);
+        let mut shot = false;
+        for t in 0..600 {
+            lane.ticks(1);
+            let hp = lane.world().obj(foe).map_or(0, |o| o.health);
+            if hp < full && !shot {
+                println!("the enemy vehicle is hit from inside after {t} ticks");
+                lane.ticks(4);
+                lane.save("bunker-firing");
+                shot = true;
+            }
+            if hp <= 0 {
+                break;
+            }
+        }
+        println!("enemy vehicle hit from the bunker: {shot}");
+    }
+    let cursor = targeting::cursor(lane.world(), local, &[v], ClickOn::Object(v), Modifiers::default());
+    let n = lane.order(local, v, ClickOn::Object(v));
+    println!("click on the bunkered vehicle: cursor {cursor:?}, {n} orders");
+    for t in 0..600 {
+        lane.ticks(1);
+        if !bunker::bunkered(lane.world(), v) {
+            println!("let out after {t} ticks; bunker stage {:?}", stage(lane));
+            break;
+        }
+    }
+    lane.ticks(60);
+    lane.save("bunker-released");
 }
 
 /// S-0613 claims 2, 4, 5, 8 to 13: a virus unit of the local house is
