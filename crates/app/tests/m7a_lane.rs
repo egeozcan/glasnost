@@ -948,7 +948,8 @@ fn lifter_type(w: &World) -> Option<(String, i32)> {
 
 /// A ground vehicle type a lifter of weapon damage `damage` may seize
 /// (S-0607 claim 3 and F1: size below the damage), not a harvester, not
-/// hover, with no seizing weapon of its own; an unarmed type first, so that
+/// hover, not one that deploys into a building (the enemy would deploy it
+/// out of the shot), with no seizing weapon of its own; an unarmed type first, so that
 /// the scene's enemies do not shoot the lifter down.
 fn liftable_type(w: &World, damage: i32) -> Option<String> {
     let r = w.rules();
@@ -963,6 +964,7 @@ fn liftable_type(w: &World, damage: i32) -> Option<String> {
                         .is_none_or(|h| !r.combat.warhead(h).is_locomotor)
                 })
                 && !u.harvester
+                && !u.raw.deploys_into.as_deref().is_some_and(|d| !d.is_empty())
                 && u.strength > 0
                 && u.size.lt(d)
                 && u.class != Some(glasnost_rules::sim::LocomotionClass::Hover)
