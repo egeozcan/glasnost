@@ -34,8 +34,8 @@ Code: `crates/app/src/mapview/anims.rs`, `live.rs` (`create_anim`, `update_anims
 | 13 (start event) | not implemented | the start event's effects are simulation state (S-0202 claim 15, taken at creation by `load::anim_created_at`); the drawing plays no event |
 | 14 (middle event) | not implemented | simulation state; μ > 0 is not modelled in the simulation (docs/development.md, *Animation start events*) |
 | 15 (follow-up type) | tested | `follow_up_an11` (with `anim_followup_start_doubled` and `anim_followup_keeps_step` off), `follow_up_redraws_its_delay`, `unknown_follow_up_ends` |
-| 16 (end of an animation) | tested | `first_frame_and_lifetime_an1_t5_t6`, `animation_events_play_their_art_and_end` (removed at its end). Infantry-making and burning-walker ends are not modelled (S-0611, S-0615) |
-| 17 (damage over time) | not implemented | simulation state; `anim_damage_starts_at_one` is in NOT_IMPLEMENTED |
+| 16 (end of an animation) | tested | `first_frame_and_lifetime_an1_t5_t6`, `animation_events_play_their_art_and_end` (removed at its end). Infantry-making ends are not modelled (S-0611, M7b). A burning walker's end is S-0615 claim 11 (M7b step 3.2: `glasnost_sim::walker`, `expiry_lifetime_and_damage` in `claims_s0615.rs`) |
+| 17 (damage over time) | partly | Built for the burning walker at M7b step 3.2 (S-0615 claim 11, `walker::advance_damage`): F5 with the accumulator, `quirks.anim_damage_starts_at_one` both ways in `expiry_lifetime_and_damage` (`claims_s0615.rs`). Other animations have no playback clock in the simulation, so their damage over time is not delivered |
 | 18 (timing reaches game state) | not implemented | follows from 13, 14, 15 and 17 in the simulation, which has no playback clock |
 | 28 (playback draws are simulation effects) | not implemented | the simulation has no playback clock; the drawing's cosmetic stream takes these draws (seam `AnimEnv::draw`) |
 | 29 (creators and first-update timing) | partly | `first_update_after_creation`: an animation reported in a tick's effects is updated first in that tick; the in-pass placement and lost updates need playback in the simulation |

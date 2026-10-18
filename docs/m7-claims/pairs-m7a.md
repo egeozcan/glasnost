@@ -40,7 +40,7 @@ seams in the code).
 - Floating Disc (S-0608 drain) with the bunker, the absorber, the grinder and power: `approach::draining`.
 - Genetic Mutator (S-0611) with controlled, bunkered, absorbed and seized units.
 - Psychic Dominator (S-0612) with controlled units, bunkers (`bunker::holds_through_owner_change`) and the absorber.
-- Special-hit effects (S-0615) with the lift fall and gas deaths.
+- Special-hit effects (S-0615) with the lift fall and gas deaths: built at M7b step 3.2, see `pairs-m7b.md`.
 - Cloning Vats, and the Force Shield against the M7a weapons.
 
 ## Local relation tests on the reference ruleset
