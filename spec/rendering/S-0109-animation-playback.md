@@ -2,13 +2,13 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
-requests: [Q-0046, Q-0418, Q-0770, Q-0771]
+requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425]
 supersedes: []
 ---
 
@@ -481,8 +481,21 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     own warhead field plays no part here. When the chosen warhead is not given, the amount is still
     taken from the accumulator but no damage is done. The area, warhead effect and damage rules
     belong to the combat specs.
-    - Backing: `measurable` (AN4, AN12, and AN20 for the factor 5) for their delivery
-      patterns, trigger suppression and final-advance damage. The type-name warhead choice,
+
+    Each delivery is an area detonation with **resource reduction allowed**, no attacker and
+    no supplied attacking house, including the expiring advances of a burning walker.
+    Animation ownership or attachment does not supply either an attacker or a house
+    (S-0302 claim 1). Permission alone does not guarantee resource loss: S-0303 claim 17
+    still requires the resource overlay's chain-reaction flag, the chosen warhead's resource
+    flag and a large enough delivered amount. Its reduction is based on the integer amount
+    delivered by this advance, not the imported fractional damage or the animation's lifetime
+    total. This is distinct from the start-event resource chain reaction, whose detonation
+    forbids resource reduction (S-0401 claim 20), and from a middle-event crater's removal
+    (claim 14).
+    - Backing: `measurable` (AN27 for resource permission, including walker expiry,
+      and S-0302 claim 1's scenario D33 for absent attacker and attacking house).
+      AN4, AN12, and AN20 (for the factor 5) make the delivery patterns, trigger
+      suppression and final-advance damage `measurable`. The type-name warhead choice,
       ignored type warhead and missing game-wide warhead consumption are `unmeasured` here:
       the scenarios use only an ordinary type and a present game-wide warhead, with no
       distinguishing warhead fixtures.
@@ -1131,6 +1144,19 @@ Game-wide keys:
 | rules, combat-damage section, `FlameDamage2` | warhead name | warhead of claim 17 for every other type | none: no damage is done |
 | settings file, detail level | integer | claim 19 (S-0104 Import mapping) | as in S-0104 |
 
+Resource-damage inputs delegated to S-0303 claim 17:
+
+| Section and key | Form | Feeds | Absent |
+|---|---|---|---|
+| rules, selected warhead section, `Tiberium` | boolean | resource flag for claim 17's area detonation | no |
+| rules, overlay section, `Tiberium` | boolean | resource overlay eligibility under S-0303 claim 17 | no |
+| rules, overlay section, `ChainReaction` | boolean | overlay chain-reaction gate under S-0303 claim 17 | no |
+
+The animation damage producer's permission and absent attacker and attacking house are fixed
+behaviour, not additional imported settings. These rows do not enable the separate start-event
+reaction; that uses `TiberiumChainReaction` above. The delegated gates have S-0303 claim 17's
+backing and confidence; AN27 tests their composition with animation damage.
+
 The built-in invisibility-animation type is identified by an exact, byte-for-byte comparison against its built-in type name.
 
 Import defaults and sentinel cases not explicitly exercised by the named scenarios are
@@ -1665,6 +1691,42 @@ building that can cloak), it sets them in the test map's override section, which
     Turning off the removal-skip quirk is an engine-only companion test: the minimal
     explosion should then first update in *c*, advance in *c* + 1 and end in *c* + 3.
 
+- **AN27 (claim 17; Q-1425: animation damage and resources).** Use the common tiny
+  skirmish setup at speed 2, director off and mods off except the named test data. A named
+  art fixture gives an ordinary weapon-created explosion animation damage 20, rate 300,
+  start 0, end 3 and one forward pass, with no follow-up, particles, craters, scorch marks
+  or start-event resource reaction. The weapon's own impact must not reduce resources.
+  A named map fixture supplies a resource patch whose overlay has its chain-reaction flag
+  and selects a game-wide flame warhead with its resource flag enabled. Disable resource
+  growth, spreading and secondary explosions for the observation. Use a patch with more
+  than 2 resource units per observed cell, and keep harvesters out.
+  - Procedure: create the animation with an ordinary shot, not a trigger-played animation.
+    Snapshot resource amounts after that impact and before the first animation advance.
+    Record stage, position and each scanned cell's resource amount on every damaging
+    advance, using the read-only recorder and frame capture. Repeat with the selected
+    warhead's resource flag off, then with the overlay's chain-reaction flag off.
+  - Walker variant: use S-0615 scenario FW3's expiry fixture on the same resource patch,
+    with named art damage 20 and at least one expiring advance before removal. Record
+    running versus expiring stages and the resource cells scanned at each actual position.
+    Keep the initial infantry-killing impact outside the resource observation interval.
+    Repeat the same two flag-off controls. Run each ordinary and walker case three times.
+  - Expected: with both flags on, each permitted scanned resource cell loses 2 resource
+    units on each damaging advance while sufficient resource remains, under S-0303
+    claim 17. F5 gives first delivery 21 damage points and later deliveries 20, both
+    truncated toward zero after division by 10 for resource reduction. There is no loss
+    during a walker's running stages or between advances. Either flag-off control loses
+    nothing through this damage. No crater or start-event removal contributes.
+  - Falsified by no reduction with both gates satisfied, reduction in either flag-off
+    control, reduction during running, or loss inconsistent with the actual per-advance
+    delivered amount and S-0303 claim 17's cell scan.
+  - Attribution companion: S-0302 scenario D33 supplies owned and ownerless damaging
+    animations, defended and lethal targets, kill/loss records and crew-escape controls.
+    Repeat its owned lethal case with FW3's expiring walker. Expect no house credited
+    with an animation-damage kill, even when the animation has an owner; the victim's
+    house still records the loss. Owner-derived kill credit falsifies the absent-house
+    contract. Neither a running walker nor a trigger-played animation is a damaging
+    control for this purpose.
+
 - **Companion section-selection scenario (Import mapping).** S-0007 scenario A25 supplies
   the tiny skirmish setup, conflicting own/image-section values, omitted and empty own keys,
   damaged and normal building slots, independent effects, preceding-sprite/read-count variants,
@@ -1691,6 +1753,11 @@ building that can cloak), it sets them in the test map's override section, which
 
 ## Open questions
 
+- Q-1425 is answered by claim 17 and AN27. The existing approved S-0303 claim 17 already
+  permits resource reduction for damaging-animation detonations, and S-0302 claim 1
+  already specifies no attacker or attacking house, even for an owned animation.
+  S-0615 claim 11 already delegates expiring-walker damage to claim 17 here. This revision
+  makes the composition explicit; it changes neither those gates nor walker expiry timing.
 - Q-0418 questions 1 to 4 are answered by claims 10, 26 and 27. S-0108 claim 10
   already supplies the building-slot world position, and S-0102 claim 19 already
   supplies canvas centring. Question 5's exact packed-pixel blending is answered by

@@ -1,9 +1,9 @@
 ---
 id: Q-1425
 title: Does a burning walker's damage over time reduce resource cells
-status: open
+status: answered
 related: [S-0615, S-0109, S-0303]
-answered-by: []
+answered-by: [S-0109]
 ---
 
 ## Need
