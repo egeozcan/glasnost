@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -246,7 +246,8 @@ New terms:
 
 ### Take-off and climb
 
-5. **Take-off.** In its first update with a move order, a *grounded* jumpjet (claim 16):
+5. **Take-off.** In its first eligible update with a movement commitment, a *grounded*
+   jumpjet takes off, even when its order-level destination is empty (claims 16 and 24):
    - its speed fraction becomes 1, except 0 for *S* = 0 under claim 25's design rule
    - its current and maximum speeds become 0
    - its target height becomes *H*
@@ -337,7 +338,13 @@ New terms:
      *W* wobbles per 15 ticks (F2). In every other state, the wobble phase is 0.
    - **Ground reference.** In every state except *grounded* and *descending*, the ground
      reference uses a look-ahead (F3) when the jumpjet is not over its destination cell, and
-     always for a balloon-hover type. The look-ahead combines two clearances:
+     always for a balloon-hover type. “Destination cell” here means the cell of the stored
+     movement point, not the order-level destination. This includes *crashing*: a dropped
+     seized unit over its cell centre that retains a stop-reroute point in another cell
+     (S-0607 claim 13) uses look-ahead even with zero horizontal speed. With zero speed,
+     only its own cell's clearance contributes, not the neighbouring cell's. Thus its
+     ordinary height step can rise towards an object's clearance before the extra crash
+     drop, rather than using bare terrain as its reference. The look-ahead combines two clearances:
      - the clearance of the jumpjet's own cell
      - while its current speed is above 0, the clearance of the neighbouring cell in the
        8-direction of its movement heading.
@@ -355,7 +362,10 @@ New terms:
      the jumpjet, or the deck when it is over a high-bridge cell and its world height is at least
      the deck's height less *k* (F3).
    - Backing: `measurable` (scenario J5) for wobble, the object-kind and cell-layer
-     clearances, and the bridge reference.
+     clearances, and the bridge reference; J27 b proposes a conditional measurement of the
+     retained-point seized-crash combination. Its stock reachability is not established:
+     a run must record both the different-cell retained point and a nonzero own-cell
+     clearance allowance before it can confirm or falsify that combination.
    - Confidence: high
 
 ### Horizontal motion and facing
@@ -556,6 +566,16 @@ New terms:
       remaining health with the demolition warhead, ignoring defences, with the no-escape marker
       and no attacker (so its kill is credited to no one). Its destination is cleared.
 
+    **Magnetic-release safety departure (design).** When the lifter ends a grip by any
+    event of S-0607 claim 12 other than its no-destination exception, no-cell failure
+    instead follows S-0607 claim 13: do not self-destruct, irrespective of
+    `quirks.jumpjet_no_cell_self_destruct`. A dropped unit follows S-0607 claim 15's fall.
+    A set-down unit clears its movement point and commitment, stays put and becomes
+    eligible for restoration under S-0607 claim 20. The original can terminate with a
+    fatal error when self-destruction occurs while the lifter is releasing its unit.
+    S-0607 claim 9's no-destination exception ends the grip before this stop and keeps
+    this claim's ordinary no-cell outcome, quirk switch and lack of kill credit unchanged.
+
     Stopping a jumpjet that is not moving does nothing. The search has claim 23's settings.
     A player stop that clears the order-level destination uses this rule (claim 24); it is
     not an instruction to erase the locomotor's point.
@@ -563,7 +583,8 @@ New terms:
       Exact damage amount, warhead, defence bypass and no-escape marker are `unmeasured`:
       J11's unprotected empty infantry unit dies under several damage mechanisms, so the
       result cannot distinguish those properties. Stopping a non-moving unit has
-      `measurable` backing through J19's recorded idle cases.
+      `measurable` backing through J19's recorded idle cases. The magnetic-release
+      replacement is design, not an observation of a completed original release (J27).
     - Confidence: high (re-routing); medium (self-destruction, which needs a situation with no
       reachable cell)
 
@@ -791,15 +812,20 @@ New terms:
 
     | Flight state when stopped | Successful claim-17 reroute |
     |---|---|
+    | grounded with a movement commitment | keeps its commitment and replacement point; its next eligible jumpjet update takes off under claim 5, then follows ordinary flight and arrival towards that point |
     | ascending | stays ascending towards the replacement point |
     | cruising | stays cruising towards the replacement point; ordinary arrival applies |
     | hovering with a move order | remains moving; stays hovering only if the replacement horizontal point equals its position, otherwise claim 13 starts cruise |
     | descending | reservation released; re-ascends under claim 16 |
-    | grounded or hovering without a move order | claim 17 does nothing |
+    | grounded or hovering without a movement commitment | claim 17 does nothing |
 
     Both searches of claims 17 and 16 apply, so the point is not necessarily the current
-    position. Infantry can pick another side position in the same cell. Failure follows
-    claim 17's no-cell outcome. Stop clears the target too (S-0213 claim 8); later arrival
+    position. Infantry can pick another side position in the same cell. The committed
+    grounded row also covers a seized unit set down before take-off (S-0607 claim 13):
+    set-down alone neither clears a successful reroute's commitment nor prevents take-off.
+    Restoration requires that commitment to end (S-0607 claim 20); it cannot pre-empt
+    flight merely because the unit is grounded. Failure follows claim 17's no-cell outcome,
+    including its magnetic-release safety departure. Stop clears the target too (S-0213 claim 8); later arrival
     uses the then-current target. This is neither an immediate halt nor a command to finish
     the old destination.
 
@@ -815,7 +841,7 @@ New terms:
     while *moving now*, retaining that preceding movement instead of navigating towards an
     absent point. Ordinary player stop still uses the reroute table, not this refusal.
     The original stores its supplied point before adjustment, with no such rejection.
-    later off-map queries can encounter S-0009 claim 44's stand-in. A safe original
+    Later off-map queries can encounter S-0009 claim 44's stand-in. A safe original
     completion there is not established.
     - Backing: `measurable` (J19 and J22) for effective clears, suppressed assignments and
       the committed hovering deploy cases. An idle, uncommitted hovering deploy request
@@ -830,7 +856,10 @@ New terms:
       `unmeasured` (J17 diagnostic): ordinary input cannot independently establish these
       instructions. The refusal is design, not an original-behaviour claim.
     - Confidence: high for stop dispatch and unchanged flight state; medium for the
-      complete original exceptional aftermath.
+      complete original exceptional aftermath. The committed grounded set-down case has
+      `measurable` backing through conditional scenario J27 a, with high confidence in
+      its movement and restoration predicates. Stock reachability before the first
+      take-off update remains unsettled; a run missing that timing is inconclusive.
 
 25. **Zero flight fields (design, Q-0977).** For *S* = 0, the speed fraction and every
     cruise-band speed are 0. Horizontal travel from that speed is zero; vertical take-off
@@ -1006,6 +1035,9 @@ division and phase addition separately under the floating-point rule above.
 precision.
 
 **F3. Ground reference (claim 9).**
+Use look-ahead only in states other than *grounded* and *descending*, and within those
+states when either the movement point is in another cell or the type is balloon-hover.
+This includes *crashing*, even at zero horizontal speed; otherwise use the direct reference.
 - **Direct.** Let *f* be the terrain height at the jumpjet's position. On a high-bridge cell,
   when *z* ≥ *f* + 416 − *k*, use *f* + 416; otherwise use *f*.
 - **Clearance of a cell.** clear(cell) = *f*(cell centre) + *A*(cell) + *B*(cell), where:
@@ -1104,7 +1136,7 @@ round-toward-zero arithmetic.
 
 | State | Event (checked each tick after the physics step) | Next state | Effect |
 |---|---|---|---|
-| grounded | move order | ascending | speeds 0, fraction 1 (0 for zero speed, design), *h*<sub>t</sub> = *H* (claims 5, 25) |
+| grounded | eligible update with a movement commitment, even with empty order-level destination | ascending | speeds 0, fraction 1 (0 for zero speed, design), *h*<sub>t</sub> = *H* (claims 5, 24 and 25) |
 | ascending | *h* > ¼ *h*<sub>t</sub> (½ balloon-hover vehicle) | ascending | *v*<sub>m</sub> = *S*, heading towards destination |
 | ascending | over the destination cell, past that fraction, not balloon-hover | cruising | *h*<sub>t</sub> = *r* (claim 7) |
 | ascending | *h* ≥ *h*<sub>t</sub>, slot free | hovering | slot claimed |
@@ -1169,7 +1201,9 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 - **No landing slot.** A jumpjet that cannot land and finds no cell nearby destroys itself
   (claim 17). This is the original's behaviour and stays the default
   (`quirks.jumpjet_no_cell_self_destruct`, default on, YR behaviour). Off: it re-enters *hovering* over its
-  current cell. Backing and confidence are claim 17's; the off alternative is a design rule.
+  current cell. Claim 17's magnetic-release safety departure overrides both switch settings
+  for lifter-ended release, but not S-0607 claim 9's no-destination exception.
+  Backing and confidence are claim 17's; the off alternative is a design rule.
 - **Ion storms.** An ion storm makes every flying jumpjet of the affected house crash, and stops a
   grounded one taking off. Ion storms do not occur in skirmish, so this is out of scope.
 
@@ -1549,6 +1583,50 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   Idle stopping leaves movement alone; moving descent re-ascends after successful reroute.
   An immediate no-point moving-flag clear, retained old cruise point despite a different
   successful reroute, or continued descent after successful replacement falsifies the table.
+- **J27 Magnetic-release boundaries (claims 5, 9, 17 and 24).** Conditional original-game
+  measurements (a and b), and a separate engine design test (c).
+  Use the common flat skirmish map, game-speed index 2 and 800 × 600 pixels, with a
+  stock magnetic lifter and an eligible enemy ground vehicle in the test area; keep the
+  bystander isolated. No engine add-on or mod is active. Use scripted ordinary
+  input and a proposed read-only recorder for grip, seized/set-down state, order-level
+  destination, movement point, movement commitment, flight state, speeds, target height,
+  world height, crash rate, cell listings and restoration. Propose missing recorder support
+  to the user; never inject state. For each part attempt 20 runs, record each seed and exact
+  input/release ticks, and retain every qualifying trace. No qualifying trace means
+  inconclusive reachability, not confirmation of the rule or a falsifier.
+  - (a) Grounded release: use a legal new lifter destination to end the grip, varying its
+    input tick around the seize. Keep surrounding cells free so the stop searches can
+    succeed. Qualify only a trace in which release precedes the seized unit's first
+    jumpjet update: height is 0, state is *grounded* and commitment is present.
+    Record both stop searches, their resulting point, the empty order-level destination,
+    commitment, next eligible update and eventual restoration. Expected: a successful
+    reroute retains commitment and point, and the next eligible update enters *ascending*
+    under claim 5; ordinary height rise starts in the following update. Restoration cannot
+    occur while commitment remains. Staying grounded through that eligible update, losing
+    commitment despite successful reroute, or restoration while committed falsifies
+    claims 5 or 24. Stock input timing establishing this boundary is not yet settled.
+    The proposed test makes the conditional rule `measurable`, not `measured`.
+  - (b) Retained-point crash: first use arrival release (S-0607 claim 8), which centres the
+    unit. Place a parked ground vehicle or building in that cell after the seize's initial
+    point search but before arrival. Vary the placement timing so release can retain a
+    successful stop-reroute point in another cell. Qualify only a trace with that retained
+    point, zero crash speed and a nonzero ground-layer clearance allowance in the current
+    cell. Record listings independently of occupancy marks and record every height step
+    through crash entry and impact. Compare the observed height after each update with
+    F3/F4 followed by claim 18's extra drop, using the recorded preceding state, target
+    height and crash rate. At zero speed only own-cell clearance contributes: changing
+    a neighbouring occupant must not change the reference. A direct-terrain-only step
+    when its predicted result differs from the own-cell-clearance result, a reference
+    supplied by the neighbour at zero speed, or any other height mismatch falsifies
+    claim 9's combination. Stock reachability of all these conditions together is
+    unsettled; the conditional measurement does not assert it.
+  - (c) No-cell release is an engine design test, not an original-game oracle run: arrange
+    failed stop searches for lifter-ended release at positive and non-positive height.
+    Expected: the dropped unit falls, the set-down unit stops in place with no point or
+    commitment, and neither self-destructs, with either setting of the no-cell quirk.
+    Test the no-destination exception separately: claim 17's ordinary quirk outcome still
+    applies. Self-destruction on lifter release, or applying that safety exemption to
+    the no-destination exception, falsifies the design rule.
 - **J20 Zero-field engine test.** Named importer test data, not an original-game oracle run:
   one type with zero speed, one with zero turn rate, and one with both. Expect a warning for
   each affected type, zero fraction and all zero cruise speeds for zero speed, no middle
@@ -1572,7 +1650,7 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   that destination empty but a commitment retained. Record every destination assignment,
   refresh state, movement point, flight state, landing request and touchdown position.
   Expected: the effective first clear runs both searches and keeps their resulting point.
-  the ordinary empty-to-empty vehicle assignment is suppressed and keeps its preceding
+  The ordinary empty-to-empty vehicle assignment is suppressed and keeps its preceding
   point without another reroute. A point erased by either case, or an extra reroute on the
   suppressed assignment, falsifies claim 24. Descent at an equal point and cruise before
   descent at a different point must follow claim 13 and end at the retained point.
@@ -1678,6 +1756,20 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   destination effect inconsistent with that claim falsifies the design rule. Repeat
   with and without a saved rally. Original skipped-window aftermath remains diagnostic
   under U14; no safe original fallback or stock fixture is asserted.
+
+## Changes for other specs
+
+- **S-0607 claim 13:** replace the open alternative for a successfully rerouted,
+  still-committed grounded set-down unit with claims 5 and 24 here: its next eligible
+  jumpjet update starts ascent towards the retained point. Set-down alone does not end
+  its commitment. Limit the found point's “no effect” statement to horizontal fall
+  placement: a different-cell point can change the crash height reference under claim 9
+  even at zero speed.
+- **S-0607 claim 20:** qualify the restoration summary: set-down alone cannot restore a
+  unit while its movement commitment remains; restoration still needs the stated
+  fall-back-to-rest event and absence of movement. Align claim 13's confidence/backing,
+  L3 and the related open questions with conditional measurements J27 a and b here.
+  Their backing is `measurable`; stock reachability is unsettled, not an observed result.
 
 ## Open questions
 
