@@ -1,0 +1,1549 @@
+//! The unit arena of the oracle records (M7b step 4c part 2; PLAN.md §5
+//! M7 exit and §6 layer 2B): the stock oracle's arena games, played again
+//! in our engine with the records' setup, and compared with the records'
+//! per-game data.
+//!
+//! # The records
+//!
+//! An *oracle arena record* is a measurement record
+//! `measurements/<topic>/M-xxxx-*.md` with a CSV file of the same stem
+//! beside it whose header is exactly [`CSV_HEADER`]: one line per game,
+//! `row,col,row_side,seed,winner,end_frame,row_left,col_left` (the row and
+//! column type IDs, the side the row type played (`A` or `B`), the seed,
+//! the winner `row`, `col` or `none`, the sample frame at which the game
+//! was over, and each type's share of its starting army value left at the
+//! end, with four decimals). The record's Setup names the map as a
+//! back-quoted file name followed by `(sha256 `…`)`; the rest of the setup
+//! is the arena protocol below, which the records M-0001 to M-0003 share.
+//!
+//! # The protocol (measure: M-0001, M-0002, M-0003, Setup and Procedure)
+//!
+//! - **Map**: the record's stock map, read from the install
+//!   (`GLASNOST_GAME_DIR`) and checked against the record's sha256; never
+//!   committed. Its rules layer applies (the inputs of a skirmish on that
+//!   map). W is the cell of start waypoint [`W_WAYPOINT`].
+//! - **Houses**: side A plays country [`COUNTRIES`]`[0]` at start 0, side B
+//!   [`COUNTRIES`]`[1]` at start 1; skirmish setup with 0 credits, no
+//!   starting units, no bases, short game, superweapons and crates off,
+//!   game speed fastest (index 0, glossary claim G2). The record's houses
+//!   are hard computer players: per S-0412 claim 4 a hard computer gets
+//!   difficulty index 0 and the easy row, which our engine applies through
+//!   the handicap (S-0412 claim 5). They are AI houses of our engine with
+//!   no brain attached (our own AI takes no part); like the original's
+//!   computer players they stop the unused-house cleanup (S-0009 claim
+//!   28). See *Differences* in docs/development.md for what we cannot
+//!   reproduce (the original's skirmish AI, the observer, the tech level).
+//! - **Groups**: per side one type, round(9000 / cost) units (an exact half
+//!   to the even number, as the CSVs show), at least 1, infantry at most 60. Unit *i* of side A on
+//!   cell (W.x − 6 − ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map east, side B on
+//!   (W.x + 6 + ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map west; infantry at
+//!   the cell's centre standing point. Side A's group is created first.
+//!   Every unit starts in the hunt behaviour, as a map object whose entry
+//!   names it (S-0009 claim 41); no order is given.
+//! - **Samples**: every [`SAMPLE_PERIOD`] frames (ticks from game start);
+//!   the game is over at the first sample at which only one side owns
+//!   anything (that side wins), or at which neither does (`none`), or at
+//!   the first sample at or after [`FRAME_LIMIT`] (`none` when both own
+//!   something).
+//! - **Shares**: a side's share is the summed cost fields of every object
+//!   its house owns at the end (any kind, on or off the map, taken-over
+//!   units included) over the summed cost fields of its group at the
+//!   start, written with four decimals (rounded half up).
+//!
+//! # The comparison (each record's *Tolerance for tests*)
+//!
+//! Per pairing (row type against column type), pooled over both sides
+//! (n = 12): the row's win proportion with a two-proportion z test, and
+//! the per-game row-left and column-left shares with two-sample
+//! Kolmogorov–Smirnov tests (asymptotic p-value with Stephens'
+//! correction, [`stats::ks_two_sample`]; shares compared as whole
+//! ten-thousandths, so ties are as in the CSV), each failing at
+//! p < [`ALPHA`]. Separately, where the record shows the same winner for
+//! every seed on a side, whether ours shows that same winner for every
+//! seed on that side.
+
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use glasnost_map::terrain::TileCatalogue;
+use glasnost_map::{CellXY, Map};
+use glasnost_sim::econ::TypeRef;
+use glasnost_sim::econ::setup::{self, HouseValues, Player, Row, Settings};
+use glasnost_sim::rules::{Behaviour, Kind, SimRules};
+use glasnost_sim::world::{HouseId, ObjectId, World};
+
+use crate::stats;
+
+/// The CSV header of an oracle arena record (measure: M-0001, Procedure).
+pub const CSV_HEADER: &str = "row,col,row_side,seed,winner,end_frame,row_left,col_left";
+
+/// Each side's budget in credits (measure: M-0001, Setup, Groups).
+pub const BUDGET: i64 = 9000;
+
+/// The most units of an infantry group (measure: M-0001, Setup, Groups).
+pub const INFANTRY_CAP: u32 = 60;
+
+/// Frames between samples (measure: M-0001, Procedure step 2).
+pub const SAMPLE_PERIOD: i32 = 304;
+
+/// The game is over at the first sample at or after this frame (measure:
+/// M-0001, Procedure step 2).
+pub const FRAME_LIMIT: i32 = 6000;
+
+/// The start waypoint whose cell is W (measure: M-0001, Setup, Map).
+pub const W_WAYPOINT: u16 = 2;
+
+/// Cells from W to the front column of each side, along x (measure:
+/// M-0001, Setup, Groups: W.x − 6 and W.x + 6).
+pub const FRONT: i32 = 6;
+
+/// Rows of a group's columns: unit *i* stands in row i mod 8, starting
+/// 4 cells before W.y (measure: M-0001, Setup, Groups).
+pub const COLUMN: i32 = 8;
+
+/// The first row's offset from W.y (measure: M-0001, Setup, Groups).
+pub const FIRST_ROW: i32 = -4;
+
+/// The countries of side A and side B (measure: M-0001, Setup, Players).
+pub const COUNTRIES: [&str; 2] = ["Americans", "Russians"];
+
+/// The start positions of side A and side B (measure: M-0001, Setup,
+/// Players).
+pub const STARTS: [u32; 2] = [0, 1];
+
+/// Map east and map west facings (glossary *facing*: 16384 is map east,
+/// 49152 map west); side A faces east, side B west (measure: M-0001,
+/// Setup, Groups).
+pub const FACINGS: [u16; 2] = [16384, 49152];
+
+/// The fastest game speed: index 0 (glossary claim G2; measure: M-0001,
+/// Setup, Players: game speed fastest).
+pub const FASTEST: u8 = 0;
+
+/// Seeds per side of a pairing (measure: M-0001, Setup: seeds 0 to 5).
+pub const SEEDS: std::ops::Range<u32> = 0..6;
+
+/// The significance level of each test (the records' *Tolerance for
+/// tests*: p < 0.01).
+pub const ALPHA: f64 = 0.01;
+
+/// A side of the arena.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Side {
+    /// Side A: start 0, the lower-x group.
+    A,
+    /// Side B: start 1, the higher-x group.
+    B,
+}
+
+impl Side {
+    /// 0 for A, 1 for B.
+    pub fn index(self) -> usize {
+        match self {
+            Self::A => 0,
+            Self::B => 1,
+        }
+    }
+
+    fn text(self) -> &'static str {
+        ["A", "B"][self.index()]
+    }
+}
+
+/// Who won a game.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Winner {
+    /// The row type's side.
+    Row,
+    /// The column type's side.
+    Col,
+    /// Neither.
+    None,
+}
+
+impl Winner {
+    fn text(self) -> &'static str {
+        match self {
+            Self::Row => "row",
+            Self::Col => "col",
+            Self::None => "none",
+        }
+    }
+}
+
+/// One game: a CSV line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Game {
+    /// The row type ID.
+    pub row: String,
+    /// The column type ID.
+    pub col: String,
+    /// The side the row type played.
+    pub row_side: Side,
+    /// The seed.
+    pub seed: u32,
+    /// The winner.
+    pub winner: Winner,
+    /// The sample frame at which the game was over.
+    pub end_frame: i32,
+    /// The row type's share left, in ten-thousandths.
+    pub row_left: i64,
+    /// The column type's share left, in ten-thousandths.
+    pub col_left: i64,
+}
+
+/// A share in ten-thousandths as written in the CSV (four decimals).
+pub fn share_text(x: i64) -> String {
+    format!("{}.{:04}", x / 10_000, x % 10_000)
+}
+
+/// Parses a share with up to four decimals into ten-thousandths, without
+/// going through floating point.
+pub fn parse_share(s: &str) -> Result<i64, String> {
+    let bad = || format!("share {s:?}: expected a number with up to four decimals");
+    let (whole, frac) = s.trim().split_once('.').unwrap_or((s.trim(), ""));
+    if frac.len() > 4
+        || whole.is_empty()
+        || !whole.bytes().all(|b| b.is_ascii_digit())
+        || !frac.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(bad());
+    }
+    let whole: i64 = whole.parse().map_err(|_| bad())?;
+    let frac: i64 = format!("{frac:0<4}").parse().map_err(|_| bad())?;
+    Ok(whole * 10_000 + frac)
+}
+
+impl Game {
+    /// The game as a CSV line (without the line end).
+    pub fn line(&self) -> String {
+        format!(
+            "{},{},{},{},{},{},{},{}",
+            self.row,
+            self.col,
+            self.row_side.text(),
+            self.seed,
+            self.winner.text(),
+            self.end_frame,
+            share_text(self.row_left),
+            share_text(self.col_left)
+        )
+    }
+}
+
+/// Parses a CSV of games (the header first).
+pub fn parse_csv(text: &str) -> Result<Vec<Game>, String> {
+    let mut lines = text.lines().enumerate();
+    match lines.next() {
+        Some((_, h)) if h.trim() == CSV_HEADER => {}
+        _ => return Err(format!("the CSV header is not {CSV_HEADER:?}")),
+    }
+    let mut out = Vec::new();
+    for (n, line) in lines {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let f: Vec<&str> = line.split(',').map(str::trim).collect();
+        let at = |e: String| format!("CSV line {}: {e}", n + 1);
+        if f.len() != 8 {
+            return Err(at("expected 8 fields".into()));
+        }
+        let row_side = match f[2] {
+            "A" => Side::A,
+            "B" => Side::B,
+            s => return Err(at(format!("row_side {s:?} is not A or B"))),
+        };
+        let winner = match f[4] {
+            "row" => Winner::Row,
+            "col" => Winner::Col,
+            "none" => Winner::None,
+            s => return Err(at(format!("winner {s:?} is not row, col or none"))),
+        };
+        if f[0].is_empty() || f[1].is_empty() {
+            return Err(at("empty type ID".into()));
+        }
+        out.push(Game {
+            row: f[0].to_owned(),
+            col: f[1].to_owned(),
+            row_side,
+            seed: f[3]
+                .parse()
+                .map_err(|_| at(format!("seed {:?}", f[3])))?,
+            winner,
+            end_frame: f[5]
+                .parse()
+                .map_err(|_| at(format!("end_frame {:?}", f[5])))?,
+            row_left: parse_share(f[6]).map_err(at)?,
+            col_left: parse_share(f[7]).map_err(at)?,
+        });
+    }
+    Ok(out)
+}
+
+/// Writes games as a CSV with the header.
+pub fn write_csv(games: &[Game]) -> String {
+    let mut s = format!("{CSV_HEADER}\n");
+    for g in games {
+        s.push_str(&g.line());
+        s.push('\n');
+    }
+    s
+}
+
+/// An oracle arena record.
+#[derive(Clone, Debug)]
+pub struct OracleRecord {
+    /// The record's ID (front matter `id`).
+    pub id: String,
+    /// The record's markdown file.
+    pub path: PathBuf,
+    /// The map's file name.
+    pub map_file: String,
+    /// The map file's sha256, lower-case hex.
+    pub map_sha256: String,
+    /// The stock games, in CSV order.
+    pub games: Vec<Game>,
+}
+
+/// The front matter's `key: value` lines.
+fn front_matter(text: &str) -> Vec<(String, String)> {
+    let mut lines = text.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return Vec::new();
+    }
+    lines
+        .take_while(|l| l.trim() != "---")
+        .filter_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            Some((k.trim().to_owned(), v.trim().to_owned()))
+        })
+        .collect()
+}
+
+/// The map file name and sha256 of a record's Setup: the first line
+/// starting `- Map:` holds a back-quoted file name, then `sha256` and a
+/// back-quoted hex digest.
+fn map_of(text: &str) -> Result<(String, String), String> {
+    let line = text
+        .lines()
+        .find(|l| l.trim_start().starts_with("- Map:"))
+        .ok_or("the Setup has no `- Map:` line")?;
+    let quoted: Vec<&str> = line.split('`').skip(1).step_by(2).collect();
+    let file = quoted.first().ok_or("the Map line names no file")?;
+    let sha = line
+        .split("sha256")
+        .nth(1)
+        .and_then(|rest| rest.split('`').nth(1))
+        .ok_or("the Map line gives no sha256")?;
+    if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("the Map line's sha256 {sha:?} is not 64 hex digits"));
+    }
+    Ok(((*file).to_owned(), sha.to_ascii_lowercase()))
+}
+
+/// Reads one record from its markdown text and its CSV text.
+pub fn parse_record(path: &Path, md: &str, csv: &str) -> Result<OracleRecord, String> {
+    let fm = front_matter(md);
+    let id = fm
+        .iter()
+        .find(|(k, _)| k == "id")
+        .map(|(_, v)| v.clone())
+        .ok_or("the front matter has no id")?;
+    let (map_file, map_sha256) = map_of(md).map_err(|e| format!("{id}: {e}"))?;
+    let games = parse_csv(csv).map_err(|e| format!("{id}: {e}"))?;
+    Ok(OracleRecord {
+        id,
+        path: path.to_owned(),
+        map_file,
+        map_sha256,
+        games,
+    })
+}
+
+/// The CSV beside a record file.
+fn csv_beside(md: &Path) -> PathBuf {
+    md.with_extension("csv")
+}
+
+/// Every oracle arena record under `dir` (recursively, outside `local/`),
+/// sorted by path: a `M-*.md` file with a CSV of the same stem whose first
+/// line is [`CSV_HEADER`].
+pub fn record_files(dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().into_owned();
+            if p.is_dir() {
+                if name != "local" {
+                    walk(&p, out);
+                }
+            } else if name.starts_with("M-")
+                && name.ends_with(".md")
+                && std::fs::read_to_string(csv_beside(&p))
+                    .is_ok_and(|t| t.lines().next().map(str::trim) == Some(CSV_HEADER))
+            {
+                out.push(p);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, &mut out);
+    out.sort();
+    out
+}
+
+/// Reads every oracle arena record under `dir` (the `measurements/`
+/// folder).
+pub fn load_records(dir: &Path) -> Result<Vec<OracleRecord>, String> {
+    let mut out = Vec::new();
+    for path in record_files(dir) {
+        let md = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let csv = std::fs::read_to_string(csv_beside(&path))
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        out.push(parse_record(&path, &md, &csv)?);
+    }
+    Ok(out)
+}
+
+/// Finds a record by ID (`M-0001`) or by the start of its file name.
+pub fn find_record<'a>(records: &'a [OracleRecord], name: &str) -> Option<&'a OracleRecord> {
+    records.iter().find(|r| {
+        r.id.eq_ignore_ascii_case(name)
+            || r
+                .path
+                .file_name()
+                .is_some_and(|f| f.to_string_lossy().starts_with(name))
+    })
+}
+
+/// The pairings of a list of games, in order of first appearance.
+pub fn pairings(games: &[Game]) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for g in games {
+        let p = (g.row.clone(), g.col.clone());
+        if !out.contains(&p) {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// Checks the shape of a record's games: per pairing 6 seeds (0 to 5) on
+/// each side, each once.
+pub fn check_shape(games: &[Game]) -> Result<(), String> {
+    for (row, col) in pairings(games) {
+        for side in [Side::A, Side::B] {
+            let mut seeds: Vec<u32> = games
+                .iter()
+                .filter(|g| g.row == row && g.col == col && g.row_side == side)
+                .map(|g| g.seed)
+                .collect();
+            seeds.sort_unstable();
+            if seeds != SEEDS.collect::<Vec<_>>() {
+                return Err(format!(
+                    "{row} against {col}, row on side {}: seeds {seeds:?}, expected 0 to 5 once each",
+                    side.text()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// The ground and one game
+
+/// What every game of a record shares: the rules, the map, the tiles and
+/// W.
+#[derive(Clone)]
+pub struct Ground {
+    /// The resolved rules (with the map's rules layer).
+    pub rules: Arc<SimRules>,
+    /// The map.
+    pub map: Map,
+    /// The tile catalogue.
+    pub tiles: Arc<TileCatalogue>,
+    /// The cell W.
+    pub w: CellXY,
+    /// The countries of side A and side B.
+    pub countries: [String; 2],
+}
+
+/// The sha256 of `bytes`, lower-case hex.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Loads the ground of a record from the install in `dir`: the top-level
+/// file named `map_file` (letter case ignored) must have the record's
+/// sha256; the map inside it is decoded with the install's rules and the
+/// map's rules layer.
+pub fn stock_ground(dir: &Path, map_file: &str, sha256: &str) -> Result<Ground, String> {
+    let entry = std::fs::read_dir(dir)
+        .map_err(|e| format!("could not read the install ({:?})", e.kind()))?
+        .flatten()
+        .find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(map_file))
+        .ok_or_else(|| format!("the install has no {map_file}"))?;
+    let bytes = std::fs::read(entry.path()).map_err(|e| format!("{map_file}: {:?}", e.kind()))?;
+    let got = sha256_hex(&bytes);
+    if got != sha256 {
+        return Err(format!(
+            "{map_file}: sha256 {got} is not the record's {sha256}"
+        ));
+    }
+    pollster::block_on(async {
+        let mut vfs = crate::local_lane::mount(dir)
+            .await
+            .map_err(|e| format!("could not mount the install ({:?})", e.kind()))?;
+        let listings = glasnost_convert::find::find_maps(&vfs).await;
+        let listing = listings
+            .iter()
+            .find(|l| l.archive.eq_ignore_ascii_case(map_file))
+            .ok_or_else(|| format!("no map found inside {map_file}"))?;
+        let map_bytes = vfs
+            .read(&listing.file)
+            .await
+            .map_err(|e| format!("{map_file}: {e:?}"))?;
+        let inputs = glasnost_convert::game::load(&mut vfs, map_bytes, map_file.to_owned()).await;
+        let resolved = inputs
+            .resolved
+            .map_err(|e| format!("the rules did not resolve: {e}"))?;
+        let tiles = inputs
+            .tiles
+            .ok_or("the theater's tile data was not found")?;
+        let map = inputs.map;
+        let &(x, y) = map
+            .waypoints
+            .get(&W_WAYPOINT)
+            .ok_or_else(|| format!("{map_file} has no waypoint {W_WAYPOINT}"))?;
+        Ok(Ground {
+            rules: Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash)),
+            map,
+            tiles: Arc::new(tiles),
+            w: CellXY::new(i32::from(x), i32::from(y)),
+            countries: COUNTRIES.map(str::to_owned),
+        })
+    })
+}
+
+/// A synthetic ground for tests and CI: the synthetic combat ruleset on our
+/// own flat map of `size` cells, with start waypoints 0 and 1 and W in the
+/// middle, the countries the synthetic rules' first two.
+pub fn synthetic_ground(size: i32) -> Ground {
+    let rules = glasnost_sim::testkit::combat_rules();
+    let mut map = glasnost_sim::testkit::empty_map(size);
+    let w = glasnost_sim::testkit::mid(size, 0, 0);
+    let wp = |c: CellXY| (c.x as i16, c.y as i16);
+    map.waypoints
+        .insert(0, wp(CellXY::new(w.x - size / 2, w.y)));
+    map.waypoints
+        .insert(1, wp(CellXY::new(w.x + size / 2, w.y)));
+    map.waypoints.insert(W_WAYPOINT, wp(w));
+    let countries = [0, 1].map(|i| rules.country_names[i].clone());
+    Ground {
+        rules,
+        map,
+        tiles: glasnost_sim::testkit::catalogue(),
+        w,
+        countries,
+    }
+}
+
+/// The kind and group size of type `name`: round(BUDGET / cost) (an exact
+/// half to even, [`round_half_even`]), at least 1, infantry at most [`INFANTRY_CAP`] (measure:
+/// M-0001, Setup, Groups). A cost of 0 or less gives 1.
+pub fn group(rules: &SimRules, name: &str) -> Result<(Kind, u32, i64), String> {
+    let (kind, index) = [Kind::Infantry, Kind::Vehicle, Kind::Aircraft]
+        .into_iter()
+        .find_map(|k| rules.index_of(k, name).map(|i| (k, i)))
+        .ok_or_else(|| format!("{name}: no infantry, vehicle or aircraft type of that ID"))?;
+    let cost = i64::from(
+        rules
+            .econ
+            .production
+            .of(TypeRef { kind, index })
+            .map_or(0, |t| t.cost),
+    );
+    let mut n = if cost > 0 {
+        round_half_even(BUDGET, cost)
+    } else {
+        1
+    };
+    n = n.max(1);
+    if kind == Kind::Infantry {
+        n = n.min(i64::from(INFANTRY_CAP));
+    }
+    Ok((kind, n as u32, cost))
+}
+
+/// a / b rounded to the nearest whole number, an exact half to the even
+/// one (a ≥ 0, b > 0). The records say "round"; their CSVs settle the
+/// half: a budget that is an exact half of two group sizes gives the even
+/// one (the shares of such groups are whole multiples of 1/n only for the
+/// even n; measure: M-0001, M-0003, CSV).
+pub fn round_half_even(a: i64, b: i64) -> i64 {
+    let (q, r) = (a / b, a % b);
+    match (2 * r).cmp(&b) {
+        std::cmp::Ordering::Greater => q + 1,
+        std::cmp::Ordering::Equal => q + (q & 1),
+        std::cmp::Ordering::Less => q,
+    }
+}
+
+/// The cell of unit `i` of `side` (measure: M-0001, Setup, Groups).
+pub fn cell_of(w: CellXY, side: Side, i: u32) -> CellXY {
+    let (back, row) = ((i / COLUMN as u32) as i32, (i % COLUMN as u32) as i32);
+    let x = match side {
+        Side::A => w.x - FRONT - back,
+        Side::B => w.x + FRONT + back,
+    };
+    CellXY::new(x, w.y + FIRST_ROW + row)
+}
+
+/// A game set up and ready to run.
+pub struct Arena {
+    /// The world.
+    pub world: World,
+    /// The houses of side A and side B.
+    pub houses: [HouseId; 2],
+    /// Each side's units, in creation order.
+    pub units: [Vec<ObjectId>; 2],
+    /// Each side's starting army value (summed cost fields).
+    pub start_value: [i64; 2],
+}
+
+/// The cost field of an object's type (S-0403 claim 2).
+fn cost_of(w: &World, id: ObjectId) -> i64 {
+    w.obj(id).map_or(0, |o| {
+        i64::from(glasnost_sim::econ::production::cost_field(
+            w,
+            TypeRef {
+                kind: o.kind,
+                index: o.type_index,
+            },
+        ))
+    })
+}
+
+/// Sets up the game of `types` (side A's and side B's type) with `seed`.
+pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, String> {
+    let rules = &ground.rules;
+    let players: Vec<Player> = [0, 1]
+        .map(|i| Player {
+            name: format!("Side {}", ["A", "B"][i]),
+            country: ground.countries[i].clone(),
+            start: Some(STARTS[i]),
+            // An AI house with no brain: the record's houses are computer
+            // players (measure: M-0001, Setup, Players), which stop the
+            // unused-house cleanup (S-0009 claim 28); our own AI takes no part.
+            ai: true,
+            values: HouseValues {
+                // spec: S-0412 claim 4 (a hard computer: index 0, the easy row), applied through claim 5's handicap
+                handicap: Some(Row::Easy),
+                ..Default::default()
+            },
+        })
+        .into();
+    let settings = Settings {
+        // measure: M-0001 (0 credits, short game off, superweapons off, crates off)
+        credits: Some(0),
+        short_game: Some(false),
+        superweapons: Some(false),
+        crates: Some(false),
+        ..Default::default()
+    };
+    // measure: M-0001 (no starting units, no buildings)
+    let mut gs = setup::skirmish(rules, &players, settings, 0, seed);
+    gs.bases = false;
+    gs.game_speed = FASTEST;
+    let mut w = glasnost_sim::load::new_game(rules.clone(), &ground.map, ground.tiles.clone(), &gs)
+        .map_err(|e| format!("{e:?}"))?;
+    let houses = [HouseId(0), HouseId(1)];
+    // Nothing of the two houses may exist before the groups are placed.
+    if w
+        .objects
+        .values()
+        .any(|o| o.owner.is_some_and(|h| houses.contains(&h)))
+    {
+        return Err("a side owns objects before its group is placed".into());
+    }
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let mut units: [Vec<ObjectId>; 2] = [Vec::new(), Vec::new()];
+    let mut start_value = [0i64; 2];
+    for side in [Side::A, Side::B] {
+        let s = side.index();
+        let (kind, n, _) = group(rules, types[s])?;
+        for i in 0..n {
+            let cell = cell_of(ground.w, side, i);
+            if ground.map.cells.get(cell).is_none() {
+                return Err(format!("{}: cell ({}, {}) is off the map", types[s], cell.x, cell.y));
+            }
+            let id = glasnost_sim::testkit::spawn(
+                &mut w,
+                kind,
+                types[s],
+                houses[s].0,
+                cell,
+                FACINGS[s],
+            );
+            let tick = w.tick;
+            let o = w
+                .obj_mut(id)
+                .ok_or_else(|| format!("{}: not created", types[s]))?;
+            if !o.on_map || o.pos.cell() != cell {
+                return Err(format!(
+                    "{}: unit {i} could not stand on cell ({}, {})",
+                    types[s], cell.x, cell.y
+                ));
+            }
+            // spec: S-0009 claim 41 (the behaviour a placed object starts with: hunt, measure: M-0001)
+            o.beh.force(Behaviour::Hunt, tick, stale);
+            start_value[s] += cost_of(&w, id);
+            units[s].push(id);
+        }
+    }
+    Ok(Arena {
+        world: w,
+        houses,
+        units,
+        start_value,
+    })
+}
+
+/// What a house owns: the number of its objects with health above 0 (any
+/// kind, on or off the map), and their summed cost fields.
+pub fn owned(w: &World, h: HouseId) -> (usize, i64) {
+    let ids: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(h) && o.health > 0 && o.kind != Kind::Terrain)
+        .map(|o| o.id)
+        .collect();
+    let value = ids.iter().map(|&id| cost_of(w, id)).sum();
+    (ids.len(), value)
+}
+
+/// A share in ten-thousandths, rounded half up.
+fn share(value: i64, start: i64) -> i64 {
+    if start <= 0 {
+        0
+    } else {
+        (value * 20_000 + start) / (2 * start)
+    }
+}
+
+/// Plays the game of `row` against `col` with the row type on `row_side`
+/// and `seed`. With `watch`, also describes it: each sample's owned counts
+/// and values, the shots of each side, and every unit's state at the end.
+pub fn play(
+    ground: &Ground,
+    row: &str,
+    col: &str,
+    row_side: Side,
+    seed: u32,
+    watch: bool,
+) -> Result<(Game, String), String> {
+    let types = match row_side {
+        Side::A => [row, col],
+        Side::B => [col, row],
+    };
+    let Arena {
+        world: mut w,
+        houses,
+        units,
+        start_value,
+    } = setup(ground, types, seed)?;
+    let mut seen = String::new();
+    let mut shots = [0u32; 2];
+    let (winner_side, end_frame, values) = loop {
+        glasnost_sim::tick::step(&mut w);
+        let effects = std::mem::take(&mut w.effects);
+        for e in effects {
+            if watch
+                && let glasnost_sim::combat::effects::Effect::Shot { firer, .. } = e
+                && let Some(owner) = w.obj(firer).and_then(|o| o.owner)
+                && let Some(s) = houses.iter().position(|&h| h == owner)
+            {
+                shots[s] += 1;
+            }
+        }
+        // A game whose final tick has run stays as it is (S-0414 claim 8,
+        // S-0201 claim 1): it is read at the next sample.
+        let finished = w.econ.end.finished;
+        let frame = if finished {
+            (w.tick + SAMPLE_PERIOD - 1) / SAMPLE_PERIOD * SAMPLE_PERIOD
+        } else {
+            w.tick
+        };
+        if !finished && (frame <= 0 || frame % SAMPLE_PERIOD != 0) {
+            continue;
+        }
+        let o = houses.map(|h| owned(&w, h));
+        if watch {
+            let _ = writeln!(
+                seen,
+                "  frame {frame}: A owns {} (value {}), B owns {} (value {}); shots so far A {}, B {}",
+                o[0].0, o[0].1, o[1].0, o[1].1, shots[0], shots[1]
+            );
+        }
+        let values = [o[0].1, o[1].1];
+        match (o[0].0 > 0, o[1].0 > 0) {
+            (true, false) => break (Some(Side::A), frame, values),
+            (false, true) => break (Some(Side::B), frame, values),
+            (false, false) => break (None, frame, values),
+            (true, true) if frame >= FRAME_LIMIT || finished => break (None, frame, values),
+            _ => {}
+        }
+    };
+    if watch {
+        for (s, ids) in units.iter().enumerate() {
+            for &id in ids {
+                let Some(o) = w.obj(id) else {
+                    let _ = writeln!(seen, "    {} #{}: gone", ["A", "B"][s], id.0);
+                    continue;
+                };
+                let _ = writeln!(
+                    seen,
+                    "    {} #{}: owner {:?}, health {}, on map {}, cell ({}, {}), behaviour {:?}, target {:?}, destination {:?}",
+                    ["A", "B"][s],
+                    id.0,
+                    o.owner.map(|h| h.0),
+                    o.health,
+                    o.on_map,
+                    o.pos.cell().x,
+                    o.pos.cell().y,
+                    o.beh.current,
+                    o.target,
+                    o.dest
+                );
+            }
+        }
+    }
+    let (r, c) = (row_side.index(), 1 - row_side.index());
+    let winner = match winner_side {
+        None => Winner::None,
+        Some(s) if s == row_side => Winner::Row,
+        Some(_) => Winner::Col,
+    };
+    Ok((
+        Game {
+            row: row.to_owned(),
+            col: col.to_owned(),
+            row_side,
+            seed,
+            winner,
+            end_frame,
+            row_left: share(values[r], start_value[r]),
+            col_left: share(values[c], start_value[c]),
+        },
+        seen,
+    ))
+}
+
+/// One game to play: row, column, the row's side, the seed.
+pub type Job = (String, String, Side, u32);
+
+/// The jobs of a record's pairings (every pairing when `only` is empty):
+/// per pairing the row on side A for seeds 0 to 5, then on side B.
+pub fn jobs(record: &OracleRecord, only: &[(String, String)]) -> Vec<Job> {
+    let mut out = Vec::new();
+    for (row, col) in pairings(&record.games) {
+        if !only.is_empty()
+            && !only
+                .iter()
+                .any(|(r, c)| r.eq_ignore_ascii_case(&row) && c.eq_ignore_ascii_case(&col))
+        {
+            continue;
+        }
+        for side in [Side::A, Side::B] {
+            for seed in SEEDS {
+                out.push((row.clone(), col.clone(), side, seed));
+            }
+        }
+    }
+    out
+}
+
+/// Plays `jobs` on `threads` worker threads (each game is its own world;
+/// the results come back in job order).
+pub fn run_jobs(ground: &Ground, jobs: &[Job], threads: usize) -> Vec<Result<Game, String>> {
+    let next = AtomicUsize::new(0);
+    let results: Vec<std::sync::Mutex<Option<Result<Game, String>>>> =
+        jobs.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    std::thread::scope(|s| {
+        for _ in 0..threads.max(1) {
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some((row, col, side, seed)) = jobs.get(i) else {
+                        break;
+                    };
+                    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        play(ground, row, col, *side, *seed, false).map(|(g, _)| g)
+                    }))
+                    .unwrap_or_else(|_| Err(format!("{row} against {col}: panic")));
+                    if let Ok(mut slot) = results[i].lock() {
+                        *slot = Some(r);
+                    }
+                }
+            });
+        }
+    });
+    results
+        .into_iter()
+        .map(|m| {
+            m.into_inner()
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| Err("not run".into()))
+        })
+        .collect()
+}
+
+/// Replaces in `stored` every game of the pairings of `fresh` by `fresh`'s
+/// games, keeping the record's pairing order (`order`).
+pub fn merge(stored: &[Game], fresh: &[Game], order: &[(String, String)]) -> Vec<Game> {
+    let redone = pairings(fresh);
+    let mut out = Vec::new();
+    for p in order {
+        let src = if redone.contains(p) { fresh } else { stored };
+        out.extend(
+            src.iter()
+                .filter(|g| g.row == p.0 && g.col == p.1)
+                .cloned(),
+        );
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Command line
+
+/// The usage of `arena --record`.
+pub const USAGE: &str = "arena --record <ID|all> [--pairing ROW,COL]… [--threads N] [--out DIR] [--measurements DIR] [--compare-only] [--groups] [--watch ROW,COL,A|B,SEED]";
+
+/// The `arena --record` command line.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Cli {
+    /// The record's ID, or `all`.
+    pub record: String,
+    /// Only these pairings (all when empty).
+    pub pairings: Vec<(String, String)>,
+    /// Worker threads.
+    pub threads: usize,
+    /// Where our CSV and the comparison go.
+    pub out: PathBuf,
+    /// Where the records are.
+    pub measurements: PathBuf,
+    /// Compare the stored CSV of ours without playing.
+    pub compare_only: bool,
+    /// Play this one game and describe it.
+    pub watch: Option<Job>,
+    /// List each type's kind, group size and cost, and play nothing.
+    pub groups: bool,
+}
+
+/// Default worker threads (our tool's choice).
+pub const DEFAULT_THREADS: usize = 6;
+
+/// Parses the arguments after `arena` when they hold `--record`.
+pub fn parse_cli(args: &[String]) -> Result<Cli, String> {
+    let mut cli = Cli {
+        record: String::new(),
+        pairings: Vec::new(),
+        threads: DEFAULT_THREADS,
+        out: PathBuf::from("local-lane/m7b/arena"),
+        measurements: PathBuf::from("measurements"),
+        compare_only: false,
+        watch: None,
+        groups: false,
+    };
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut value = |name: &str| it.next().cloned().ok_or_else(|| format!("{name} needs a value"));
+        match a.as_str() {
+            "--record" => cli.record = value(a)?,
+            "--pairing" => {
+                let v = value(a)?;
+                let (r, c) = v.split_once(',').ok_or("--pairing needs ROW,COL")?;
+                cli.pairings.push((r.trim().to_owned(), c.trim().to_owned()));
+            }
+            "--threads" => {
+                cli.threads = value(a)?
+                    .parse()
+                    .ok()
+                    .filter(|&n| n > 0)
+                    .ok_or("--threads needs a positive whole number")?
+            }
+            "--out" => cli.out = PathBuf::from(value(a)?),
+            "--measurements" => cli.measurements = PathBuf::from(value(a)?),
+            "--compare-only" => cli.compare_only = true,
+            "--groups" => cli.groups = true,
+            "--watch" => {
+                let v = value(a)?;
+                let f: Vec<&str> = v.split(',').map(str::trim).collect();
+                let side = match f.get(2).copied() {
+                    Some("A" | "a") => Side::A,
+                    Some("B" | "b") => Side::B,
+                    _ => return Err("--watch needs ROW,COL,A|B,SEED".into()),
+                };
+                let seed = f
+                    .get(3)
+                    .and_then(|s| s.parse().ok())
+                    .ok_or("--watch needs ROW,COL,A|B,SEED")?;
+                cli.watch = Some((f[0].to_owned(), f[1].to_owned(), side, seed));
+            }
+            other => return Err(format!("unknown argument {other:?}")),
+        }
+    }
+    if cli.record.is_empty() {
+        return Err("--record needs a record ID or all".into());
+    }
+    Ok(cli)
+}
+
+/// Runs the command line: plays (or with `--compare-only` reads) our games
+/// of the chosen records, stores them as `<out>/ours-<ID>.csv` (merged
+/// with the stored ones when only some pairings were played), compares
+/// them with the record and writes `<out>/oracle-<ID>.txt`. `game_dir` is
+/// the install (`None`: only `--compare-only` works). Returns the report.
+pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
+    let records = load_records(&cli.measurements)?;
+    if records.is_empty() {
+        return Ok(format!(
+            "skipped: no oracle arena record in {}\n",
+            cli.measurements.display()
+        ));
+    }
+    let chosen: Vec<&OracleRecord> = if cli.record.eq_ignore_ascii_case("all") {
+        records.iter().collect()
+    } else {
+        vec![find_record(&records, &cli.record).ok_or_else(|| format!("no oracle arena record {}", cli.record))?]
+    };
+    let mut out = String::new();
+    let mut grounds: BTreeMap<(String, String), Ground> = BTreeMap::new();
+    let mut ground_of = |r: &OracleRecord| -> Result<Ground, String> {
+        let key = (r.map_file.clone(), r.map_sha256.clone());
+        if let Some(g) = grounds.get(&key) {
+            return Ok(g.clone());
+        }
+        let dir = game_dir.ok_or_else(|| {
+            format!("{} is not set: the oracle arena needs the install (local lane only)", crate::local_lane::GAME_DIR_VAR)
+        })?;
+        let t0 = std::time::Instant::now();
+        let g = stock_ground(dir, &r.map_file, &r.map_sha256)?;
+        eprintln!("loaded {} in {} ms", r.map_file, t0.elapsed().as_millis());
+        grounds.insert(key, g.clone());
+        Ok(g)
+    };
+    if cli.groups {
+        for r in &chosen {
+            let ground = ground_of(r)?;
+            let mut types: Vec<String> = Vec::new();
+            for g in &r.games {
+                for t in [&g.row, &g.col] {
+                    if !types.contains(t) {
+                        types.push(t.clone());
+                    }
+                }
+            }
+            let _ = writeln!(out, "{} groups (type, kind, units, cost):", r.id);
+            for t in types {
+                match group(&ground.rules, &t) {
+                    Ok((kind, n, cost)) => {
+                        let _ = writeln!(out, "  {t} {kind:?} {n} {cost}");
+                    }
+                    Err(e) => {
+                        let _ = writeln!(out, "  {t}: {e}");
+                    }
+                }
+            }
+        }
+        return Ok(out);
+    }
+    if let Some((row, col, side, seed)) = &cli.watch {
+        let r = chosen[0];
+        let ground = ground_of(r)?;
+        let (g, seen) = play(&ground, row, col, *side, *seed, true)?;
+        let _ = writeln!(out, "{} watch: {}", r.id, g.line());
+        for t in [row, col] {
+            let (kind, n, cost) = group(&ground.rules, t)?;
+            let _ = writeln!(out, "  {t}: {kind:?}, {n} units at cost {cost}");
+        }
+        out.push_str(&seen);
+        return Ok(out);
+    }
+    std::fs::create_dir_all(&cli.out).map_err(|e| format!("{}: {e}", cli.out.display()))?;
+    for r in chosen {
+        check_shape(&r.games).map_err(|e| format!("{}: {e}", r.id))?;
+        let stored_path = cli.out.join(format!("ours-{}.csv", r.id));
+        let stored = std::fs::read_to_string(&stored_path)
+            .ok()
+            .map(|t| parse_csv(&t))
+            .transpose()?
+            .unwrap_or_default();
+        let ours = if cli.compare_only {
+            stored
+        } else {
+            let ground = ground_of(r)?;
+            let jobs = jobs(r, &cli.pairings);
+            let t0 = std::time::Instant::now();
+            let results = run_jobs(&ground, &jobs, cli.threads);
+            let secs = t0.elapsed().as_secs();
+            let mut fresh = Vec::new();
+            for (j, res) in jobs.iter().zip(results) {
+                match res {
+                    Ok(g) => fresh.push(g),
+                    Err(e) => {
+                        let _ = writeln!(out, "{}: {} against {}, side {}, seed {}: {e}", r.id, j.0, j.1, j.2.text(), j.3);
+                    }
+                }
+            }
+            let _ = writeln!(
+                out,
+                "{}: played {} games on {} threads in {secs} s",
+                r.id,
+                fresh.len(),
+                cli.threads
+            );
+            let merged = merge(&stored, &fresh, &pairings(&r.games));
+            std::fs::write(&stored_path, write_csv(&merged))
+                .map_err(|e| format!("{}: {e}", stored_path.display()))?;
+            merged
+        };
+        let c = compare_record(r, &ours);
+        let text = report(&c);
+        let txt = cli.out.join(format!("oracle-{}.txt", r.id));
+        let full = format!("{text}\nour games (winner@frame row_left/col_left), by pairing and the row's side:\n{}", games_text(&ours));
+        std::fs::write(&txt, &full).map_err(|e| format!("{}: {e}", txt.display()))?;
+        out.push_str(&text);
+        let _ = writeln!(out, "wrote {} and {} (git-ignored; never commit them)", stored_path.display(), txt.display());
+    }
+    Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Comparison
+
+/// Whether every game of a side has the same winner, and which.
+fn unanimous(games: &[&Game], side: Side) -> Option<Winner> {
+    let mut w = games.iter().filter(|g| g.row_side == side).map(|g| g.winner);
+    let first = w.next()?;
+    w.all(|x| x == first).then_some(first)
+}
+
+/// One pairing compared.
+#[derive(Clone, Debug)]
+pub struct PairingComparison {
+    /// Row and column type.
+    pub pairing: (String, String),
+    /// Stock and our counts: row wins, column wins, none.
+    pub counts: [[u32; 3]; 2],
+    /// Stock and our mean row-left and column-left shares.
+    pub means: [[f64; 2]; 2],
+    /// The two-proportion test of the row's win proportion.
+    pub win: Option<stats::ProportionTest>,
+    /// The KS tests of the row-left and column-left shares.
+    pub ks: [Option<stats::KsTest>; 2],
+    /// Per side (A, B): the stock winner when every stock game of the side
+    /// had the same one, and whether ours reproduces it.
+    pub same: [Option<(Winner, bool)>; 2],
+    /// Our games of the pairing (n).
+    pub n: usize,
+}
+
+impl PairingComparison {
+    /// Whether all three tests pass at [`ALPHA`].
+    pub fn pass(&self) -> bool {
+        self.win.is_some_and(|t| t.p >= ALPHA)
+            && self.ks.iter().all(|k| k.is_some_and(|k| k.p >= ALPHA))
+    }
+
+    /// Whether every side-wise unanimous stock outcome is reproduced.
+    pub fn same_reproduced(&self) -> bool {
+        self.same.iter().flatten().all(|&(_, ok)| ok)
+    }
+
+    /// How far off it is, for ranking: side-wise mismatches first, then the
+    /// win-rate difference, then the larger KS D.
+    pub fn badness(&self) -> (usize, i64, i64) {
+        let mism = self.same.iter().flatten().filter(|(_, ok)| !ok).count();
+        let dw = (i64::from(self.counts[0][0]) - i64::from(self.counts[1][0])).abs();
+        let d = self
+            .ks
+            .iter()
+            .flatten()
+            .map(|k| (k.d * 1000.0) as i64)
+            .max()
+            .unwrap_or(0);
+        (mism, dw, d)
+    }
+}
+
+/// Compares the games of one pairing.
+pub fn compare_pairing(pairing: &(String, String), stock: &[Game], ours: &[Game]) -> PairingComparison {
+    let of = |gs: &'_ [Game]| -> Vec<Game> {
+        gs.iter()
+            .filter(|g| g.row == pairing.0 && g.col == pairing.1)
+            .cloned()
+            .collect()
+    };
+    let (s, o) = (of(stock), of(ours));
+    let count = |gs: &[Game]| {
+        let mut c = [0u32; 3];
+        for g in gs {
+            c[match g.winner {
+                Winner::Row => 0,
+                Winner::Col => 1,
+                Winner::None => 2,
+            }] += 1;
+        }
+        c
+    };
+    let mean = |gs: &[Game], f: fn(&Game) -> i64| {
+        if gs.is_empty() {
+            0.0
+        } else {
+            gs.iter().map(|g| f(g) as f64).sum::<f64>() / gs.len() as f64 / 10_000.0
+        }
+    };
+    let (cs, co) = (count(&s), count(&o));
+    let left = |gs: &[Game], f: fn(&Game) -> i64| gs.iter().map(f).collect::<Vec<i64>>();
+    let rl: fn(&Game) -> i64 = |g| g.row_left;
+    let cl: fn(&Game) -> i64 = |g| g.col_left;
+    let sr: Vec<&Game> = s.iter().collect();
+    let or: Vec<&Game> = o.iter().collect();
+    let same = [Side::A, Side::B].map(|side| {
+        unanimous(&sr, side).map(|w| {
+            let ours_same = unanimous(&or, side) == Some(w);
+            (w, ours_same)
+        })
+    });
+    PairingComparison {
+        pairing: pairing.clone(),
+        counts: [cs, co],
+        means: [[mean(&s, rl), mean(&s, cl)], [mean(&o, rl), mean(&o, cl)]],
+        win: stats::two_proportion(cs[0], s.len() as u32, co[0], o.len() as u32),
+        ks: [
+            stats::ks_two_sample(&left(&s, rl), &left(&o, rl)),
+            stats::ks_two_sample(&left(&s, cl), &left(&o, cl)),
+        ],
+        same,
+        n: o.len(),
+    }
+}
+
+/// A record compared with our games.
+#[derive(Clone, Debug)]
+pub struct RecordComparison {
+    /// The record's ID.
+    pub id: String,
+    /// Every pairing of the record with games of ours, in record order.
+    pub pairings: Vec<PairingComparison>,
+    /// Pairings of the record with no game of ours.
+    pub missing: Vec<(String, String)>,
+}
+
+impl RecordComparison {
+    /// The pairings that fail a test.
+    pub fn failing(&self) -> Vec<&PairingComparison> {
+        self.pairings.iter().filter(|p| !p.pass()).collect()
+    }
+
+    /// The pairings that do not reproduce a side-wise unanimous outcome.
+    pub fn not_same(&self) -> Vec<&PairingComparison> {
+        self.pairings
+            .iter()
+            .filter(|p| !p.same_reproduced())
+            .collect()
+    }
+}
+
+/// Compares a record's games with ours.
+pub fn compare_record(record: &OracleRecord, ours: &[Game]) -> RecordComparison {
+    let mut out = RecordComparison {
+        id: record.id.clone(),
+        pairings: Vec::new(),
+        missing: Vec::new(),
+    };
+    for p in pairings(&record.games) {
+        if ours.iter().any(|g| g.row == p.0 && g.col == p.1) {
+            out.pairings.push(compare_pairing(&p, &record.games, ours));
+        } else {
+            out.missing.push(p);
+        }
+    }
+    out
+}
+
+fn p_text(p: Option<f64>) -> String {
+    p.map_or("  n/a ".to_owned(), |p| format!("{p:.4}"))
+}
+
+/// The comparison as a table, with a summary and the failing pairings
+/// (largest discrepancies first).
+pub fn report(c: &RecordComparison) -> String {
+    let mut s = String::new();
+    let _ = writeln!(
+        s,
+        "{}: {} pairings compared, {} without games of ours",
+        c.id,
+        c.pairings.len(),
+        c.missing.len()
+    );
+    let _ = writeln!(
+        s,
+        "{:<7} {:<7} {:>2} | stock W/L/N  ours W/L/N | p(win) | rowleft stock ours  D     p     | colleft stock ours  D     p     | same A / same B        | result",
+        "row", "col", "n"
+    );
+    for p in &c.pairings {
+        let ks = |i: usize| {
+            p.ks[i].map_or("  n/a        ".to_owned(), |k| {
+                format!("{:.3} {}", k.d, p_text(Some(k.p)))
+            })
+        };
+        let same = |i: usize| match p.same[i] {
+            None => "-".to_owned(),
+            Some((w, ok)) => format!("{} {}", w.text(), if ok { "yes" } else { "NO" }),
+        };
+        let _ = writeln!(
+            s,
+            "{:<7} {:<7} {:>2} | {:>2}/{:>2}/{:>2}     {:>2}/{:>2}/{:>2}   | {} | {:>6.3} {:>6.3} {} | {:>6.3} {:>6.3} {} | {:<9} / {:<9} | {}{}",
+            p.pairing.0,
+            p.pairing.1,
+            p.n,
+            p.counts[0][0],
+            p.counts[0][1],
+            p.counts[0][2],
+            p.counts[1][0],
+            p.counts[1][1],
+            p.counts[1][2],
+            p_text(p.win.map(|t| t.p)),
+            p.means[0][0],
+            p.means[1][0],
+            ks(0),
+            p.means[0][1],
+            p.means[1][1],
+            ks(1),
+            same(0),
+            same(1),
+            if p.pass() { "pass" } else { "FAIL" },
+            if p.same_reproduced() { "" } else { " (side outcome differs)" }
+        );
+    }
+    let fail = c.failing();
+    let count = |f: &dyn Fn(&PairingComparison) -> bool| c.pairings.iter().filter(|p| f(p)).count();
+    let _ = writeln!(s);
+    let _ = writeln!(
+        s,
+        "tests failing (p < {ALPHA}): win proportion {}, row-left KS {}, column-left KS {}; pairings failing any test: {} of {}",
+        count(&|p| !p.win.is_some_and(|t| t.p >= ALPHA)),
+        count(&|p| !p.ks[0].is_some_and(|k| k.p >= ALPHA)),
+        count(&|p| !p.ks[1].is_some_and(|k| k.p >= ALPHA)),
+        fail.len(),
+        c.pairings.len()
+    );
+    let sides: usize = c.pairings.iter().map(|p| p.same.iter().flatten().count()).sum();
+    let kept: usize = c
+        .pairings
+        .iter()
+        .map(|p| p.same.iter().flatten().filter(|(_, ok)| *ok).count())
+        .sum();
+    let _ = writeln!(
+        s,
+        "side-wise unanimous stock outcomes: {sides}; reproduced {kept}; pairings with one not reproduced: {}",
+        c.not_same().len()
+    );
+    let mut ranked: Vec<&PairingComparison> = c
+        .pairings
+        .iter()
+        .filter(|p| !p.pass() || !p.same_reproduced())
+        .collect();
+    ranked.sort_by_key(|p| std::cmp::Reverse(p.badness()));
+    let _ = writeln!(s, "failing or side-differing pairings, largest discrepancy first:");
+    for p in ranked {
+        let _ = writeln!(
+            s,
+            "  {} against {}: stock row wins {}/12, ours {}/12; mean row left {:.3} / {:.3}, column left {:.3} / {:.3}{}",
+            p.pairing.0,
+            p.pairing.1,
+            p.counts[0][0],
+            p.counts[1][0],
+            p.means[0][0],
+            p.means[1][0],
+            p.means[0][1],
+            p.means[1][1],
+            if p.pass() { " (tests pass; a side outcome differs)" } else { "" }
+        );
+    }
+    for m in &c.missing {
+        let _ = writeln!(s, "  not run: {} against {}", m.0, m.1);
+    }
+    s
+}
+
+/// Per pairing and side, our games in short form, for reading by eye.
+pub fn games_text(games: &[Game]) -> String {
+    let mut by: BTreeMap<(String, String, Side), Vec<&Game>> = BTreeMap::new();
+    for g in games {
+        by.entry((g.row.clone(), g.col.clone(), g.row_side))
+            .or_default()
+            .push(g);
+    }
+    let mut s = String::new();
+    for ((r, c, side), gs) in by {
+        let _ = write!(s, "{r} {c} {}:", side.text());
+        for g in gs {
+            let _ = write!(
+                s,
+                " {}@{} {}/{}",
+                g.winner.text(),
+                g.end_frame,
+                share_text(g.row_left),
+                share_text(g.col_left)
+            );
+        }
+        s.push('\n');
+    }
+    s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shares_parse_without_floats() {
+        assert_eq!(parse_share("0.0769"), Ok(769));
+        assert_eq!(parse_share("2.04"), Ok(20_400));
+        assert_eq!(parse_share("1"), Ok(10_000));
+        assert!(parse_share("0.12345").is_err());
+        assert!(parse_share("-0.1").is_err());
+        assert!(parse_share("x").is_err());
+        assert_eq!(share_text(769), "0.0769");
+        assert_eq!(share_text(20_400), "2.0400");
+        // Rounded half up: 1/13 = 0.076923… → 0.0769; 1/8 → 0.1250.
+        assert_eq!(share(1, 13), 769);
+        assert_eq!(share(1, 8), 1250);
+        assert_eq!(share(0, 0), 0);
+    }
+
+    #[test]
+    fn group_sizes_round_an_exact_half_to_even() {
+        assert_eq!(round_half_even(9, 2), 4);
+        assert_eq!(round_half_even(15, 2), 8);
+        assert_eq!(round_half_even(10, 4), 2);
+        assert_eq!(round_half_even(11, 4), 3);
+        assert_eq!(round_half_even(13, 4), 3);
+        assert_eq!(round_half_even(1, 3), 0);
+    }
+
+    #[test]
+    fn the_map_line_is_read() {
+        let md = "---\nid: M-test\n---\n\n## Setup\n\n- Map: the map `Some.mmx` (sha256 `ABCDEF0123456789abcdef0123456789abcdef0123456789abcdef0123456789`), around W.\n";
+        let (f, h) = map_of(md).unwrap();
+        assert_eq!(f, "Some.mmx");
+        assert_eq!(h, "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
+        assert!(map_of("- Map: `x.mmx` no digest").is_err());
+    }
+
+    #[test]
+    fn placement_follows_the_protocol() {
+        let w = CellXY::new(50, 40);
+        assert_eq!(cell_of(w, Side::A, 0), CellXY::new(44, 36));
+        assert_eq!(cell_of(w, Side::A, 7), CellXY::new(44, 43));
+        assert_eq!(cell_of(w, Side::A, 8), CellXY::new(43, 36));
+        assert_eq!(cell_of(w, Side::B, 0), CellXY::new(56, 36));
+        assert_eq!(cell_of(w, Side::B, 9), CellXY::new(57, 37));
+    }
+
+    fn g(row_side: Side, seed: u32, winner: Winner, rl: i64, cl: i64) -> Game {
+        Game {
+            row: "R".into(),
+            col: "C".into(),
+            row_side,
+            seed,
+            winner,
+            end_frame: 304,
+            row_left: rl,
+            col_left: cl,
+        }
+    }
+
+    fn twelve(f: impl Fn(Side, u32) -> (Winner, i64, i64)) -> Vec<Game> {
+        let mut out = Vec::new();
+        for side in [Side::A, Side::B] {
+            for seed in SEEDS {
+                let (w, rl, cl) = f(side, seed);
+                out.push(g(side, seed, w, rl, cl));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn csv_round_trips_and_shape_is_checked() {
+        let games = twelve(|_, s| (Winner::Row, 10_000 - i64::from(s), 0));
+        let text = write_csv(&games);
+        assert_eq!(parse_csv(&text).unwrap(), games);
+        assert!(check_shape(&games).is_ok());
+        assert!(check_shape(&games[1..]).is_err());
+        assert!(parse_csv("row,col\n").is_err());
+        assert!(parse_csv(&format!("{CSV_HEADER}\nR,C,X,0,row,304,1,0\n")).is_err());
+    }
+
+    #[test]
+    fn equal_samples_pass_and_reversed_ones_fail() {
+        let stock = twelve(|_, s| (Winner::Row, 8000 + i64::from(s) * 100, 0));
+        let c = compare_pairing(&("R".into(), "C".into()), &stock, &stock);
+        assert!(c.pass() && c.same_reproduced(), "{c:?}");
+        assert_eq!(c.same, [Some((Winner::Row, true)), Some((Winner::Row, true))]);
+        let reversed = twelve(|_, s| (Winner::Col, 0, 8000 + i64::from(s) * 100));
+        let c = compare_pairing(&("R".into(), "C".into()), &stock, &reversed);
+        assert!(!c.pass() && !c.same_reproduced());
+        assert!(c.win.unwrap().p < ALPHA);
+        assert!(c.ks.iter().all(|k| k.unwrap().p < ALPHA));
+        // A side-wise difference that the pooled tests do not catch: stock
+        // 6/6 on side A, ours 5/6 there.
+        let near = twelve(|side, s| {
+            if side == Side::A && s == 0 {
+                (Winner::Col, 0, 8000)
+            } else {
+                (Winner::Row, 8000 + i64::from(s) * 100, 0)
+            }
+        });
+        let c = compare_pairing(&("R".into(), "C".into()), &stock, &near);
+        assert!(c.pass());
+        assert_eq!(c.same, [Some((Winner::Row, false)), Some((Winner::Row, true))]);
+    }
+
+    #[test]
+    fn merging_replaces_only_the_redone_pairings() {
+        let mut a = twelve(|_, _| (Winner::Row, 1, 0));
+        let mut b = twelve(|_, _| (Winner::Row, 2, 0));
+        for x in &mut b {
+            x.col = "D".into();
+        }
+        a.extend(b.clone());
+        let mut fresh = twelve(|_, _| (Winner::Col, 0, 3));
+        for x in &mut fresh {
+            x.col = "D".into();
+        }
+        let order = pairings(&a);
+        let m = merge(&a, &fresh, &order);
+        assert_eq!(m.len(), 24);
+        assert!(m[..12].iter().all(|x| x.row_left == 1));
+        assert!(m[12..].iter().all(|x| x.winner == Winner::Col));
+    }
+}
