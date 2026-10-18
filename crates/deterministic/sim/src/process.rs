@@ -523,6 +523,8 @@ pub fn head(w: &mut World, id: ObjectId) {
         // spec: S-0606 claim 18 (while the bunker link holds, a destination written by any rule is refused: it is replaced by none)
         crate::structures::bunker::enforce(w, id);
     }
+    // spec: S-0607 claims 9 and 22; Q-1334 interim (a unit seized with a stand-in locomotor has no jumpjet steering: a destination written by any rule is replaced by none here)
+    crate::lift::enforce(w, id);
     if kind == Kind::Building {
         door_update(w, id);
     }

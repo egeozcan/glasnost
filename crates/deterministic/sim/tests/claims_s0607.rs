@@ -851,6 +851,97 @@ fn claim_21_firer_off_the_map_ends_the_wave() {
     );
 }
 
+/// A ruleset tweak: the seizing warhead names `loco` (None: no key).
+fn mag_locomotor(loco: Option<&'static str>) -> impl FnOnce(&mut glasnost_rules::schema::Ruleset) {
+    move |r| {
+        r.sim.warheads.get_mut("MAG").unwrap().locomotor = loco.map(str::to_owned);
+    }
+}
+
+// spec: S-0607 claim 22: a seizing warhead naming a locomotor that cannot stand in temporarily (hovering, flying, rocket, tunnelling; an unknown identifier by design): the eligible target stops and is put in guard but is not seized, keeps its own locomotor, and can be hit again; the firer's previous victim is still released
+#[test]
+fn claim_22_cannot_stand_in_does_not_seize() {
+    for loco in ["hover", "fly", "rocket", "tunnel", "unknown"] {
+        let mut w = world(mag_locomotor(Some(loco)));
+        let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+        let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 0));
+        order_move(&mut w, v, at(6, 6));
+        run(&mut w, 3);
+        beam(&mut w, l, v);
+        assert!(!lift::seized(&w, v), "{loco}: not seized");
+        assert!(!lift::grips(&w, l, v), "{loco}: no grip");
+        let o = w.obj(v).unwrap();
+        assert!(o.jump.is_none(), "{loco}: no locomotor installed");
+        assert_eq!(o.dest, None, "{loco}: it stops");
+        assert_eq!(o.beh.current, Some(Behaviour::Guard), "{loco}: guard");
+        assert_eq!(health(&w, v), 100, "{loco}: no damage");
+        beam(&mut w, l, v);
+        assert!(!lift::seized(&w, v), "{loco}: hit again, still not seized");
+    }
+}
+
+// spec: S-0607 claims 2 and 22: a hit with a cannot-stand-in warhead still releases the firer's previous victim
+#[test]
+fn claim_22_cannot_stand_in_releases_the_previous_victim() {
+    let (mut w, l, v) = seized_world(
+        |r| {
+            let mut h = r.sim.warheads["MAG"].clone();
+            h.locomotor = Some("hover".into());
+            r.sim.warheads.insert("MAGH".into(), h);
+            let mut wp = r.sim.weapons["MagBeam"].clone();
+            wp.warhead = Some("MAGH".into());
+            r.sim.weapons.insert("MagHover".into(), wp);
+            r.sim.vehicles.get_mut("LIFTER").unwrap().secondary = Some("MagHover".into());
+        },
+        "VICT",
+    );
+    pull_over(&mut w, v, 3);
+    let other = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(0, 4));
+    attack(&mut w, l, other);
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        l,
+        1,
+        Target::Object(other)
+    ));
+    assert!(run_until(&mut w, 40, |w| w.projectiles.is_empty()));
+    assert!(!lift::grips(&w, l, v), "the previous victim is released");
+    assert!(lift::dropped(&w, v), "and dropped");
+    assert!(!lift::seized(&w, other));
+}
+
+// spec: S-0607 claim 22 and Import mapping: a locomotor that can stand in temporarily (driving, walking, ship, teleporting, drop-pod; an absent key means teleporting) seizes the target, without the jumpjet locomotor; Q-1334 interim: it stays where it stands, and claim 20's rule restores it once the grip has ended
+#[test]
+fn claim_22_stand_in_seizes() {
+    for loco in [
+        Some("drive"),
+        Some("walk"),
+        Some("ship"),
+        Some("teleport"),
+        Some("drop_pod"),
+        None,
+    ] {
+        let mut w = world(mag_locomotor(loco));
+        let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+        let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 0));
+        let here = w.obj(v).unwrap().pos.cell();
+        beam(&mut w, l, v);
+        assert!(lift::seized(&w, v), "{loco:?}: seized");
+        assert!(lift::grips(&w, l, v), "{loco:?}: gripped");
+        assert!(
+            w.obj(v).unwrap().jump.is_none(),
+            "{loco:?}: no jumpjet locomotor"
+        );
+        run(&mut w, 30);
+        assert_eq!(w.obj(v).unwrap().pos.cell(), here, "{loco:?}: it stays");
+        order_lifter(&mut w, l);
+        assert!(!lift::grips(&w, l, v), "{loco:?}: claim 12 ends the grip");
+        // The lifter leaves, so it cannot seize the unit again once restored.
+        glasnost_sim::objects::remove(&mut w, l);
+        assert!(restored(&mut w, v), "{loco:?}: restored");
+    }
+}
+
 /// Drops the victim over a cell holding a TROOPER first and a VICT after
 /// it in the ground list; the impact warheads do no damage.
 fn tail_scene(

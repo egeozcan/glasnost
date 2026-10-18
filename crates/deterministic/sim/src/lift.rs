@@ -9,15 +9,17 @@
 //! decides when it starts, what destination it has and what happens at the
 //! ends of a lift. Every rule that tests the seized state reads [`seized`].
 //!
-//! Our engine supports the seizing warhead that names the jumpjet locomotor
-//! (the stock case); a warhead naming another locomotor, or none, seizes
-//! nothing (Q-1321). The team-membership removal of claim 5 belongs to the
+//! A seizing warhead that names another locomotor follows claim 22: one that
+//! can stand in temporarily seizes with the unit's own movement state kept
+//! (Q-1334), one that cannot (or an unknown identifier) stops the target
+//! without a seize. The team-membership removal of claim 5 belongs to the
 //! original's team system, which is out of scope.
 
 use glasnost_num::{F32, F64};
 use serde::{Deserialize, Serialize};
 
 use crate::combat::damage::{self, Hit};
+use crate::combat::data::SeizeLocomotor;
 use crate::rules::{Behaviour, Kind};
 use crate::world::{HouseId, HouseRole, Layer, ObjectId, Pos, Target, World};
 
@@ -66,6 +68,11 @@ pub struct LiftState {
     pub detour: bool,
     /// A falling dropped unit's crash rate, a single (S-0502 claim 18).
     pub rate: Option<F32>,
+    /// The unit was seized with a locomotor other than jumpjet that can
+    /// stand in temporarily (S-0607 claim 22); it keeps its own movement
+    /// state (Q-1334).
+    #[serde(default)]
+    pub stand_in: bool,
     /// A unit set sinking by claim 17: its coming death is credited.
     pub sink_credit: bool,
 }
@@ -105,6 +112,12 @@ pub fn lifter_of(w: &World, unit: ObjectId) -> Option<ObjectId> {
 /// magnetic-beam weapon).
 pub fn grips(w: &World, lifter: ObjectId, unit: ObjectId) -> bool {
     gripped_unit(w, lifter) == Some(unit)
+}
+
+/// Whether a seized unit was seized with a stand-in locomotor (S-0607
+/// claim 22).
+pub fn stand_in(w: &World, id: ObjectId) -> bool {
+    st(w, id).is_some_and(|l| l.seized && l.stand_in)
 }
 
 /// Whether the unit is *dropped* (S-0607 Terms).
@@ -164,19 +177,47 @@ pub fn seize_hit(
     }
     // spec: S-0607 claim 2 (otherwise, before the target is tested, the firer's current grip ends as claim 13 says, the firer keeping its target, even when the target then turns out immune) and claim 12 (a new seizing detonation: the lifter's target is not cleared)
     end_grip(w, f, false);
-    // spec: S-0607 Terms and Import mapping (the seize installs the locomotor the warhead names; this spec covers the jumpjet locomotor; Q-1321: another or none seizes nothing)
-    if !w.rules().combat.warhead(warhead).locomotor_jumpjet {
-        return;
-    }
     let Some(x) = x else { return };
+    // spec: S-0607 claim 22 (claims 1 to 3 decide the seize the same way whatever locomotor the warhead names)
     if !eligible(w, x, damage) {
         return;
     }
-    // spec: S-0607 State and ordering (a resource gatherer made immune by claim 3 keeps its temporary locomotor: claim 3's conditions come before claim 4's special case)
+    // spec: S-0607 State and ordering (a resource gatherer made immune by claim 3 keeps its temporary locomotor: claim 3's conditions come before claim 4's special case); Q-1336 interim (claim 4's special case comes first whatever locomotor the warhead names)
     if harvester_case(w, x) {
         return;
     }
-    seize(w, f, x);
+    match w.rules().combat.warhead(warhead).seize_locomotor {
+        SeizeLocomotor::Jumpjet => seize(w, f, x, false),
+        // spec: S-0607 claim 22 (a locomotor that can stand in temporarily: the target is seized as in claim 5, with that locomotor in place of its own)
+        SeizeLocomotor::StandIn => seize(w, f, x, true),
+        // spec: S-0607 claim 22 (a locomotor that cannot stand in temporarily, or an unknown identifier: claim 5's other effects, no seize)
+        SeizeLocomotor::NoStandIn => not_seized(w, x),
+    }
+}
+
+/// A hit whose warhead names a locomotor that cannot stand in temporarily
+/// (S-0607 claim 22): the eligible target stops, is put in *guard* and
+/// loses its spawned objects and its parasite, but is not seized: no
+/// locomotor is installed, it keeps moving with its own and can be hit
+/// again.
+fn not_seized(w: &mut World, x: ObjectId) {
+    let t = w.tick;
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    // spec: S-0607 claims 5 and 22 (it stops: its route is cleared and its destination becomes none, its own locomotor stopping by its own rules)
+    if let Some(o) = w.obj_mut(x) {
+        o.path.steps.clear();
+        o.queued_dests.clear();
+    }
+    crate::econ::assign_destination(w, x, None);
+    crate::drive::stop(w, x);
+    if let Some(o) = w.obj_mut(x) {
+        // spec: S-0607 claims 5 and 22 (it is put in guard with no target)
+        crate::spawn::clear_own_target(o);
+        o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        o.beh.force(Behaviour::Guard, t, stale);
+    }
+    // spec: S-0607 claims 5 and 22 (it loses its spawned objects and its parasite)
+    cleanup(w, x);
 }
 
 /// Whether a target can be seized by a hit of `damage` (S-0607 claim 3
@@ -268,11 +309,16 @@ fn non_human_rule(w: &World, h: Option<HouseId>) -> bool {
 }
 
 /// The seize itself (S-0607 claim 5).
-fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
+fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: bool) {
     let t = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    // spec: S-0607 claim 5 (it stops: its route is cleared, it gives up the occupancy mark of its cell and it stands still)
-    suspend_own(w, x);
+    if stand_in {
+        // spec: S-0607 claim 22 (how a unit seized with a stand-in locomotor moves is outside the spec); Q-1334 interim (it keeps its own movement state and marks, stops by its own rules and stays where it stands)
+        crate::drive::stop(w, x);
+    } else {
+        // spec: S-0607 claim 5 (it stops: its route is cleared, it gives up the occupancy mark of its cell and it stands still)
+        suspend_own(w, x);
+    }
     if let Some(o) = w.obj_mut(x) {
         o.path.steps.clear();
         o.queued_dests.clear();
@@ -286,8 +332,10 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
     if w.obj(x).is_none() {
         return;
     }
-    // spec: S-0607 claim 5 and claim 7 (its jumpjet locomotor is linked, with the jumpjet fields of the unit's own type)
-    crate::jump::link_lift(w, x);
+    if !stand_in {
+        // spec: S-0607 claim 5 and claim 7 (its jumpjet locomotor is linked, with the jumpjet fields of the unit's own type)
+        crate::jump::link_lift(w, x);
+    }
     // spec: S-0607 claim 5 (the firer's previous grip ends without clearing the firer's target)
     end_grip(w, lifter, false);
     // spec: S-0607 claim 5 (a grip the unit itself held ends, clearing the unit's own target)
@@ -306,6 +354,7 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
         l.dropper = None;
         l.dropper_house = None;
         l.rate = None;
+        l.stand_in = stand_in;
     });
     let harvester = resource_gatherer(w, x);
     let hunt = non_human_rule(w, w.obj(x).and_then(|o| o.owner))
@@ -314,12 +363,14 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId) {
             .and_then(|o| o.owner)
             .is_some_and(|h| crate::econ::setup::passive(w, h))
         && !harvester;
-    // spec: S-0607 claims 5 and 7 (the grip is made and the unit is given the lifter as its destination; its jumpjet movement turns this at once into a movement point fixed at the seize, from the lifter's point)
-    let p = lifter_point(w, lifter, x);
-    let cell = crate::jump::lift_point(w, x, p);
-    if let Some(o) = w.obj_mut(x) {
-        // spec: S-0607 claim 5 (its order-level destination becomes the cell of that point, not the lifter)
-        o.dest = Some(Target::Cell(cell));
+    if !stand_in {
+        // spec: S-0607 claims 5 and 7 (the grip is made and the unit is given the lifter as its destination; its jumpjet movement turns this at once into a movement point fixed at the seize, from the lifter's point)
+        let p = lifter_point(w, lifter, x);
+        let cell = crate::jump::lift_point(w, x, p);
+        if let Some(o) = w.obj_mut(x) {
+            // spec: S-0607 claim 5 (its order-level destination becomes the cell of that point, not the lifter)
+            o.dest = Some(Target::Cell(cell));
+        }
     }
     // spec: S-0607 claim 5 (the unit is deselected)
     w.effects
@@ -679,6 +730,20 @@ pub fn steer(w: &mut World, id: ObjectId) {
             }
             crate::jump::forget_order(w, id);
         }
+    }
+}
+
+/// Enforces claim 9 for a unit seized with a stand-in locomotor (S-0607
+/// claim 22, Q-1334 interim): a destination written without the assignment
+/// is replaced by none at the start of its behaviour turn.
+pub fn enforce(w: &mut World, id: ObjectId) {
+    if stand_in(w, id)
+        && let Some(o) = w.obj_mut(id)
+        && o.dest.is_some()
+    {
+        // spec: S-0607 claim 9 (a seized unit ignores every new destination)
+        o.dest = None;
+        o.path.steps.clear();
     }
 }
 
@@ -1124,6 +1189,20 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
 /// Gives a seized unit its own locomotor back (S-0607 claim 20).
 fn restore(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
+    if o.lift.stand_in {
+        // spec: S-0607 claim 22 (when a unit seized with a stand-in locomotor is restored is outside the spec); Q-1334 interim (claim 20's rule; its own movement state and marks were kept, so nothing is put back)
+        upd(w, id, |l| {
+            l.seized = false;
+            l.set_down = false;
+            l.dropped = false;
+            l.detour = false;
+            l.dropper = None;
+            l.dropper_house = None;
+            l.rate = None;
+            l.stand_in = false;
+        });
+        return;
+    }
     let jumpjet_type = w
         .rules()
         .unit(o.kind, o.type_index)

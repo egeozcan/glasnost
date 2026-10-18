@@ -267,8 +267,10 @@ fn object_turn(w: &mut World, id: ObjectId) {
         _ if crate::transport::riding(w, id).is_some() => false,
         // spec: S-0504 claim 5 (a sinking vessel makes no progress by its locomotor, turning and speed-fraction updates included)
         _ if sinking => false,
-        // spec: S-0607 claims 5 and 7 (a seized unit moves with its temporary jumpjet locomotor, whatever its own)
-        _ if crate::lift::seized(w, id) => crate::jump::tick(w, id),
+        // spec: S-0607 claims 5 and 7 (a seized unit moves with its temporary jumpjet locomotor, whatever its own); claim 22 and Q-1334 interim (a unit seized with a stand-in locomotor keeps moving by its own)
+        _ if crate::lift::seized(w, id) && !crate::lift::stand_in(w, id) => {
+            crate::jump::tick(w, id)
+        }
         Some(Locomotor::Drive) if held => false,
         Some(Locomotor::Drive) => {
             let moved = drive::tick(w, id);

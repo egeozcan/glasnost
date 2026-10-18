@@ -3018,15 +3018,26 @@ impl Builder<'_> {
         if let Some(v) = self.verses(t) {
             rec.put("verses", v);
         }
-        // spec: S-0607 Import mapping (warhead Locomotor: a locomotor identifier, S-0207 claim 14's class identifier of table T3; a value of another form or an unknown identifier keeps the value in force)
+        // spec: S-0607 Import mapping and claim 22 (warhead Locomotor: a locomotor identifier, S-0207 claim 14's class identifier of table T3; an identifier the table does not list is kept as unknown, design); Q-1321 interim (a value of another form, an empty one included, keeps the value in force)
         let loco = fold(key(t, "Locomotor"), None, |v, _| {
             let id = class_identifier(v)?;
-            LOCOMOTORS.iter().find(|l| l.0 == id).map(|l| l.1)
+            Some(
+                LOCOMOTORS
+                    .iter()
+                    .find(|l| l.0 == id)
+                    .map_or("unknown", |l| l.1),
+            )
         });
         if let Some(name) = loco {
             rec.put("locomotor", jsonc::string(name));
         }
         let name = format!("warheads {}", show(&t.name));
+        // spec: S-0607 claim 22 (an unknown identifier, design: the importer warns, and a hit is treated as with a locomotor that cannot stand in temporarily)
+        self.each(
+            key(t, "Locomotor"),
+            |v| class_identifier(v).is_some_and(|id| !LOCOMOTORS.iter().any(|l| l.0 == id)),
+            |v| format!("{name} Locomotor {v} names no known locomotor: the original stops with a fatal error when such a warhead seizes; our engine treats its hit as one with a locomotor that cannot stand in temporarily: the target stops and is not seized (S-0607 claim 22, a design departure)"),
+        );
         // spec: S-0303 Edge cases (a spread outside 0 to 11: clamped by our engine, the importer warns)
         self.each_dec(
             key(t, "CellSpread"),
@@ -3395,6 +3406,10 @@ impl Builder<'_> {
         {
             // spec: S-0302 Edge cases (the importer warns when the damage-fire list has fewer than three entries)
             self.warn_at(fires.as_ref(), "[General] DamageFireTypes has fewer than three animations: a building fire of a missing kind is not started (S-0302 claim 13, a departure)".to_owned());
+        }
+        if self.global(COMBAT_DAMAGE, "DeathWeapon").is_none() {
+            // spec: S-0607 claim 18 (no death weapon, design: the importer warns, and each impact detonation becomes a plain area detonation of its warhead)
+            self.warn(0, 0, "[CombatDamage] DeathWeapon is given by no rules layer: a magnetic-lift impact detonates its two warheads as plain area detonations, without projectile effects; the original stops with a fatal error (S-0607 claim 18, a design departure)".to_owned());
         }
         let splash = self.global(COMBAT_DAMAGE, "SplashList");
         if list_of(splash.as_ref(), self.i.ini_quirks.list_items_untrimmed)
