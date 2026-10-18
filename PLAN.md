@@ -44,6 +44,7 @@ An open-source (GPL-3.0-or-later) reimplementation of *Command & Conquer: Yuri's
 | D11 | **Team:** the project lead is spec owner, oracle operator and reviewer/approver, and writes no engine code. No second human implementer; implementation is done only by isolated AI sessions. | DECIDED |
 | D12 | **Repos:** `glasnost` (this repo: scrubbed `spec/`, measurements, code) and a separate, never-pushed spec workspace (`~/glasnost-spec-dirty`). Each has its own CLAUDE.md and Claude Code memory. | DECIDED |
 | D13 | **Name:** Glasnost (Gorbachev's policy of "openness"). It avoids EA trademarks. Registry search (USPTO/EUIPO) and claiming the crate/GitHub name before going public. | DECIDED |
+| D14 | **Balance:** the default game plays with the stock data, and the simulation stays faithful to it (D8). Matching the original's faction balance is not a goal in itself, and the own AI is never held back, capped or made to under-use a unit to reproduce it or to even out sides. Balance changes ship as optional rules patch layers (D6), off by default, like mods on the original game. | DECIDED |
 
 Deployment default (not a decision yet): static hosting such as GitHub Pages for v1; v1 uses no threads, so COOP/COEP headers are not needed.
 
@@ -267,6 +268,7 @@ The `ini` reader must parse exactly as YR does: case; duplicate keys, entries an
 - **Deterministic:** runs inside the tick, uses the sim RNG, reads the hashed `ai-hint` data.
 - **Build-up:** (1) scripted builder and attack waves; (2) reactive economy and defence; (3) tactics and superweapons.
 - Tuned against itself and against the project lead. Matching the original AI is not a goal.
+- **Never stunted for balance (D14):** no count caps, production vetoes or deliberate under-use of a unit to even out factions. The AI plays as well as it can; balance comes from unit and game data, as an optional patch layer.
 - **Scope switches:** any temporary engine-scope switch applies to all players equally, is labelled as engine scope and removed at the next milestone. It is never an AI cap.
 
 ### 4.8 Networking (after skirmish fidelity)
@@ -298,7 +300,7 @@ The `ini` reader must parse exactly as YR does: case; duplicate keys, entries an
 | M4 | **Combat:** weapons, warheads, Verses (incl. 0/1/2% semantics), projectiles, veterancy, acquisition, slot selection. | ≥ 40 relation tests (ROF, damage per armor, rounding), each citing an S-spec and confirmed by an M-id. | 1.5–2.5 |
 | M5 | **Economy, production, sidebar and shell UI** (layout from screenshots, visibly original fallback); shroud; **minimal own AI**; game-mode layer; first SFX/EVA. | **First playable game:** a full 1v1 against our own AI on 2 stock maps. Build times and harvest cycle match specs and oracle. | 3–4.5 |
 | M6 | **Allied and Soviet completeness:** air, naval, Hover, Jumpjet, Teleport, Rocket; bridges, garrisons, engineers, spies, crates; superweapons, tech buildings; multiplayer trigger subset. | Naval maps playable. Every superweapon has a scenario test. Stock multiplayer maps run their triggers without "unimplemented" warnings, apart from flagged script maps. | 2–3.5 |
-| M7 | **The Yuri faction:** mind control and Mastermind overload; Slave Miner, Grinder, Cloning Vats, Bio Reactor, Tank Bunker; Magnetron, Floating Disc, Gattling; Genetic Mutator, Psychic Dominator, Force Shield. | Every interaction pair has a scenario test on the synthetic ruleset and a local relation test on the reference ruleset. Arena win rates within tolerance of the stock oracle. Full YR skirmish against our own AI. | 2.5–3.5 |
+| M7 | **The Yuri faction:** mind control and Mastermind overload; Slave Miner, Grinder, Cloning Vats, Bio Reactor, Tank Bunker; Magnetron, Floating Disc, Gattling; Genetic Mutator, Psychic Dominator, Force Shield. | Every interaction pair has a scenario test on the synthetic ruleset and a local relation test on the reference ruleset. Arena win rates within tolerance of the stock oracle (a fidelity check of the simulation: a mismatch is fixed in the simulation per the specs, never by changing the AI, D14). Full YR skirmish against our own AI. | 2.5–3.5 |
 | M8 | **Fidelity pass, AI depth, polish:** turning `unmeasured` and `measurable` claims into measured ones; movement and crowding feel; accessibility, settings; low-end iGPU performance; optional WebGPU extras; **music** (IMA-ADPCM WAV decoder, playlist, OPFS share). | Statistical suites green nightly. Playtester survey. | ongoing |
 | M9 | **Multiplayer:** relay, lobby, lockstep, desync reports, then WebRTC. | 2v2 across networks for 30+ minutes without desync. A forced desync produces a readable diff. | 2–3 |
 | M10 | **Campaign (optional):** full trigger and script set, briefings, fog as a map flag, movies. | Every campaign mission completable. | 6–12+ |
