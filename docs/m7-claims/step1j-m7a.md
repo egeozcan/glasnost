@@ -37,7 +37,7 @@ Q-1160 to Q-1165 are unused.
 **Formats.**
 - Save format 52 → 53. `DepotState::walked: bool` became `DepotState::entering: Option<ObjectId>`, the remembered depot. `claim_23_queued_state_round_trips` and `depot_state_round_trips` check it. `StructState` gained `fate_tick` (S-0605 revision 7, below) in the same format.
 - AI game format unchanged at 21: the AI makes no new decision.
-- Goldens: regenerated; no golden file changed, so no gate game reaches the changed rows. The gate figures are the same as at step 1i. The M7a duel still plays all 12 000 ticks at seed 3. Over seeds 1 to 16 every minimum is at least 3, except the sensor orders (2).
+- Goldens: regenerated. Before S-0605 revision 7 no golden file changed. After it every golden's hashes change, because `StructState::fate_tick` is new state. A regeneration with that field left out of the state changed no golden, so no gate game plays differently, and the gate figures are the same as at step 1i. The M7a duel still plays all 12 000 ticks at seed 3. Over seeds 1 to 16 every minimum is at least 3, except the sensor orders (2).
 
 ## S-0314 revision 25
 
