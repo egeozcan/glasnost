@@ -419,13 +419,7 @@ const NAMED: &[(&str, &[&str])] = &[
     ("S-0311", &["EliteFlashTimer"]),
     (
         "S-0312",
-        &[
-            "Bright",
-            "CrateBeneath",
-            "CrateBeneathIsMoney",
-            "DestroySmokeOffset",
-            "Wake",
-        ],
+        &["Bright", "CrateBeneath", "CrateBeneathIsMoney", "Wake"],
     ),
     (
         "S-0313",

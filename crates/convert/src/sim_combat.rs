@@ -27,6 +27,13 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
     ("rate_down", "RateDown", Int, "S-0609"),
     ("is_charge_turret", "IsChargeTurret", Bool, "S-0301, S-0308"),
     ("land_targeting", "LandTargeting", Int, "S-0308"),
+    // spec: S-0616 Import mapping (object type NaturalParticleSystem: a particle-system name; absent none)
+    (
+        "natural_particle_system",
+        "NaturalParticleSystem",
+        Ref(Kind::ParticleSystems),
+        "S-0616",
+    ),
     ("naval_targeting", "NavalTargeting", Int, "S-0308"),
     ("underwater", "Underwater", Bool, "S-0308, S-0504"),
     ("cloakable", "Cloakable", Bool, "S-0504, S-0516"),
@@ -266,7 +273,22 @@ const BUILDING_COMBAT: &[Row] = &[
         "S-0313, S-0310",
     ),
     ("barrel_anim_is_voxel", "BarrelAnimIsVoxel", Bool, "S-0313"),
+    // spec: S-0616 Import mapping (building type RefinerySmokeParticleSystem: a particle-system name; absent none)
+    (
+        "refinery_smoke_particle_system",
+        "RefinerySmokeParticleSystem",
+        Ref(Kind::ParticleSystems),
+        "S-0616",
+    ),
 ];
+
+/// The refinery smoke point keys, in order (S-0616 Import mapping).
+const REFINERY_SMOKE_POINTS: [&str; 4] = [
+    "RefinerySmokeOffsetOne",
+    "RefinerySmokeOffsetTwo",
+    "RefinerySmokeOffsetThree",
+    "RefinerySmokeOffsetFour",
+]; // spec: S-0616 Import mapping (RefinerySmokeOffsetOne … RefinerySmokeOffsetFour)
 
 /// Combat fields of overlay types.
 const OVERLAY_COMBAT: &[Row] = &[
@@ -310,6 +332,13 @@ const WEAPON_COMBAT: &[Row] = &[
         "S-0301, S-0302",
     ),
     ("is_railgun", "IsRailgun", Bool, "S-0301"),
+    // spec: S-0616 Import mapping (weapon AttachedParticleSystem: the effect weapon's emitter type, a particle-system name; absent none)
+    (
+        "attached_particle_system",
+        "AttachedParticleSystem",
+        Ref(Kind::ParticleSystems),
+        "S-0616",
+    ),
     ("is_mag_beam", "IsMagBeam", Bool, "S-0301"),
     ("spawner", "Spawner", Bool, "S-0301"),
     ("camera", "Camera", Bool, "S-0501"),
@@ -1055,6 +1084,29 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         "BarrelParticle",
         Ref(Kind::ParticleSystems),
         "S-0303",
+    ),
+    // spec: S-0616 Import mapping ([General] RefinerySmokeFrames: an integer, ticks; absent 25)
+    (
+        "refinery_smoke_frames",
+        GENERAL,
+        "RefinerySmokeFrames",
+        Int,
+        "S-0616",
+    ),
+    // spec: S-0616 Import mapping ([General] ConditionRedSparkingProbability and ConditionYellowSparkingProbability: decimals held as doubles; absent 0.02 and 0.01)
+    (
+        "condition_red_sparking_probability",
+        GENERAL,
+        "ConditionRedSparkingProbability",
+        Dec,
+        "S-0616",
+    ),
+    (
+        "condition_yellow_sparking_probability",
+        GENERAL,
+        "ConditionYellowSparkingProbability",
+        Dec,
+        "S-0616",
     ),
     (
         "metallic_debris",
@@ -1859,6 +1911,9 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         &s(&["DamageSmokeOffset", "DamSmkOffScrnRel"]),
         "S-0616",
     );
+    keyed(&TYPES, &s(&["NaturalParticleLocation"]), "S-0616");
+    keyed(&TYPES, &s(&["DestroySmokeOffset"]), "S-0312");
+    keyed(&["buildings"], &s(&REFINERY_SMOKE_POINTS), "S-0616");
     let crews: Vec<String> = CREWS.iter().map(|c| c.1.to_owned()).collect();
     keyed(&["global:General"], &crews, "S-0312");
     keyed(&UNITS, &s(&["DamageParticleSystems"]), "S-0302");
@@ -2107,6 +2162,15 @@ impl Builder<'_> {
     /// S-0315), written into `combat`.
     fn shared_combat(&mut self, combat: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
         self.cfields(combat, t, kind, COMBAT_FIELDS);
+        // spec: S-0616 Import mapping (NaturalParticleLocation: three integers, leptons; absent 0, 0, 0) and S-0312 Import mapping (DestroySmokeOffset: three integers in leptons; absent 0, 0, 0)
+        for (field, k) in [
+            ("natural_particle_location", "NaturalParticleLocation"),
+            ("destroy_smoke_offset", "DestroySmokeOffset"),
+        ] {
+            if let Some(v) = int_triple(t, k) {
+                Self::put_tuple(combat, field, v);
+            }
+        }
         self.spin_settings(combat, kind, t);
         if let Some(word) = self.armour(kind, t) {
             combat.put("armor", jsonc::string(word));
@@ -2413,24 +2477,8 @@ impl Builder<'_> {
     /// leptons; the screen-relative case is not specified, so the importer
     /// warns and the displacement is used as given.
     fn damage_smoke_offset(&mut self, combat: &mut Rec, kind: Kind, t: &TypeRec) {
-        let mut held: Option<[i32; 3]> = None;
-        for e in t
-            .keys
-            .get(&b"DamageSmokeOffset"[..])
-            .into_iter()
-            .flat_map(|s| &s.history)
-        {
-            match &e.what {
-                What::Set(v) => {
-                    // spec: S-0616 Import mapping (DamageSmokeOffset: three integers, leptons; absent 0, 0, 0) and S-0003 claim 9 (unread components keep the value in force, our engine)
-                    let (out, _) = value::int_tuple_or::<3>(v, held.unwrap_or([0; 3]));
-                    held = Some(out);
-                }
-                What::Reset => held = None,
-                _ => {}
-            }
-        }
-        if let Some(o) = held {
+        // spec: S-0616 Import mapping (DamageSmokeOffset: three integers, leptons; absent 0, 0, 0)
+        if let Some(o) = int_triple(t, "DamageSmokeOffset") {
             Self::put_tuple(combat, "damage_smoke_offset", o);
         }
         let rel = fold(t.keys.get(&b"DamSmkOffScrnRel"[..]), None, |v, _| {
@@ -2463,18 +2511,29 @@ impl Builder<'_> {
         };
         let keys = type_keys(reg);
         let mut out = Vec::new();
+        let mut sparks = Vec::new();
         for item in list {
             let Some(i) = reg.iter().position(|p| value::type_name_eq(&p.name, &item)) else {
                 continue;
             };
+            let kind = text_of(key(&reg[i], "BehavesLike"));
             // spec: S-0302 Import mapping (eligible when BehavesLike is Smoke, letter case ignored; other and unknown words are not)
-            let smoke = text_of(key(&reg[i], "BehavesLike"))
+            let smoke = kind
+                .as_ref()
                 .is_some_and(|b| b.eq_ignore_ascii_case(b"Smoke"));
+            // spec: S-0616 claim 1 (damage sparks: the spark-kind entries of the same list, in list order)
+            let spark = kind.is_some_and(|b| b.eq_ignore_ascii_case(b"Spark"));
             if smoke {
                 out.push(jsonc::string(keys[i].clone()));
             }
+            if spark {
+                sparks.push(jsonc::string(keys[i].clone()));
+            }
         }
         combat.put("damage_smoke_systems", jsonc::array(out));
+        if !sparks.is_empty() {
+            combat.put("damage_spark_systems", jsonc::array(sparks));
+        }
     }
 
     /// The gattling thresholds and the warnings for the spin settings
@@ -2709,6 +2768,25 @@ impl Builder<'_> {
             rec.put("combat", combat.node());
         }
         self.cfields(rec, t, kind, BUILDING_COMBAT);
+        // spec: S-0616 Import mapping (RefinerySmokeOffsetOne … RefinerySmokeOffsetFour: three integers each, leptons; absent unset)
+        let points: Vec<Option<[i32; 3]>> = REFINERY_SMOKE_POINTS
+            .iter()
+            .map(|k| int_triple(t, k))
+            .collect();
+        if points.iter().any(Option::is_some) {
+            rec.put(
+                "refinery_smoke_offsets",
+                jsonc::array(
+                    points
+                        .iter()
+                        // spec: S-0616 claim 1 (a point of (0, 0, 0) counts as unset, as a point not given does)
+                        .map(|p| {
+                            jsonc::array(p.unwrap_or([0; 3]).iter().map(|&x| int_node(x)).collect())
+                        })
+                        .collect(),
+                ),
+            );
+        }
         // spec: S-0004 claim 11 (the sidebar tab's build category uses this same rule)
         // spec: S-0302 Import mapping (BuildCat: the first 31 bytes, surrounding whitespace trimmed, a whole word compared ignoring A–Z case; a defence building only for Combat, any other nonempty word, unknown ones included, is not; missing or empty keeps the held category, initially not a defence)
         if let Some(d) = fold(key(t, "BuildCat"), None, |v, _| {
@@ -2886,6 +2964,16 @@ impl Builder<'_> {
     pub(super) fn weapon_combat(&mut self, rec: &mut Rec, t: &TypeRec) {
         self.cfields(rec, t, Kind::Weapons, WEAPON_COMBAT);
         let name = format!("weapons {}", show(&t.name));
+        let effect = ["UseSparkParticles", "UseFireParticles", "IsRailgun"]
+            .iter()
+            .any(|k| bool_of(key(t, k)) == Some(true));
+        if effect && !rec.0.iter().any(|(f, _)| f == "attached_particle_system") {
+            // spec: S-0616 Import mapping (an effect weapon without AttachedParticleSystem: the original fails; our engine makes no emitter, with an importer warning)
+            let line = t.reads.last().copied().unwrap_or(t.created_in);
+            self.warn(line, 0, format!(
+                "{name} is a spark, fire or railgun weapon without an AttachedParticleSystem: our engine makes no emitter at its shots (S-0616 Import mapping, a departure)"
+            ));
+        }
         // spec: S-0519 claim 23 and Import mapping (a suicide weapon with no game-wide demolition warhead: the self-hit is still delivered, our engine completes the death deterministically; the importer warns)
         if bool_of(key(t, "Suicide")) == Some(true)
             && self.global(COMBAT_DAMAGE, "C4Warhead").is_none()
@@ -3898,3 +3986,27 @@ const LOW_BRIDGE_BASES: [usize; 4] = [74, 83, 205, 214];
 /// The largest displacement from t₀ that S-0511 binds (the destroyed piece
 /// along x).
 const LOW_BRIDGE_LAST: usize = 26; // spec: S-0511 Import mapping (X along x: displacement 26)
+
+/// Three integers of a type key through its layers (S-0003 claim 9: the
+/// components a value does not give keep the value in force, our engine;
+/// a reset forgets it), or `None` when no layer gives the key.
+fn int_triple(t: &TypeRec, k: &str) -> Option<[i32; 3]> {
+    let mut held: Option<[i32; 3]> = None;
+    for e in t
+        .keys
+        .get(k.as_bytes())
+        .into_iter()
+        .flat_map(|s| &s.history)
+    {
+        match &e.what {
+            What::Set(v) => {
+                // spec: S-0003 claim 9 (unread components keep the value in force, our engine)
+                let (out, _) = value::int_tuple_or::<3>(v, held.unwrap_or([0; 3]));
+                held = Some(out);
+            }
+            What::Reset => held = None,
+            _ => {}
+        }
+    }
+    held
+}

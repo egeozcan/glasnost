@@ -859,6 +859,18 @@ pub struct General {
     /// established.
     #[serde(default)]
     pub default_spark_system: Option<String>,
+    /// `[General] RefinerySmokeFrames`, the refinery-smoke system lifetime
+    /// in ticks (S-0616 claim 1 and Import mapping; absent 25).
+    #[serde(default)]
+    pub refinery_smoke_frames: Option<i32>,
+    /// `[General] ConditionRedSparkingProbability`, the red sparking
+    /// probability of damage sparks, a double (S-0616 claim 1; absent 0.02).
+    #[serde(default)]
+    pub condition_red_sparking_probability: Option<Decimal>,
+    /// `[General] ConditionYellowSparkingProbability`, the yellow sparking
+    /// probability of damage sparks, a double (S-0616 claim 1; absent 0.01).
+    #[serde(default)]
+    pub condition_yellow_sparking_probability: Option<Decimal>,
     /// `[AudioVisual] MindClearedSound`, the rules-wide release sound
     /// (S-0601 claim 9).
     #[serde(default)]
@@ -2045,6 +2057,22 @@ pub struct CombatFields {
     /// axis (S-0616 claim 1 and Import mapping; absent 0, 0, 0).
     #[serde(default)]
     pub damage_smoke_offset: Option<[i32; 3]>, // spec: S-0616 Import mapping (three integers, leptons)
+    /// `DamageParticleSystems`: the particle-system names of the spark
+    /// kind, in list order (S-0616 claim 1, damage sparks).
+    #[serde(default)]
+    pub damage_spark_systems: Option<Vec<String>>,
+    /// `NaturalParticleSystem`, a particle-system name (S-0616 claim 1,
+    /// natural smoke; absent none).
+    #[serde(default)]
+    pub natural_particle_system: Option<String>,
+    /// `NaturalParticleLocation`, the natural-smoke displacement in leptons
+    /// per axis (S-0616 Import mapping; absent 0, 0, 0).
+    #[serde(default)]
+    pub natural_particle_location: Option<[i32; 3]>, // spec: S-0616 Import mapping (three integers, leptons)
+    /// `DestroySmokeOffset`, the destruction smoke displacement in leptons
+    /// per axis (S-0312 claim 19 f and Import mapping; absent 0, 0, 0).
+    #[serde(default)]
+    pub destroy_smoke_offset: Option<[i32; 3]>, // spec: S-0312 Import mapping (three integers in leptons)
     /// `MaxDebris` X (S-0312 F1).
     #[serde(default)]
     pub max_debris: Option<i32>,
@@ -2452,6 +2480,15 @@ pub struct BuildingType {
     // spec: S-0306 Import mapping (an integer triple)
     #[serde(default)]
     pub target_coord_offset: Option<[i32; 3]>,
+    /// `RefinerySmokeParticleSystem`, a particle-system name (S-0616 claim
+    /// 1, refinery smoke; absent none).
+    #[serde(default)]
+    pub refinery_smoke_particle_system: Option<String>,
+    /// `RefinerySmokeOffsetOne` … `RefinerySmokeOffsetFour`, the smoke
+    /// points in leptons; a point not given is written as (0, 0, 0), which
+    /// counts as unset (S-0616 claim 1 and Import mapping).
+    #[serde(default)]
+    pub refinery_smoke_offsets: Option<Vec<[i32; 3]>>, // spec: S-0616 Import mapping (three integers each, leptons; absent unset)
     /// Art `Height` H_b (S-0306 claim 6 c).
     #[serde(default)]
     pub art_height: Option<i32>,
@@ -2700,6 +2737,10 @@ pub struct WeaponType {
     /// (S-0614 claim 9); absent: empty.
     #[serde(default)]
     pub anim: Option<Vec<String>>,
+    /// `AttachedParticleSystem`, the effect weapon's emitter type, a
+    /// particle-system name (S-0616 claim 1; absent none).
+    #[serde(default)]
+    pub attached_particle_system: Option<String>,
 }
 
 /// A projectile's simulation fields.
