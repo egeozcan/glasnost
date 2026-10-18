@@ -29,7 +29,6 @@ fn claim_5_the_seize() {
     assert!(o.jump.is_some(), "the jumpjet locomotor is linked");
 }
 
-
 /// Destructions credited to house `h` (S-0302 claim 14), by object or by
 /// house alone.
 fn kills(w: &glasnost_sim::world::World, h: usize) -> i32 {
@@ -41,7 +40,11 @@ fn kills(w: &glasnost_sim::world::World, h: usize) -> i32 {
 fn seized_world(
     tweak: impl FnOnce(&mut glasnost_rules::schema::Ruleset),
     name: &str,
-) -> (glasnost_sim::world::World, glasnost_sim::world::ObjectId, glasnost_sim::world::ObjectId) {
+) -> (
+    glasnost_sim::world::World,
+    glasnost_sim::world::ObjectId,
+    glasnost_sim::world::ObjectId,
+) {
     let mut w = world(tweak);
     let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
     let v = spawn(&mut w, Kind::Vehicle, name, 1, at(6, 0));
@@ -54,7 +57,8 @@ fn seized_world(
 fn pull_over(w: &mut glasnost_sim::world::World, v: glasnost_sim::world::ObjectId, dx: i32) {
     let c = at(dx, 0);
     assert!(
-        run_until(w, 400, |w| w.obj(v).is_some_and(|o| o.pos.cell() == c) && height(w, v) > 300),
+        run_until(w, 400, |w| w.obj(v).is_some_and(|o| o.pos.cell() == c)
+            && height(w, v) > 300),
         "the victim did not pass over the cell"
     );
 }
@@ -70,7 +74,12 @@ fn claim_5_deselection_effect() {
     let mut w = world(|_| {});
     let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
     let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 0));
-    assert!(glasnost_sim::combat::fire::shot(&mut w, l, 0, Target::Object(v)));
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        l,
+        0,
+        Target::Object(v)
+    ));
     let mut seen = false;
     for _ in 0..40 {
         run(&mut w, 1);
@@ -101,16 +110,23 @@ fn claim_3_immune_targets() {
     assert!(lift::seized(&w, v));
     let l2 = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, -6));
     beam(&mut w, l2, v);
-    assert_eq!(lift::lifter_of(&w, v), Some(l), "already seized: no second grip");
+    assert_eq!(
+        lift::lifter_of(&w, v),
+        Some(l),
+        "already seized: no second grip"
+    );
     assert!(lift::gripped_unit(&w, l2).is_none());
 }
 
 // spec: S-0607 claim 3 and F1: a type whose size is below the damage is seized, whatever its weight
 #[test]
 fn f1_size_below_damage_seizes() {
-    let (w, _, v) = seized_world(|r| {
-        r.sim.vehicles.get_mut("VICT").unwrap().size = Some(d("9.99"));
-    }, "VICT");
+    let (w, _, v) = seized_world(
+        |r| {
+            r.sim.vehicles.get_mut("VICT").unwrap().size = Some(d("9.99"));
+        },
+        "VICT",
+    );
     assert!(lift::seized(&w, v));
 }
 
@@ -122,25 +138,41 @@ fn claim_8_arrival_drop_on_the_lifter() {
     let mut max_h = 0;
     let gone = run_until(&mut w, 600, |w| {
         if let Some(o) = w.obj(v) {
-            assert_eq!(o.body.value(w.tick), facing, "claim 7: the body facing is kept");
+            assert_eq!(
+                o.body.value(w.tick),
+                facing,
+                "claim 7: the body facing is kept"
+            );
         }
         max_h = max_h.max(height(w, v));
         w.obj(v).is_none()
     });
     assert!(gone, "the dropped unit leaves play");
     assert!(max_h > 300, "it was lifted");
-    assert!(health(&w, l) < 1000, "claim 18: the lifter underneath is hurt");
+    assert!(
+        health(&w, l) < 1000,
+        "claim 18: the lifter underneath is hurt"
+    );
     assert_eq!(kills(&w, 0), 1, "claim 18: credited to the dropper's house");
 }
 
 // spec: S-0607 claim 10: a seized unit gets illegal for every weapon and target
 #[test]
 fn claim_10_no_firing() {
-    let (w, l, v) = seized_world(|r| {
-        r.sim.vehicles.get_mut("VICT").unwrap().primary = Some("Gun".into());
-    }, "VICT");
-    assert_eq!(check::check(&w, v, Some(Target::Object(l)), 0, false), Answer::Illegal);
-    assert_eq!(check::check(&w, v, Some(Target::Cell(at(3, 3))), 0, false), Answer::Illegal);
+    let (w, l, v) = seized_world(
+        |r| {
+            r.sim.vehicles.get_mut("VICT").unwrap().primary = Some("Gun".into());
+        },
+        "VICT",
+    );
+    assert_eq!(
+        check::check(&w, v, Some(Target::Object(l)), 0, false),
+        Answer::Illegal
+    );
+    assert_eq!(
+        check::check(&w, v, Some(Target::Cell(at(3, 3))), 0, false),
+        Answer::Illegal
+    );
 }
 
 // spec: S-0607 claims 12, 13, 15, 17 and 20: a lifter's accepted order drops the unit mid-pull; it flies to its cell centre, falls with a growing rate, finds the cell clear, descends and touches down unhurt, set down; its next fall-back to rest restores its own locomotor
@@ -149,8 +181,14 @@ fn claim_17_release_over_clear_land() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
     pull_over(&mut w, v, 3);
     order_lifter(&mut w, l);
-    assert!(lift::gripped_unit(&w, l).is_none(), "claim 12: the grip ends");
-    assert!(w.obj(l).unwrap().target.is_none(), "claim 12: the lifter's target is cleared");
+    assert!(
+        lift::gripped_unit(&w, l).is_none(),
+        "claim 12: the grip ends"
+    );
+    assert!(
+        w.obj(l).unwrap().target.is_none(),
+        "claim 12: the lifter's target is cleared"
+    );
     assert!(lift::dropped(&w, v), "claim 13: dropped");
     assert!(w.obj(v).unwrap().dest.is_none());
     let mut rates = Vec::new();
@@ -160,12 +198,22 @@ fn claim_17_release_over_clear_land() {
         }
         !lift::dropped(w, v)
     }));
-    assert!(rates.len() > 2 && rates.windows(2).all(|p| p[1].to_f64().gt(p[0].to_f64())), "the crash rate grows");
+    assert!(
+        rates.len() > 2 && rates.windows(2).all(|p| p[1].to_f64().gt(p[0].to_f64())),
+        "the crash rate grows"
+    );
     let c = w.obj(v).unwrap().pos;
-    assert_eq!((c.x.rem_euclid(256), c.y.rem_euclid(256)), (128, 128), "claim 15: over the cell centre");
+    assert_eq!(
+        (c.x.rem_euclid(256), c.y.rem_euclid(256)),
+        (128, 128),
+        "claim 15: over the cell centre"
+    );
     assert!(restored(&mut w, v), "claim 20: restored");
     assert_eq!(health(&w, v), 100, "unhurt");
-    assert!(w.obj(v).unwrap().jump.is_none(), "its own locomotor is back");
+    assert!(
+        w.obj(v).unwrap().jump.is_none(),
+        "its own locomotor is back"
+    );
     assert_eq!(height(&w, v), 0);
 }
 
@@ -178,6 +226,34 @@ fn claim_13_set_down_at_height_zero() {
     assert!(!lift::dropped(&w, v), "not dropped");
     assert!(restored(&mut w, v));
     assert_eq!(health(&w, v), 100);
+}
+
+// spec: S-0607 claim 5 and S-0215 claim 11 (revision 63): a seized vehicle's movement is its jumpjet locomotor, so a set-down seized vehicle standing still in move is ready while its body turns
+#[test]
+fn claim_5_seized_turning_vehicle_is_ready() {
+    let (mut w, l, v) = seized_world(|_| {}, "VICT");
+    order_lifter(&mut w, l);
+    assert!(run_until(&mut w, 400, |w| {
+        w.height_above_surface(v) == 0 && !glasnost_sim::occupancy::in_progress(w, v)
+    }));
+    assert!(
+        lift::seized(&w, v),
+        "guard never falls back, so still seized"
+    );
+    // As after the owner's move click (scenario L11 part a): *move* is
+    // current, which claim 11 does not excuse.
+    let t = w.tick;
+    let stale = w.rules().quirks.stale_suspended_revert;
+    w.obj_mut(v).unwrap().beh.force(Behaviour::Move, t, stale);
+    let rate = w
+        .rules()
+        .unit(Kind::Vehicle, w.obj(v).unwrap().type_index)
+        .unwrap()
+        .turn_rate;
+    let face = w.obj(v).unwrap().body.value(t).wrapping_add(32768);
+    assert!(w.obj_mut(v).unwrap().body.turn_to(face, t, rate));
+    assert!(w.obj(v).unwrap().body.turning(t));
+    assert!(glasnost_sim::process::ready(&w, v), "turning but ready");
 }
 
 // spec: S-0607 claim 9: a seized unit ignores a new destination
@@ -196,7 +272,10 @@ fn claim_9_no_destination_sets_down() {
     glasnost_sim::econ::assign_destination(&mut w, v, None);
     run(&mut w, 1);
     assert!(lift::gripped_unit(&w, l).is_none(), "the grip ends");
-    assert!(w.obj(l).unwrap().target.is_some(), "the lifter keeps its target");
+    assert!(
+        w.obj(l).unwrap().target.is_some(),
+        "the lifter keeps its target"
+    );
     assert!(!lift::dropped(&w, v), "no drop");
     assert!(restored(&mut w, v));
     assert_eq!(health(&w, v), 100);
@@ -206,14 +285,21 @@ fn claim_9_no_destination_sets_down() {
 #[test]
 fn claim_17_blocked_water_sinks() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
-    let cells: Vec<_> = (1..=5).flat_map(|x| (-1..=1).map(move |y| at(x, y))).collect();
+    let cells: Vec<_> = (1..=5)
+        .flat_map(|x| (-1..=1).map(move |y| at(x, y)))
+        .collect();
     water(&mut w, &cells);
     pull_over(&mut w, v, 3);
     order_lifter(&mut w, l);
-    assert!(run_until(&mut w, 400, |w| glasnost_sim::naval::sinking(w, v) || w.obj(v).is_none()));
+    assert!(run_until(&mut w, 400, |w| glasnost_sim::naval::sinking(
+        w, v
+    ) || w.obj(v).is_none()));
     assert!(w.obj(v).is_some(), "sinking, not removed by an impact");
     assert_eq!(health(&w, v), 100, "no falling damage");
-    assert!(run_until(&mut w, 400, |w| w.obj(v).is_none()), "it sinks out of play");
+    assert!(
+        run_until(&mut w, 400, |w| w.obj(v).is_none()),
+        "it sinks out of play"
+    );
     assert_eq!(kills(&w, 0), 1, "its death is credited to the dropper");
 }
 
@@ -224,10 +310,17 @@ fn claim_16_infantry_underneath_are_erased() {
     let i = spawn(&mut w, Kind::Infantry, "TROOPER", 1, at(3, 0));
     pull_over(&mut w, v, 3);
     order_lifter(&mut w, l);
-    assert!(run_until(&mut w, 400, |w| w.obj(i).is_none()), "the infantry unit is removed");
+    assert!(
+        run_until(&mut w, 400, |w| w.obj(i).is_none()),
+        "the infantry unit is removed"
+    );
     assert_eq!(kills(&w, 0), 1);
     assert!(restored(&mut w, v));
-    assert_eq!(health(&w, v), 100, "the dropped unit survives on the cleared cell");
+    assert_eq!(
+        health(&w, v),
+        100,
+        "the dropped unit survives on the cleared cell"
+    );
 }
 
 /// A world whose impact warheads do no damage (verses 0), with the switch
@@ -243,7 +336,11 @@ fn armoured(removes: bool) -> impl FnOnce(&mut glasnost_rules::schema::Ruleset) 
 
 /// Drops the victim onto a vehicle at (3, 0) (blocked land) and returns
 /// once the impact has happened.
-fn drop_on_blocker(w: &mut glasnost_sim::world::World, l: glasnost_sim::world::ObjectId, v: glasnost_sim::world::ObjectId) {
+fn drop_on_blocker(
+    w: &mut glasnost_sim::world::World,
+    l: glasnost_sim::world::ObjectId,
+    v: glasnost_sim::world::ObjectId,
+) {
     spawn(w, Kind::Vehicle, "VICT", 0, at(3, 0));
     pull_over(w, v, 3);
     order_lifter(w, l);
@@ -268,7 +365,10 @@ fn quirk_lift_impact_removes_survivor_both_positions() {
 fn claim_18_crashable_type_crashes() {
     let (mut w, l, v) = seized_world(armoured(false), "CRASHER");
     drop_on_blocker(&mut w, l, v);
-    assert!(run_until(&mut w, 5, |w| w.obj(v).is_none()), "destroyed by the ordinary crash end");
+    assert!(
+        run_until(&mut w, 5, |w| w.obj(v).is_none()),
+        "destroyed by the ordinary crash end"
+    );
 }
 
 // spec: S-0607 F2: D_f = trunc(B × m) with B the current health (switch on) or the type's strength (switch off)
@@ -293,8 +393,6 @@ fn f2_falling_damage() {
     assert_eq!(health(&w, v), 30);
 }
 
-
-
 // spec: S-0607 claim 2: a new hit by a firer that already grips this very target does nothing
 #[test]
 fn claim_2_hit_on_the_gripped_target_does_nothing() {
@@ -312,13 +410,21 @@ fn claim_2_new_hit_at_an_immune_target_drops() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
     let i = spawn(&mut w, Kind::Infantry, "TROOPER", 1, at(0, 4));
     pull_over(&mut w, v, 3);
-    assert!(glasnost_sim::combat::fire::shot(&mut w, l, 0, Target::Object(i)));
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        l,
+        0,
+        Target::Object(i)
+    ));
     attack(&mut w, l, v);
     assert!(run_until(&mut w, 40, |w| w.projectiles.is_empty()));
     assert!(!lift::seized(&w, i), "infantry are immune");
     assert!(lift::gripped_unit(&w, l).is_none(), "the grip ended");
     assert!(lift::dropped(&w, v), "the old unit falls");
-    assert!(w.obj(l).unwrap().target.is_some(), "the firer keeps its target");
+    assert!(
+        w.obj(l).unwrap().target.is_some(),
+        "the firer keeps its target"
+    );
 }
 
 // spec: S-0607 claim 5 and State and ordering: the firer's old gripped unit is released, and starts its fall, in the same tick in which the new unit is seized
@@ -328,7 +434,12 @@ fn claim_5_second_seize_drops_the_first() {
     let v2 = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(0, 6));
     pull_over(&mut w, v, 3);
     run(&mut w, 25);
-    assert!(glasnost_sim::combat::fire::shot(&mut w, l, 0, Target::Object(v2)));
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        l,
+        0,
+        Target::Object(v2)
+    ));
     assert!(run_until(&mut w, 40, |w| lift::seized(w, v2)));
     assert!(lift::grips(&w, l, v2));
     assert!(lift::dropped(&w, v), "dropped in the tick of the new seize");
@@ -352,7 +463,10 @@ fn claim_14_lifter_leaves_play() {
     pull_over(&mut w, v, 3);
     glasnost_sim::objects::remove(&mut w, l);
     assert!(lift::dropped(&w, v));
-    assert!(run_until(&mut w, 400, |w| w.obj(v).is_none()), "impact removal");
+    assert!(
+        run_until(&mut w, 400, |w| w.obj(v).is_none()),
+        "impact removal"
+    );
     assert!(kills(&w, 0) >= 1, "credited to the dropper house");
     assert_eq!(kills(&w, 1), 0);
 }
@@ -360,14 +474,26 @@ fn claim_14_lifter_leaves_play() {
 // spec: S-0607 claim 6: a seized unit of the neutral or special house (non-human rule) queues hunt; a player house's unit queues guard
 #[test]
 fn claim_6_non_human_houses_queue_hunt() {
-    for (house, want) in [(1u8, Behaviour::Guard), (2, Behaviour::Hunt), (3, Behaviour::Hunt)] {
+    for (house, want) in [
+        (1u8, Behaviour::Guard),
+        (2, Behaviour::Hunt),
+        (3, Behaviour::Hunt),
+    ] {
         let mut w = testkit::game_with_non_players(&ruleset(), SIZE, 1);
         let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
         let v = spawn(&mut w, Kind::Vehicle, "VICT", house, at(6, 0));
-        assert!(glasnost_sim::combat::fire::shot(&mut w, l, 0, Target::Object(v)));
+        assert!(glasnost_sim::combat::fire::shot(
+            &mut w,
+            l,
+            0,
+            Target::Object(v)
+        ));
         assert!(run_until(&mut w, 40, |w| lift::seized(w, v)));
         let b = &w.obj(v).unwrap().beh;
-        assert!(b.queued == Some(want) || (b.queued.is_none() && b.current == Some(want)), "house {house}: {b:?}");
+        assert!(
+            b.queued == Some(want) || (b.queued.is_none() && b.current == Some(want)),
+            "house {house}: {b:?}"
+        );
     }
 }
 
@@ -378,8 +504,15 @@ fn claim_11_rearming_while_gripping() {
     let other = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(0, 5));
     assert!(lift::wave_alive(&w, l), "the shot made a wave");
     run(&mut w, 25);
-    assert_eq!(check::check(&w, l, Some(Target::Object(other)), 0, false), Answer::Rearming);
-    assert_ne!(check::check(&w, l, Some(Target::Object(v)), 0, false), Answer::Illegal, "its gripped unit is not refused");
+    assert_eq!(
+        check::check(&w, l, Some(Target::Object(other)), 0, false),
+        Answer::Rearming
+    );
+    assert_ne!(
+        check::check(&w, l, Some(Target::Object(v)), 0, false),
+        Answer::Illegal,
+        "its gripped unit is not refused"
+    );
 }
 
 fn pos_at(c: glasnost_map::CellXY, dx: i32) -> Pos {
@@ -432,12 +565,22 @@ fn f4_wave_fade() {
         n += 1;
         assert!(n < 100);
     }
-    assert_eq!(n, 2, "the target leaving play ends it; the shorter fade from the retained strength");
+    assert_eq!(
+        n, 2,
+        "the target leaving play ends it; the shorter fade from the retained strength"
+    );
 }
 
 /// Drops the victim over a cell holding a TROOPER first and a VICT after
 /// it in the ground list; the impact warheads do no damage.
-fn tail_scene(erase_tail: bool) -> (glasnost_sim::world::World, glasnost_sim::world::ObjectId, glasnost_sim::world::ObjectId, glasnost_sim::world::ObjectId) {
+fn tail_scene(
+    erase_tail: bool,
+) -> (
+    glasnost_sim::world::World,
+    glasnost_sim::world::ObjectId,
+    glasnost_sim::world::ObjectId,
+    glasnost_sim::world::ObjectId,
+) {
     let (mut w, l, v) = seized_world(
         move |r| {
             armoured(true)(r);
@@ -447,7 +590,10 @@ fn tail_scene(erase_tail: bool) -> (glasnost_sim::world::World, glasnost_sim::wo
     );
     let t = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(3, 0));
     let i = spawn(&mut w, Kind::Infantry, "TROOPER", 1, at(3, 0));
-    let list = w.cells.list(at(3, 0), glasnost_sim::world::Layer::Ground).to_vec();
+    let list = w
+        .cells
+        .list(at(3, 0), glasnost_sim::world::Layer::Ground)
+        .to_vec();
     assert_eq!(list, vec![i, t], "the infantry unit is listed first");
     pull_over(&mut w, v, 3);
     order_lifter(&mut w, l);
@@ -461,11 +607,20 @@ fn quirk_lift_drop_erases_cell_tail_both_positions() {
     let (mut w, v, _, t) = tail_scene(true);
     assert!(w.obj(t).is_none(), "on: the vehicle after it is erased");
     assert_eq!(kills(&w, 0), 2);
-    assert!(restored(&mut w, v), "on: the cell is clear, the unit survives");
+    assert!(
+        restored(&mut w, v),
+        "on: the cell is clear, the unit survives"
+    );
     let (mut w, v, _, t) = tail_scene(false);
     assert!(w.obj(t).is_some(), "off: the vehicle stays");
-    assert!(run_until(&mut w, 30, |w| w.obj(v).is_none()), "off: the cell is blocked; impact removal");
-    assert!(w.obj(t).is_some(), "off: the vehicle survives the armoured impact");
+    assert!(
+        run_until(&mut w, 30, |w| w.obj(v).is_none()),
+        "off: the cell is blocked; impact removal"
+    );
+    assert!(
+        w.obj(t).is_some(),
+        "off: the vehicle survives the armoured impact"
+    );
 }
 
 // spec: S-0607 claims 15 and 16 and quirks.lift_deck_impact_reads_ground: a fall ending on a bridge deck reads the ground layer under it (on: the infantry under the bridge is erased); off: the deck layer (the infantry is untouched)
@@ -486,8 +641,6 @@ fn quirk_lift_deck_impact_reads_ground_both_positions() {
     }
 }
 
-
-
 /// A ruleset whose crushing warhead does no damage (verses 0), falling
 /// damage a quarter of the type's strength, and survivors kept, with a
 /// landed, crashable aircraft type PLANE of strength 100.
@@ -498,7 +651,10 @@ fn plane_rules(r: &mut glasnost_rules::schema::Ruleset) {
     r.sim.general.current_strength_damage = Some(false);
     let mut t = r.sim.vehicles["VICT"].clone();
     t.crashable = Some(true);
-    r.registries.entry("aircraft".into()).or_default().push("PLANE".into());
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("PLANE".into());
     r.sim.aircraft.insert("PLANE".into(), t);
 }
 
@@ -524,7 +680,13 @@ fn claim_19_dropped_aircraft() {
 
 /// A resource-gathering vehicle type HARV that drives temporarily
 /// (S-0417 claim 5): `moving` keeps a locomotor destination point.
-fn temporary_harvester(moving: bool) -> (glasnost_sim::world::World, glasnost_sim::world::ObjectId, glasnost_sim::world::ObjectId) {
+fn temporary_harvester(
+    moving: bool,
+) -> (
+    glasnost_sim::world::World,
+    glasnost_sim::world::ObjectId,
+    glasnost_sim::world::ObjectId,
+) {
     let mut w = world(|r| {
         vehicle(r, "HARV", |t| t.econ.resource_gatherer = Some(true));
     });
@@ -549,13 +711,23 @@ fn claim_4_temporary_harvester() {
     let (mut w, l, h) = temporary_harvester(false);
     beam(&mut w, l, h);
     assert!(!lift::seized(&w, h));
-    assert!(!glasnost_sim::econ::release::temporary_drive(&w, h), "its own locomotor is back");
+    assert!(
+        !glasnost_sim::econ::release::temporary_drive(&w, h),
+        "its own locomotor is back"
+    );
     assert_eq!(health(&w, h), 100);
     let (mut w, l, h) = temporary_harvester(true);
     beam(&mut w, l, h);
     assert!(!lift::seized(&w, h));
-    assert!(glasnost_sim::econ::release::temporary_drive(&w, h), "still driving temporarily");
+    assert!(
+        glasnost_sim::econ::release::temporary_drive(&w, h),
+        "still driving temporarily"
+    );
     let o = w.obj(h).unwrap();
-    assert!(o.beh.current == Some(Behaviour::Stop) || o.beh.queued == Some(Behaviour::Stop), "{:?}", o.beh);
+    assert!(
+        o.beh.current == Some(Behaviour::Stop) || o.beh.queued == Some(Behaviour::Stop),
+        "{:?}",
+        o.beh
+    );
     assert!(lift::gripped_unit(&w, l).is_none());
 }

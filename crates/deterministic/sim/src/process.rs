@@ -57,6 +57,8 @@ fn drive_body_turning(w: &World, id: ObjectId) -> bool {
         .unit(o.kind, o.type_index)
         .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Drive)
         || crate::econ::release::temporary_drive(w, id);
+    // spec: S-0607 claim 5 (a seized unit's movement is its linked jumpjet locomotor, not its own driving one, until claim 20 gives it back)
+    let driving = driving && !crate::lift::seized(w, id);
     // spec: S-0215 claim 11 (revision 63: moving while the body is still turning towards its target facing; ready on the first start or late start after the turn ends) and S-0206 Terms (turning: the facing differs from its target at this tick)
     driving && o.body.turning(w.tick)
 }
@@ -734,7 +736,9 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             crate::structures::bunker::process_enter(w, id)
         }
         // spec: S-0606 claim 6 (a tank bunker's repair processing: the entry stages of table S1)
-        (Some(Behaviour::Repair), Kind::Building) if crate::structures::bunker::is_bunker(w, id) => {
+        (Some(Behaviour::Repair), Kind::Building)
+            if crate::structures::bunker::is_bunker(w, id) =>
+        {
             crate::structures::bunker::process_repair(w, id)
         }
         // spec: S-0215 claim 29 and S-0507 claim 5 (enter toward a transport: the loading exchange)
