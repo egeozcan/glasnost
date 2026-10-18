@@ -2,7 +2,7 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 56
+revision: 57
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1710,13 +1710,15 @@ rocket-flight movement to a fixed aim point, not an ordinary projectile. S-0506 
 firing pass and a spy plane's overfly. It makes the aircraft not ready to change, subject
 to the spy-plane approach exception of S-0501 claim 31.
 
-**seized.** A unit's state from a successful locomotor seize until it gets its own locomotor
-back. It survives the end of a grip and a drop, and is distinct from *held*, the parasite
-countdown. S-0607 claims 5, 12 and 20 own the state and restoration.
+**seized.** A unit's state from a successful locomotor seize until a restoration clears it
+(S-0607 claim 20; claim 24 for another stand-in). It survives the end of a grip and a drop,
+and is distinct from *held*, the parasite countdown. Getting its own locomotor back does
+not by itself clear the state: a drop-pod stand-in can end while the unit stays seized
+(S-0607 claim 24). S-0607 claims 5 and 12 own the seize and the end of the grip.
 
 **seizing warhead.** A warhead with the imported locomotor flag, naming a temporary replacement
-for its target's own locomotor. S-0607 claim 1 owns its seizing hit and claim 22 the outcomes
-for other named locomotors; that spec covers movement under the jumpjet replacement only.
+for its target's own locomotor. S-0607 claim 1 owns its seizing hit and claims 22 to 24 the
+outcomes, movement and restoration for other named locomotors.
 
 **set down.** In magnetic lift, ending a grip at non-positive height above the surface, or a
 seized unit's touchdown at the end of descending flight. Being set down allows restoration
@@ -1743,6 +1745,9 @@ spawns, and its number of spawn slots. S-0506 claim 1 owns creation and initial 
 **spread, spread radius.** A warhead's *spread* is its spread field, a decimal number of cells; the
 *spread radius* is the distance in leptons, derived from it, within which a detonation hits
 objects. S-0303 owns both (Terms, claim 3, Formulas F1); S-0302 and S-0312 use them.
+
+**stand-in locomotor.** The locomotor a seize installs in place of the unit's own. S-0607
+(Terms, claims 22 to 24) owns the term and the rules for other stand-ins besides the jumpjet.
 
 **strafing weapon.** A weapon whose projectile has a signed turn rate at most 1 and is not
 invisible. S-0501 claim 11 uses this test to identify a strafer; claims 13 and 15 own its
