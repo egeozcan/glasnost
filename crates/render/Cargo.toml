@@ -16,6 +16,8 @@ log = "0.4"
 # Native: wgpu's default backends (Vulkan, GL, Metal, DX12).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 wgpu = "30.0.1"
+# Blocks on device setup for `gpu::shared_device` (tests and tools).
+pollster = "0.4"
 
 # Web: both browser backends; the instance picks WebGPU at runtime where the
 # browser offers it and falls back to WebGL2 (PLAN.md 4.1).
@@ -23,7 +25,6 @@ wgpu = "30.0.1"
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "wgsl", "webgl", "webgpu"] }
 
 [dev-dependencies]
-pollster = "0.4"
 # Translates the WGSL shaders to GLSL ES 3.00 in tests, to catch constructs
 # WebGL2 cannot express without needing a browser.
 naga = { version = "30.0.1", features = ["wgsl-in", "glsl-out"] }

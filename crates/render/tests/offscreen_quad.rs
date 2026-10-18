@@ -6,7 +6,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use glasnost_fmt::synth::{checkerboard, ramp_palette};
-use glasnost_render::gpu::{self, BackendChoice};
+use glasnost_render::gpu;
 use glasnost_render::offscreen::{OFFSCREEN_FORMAT, render_rgba};
 use glasnost_render::palette_quad::{PaletteQuad, QuadParams, cycled_index};
 
@@ -15,21 +15,18 @@ fn gpu_required() -> bool {
 }
 
 fn device() -> Option<(wgpu::Device, wgpu::Queue, String)> {
-    pollster::block_on(async {
-        let instance = gpu::create_instance(BackendChoice::Auto, None).await;
-        let adapter = match gpu::request_adapter(&instance, None).await {
-            Ok(a) => a,
-            Err(e) if !gpu_required() => {
-                eprintln!("skipping: {e} (set GLASNOST_REQUIRE_GPU=1 to make this fatal)");
-                return None;
-            }
-            Err(e) => panic!("GLASNOST_REQUIRE_GPU=1 but {e}"),
-        };
-        let info = adapter.get_info();
-        let label = format!("{} on {}", gpu::backend_label(info.backend), info.name);
-        let (device, queue) = gpu::request_device(&adapter).await.expect("device opens");
-        Some((device, queue, label))
-    })
+    match gpu::shared_device() {
+        Ok(g) => {
+            let label = format!("{} on {}", gpu::backend_label(g.info.backend), g.info.name);
+            Some((g.device, g.queue, label))
+        }
+        Err(gpu::SharedGpuError::NoAdapter(e)) if !gpu_required() => {
+            eprintln!("skipping: {e} (set GLASNOST_REQUIRE_GPU=1 to make this fatal)");
+            None
+        }
+        Err(gpu::SharedGpuError::NoAdapter(e)) => panic!("GLASNOST_REQUIRE_GPU=1 but {e}"),
+        Err(e) => panic!("device opens: {e}"),
+    }
 }
 
 #[test]

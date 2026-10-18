@@ -107,14 +107,11 @@ fn ticks(c: &mut Client, clock: &mut i64, n: usize) {
 /// offscreen, when there is an adapter: written to `game-gpu.png` and
 /// compared with the CPU frame.
 fn gpu_shot(shots: &Shots, c: &mut Client, cpu: &[u8]) {
-    use glasnost_render::gpu::{self, BackendChoice};
+    use glasnost_render::gpu;
     use glasnost_render::offscreen::{OFFSCREEN_FORMAT, render_rgba};
     use glasnost_render::wgpu;
-    let Some((device, queue)) = pollster::block_on(async {
-        let instance = gpu::create_instance(BackendChoice::Auto, None).await;
-        let adapter = gpu::request_adapter(&instance, None).await.ok()?;
-        gpu::request_device(&adapter).await.ok()
-    }) else {
+    // The process's one shared device (M7b step 2c).
+    let Some((device, queue)) = gpu::shared_device().ok().map(|g| (g.device, g.queue)) else {
         println!("no GPU adapter: game-gpu.png not written");
         return;
     };

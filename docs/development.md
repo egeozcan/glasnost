@@ -1557,7 +1557,7 @@ cargo test --workspace          # unit tests, render tests, dependency rule
 cargo xtask check               # the checks above
 ```
 
-`crates/render/tests/offscreen_quad.rs` renders the palette quad on a real or software GPU and compares every pixel with the CPU palette lookup. Without an adapter it skips, unless `GLASNOST_REQUIRE_GPU=1` is set (CI sets it and installs lavapipe). `WGPU_BACKEND=gl` runs it on the native GL backend. `crates/render/tests/webgl2_shaders.rs` translates every shader to GLSL ES 3.00, so constructs WebGL2 can't express fail without a browser.
+`crates/render/tests/offscreen_quad.rs` renders the palette quad on a real or software GPU and compares every pixel with the CPU palette lookup. Without an adapter it skips, unless `GLASNOST_REQUIRE_GPU=1` is set (CI sets it and installs lavapipe). `WGPU_BACKEND=gl` runs it on the native GL backend. Offscreen GPU tests and lanes take their device from `render::gpu::shared_device()`, one device per process, and never open their own: the test harness runs tests on several threads, and opening Vulkan devices on several threads at once made the Vulkan loader segfault while naming a debug object (M7b step 2c: `map_gpu` crashed in 3 of 250 runs before the fix and in none of 1250 after). `crates/render/tests/webgl2_shaders.rs` translates every shader to GLSL ES 3.00, so constructs WebGL2 can't express fail without a browser.
 
 The browser lane is described in [web.md](web.md).
 
