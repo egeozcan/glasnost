@@ -275,6 +275,7 @@ impl Brain {
                     self.build_bunker(w, &mut out);
                 }
             }
+            self.build_lifter(w, &mut out);
         }
         if w.tick % THINK_PERIOD == 0 {
             self.special.think(&self.script, w, &mut out);
@@ -306,6 +307,8 @@ impl Brain {
         if kept > 0 {
             self.special.count_spins_kept(kept);
         }
+        // S-0607 claims 9 and 12: a lifter takes only the lifter part's orders, and a holding lifter only its drop (`lifter`)
+        out.retain(|o| crate::lifter::keeps_order(w, o));
         // S-0601 claim 16: no attack order (from any part of the brain) to an unlimited controller one more victim would overload harmfully
         out.retain(|o| match o {
             Order::Behaviour {
@@ -391,6 +394,20 @@ impl Brain {
             out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
             out.push(Order::Build { what: t });
             self.special.count_gattling_defence();
+        }
+    }
+
+    /// Builds a magnetic lifter (S-0607, [`crate::lifter::build_type`]) as a
+    /// person adds a few lifters, since every side fields vehicles: not while selling
+    /// out, and only when the plan keeps its harvesters. A vehicle order does
+    /// not compete with the building orders of this think.
+    fn build_lifter(&mut self, w: &World, out: &mut Vec<Order>) {
+        if self.script.selling() || !self.script.harvesters_kept(w) {
+            return;
+        }
+        if let Some(t) = crate::lifter::build_type(&self.script, w) {
+            out.push(Order::Build { what: t });
+            self.special.count_lifter_build();
         }
     }
 

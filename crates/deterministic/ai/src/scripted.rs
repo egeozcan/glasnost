@@ -986,10 +986,15 @@ impl Script {
             && (!self.candidates(w, Role::Harvester).is_empty()
                 || (self.of_role(w, vehicle_factory).is_empty()
                     && !self.candidates(w, vehicle_factory).is_empty()));
-        let army_types = if economy_first {
+        // Lifters are built by their own rule (`lifter::build_type`), not
+        // in the round of army types.
+        let army_types: Vec<TypeRef> = if economy_first {
             Vec::new()
         } else {
             self.candidates(w, Role::Army)
+                .into_iter()
+                .filter(|&t| !crate::lifter::lifter_type(w, t))
+                .collect()
         };
         // Of the types whose line is free (a naval yard's and a war
         // factory's vehicles do not wait on each other), the one the house

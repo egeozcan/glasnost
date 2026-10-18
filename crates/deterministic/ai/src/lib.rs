@@ -38,6 +38,7 @@ pub mod game;
 pub mod gattling;
 pub mod grinder;
 pub mod jumpjets;
+pub mod lifter;
 pub mod linked;
 pub mod memory;
 pub mod mind;

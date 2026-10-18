@@ -38,6 +38,11 @@
 //!   houses start with units only.
 //! - Both sides (S-0606): BUNK, a tank bunker built by the AI, which
 //!   sends GUNR and GATV in and lets them out again.
+//! - Both sides (S-0607): MAGN, a magnetic lifter built at the war
+//!   factory, whose beam MAGRAY seizes the enemy's vehicles; the general
+//!   crushing and demolition warheads SQUASH and BLAST for the falls.
+//!   Both sides have it because an Alpha-only lifter tipped the duel:
+//!   Alpha won the gate seed before its last tick.
 //!
 //! To add a type, insert it in [`ruleset`] (with `register`) and, for a
 //! start unit, add its name to [`INFANTRY`] or [`VEHICLES`]; the gate's
@@ -359,6 +364,54 @@ pub fn ruleset() -> Ruleset {
     bunk.number_impassable_rows = Some(0);
     register(&mut r, "buildings", "BUNK");
     r.sim.buildings.insert("BUNK".into(), bunk);
+    // The magnetic lifter of both sides (S-0607): MAGN, a vehicle built at the war
+    // factory whose beam MAGRAY (damage 10, so every fixture vehicle of
+    // size 1 can be seized) has the seizing warhead MAGWH with the jumpjet
+    // locomotor. The falls of S-0607 claim 18 detonate SQUASH (crushing)
+    // and BLAST (demolition); the fixture has no game-wide death weapon, so
+    // they are plain area detonations (Q-1325).
+    r.sim.warheads.insert(
+        "MAGWH".into(),
+        WarheadType {
+            is_locomotor: Some(true),
+            locomotor: Some("jumpjet".into()),
+            verses: Some(vec![d("1"); 11]),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.insert(
+        "MAGRAY".into(),
+        WeaponType {
+            damage: Some(10),
+            rof: Some(40),
+            range: Some(d("7")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("MAGWH".into()),
+            is_mag_beam: Some(true),
+            ..Default::default()
+        },
+    );
+    for name in ["SQUASH", "BLAST"] {
+        r.sim.warheads.insert(
+            name.into(),
+            WarheadType {
+                cell_spread: Some(d("1")),
+                verses: Some(vec![d("1"); 11]),
+                ..Default::default()
+            },
+        );
+    }
+    let g = &mut r.sim.general;
+    g.crush_warhead.get_or_insert_with(|| "SQUASH".into());
+    g.c4_warhead.get_or_insert_with(|| "BLAST".into());
+    let mut magn = r.sim.vehicles["GUNR"].clone();
+    magn.primary = Some("MAGRAY".into());
+    magn.secondary = None;
+    magn.strength = Some(400);
+    magn.cost = Some(400);
+    register(&mut r, "vehicles", "MAGN");
+    r.sim.vehicles.insert("MAGN".into(), magn);
     // HULK: an unarmed vehicle no house can build (tech level -1); Alpha
     // starts with a few of them, badly damaged ([`HULKS`]).
     let mut hulk = r.sim.vehicles["TRUK"].clone();
