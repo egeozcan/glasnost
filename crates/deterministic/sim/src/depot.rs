@@ -413,7 +413,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     }
     if !tethered(w, id) {
         if from_memory && o.dest.is_none() {
-            // spec: S-0314 claim 23 (the request that takes a free place: the retry later in the same turn finds the contact held, asks permission and, granted, assigns the depot as destination); Q-1158 interim (this processing gives no destination of its own)
+            // spec: S-0314 claim 23 (the request that takes a free place: the retry later in the same turn finds the contact held, asks permission and, granted, assigns the depot as destination and revision 28, Q-1158 answered: this processing gives no destination of its own)
             return crate::process::standard_delay(w, id);
         }
         let arrived = at_dock(w, k, id);
