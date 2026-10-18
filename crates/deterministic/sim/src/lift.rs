@@ -851,8 +851,10 @@ fn start_fall(w: &mut World, x: ObjectId) {
 /// 9's no-destination exception: S-0502 claim 17 unchanged). A unit whose
 /// jumpjet movement is still moving afterwards keeps the found point and
 /// its commitment: S-0502 claims 5 and 24 take it off, fly it to the point
-/// and land it there, and claim 20 restores it only after that. Otherwise
-/// it descends and lands from above the surface, or stays where it is.
+/// and land it there, and claim 20 restores it only after that. A claim 9
+/// unit in the air that the stop left hovering with no cell (the switch
+/// off) keeps hovering, set down and seized. Otherwise it descends and
+/// lands from above the surface, or stays where it is.
 fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
     upd(w, x, |l| {
         l.set_down = true;
@@ -868,6 +870,7 @@ fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
         // spec: S-0607 claim 23 (a unit on another stand-in is set down where it stands: no jumpjet stop, descent or touchdown)
         return;
     }
+    let was_moving = crate::jump::moving(w, x);
     // spec: S-0607 claim 13 (revision 5, the jumpjet stop in both cases: an effective order-level clear runs S-0502 claim 17's stopped-movement rule in the same update) and claim 9 (the no-destination exception: the grip has already ended when the stop runs, so S-0502 claim 17's self-destruction applies unchanged, with its quirk switch and no credit)
     crate::jump::lift_release_stop(w, x, lifter_ended);
     if w.obj(x).is_none_or(damage::dead) {
@@ -877,11 +880,16 @@ fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
         // spec: S-0607 claim 13 (revision 6: a set-down unit still moving keeps the found point and its movement commitment; being set down clears neither) and S-0502 claims 5 and 24 (revision 14: its next eligible jumpjet update takes off, then ordinary flight and arrival towards that point)
         return;
     }
-    if crate::jump::height_above(w, x) > 0 {
-        // spec: S-0607 claim 9 (set down at whatever height, it then descends and lands under claim 17's clear-cell rule). After S-0502 claim 17's hovering re-entry with quirks.jumpjet_no_cell_self_destruct off, whether this descent still follows is open: Q-1343 (interim: it does)
+    let above = crate::jump::height_above(w, x) >= 1; // spec: S-0607 claim 9 (revision 8: in the air is a height above the surface of 1 lepton or more)
+    if was_moving && !lifter_ended && above {
+        // spec: S-0607 claim 9 (revision 8, design: no cell found with quirks.jumpjet_no_cell_self_destruct off, in the air: it re-enters hovering over its current cell with no movement point and no commitment, neither descends nor flies anywhere, and stays set down and seized; claim 20 retries the search at each fall-back to rest) and S-0502 Edge cases (revision 16)
+        return;
+    }
+    if above {
+        // spec: S-0607 claim 13 (a gripped unit is not moving only when the seize's search found no cell, and it is then still grounded); an unmoving unit set down above the surface descends and lands where it is (claim 17's clear-cell rule, as for claim 23's set-down)
         crate::jump::lift_descend(w, x);
     } else {
-        // spec: S-0607 claim 13 (no cell found for a grip ended by its lifter, design: a set-down unit stops where it is, with no movement point, its jumpjet movement no longer moving)
+        // spec: S-0607 claim 13 (no cell found for a grip ended by its lifter, design: a set-down unit stops where it is, with no movement point, its jumpjet movement no longer moving) and claim 9 (revision 8, switch off, on the ground: it stays grounded where it is with no movement point, no longer moving, and claim 20 restores it as any set-down unit)
         crate::jump::lift_settle(w, x);
     }
 }
@@ -1533,7 +1541,10 @@ pub fn touched_down(w: &mut World, id: ObjectId) {
 
 /// At a fall-back to rest (S-0215 claim 13 row 1): a seized unit whose
 /// jumpjet movement is not *moving* and that is set down gets its own
-/// locomotor back (S-0607 claim 20). Returns whether it did.
+/// locomotor back (S-0607 claim 20). With the no-cell switch off, a
+/// set-down unit hovering with no commitment is not restored: it repeats
+/// the stop's search instead.
+/// Returns whether it was restored.
 pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
     let Some(l) = st(w, id).cloned() else {
         return false;
@@ -1552,6 +1563,15 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
         }
         restore(w, id);
         return true;
+    }
+    if l.set_down
+        && l.lifter.is_none()
+        && !w.rules().quirks.jumpjet_no_cell_self_destruct
+        && crate::jump::hovering_uncommitted(w, id)
+    {
+        // spec: S-0607 claim 20 (revision 8, the hovering set-down unit under claim 9's switch-off rule, design: restoration is not tested; the unit repeats the stop's search instead) and S-0502 Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct off: while hovering a seized set-down unit is not restored and retries the search at each fall-back to rest). With the switch off, every seized set-down unit hovering with no commitment takes this rule, not only claim 9's: Q-1344 (interim)
+        crate::jump::lift_retry_stop(w, id);
+        return false;
     }
     // spec: S-0607 claim 20 (its jumpjet movement is not moving, S-0502's moving, not moving now; and it is set down)
     if crate::jump::moving(w, id) || !l.set_down || l.lifter.is_some() {

@@ -246,7 +246,7 @@ fn claim_13_no_cell_lifter_set_down_stops() {
     }
 }
 
-// spec: S-0607 claim 9 (revision 5) and S-0502 claim 17 and Edge cases (quirks.jumpjet_no_cell_self_destruct): a grip ended by the no-destination exception keeps S-0502 claim 17's ordinary no-cell outcome: on, the unit destroys itself with no credit; off, it hovers again over its current cell with no movement point and no commitment; whether claim 9's set-down descent then follows is open (Q-1343, interim: it does)
+// spec: S-0607 claim 9 (revisions 5 and 8) and S-0502 claim 17 and Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct; scenario J27 c): a grip ended by the no-destination exception keeps S-0502 claim 17's ordinary no-cell outcome: on, the unit destroys itself with no credit; off, in the air, it hovers over its current cell with no movement point and no commitment, neither descends nor flies anywhere, and stays set down and seized; claim 20 does not restore it while it hovers, and a failed retry at each fall-back to rest changes nothing
 #[test]
 fn claim_9_no_cell_keeps_the_ordinary_outcome() {
     for on in [true, false] {
@@ -263,18 +263,204 @@ fn claim_9_no_cell_keeps_the_ordinary_outcome() {
                 "quirk on: destroyed"
             );
             assert_eq!(w.houses[0].combat.kills, kills_before, "no credit");
-        } else {
-            assert_eq!(health(&w, v), 100, "quirk off: alive");
-            assert!(!jump::moving(&w, v), "quirk off: no movement commitment");
-            let c = w.obj(v).unwrap().pos.cell();
-            assert!(
-                point(&w, v).is_none_or(|d| d.cell() == c),
-                "quirk off: no point elsewhere"
-            );
-            // Q-1343 (interim): claim 9's set-down descent follows the hover re-entry.
-            assert!(run_until(&mut w, 200, |w| height(w, v) == 0));
-            assert_eq!(health(&w, v), 100, "quirk off: lands unhurt");
+            continue;
         }
+        assert_eq!(health(&w, v), 100, "quirk off: alive");
+        assert_eq!(jump::phase(&w, v), Some(Phase::Hovering));
+        assert!(!jump::moving(&w, v), "quirk off: no movement commitment");
+        assert_eq!(point(&w, v), None, "quirk off: no movement point");
+        let o = w.obj(v).unwrap();
+        assert!(
+            o.lift.set_down && lift::seized(&w, v),
+            "set down and seized"
+        );
+        let (p, z) = (o.pos, height(&w, v));
+        // Refused move orders make it fall back to rest (claim 20): each one
+        // retries the search, which finds nothing, and it is not restored.
+        for _ in 0..5 {
+            order_move(
+                &mut w,
+                v,
+                CellXY {
+                    x: p.cell().x + 2,
+                    y: p.cell().y,
+                },
+            );
+            run(&mut w, 20);
+            assert!(lift::seized(&w, v), "not restored while it hovers");
+            assert_eq!(jump::phase(&w, v), Some(Phase::Hovering));
+            assert!(!jump::moving(&w, v));
+            assert_eq!(w.obj(v).unwrap().pos, p, "it neither flies nor descends");
+            assert_eq!(height(&w, v), z);
+        }
+        assert_eq!(health(&w, v), 100, "not destroyed");
+    }
+}
+
+/// Makes `cells` land again, with the tile of the untouched cell (0, 0).
+fn dry(w: &mut World, cells: &[CellXY]) {
+    let tile = w.cells.grid.get(at(0, 0)).unwrap().tile;
+    for &c in cells {
+        w.cells.grid.get_mut(c).unwrap().tile = tile;
+    }
+    glasnost_sim::load::recalc_cells(w, cells);
+}
+
+// spec: S-0607 claim 20 (revision 8, the hovering set-down unit, design) and S-0502 Edge cases (revision 16; scenario J27 c, a successful retry): once a cell is free again, the next fall-back to rest repeats the stop's search, which finds it: the unit re-orders itself to that cell's centre (a movement point, no order-level destination), releases its hover slot, flies there, descends and lands, and is restored at a later fall-back to rest once its commitment has ended
+#[test]
+fn claim_20_hovering_set_down_retries_the_search() {
+    let (mut w, l, v) = seized(quirk(false));
+    flood(&mut w);
+    assert!(run_until(&mut w, 400, |w| height(w, v) > 300));
+    glasnost_sim::econ::assign_destination(&mut w, v, None);
+    run(&mut w, 1);
+    assert!(!lift::grips(&w, l, v));
+    assert_eq!(jump::phase(&w, v), Some(Phase::Hovering));
+    let c = w.obj(v).unwrap().pos.cell();
+    assert_eq!(
+        w.obj(v).unwrap().jump.as_ref().unwrap().slot,
+        Some(c),
+        "it holds its cell's hover slot"
+    );
+    run(&mut w, 5);
+    assert!(lift::seized(&w, v));
+    assert_eq!(
+        jump::phase(&w, v),
+        Some(Phase::Hovering),
+        "no fall-back yet"
+    );
+    dry(&mut w, &[c]);
+    order_move(&mut w, v, CellXY { x: c.x + 2, y: c.y });
+    assert!(
+        run_until(&mut w, 20, |w| jump::moving(w, v)),
+        "the fall-back to rest retried the search"
+    );
+    assert!(lift::seized(&w, v), "not restored by the retry");
+    let d = point(&w, v).expect("the found point");
+    assert_eq!(d.cell(), c);
+    assert_eq!((d.x, d.y), (c.x * 256 + 128, c.y * 256 + 128), "the centre");
+    assert_eq!(w.obj(v).unwrap().dest, None, "no order-level destination");
+    run(&mut w, 2);
+    assert!(height(&w, v) > 0, "still in the air");
+    assert_eq!(
+        w.obj(v).unwrap().jump.as_ref().unwrap().slot,
+        None,
+        "the hover slot is released"
+    );
+    assert!(run_until(&mut w, 400, |w| height(w, v) == 0 && !jump::moving(w, v)));
+    let p = w.obj(v).unwrap().pos;
+    assert_eq!((p.x, p.y), (d.x, d.y), "landed at the point");
+    assert_eq!(health(&w, v), 100);
+    assert!(restored(&mut w, v), "restored after the commitment ended");
+}
+
+// spec: S-0607 claim 9 (revision 8, design: on the ground, height 0 or less, the unit still moving because it was released before its first jumpjet update) and S-0502 Edge cases (revision 16): with no cell and the switch off it stays grounded where it is with no movement point and no commitment, and claim 20 restores it as any set-down unit; with the switch on it is destroyed
+#[test]
+fn claim_9_no_cell_on_the_ground_stays_grounded() {
+    for on in [true, false] {
+        let (mut w, l, v) = seized(quirk(on));
+        flood(&mut w);
+        assert_eq!(height(&w, v), 0);
+        assert!(jump::moving(&w, v), "quirk {on}: before its first update");
+        let p = w.obj(v).unwrap().pos;
+        glasnost_sim::econ::assign_destination(&mut w, v, None);
+        run(&mut w, 1);
+        assert!(!lift::grips(&w, l, v), "quirk {on}: the grip ends");
+        if on {
+            assert!(
+                w.obj(v).is_none_or(|o| o.health <= 0),
+                "quirk on: destroyed"
+            );
+            continue;
+        }
+        assert_eq!(health(&w, v), 100);
+        assert_eq!(jump::phase(&w, v), Some(Phase::Grounded), "stays grounded");
+        assert!(!jump::moving(&w, v), "no movement commitment");
+        assert_eq!(point(&w, v), None, "no movement point");
+        assert!(w.obj(v).unwrap().lift.set_down);
+        run(&mut w, 5);
+        assert_eq!(w.obj(v).unwrap().pos, p, "it stays where it is");
+        assert_eq!(height(&w, v), 0);
+        // The lifter keeps its target (claim 12): out of play, it cannot seize the unit again.
+        glasnost_sim::objects::remove(&mut w, l);
+        assert!(restored(&mut w, v), "restored as any set-down unit");
+    }
+}
+
+// spec: S-0607 claim 13 (revision 8, design; answers Q-1342) and S-0502 claims 9 and 17 (revision 16; scenario J27 c): a unit dropped over its cell centre by its lifter with no cell for the stop loses the point fixed at the seize and its commitment, and falls with no movement point by the direct ground reference, even with a vehicle listed in its own cell; it takes its jumpjet update every tick of its fall
+#[test]
+fn claim_13_no_cell_drop_over_the_centre_falls_by_the_direct_reference() {
+    let (mut w, l, v) = seized(quirk(true));
+    let c = fixed_cell(&w, v);
+    let mut cells = Vec::new();
+    for dx in -SIZE..SIZE {
+        for dy in -SIZE..SIZE {
+            let x = at(dx, dy);
+            if x != at(0, 0) && x != c && w.cells.grid.get(x).is_some() {
+                cells.push(x);
+            }
+        }
+    }
+    water(&mut w, &cells);
+    // Parked after the seize's point search, before the arrival.
+    spawn(&mut w, Kind::Vehicle, "VICT", 0, c);
+    assert!(run_until(&mut w, 400, |w| !lift::grips(w, l, v)));
+    assert!(lift::dropped(&w, v), "an arrival drop");
+    let p = w.obj(v).unwrap().pos;
+    assert_eq!(p.cell(), c);
+    assert_eq!((p.x.rem_euclid(256), p.y.rem_euclid(256)), (128, 128));
+    assert_eq!(point(&w, v), None, "the seize's point is cleared");
+    assert!(!jump::moving(&w, v), "the commitment is lost");
+    assert_eq!(health(&w, v), 100, "no self-destruction");
+    let steps = fall_steps(&mut w, v);
+    assert!(!steps.is_empty(), "it fell");
+    assert!(
+        steps.iter().all(|&s| !held(&w, s)),
+        "no step held at the parked vehicle's clearance: {steps:?}"
+    );
+    assert!(
+        steps.iter().all(|&(before, after, _)| after < before),
+        "an update every tick of the fall: {steps:?}"
+    );
+}
+
+// spec: S-0607 claims 13 and 15 (revision 8, design) and S-0502 claims 3 and 17 (revision 16, the no-cell magnetic-release safety fall): a unit dropped while hovering with no cell for the stop still takes its next update: over its cell centre its fall starts at once with no movement point; off its centre the detour gives it that centre, which lies in its own cell, as its point
+#[test]
+fn claim_13_no_cell_drop_while_hovering_still_falls() {
+    for centred in [true, false] {
+        let (mut w, l, v) = seized(quirk(true));
+        flood(&mut w);
+        assert!(run_until(&mut w, 400, |w| height(w, v) > 300));
+        let o = w.obj_mut(v).unwrap();
+        let c = o.pos.cell();
+        if centred {
+            o.pos.x = c.x * 256 + 128;
+            o.pos.y = c.y * 256 + 128;
+        } else if o.pos.x.rem_euclid(256) == 128 && o.pos.y.rem_euclid(256) == 128 {
+            o.pos.x += 10;
+        }
+        o.jump.as_mut().unwrap().phase = Phase::Hovering;
+        order_lifter(&mut w, l);
+        assert!(lift::dropped(&w, v), "centred {centred}: dropped");
+        let before = (w.obj(v).unwrap().pos, height(&w, v));
+        if centred {
+            assert_eq!(point(&w, v), None, "no movement point");
+            assert!(!jump::moving(&w, v), "no commitment");
+        } else {
+            let d = point(&w, v).expect("the detour's point");
+            assert_eq!(d.cell(), c, "its own cell");
+            assert_eq!((d.x, d.y), (c.x * 256 + 128, c.y * 256 + 128));
+        }
+        run(&mut w, 1);
+        let after = (w.obj(v).unwrap().pos, height(&w, v));
+        assert_ne!(before, after, "centred {centred}: its next update ran");
+        if centred {
+            assert!(after.1 < before.1, "the fall started");
+        }
+        assert!(
+            run_until(&mut w, 400, |w| !lift::dropped(w, v)),
+            "centred {centred}: the fall ends"
+        );
     }
 }
 

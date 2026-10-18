@@ -497,7 +497,7 @@ fn claim_16_orders() {
     assert!(!j(&w, e).landing_request, "the landing request ends");
 }
 
-// spec: S-0502 claim 17 and scenario J11 (a failed landing with no free cell nearby: the jumpjet is destroyed by its remaining health with no attacker and no kill credit; with quirks.jumpjet_no_cell_self_destruct off it hovers again)
+// spec: S-0502 claim 17 and scenario J11 (a failed landing with no free cell nearby: the jumpjet is destroyed by its remaining health with no attacker and no kill credit; with quirks.jumpjet_no_cell_self_destruct off, in the air, it hovers again, revision 16's Edge cases)
 #[test]
 fn claim_17_no_cell_self_destruct() {
     for on in [true, false] {
@@ -536,6 +536,43 @@ fn claim_17_no_cell_self_destruct() {
             assert_eq!(phase(&w, u), Phase::Hovering);
             assert_eq!(w.obj(u).unwrap().pos.cell(), c, "over its current cell");
         }
+    }
+}
+
+// spec: S-0502 Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct off) and claim 17: a grounded jumpjet with a movement commitment, stopped before its take-off with no cell nearby, clears its movement point and commitment and stays grounded: no hover slot, no take-off, its height 0; with the switch on it is destroyed
+#[test]
+fn claim_17_no_cell_grounded_stays_grounded() {
+    for on in [true, false] {
+        let mut w = game();
+        quirk(&mut w, |q| q.jumpjet_no_cell_self_destruct = on);
+        let u = put(&mut w, "JV", Kind::Vehicle, 0, 4, 0);
+        go(&mut w, u, at(8, 0));
+        assert!(jump::moving(&w, u), "committed before its take-off");
+        assert_eq!(phase(&w, u), Phase::Grounded);
+        let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+        for c in cells {
+            w.cells.claim_vehicle(c, Layer::Ground, true);
+        }
+        jump::stop(&mut w, u);
+        if on {
+            assert!(
+                w.obj(u).is_none_or(|o| o.health <= 0),
+                "switch on: destroyed"
+            );
+            continue;
+        }
+        assert!(w.obj(u).unwrap().health > 0);
+        assert_eq!(phase(&w, u), Phase::Grounded, "switch off: stays grounded");
+        assert!(!jump::moving(&w, u), "no movement commitment");
+        assert_eq!(j(&w, u).dest, None, "no movement point");
+        assert_eq!(j(&w, u).slot, None, "no hover slot");
+        let p = pos(&w, u);
+        for _ in 0..10 {
+            step(&mut w);
+        }
+        assert_eq!(phase(&w, u), Phase::Grounded);
+        assert_eq!(height(&w, u), 0);
+        assert_eq!(pos(&w, u), p, "it stays where it is");
     }
 }
 
