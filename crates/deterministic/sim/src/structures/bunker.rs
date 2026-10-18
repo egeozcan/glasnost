@@ -541,7 +541,7 @@ pub fn chosen_distance(w: &World, p: Pos) -> u64 {
     };
     // spec: S-0606 F5 (u = x mod 256, w = y mod 256, the residues 0 to 255; z plays no part)
     let u = i64::from(p.x.rem_euclid(256));
-    let v = i64::from(p.y.rem_euclid(256));
+    let v = i64::from(p.y.rem_euclid(256)); // spec: S-0606 F5 (w = y mod 256)
     // spec: S-0606 F5 (n = (u − a)² + (w − a)², exact; e = ⌊r(n)⌋, the table root of S-0204 F1, quirks.table_root_distance)
     let n = (u - a) * (u - a) + (v - a) * (v - a);
     glasnost_num::geom::root_floor(n as u64, r.quirks.table_root_distance, r.mode)
@@ -648,7 +648,7 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
             let d = damaged(w, k);
             w.effects.push(Effect::SpecialAnims {
                 building: k,
-                slots: [1, 2],
+                slots: [1, 2], // spec: S-0606 claim 16 (special-1 and special-2)
                 start: false,
                 damaged: d,
             });
