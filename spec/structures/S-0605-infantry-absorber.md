@@ -2,7 +2,7 @@
 id: S-0605
 title: Infantry absorber (who may enter an absorbing building, entry, holding, release)
 topic: structures
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -57,8 +57,10 @@ S-0312 and S-0408 are made in the current drafts of those specs):
   position": claim 14 below gives the choice (centre class, one draw).
 - S-0214's passenger test of rows x, q and I13 applies to absorbing buildings as to transports
   (claim 1 below).
-- S-0314 claim 23 says a vehicle waiting in line "stays where it is": claim 4 below gives the
-  walk to a free cell next to the building at its first *enter* processing.
+- S-0314 claim 23 gives a damaged vehicle on a repair depot holding contact a queued entry and
+  makes it remember the depot, so that vehicle has no walk. Claim 4 below gives the walk to a free
+  cell next to the building for an actor that waits in line with no remembered entry object (the
+  waiting line still names the building; infantry, and a vehicle on a vehicle absorber).
 - S-0405 claim 7 and its Open questions: removing a passenger inside does not make power due
   (claim 15 below).
 - S-0215 claim 24's "already bound" test (for *enter*: in contact with that building) is widened by
@@ -94,6 +96,10 @@ S-0312 and S-0408 are made in the current drafts of those specs):
 - **Waiting in line.** An actor's standing intention to enter one building when a link place is
   free. S-0314 (Terms, *queued entry*) gives the same thing for repair depots; this spec uses it
   for absorbing buildings (claim 4).
+- **Remembered entry object.** The object an actor remembers as the one it is entering: for a
+  damaged vehicle waiting for a repair depot, the depot (S-0314 claim 23). An enter order on an
+  absorbing building gives none, and setting up a wait removes any (claim 4). Not the building in
+  the waiting line, which the waiting actor still names (S-0213 table T3 part (b)).
 - **Acceptance test.** The building's docking answer (S-0214) to a would-be passenger (claim 1).
 - **Voluntary release.** The owner's order that lets passengers out of a standing absorbing
   building (claims 11 to 13).
@@ -164,6 +170,16 @@ S-0312 and S-0408 are made in the current drafts of those specs):
    - If the building already holds any contact, the actor starts *waiting in line* for that
      building, whatever the number of link places. Its destination is cleared. It is not told to
      walk yet (claim 4).
+   - A vehicle ordered in to a vehicle absorber always starts *waiting in line* for it, whether or
+     not the building holds contact: it is given no destination and no contact at the order. It
+     has no remembered entry object (claim 4); the waiting line still names the building, as
+     S-0213 table T3 part (b) gives it. Its first enter processing then finds a cell next to the
+     building (claim 4's approach), and its retry runs in the same turn, after its movement (claim
+     4). If the place is free, the retry grants contact and the vehicle goes in, so at an empty
+     building the walk it makes is at most its movement in that turn (or none, if the retry comes
+     before *enter* is current; see Flag F1). It rests next to the building only while the place
+     is held by another contact (claim 4). Vehicle orders at other buildings are owned by S-0314.
+     This vehicle rule is `measurable` in scenario A2c's vehicle variant; confidence medium.
    - Otherwise it asks the building for contact. The building grants it when it counts the actor's
      house as allied, the actor's house also counts the building's house as allied, the
      building's health is above 0 and a link place is free.
@@ -183,8 +199,7 @@ S-0312 and S-0408 are made in the current drafts of those specs):
 
 4. **Waiting in line.** An actor waiting in line for a building is in one of two phases.
    - *Approach.* The actor's first processing of *enter* (S-0215 claim 29) after the wait began,
-     while it holds no contact and remembers no object it is entering (an enter order on a
-     building does not make an actor remember one), finds the building still
+     while it holds no contact and remembers no object it is entering, finds the building still
      in the game. The search is S-0212 claim 25's nearby-cell search, with the settings that its table
      T5 row for the waiting absorber approach gives. Its centre is the cell of the building's reference
      point (the centre of its foundation, S-0204 claim 4), not its top-left cell and not S-0507
@@ -209,6 +224,11 @@ S-0312 and S-0408 are made in the current drafts of those specs):
      tried again, because no further *enter* processing follows while the wait lasts.
      So a unit waiting in line walks to a cell next to the building, then rests there by S-0215
      claims 13 and 14. The waiting itself does not end.
+
+     Setting up the wait clears any object the actor remembered entering, so an actor that waits
+     in line for an absorbing building never has a remembered entry object and always has the
+     approach. A damaged vehicle waiting for a repair depot is the contrast: S-0314 claim 23 makes
+     it remember the depot, so it has no approach and stays where it is.
    - *Retry.* In each of its own turns, after its behaviour processing and its movement, an actor
      waiting in line for a building that is still in the game asks for contact (the turn position
      is S-0314 claim 23's; nothing is retried while the actor is still phasing in or otherwise
@@ -246,8 +266,9 @@ S-0312 and S-0408 are made in the current drafts of those specs):
      walk ends, and whether *move* or the per-tick start takes over before the walk ends, are
      not established (S-0215 claims 8 and 11).
 
-   An actor that holds no contact and remembers no entry object (an enter order on a building
-   does not make an actor remember one) at a processing of *enter*, and is not waiting in line
+   An actor that holds no contact and remembers no entry object (an enter order on an absorbing
+   building does not make an actor remember one; a vehicle ordered onto a repair depot that holds
+   contact does, S-0314 claim 23) at a processing of *enter*, and is not waiting in line
    (claim 4), falls back to rest at once, in the same way: this is what
    follows a destination assignment whose contact was not granted or whose loading was refused
    at the order (claim 3). It too keeps the building as its destination and never goes in.
@@ -554,7 +575,8 @@ serving direction is 5: the passenger appears in (*x*₀ − 1, *y*₀ + 1) and 
 | State | Event | Result |
 |---|---|---|
 | *enter* (current or queued), no contact | destination assigned: an absorbing building that holds a contact | waiting in line, destination cleared |
-| *enter* (current or queued), no contact | destination assigned: a building with no contact, grant, loading accepted | in contact, walks under S-0215 claim 29 |
+| *enter* (current or queued), no contact | destination assigned: a building with no contact, grant, loading accepted, and not a vehicle ordered to a vehicle absorber (claim 3) | in contact, walks under S-0215 claim 29 |
+| *enter* (current or queued), no contact | vehicle ordered in to a vehicle absorber (claim 3), whatever the building's contact state | waiting in line, no destination, no remembered entry object; approach and retry as in claim 4 |
 | same | grant, loading refused (switched off) | contact given up; destination kept; no contact |
 | same | contact not granted | no waiting; destination kept; no contact |
 | *enter* current, no contact, no remembered entry object, not waiting | processing | falls back to rest at once, destination kept, *move* queued; never goes in |
@@ -740,8 +762,13 @@ whichever side it starts on (a different or farther choice falsifies the centre 
 leave two equally near free cells, repeat over several ordering ticks: the cell chosen varies
 with the tick as *N* mod *n* of S-0212 claim 25 (always the same cell falsifies the tie rule); (iii)
 block every cell within the search radius: the unit stays where it is, rests, and still goes in when
-the place is free (walking, or an end of the wait, falsifies the no-result outcome). Repeat with a vehicle and a vehicle absorber or a depot (S-0314
-claim 23).
+the place is free (walking, or an end of the wait, falsifies the no-result outcome). Repeat with a vehicle and a vehicle absorber: the vehicle, even for the
+first entrant, gets no destination and no contact at the order (claim 3). With a free place, its
+retry grants contact in its first turn, and it goes in without resting at a cell next to the
+building: a vehicle that rests next to an empty building with a free place falsifies this part.
+With the place held by another contact, it walks to a cell next to the building and rests there
+(claim 4). A vehicle onto a repair depot is S-0314's scenario, not this one: it remembers the depot
+and does not walk (S-0314 claim 23).
 
 **A3. Entry tick** (claims 6 and 7). A map trigger "entered by" on the building. Order one infantry
 in. *Record:* the tick of the trigger, of the entry sound and of the unit leaving the map; the
