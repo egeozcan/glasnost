@@ -58,8 +58,9 @@ fn driving(w: &World, id: ObjectId) -> bool {
     crate::lift::current_locomotor(w, id) == Some(crate::rules::Locomotor::Drive)
 }
 
-/// "Moving" for the readiness of a vehicle with the driving locomotor
-/// (S-0215 claim 11, revision 67, which answers Q-1160 and Q-1161): its
+/// "Moving" for the readiness of a vehicle whose current locomotor is the
+/// driving one (S-0215 claim 11, revision 67, which answers Q-1160 and
+/// Q-1161; revision 68 asks the current locomotor): its
 /// body is still turning, for any reason; or all three of: its locomotor
 /// is moving it in S-0206's sense, it has a heading point (the track
 /// target of the track it is on, S-0207 Terms) and its integer movement
