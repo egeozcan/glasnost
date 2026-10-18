@@ -23,7 +23,9 @@
 //! enemy vehicle are clicked into a recycling building and consumed.
 //! S-0606 (vehicle bunker): a turreted vehicle is clicked into a tank
 //! bunker, drives in, fires at an enemy from inside and is let out by the
-//! deploy click.
+//! deploy click. S-0607 (magnetic lift): a lifter is clicked onto an enemy
+//! vehicle, seizes it and pulls it up; a move click on the lifter lets go
+//! over a second enemy vehicle, and the falling one is destroyed on impact.
 //!
 //! Run with `cargo test --release -p glasnost-app --test m7a_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -64,6 +66,7 @@ const SCENES: &[Scene] = &[
     ("absorber", absorber),
     ("grinder", grinder),
     ("bunker", bunker),
+    ("lift", magnetic_lift),
 ];
 
 #[test]
@@ -875,6 +878,158 @@ fn bunker(lane: &mut Lane) {
     }
     lane.ticks(60);
     lane.save("bunker-released");
+}
+
+/// A lifter type by its flags (S-0607 Terms: a vehicle whose first weapon's
+/// warhead is a seizing warhead), with that weapon's damage.
+fn lifter_type(w: &World) -> Option<(String, i32)> {
+    let r = w.rules();
+    (0..r.vehicles.len()).find_map(|i| {
+        let u = r.unit(Kind::Vehicle, i as u32)?;
+        let wp = u.combat.slots[0]?;
+        let weapon = r.combat.weapon(wp);
+        let h = weapon.warhead?;
+        r.combat
+            .warhead(h)
+            .is_locomotor
+            .then(|| (r.vehicles[i].name.clone(), weapon.damage))
+    })
+}
+
+/// A ground vehicle type a lifter of weapon damage `damage` may seize
+/// (S-0607 claim 3 and F1: size below the damage), not a harvester, not
+/// hover, with no seizing weapon of its own; an unarmed type first, so that
+/// the scene's enemies do not shoot the lifter down.
+fn liftable_type(w: &World, damage: i32) -> Option<String> {
+    let r = w.rules();
+    let d = glasnost_num::F64::from_i64(i64::from(damage), r.mode);
+    let ok = |i: usize, armed: bool| {
+        r.unit(Kind::Vehicle, i as u32).is_some_and(|u| {
+            u.combat.slots[0].is_some() == armed
+                && u.combat.slots[0].is_none_or(|wp| {
+                    r.combat
+                        .weapon(wp)
+                        .warhead
+                        .is_none_or(|h| !r.combat.warhead(h).is_locomotor)
+                })
+                && !u.harvester
+                && u.strength > 0
+                && u.size.lt(d)
+                && u.class != Some(glasnost_rules::sim::LocomotionClass::Hover)
+        })
+    };
+    (0..r.vehicles.len())
+        .find(|&i| ok(i, false))
+        .or_else(|| (0..r.vehicles.len()).find(|&i| ok(i, true)))
+        .map(|i| r.vehicles[i].name.clone())
+}
+
+/// S-0607 claims 1, 5, 7, 12, 13 and 15 to 18: a lifter of the local house
+/// is clicked onto an enemy vehicle (cursor *attack*); the hit seizes it
+/// unhurt and pulls it up towards the lifter. When it is over a second
+/// enemy vehicle, a move click on the lifter ends the grip: the unit is
+/// dropped, falls onto the occupied cell and is destroyed by its impact,
+/// hurting the vehicle underneath. Ticks and health in per-mille; four
+/// screens.
+fn magnetic_lift(lane: &mut Lane) {
+    use glasnost_sim::lift;
+    let w = lane.world();
+    let lt = lifter_type(w);
+    let victim_ty = lt.as_ref().and_then(|(_, d)| liftable_type(w, *d));
+    let enemy = lane.enemy();
+    println!(
+        "lifter type found: {}, liftable type found: {}",
+        lt.is_some(),
+        victim_ty.is_some()
+    );
+    let (Some((lname, _)), Some(vname), Some(enemy)) = (lt, victim_ty, enemy) else {
+        return;
+    };
+    let local = lane.local();
+    let home = lane.home();
+    let Some(at) = lane.area(CellXY::new(home.x + 8, home.y + 8), (9, 1), 3, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("no room for the scene");
+        return;
+    };
+    let l = lane.spawn(Kind::Vehicle, &lname, local, at);
+    let under = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(at.x + 3, at.y));
+    let v = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(at.x + 6, at.y));
+    lane.ticks(2);
+    lane.look_at(CellXY::new(at.x + 3, at.y));
+    lane.ticks(2);
+    lane.save("lift-before");
+    let cursor = targeting::cursor(lane.world(), local, &[l], ClickOn::Object(v), Modifiers::default());
+    let n = lane.order(local, l, ClickOn::Object(v));
+    println!("click on the enemy vehicle: cursor {cursor:?}, {n} orders");
+    let full = lane.full_health(v);
+    let mut seized_at = None;
+    let mut over = false;
+    for t in 0..900 {
+        lane.ticks(1);
+        let w = lane.world();
+        if seized_at.is_none() && lift::seized(w, v) {
+            seized_at = Some(t);
+            println!(
+                "seized after {t} ticks, health {} per mille",
+                lane.permille(v)
+            );
+        }
+        if seized_at.is_some() && w.obj(v).is_none() {
+            println!("the seized unit left play before the drop");
+            break;
+        }
+        let pos = w.obj(v).map(|o| o.pos.cell());
+        if lift::grips(w, l, v) && pos == Some(CellXY::new(at.x + 3, at.y)) && w.height_above_surface(v) > 200 {
+            println!(
+                "over the second vehicle after {t} ticks at height {}",
+                w.height_above_surface(v)
+            );
+            over = true;
+            break;
+        }
+    }
+    let _ = full;
+    if seized_at.is_none() || !over {
+        println!("not lifted over the second vehicle");
+        lane.save("lift-seized");
+        return;
+    }
+    lane.save("lift-seized");
+    let cursor = targeting::cursor(
+        lane.world(),
+        local,
+        &[l],
+        ClickOn::Cell(CellXY::new(at.x - 1, at.y)),
+        Modifiers::default(),
+    );
+    let n = lane.order(local, l, ClickOn::Cell(CellXY::new(at.x - 1, at.y)));
+    println!("move click for the lifter: cursor {cursor:?}, {n} orders");
+    for t in 1..=10 {
+        lane.ticks(1);
+        if !lift::grips(lane.world(), l, v) {
+            println!(
+                "grip ended after {t} ticks, dropped: {}",
+                lift::dropped(lane.world(), v)
+            );
+            break;
+        }
+    }
+    lane.ticks(5);
+    lane.save("lift-drop");
+    for t in 0..400 {
+        lane.ticks(1);
+        if lane.world().obj(v).is_none() {
+            println!(
+                "impact after {t} ticks: the dropped unit left play; the vehicle underneath at {} per mille",
+                lane.permille(under)
+            );
+            break;
+        }
+    }
+    lane.ticks(3);
+    lane.save("lift-impact");
 }
 
 /// S-0613 claims 2, 4, 5, 8 to 13: a virus unit of the local house is
