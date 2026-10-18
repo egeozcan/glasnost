@@ -1198,6 +1198,16 @@ fn claim_3_vehicle_fate_waits_in_line() {
     assert_eq!(o.contact, None, "no contact from the fate itself");
     assert_eq!(o.dest, None);
     assert_eq!(o.beh.queued, Some(glasnost_sim::rules::Behaviour::Enter));
+    // spec: S-0605 scenario A13 (g) (no contact request in the release tick, even from a turn later in that tick; the first comes in its first update)
+    absorb::waiting_turn(&mut w, car);
+    assert_eq!(w.obj(car).unwrap().contact, None, "no request in the release tick");
+    assert_eq!(absorb::waiting_for(&w, car), Some(v));
+    // Between ticks the tick number is already the next tick's, so this
+    // call counts as made in that tick: its turn pass sends no request.
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(car).unwrap().contact, None, "the rest of the release tick");
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(car).unwrap().contact, Some(v), "its first update's retry");
     assert!(until(&mut w, 800, |w| inside(w, car, v)), "the retry grants contact and it goes in");
 }
 

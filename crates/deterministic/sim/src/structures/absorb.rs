@@ -321,6 +321,10 @@ pub fn waiting_turn(w: &mut World, u: ObjectId) {
         contact_outlived(w, u);
     }
     let Some(b) = waiting_for(w, u) else { return };
+    // spec: S-0605 claim 3 and scenario A13 (g) (a vehicle victim put in line by claim 16's fate sends no contact request in the tick of the release; its first request is a later update's retry)
+    if w.obj(u).is_some_and(|o| o.structure.fate_tick == Some(w.tick)) {
+        return;
+    }
     // spec: S-0605 claim 4 (a building that has left the game ends the wait)
     if w.obj(b).is_none_or(|o| !o.on_map) {
         set_waiting(w, u, None);
@@ -1012,7 +1016,14 @@ pub fn bio_reactor_fate(w: &mut World, u: ObjectId) -> bool {
     if w.obj(u).is_none_or(|o| !o.on_map || o.owner.is_none()) {
         return false;
     }
-    search_and_go(w, u)
+    let found = search_and_go(w, u);
+    if w.obj(u).is_some_and(|o| o.kind == Kind::Vehicle) && waiting_for(w, u).is_some() {
+        let t = w.tick;
+        if let Some(ob) = w.obj_mut(u) {
+            ob.structure.fate_tick = Some(t);
+        }
+    }
+    found
 }
 
 /// The *guard* or *area guard* processing of an actor that holds the
