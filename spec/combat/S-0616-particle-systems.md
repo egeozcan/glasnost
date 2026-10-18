@@ -2,7 +2,7 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 6
+revision: 7
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -257,7 +257,7 @@ stands alone. This spec adds the terms after them.
    names a next particle type, whether successors are made, how many and where is decided by the
    kind of the system that holds the dead particle, whatever the particle's own kind:
    - **Gas system:** the dead particle, of any kind, gets one successor (at its position plus its type's
-     next-particle displacement, with the dead particle's velocity). S-0613 claim 7 and its Terms entry for *Successor* are revised in the same round to match this rule, since they give the other kinds' successors to claim 8.
+     next-particle displacement, taking the dead particle's speed and its velocity and nothing else from it). S-0613 claim 7 gives the details of what is taken and its Terms entry for *Successor* is revised in the same round to match this rule, since they give the other kinds' successors to claim 8.
    - **Smoke system:** the dead particle, of any kind, gets claim 8's two successors, with the
      draws of claim 8, *d* being taken from the dead particle's type.
    - **Fire, spark and railgun systems:** no successors for any particle, and no draw for them.
@@ -265,8 +265,8 @@ stands alone. This spec adds the terms after them.
    from claim 8; a gas particle that dies in a smoke system gets claim 8's two successors; a smoke
    or gas particle that dies in a fire, spark or railgun system is removed with none. The
    successor's kind is that of the next type named, and it then updates by its own kind.
-   - Backing: `measurable` (scenario P3, parts b and c, test rules)
-   - Confidence: high
+   - Backing: `measurable` (scenario P3, parts b and c, test rules; the speed part of a gas successor: S-0613 claim 7's scenario G5-speed)
+   - Confidence: high for the successors' count, kind, position and draws; medium for a gas successor's speed, which takes the medium confidence of S-0613 claim 7 until G5-speed has run
 
 4. **Removal of the owner object marks the system.** When an object is removed (S-0203 claims 6 and 10),
    every particle system whose owner object it is loses its owner object and is marked. This holds
