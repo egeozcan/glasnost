@@ -964,6 +964,10 @@ pub fn track_points(t: BunkerTrack) -> Vec<Point> {
 
 /// Whether `v` is the bunkered vehicle of building `k`: S-0509's contact
 /// treatment of an owner change leaves it (S-0606 claim 15: the link holds).
+///
+/// Seam: S-0612 is not built (M7b). S-0606 claim 15 leaves the Psychic
+/// Dominator's sweep of a bunkered vehicle (and the end of the link it
+/// brings) to S-0612 claim 13; nothing calls this for it yet.
 pub fn holds_through_owner_change(w: &World, k: ObjectId, v: ObjectId) -> bool {
     // spec: S-0606 claim 15 (either side changes owner: the link holds)
     occupant(w, k) == Some(v) || bunkered_in(w, v) == Some(k)
