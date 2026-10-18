@@ -587,10 +587,10 @@ fn cash_keys_of_a_building_type() {
 // spec: S-0502 Import mapping and Key case (revision 17; S-0001 claim 13; scenario J1 c) (the jumpjet fields of a type: JumpjetSpeed, JumpjetClimb, JumpjetCrash, JumpjetHeight, JumpjetAccel, JumpjetWobbles, JumpjetDeviation, JumpjetNoWobbles, JumpjetTurnRate; DeployToLand; a key written with different letter case does not set the field: with no exact key in any layer the absent-key default applies, otherwise the value from an earlier layer remains; a later layer that omits a key keeps the value)
 #[test]
 fn jumpjet_type_keys() {
-    let base = "[InfantryTypes]\n0=JJ\n1=CASE\n[JJ]\nJumpjetSpeed=20\nJumpjetClimb=3.5\nJumpjetCrash=7.25\nJumpjetHeight=600\nJumpjetAccel=1.5\nJumpjetWobbles=0.3\nJumpjetDeviation=25\nJumpjetNoWobbles=yes\nJumpjetTurnRate=9\nDeployToLand=yes\n[CASE]\njumpjetAccel=9.5\nJumpJetTurnRate=77\n";
+    let base = "[InfantryTypes]\n0=JJ\n1=CASE\n[JJ]\nJumpjetSpeed=20\nJumpjetClimb=3.5\nJumpjetCrash=7.25\nJumpjetHeight=600\nJumpjetAccel=1.5\nJumpjetWobbles=0.3\nJumpjetDeviation=25\nJumpjetNoWobbles=yes\nJumpjetTurnRate=9\nDeployToLand=yes\n[CASE]\njumpjetAccel=9.5\njumpjetTurnRate=77\n";
     let (s, _) = import_with_map(
         base,
-        "[JJ]\nJumpjetSpeed=22\njumpjetAccel=4\nJumpJetTurnRate=30\n",
+        "[JJ]\nJumpjetSpeed=22\njumpjetAccel=4\njumpjetTurnRate=30\n",
     );
     let t = &s.infantry["JJ"];
     assert_eq!(t.jumpjet_speed, Some(22));

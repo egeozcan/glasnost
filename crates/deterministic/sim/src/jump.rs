@@ -1093,6 +1093,7 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool)
             release_slot(w, id);
             upd(w, id, |j| {
                 j.phase = Phase::Grounded;
+                j.ht = 0; // spec: S-0502 claims 5 and 15 (a grounded jumpjet's target height is 0, as touchdown leaves it, so a later take-off keeps claim 5's timing)
                 j.dest = None;
                 j.order = None;
                 j.moving = false;

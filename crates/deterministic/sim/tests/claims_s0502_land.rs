@@ -636,6 +636,40 @@ fn claim_17_no_cell_switch_off_height_decides() {
     }
 }
 
+// spec: S-0502 Edge cases (revision 17, switch off: height 0 or less, it becomes grounded, also from ascending) and claim 5 with scenario J2 (a grounded jumpjet's take-off timing): a jumpjet stopped with no cell while ascending at height 0 keeps its ground listing and mark, and a later order takes it off exactly as a freshly placed grounded unit: the same height trace from the order on, no early rise
+#[test]
+fn claim_17_grounded_from_ascending_takes_off_as_a_fresh_unit() {
+    let trace = |stopped: bool| {
+        let mut w = game();
+        quirk(&mut w, |q| q.jumpjet_no_cell_self_destruct = false);
+        let u = put(&mut w, "JV", Kind::Vehicle, 0, 4, 0);
+        if stopped {
+            go(&mut w, u, at(8, 0));
+            step(&mut w);
+            assert_eq!(phase(&w, u), Phase::Ascending);
+            block_every_cell(&mut w);
+            jump::stop(&mut w, u);
+            assert_eq!(phase(&w, u), Phase::Grounded);
+            let c = pos(&w, u).cell();
+            assert_eq!(j(&w, u).listed, Some((c, Layer::Ground)), "still listed");
+            assert!(w.cells.list(c, Layer::Ground).contains(&u));
+            assert!(j(&w, u).mark.is_some(), "still marked");
+            let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+            for c in cells {
+                w.cells.claim_vehicle(c, Layer::Ground, false);
+            }
+        }
+        go(&mut w, u, at(4, 8));
+        let mut v = Vec::new();
+        for _ in 0..12 {
+            step(&mut w);
+            v.push((height(&w, u), phase(&w, u)));
+        }
+        v
+    };
+    assert_eq!(trace(true), trace(false));
+}
+
 // spec: S-0502 claim 17 (stopping a jumpjet that is not moving does nothing)
 #[test]
 fn claim_17_stopping_an_idle_jumpjet_does_nothing() {
