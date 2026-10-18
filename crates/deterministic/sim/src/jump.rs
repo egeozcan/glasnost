@@ -1281,6 +1281,24 @@ pub fn link_lift(w: &mut World, id: ObjectId) {
     }
 }
 
+/// A jumpjet type seized with another stand-in locomotor gives up its
+/// marks (S-0607 claims 5 and 23): its ground mark, its landing
+/// reservation and its hover slot go before its own state is kept aside.
+pub fn give_up_marks(w: &mut World, id: ObjectId) {
+    // spec: S-0607 claim 5 (it gives up the occupancy mark of its cell and stands still)
+    lift_mark(w, id);
+    release_reservation(w, id);
+    release_slot(w, id);
+}
+
+/// A jumpjet type gets its own jumpjet locomotor back from another
+/// stand-in (S-0607 claim 24, quirk off): its ground mark is laid at its
+/// present position.
+pub fn retake_marks(w: &mut World, id: ObjectId) {
+    // spec: S-0502 claim 4 (the actual-position mark at its present position)
+    lay_mark(w, id);
+}
+
 /// The movement point of a gripped unit, fixed at the seize (S-0607 claim
 /// 7): S-0502 claim 16 applied to the lifter's point `p`. Returns the cell
 /// that becomes the unit's order-level destination.

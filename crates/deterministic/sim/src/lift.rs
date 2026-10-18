@@ -9,18 +9,20 @@
 //! decides when it starts, what destination it has and what happens at the
 //! ends of a lift. Every rule that tests the seized state reads [`seized`].
 //!
-//! A seizing warhead that names another locomotor follows claim 22: one that
-//! can stand in temporarily seizes with the unit's own movement state kept
-//! (Q-1334), one that cannot (or an unknown identifier) stops the target
-//! without a seize. The team-membership removal of claim 5 belongs to the
-//! original's team system, which is out of scope.
+//! A seizing warhead that names another locomotor follows claims 22 to 24:
+//! one that can stand in temporarily seizes with that locomotor installed as
+//! the unit's stand-in, which moves it towards the lifter by its own rules
+//! and, under `quirks.lift_standin_stays_seized`, never lets go; one that
+//! cannot (or an unknown identifier) stops the target without a seize. The
+//! team-membership removal of claim 5 belongs to the original's team
+//! system, which is out of scope.
 
 use glasnost_num::{F32, F64};
 use serde::{Deserialize, Serialize};
 
 use crate::combat::damage::{self, Hit};
 use crate::combat::data::SeizeLocomotor;
-use crate::rules::{Behaviour, Kind};
+use crate::rules::{Behaviour, Kind, Locomotor};
 use crate::world::{HouseId, HouseRole, Layer, ObjectId, Pos, Target, World};
 
 /// The magnetic wave of a magnetic-beam weapon's shot (S-0607 claim 21,
@@ -40,6 +42,43 @@ pub struct Wave {
     pub b: F64,
     /// The wave has ended and fades out.
     pub ended: bool,
+}
+
+/// A stand-in locomotor other than the jumpjet's (S-0607 Terms, claims 22
+/// to 24): the locomotor a seize installs in place of the unit's own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StandIn {
+    /// The driving locomotor (S-0207).
+    Drive,
+    /// The walking locomotor: our engine keeps the unit where it is
+    /// (claim 23, design).
+    Walk,
+    /// The ship locomotor (S-0504).
+    Ship,
+    /// The teleporting locomotor (S-0207 claim 20).
+    Teleport,
+    /// The drop-pod locomotor: our engine ends it at once at the seize
+    /// (claim 23, design).
+    DropPod,
+}
+
+/// A seized unit's own movement states, kept aside while a stand-in is
+/// installed (S-0607 claim 24 with `quirks.lift_standin_stays_seized` off;
+/// S-0215 claim 13: restoration retains the suspended movement state).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OwnLocomotor {
+    /// Its own driving or ship state.
+    pub drive: Option<crate::drive::DriveState>,
+    /// Its own walking state.
+    pub walk: Option<crate::walk::WalkState>,
+    /// Its own hovering state.
+    pub hover: Option<crate::hover::HoverState>,
+    /// Its own teleporting state.
+    pub teleport: Option<crate::teleport::TeleportState>,
+    /// Its own jumpjet state.
+    pub jump: Option<crate::jump::JumpState>,
+    /// It was driving temporarily for a factory exit (S-0417 claim 5).
+    pub temporary_drive: bool,
 }
 
 /// An object's magnetic-lift state (S-0607 Terms).
@@ -68,11 +107,15 @@ pub struct LiftState {
     pub detour: bool,
     /// A falling dropped unit's crash rate, a single (S-0502 claim 18).
     pub rate: Option<F32>,
-    /// The unit was seized with a locomotor other than jumpjet that can
-    /// stand in temporarily (S-0607 claim 22); it keeps its own movement
-    /// state (Q-1334).
+    /// The stand-in locomotor of a unit seized with a locomotor other than
+    /// jumpjet that can stand in temporarily (S-0607 claims 22 to 24);
+    /// none for the jumpjet's lift. A drop-pod stand-in stays recorded
+    /// after it has ended, since the unit stays seized (claim 24).
     #[serde(default)]
-    pub stand_in: bool,
+    pub stand_in: Option<StandIn>,
+    /// The unit's own movement states while a stand-in is installed.
+    #[serde(default)]
+    pub own: Option<Box<OwnLocomotor>>,
     /// A unit set sinking by claim 17: its coming death is credited.
     pub sink_credit: bool,
 }
@@ -114,10 +157,43 @@ pub fn grips(w: &World, lifter: ObjectId, unit: ObjectId) -> bool {
     gripped_unit(w, lifter) == Some(unit)
 }
 
-/// Whether a seized unit was seized with a stand-in locomotor (S-0607
-/// claim 22).
-pub fn stand_in(w: &World, id: ObjectId) -> bool {
-    st(w, id).is_some_and(|l| l.seized && l.stand_in)
+/// The stand-in locomotor of a unit seized with one (S-0607 claims 22 to
+/// 24); none for a unit that is not seized or is seized with the jumpjet.
+pub fn stand_in(w: &World, id: ObjectId) -> Option<StandIn> {
+    st(w, id).filter(|l| l.seized).and_then(|l| l.stand_in)
+}
+
+/// The stand-in that moves a seized unit now (S-0607 claim 23): none for a
+/// unit not seized with a stand-in, and for the drop-pod stand-in, which
+/// has already ended (the unit has its own locomotor back).
+pub fn moving_stand_in(w: &World, id: ObjectId) -> Option<StandIn> {
+    stand_in(w, id).filter(|&k| k != StandIn::DropPod)
+}
+
+/// The locomotor the unit moves with now (S-0215 claim 11, revision 68:
+/// "the vehicle's current locomotor"; S-0607 claims 5, 20, 23 and 24): the
+/// temporary jumpjet while seized with it, the stand-in while one is
+/// installed, otherwise its own (the driving locomotor while it drives
+/// temporarily, S-0417 claim 5).
+pub fn current_locomotor(w: &World, id: ObjectId) -> Option<Locomotor> {
+    let o = w.obj(id)?;
+    if o.lift.seized {
+        // spec: S-0607 claim 20 and S-0215 claim 11 (while seized the current locomotor is the temporary jumpjet movement)
+        match o.lift.stand_in {
+            None => return Some(Locomotor::Jump),
+            // spec: S-0607 claims 22 and 23 (the stand-in installed in place of its own)
+            Some(StandIn::Drive) => return Some(Locomotor::Drive),
+            Some(StandIn::Walk) => return Some(Locomotor::Walk),
+            Some(StandIn::Ship) => return Some(Locomotor::Ship),
+            Some(StandIn::Teleport) => return Some(Locomotor::Teleport),
+            // spec: S-0607 claims 23 and 24 (the drop-pod stand-in has ended: the unit has its own locomotor back)
+            Some(StandIn::DropPod) => {}
+        }
+    }
+    if crate::econ::release::temporary_drive(w, id) {
+        return Some(Locomotor::Drive);
+    }
+    w.rules().unit(o.kind, o.type_index).map(|u| u.locomotor)
 }
 
 /// Whether the unit is *dropped* (S-0607 Terms).
@@ -187,9 +263,9 @@ pub fn seize_hit(
         return;
     }
     match w.rules().combat.warhead(warhead).seize_locomotor {
-        SeizeLocomotor::Jumpjet => seize(w, f, x, false),
-        // spec: S-0607 claim 22 (a locomotor that can stand in temporarily: the target is seized as in claim 5, with that locomotor in place of its own)
-        SeizeLocomotor::StandIn => seize(w, f, x, true),
+        SeizeLocomotor::Jumpjet => seize(w, f, x, None),
+        // spec: S-0607 claim 22 (a locomotor that can stand in temporarily: the target is seized as in claim 5, with that locomotor installed as its stand-in in place of its own)
+        SeizeLocomotor::StandIn(k) => seize(w, f, x, Some(k)),
         // spec: S-0607 claim 22 (a locomotor that cannot stand in temporarily, or an unknown identifier: claim 5's other effects, no seize)
         SeizeLocomotor::NoStandIn => not_seized(w, x),
     }
@@ -308,17 +384,12 @@ fn non_human_rule(w: &World, h: Option<HouseId>) -> bool {
         .is_some_and(|x| !x.human && x.role != HouseRole::Player)
 }
 
-/// The seize itself (S-0607 claim 5).
-fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: bool) {
+/// The seize itself (S-0607 claim 5; claims 22 and 23 for a stand-in).
+fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: Option<StandIn>) {
     let t = w.tick;
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
-    if stand_in {
-        // spec: S-0607 claim 22 (how a unit seized with a stand-in locomotor moves is outside the spec); Q-1334 interim (it keeps its own movement state and marks, stops by its own rules and stays where it stands)
-        crate::drive::stop(w, x);
-    } else {
-        // spec: S-0607 claim 5 (it stops: its route is cleared, it gives up the occupancy mark of its cell and it stands still)
-        suspend_own(w, x);
-    }
+    // spec: S-0607 claim 5 (it stops: its route is cleared, it gives up the occupancy mark of its cell and it stands still; claims 22 and 23 replace only the link and the destination for a stand-in)
+    suspend_own(w, x);
     if let Some(o) = w.obj_mut(x) {
         o.path.steps.clear();
         o.queued_dests.clear();
@@ -332,9 +403,11 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: bool) {
     if w.obj(x).is_none() {
         return;
     }
-    if !stand_in {
+    match stand_in {
         // spec: S-0607 claim 5 and claim 7 (its jumpjet locomotor is linked, with the jumpjet fields of the unit's own type)
-        crate::jump::link_lift(w, x);
+        None => crate::jump::link_lift(w, x),
+        // spec: S-0607 claims 22 and 23 (that locomotor is installed as its stand-in in place of its own)
+        Some(k) => install_stand_in(w, x, k),
     }
     // spec: S-0607 claim 5 (the firer's previous grip ends without clearing the firer's target)
     end_grip(w, lifter, false);
@@ -345,6 +418,15 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: bool) {
         l.gripped = Some(x);
         l.grip_dest = grip_dest;
     });
+    let p = lifter_point(w, lifter, x);
+    if let Some(k) = stand_in {
+        if let Some(o) = w.obj_mut(x) {
+            // spec: S-0607 claim 23 (at the seize the unit is given the lifter as its order-level destination, exactly as in claim 5, before the seized state begins; with another stand-in it stays the lifter itself, an object destination, not the cell of a point)
+            o.dest = Some(Target::Object(lifter));
+        }
+        // spec: S-0607 claim 23 (the stand-in receives the lifter's point of claim 7 as its movement instruction; no nearby-cell search and no fixed movement point of its own)
+        instruct_stand_in(w, x, k, lifter, p);
+    }
     upd(w, x, |l| {
         l.seized = true;
         l.lifter = Some(lifter);
@@ -363,9 +445,8 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: bool) {
             .and_then(|o| o.owner)
             .is_some_and(|h| crate::econ::setup::passive(w, h))
         && !harvester;
-    if !stand_in {
+    if stand_in.is_none() {
         // spec: S-0607 claims 5 and 7 (the grip is made and the unit is given the lifter as its destination; its jumpjet movement turns this at once into a movement point fixed at the seize, from the lifter's point)
-        let p = lifter_point(w, lifter, x);
         let cell = crate::jump::lift_point(w, x, p);
         if let Some(o) = w.obj_mut(x) {
             // spec: S-0607 claim 5 (its order-level destination becomes the cell of that point, not the lifter)
@@ -385,6 +466,88 @@ fn seize(w: &mut World, lifter: ObjectId, x: ObjectId, stand_in: bool) {
             Behaviour::Guard
         }));
     }
+    match stand_in {
+        Some(StandIn::DropPod) => drop_pod_ends(w, lifter, x),
+        // spec: S-0607 claim 23 (a stand-in whose own rules removed the destination at once, such as a teleporting stand-in that finds no landing cell, S-0207 claim 20 b: the grip ends and the unit is set down)
+        Some(_) => enforce(w, x),
+        None => {}
+    }
+}
+
+/// Installs a stand-in locomotor on a seized unit (S-0607 claims 22 and
+/// 23): its own movement states are kept aside and the stand-in starts
+/// afresh, at rest in the unit's cell. A drop-pod stand-in ends at once and
+/// installs nothing ([`drop_pod_ends`]); a landed aircraft keeps its own
+/// states and stays where it is.
+fn install_stand_in(w: &mut World, x: ObjectId, k: StandIn) {
+    let Some(o) = w.obj(x) else { return };
+    if k == StandIn::DropPod || o.kind != Kind::Vehicle {
+        return;
+    }
+    if o.jump.is_some() {
+        // spec: S-0607 claim 5 (it gives up the occupancy mark of its cell: a jumpjet type's own marks, reservation and slot go)
+        crate::jump::give_up_marks(w, x);
+    }
+    let Some(o) = w.obj_mut(x) else { return };
+    let own = OwnLocomotor {
+        drive: o.drive.take(),
+        walk: o.walk.take(),
+        hover: o.hover.take(),
+        teleport: o.teleport.take(),
+        jump: o.jump.take(),
+        temporary_drive: std::mem::take(&mut o.econ.temporary_drive),
+    };
+    o.lift.own = Some(Box::new(own));
+    match k {
+        StandIn::Drive | StandIn::Ship => o.drive = Some(crate::drive::DriveState::new()),
+        StandIn::Teleport => o.teleport = Some(crate::teleport::TeleportState::default()),
+        StandIn::Walk | StandIn::DropPod => {}
+    }
+    let (c, layer) = (o.pos.cell(), o.layer);
+    // spec: S-0607 claims 5 and 23 do not say whether the stand-in marks the cell the unit gave up; Q-1338 interim (it starts at rest in that cell and holds its vehicle-present mark, as S-0209 claim 1 says a vehicle at rest does)
+    w.cells.claim_vehicle(c, layer, true);
+    if let Some(d) = w.obj_mut(x).and_then(|o| o.drive.as_mut()) {
+        d.claims = vec![c];
+    }
+}
+
+/// The stand-in takes the lifter's point as its movement instruction
+/// (S-0607 claim 23).
+fn instruct_stand_in(w: &mut World, x: ObjectId, k: StandIn, lifter: ObjectId, p: Pos) {
+    if w.obj(x).is_none_or(|o| o.kind != Kind::Vehicle) {
+        return;
+    }
+    let dest = Some(Target::Object(lifter));
+    match k {
+        StandIn::Drive | StandIn::Ship => {
+            if let Some(d) = w.obj_mut(x).and_then(|o| o.drive.as_mut()) {
+                // spec: S-0607 claim 23 and S-0207 claim 25 (the locomotor destination point is the lifter's point, taken for the lifter as the order-level destination)
+                d.for_dest = dest;
+                d.goal = Some(p);
+            }
+        }
+        // spec: S-0607 claim 23 and S-0207 claim 20 (a) and (b) (the teleporting stand-in fixes its landing point from the cell of the lifter's point)
+        StandIn::Teleport => {
+            crate::teleport::stand_in_instruction(w, x, Target::Object(lifter), p.cell())
+        }
+        // spec: S-0607 claim 23 (walking, design: the unit does not move or turn under that stand-in)
+        StandIn::Walk | StandIn::DropPod => {}
+    }
+}
+
+/// The drop-pod stand-in ends at once at the seize (S-0607 claim 23,
+/// design): the unit stays where it is, gets its own locomotor back and
+/// the grip ends with it set down. It stays seized (claim 24).
+fn drop_pod_ends(w: &mut World, lifter: ObjectId, x: ObjectId) {
+    // spec: S-0607 claims 23 and 24 (our engine ends the drop-pod stand-in at once at the seize: the unit stays where it is and gets its own locomotor back)
+    own_marks_back(w, x);
+    // spec: S-0607 claim 23 (the grip ends with the unit set down); claim 12 gives no row for this end; Q-1337 interim (the lifter's target is not cleared, as for a gripped unit given no destination)
+    upd(w, lifter, |s| {
+        s.gripped = None;
+        s.grip_dest = None;
+    });
+    upd(w, x, |s| s.lifter = None);
+    set_down_here(w, x);
 }
 
 /// The lifter's point at the seize (S-0607 claim 7): a mobile lifter's
@@ -589,6 +752,10 @@ fn set_down_here(w: &mut World, x: ObjectId) {
         // spec: S-0607 claims 9 and 13 (set down: its destination becomes none)
         o.dest = None;
     }
+    if w.obj(x).is_some_and(|o| o.jump.is_none()) {
+        // spec: S-0607 claim 23 (a unit on another stand-in, or with its own locomotor back from a drop-pod stand-in, is set down where it stands: no jumpjet descent or touchdown)
+        return;
+    }
     if crate::jump::height_above(w, x) > 0 {
         // spec: S-0607 claim 9 (set down at whatever height, it then descends and lands under claim 17's clear-cell rule)
         crate::jump::lift_descend(w, x);
@@ -732,17 +899,47 @@ pub fn steer(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Enforces claim 9 for a unit seized with a stand-in locomotor (S-0607
-/// claim 22, Q-1334 interim): a destination written without the assignment
-/// is replaced by none at the start of its behaviour turn.
+/// Enforces claims 9 and 23 for a unit seized with a stand-in locomotor
+/// (S-0607 claims 22 to 24), at the start of its behaviour turn and after
+/// its movement: while gripped its order-level destination stays the
+/// lifter, and a destination removed by any rule ends the grip with the
+/// unit set down; once the grip has ended a destination written without
+/// the assignment is replaced by none.
+// spec: S-0607 claim 23 and S-0207 claim 20 (the teleporting stand-in's jump removes the destination, which ends the grip here); Q-1340 interim (followed as written, although scenario L13 part b lists a grip ended by arrival alone as a falsifier)
 pub fn enforce(w: &mut World, id: ObjectId) {
-    if stand_in(w, id)
-        && let Some(o) = w.obj_mut(id)
-        && o.dest.is_some()
-    {
-        // spec: S-0607 claim 9 (a seized unit ignores every new destination)
-        o.dest = None;
-        o.path.steps.clear();
+    if stand_in(w, id).is_none() {
+        return;
+    }
+    let Some(o) = w.obj(id) else { return };
+    let dest = o.dest;
+    match lifter_of(w, id) {
+        Some(l) if w.obj(l).is_some() => match dest {
+            None => {
+                // spec: S-0607 claims 9, 12 and 23 (a gripped unit given no destination, here when the stand-in's own rules remove it through the ordinary destination-setting rule: the grip ends without a drop and the unit is set down; the lifter's target is not cleared)
+                upd(w, l, |s| {
+                    s.gripped = None;
+                    s.grip_dest = None;
+                });
+                upd(w, id, |s| s.lifter = None);
+                set_down_here(w, id);
+            }
+            Some(t) if t != Target::Object(l) => {
+                if let Some(ob) = w.obj_mut(id) {
+                    // spec: S-0607 claims 9 and 23 (a seized unit ignores every new destination: the lifter stays its destination)
+                    ob.dest = Some(Target::Object(l));
+                }
+            }
+            Some(_) => {}
+        },
+        _ => {
+            if dest.is_some()
+                && let Some(ob) = w.obj_mut(id)
+            {
+                // spec: S-0607 claim 9 (a seized unit ignores every new destination)
+                ob.dest = None;
+                ob.path.steps.clear();
+            }
+        }
     }
 }
 
@@ -1177,6 +1374,18 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
     if !l.seized {
         return false;
     }
+    if let Some(k) = l.stand_in {
+        // spec: S-0607 claim 24 and quirks.lift_standin_stays_seized (on: a unit seized with the driving, walking, ship or teleporting stand-in is never restored, and one seized with the drop-pod stand-in stays seized)
+        if w.rules().quirks.lift_standin_stays_seized {
+            return false;
+        }
+        // spec: S-0607 claim 24 (quirk off: claim 20 applies to every stand-in, with that stand-in's own moving test in place of the jumpjet's)
+        if stand_in_moving(w, id, k) || !l.set_down || l.lifter.is_some() {
+            return false;
+        }
+        restore(w, id);
+        return true;
+    }
     // spec: S-0607 claim 20 (its jumpjet movement is not moving, S-0502's moving, not moving now; and it is set down)
     if crate::jump::moving(w, id) || !l.set_down || l.lifter.is_some() {
         return false;
@@ -1185,53 +1394,24 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
     true
 }
 
-/// Gives a seized unit its own locomotor back (S-0607 claim 20).
+/// Gives a seized unit its own locomotor back (S-0607 claim 20; claim 24
+/// for another stand-in).
 fn restore(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
-    if o.lift.stand_in {
-        // spec: S-0607 claim 22 (when a unit seized with a stand-in locomotor is restored is outside the spec); Q-1334 interim (claim 20's rule; its own movement state and marks were kept, so nothing is put back)
-        upd(w, id, |l| {
-            l.seized = false;
-            l.set_down = false;
-            l.dropped = false;
-            l.detour = false;
-            l.dropper = None;
-            l.dropper_house = None;
-            l.rate = None;
-            l.stand_in = false;
-        });
-        return;
-    }
-    let jumpjet_type = w
-        .rules()
-        .unit(o.kind, o.type_index)
-        .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Jump);
-    crate::jump::lift_restore(w, id, jumpjet_type);
-    if !jumpjet_type {
-        // spec: S-0215 claim 13 (restoration retains the suspended movement state) and S-0209 claim 1 (the own locomotor's mark at its cell)
-        let Some(o) = w.obj(id).cloned() else { return };
-        let (c, layer) = (o.pos.cell(), o.layer);
-        match o.kind {
-            Kind::Vehicle => {
-                // spec: S-0207 claim 21 (no occupancy mark is moved merely by restoration: a retained teleport reservation stays where it is)
-                let pending = o.teleport.as_ref().is_some_and(|t| t.mark.is_some());
-                if !pending {
-                    w.cells.claim_vehicle(c, layer, true);
-                }
-                if let Some(ob) = w.obj_mut(id) {
-                    if let Some(d) = ob.drive.as_mut() {
-                        d.claims = vec![c];
-                    }
-                    if let Some(h) = ob.hover.as_mut() {
-                        h.claims = vec![(c, layer)];
-                    }
-                }
-            }
-            Kind::Aircraft => crate::air::ground_mark(w, id),
-            _ => {}
+    if o.lift.stand_in.is_some() {
+        // spec: S-0607 claim 24 (quirks.lift_standin_stays_seized off: claim 20 applies to every stand-in; the stand-in ends and its own locomotor returns)
+        end_stand_in(w, id);
+    } else {
+        let jumpjet_type = w
+            .rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.locomotor == Locomotor::Jump);
+        crate::jump::lift_restore(w, id, jumpjet_type);
+        if !jumpjet_type {
+            own_marks_back(w, id);
         }
     }
-    // spec: S-0607 claim 20 (restoration clears seized, set down and the dropper)
+    // spec: S-0607 claim 20 (restoration clears seized, set down and the dropper) and claim 24 (for every stand-in when the quirk is off)
     upd(w, id, |l| {
         l.seized = false;
         l.set_down = false;
@@ -1240,6 +1420,8 @@ fn restore(w: &mut World, id: ObjectId) {
         l.dropper = None;
         l.dropper_house = None;
         l.rate = None;
+        l.stand_in = None;
+        l.own = None;
     });
     let owner = o.owner;
     if resource_gatherer(w, id)
@@ -1249,6 +1431,111 @@ fn restore(w: &mut World, id: ObjectId) {
         // spec: S-0607 claim 20 (a seized resource gatherer of a computer-controlled house queues harvest in the original; our AI houses take the human rule, the neutral and special houses the original's)
         ob.beh.queue(Some(Behaviour::Harvest));
     }
+}
+
+/// The own locomotor's marks at the unit's cell when it returns (S-0215
+/// claim 13: restoration retains the suspended movement state; S-0209
+/// claim 1).
+fn own_marks_back(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id).cloned() else { return };
+    if o.jump.is_some() {
+        // A jumpjet type kept its own jumpjet locomotor and its marks (`suspend_own`).
+        return;
+    }
+    let (c, layer) = (o.pos.cell(), o.layer);
+    match o.kind {
+        Kind::Vehicle => {
+            // spec: S-0207 claim 21 (no occupancy mark is moved merely by restoration: a retained teleport reservation stays where it is)
+            let pending = o.teleport.as_ref().is_some_and(|t| t.mark.is_some());
+            if !pending {
+                w.cells.claim_vehicle(c, layer, true);
+            }
+            if let Some(ob) = w.obj_mut(id) {
+                if let Some(d) = ob.drive.as_mut() {
+                    d.claims = vec![c];
+                }
+                if let Some(h) = ob.hover.as_mut() {
+                    h.claims = vec![(c, layer)];
+                }
+            }
+        }
+        Kind::Aircraft => crate::air::ground_mark(w, id),
+        _ => {}
+    }
+}
+
+/// A stand-in other than the drop-pod's ends (S-0607 claim 24 with the
+/// quirk off): it gives up its marks and the unit's own movement states
+/// return, with their marks at its cell.
+fn end_stand_in(w: &mut World, id: ObjectId) {
+    let Some(own) = w.obj_mut(id).and_then(|o| o.lift.own.take()) else {
+        // The drop-pod stand-in, or a landed aircraft: nothing was installed.
+        return;
+    };
+    // spec: S-0209 claim 1 (the stand-in clears the marks it holds)
+    crate::drive::release_claims(w, id);
+    let jumpjet = own.jump.is_some();
+    if let Some(o) = w.obj_mut(id) {
+        let own = *own;
+        o.drive = own.drive;
+        o.walk = own.walk;
+        o.hover = own.hover;
+        o.teleport = own.teleport;
+        o.jump = own.jump;
+        o.econ.temporary_drive = own.temporary_drive;
+    }
+    if jumpjet {
+        // spec: S-0502 claim 4 (a jumpjet type's own ground mark at its present position)
+        crate::jump::retake_marks(w, id);
+    } else {
+        own_marks_back(w, id);
+    }
+}
+
+/// The stand-in's own moving test (S-0607 claim 24, quirk off: in place of
+/// the jumpjet's *moving* of claim 20).
+fn stand_in_moving(w: &World, id: ObjectId, k: StandIn) -> bool {
+    match k {
+        // spec: S-0607 claim 24 and S-0207 claim 27 (the driving or ship locomotor's movement report: a locomotor destination point, or a heading point horizontally different from its position)
+        StandIn::Drive | StandIn::Ship => crate::drive::movement_report(w, id, false),
+        // spec: S-0607 claim 24 and S-0207 claim 20 (d) (the teleporting locomotor is moving while a jump to a landing point other than its position is pending)
+        StandIn::Teleport => w.obj(id).is_some_and(|o| {
+            o.teleport
+                .as_ref()
+                .and_then(|t| t.landing)
+                .is_some_and(|l| l != o.pos)
+        }),
+        // spec: S-0607 claim 23 (walking: our engine never moves the unit; drop-pod: the stand-in has already ended)
+        StandIn::Walk | StandIn::DropPod => false,
+    }
+}
+
+/// The movement update of a unit seized with a stand-in (S-0607 claim 23):
+/// the stand-in's ordinary rules move it, then a destination they removed
+/// ends the grip. Returns whether it moved.
+pub fn stand_in_tick(w: &mut World, id: ObjectId, k: StandIn, held: bool) -> bool {
+    if w.obj(id).is_none_or(|o| o.kind != Kind::Vehicle) {
+        // spec: S-0607 claims 3 and 23 (a landed aircraft seized with a stand-in: no movement spec covers it); Q-1339 interim (it stays where it is)
+        return false;
+    }
+    let moved = match k {
+        // spec: S-0607 claim 23 (driving: S-0207) and S-0614 claim 8 (a held unit does not move under the driving locomotor)
+        StandIn::Drive => {
+            let moved = !held && crate::drive::tick(w, id);
+            // spec: S-0207 claim 23 (a drive vehicle's wake, created right after its drive update)
+            crate::drive::driving_wake(w, id);
+            moved
+        }
+        // spec: S-0607 claim 23 (ship: S-0504's ship locomotor) and S-0614 claim 8
+        StandIn::Ship => !held && crate::naval::tick(w, id),
+        // spec: S-0607 claim 23 (teleporting: S-0207 claim 20)
+        StandIn::Teleport => crate::teleport::tick(w, id),
+        // spec: S-0607 claim 23 (walking, design: the unit does not move or turn while it is seized; drop-pod: ended at the seize)
+        StandIn::Walk | StandIn::DropPod => false,
+    };
+    // spec: S-0607 claim 23 (the grip ends when the stand-in's own rules remove the unit's order-level destination, for example S-0207 claim 25's give-up row)
+    enforce(w, id);
+    moved
 }
 
 // ---------------------------------------------------------------------------

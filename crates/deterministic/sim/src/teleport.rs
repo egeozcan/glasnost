@@ -151,6 +151,10 @@ pub fn removal_marks(w: &World, id: ObjectId) -> Vec<(CellXY, Layer)> {
 
 /// Whether the object moves with the teleporting locomotor in our engine.
 pub fn is_teleporter(w: &World, id: ObjectId) -> bool {
+    // spec: S-0607 claims 22 and 23 (a unit seized with a stand-in moves with that stand-in, not its own locomotor)
+    if let Some(k) = crate::lift::moving_stand_in(w, id) {
+        return k == crate::lift::StandIn::Teleport;
+    }
     // spec: S-0417 claim 5 (a teleporting vehicle drives temporarily for its factory exit)
     !crate::econ::release::temporary_drive(w, id)
         && w.obj(id)
@@ -230,6 +234,24 @@ pub fn take_destination(w: &mut World, id: ObjectId) {
             None => return,
         },
     };
+    fix_landing(w, id, dest, dc, st);
+}
+
+/// A teleporting stand-in takes the lifter's point as its movement
+/// instruction at a magnetic seize (S-0607 claim 23): the landing point is
+/// fixed from the cell `dc` of that point as for a destination in that cell
+/// (claim 20 a and b), the order-level destination `dest` staying the
+/// lifter.
+pub fn stand_in_instruction(w: &mut World, id: ObjectId, dest: Target, dc: CellXY) {
+    let Some(o) = w.obj(id) else { return };
+    let st = o.teleport.clone().unwrap_or_default();
+    fix_landing(w, id, dest, dc, st);
+}
+
+/// Fixes a vehicle's or aircraft's landing point for destination `dest` in
+/// cell `dc` (claim 20 a and b).
+fn fix_landing(w: &mut World, id: ObjectId, dest: Target, dc: CellXY, mut st: TeleportState) {
+    let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0207 claim 20 (b) (revision 34: warp-pending immobilization, Terms, leaves L unchanged, as a search that gives no cell does)
     let found = if crate::superweapons::warp_pending_or_leaving(w, id) {
         None
