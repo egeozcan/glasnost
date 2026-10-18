@@ -1327,6 +1327,7 @@ pub fn lift_dropped(w: &mut World, id: ObjectId) -> bool {
         return false;
     }
     release_slot(w, id);
+    // spec: S-0607 claim 13 (its jumpjet movement is stopped by S-0502 claim 17's rule: the reservation is released); Q-1332 interim (no nearby-cell search and no self-destruct: claim 15's detour decides where it falls)
     release_reservation(w, id);
     // spec: S-0607 claim 15 (its destination becomes that centre and it keeps flying under S-0502's cruising rules)
     upd(w, id, |j| {
@@ -1338,13 +1339,13 @@ pub fn lift_dropped(w: &mut World, id: ObjectId) -> bool {
 }
 
 /// A dropped unit's fall begins (S-0607 claim 15, S-0502 claim 18):
-/// *crashing* with target height −5 leptons, speeds 0, no move order.
+/// *crashing* with target height 0, speeds 0, no move order.
 pub fn lift_fall(w: &mut World, id: ObjectId) {
     release_reservation(w, id);
-    // spec: S-0502 claim 18 (crashing with target height −5 leptons; a seized unit's speeds are 0)
+    // spec: S-0502 claim 18 (crashing; a seized unit's speeds are 0) and S-0607 claim 15 (while a seized unit is crashing, its jumpjet target height is 0 in every update, not the ordinary crash's −5)
     upd(w, id, |j| {
         j.phase = Phase::Crashing;
-        j.ht = CRASH_TARGET;
+        j.ht = 0;
         j.vc = F64::ZERO;
         j.vm = F64::ZERO;
         j.dest = None;

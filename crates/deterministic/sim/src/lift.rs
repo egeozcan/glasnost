@@ -161,7 +161,7 @@ pub fn seize_hit(
     if !eligible(w, x, damage) {
         return;
     }
-    // Q-1330 interim (question 1: claim 3's conditions are tested before claim 4's special case)
+    // spec: S-0607 State and ordering (a resource gatherer made immune by claim 3 keeps its temporary locomotor: claim 3's conditions come before claim 4's special case)
     if harvester_case(w, x) {
         return;
     }
@@ -382,6 +382,26 @@ fn break_contact(w: &mut World, x: ObjectId) {
     }
 }
 
+/// The dropped unit breaks off any contact (S-0607 claim 13): a contact
+/// with a building as claim 5 breaks it, any other on both sides.
+fn break_any_contact(w: &mut World, x: ObjectId) {
+    let Some(k) = w.obj(x).and_then(|o| o.contact) else {
+        return;
+    };
+    if w.obj(k).is_some_and(|b| b.kind == Kind::Building) {
+        break_contact(w, x);
+        return;
+    }
+    if let Some(o) = w.obj_mut(x) {
+        o.contact = None;
+    }
+    if let Some(b) = w.obj_mut(k)
+        && b.contact == Some(x)
+    {
+        b.contact = None;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Ending the grip (claims 12 to 14)
 
@@ -426,10 +446,17 @@ fn drop(w: &mut World, x: ObjectId, dropper: Option<ObjectId>, house: Option<Hou
         l.set_down = false;
     });
     if let Some(o) = w.obj_mut(x) {
-        // spec: S-0607 claim 13 (its orders stop: its destination becomes none and its route is cleared)
+        // spec: S-0607 claim 13 (the stop on dropping: its destination becomes none, its route is cleared and its target is cleared)
         o.dest = None;
         o.path.steps.clear();
+        crate::spawn::clear_own_target(o);
+        o.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
     }
+    // spec: S-0607 claim 13 (the stop on dropping: it breaks off any contact)
+    break_any_contact(w, x);
+    // spec: S-0607 claim 13 (the stop on dropping: it is deselected)
+    w.effects
+        .push(crate::combat::effects::Effect::Dropped { unit: x });
     // spec: S-0607 claim 15 (to its cell centre first when it is not exactly over it)
     let detour = crate::jump::lift_dropped(w, x);
     upd(w, x, |l| l.detour = detour);
@@ -442,7 +469,7 @@ fn drop(w: &mut World, x: ObjectId, dropper: Option<ObjectId>, house: Option<Hou
 fn start_fall(w: &mut World, x: ObjectId) {
     let mode = w.rules().mode;
     let k = crate::jump::fields(w, x).map_or(F64::ZERO, |f| f.crash);
-    // Q-1322 (interim: the growing crash rate starts at the type's crash rate k, narrowed to single precision)
+    // spec: S-0607 claim 15 (the crash rate starts at the unit's own type's jumpjet crash value, narrowed to single precision, afresh at every seize)
     upd(w, x, |l| {
         l.detour = false;
         l.rate = Some(k.to_f32(mode));
@@ -790,7 +817,7 @@ fn blocked(w: &World, id: ObjectId, on_deck: bool) -> bool {
     let Some(o) = w.obj(id) else { return true };
     let c = o.pos.cell();
     let reference = crate::occupancy::reference_level(w, id);
-    // spec: S-0607 claim 17 (the cell is blocked when the occupancy test that S-0209 owns finds an obstacle for the unit; Q-1323: every outcome but clear is an obstacle)
+    // spec: S-0607 claim 17 (the cell is blocked when the entry outcome that S-0209 claim 5 gives the dropped unit for the cell is anything other than clear: cloaked blocker, moving blocker, closed friendly gate, friendly obstacle, enemy obstacle, stationary friendly and blocked all count; a crushable occupant whose row gives clear does not block)
     let outcome = crate::occupancy::vehicle_outcome(w, id, c, reference);
     if outcome != crate::occupancy::Outcome::Clear {
         return true;
@@ -830,7 +857,7 @@ fn blocked(w: &World, id: ObjectId, on_deck: bool) -> bool {
 /// The unit is set sinking (S-0607 claim 17, blocked water).
 fn sink(w: &mut World, id: ObjectId) {
     crate::jump::lift_sinking(w, id);
-    // spec: S-0607 claim 17 and S-0504 claims 4 and 5 (set sinking; Q-1324: stunned adds nothing beyond sinking)
+    // spec: S-0607 claim 17 and S-0504 claims 4 and 5 (set sinking and stunned; the stun repeats claim 13's stop on dropping, so it adds nothing observable beyond the sinking)
     crate::naval::start_sinking(w, id);
     upd(w, id, |l| {
         l.sink_credit = true;
@@ -931,12 +958,18 @@ fn impact(w: &mut World, id: ObjectId) {
     // spec: S-0607 claim 18 (the second at the unit's own position with the demolition warhead; both use the pre-impact amount)
     let at = w.obj(id).map_or(o.pos, |x| x.pos);
     detonate(w, death, c4, df, at, source, house);
-    let Some(o2) = w.obj(id) else { return };
-    if damage::dead(o2) {
+    let killed = w.obj(id).is_none_or(damage::dead);
+    if killed {
+        if w.rules().quirks.lift_impact_double_credit {
+            // spec: S-0607 claim 18 and quirks.lift_impact_double_credit (the impact credit is given whether or not the unit is already dead: a unit a detonation killed is credited a second time, in the kill and loss tallies, the score and the experience); switch off: skipped
+            impact_credit(w, id, &o);
+        }
         return;
     }
     if w.rules().quirks.lift_impact_removes_survivor {
-        // spec: S-0607 claim 18 and quirks.lift_impact_removes_survivor (the falling unit leaves play after these effects even if both detonations left it alive)
+        // spec: S-0607 claim 18 (a survivor removed under quirks.lift_impact_removes_survivor is credited once, to the dropper, else the retained dropper house)
+        impact_credit(w, id, &o);
+        // spec: S-0607 claim 18 and quirks.lift_impact_removes_survivor (the falling unit leaves play after these effects even if both detonations left it alive; a surviving transport loses its passengers without attacker credit, S-0507 claim 16)
         crate::combat::death::leave_play(w, id);
     } else {
         // spec: S-0607 Edge cases (switch off: a unit that survives both detonations stays in play, is set down, and is restored by claim 20)
@@ -944,8 +977,44 @@ fn impact(w: &mut World, id: ObjectId) {
     }
 }
 
+/// The impact credit of claim 18: the destruction of the falling unit is
+/// credited to the dropper, else to the retained dropper house. `before` is
+/// the unit as it was before the detonations; a unit a detonation has
+/// already taken out of play is credited from it.
+fn impact_credit(w: &mut World, id: ObjectId, before: &crate::world::Object) {
+    let l = &before.lift;
+    let dropper = l.dropper.filter(|&d| w.obj(d).is_some());
+    // spec: S-0607 claim 18 (impact destruction is credited to the dropper, else to the retained dropper house)
+    let hit = Hit {
+        amount: 0,
+        warhead: None,
+        distance: 0,
+        attacker: dropper,
+        house: if dropper.is_some() {
+            None
+        } else {
+            l.dropper_house
+        },
+        ignore_defences: true,
+        no_escape: false,
+    };
+    if hit.attacker.is_none() && hit.house.is_none() {
+        return;
+    }
+    if w.obj(id).is_some() {
+        damage::credit(w, id, &hit);
+        return;
+    }
+    // The credit reads only the victim's owner, type and experience; the
+    // snapshot stands in for the removed unit for that read alone.
+    w.objects.insert(id, before.clone());
+    damage::credit(w, id, &hit);
+    w.objects.remove(&id);
+}
+
 /// One impact detonation of claim 18: the death weapon's projectile with the
-/// given warhead. With no death weapon, a plain area detonation (Q-1325).
+/// given warhead. With no death weapon, a plain area detonation (S-0607
+/// claim 18, the design rule).
 fn detonate(
     w: &mut World,
     weapon: Option<crate::combat::data::WeaponId>,
@@ -961,6 +1030,7 @@ fn detonate(
             crate::combat::projectile::detonate_weapon_as(w, wp, h, amount, at, source, house);
         }
         None => {
+            // spec: S-0607 claim 18 (no death weapon, design: each detonation becomes a plain area detonation of its warhead at its point, with the same amount, source and house, and no projectile effects)
             crate::combat::projectile::detonate_area(w, h, amount, at, source, house, true);
         }
     }
@@ -1113,13 +1183,9 @@ pub fn shot(w: &mut World, firer: ObjectId, target: Target, fire_point: Pos, imp
     let dx = impact.x.wrapping_sub(fire_point.x);
     let dy = impact.y.wrapping_sub(fire_point.y);
     let n = dx.wrapping_mul(dx).wrapping_add(dy.wrapping_mul(dy));
-    // Q-1326 (interim: a sum that wraps negative is outside the established domain; it creates no wave)
-    if n < 0 {
-        return;
-    }
     let mode = w.rules().mode;
-    // spec: S-0607 F3 (d = S-0204 claim 5's table square root, without integer truncation)
-    let d = glasnost_num::geom::table_root(n as u64, mode).to_f64();
+    // spec: S-0607 F3 (d = S-0204 claim 5's table square root, without integer truncation; for a sum that wraps negative, r(n) = r(−n): the root's input is made positive first)
+    let d = glasnost_num::geom::table_root(i64::from(n).unsigned_abs(), mode).to_f64();
     // spec: S-0607 F3 and Constants (no wave when d < 240 leptons)
     if d.lt(F64::from_i64(240, mode)) {
         return;

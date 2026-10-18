@@ -9043,6 +9043,11 @@
           "type": "boolean",
           "default": true
         },
+        "lift_impact_double_credit": {
+          "description": "The impact credit of a dropped unit's fall is given whether or not one of the two impact detonations has already killed it, so such a unit is credited twice: once to the detonation's source and once more to the dropper (else the dropper house), in the kill and loss tallies, the score and the experience; off: the impact credit is skipped for a unit a detonation has already killed.",
+          "type": "boolean",
+          "default": true
+        },
         "lift_impact_removes_survivor": {
           "description": "A dropped unit that ends its fall in *crashed* leaves play after the two impact detonations even when they did not kill it; off: a unit that survives both detonations stays in play, is set down and gets its own locomotor back. Not implemented yet (wave 2).",
           "type": "boolean",

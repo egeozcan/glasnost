@@ -153,7 +153,11 @@ fn claim_8_arrival_drop_on_the_lifter() {
         health(&w, l) < 1000,
         "claim 18: the lifter underneath is hurt"
     );
-    assert_eq!(kills(&w, 0), 1, "claim 18: credited to the dropper's house");
+    assert_eq!(
+        kills(&w, 0),
+        2,
+        "claim 18: credited to the dropper's house, twice (quirks.lift_impact_double_credit)"
+    );
 }
 
 // spec: S-0607 claim 10: a seized unit gets illegal for every weapon and target
@@ -360,6 +364,108 @@ fn quirk_lift_impact_removes_survivor_both_positions() {
     assert!(restored(&mut w, v), "off: restored");
 }
 
+// spec: S-0607 claim 13: the stop on dropping clears the dropped unit's destination, route and target, breaks off its contact and deselects it
+#[test]
+fn claim_13_stop_on_dropping() {
+    let (mut w, l, v) = seized_world(|_| {}, "VICT");
+    let other = spawn(&mut w, Kind::Vehicle, "VICT", 0, at(0, 6));
+    pull_over(&mut w, v, 3);
+    if let Some(o) = w.obj_mut(v) {
+        o.target = Some(Target::Object(other));
+        o.contact = Some(other);
+    }
+    w.obj_mut(other).unwrap().contact = Some(v);
+    w.effects.clear();
+    order_lifter(&mut w, l);
+    assert!(lift::dropped(&w, v));
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.dest, None);
+    assert_eq!(o.target, None, "target cleared");
+    assert_eq!(o.contact, None, "contact broken");
+    assert_eq!(w.obj(other).unwrap().contact, None, "on both sides");
+    assert!(
+        w.effects
+            .iter()
+            .any(|e| matches!(e, Effect::Dropped { unit } if *unit == v)),
+        "deselected"
+    );
+}
+
+// spec: S-0607 claim 15: while seized and crashing the target height is 0 in every update (not the ordinary crash's -5), and the rate starts afresh at every seize
+#[test]
+fn claim_15_crash_target_height_zero() {
+    let (mut w, l, v) = seized_world(|_| {}, "VICT");
+    pull_over(&mut w, v, 3);
+    order_lifter(&mut w, l);
+    assert!(run_until(&mut w, 40, |w| lift::dropped(w, v)));
+    let mut seen = 0;
+    while lift::dropped(&w, v) && w.tick < 2000 {
+        if lift::rate(&w, v).is_some() {
+            seen += 1;
+            assert_eq!(
+                w.obj(v).unwrap().jump.as_ref().unwrap().ht,
+                0,
+                "target height 0"
+            );
+        }
+        run(&mut w, 1);
+    }
+    assert!(seen > 0, "it fell");
+}
+
+// spec: S-0607 claim 18: a survivor removed under quirks.lift_impact_removes_survivor is credited once, to the dropper
+#[test]
+fn claim_18_removed_survivor_credited_once() {
+    for double in [true, false] {
+        let (mut w, l, v) = seized_world(
+            |r| {
+                armoured(true)(r);
+                r.globals.quirks.lift_impact_double_credit = double;
+            },
+            "VICT",
+        );
+        drop_on_blocker(&mut w, l, v);
+        assert!(w.obj(v).is_none(), "removed");
+        assert_eq!(w.houses[1].combat.losses, 1, "one loss (double {double})");
+        assert_eq!(kills(&w, 0), 1, "one kill to the dropper (double {double})");
+    }
+}
+
+/// A world whose falling damage kills VICT outright (F2 with the type's
+/// strength and a multiplier of 1), with the switch `double` for
+/// quirks.lift_impact_double_credit.
+fn deadly(double: bool) -> impl FnOnce(&mut glasnost_rules::schema::Ruleset) {
+    move |r| {
+        r.sim.general.falling_damage_multiplier = Some(d("1.0"));
+        r.sim.general.current_strength_damage = Some(false);
+        r.globals.quirks.lift_impact_double_credit = double;
+        r.sim.vehicles.get_mut("VICT").unwrap().cost = Some(500);
+    }
+}
+
+// spec: S-0607 claim 18 and quirks.lift_impact_double_credit: a falling unit killed by a detonation is credited a second time by the impact credit, in the kill and loss tallies and the score; off: once
+#[test]
+fn quirk_lift_impact_double_credit_both_positions() {
+    let mut tallies = Vec::new();
+    for double in [true, false] {
+        let (mut w, l, v) = seized_world(deadly(double), "VICT");
+        drop_on_blocker(&mut w, l, v);
+        assert!(w.obj(v).is_none_or(|o| o.health <= 0), "killed");
+        run(&mut w, 5);
+        tallies.push((
+            w.houses[1].combat.losses,
+            kills(&w, 0),
+            w.houses[0].combat.score,
+        ));
+    }
+    let (on, off) = (tallies[0], tallies[1]);
+    assert_eq!(on.0, 2, "on: the victim's house counts two losses");
+    assert_eq!(off.0, 1, "off: one loss");
+    assert_eq!(on.1, off.1 + 1, "on: one more kill for the dropper's house");
+    assert!(off.2 > 0);
+    assert_eq!(on.2, 2 * off.2, "on: the score is doubled");
+}
+
 // spec: S-0607 claim 18: a crashable vehicle type takes the ordinary crash end instead (destroyed whatever its armour)
 #[test]
 fn claim_18_crashable_type_crashes() {
@@ -508,11 +614,31 @@ fn claim_11_rearming_while_gripping() {
         check::check(&w, l, Some(Target::Object(other)), 0, false),
         Answer::Rearming
     );
-    assert_ne!(
+    assert_eq!(
         check::check(&w, l, Some(Target::Object(v)), 0, false),
-        Answer::Illegal,
-        "its gripped unit is not refused"
+        Answer::Rearming,
+        "against its gripped unit: rearming"
     );
+}
+
+// spec: S-0607 claim 11: against its own gripped unit the lifter answers rearming with any weapon, ahead of the tests of the target's layer and height (the gripped unit is airborne)
+#[test]
+fn claim_11_gripped_unit_rearming_with_any_weapon() {
+    let (mut w, l, v) = seized_world(
+        |r| {
+            r.sim.vehicles.get_mut("LIFTER").unwrap().secondary = Some("Doom".into());
+        },
+        "VICT",
+    );
+    pull_over(&mut w, v, 3);
+    assert!(height(&w, v) > 300, "the gripped unit is airborne");
+    for slot in [0, 1] {
+        assert_eq!(
+            check::check(&w, l, Some(Target::Object(v)), slot, false),
+            Answer::Rearming,
+            "slot {slot}"
+        );
+    }
 }
 
 fn pos_at(c: glasnost_map::CellXY, dx: i32) -> Pos {
@@ -531,6 +657,25 @@ fn f3_wave_distance_threshold() {
     assert!(!lift::wave_alive(&w, l), "239: no wave");
     lift::shot(&mut w, l, Target::Object(v), pos_at(c, 0), pos_at(c, 240));
     assert!(lift::wave_alive(&w, l), "240: a wave");
+}
+
+// spec: S-0607 F3: a squared sum that wraps negative in 32-bit arithmetic takes the root of its negation, r(n) = r(-n), so a far impact still makes a wave
+#[test]
+fn f3_wrapped_negative_sum() {
+    let mut w = world(|_| {});
+    let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+    let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(1, 0));
+    let c = at(0, 0);
+    w.obj_mut(l).unwrap().target = Some(Target::Object(v));
+    // 46341 squared is above the largest signed 32-bit value and wraps negative.
+    lift::shot(
+        &mut w,
+        l,
+        Target::Object(v),
+        pos_at(c, 0),
+        pos_at(c, 46_341),
+    );
+    assert!(lift::wave_alive(&w, l), "a wave");
 }
 
 // spec: S-0607 claim 21 and F4: no fixed duration; after a full fade-in a retarget leaves 20 fade updates; target removal also ends it

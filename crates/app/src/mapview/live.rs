@@ -1214,7 +1214,8 @@ impl Live {
                 | Effect::Cloak { .. }
                 | Effect::SpecialAnims { .. }
                 | Effect::Bunkered { .. }
-                | Effect::Seized { .. } => continue,
+                | Effect::Seized { .. }
+                | Effect::Dropped { .. } => continue,
             };
             self.transients.push(Transient {
                 kind,

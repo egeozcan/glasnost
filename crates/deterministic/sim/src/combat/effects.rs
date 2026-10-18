@@ -151,6 +151,12 @@ pub enum Effect {
         /// The seized unit.
         unit: ObjectId,
     },
+    /// A unit dropped by magnetic lift is deselected by the stop on
+    /// dropping (S-0607 claim 13): it is removed from the selection.
+    Dropped {
+        /// The dropped unit.
+        unit: ObjectId,
+    },
     /// A gattling spin update or a gattling-flagged object leaving the map
     /// (S-0609 claim 13), for the spin sound the audio crate keeps.
     Spin {

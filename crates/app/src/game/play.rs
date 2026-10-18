@@ -380,6 +380,10 @@ impl Play {
                 // spec: S-0607 claim 5 (the seized unit is deselected)
                 self.selection.retain(|&x| x != unit);
             }
+            if let Effect::Dropped { unit } = *e {
+                // spec: S-0607 claim 13 (the stop on dropping deselects the dropped unit)
+                self.selection.retain(|&x| x != unit);
+            }
         }
         self.captured_yard_cancels_placement();
         self.selection
