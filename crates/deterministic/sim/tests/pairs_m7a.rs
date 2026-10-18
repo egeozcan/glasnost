@@ -943,7 +943,8 @@ fn a_lift_attack_on_a_bunkered_vehicle_goes_to_its_bunker() {
     let mut fired = false;
     for _ in 0..200 {
         tick::step(&mut w);
-        fired |= lift::wave_alive(&w, l);
+        // A wave at a bunkered target ends at once (S-0607 claim 21: inside a bunker is out of play), so the shot itself is looked for.
+        fired |= w.projectiles.values().any(|p| p.attacker == Some(l));
     }
     assert!(fired, "the lifter fired");
     assert!(!lift::seized(&w, g) && !lift::seized(&w, b));

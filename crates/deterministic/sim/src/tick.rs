@@ -99,6 +99,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::gas::anim_turn(w, id);
         return;
     }
+    if w.waves.contains_key(&id) {
+        // spec: S-0607 claim 21 (a magnetic wave updates in its own turn of the update order)
+        crate::lift::wave_turn(w, id);
+        return;
+    }
     let Some(o) = w.obj(id) else { return };
     // A building in a delayed-kill countdown is killed but alive (S-0302 claim 16): it takes its whole turn.
     let dead = crate::combat::damage::dead(o);
@@ -200,8 +205,6 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0607 claim 12 (row 2: a mobile lifter that accepted another non-empty destination by any rule this turn lets go)
     crate::lift::lifter_destination(w, id);
-    // spec: S-0607 claim 21 and F4 (the wave's per-tick update; Q-1327: in its firer's own turn, after the behaviour processing)
-    crate::lift::wave_turn(w, id);
     if kind == Kind::Building {
         // spec: S-0609 claims 9 and 14 (a gattling building's animation advance and its passive spin-down follow the tick's behaviour processing)
         crate::gattling::building_turn(w, id);

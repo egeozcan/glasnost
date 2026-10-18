@@ -769,14 +769,15 @@ fn f4_wave_fade() {
     let c = at(0, 0);
     w.obj_mut(l).unwrap().target = Some(Target::Object(v));
     lift::shot(&mut w, l, Target::Object(v), pos_at(c, 0), pos_at(c, 300));
+    let wave = lift::wave_of(&w, l).unwrap();
     for _ in 0..200 {
-        lift::wave_turn(&mut w, l);
+        lift::wave_turn(&mut w, wave);
     }
     assert!(lift::wave_alive(&w, l), "no fixed expiry");
     w.obj_mut(l).unwrap().target = None;
     let mut n = 0;
     while lift::wave_alive(&w, l) {
-        lift::wave_turn(&mut w, l);
+        lift::wave_turn(&mut w, wave);
         n += 1;
         assert!(n < 100);
     }
@@ -784,17 +785,69 @@ fn f4_wave_fade() {
     // A retarget on the first update after creation: a = 2q retained, so b catches up in 2 updates.
     w.obj_mut(l).unwrap().target = Some(Target::Object(v));
     lift::shot(&mut w, l, Target::Object(v), pos_at(c, 0), pos_at(c, 300));
-    lift::wave_turn(&mut w, l);
+    let wave = lift::wave_of(&w, l).unwrap();
+    lift::wave_turn(&mut w, wave);
     glasnost_sim::objects::remove(&mut w, v);
     let mut n = 0;
     while lift::wave_alive(&w, l) {
-        lift::wave_turn(&mut w, l);
+        lift::wave_turn(&mut w, wave);
         n += 1;
         assert!(n < 100);
     }
     assert_eq!(
         n, 2,
         "the target leaving play ends it; the shorter fade from the retained strength"
+    );
+}
+
+// spec: S-0607 claim 21: the wave joins the update order at creation, appended after every object; each later tick it updates once in its own turn, so a full fade-in followed by a retarget leaves it 20 ticks; it leaves the update order when removed
+#[test]
+fn claim_21_wave_in_the_update_order() {
+    let mut w = world(|_| {});
+    let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+    let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(1, 0));
+    let c = at(0, 0);
+    w.obj_mut(l).unwrap().target = Some(Target::Object(v));
+    lift::shot(&mut w, l, Target::Object(v), pos_at(c, 0), pos_at(c, 300));
+    let wave = lift::wave_of(&w, l).unwrap();
+    assert_eq!(
+        w.update.order.last(),
+        Some(&wave),
+        "appended after every object"
+    );
+    // A full fade-in; the lifter's target is set back in case its own processing changed it.
+    run(&mut w, 40);
+    w.obj_mut(l).unwrap().target = Some(Target::Object(v));
+    assert!(lift::wave_alive(&w, l));
+    w.obj_mut(l).unwrap().target = None;
+    let mut n = 0;
+    while lift::wave_alive(&w, l) {
+        run(&mut w, 1);
+        n += 1;
+        assert!(n < 100);
+    }
+    assert_eq!(n, 20, "one fade update per tick");
+    assert!(
+        !w.update.order.contains(&wave),
+        "removed from the update order"
+    );
+}
+
+// spec: S-0607 claim 21: leaving play includes going inside a transport: a wave whose firer is taken out of the map ends at its next update
+#[test]
+fn claim_21_firer_off_the_map_ends_the_wave() {
+    let mut w = world(|_| {});
+    let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+    let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(1, 0));
+    let c = at(0, 0);
+    w.obj_mut(l).unwrap().target = Some(Target::Object(v));
+    lift::shot(&mut w, l, Target::Object(v), pos_at(c, 0), pos_at(c, 300));
+    let wave = lift::wave_of(&w, l).unwrap();
+    w.obj_mut(l).unwrap().on_map = false;
+    lift::wave_turn(&mut w, wave);
+    assert!(
+        w.waves.get(&wave).is_none_or(|x| x.ended),
+        "ended although its firer still exists"
     );
 }
 

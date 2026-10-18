@@ -22,9 +22,13 @@ use crate::rules::{Behaviour, Kind};
 use crate::world::{HouseId, HouseRole, Layer, ObjectId, Pos, Target, World};
 
 /// The magnetic wave of a magnetic-beam weapon's shot (S-0607 claim 21,
-/// F4): its target, the two fade accumulators and whether it has ended.
+/// F4): its firer, its target, the two fade accumulators and whether it has
+/// ended. A wave is an entry of the update order of its own
+/// (`World::waves`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Wave {
+    /// The firer whose shot made it.
+    pub firer: ObjectId,
     /// The shot's target (claim 21: the wave ends when its firer's target
     /// is no longer this one).
     pub target: Target,
@@ -64,8 +68,6 @@ pub struct LiftState {
     pub rate: Option<F32>,
     /// A unit set sinking by claim 17: its coming death is credited.
     pub sink_credit: bool,
-    /// A firer's magnetic wave (claim 21).
-    pub wave: Option<Wave>,
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +119,16 @@ pub fn rate(w: &World, id: ObjectId) -> Option<F32> {
 
 /// Whether the firer's magnetic wave is alive (S-0607 claim 21).
 pub fn wave_alive(w: &World, id: ObjectId) -> bool {
-    st(w, id).is_some_and(|l| l.wave.is_some())
+    wave_of(w, id).is_some()
+}
+
+/// The live magnetic wave of a firer, by its number in the update order
+/// (S-0607 claim 21).
+pub fn wave_of(w: &World, firer: ObjectId) -> Option<ObjectId> {
+    w.waves
+        .iter()
+        .find(|(_, v)| v.firer == firer)
+        .map(|(&id, _)| id)
 }
 
 // ---------------------------------------------------------------------------
@@ -1228,38 +1239,51 @@ pub fn shot(w: &mut World, firer: ObjectId, target: Target, fire_point: Pos, imp
     if d.lt(F64::from_i64(240, mode)) {
         return;
     }
-    upd(w, firer, |l| {
-        l.wave = Some(Wave {
+    let id = w.new_id();
+    w.waves.insert(
+        id,
+        Wave {
+            firer,
             target,
             a: F64::ZERO,
             b: F64::ZERO,
             ended: false,
-        });
-    });
-    // spec: S-0607 F4 (one update at creation as well as the per-tick updates)
-    wave_update(w, firer);
+        },
+    );
+    // spec: S-0607 claim 21 (the wave joins the update order when it is created, appended after every object already in play, S-0203 claims 2 and 3)
+    w.update.enter(id);
+    // spec: S-0607 claim 21 and F4 (one update at creation as well as the per-tick updates)
+    wave_update(w, id);
 }
 
-/// The per-tick update of a firer's wave (S-0607 claim 21, F4), in the
-/// firer's own turn (Q-1327).
+/// A wave's own turn in the update order (S-0607 claim 21, F4): each tick
+/// after the one it was created in, after its firer's turn.
 pub fn wave_turn(w: &mut World, id: ObjectId) {
-    if wave_alive(w, id) {
-        wave_update(w, id);
-    }
+    wave_update(w, id);
+}
+
+/// Whether an object is in play for the wave's end test (S-0607 claim 21):
+/// present and on the map, and not inside a transport, a bunker or a
+/// building.
+fn in_play(w: &World, x: ObjectId) -> bool {
+    w.obj(x).is_some_and(|o| {
+        o.on_map && o.structure.inside.is_none() && crate::transport::riding(w, x).is_none()
+    }) && crate::structures::bunker::bunkered_in(w, x).is_none()
 }
 
 fn wave_update(w: &mut World, id: ObjectId) {
-    let Some(mut v) = st(w, id).and_then(|l| l.wave) else {
+    let Some(mut v) = w.waves.get(&id).copied() else {
         return;
     };
     let mode = w.rules().mode;
     let q = fade_step(mode);
     let one = F64::from_i64(1, mode);
     if !v.ended {
-        let target_gone = matches!(v.target, Target::Object(t) if w.obj(t).is_none());
-        let retargeted = w.obj(id).and_then(|o| o.target) != Some(v.target);
-        // spec: S-0607 claim 21 (the wave ends when its target leaves play or its firer's target is no longer the wave's target; the firer leaving play takes the wave with it)
-        if target_gone || retargeted {
+        let firer_gone = !in_play(w, v.firer);
+        let target_gone = matches!(v.target, Target::Object(t) if !in_play(w, t));
+        let retargeted = w.obj(v.firer).and_then(|o| o.target) != Some(v.target);
+        // spec: S-0607 claim 21 (the wave ends when its firer or its target leaves play, going inside a transport, a bunker or a building included, or when its firer's target, as it stands at the wave's turn, is no longer the wave's target)
+        if firer_gone || target_gone || retargeted {
             v.ended = true;
         }
     }
@@ -1277,10 +1301,13 @@ fn wave_update(w: &mut World, id: ObjectId) {
         if v.b.le(v.a.add(q.mul(half, mode), mode)) {
             v.b = v.b.add(q, mode);
             if v.b.ge(v.a) {
-                upd(w, id, |l| l.wave = None);
+                w.waves.remove(&id);
+                let skip = w.rules().quirks.update_order_removal_skip;
+                // spec: S-0203 claim 10 (a removal from the update order, counting during the turn pass)
+                w.update.leave(id, skip);
                 return;
             }
         }
     }
-    upd(w, id, |l| l.wave = Some(v));
+    w.waves.insert(id, v);
 }

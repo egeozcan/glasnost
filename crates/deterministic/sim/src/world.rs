@@ -420,6 +420,10 @@ pub struct World {
     /// Particle systems and virus-death animations (S-0613).
     #[serde(default)]
     pub gas: crate::gas::GasWorld,
+    /// The magnetic waves by their number in the update order (S-0607
+    /// claim 21).
+    #[serde(default)]
+    pub waves: BTreeMap<ObjectId, crate::lift::Wave>,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.
