@@ -151,6 +151,12 @@ struct Game {
     clouds: usize,
     gas_max: usize,
     virus_armed: [usize; PLAYERS],
+    /// Particle systems (S-0616): systems that appeared, by behaviour kind;
+    /// effect-weapon emitters made, by place (fire, spark, railgun); the
+    /// most particles of every kind at once.
+    systems_by_kind: BTreeMap<String, usize>,
+    emitters: [usize; 3],
+    particles_max: usize,
     /// Absorbing buildings (S-0605): entries, releases with the building
     /// still standing, and per player house the most passengers its
     /// absorbers held at once and its distinct absorbing buildings.
@@ -669,6 +675,9 @@ fn play_ai(
     g.gattling_types = tally.gattling_types.map(|s| s.len());
     g.clouds = tally.clouds;
     g.gas_max = tally.gas_max;
+    g.systems_by_kind = tally.systems_by_kind;
+    g.emitters = tally.emitters;
+    g.particles_max = tally.particles_max;
     g.virus_armed = tally.virus_armed.map(|s| s.len());
     g.absorbed = tally.absorbed;
     g.absorber_releases = tally.absorber_releases;
@@ -848,6 +857,17 @@ pub struct Tally {
     absorbed_before: BTreeSet<(u32, u32)>,
     /// The gas systems and animations after the last tick.
     clouds_before: BTreeSet<u32>,
+    /// Particle systems that appeared, by behaviour kind (S-0616).
+    pub systems_by_kind: BTreeMap<String, usize>,
+    /// Effect-weapon emitters made, by place: fire, spark, railgun
+    /// (S-0616 claim 1; a spark place also counts damage sparks).
+    pub emitters: [usize; 3],
+    /// The most particles of every kind in the world at one tick.
+    pub particles_max: usize,
+    /// The particle systems after the last tick.
+    systems_before: BTreeSet<u32>,
+    /// The (holder, system) emitter pairs after the last tick.
+    emitters_before: BTreeSet<(u8, u32, u32)>,
     /// The (victim, controller) pairs after the last tick.
     victims_before: BTreeSet<(u32, u32)>,
     /// The units berserk after the last tick.
@@ -990,6 +1010,34 @@ impl Tally {
         self.clouds += clouds.difference(&self.clouds_before).count();
         self.clouds_before = clouds;
         self.gas_max = self.gas_max.max(glasnost_sim::gas::particles(w).count());
+        let systems: BTreeSet<u32> = w.gas.systems.keys().map(|id| id.0).collect();
+        for &id in systems.difference(&self.systems_before) {
+            let kind = w.gas.systems[&glasnost_sim::world::ObjectId(id)].type_index as usize;
+            let kind = w.rules().gas.systems[kind]
+                .kind
+                .map_or("none".to_string(), |k| format!("{k:?}").to_lowercase());
+            *self.systems_by_kind.entry(kind).or_default() += 1;
+        }
+        self.systems_before = systems;
+        let emitters: BTreeSet<(u8, u32, u32)> = w
+            .objects
+            .values()
+            .flat_map(|o| {
+                let c = &o.combat;
+                [
+                    c.fire_emitter.map(|e| (0, o.id.0, e.system.0)),
+                    c.spark_emitter.map(|s| (1, o.id.0, s.0)),
+                    c.railgun_emitter.map(|s| (2, o.id.0, s.0)),
+                ]
+            })
+            .flatten()
+            .collect();
+        for &(place, _, _) in emitters.difference(&self.emitters_before) {
+            self.emitters[usize::from(place)] += 1;
+        }
+        self.emitters_before = emitters;
+        let all: usize = w.gas.systems.values().map(|s| s.particles.len()).sum();
+        self.particles_max = self.particles_max.max(all);
         let r = w.rules();
         for o in w.objects.values() {
             let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
@@ -2010,6 +2058,11 @@ fn report(
                 s,
                 "  gas: hits {}, clouds {}, most particles at once {}; virus units per house {:?}",
                 g.gas_hits, g.clouds, g.gas_max, g.virus_armed
+            );
+            let _ = writeln!(
+                s,
+                "  particle systems: appeared by kind {:?}; emitters made (fire, spark, railgun) {:?}; most particles at once {}",
+                g.systems_by_kind, g.emitters, g.particles_max
             );
             let _ = writeln!(
                 s,

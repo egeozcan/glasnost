@@ -571,3 +571,86 @@ fn counts_seized_and_dropped_units() {
     }
     assert_eq!((tally.seized, tally.dropped), (1, 1), "{tally:?}");
 }
+
+// Particle systems that appear are counted by behaviour kind, and an
+// effect weapon's emitter by its place (S-0616 claim 1).
+#[test]
+fn counts_particle_systems_by_kind_and_emitters() {
+    use glasnost_rules::sim::{ParticleSystemType, ParticleType, WeaponType};
+    use glasnost_sim::world::{Pos, Target};
+    let mut r = testkit::combat_ruleset();
+    let reg = |r: &mut glasnost_rules::schema::Ruleset, l: &str, n: &str| {
+        r.registries.entry(l.into()).or_default().push(n.into());
+    };
+    reg(&mut r, "particles", "EMBER");
+    r.sim.particles.insert(
+        "EMBER".into(),
+        ParticleType {
+            behaves_like: Some("fire".into()),
+            max_ec: Some(100),
+            ..Default::default()
+        },
+    );
+    for (n, k) in [("BLAZE", "fire"), ("PLUME", "smoke")] {
+        reg(&mut r, "particle_systems", n);
+        r.sim.particle_systems.insert(
+            n.into(),
+            ParticleSystemType {
+                behaves_like: Some(k.into()),
+                holds_what: Some("EMBER".into()),
+                ..Default::default()
+            },
+        );
+    }
+    r.sim.weapons.insert(
+        "TORCH".into(),
+        WeaponType {
+            damage: Some(1),
+            rof: Some(30),
+            range: Some(glasnost_rules::sim::Decimal("10".into())),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("SA".into()),
+            use_fire_particles: Some(true),
+            attached_particle_system: Some("BLAZE".into()),
+            ..Default::default()
+        },
+    );
+    r.sim.vehicles.get_mut("CART").unwrap().primary = Some("TORCH".into());
+    let mut w = testkit::game_with(&r, 24, 7);
+    let mut tally = Tally::default();
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, -2, 0),
+        16384,
+    );
+    let b = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(24, 2, 0),
+        49152,
+    );
+    tally.observe(&w);
+    glasnost_sim::gas::warhead_system(
+        &mut w,
+        "PLUME",
+        Pos::centre(testkit::mid(24, 0, 3), 0),
+        None,
+    );
+    assert!(glasnost_sim::combat::fire::shot(
+        &mut w,
+        a,
+        0,
+        Target::Object(b)
+    ));
+    tally.observe(&w);
+    assert_eq!(tally.systems_by_kind.get("smoke"), Some(&1), "{tally:?}");
+    assert_eq!(tally.systems_by_kind.get("fire"), Some(&1), "{tally:?}");
+    assert_eq!(tally.emitters, [1, 0, 0]);
+    assert!(tally.particles_max >= 1);
+}
