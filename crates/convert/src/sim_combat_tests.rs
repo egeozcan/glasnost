@@ -864,6 +864,7 @@ fn game_wide_combat_values() {
                 [CombatDamage]\nMaxDamage=0\nMinDamage=1\nOccupyROFMultiplier=-1.5\nBunkerROFMultiplier=2\n\
                 OccupyDamageMultiplier=0.5\nBunkerDamageMultiplier=0.25\nOpenToppedDamageMultiplier=1.5\n\
                 C4Warhead=Blast\nCrushWarhead=Squash\nIonCannonWarhead=Ion\nBridgeStrength=900\nAmmoCrateDamage=20\n\
+                railgundamageradius=77\nCollapseChance=-5\n\
                 SplashList=Drip\nBallisticScatter=1.5\nOccupyWeaponRange=6\nBunkerWeaponRangeBonus=1\n\
                 OpenToppedRangeBonus=3\nFireSupress=0.75\nDeathWeapon=Pop\n\
                 [General]\nVeteranROF=0.5\nVeteranCombat=1.5\nVeteranArmor=2\nVeteranSight=1.25\nVeteranRatio=-3\n\
@@ -894,6 +895,11 @@ fn game_wide_combat_values() {
     assert_eq!(
         (g.bridge_strength, g.ammo_crate_damage),
         (Some(900), Some(20))
+    );
+    // spec: S-0306 Import mapping (railgundamageradius and CollapseChance, integers taken as given)
+    assert_eq!(
+        (g.railgun_damage_radius, g.collapse_chance),
+        (Some(77), Some(-5))
     );
     assert_eq!(texts(&g.splash_list), ["Drip"]);
     assert_eq!(dec(&g.ballistic_scatter), Some("15e-1"));

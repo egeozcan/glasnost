@@ -29,6 +29,7 @@ pub mod heal;
 pub mod lof;
 pub mod position;
 pub mod projectile;
+pub mod railgun;
 pub mod range;
 pub mod state;
 pub mod veterancy;

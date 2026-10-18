@@ -792,6 +792,14 @@ pub struct General {
     /// `AmmoCrateDamage` (S-0303 claim 19).
     #[serde(default)]
     pub ammo_crate_damage: Option<i32>,
+    /// `[CombatDamage] railgundamageradius`, integer leptons: the railgun
+    /// hit distance (S-0306 claim 27).
+    #[serde(default)]
+    pub railgun_damage_radius: Option<i32>,
+    /// `[CombatDamage] CollapseChance`, integer percentage points: the
+    /// railgun cliff-collapse chance (S-0306 claim 27).
+    #[serde(default)]
+    pub collapse_chance: Option<i32>,
     /// `SplashList`, animation names (S-0303 F5).
     #[serde(default)]
     pub splash_list: Option<Vec<String>>,

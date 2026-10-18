@@ -936,6 +936,10 @@ pub struct CombatGeneral {
     pub bridge_strength: i32,
     /// Ammunition-crate damage, damage points (S-0303 claims 19 and 24).
     pub ammo_crate_damage: i32,
+    /// The railgun hit distance, leptons (S-0306 claim 27).
+    pub railgun_radius: i32,
+    /// The railgun cliff-collapse chance, percentage points (S-0306 claim 27).
+    pub collapse_chance: i32,
     /// Splash list.
     pub splash_list: Vec<String>,
     /// Ballistic scatter B, leptons.
@@ -1794,6 +1798,8 @@ pub fn combat_rules(
         // spec: S-0303 claim 24 (at a fresh program start the bridge strength is 1000 and the ammunition-crate damage 100; an omission keeps the value in force)
         bridge_strength: g.bridge_strength.unwrap_or(1000),
         ammo_crate_damage: g.ammo_crate_damage.unwrap_or(100), // spec: S-0303 claim 24 (ammunition-crate damage 100)
+        railgun_radius: g.railgun_damage_radius.unwrap_or(128), // spec: S-0306 Import mapping (railgundamageradius absent: 128 leptons)
+        collapse_chance: g.collapse_chance.unwrap_or(100), // spec: S-0306 Import mapping (CollapseChance absent: 100)
         splash_list: g.splash_list.clone().unwrap_or_default(),
         // spec: S-0306 Constants (ballistic scatter absent: 256 leptons)
         ballistic_scatter: g

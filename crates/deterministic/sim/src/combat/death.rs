@@ -767,7 +767,7 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
         let name = tc.destroy_anim[k].clone();
         effects::anim(w, &name, o.pos);
     }
-    // spec: S-0312 claim 19 (f) and S-0616 claim 1 (one destruction smoke system; the eligible kinds are interim, Q-1400)
+    // spec: S-0312 claim 19 (f) and S-0616 claim 1 (one destruction smoke system: smoke-kind entries only, Q-1400 answered; an exploding or sold building keeps it emitting until its removal, any other one marks it at once by claim 4)
     crate::emitters::destruction_smoke(w, id);
     // spec: S-0312 claim 19 (g) and claim 24 (absorbed passengers come out, or die, before the survivors)
     crate::structures::absorb::destroyed(w, id, hit);

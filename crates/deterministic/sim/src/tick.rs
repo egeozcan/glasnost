@@ -155,6 +155,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::death::infantry_death_turn(w, id);
         return;
     }
+    // spec: S-0616 claim 1 (a deactivated vehicle's spark step comes first in its turn, before every other draw of that turn, also in turns that end early for another reason)
+    crate::emitters::deactivated_sparks(w, id);
     // spec: S-0513 State and ordering and T2 (a warp member's warp runs in its own updates); S-0513 claims 48 and 51 and S-0203 claim 4 (a member still leaving takes no other part of its turn, confirmed; engine design for the other stages before the arrival hold: no ordinary healing, behaviour, movement, firing or turret turning, and S-0203 claim 4 revision 32: the warp update is the whole member turn, with the intrinsic exceptions)
     if crate::superweapons::warp::turn(w, id) {
         // spec: S-0203 claim 4 and S-0301 claim 11 (the reload countdown's elapsed time still passes in an excluded warp turn; no grant, no restart)
@@ -184,8 +186,6 @@ fn object_turn(w: &mut World, id: ObjectId) {
     }
     // spec: S-0314 claims 9 and 10 (self-healing, in the object's own turn) and claim 19 (a sinking vehicle still self-heals; health does not end sinking)
     crate::combat::heal::turn(w, id);
-    // spec: S-0525 claims 9 and 11 (the radiation hit, in the object's own turn after its self-healing; a kill ends the turn as S-0312 says)
-    crate::radiation::hit_turn(w, id);
     let sinking = crate::naval::sinking(w, id);
     // spec: S-0511 claim 10 (a dropped object falls on each of its own updates; the fall and any landing hit precede that turn's due behaviour processing, ordinary locomotion advance and firing check)
     let fell = crate::fall::falling(w, id) && crate::fall::turn(w, id);
@@ -196,6 +196,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     crate::temporal::holder_turn(w, id);
     crate::temporal::phasing_sparkle(w, id);
     if crate::temporal::turn(w, id) {
+        // spec: S-0525 claims 9 and 11 (the radiation hit in the object's own turn, after its self-healing; S-0514 claim 17's erasure skips behaviour, movement, turning and firing, not the hit)
+        crate::radiation::hit_turn(w, id);
         return;
     }
     if w.obj(id).is_none() {
@@ -208,6 +210,13 @@ fn object_turn(w: &mut World, id: ObjectId) {
         process::turn(w, id);
     }
     if w.obj(id).is_none() {
+        return;
+    }
+    // spec: S-0616 claim 1 (Q-1404 answered: the damage-sparks draws come after the due behaviour processing with its shots, the mind-control overload and the self-healing, and before the radiation hit, ordinary movement, the parasite step and the separate infantry firing)
+    crate::emitters::damage_sparks(w, id);
+    // spec: S-0525 claims 9 and 11 (the radiation hit, in the object's own turn after its self-healing) and S-0616 claim 1 (after the damage sparks, so after the behaviour processing); a kill ends the turn as S-0312 says
+    crate::radiation::hit_turn(w, id);
+    if w.obj(id).is_none_or(crate::combat::damage::dead) {
         return;
     }
     // spec: S-0607 claim 12 (row 2: a mobile lifter that accepted another non-empty destination by any rule this turn lets go)
@@ -321,9 +330,6 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none_or(crate::combat::damage::dead) {
         return;
     }
-    // spec: S-0616 claim 1 (damage sparks and the sparks of a deactivated vehicle, in its turn; the place in the turn is interim, Q-1404)
-    crate::emitters::damage_sparks(w, id);
-    crate::emitters::deactivated_sparks(w, id);
     // spec: S-0405 claim 13, S-0409 claim 8 (the unit's own turn, after its movement of the tick)
     crate::econ::events::turn(w, id, moved);
     if kind == Kind::Aircraft {

@@ -5044,6 +5044,15 @@
           "maxItems": 5,
           "minItems": 5
         },
+        "collapse_chance": {
+          "description": "`[CombatDamage] CollapseChance`, integer percentage points: the\nrailgun cliff-collapse chance (S-0306 claim 27).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "condition_red": {
           "description": "`[AudioVisual] ConditionRed` (S-0107 F5).",
           "anyOf": [
@@ -6193,6 +6202,15 @@
               "type": "null"
             }
           ]
+        },
+        "railgun_damage_radius": {
+          "description": "`[CombatDamage] railgundamageradius`, integer leptons: the railgun\nhit distance (S-0306 claim 27).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
         },
         "refinery_smoke_frames": {
           "description": "`[General] RefinerySmokeFrames`, the refinery-smoke system lifetime\nin ticks (S-0616 claim 1 and Import mapping; absent 25).",

@@ -581,7 +581,7 @@ fn destruction_smoke(lane: &mut Lane) {
     }
     println!(
         "building destroyed after {gone:?} ticks; systems before {before}, most smoke systems seen at once {most} \
-         (a building leaving play at once marks its smoke by claim 4 before it emits: interim Q-1400)"
+         (S-0616 claim 1: a building leaving play at once marks its smoke by claim 4 before it emits; an exploding one lets it emit until its removal)"
     );
     print_census(lane, "destruction smoke");
     lane.save("destroy-smoke");

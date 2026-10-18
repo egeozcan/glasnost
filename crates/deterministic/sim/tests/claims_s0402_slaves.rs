@@ -2109,3 +2109,90 @@ fn claim_5a_slave_miner_has_no_harvesting_display() {
     .expect("the slaves earn");
     assert!(harvesting > 0);
 }
+
+/// [`rules`] with the smoke system PLUME (smoke kind, PUFF, a long
+/// emission interval) named as the refinery smoke of SMB, at one set
+/// smoke point.
+fn smoky() -> Ruleset {
+    use glasnost_rules::sim::{ParticleSystemType, ParticleType};
+    let mut r = rules();
+    r.registries
+        .entry("particles".into())
+        .or_default()
+        .push("PUFF".into());
+    r.sim.particles.insert(
+        "PUFF".into(),
+        ParticleType {
+            behaves_like: Some("smoke".into()),
+            max_ec: Some(1000),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("particle_systems".into())
+        .or_default()
+        .push("PLUME".into());
+    r.sim.particle_systems.insert(
+        "PLUME".into(),
+        ParticleSystemType {
+            behaves_like: Some("smoke".into()),
+            holds_what: Some("PUFF".into()),
+            spawn_frames: Some(1000),
+            spawn_cutoff: Some(Decimal("100000.0".into())),
+            ..Default::default()
+        },
+    );
+    let b = r.sim.buildings.get_mut("SMB").unwrap();
+    b.refinery_smoke_particle_system = Some("PLUME".into());
+    b.refinery_smoke_offsets = Some(vec![[40, 0, 0]]);
+    r.sim.general.refinery_smoke_frames = Some(5000);
+    r
+}
+
+// spec: S-0402 claim 14 (revision 32) and S-0616 claim 1 (Q-1401: one smoke event on the master per slave delivery, after its payments, not one per tiberium; a deployed master makes the smoke at its smoke points; a vehicle master makes none)
+#[test]
+fn claim_14_refinery_smoke_per_delivery() {
+    let r = smoky();
+    let mut w = game_on(&r, &field(5, -1, 5), false);
+    let b = working_building(&mut w);
+    let credits = w.houses[0].credits;
+    let smokes = |w: &World| {
+        w.gas
+            .systems
+            .values()
+            .filter(|s| s.owner_object == Some(b))
+            .count() as i32
+    };
+    for _ in 0..600 {
+        let c0 = w.houses[0].credits;
+        let s0 = smokes(&w);
+        testkit::run(&mut w, 1);
+        let paid = w.houses[0].credits - c0;
+        // Each delivery pays a full load of one tiberium.
+        assert_eq!(
+            smokes(&w) - s0,
+            paid / (STORE * ORE_VALUE),
+            "tick {}: one smoke per delivery",
+            w.tick
+        );
+        if w.houses[0].credits - credits >= 3 * STORE * ORE_VALUE {
+            break;
+        }
+    }
+    assert!(smokes(&w) >= 3);
+    let o = w.obj(b).unwrap().pos;
+    assert!(
+        w.gas
+            .systems
+            .values()
+            .filter(|s| s.owner_object == Some(b))
+            .all(|s| s.pos == glasnost_sim::world::Pos::new(o.x + 40, o.y, o.z)),
+        "at the smoke point"
+    );
+    // A vehicle master: a smoke event makes nothing.
+    let mut w = game_on(&r, &[], false);
+    let v = place_vehicle(&mut w, "SMV", 0, at(0, 0), 0);
+    let n = w.gas.systems.len();
+    glasnost_sim::emitters::refinery_smoke(&mut w, v);
+    assert_eq!(w.gas.systems.len(), n);
+}

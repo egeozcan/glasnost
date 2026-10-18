@@ -349,3 +349,61 @@ fn the_hit_amount_follows_the_cell() {
     run_to(&mut w, 31);
     assert_eq!(health(&w, p), 100_000 - 12);
 }
+
+// spec: S-0616 claim 1 (Q-1404 answered: the damage-sparks draws come before the radiation hit in the object's turn, so a hit that takes a cyborg below the yellow ratio makes no sparks decision in that turn, only from its next one) and S-0525 claim 11
+#[test]
+fn damage_sparks_come_before_the_radiation_hit() {
+    let (mut w, s) = base(|r| {
+        r.registries
+            .entry("particles".into())
+            .or_default()
+            .push("SPARK".into());
+        r.sim.particles.insert(
+            "SPARK".into(),
+            glasnost_rules::sim::ParticleType {
+                behaves_like: Some("spark".into()),
+                max_ec: Some(1000),
+                ..Default::default()
+            },
+        );
+        r.registries
+            .entry("particle_systems".into())
+            .or_default()
+            .push("BURST".into());
+        r.sim.particle_systems.insert(
+            "BURST".into(),
+            glasnost_rules::sim::ParticleSystemType {
+                behaves_like: Some("spark".into()),
+                holds_what: Some("SPARK".into()),
+                spark_spawn_frames: Some(100),
+                ..Default::default()
+            },
+        );
+        infantry(r, "BORG", |t| {
+            t.cyborg = Some(true);
+            t.combat.damage_spark_systems = Some(vec!["BURST".into()]);
+        });
+        let g = &mut r.sim.general;
+        g.condition_yellow = Some(d("0.5"));
+        g.condition_yellow_sparking_probability = Some(d("1.0"));
+        g.condition_red_sparking_probability = Some(d("1.0"));
+    });
+    let borg = testkit::spawn(&mut w, Kind::Infantry, "BORG", 1, at(0, 0), 0);
+    run_to(&mut w, 20);
+    detonate(&mut w, s, X);
+    run_to(&mut w, 30);
+    // At the yellow ratio, not below it, just before the hit tick 30.
+    w.obj_mut(borg).unwrap().health = 50_000;
+    testkit::run(&mut w, 1);
+    assert!(health(&w, borg) < 50_000, "hit at tick 30");
+    assert_eq!(
+        w.obj(borg).unwrap().combat.spark_emitter,
+        None,
+        "no sparks in the hit turn: they came before the hit"
+    );
+    testkit::run(&mut w, 1);
+    assert!(
+        w.obj(borg).unwrap().combat.spark_emitter.is_some(),
+        "sparks from the next turn"
+    );
+}

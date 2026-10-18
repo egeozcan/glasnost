@@ -6,6 +6,8 @@
 //! wired up; money goes through [`crate::seams`]. Healers' shots are hits
 //! (S-0302).
 
+use glasnost_num::F64;
+
 use crate::combat::data::Ability;
 use crate::combat::veterancy::{has_ability, type_combat};
 use crate::rules::Kind;
@@ -67,6 +69,36 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let h2 = (i64::from(h) + i64::from(g9) + i64::from(g10)).min(i64::from(s)) as i32;
     if let Some(ob) = w.obj_mut(id) {
         ob.health = h2;
+    }
+    // spec: S-0314 claim 9 and S-0616 claim 1 (after the object's own self-healing gain, its damage smoke takes the healing-mark test)
+    let own = g9 > 0;
+    // spec: S-0314 claim 10 and S-0616 claim 1 (after house-wide healing only a vehicle that is not organic takes the test; infantry and organic vehicles do not)
+    let house = g10 > 0 && o.kind == Kind::Vehicle && !organic;
+    if own || house {
+        smoke_heal_mark(w, id, h2, s);
+    }
+}
+
+/// The damage-smoke depth of the healing mark, leptons (S-0616 claim 1:
+/// the mark applies below −10).
+const SMOKE_MARK_DEPTH: i32 = -10; // spec: S-0616 Constants (damage-smoke healing-mark depth 10 leptons below the surface)
+
+/// S-0616 claim 1 (with S-0314 claims 9 and 10): after a self-healing gain
+/// to health `h` of strength `s`, an existing damage-smoke system is marked
+/// when the health ratio is strictly above the yellow ratio or the object
+/// is below −10 leptons above the surface. The object keeps it in its
+/// place until it leaves play.
+fn smoke_heal_mark(w: &mut World, id: ObjectId, h: i32, s: i32) {
+    let Some(sys) = w.obj(id).and_then(|o| o.combat.damage_smoke) else {
+        return;
+    };
+    let m = w.rules().mode;
+    // spec: S-0214 Terms (health ratio: health / strength in floating point)
+    let ratio = F64::from_i64(i64::from(h), m).div(F64::from_i64(i64::from(s), m), m);
+    // spec: S-0616 claim 1 and S-0314 claim 9 (strictly above the game-wide yellow ratio, or the height above the surface below −10 leptons)
+    if ratio.gt(w.rules().general.condition_yellow) || w.height_above_surface(id) < SMOKE_MARK_DEPTH
+    {
+        crate::particles::mark(w, sys);
     }
 }
 
