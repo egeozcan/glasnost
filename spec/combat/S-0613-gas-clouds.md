@@ -2,7 +2,7 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -49,7 +49,7 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 - **Gas particle.** A particle whose type has the gas behaviour kind. Its state is a position
   (integer leptons), an integer velocity (*v*ₓ, *v*ᵧ, *v*_z) in leptons per tick, a stored
   horizontal *deflection* (*d*ₓ, *d*ᵧ) in single-precision leptons, a remaining lifetime *E* in
-  ticks, a damage countdown *C* in ticks, a particle stage *s* and a dead mark.
+  ticks, a damage countdown *C* in ticks, a particle stage *s*, a particle speed *S* (glossary, *particle speed*) and a dead mark.
 - **Shared gas system.** The one particle system that every game has from its start, with no
   owner house (claim 1). Normally its type has gas behaviour; a missing type is created without
   any behaviour kind. Virus deaths put their clouds into it.
@@ -177,13 +177,26 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
 7. **Successor.** When a dead particle of any kind in a gas system has a type that names a next particle
    type, one particle of that type is created (claim 5, including its creation draws) at the dead
    particle's position plus the type's next-particle displacement (leptons, per axis). It then takes
-   the dead particle's velocity. The system's kind decides, not the particle's: a smoke
+   exactly two quantities from the dead particle, overwriting what its own creation gave it: the
+   particle speed (S-0616 Terms, a single-precision value) and the integer velocity (*v*ₓ, *v*ᵧ, *v*_z).
+   The gas-system line of S-0616 claim 3 gives this successor the dead particle's velocity only; that line
+   is revised in the same round to give the speed as well, and the speed part of this claim depends on
+   that revision.
+   Nothing else is copied: not the horizontal deflection, the damage countdown, the lifetime, the particle
+   stage, the translucency or the direction. A gas particle never reads its speed (gas motion is velocity and
+   deflection only, claims 8 to 11), so for a dead gas particle the speed is whatever value it holds at that
+   moment: its type's speed value from its own creation, or, if it was itself made as a successor, the speed
+   it took from its parent under this claim; it matters only when the successor's type is of a kind that reads it
+   (a smoke successor rises by it; S-0616 claim 7). A dead smoke particle in a gas system passes its own speed
+   as it then stands (the value S-0616 gives for it, including the emission lowering of its claim 9) and its
+   velocity; both are carried as they are, with no conversion between smoke and gas meanings. The successor's
+   kind is that of the next type named. The system's kind decides, not the particle's: a smoke
    particle dying in a gas system gets this one successor, and a gas particle dying in a smoke system
    gets S-0616 claim 8's two (mixed-kind rule: S-0616 claim 3). Successors
    are created in the second pass, so their draws come after all the update draws of that turn.
-   - Backing: `measurable` (scenario G5 for the gas-to-gas case; S-0616 scenario P3, part c, for the
+   - Backing: `measurable` (scenario G5 for the gas-to-gas velocity, deflection and timing; scenario G5-speed for the speed part; S-0616 scenario P3, part c, for the
      smoke-in-gas and gas-in-smoke cases)
-   - Confidence: high
+   - Confidence: high for the velocity, deflection and timing; medium for the speed part until G5-speed has run.
 
 ### Gas particle motion
 
@@ -673,6 +686,7 @@ position, count or draw mismatch. Named test rules/art files are removed after e
   the next turn; a middle-event particle created after the system turn waits for the next turn.
   Include a nonzero successor displacement and a parent dying where deflection is nonzero.
   Wrong phase, inherited deflection, immediate successor motion or a wrong frame falsifies the claim.
+  Named test rules file G5-speed gives a gas-kind system a virus-cloud type whose next particle type is of smoke kind, and gives the cloud's type a speed field different from the smoke type's. The cloud is killed with its damage countdown part-run and with a translucency different from the next type's. Record each particle's speed (as the recorder logs it), velocity, damage countdown and translucency, the smoke successor's rise per tick, and the draws taken for its creation. Expected: the successor's speed equals the dead gas particle's speed and its velocity equals the dead particle's velocity; its rise follows S-0616 claim 7 from that inherited speed, not from the smoke type's own speed field; its countdown and translucency start at its own type's values; and its creation draws are taken as claim 5 gives. Repeat with a gas parent that is itself a successor of a smoke particle: its speed must be the inherited smoke speed, not its own type's field. Three runs per variant. Falsified if the rise follows the smoke type's own speed field, the velocity or speed is not the parent's, the countdown or translucency is copied from the parent, or the draw count differs.
 - **G6. Flat spread.** One stock virus cloud on flat open ground. Record its position every 100
   ticks, and its position change per tick for the first 200 ticks, over 20 seeds. Expected: no
   position change on even ticks, a change of at most 2 leptons per axis on odd ticks, a random walk

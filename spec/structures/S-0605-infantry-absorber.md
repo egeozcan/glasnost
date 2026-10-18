@@ -2,7 +2,7 @@
 id: S-0605
 title: Infantry absorber (who may enter an absorbing building, entry, holding, release)
 topic: structures
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -173,13 +173,28 @@ S-0312 and S-0408 are made in the current drafts of those specs):
    - A vehicle ordered in to a vehicle absorber always starts *waiting in line* for it, whether or
      not the building holds contact: it is given no destination and no contact at the order. It
      has no remembered entry object (claim 4); the waiting line still names the building, as
-     S-0213 table T3 part (b) gives it. Its first enter processing then finds a cell next to the
-     building (claim 4's approach), and its retry runs in the same turn, after its movement (claim
-     4). If the place is free, the retry grants contact and the vehicle goes in, so at an empty
-     building the walk it makes is at most its movement in that turn (or none, if the retry comes
-     before *enter* is current; see Flag F1). It rests next to the building only while the place
-     is held by another contact (claim 4). Vehicle orders at other buildings are owned by S-0314.
-     This vehicle rule is `measurable` in scenario A2c's vehicle variant; confidence medium.
+     S-0213 table T3 part (b) gives it. The same holds when claim 16's fate assigns a vehicle
+     victim the building: that assignment applies this claim at once, with *enter* already
+     queued, so a vehicle victim sent to a vehicle absorber always waits in line, whatever the
+     building's contact state, and never gets contact from the fate itself. In that tick it sends
+     no contact request; its first request is the retry of claim 4. The order takes effect before
+     the vehicle's turn on the next tick (S-0215 claim 12), so the vehicle's first update is the
+     first in which the retry can run. What the vehicle does in that update depends on whether it
+     is ready to change at its first per-tick start (S-0215 claim 11):
+     - Ready there (for example a vehicle standing still): *enter* becomes current at that start.
+       In that update the vehicle takes one movement step toward a free cell next to the building
+       (the approach of claim 4). If the place is free, it then holds contact and goes on to the
+       building as any actor with contact does (below); it never rests next to an empty building.
+       If the place is held by another contact, it rests next to the building (claim 4).
+     - Not ready there (for example a vehicle still driving from an earlier order): *enter* is not
+       current at that start, and no approach step is made. If the place is free, the vehicle holds
+       contact by the end of that update, with *enter* queued and the building as its destination.
+       It rests next to the building only while the place is held by another contact (claim 4).
+
+     Vehicle orders at other buildings are owned by S-0314. The order rule is `measurable` in
+     scenario A2c's vehicle variant; the fate rule is `measurable` in scenario A13, variant (g).
+     Confidence: high for the fate always waiting in line; medium for the order of the first
+     approach and the retry within the update.
    - Otherwise it asks the building for contact. The building grants it when it counts the actor's
      house as allied, the actor's house also counts the building's house as allied, the
      building's health is above 0 and a link place is free.
@@ -611,7 +626,9 @@ Ordering consequences:
   S-0108 claim 17); this does not force an animation update earlier in the tick.
 
 The fate of claim 16 is part of the release or takeover that causes it: the search, the queueing
-and claim 3's contact request all take place in the tick of that release.
+and claim 3's step all take place in the tick of that release. For an infantry victim that step
+is a contact request; for a vehicle victim it is the waiting-in-line rule, which sends no
+request (claim 3).
 
 Random draws: an *unload* processing that begins with passengers draws once for its standard
 delay (S-0215 claim 6); the ordinary empty processing chooses 1 tick without that draw. Each
@@ -764,8 +781,16 @@ with the tick as *N* mod *n* of S-0212 claim 25 (always the same cell falsifies 
 block every cell within the search radius: the unit stays where it is, rests, and still goes in when
 the place is free (walking, or an end of the wait, falsifies the no-result outcome). Repeat with a vehicle and a vehicle absorber: the vehicle, even for the
 first entrant, gets no destination and no contact at the order (claim 3). With a free place, its
-retry grants contact in its first turn, and it goes in without resting at a cell next to the
-building: a vehicle that rests next to an empty building with a free place falsifies this part.
+retry grants contact in its first update, after at most one movement step toward the found cell
+(none if the vehicle was not ready at that update's first start), and it goes in without resting at a cell
+next to the building: a vehicle that rests next to an empty building with a free place falsifies
+this part. Set up the still-driving case by ordering the vehicle first to a point far enough away that it
+is still moving at the next tick, then giving the *enter* order. In both cases, record the
+vehicle's position, destination, contact and behaviours in the first update after the order.
+Expected: a first step toward a cell next to the building in the standing case, and none in the
+driving case; in both, contact is held at the end of that update when the place is free.
+Falsified by no step in the standing case, by a step in the driving case, or by no contact at the
+end of that update when the place is free.
 With the place held by another contact, it walks to a cell next to the building and rests there
 (claim 4). A vehicle onto a repair depot is S-0314's scenario, not this one: it remembers the depot
 and does not walk (S-0314 claim 23).
@@ -915,7 +940,15 @@ switched off: it is not a candidate. (c) No building accepts *U*: the fate becom
 in at its next *guard* processing (switch on). A redirect while in *enter*, a draw by the search,
 a nearer building ignored or a farther one chosen falsifies the respective part. (f) Three buildings
 at equal distance, in a known list order: destroy the middle one of the three and send *U*. *Expected:*
-the later of the two that remain wins. A different winner falsifies the tie-break after removal.
+the later of the two that remain wins. A different winner falsifies the tie-break after removal. (g) A vehicle victim: the same set-up
+with the fate weights as above, one test vehicle absorber of the neutral house with one link place,
+and a neutral-house test vehicle *U* of a vehicle type that a controller of house B holds.
+*Record:* per tick, *U*'s contact, destination, current and queued behaviour, and whether it is
+waiting in line for the building; and, for the release tick, whether a contact request is sent.
+*Expected:* at the release tick *U* has no contact and no destination, waits in line for the
+building, and sends no contact request in that tick; its first request comes in its first update
+(claim 3). Falsified by contact or a destination at the release tick, or by a contact request in
+that tick.
 
 **A14. The stale contact** (claim 17). One-place building. First entrant *E1* in contact and
 walking; a second, *E2*, waiting in line. Make *E1* leave *enter* without an order and without

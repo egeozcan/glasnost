@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -76,6 +76,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
   driving and ship locomotion; S-0503 claim 16 for hovering).
 - **Queued entry.** A vehicle's standing intention to enter one depot. While it holds one, the
   vehicle requests a contact place again on every tick (claim 23).
+- **Remembered entry object.** The object an actor remembers as the one it is entering. For a
+  damaged vehicle that holds a queued entry for a repair depot (claim 23), it is that depot. The
+  term is S-0605's (Terms), and the glossary does not define it.
 - **Locomotion class.** The class name of a mobile type, as S-0211 claim 3 gives it (see Import
   mapping).
 - **Docking point.** The world position the depot supplies for that vehicle's approach and
@@ -829,9 +832,7 @@ only the vehicle in that place.
       from the order. The order queues *enter* without an immediate start (S-0215 claim 12),
       records the depot as the object the vehicle is entering, and gives it a *queued entry* for
       that depot. The vehicle does not move because of the order: it has no destination, and it
-      does not walk to a cell near the depot, because the depot is now its remembered entry object
-      (this needs S-0605 claim 4 revised so that an enter order on a repair depot makes the actor
-      remember it; see Cross-spec changes to confirm). *Enter* becomes current
+      does not walk to a cell near the depot, because the depot is now its remembered entry object. *Enter* becomes current
       at the vehicle's next per-tick start at which it is ready to change (S-0215 claims 11 and 12),
       which is its first turn after the order takes effect, at the earliest the next tick (S-0215
       claim 12), and is processed in that same turn (S-0215 claim 3(a)). While it is current it
