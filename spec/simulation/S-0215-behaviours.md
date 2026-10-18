@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 67
+revision: 68
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -987,7 +987,11 @@ Terms used by this spec:
         by this condition,
       - the vehicle is moving on this tick and is not below the surface (its height above the
         surface is not negative, so a vehicle travelling underground does not meet this
-        condition). For a vehicle with the driving locomotor, "moving" here means either
+        condition). This asks the vehicle's current locomotor for its *moving now* report.
+        While a temporary replacement is installed, that replacement's report applies.
+        In particular, a seized unit uses temporary jumpjet movement, not its saved
+        driving movement (S-0607 claim 20). For a vehicle whose current locomotor is
+        the driving one, "moving" here means either
         that its body facing is still turning for any reason, or that all three of these hold:
         its locomotor is moving it in S-0206's sense (Terms), its heading point is present
         (S-0207 Terms), and its integer movement step *s* of S-0207 claim 2 is strictly
@@ -1023,6 +1027,9 @@ Terms used by this spec:
         queue that takes effect, start, force, override or revert ends it). Confidence: high for the driving readiness predicate and tick-based turn-end start.
         Backing: `measurable` by B47 for the isolated body-turn condition and same-tick
         processing, and B48's fresh-move cases for a destination without a heading point.
+        Readiness under magnetic seizure is `unmeasured` here: no fixture establishes
+        a distinguishable queued behaviour during a qualifying airborne state.
+        S-0607 claim 20 supplies the current-locomotor rule, with confidence high.
         The retained-goal blockage/retry comparisons, including a present heading point with
         zero or positive integer movement step and no displacement, are `unmeasured`: B48
         establishes no legal order that both preserves the required waiting state and leaves
