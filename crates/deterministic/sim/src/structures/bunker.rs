@@ -10,14 +10,14 @@
 //! `contact` field: a bunkered vehicle is also its bunker's contact
 //! (S-0606 Terms).
 //!
-//! Interim rules of our requests: Q-1300 (the distance of the nearest
-//! object to a foundation cell's centre), Q-1301 (arrival clears the
-//! destination and is also checked at the vehicle's *enter* processing),
-//! Q-1302 (an order given while entering: S-0213 table T3 (b) breaks the
-//! contact, and the next entry processing finds no vehicle), Q-1303 (a bunkered vehicle keeps
-//! its contact under orders), Q-1304 (a bunkered vehicle refuses non-empty
-//! destinations), Q-1305 (claim 12's open details), Q-1306 (the track
-//! points), Q-1307 (other removals).
+//! Revision 4 of S-0606 answers our requests Q-1300 to Q-1308: the chosen
+//! object's distance (F5, `quirks.bunker_clear_far_point`), arrival
+//! (claim 5), orders during entry and to a bunkered vehicle (claims 16
+//! and 17), the destination refusal (claim 18), the release's open details
+//! (claim 12), the track ends (claim 21), other removals (claim 19, our
+//! departure) and a type that is also a repair depot (claim 20, whose
+//! outcome stays open). Q-1163 holds the interim order of claim 20's two
+//! processings.
 //!
 //! [`StructState::bunker_occupant`]: super::StructState::bunker_occupant
 //! [`StructState::bunkered_in`]: super::StructState::bunkered_in
@@ -93,6 +93,15 @@ const RELEASE: (i32, i32) = (-128, 128);
 /// The exit search centre displacement (S-0606 claim 12), cells.
 // spec: S-0606 Constants (exit search centre displacement: (−1, +1) cells from the top-left foundation cell)
 const EXIT_CENTRE: (i32, i32) = (-1, 1);
+
+/// The placeholder destination of a release with no nearby cell (S-0606
+/// claim 12).
+// spec: S-0606 Constants (no-cell placeholder destination: map cell (0, 0))
+const NO_CELL: CellXY = CellXY { x: 0, y: 0 };
+
+/// The *unload* delay after a release, ordinary type (S-0606 claim 12).
+// spec: S-0606 Constants (unload delay after a release, ordinary type: 450 ticks, no draw)
+const UNLOAD_DELAY: i32 = 450;
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -396,8 +405,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         crate::process::fall_back(w, id, false);
         return crate::process::standard_delay(w, id);
     }
-    // spec: S-0606 claim 5 (arrival; Q-1301: also checked at the enter processing)
-    arrival(w, id);
+    // spec: S-0606 claim 5 (revision 4, Q-1301 answered: the enter processing makes no arrival test; standing still in the docking cell is not arrival)
     let Some(o) = w.obj(id) else {
         return crate::process::standard_delay(w, id);
     };
@@ -414,13 +422,18 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     crate::process::standard_delay(w, id)
 }
 
-/// The arrival of an entering vehicle at its bunker (S-0606 claim 5).
-/// Called at a reached track target and at the *enter* processing.
+/// The arrival of an entering vehicle at its bunker (S-0606 claim 5): the
+/// movement-arrival test, called at a reached track target only.
 /// Returns whether it arrived.
 pub fn arrival(w: &mut World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let Some(k) = o.contact else { return false };
-    if o.kind != Kind::Vehicle || !is_bunker(w, k) || bunkered(w, id) {
+    // spec: S-0606 claim 20 (a type that is also a repair depot: arrival is the depot's movement-arrival exchange, S-0314 claim 17)
+    if o.kind != Kind::Vehicle
+        || !is_bunker(w, k)
+        || bunkered(w, id)
+        || crate::depot::is_depot(w, k)
+    {
         return false;
     }
     // spec: S-0606 claim 5 (in enter, or in patrol, which the same test accepts; contact and destination both the bunker; its cell the docking cell)
@@ -430,9 +443,9 @@ pub fn arrival(w: &mut World, id: ObjectId) -> bool {
     {
         return false;
     }
-    // spec: S-0606 claim 5 (it ends its route and stops); Q-1301 (interim: its destination is cleared, so the report is made once)
+    // spec: S-0606 claim 5 (it ends its route and stops, but its destination stays the bunker, so a later movement into the docking cell can report again) and S-0207 claim 25 (a stop clears the locomotor destination point)
     crate::drive::stop(w, id);
-    crate::econ::assign_destination(w, id, None);
+    crate::drive::stop_point(w, id);
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.clear();
         ob.path.retry_at = 0;
@@ -493,50 +506,67 @@ fn taken_in(w: &World, k: ObjectId) -> Option<ObjectId> {
     occupant(w, k).or_else(|| contacts(w, k).first().copied())
 }
 
-/// The objects examined on foundation cell `c` of bunker `k` for vehicle
-/// `v` (S-0606 claim 6 and Edge cases, `quirks.bunker_clear_nearest_only`):
-/// with the switch on, the single object nearest the cell's centre, unless
-/// it is the entering vehicle; off, every object other than the bunker and
-/// the entering vehicle.
-fn examined(w: &World, k: ObjectId, v: ObjectId, c: CellXY) -> Vec<ObjectId> {
-    let r = w.rules();
-    // Q-1300 (interim: the mobile objects listed in the cell's ground layer; the bunker itself is excepted)
-    let listed: Vec<ObjectId> = w
-        .cells
+/// The candidates of foundation cell `c` of bunker `k` (S-0606 claim 6):
+/// the infantry, vehicles, aircraft and buildings listed in the cell's
+/// ground layer, the bunker itself excepted, in list order.
+fn candidates(w: &World, k: ObjectId, c: CellXY) -> Vec<ObjectId> {
+    w.cells
         .list(c, Layer::Ground)
         .iter()
         .copied()
         .filter(|&x| {
+            // spec: S-0606 claim 6 (candidates: the infantry, vehicles, aircraft and buildings listed in the cell's ground layer, except the bunker itself; terrain objects, overlays, crates, animations and deck-layer objects never)
             x != k
                 && w.obj(x).is_some_and(|o| {
                     o.on_map
                         && o.health > 0
-                        && matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
+                        && matches!(
+                            o.kind,
+                            Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+                        )
                 })
         })
-        .collect();
-    if !r.quirks.bunker_clear_nearest_only {
-        // spec: S-0606 Edge cases (quirks.bunker_clear_nearest_only off: every object other than the bunker and the entering vehicle on the cell)
+        .collect()
+}
+
+/// F5's chosen-object distance *e* of a candidate at `p` (S-0606 F5).
+pub fn chosen_distance(w: &World, p: Pos) -> u64 {
+    let r = w.rules();
+    // spec: S-0606 F5 and Constants (a = 896 leptons per axis from the cell's top corner; 128, the centre, with quirks.bunker_clear_far_point off)
+    let a: i64 = if r.quirks.bunker_clear_far_point {
+        896
+    } else {
+        128
+    };
+    // spec: S-0606 F5 (u = x mod 256, w = y mod 256, the residues 0 to 255; z plays no part)
+    let u = i64::from(p.x.rem_euclid(256));
+    let v = i64::from(p.y.rem_euclid(256));
+    // spec: S-0606 F5 (n = (u − a)² + (w − a)², exact; e = ⌊r(n)⌋, the table root of S-0204 F1, quirks.table_root_distance)
+    let n = (u - a) * (u - a) + (v - a) * (v - a);
+    glasnost_num::geom::root_floor(n as u64, r.quirks.table_root_distance, r.mode)
+}
+
+/// The objects examined on foundation cell `c` of bunker `k` for vehicle
+/// `v` (S-0606 claim 6 and Edge cases, `quirks.bunker_clear_nearest_only`):
+/// with the switch on, the cell's chosen object (F5), unless it is the
+/// entering vehicle; off, every candidate other than the entering vehicle.
+fn examined(w: &World, k: ObjectId, v: ObjectId, c: CellXY) -> Vec<ObjectId> {
+    let listed = candidates(w, k, c);
+    if !w.rules().quirks.bunker_clear_nearest_only {
+        // spec: S-0606 Edge cases (quirks.bunker_clear_nearest_only off: every candidate of claim 6 other than the entering vehicle on the cell)
         return listed.into_iter().filter(|&x| x != v).collect();
     }
-    // spec: S-0606 claim 6 (the object nearest the centre of each foundation cell)
-    // Q-1300 (interim: the table square root of the horizontal distance to the centre; ties keep the first listed)
-    let (cx, cy) = (256 * c.x + 128, 256 * c.y + 128);
     let mut best: Option<(u64, ObjectId)> = None;
     for x in listed {
         let Some(o) = w.obj(x) else { continue };
-        let (dx, dy) = (i64::from(o.pos.x - cx), i64::from(o.pos.y - cy));
-        let d = glasnost_num::geom::root_floor(
-            (dx * dx + dy * dy) as u64,
-            r.quirks.table_root_distance,
-            r.mode,
-        );
-        if best.is_none_or(|(bd, _)| d < bd) {
-            best = Some((d, x));
+        let e = chosen_distance(w, o.pos);
+        // spec: S-0606 claim 6 (the smallest e, compared as integers; on a tie the candidate listed first wins)
+        if best.is_none_or(|(be, _)| e < be) {
+            best = Some((e, x));
         }
     }
     match best {
-        // spec: S-0606 claim 6 and S1 (unless it is the entering vehicle)
+        // spec: S-0606 claim 6 and S1 (the chosen object, unless it is the entering vehicle)
         Some((_, x)) if x != v => vec![x],
         _ => Vec::new(),
     }
@@ -612,6 +642,16 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
     let stage = w.obj(k).map_or(Stage::Clearing, |b| b.structure.bunker_stage);
     let v = taken_in(w, k).filter(|&v| w.obj(v).is_some_and(|o| o.kind == Kind::Vehicle));
     let Some(v) = v else {
+        if stage == Stage::RaisingWalls {
+            // spec: S-0606 claim 16 and S1 (an entry abandoned after raising walls started special-1 and special-2: they stop on the return to clearing, with no sound and no special-3 or special-4; the original's running animations are a display defect, fixed without a switch)
+            let d = damaged(w, k);
+            w.effects.push(Effect::SpecialAnims {
+                building: k,
+                slots: [1, 2],
+                start: false,
+                damaged: d,
+            });
+        }
         // spec: S-0606 S1 (no vehicle to take in, or it is not a vehicle: clearing, the bunker queues guard without an immediate start)
         set_stage(w, k, Stage::Clearing);
         if let Some(b) = w.obj_mut(k) {
@@ -810,7 +850,7 @@ pub fn process_unload(w: &mut World, v: ObjectId) -> i32 {
         o.structure.bunkered_in = None;
     }
     release_track(w, k, v);
-    // spec: S-0606 claim 12 (the nearby-cell search centred one cell along −x and +y from the top-left foundation cell: the vehicle's class, zone normal, no reach region, never deck mode, bridge cells allowed, no other condition, as S-0212 T5's crate fallback row)
+    // spec: S-0606 claim 12 (the nearby-cell search centred one cell along −x and +y from the top-left foundation cell: the vehicle's class, zone normal, no reach region, never deck mode, bridge cells allowed, no other condition, as S-0212 T5's bunker exit row)
     let top = w.obj(k).map(|b| b.pos.cell());
     let class = w
         .obj(v)
@@ -833,19 +873,52 @@ pub fn process_unload(w: &mut World, v: ObjectId) -> i32 {
             }),
         )
     });
-    // spec: S-0606 claim 12 (the result as destination); Q-1305 (interim: no cell found leaves no destination)
-    crate::econ::assign_destination(w, v, cell.map(Target::Cell));
+    // spec: S-0606 claim 12 (the result as destination; no cell found: the placeholder map cell (0, 0), S-0009 claim 44's stand-in, not a search result)
+    let dest = cell.unwrap_or(NO_CELL);
+    crate::econ::assign_destination(w, v, Some(Target::Cell(dest)));
     if let Some(o) = w.obj_mut(v) {
         o.path.steps.clear();
         o.path.retry_at = 0;
-        // spec: S-0606 claim 12 (queues move, without an immediate start)
+        // spec: S-0606 claim 12 (queues move, without an immediate start; it starts under S-0215 claim 11 when the vehicle is ready, whatever the delay)
         o.beh.queue(Some(Behaviour::Move));
     }
-    // spec: S-0606 claim 12 (the bunker's link ends, it returns to clearing, queues guard without an immediate start, and ends contact with the vehicle)
+    // spec: S-0606 claim 12 (the bunker's link ends, it returns to clearing, queues guard without an immediate start, and ends contact with every vehicle in contact with it)
     unlink(w, k, v);
+    for x in contacts(w, k) {
+        end_contact(w, x, k);
+    }
     back_to_clearing(w, k);
-    // Q-1305 (interim: the standard delay)
-    crate::process::standard_delay(w, v)
+    continue_unload(w, v)
+}
+
+/// The rest of a released vehicle's *unload* processing (S-0606 claim 12):
+/// an ordinary type does nothing more and chooses 450 ticks, no draw; a
+/// type with the harvester or weeder flag, a deploy-into building type or
+/// the simple-deployer flag goes on with that property's *unload* rule, in
+/// that order of precedence. The passenger unloading of S-0507 is never
+/// reached.
+fn continue_unload(w: &mut World, v: ObjectId) -> i32 {
+    let Some(o) = w.obj(v) else {
+        return UNLOAD_DELAY;
+    };
+    let Some(u) = w.rules().unit(o.kind, o.type_index).cloned() else {
+        return UNLOAD_DELAY;
+    };
+    // spec: S-0606 claim 12 (first the harvester or weeder flag: S-0402's unload rule)
+    if u.harvester || u.raw.weeder.unwrap_or(false) {
+        return crate::econ::harvest::process_unload(w, v);
+    }
+    // spec: S-0606 claim 12 (then a deploy-into building type: S-0415's unload rule, the standard delay of S-0215 claim 6)
+    if let Some(b) = crate::econ::deploy::deploys_into(w, o.kind, o.type_index) {
+        let _ = crate::econ::deploy::attempt(w, v, b);
+        return crate::process::standard_delay(w, v);
+    }
+    // spec: S-0606 claim 12 (then the simple-deployer flag: S-0517's unload rule)
+    if u.simple_deployer {
+        return crate::econ::inplace::process(w, v);
+    }
+    // spec: S-0606 claim 12 (an ordinary type: nothing more, exactly 450 ticks, no draw)
+    UNLOAD_DELAY
 }
 
 /// An occupied bunker lets its vehicle out (S-0606 claim 13: destroyed,
@@ -885,24 +958,29 @@ pub fn release_in_place(w: &mut World, v: ObjectId) {
     back_to_clearing(w, k);
 }
 
-/// An object leaving play by another route (S-0606 claim 15, Edge cases:
-/// no release is prescribed). Q-1307 (interim: the link is cleared
-/// silently on both sides, so no stale relation is kept; the bunker goes
-/// back to *clearing* without effects).
+/// An object leaving play by another route (S-0606 claim 19): our engine
+/// ends the bunker link on both sides silently (a documented departure from
+/// the original's stale link, no switch): no walls-down effects, no release
+/// track; a surviving vehicle gets no new behaviour or destination, and a
+/// surviving bunker ends contact with the removed vehicle, returns to
+/// *clearing* and queues *guard* without an immediate start.
 pub fn removing(w: &mut World, id: ObjectId) {
     if let Some(k) = bunkered_in(w, id) {
+        // spec: S-0606 claim 19 (our engine: the link ends on both sides; the surviving bunker ends contact with the removed vehicle, returns to clearing and queues guard without an immediate start)
         unlink(w, k, id);
-        set_stage(w, k, Stage::Clearing);
+        back_to_clearing(w, k);
     }
     if let Some(v) = occupant(w, id) {
+        // spec: S-0606 claim 19 (our engine: a surviving vehicle loses the link and gets no new behaviour or destination)
         unlink(w, id, v);
     }
 }
 
-/// Whether a bunkered vehicle refuses a destination (Q-1304, interim: a
-/// non-empty destination is refused while the link holds; S-0207 claim 27
-/// names the refusal and leaves it to this spec).
+/// Whether a bunkered vehicle refuses a destination (S-0606 claim 18:
+/// every non-empty destination, whatever its source, while the link
+/// holds; clearing it is accepted).
 pub fn refuses_destination(w: &World, id: ObjectId) -> bool {
+    // spec: S-0606 claim 18 (while the bunker link holds, every non-empty destination is refused; the refusal ends with the link)
     bunkered(w, id)
 }
 
@@ -922,8 +1000,9 @@ pub fn enforce(w: &mut World, id: ObjectId) {
 // Tracks (tables T1 and T2)
 
 /// The points of a bunker track, displacements from its target, facings in
-/// 1/256 turns. Q-1306 (interim: every listed point is driven, the last,
-/// (0, 0), included, so the track ends with that point's facing).
+/// 1/256 turns. Every listed point is driven, the last, (0, 0), included,
+/// so the track ends on its target with that point's facing (S-0606
+/// claim 21).
 pub fn track_points(t: BunkerTrack) -> Vec<Point> {
     match t {
         BunkerTrack::Entry(row) => (1..=16) // spec: S-0606 table T1 (n = 1 … 16)

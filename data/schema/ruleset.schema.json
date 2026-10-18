@@ -8209,6 +8209,11 @@
           "type": "boolean",
           "default": true
         },
+        "bunker_clear_far_point": {
+          "description": "A tank bunker's clearing and waiting rows choose each foundation cell's object by its distance from a point 896 leptons from the cell's top corner along each map axis, outside the cell, so the object nearest the cell's bottom corner is chosen; off: the distance is measured from the cell's centre (128 leptons per axis), with the same table root and tie rule.",
+          "type": "boolean",
+          "default": true
+        },
         "bunker_clear_nearest_only": {
           "description": "The clearing and waiting rows of a tank bunker's entry look only at the single object nearest each foundation cell's centre, so when the entering vehicle is that object a second object in the cell is neither asked to scatter nor waited for; off: every object other than the bunker and the entering vehicle on each foundation cell gets the scatter request, and the waiting row waits until none is left.",
           "type": "boolean",

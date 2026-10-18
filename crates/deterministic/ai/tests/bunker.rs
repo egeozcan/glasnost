@@ -244,7 +244,7 @@ fn the_house_builds_bunkers() {
     assert!(count(&g.world) <= bunker::WANTED, "no more than wanted");
 }
 
-// S-0606 claim 7 and Q-1304, PLAN §4.7: a bunkered vehicle is not idle, so the plan's waves leave it in its bunker.
+// S-0606 claims 7 and 18, PLAN §4.7: a bunkered vehicle is not idle, so the plan's waves leave it in its bunker.
 #[test]
 fn a_bunkered_vehicle_is_not_idle() {
     let g = game(99);

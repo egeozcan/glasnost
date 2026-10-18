@@ -176,6 +176,10 @@ fn alliance_and_place(w: &World, k: ObjectId, id: ObjectId) -> Option<u32> {
 /// queued-entry retry ask it; the repeated entry request of an entering
 /// vehicle does not (claim 17).
 pub fn accepts(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bool {
+    if crate::structures::bunker::is_bunker(w, k) {
+        // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: claim 2's permission rows apply, and S-0314 claim 16's depot rows do not)
+        return is_depot(w, k) && crate::structures::bunker::permits(w, k, id);
+    }
     // spec: S-0314 claim 16 (no contact place free for this vehicle prevents acceptance)
     permits_but_place(w, k, id, standing) && free_place(w, k, id).is_some()
 }
@@ -268,6 +272,10 @@ fn repeated_request(w: &mut World, id: ObjectId, k: ObjectId) -> Reply {
     if !permits_but_place(w, k, id, false) {
         return Reply::Refused;
     }
+    // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: the repeated request is also refused when claim 3's eligibility check refuses it)
+    if crate::structures::bunker::is_bunker(w, k) && !crate::structures::bunker::eligible(w, id) {
+        return Reply::Refused;
+    }
     let Some(place) = free_place(w, k, id) else {
         // spec: S-0314 claim 23 (with no free place for this vehicle the depot answers accept and takes no contact; claim 16's free-place refusal governs the click and the retry, not this repeated request)
         return Reply::NoPlace;
@@ -315,6 +323,10 @@ fn obsolete_unloading(w: &World, k: ObjectId) -> bool {
 /// The docking point depot `k` supplies for vehicle `id` (S-0314 claim 18;
 /// S-0504 claim 12).
 pub fn docking_point(w: &World, k: ObjectId, id: ObjectId) -> Pos {
+    if crate::structures::bunker::is_bunker(w, k) {
+        // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: claim 4's quadrant point, not S-0314 claim 18's)
+        return crate::structures::bunker::docking_point(w, k, id);
+    }
     if obsolete_unloading(w, k) {
         // spec: S-0314 claim 18 and S-0504 claim 12 (the obsolete-unloading flag, not the vehicle-factory flag, selects the centre of the cell (2, 1) from the top-left cell, at the building's height, before pad displacements)
         if let Some(b) = w.obj(k) {
@@ -540,6 +552,17 @@ pub fn movement_arrival(w: &mut World, id: ObjectId) {
     }
     if let Some(ob) = w.obj_mut(id) {
         ob.beh.queue(Some(Behaviour::Sleep));
+    }
+    // spec: S-0314 claim 17 (revision 27: for a tethered vehicle, sleep is queued from arrival before the completed-entry exchange rotates it toward 16384 facing units; an untethered vehicle is not rotated); Q-1162 interim (the rotation begins at this arrival, right after sleep is queued, so S-0215 claim 11's turning clause holds sleep until the rotation ends)
+    if tethered(w, id) && w.body_facing(id) != ARRIVAL_FACING {
+        let t = w.tick;
+        let rate = w
+            .obj(id)
+            .and_then(|o| w.rules().unit(o.kind, o.type_index))
+            .map_or(0, |u| u.turn_rate);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.body.turn_to(ARRIVAL_FACING, t, rate);
+        }
     }
 }
 

@@ -1598,3 +1598,62 @@ fn claim_17_movement_arrival_sets_the_ready_mark() {
         assert!(!docked(&w, v), "{name}: no tether");
     }
 }
+
+// spec: S-0314 claim 17 (revision 27: a tethered vehicle's sleep is queued from movement arrival before the rotation toward 16384 facing units and does not become current while the body rotates, but at the first start after the rotation ends; an untethered vehicle is not rotated and its sleep starts at the first start after arrival) and S-0215 claim 11 (the turning clause); Q-1162 interim (the rotation begins at the arrival)
+#[test]
+fn claim_17_rotation_gate_on_the_arrival_sleep() {
+    for tethered in [true, false] {
+        let r = rules();
+        let mut w = game(&r);
+        let d = depot_at(&mut w, "DEPOT");
+        let v = truck(&mut w, 0, 1, 1, 300);
+        open(&mut w);
+        assert!(depot::request(&mut w, v, d, false));
+        if tethered {
+            tether(&mut w, v);
+        }
+        w.obj_mut(v).unwrap().beh.current = Some(Behaviour::Enter);
+        arrived(&mut w, v, Target::Object(d));
+        assert_eq!(w.body_facing(v), 0);
+        depot::movement_arrival(&mut w, v);
+        assert_eq!(w.obj(v).unwrap().beh.queued, Some(Behaviour::Sleep));
+        let t0 = w.tick;
+        assert_eq!(
+            w.obj(v).unwrap().body.turning(t0),
+            tethered,
+            "only a tethered vehicle is rotated"
+        );
+        if !tethered {
+            tick::step(&mut w);
+            assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
+            assert_eq!(w.body_facing(v), 0, "not rotated");
+            continue;
+        }
+        let mut ended = None;
+        for _ in 0..200 {
+            tick::step(&mut w);
+            let k = w.tick - 1;
+            let o = w.obj(v).unwrap();
+            if o.body.turning(k) {
+                assert_ne!(
+                    o.beh.current,
+                    Some(Behaviour::Sleep),
+                    "tick {k}: still rotating"
+                );
+            } else {
+                ended = Some(k);
+                assert_eq!(o.body.value(k), 16384);
+                assert_eq!(
+                    o.beh.current,
+                    Some(Behaviour::Sleep),
+                    "tick {k}: rotation ended"
+                );
+                break;
+            }
+        }
+        assert!(
+            ended.is_some_and(|k| k > t0 + 1),
+            "the rotation takes several ticks"
+        );
+    }
+}

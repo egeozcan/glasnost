@@ -485,7 +485,7 @@ pub fn head(w: &mut World, id: ObjectId) {
     if kind == Kind::Vehicle {
         // spec: S-0517 claim 9 (a destination written by any rule while the vehicle is deployed or in transition is replaced by none)
         crate::econ::inplace::enforce(w, id);
-        // Q-1304 (interim: a destination written by any rule while the vehicle is bunkered is replaced by none)
+        // spec: S-0606 claim 18 (while the bunker link holds, a destination written by any rule is refused: it is replaced by none)
         crate::structures::bunker::enforce(w, id);
     }
     if kind == Kind::Building {
@@ -712,11 +712,18 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::depot::entering_depot(w, id) => {
             crate::depot::process_enter(w, id)
         }
+        // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: each processing carries out at most one row of table S1 and also runs the depot's repair processing; the delay is the depot's); Q-1163 interim (the S1 row first, then the depot's processing)
+        (Some(Behaviour::Repair), Kind::Building)
+            if crate::depot::is_depot(w, id) && crate::structures::bunker::is_bunker(w, id) =>
+        {
+            crate::structures::bunker::process_repair(w, id);
+            crate::depot::process_repair(w, id)
+        }
         // spec: S-0314 claim 6 and S-0504 claim 8 (a repair depot's repair processing)
         (Some(Behaviour::Repair), Kind::Building) if crate::depot::is_depot(w, id) => {
             crate::depot::process_repair(w, id)
         }
-        // spec: S-0606 claims 3 to 5 and S-0215 claim 29 (a vehicle's enter toward a tank bunker; a bunker that is also a depot takes the depot's rules, Q-1308)
+        // spec: S-0606 claims 3 to 5 and S-0215 claim 29 (a vehicle's enter toward a tank bunker; a bunker that is also a depot takes the depot's enter, S-0606 claim 20)
         (Some(Behaviour::Enter), Kind::Vehicle)
             if crate::structures::bunker::entering_bunker(w, id) =>
         {

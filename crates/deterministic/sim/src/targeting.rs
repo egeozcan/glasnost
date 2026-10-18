@@ -1257,8 +1257,8 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
         && building(w, t).is_some()
         && ally
         && (crate::depot::accepts(w, t, actor, true)
-            // spec: S-0606 claim 2 (a tank bunker's permission: row P10 accepts)
-            || (!crate::depot::is_depot(w, t) && crate::structures::bunker::permits(w, t, actor))
+            // spec: S-0606 claim 2 (a tank bunker's permission: row P10 accepts) and claim 20 (a type that is also a repair depot takes claim 2's rows)
+            || crate::structures::bunker::permits(w, t, actor)
             || (recycler
                 && crate::structures::grinder::answer(w, t, actor)
                     == crate::transport::Answer::Accepts));

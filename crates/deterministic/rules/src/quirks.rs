@@ -1728,6 +1728,10 @@ pub struct Quirks {
     // spec: S-0606 claim 6 and Edge cases
     #[serde(default = "on")]
     pub bunker_clear_nearest_only: bool,
+    /// A tank bunker's clearing and waiting rows choose each foundation cell's object by its distance from a point 896 leptons from the cell's top corner along each map axis, outside the cell, so the object nearest the cell's bottom corner is chosen; off: the distance is measured from the cell's centre (128 leptons per axis), with the same table root and tie rule.
+    // spec: S-0606 claim 6, F5 and Edge cases
+    #[serde(default = "on")]
+    pub bunker_clear_far_point: bool,
     /// A deploy order to an airborne in-place deploying type without the deploy-to-land flag is silently dropped; off: the order is kept until the vehicle is on the ground, and the next processing takes the ground deploy step of claim 4. Not implemented yet (wave 2).
     // spec: S-0517 claim 5 and Edge cases
     #[serde(default = "on")]
@@ -2290,6 +2294,7 @@ impl Default for Quirks {
             absorber_removal_keeps_stale_power: true,
             enter_nearest_survives_absorption: true,
             bunker_clear_nearest_only: true,
+            bunker_clear_far_point: true,
             airborne_deploy_order_dropped: true,
             drain_relink_strands_previous: true,
             drain_position_check_vehicles_only: true,
@@ -3410,6 +3415,7 @@ impl Quirks {
                 self.enter_nearest_survives_absorption,
             ),
             ("bunker_clear_nearest_only", self.bunker_clear_nearest_only),
+            ("bunker_clear_far_point", self.bunker_clear_far_point),
             (
                 "airborne_deploy_order_dropped",
                 self.airborne_deploy_order_dropped,
