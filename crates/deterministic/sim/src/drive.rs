@@ -1247,7 +1247,8 @@ fn crush_mode(w: &World, id: ObjectId, u: &UnitRules, first: CellXY, second: Cel
                 .is_some_and(|o| o.crushable || (walls && all && o.wall))
         })
     };
-    if u.locomotor == Locomotor::Ship {
+    // spec: S-0607 claims 22 and 23 (a seized unit's stand-in, not its own type's locomotor, is the one that moves it)
+    if crate::lift::current_locomotor(w, id) == Some(Locomotor::Ship) {
         // spec: S-0210 claim 9 (the ship locomotor's crush mode: the first cell, whose entry outcome is clear here, or the second holds a crushable overlay or, for crusher-all, a wall overlay; never set by a vehicle)
         return overlay_crush(first, true) || overlay_crush(second, true);
     }

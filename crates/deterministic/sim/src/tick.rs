@@ -259,6 +259,7 @@ fn object_turn(w: &mut World, id: ObjectId) {
     let held = crate::parasite::held(w, id);
     // spec: S-0511 claim 10 (while still falling after the fall step, no ordinary locomotion advance and no firing; a surviving landing lifts both refusals in the same turn)
     let falling = crate::fall::falling(w, id);
+    let stand_in = crate::lift::moving_stand_in(w, id);
     let moved = match loco {
         // spec: S-0506 Terms (a rocket missile moves in the rocket-flight movement mode, claims 14 to 19)
         _ if rocket => crate::rocket::tick(w, id),
@@ -267,9 +268,13 @@ fn object_turn(w: &mut World, id: ObjectId) {
         _ if crate::transport::riding(w, id).is_some() => false,
         // spec: S-0504 claim 5 (a sinking vessel makes no progress by its locomotor, turning and speed-fraction updates included)
         _ if sinking => false,
-        // spec: S-0607 claims 5 and 7 (a seized unit moves with its temporary jumpjet locomotor, whatever its own); claim 22 and Q-1334 interim (a unit seized with a stand-in locomotor keeps moving by its own)
-        _ if crate::lift::seized(w, id) && !crate::lift::stand_in(w, id) => {
+        // spec: S-0607 claims 5 and 7 (a seized unit moves with its temporary jumpjet locomotor, whatever its own)
+        _ if crate::lift::seized(w, id) && crate::lift::stand_in(w, id).is_none() => {
             crate::jump::tick(w, id)
+        }
+        // spec: S-0607 claim 23 (a unit seized with another stand-in moves under that stand-in's ordinary rules; a drop-pod stand-in has ended and the unit's own locomotor moves it)
+        _ if stand_in.is_some() => {
+            crate::lift::stand_in_tick(w, id, stand_in.unwrap_or(crate::lift::StandIn::Walk), held)
         }
         Some(Locomotor::Drive) if held => false,
         Some(Locomotor::Drive) => {

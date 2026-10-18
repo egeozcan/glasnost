@@ -9053,6 +9053,11 @@
           "type": "boolean",
           "default": true
         },
+        "lift_standin_stays_seized": {
+          "description": "A unit seized with the driving, walking, ship or teleporting stand-in locomotor is never restored, and one seized with the drop-pod stand-in gets its own locomotor back but stays seized, so either way it ignores destinations and cannot fire until it leaves play; off: claim 20's restoration applies to every stand-in, with that stand-in's own moving test, and clears the seized state.",
+          "type": "boolean",
+          "default": true
+        },
         "low_bridge_wrong_axis_recheck": {
           "description": "A low piece of the other axis along the line is re-evaluated with this line's table; off: not re-evaluated.",
           "type": "boolean",

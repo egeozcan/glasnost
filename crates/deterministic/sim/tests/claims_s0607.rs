@@ -777,7 +777,7 @@ fn claim_11_rearming_while_gripping() {
     );
 }
 
-// spec: S-0607 claim 11: against its own gripped unit the lifter answers rearming with any weapon, ahead of the tests of the target's layer and height (the gripped unit is airborne)
+// spec: S-0607 claim 11 and S-0301 claim 9 (grip refusals within rank 4, r23): against its own gripped unit the lifter answers rearming with any weapon, ahead of the tests of the target's layer and height (the gripped unit is airborne)
 #[test]
 fn claim_11_gripped_unit_rearming_with_any_weapon() {
     let (mut w, l, v) = seized_world(
@@ -797,7 +797,7 @@ fn claim_11_gripped_unit_rearming_with_any_weapon() {
     }
 }
 
-// spec: S-0607 claim 11: the magnetic beam's rearming answer against a target other than the gripped unit comes after the target's layer and projectile tests, so against an airborne target the beam cannot hit, that refusal wins
+// spec: S-0607 claim 11 and S-0301 claim 9 (grip refusals within rank 4, r23): the magnetic beam's rearming answer against a target other than the gripped unit comes after the target's layer and projectile tests, so against an airborne target the beam cannot hit, that refusal wins
 #[test]
 fn claim_11_beam_answer_after_the_layer_tests() {
     let (mut w, l, _v) = seized_world(|_| {}, "VICT");
@@ -973,10 +973,10 @@ fn mag_locomotor(loco: Option<&'static str>) -> impl FnOnce(&mut glasnost_rules:
     }
 }
 
-// spec: S-0607 claim 22: a seizing warhead naming a locomotor that cannot stand in temporarily (hovering, flying, rocket, tunnelling; an unknown identifier by design): the eligible target stops and is put in guard but is not seized, keeps its own locomotor, and can be hit again; the firer's previous victim is still released
+// spec: S-0607 claim 22: a seizing warhead naming a locomotor that cannot stand in temporarily (hovering, mechanical walking, flying, rocket, tunnelling; an unknown identifier by design): the eligible target stops and is put in guard but is not seized, keeps its own locomotor, and can be hit again; the firer's previous victim is still released
 #[test]
 fn claim_22_cannot_stand_in_does_not_seize() {
-    for loco in ["hover", "fly", "rocket", "tunnel", "unknown"] {
+    for loco in ["hover", "mech", "fly", "rocket", "tunnel", "unknown"] {
         let mut w = world(mag_locomotor(Some(loco)));
         let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
         let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 0));
@@ -1023,38 +1023,6 @@ fn claim_22_cannot_stand_in_releases_the_previous_victim() {
     assert!(!lift::grips(&w, l, v), "the previous victim is released");
     assert!(lift::dropped(&w, v), "and dropped");
     assert!(!lift::seized(&w, other));
-}
-
-// spec: S-0607 claim 22 and Import mapping: a locomotor that can stand in temporarily (driving, walking, ship, teleporting, drop-pod; an absent key means teleporting) seizes the target, without the jumpjet locomotor; Q-1334 interim: it stays where it stands, and claim 20's rule restores it once the grip has ended
-#[test]
-fn claim_22_stand_in_seizes() {
-    for loco in [
-        Some("drive"),
-        Some("walk"),
-        Some("ship"),
-        Some("teleport"),
-        Some("drop_pod"),
-        None,
-    ] {
-        let mut w = world(mag_locomotor(loco));
-        let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
-        let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 0));
-        let here = w.obj(v).unwrap().pos.cell();
-        beam(&mut w, l, v);
-        assert!(lift::seized(&w, v), "{loco:?}: seized");
-        assert!(lift::grips(&w, l, v), "{loco:?}: gripped");
-        assert!(
-            w.obj(v).unwrap().jump.is_none(),
-            "{loco:?}: no jumpjet locomotor"
-        );
-        run(&mut w, 30);
-        assert_eq!(w.obj(v).unwrap().pos.cell(), here, "{loco:?}: it stays");
-        order_lifter(&mut w, l);
-        assert!(!lift::grips(&w, l, v), "{loco:?}: claim 12 ends the grip");
-        // The lifter leaves, so it cannot seize the unit again once restored.
-        glasnost_sim::objects::remove(&mut w, l);
-        assert!(restored(&mut w, v), "{loco:?}: restored");
-    }
 }
 
 /// Drops the victim over a cell holding a TROOPER first and a VICT after

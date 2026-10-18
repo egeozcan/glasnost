@@ -52,7 +52,8 @@ pub fn entered_cell(w: &mut World, id: ObjectId, c: CellXY) {
         .as_ref()
         .and_then(|d| d.track.as_ref())
         .is_some_and(|t| t.crush);
-    if u.locomotor == crate::rules::Locomotor::Ship {
+    // spec: S-0607 claims 22 and 23 (a seized unit's stand-in, not its own type's locomotor, is the one that moves it)
+    if crate::lift::current_locomotor(w, id) == Some(crate::rules::Locomotor::Ship) {
         ship_entered_cell(w, id, c, crush_track);
         return;
     }

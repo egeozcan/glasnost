@@ -353,18 +353,25 @@ impl WarheadRules {
 /// (S-0311 Terms).
 /// The class of the locomotor a seizing warhead names (S-0607 claims 5 and
 /// 22).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SeizeLocomotor {
     /// The jumpjet locomotor: the lift of claims 5 to 21.
     Jumpjet,
     /// One that can stand in temporarily (driving, walking, ship,
-    /// teleporting or drop-pod movement): the target is seized with it.
-    #[default]
-    StandIn,
-    /// One that cannot stand in temporarily (hovering, flying, rocket or
-    /// tunnelling movement), or an unknown identifier: claim 5's other
-    /// effects, no seize.
+    /// teleporting or drop-pod movement): the target is seized with it as
+    /// its stand-in (claims 22 to 24).
+    StandIn(crate::lift::StandIn),
+    /// One that cannot stand in temporarily (hovering, mechanical walking,
+    /// flying, rocket or tunnelling movement), or an unknown identifier:
+    /// claim 5's other effects, no seize.
     NoStandIn,
+}
+
+impl Default for SeizeLocomotor {
+    fn default() -> Self {
+        // spec: S-0607 claim 22 and Import mapping (no locomotor named and no earlier layer: the teleporting locomotor)
+        Self::StandIn(crate::lift::StandIn::Teleport)
+    }
 }
 
 impl SeizeLocomotor {
@@ -372,16 +379,18 @@ impl SeizeLocomotor {
     /// names of S-0207 table T3, and `unknown` for an identifier that table
     /// does not list).
     pub fn of(name: Option<&str>) -> Self {
+        use crate::lift::StandIn;
         match name {
             // spec: S-0607 claim 5 (the jumpjet locomotor)
             Some("jumpjet") => Self::Jumpjet,
-            // spec: S-0607 claim 22 and Import mapping (an absent key means the teleporting locomotor, which can stand in)
-            None => Self::StandIn,
+            // spec: S-0607 claim 22 and Import mapping (an absent key, or an empty or malformed value ignored as absent, with no earlier layer: the teleporting locomotor, which can stand in)
+            None | Some("teleport") => Self::StandIn(StandIn::Teleport),
             // spec: S-0607 claim 22 (driving, walking, ship, teleporting or drop-pod movement can stand in temporarily)
-            Some("drive" | "walk" | "ship" | "teleport" | "drop_pod") => Self::StandIn,
-            // spec: S-0607 claim 22 does not class the walking-vehicle locomotor; Q-1335 interim (it stands in, as the walking locomotor does)
-            Some("mech") => Self::StandIn,
-            // spec: S-0607 claim 22 (hovering, flying, rocket or tunnelling movement cannot stand in temporarily; an unknown identifier, design: treated as one that cannot)
+            Some("drive") => Self::StandIn(StandIn::Drive),
+            Some("walk") => Self::StandIn(StandIn::Walk),
+            Some("ship") => Self::StandIn(StandIn::Ship),
+            Some("drop_pod") => Self::StandIn(StandIn::DropPod),
+            // spec: S-0607 claim 22 (hovering, mechanical walking, flying, rocket or tunnelling movement cannot stand in temporarily; an unknown identifier, design: treated as one that cannot)
             Some(_) => Self::NoStandIn,
         }
     }

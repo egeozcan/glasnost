@@ -54,19 +54,13 @@ fn driving(w: &World, id: ObjectId) -> bool {
     if o.kind != Kind::Vehicle {
         return false;
     }
-    // spec: S-0607 claim 5 (a seized unit moves by its linked jumpjet locomotor, not its own driving one, until claim 20 gives it back; claim 20: readiness while seized is the jumpjet's moving now)
-    if crate::lift::seized(w, id) {
-        return false;
-    }
-    // spec: S-0215 claim 11 (revision 67: the predicate is for a vehicle with the driving locomotor; a ship, hovering, jumpjet or other locomotor is not covered) and S-0417 claim 5 (a vehicle that drives temporarily has the driving locomotor)
-    w.rules()
-        .unit(o.kind, o.type_index)
-        .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Drive)
-        || crate::econ::release::temporary_drive(w, id)
+    // spec: S-0215 claim 11 (revision 68: the vehicle's current locomotor is asked; the predicate is for a vehicle whose current locomotor is the driving one, a ship, hovering, jumpjet or other locomotor is not covered; S-0417 claim 5: a vehicle that drives temporarily has the driving locomotor); S-0607 claim 20 (a seized unit uses its temporary jumpjet movement, not its saved driving movement) and claims 22 and 23 (a driving stand-in is its current locomotor)
+    crate::lift::current_locomotor(w, id) == Some(crate::rules::Locomotor::Drive)
 }
 
-/// "Moving" for the readiness of a vehicle with the driving locomotor
-/// (S-0215 claim 11, revision 67, which answers Q-1160 and Q-1161): its
+/// "Moving" for the readiness of a vehicle whose current locomotor is the
+/// driving one (S-0215 claim 11, revision 67, which answers Q-1160 and
+/// Q-1161; revision 68 asks the current locomotor): its
 /// body is still turning, for any reason; or all three of: its locomotor
 /// is moving it in S-0206's sense, it has a heading point (the track
 /// target of the track it is on, S-0207 Terms) and its integer movement
@@ -523,7 +517,7 @@ pub fn head(w: &mut World, id: ObjectId) {
         // spec: S-0606 claim 18 (while the bunker link holds, a destination written by any rule is refused: it is replaced by none)
         crate::structures::bunker::enforce(w, id);
     }
-    // spec: S-0607 claims 9 and 22; Q-1334 interim (a unit seized with a stand-in locomotor has no jumpjet steering: a destination written by any rule is replaced by none here)
+    // spec: S-0607 claims 9 and 23 (a unit seized with a stand-in locomotor has no jumpjet steering: while gripped its destination stays the lifter and a removed one ends the grip; afterwards a destination written by any rule is replaced by none here)
     crate::lift::enforce(w, id);
     if kind == Kind::Building {
         door_update(w, id);
