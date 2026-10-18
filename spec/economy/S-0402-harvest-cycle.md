@@ -2,11 +2,11 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130]
 supersedes: []
@@ -526,7 +526,9 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     So there is no backing in: the harvester arrives with whatever facing its path gives, and the
     turn of row 3 happens on the docking cell. The turn of row 3 aims at exactly 16384, so row 4
     holds at the first processing after the turn has ended; claim 11's facing range then holds at
-    once. Under the default quirk, a refinery that is not a dock-unload refinery and has
+    once. Through row 4, the *unload* is queued only then, with the body no longer turning, so it does not wait for a
+    turn; had the body still been turning, it would count as moving and the start would wait for the turn
+    to end (S-0215, claim 11, late-start rule). Under the default quirk, a refinery that is not a dock-unload refinery and has
     no other applicable unit-entry exchange can agree to contact but never directs the
     harvester: it stays in *enter*, processed at every standard delay, until something
     else ends it (Edge cases).
@@ -638,6 +640,18 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     never delay the harvester. Back in *harvest*, the harvester starts seeking and drives to its
     remembered cell (claim 3).
 
+    *Turning body.* In every row above that starts a queued behaviour "if ready to change", a body
+    that is still turning counts as moving (S-0215, claim 11), unless one of that claim's exceptions
+    applies: the queued behaviour is *enter*; the current behaviour is *guard*, or *attack* without a
+    target; or the queued *guard* is one of the two unload rules that S-0215 gives to other specs.
+    Where no exception applies, the start waits until the turn has ended and then happens at the
+    turn-end late start or the next per-tick start of S-0215, claim 11. The same rule governs the
+    starts in *Order while unloading* and *Refinery sold while unloading*. Backing: S-0215, claim 11,
+    whose turning clause is `measurable` by its proposed scenario B47 (the first part for the clause,
+    the second for the tick-exact end of the turn). Confidence: as S-0215 gives it (medium for the
+    clause, low for the tick-exact end). This spec proposes no scenario of its own for the unload start
+    after a turn; that timing is inherited from S-0215.
+
     *Unloading state.* From the start row until it leaves (the rows above, or a scatter), the
     harvester is in the unloading state, and a vehicle in that state is not ready to change (S-0215,
     claim 11, the "letting out" transition), so no queued behaviour starts by S-0215's per-tick start.
@@ -646,7 +660,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     tells every unit docked with it to leave (S-0408, claim 6). A harvester in the unloading state leaves it at
     once, receives a forced vehicle scatter request without a threat point and not move-anywhere
     (S-0207 claim 16), queues *harvest* and starts it if it is ready to change
-    (it now is), keeping the part of its load that has not been paid; the sale then breaks off the
+    (it now is, unless its body is still turning; then it starts at the turn-end late start, see
+    *Turning body*), keeping the part of its load that has not been paid; the sale then breaks off the
     contact. A harvester still in *enter* at that moment (tethered on or towards the docking cell)
     queues *guard* instead and receives the same kind of vehicle scatter request, subject to
     the usual refusals (a turning body or an existing destination can prevent movement).
@@ -667,7 +682,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     when the delay of its previous processing ends (1 tick while it is paid), the first row applies:
     the fall-back's row for a vehicle with a destination keeps the destination and queues nothing,
     the harvester leaves the unloading state and stops, and the ordered behaviour becomes current at
-    once. The harvester keeps the part of its load that has not been paid; it is not paid for it
+    once, unless its body is still turning and the behaviour is not *enter*; then it becomes current at
+    the turn-end late start (see *Turning body*). The harvester keeps the part of its load that has not been paid; it is not paid for it
     later unless it unloads again. The original also has a route by which an order ends unloading
     while contact is kept (the harvester then becomes *finishing* with its load kept, and the row
     for a destination and a queued behaviour applies), but orders of S-0213 never reach it, since
