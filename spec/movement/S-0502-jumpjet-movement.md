@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -172,9 +172,9 @@ New terms:
    - The cruise height is used only as S-0102's layer threshold.
    - The turn rate has no effect (S-0206 claim 14).
    - The other five have no effect on play.
-   - Some keys in the stock rules data are spelled with a different letter case from the keys the
-     original reads, so they are never read (Import mapping; S-0001).
-   - Backing: `measurable` (scenario J1 b) for effects and case sensitivity. Reading values that
+   - A type key written with different letter case does not set the corresponding field
+     (Import mapping; S-0001 claim 13).
+   - Backing: `measurable` (scenario J1 b for controls; J1 c for case sensitivity). Reading values that
      never affect play is `unmeasured`: no observable distinguishes reading and ignoring from
      never reading them.
    - Confidence: high
@@ -199,7 +199,9 @@ New terms:
    - The original's movement eligibility does not itself include a pending crash start.
      A successful later destination assignment would resume updates, but no general automatic
      wake or independent removal of an idle suspended unit is established here.
-   - Backing: `measurable` (scenario J2) for ordinary tick timing and idle values.
+   - Backing: `measurable` (scenario J2) for ordinary tick timing and grounded idle values.
+     Uncommitted hovering idle values are `unmeasured`: J2 does not establish an ordinary
+     input sequence producing that starting state independently of a retained commitment.
      The original idle-crash aftermath is `unmeasured` (diagnostic J15): an ordinary killing
      hit also clears orders and can invoke claim 17, so establishing the otherwise idle case
      requires recording those effects. The safety departure is a design rule, not an
@@ -243,6 +245,8 @@ New terms:
    - At the first rise from the surface, the previous occupancy is cleared and the on-deck
      state ends. Subsequent low-flight placement can mark again as above.
    - Backing: `measurable` (J3, including separate listing and reservation observations).
+     The independently falling exclusion is `unmeasured`: J3 does not establish a sequence
+     combining that state with a jumpjet placement at the discriminating bridge height.
    - Confidence: high for the placement eligibility; medium for the full kind-specific
      occupancy consequences, which depend on S-0209 claim 1.
 
@@ -257,9 +261,12 @@ New terms:
    - Backing: `measurable` (scenario J2)
    - Confidence: high
 
-6. **Speed.** Each physics step moves the current speed towards the maximum speed (F1):
-   - upwards by *a* per tick, not beyond *S*
-   - downwards by 1.5 × *a* per tick, not below 0.
+6. **Speed.** Each physics step adjusts the current speed according to F1:
+   - acceleration adds *a* per tick, capped at *S*
+   - braking subtracts 1.5 × *a* per tick, floored at 0.
+
+   These limits are not clamps to the maximum speed: an acceleration overshoot can also
+   incur braking in the same tick.
 
    The jumpjet's speed fraction is then set to *v*<sub>c</sub> / *S*. S-0310 claim 8 uses that
    fraction for an infantry jumpjet. For *S* = 0 use fraction 0 instead (design, claim 25).
@@ -1200,18 +1207,20 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   respectively. J6, J7 and J5 give their original-behaviour falsifiers. Off alternatives are
   design rules, not claims about the original.
 - **Zero speed or zero turn rate.** A type with a speed field of 0 divides by zero in its speed
-  fraction (F1), and one with a turn rate of 0 divides by zero in its middle band (F6). Stock
-  data has neither. In the original, *S* = 0 gives an infinite or undefined speed fraction,
+  fraction (F1), and one with a turn rate of 0 divides by zero in its middle band (F6).
+  In the original, *S* = 0 gives an infinite or undefined speed fraction,
   and *T* = 0 is an integer division by zero that stops the program. Backing: `unmeasured`,
   confidence high for the divisions: no scenario here isolates their consequences before other
   invalid-data effects. Claim 25 gives the approved safety replacement, with no quirk switch.
 - **No landing slot.** A jumpjet that cannot land and finds no cell nearby destroys itself
   (claim 17). This is the original's behaviour and stays the default
   (`quirks.jumpjet_no_cell_self_destruct`, default on, YR behaviour). Off: it clears its
-  movement point and commitment. In the air it re-enters *hovering* over its current cell,
-  neither descending nor flying on; a grounded jumpjet stays grounded instead. For a seized
-  set-down unit, S-0607 claims 9 and 20 apply: while hovering it is not restored and retries
-  the search at each fall-back to rest. Claim 17's magnetic-release safety departure overrides
+  movement point and commitment. At an integer height above the surface of 1 lepton or more,
+  it re-enters *hovering* over its current cell, neither descending nor flying on. At height
+  0 leptons or less, it stays put and becomes *grounded*, including from *ascending* at height
+  0. For every seized set-down unit in this switch-off outcome, whatever route brought it
+  there, S-0607 claims 9 and 20 apply: while hovering it is not restored and retries the
+  search at each fall-back to rest. Claim 17's magnetic-release safety departure overrides
   both switch settings for lifter-ended release, but not S-0607 claim 9's no-destination exception.
   Backing and confidence are claim 17's; the off alternative is a design rule.
 - **Ion storms.** An ion storm makes every flying jumpjet of the affected house crash, and stops a
@@ -1244,9 +1253,9 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 | Type movement class and movement zone | own-class/zone searches of claim 23 | keys, parse forms and defaults: S-0211 Import mapping | S-0211 Import mapping |
 | No additional rules, art or map key | claims 3, 4, 22 to 24 and 26, including the two-height listing test, own occupancy, repeated infantry assignments, effective destination clears and runtime refresh/retention states of claims 27 and 28 | engine behaviour and the stated safety departures, not imported tuning | no configurable default |
 
-- **Key case.** Key names are matched case-sensitively. The stock rules data spells two of the
-  type keys `JumpJetAccel` and `JumpJetTurnRate`. Those spellings are not the keys above and
-  have no effect, so the absent-key defaults apply (claim 2; S-0001).
+- **Key case.** Key names are matched case-sensitively (S-0001 claim 13). Changing the
+  letter case of a key above does not set that field. If no layer supplies the exact key,
+  its absent-key default applies; otherwise the value from an earlier layer remains.
 - **Layering.** Each key keeps its value when a later layer omits it (S-0006).
 - **Backing.** The engine defaults are those of the program when no layer gives the key.
   Their flight effects are `measurable` through named test files in J1 c, confidence high.
@@ -1259,8 +1268,8 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 
 **Common setup.**
 - Stock data, no engine add-on and no mods (the named test files of a scenario excepted); game-speed index 2; 800 × 600 pixels.
-- One human test house, and one computer bystander outside the test area under the glossary's
-  void rule.
+- One human test house and one bystander computer player outside the test area under the
+  glossary's void rule.
 - A purpose-made flat map with:
   - a land lane, a beach lane and a water lane
   - a high bridge
@@ -1293,8 +1302,8 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
 **Scenarios.**
 - **J1 Field copy and controls.**
   - (a) Order the jumpjet infantry 15 cells east and record the height profile and the per-tick
-    step. Expected: the climb, crash rate, height and speed follow the type's fields, with the
-    stock case-mismatched keys behaving as their engine defaults (Import mapping).
+    step, then shoot it down and record the fall. Expected: the climb, crash rate, height
+    and speed follow the imported type fields and Import mapping's absent-key defaults.
     A profile inconsistent with the imported type fields and F1–F6 falsifies claim 1.
   - (b) A test rules file changes every game-wide jumpjet control except the cruise height.
     Expected: profiles identical to (a). Any difference falsifies claim 2. In a separate run,
@@ -1304,9 +1313,12 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   - (c) In *jumpjet-flight-test*, omit each numeric type key in turn from every layer, then
     repeat with its stated engine default explicitly supplied. Keep all other fields equal.
     Compare take-off, straight flight, wobble, turning and crash traces. Expected: identical
-    traces for omission and explicit default. A difference falsifies that default. Repeat for
-    the mismatched-case spellings, then the actual spellings with a different value: only the
-    latter change the profile. A change from the mismatched spelling falsifies claim 2.
+    traces for omission and explicit default. A difference falsifies that default. For the
+    acceleration and turn-rate keys, remove the exact key from every layer, then supply a
+    different value with only its first letter changed to lower case. Repeat with the exact
+    key and that same different value. Only the exact key changes the profile. A change
+    from the altered-case key, or no change from a distinguishable exact-key value,
+    falsifies claim 2's case rule.
 - **J2 Take-off timing.**
   - Order a grounded jumpjet 10 cells away. Record the tick of the order, the first rising tick,
     the first tick of sideways movement, and the tick at which the height reaches *H* and
@@ -1639,13 +1651,18 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     with either setting of the no-cell quirk. Missing fall updates or look-ahead while
     falling with no point falsifies the design rule.
     Test the no-destination exception separately: claim 17's ordinary quirk outcome still
-    applies. With the switch off, expect no point or commitment: an airborne unit hovers
-    without descent or onward flight, while a grounded one remains grounded. A seized
-    hovering set-down unit is not restored and retries the search at every fall-back to
-    rest under S-0607 claims 9 and 20. Test both failed and successful retries. Descent or
-    onward flight before a successful retry, restoration while still hovering, failure to
-    retry at fall-back, self-destruction on lifter release, or applying that safety
-    exemption to the switch-on no-destination exception falsifies the design rule.
+    applies. With the switch off, expect no point or commitment: height above the surface
+    of 1 lepton or more gives *hovering* without descent or onward flight; height 0 leptons
+    or less gives *grounded* without moving. Include *ascending* at height 0, and heights
+    −1 and 1 leptons as boundary controls. A seized hovering set-down unit is not restored
+    and retries the search at every fall-back to rest under S-0607 claims 9 and 20,
+    regardless of how it reached this outcome. Test both failed and successful retries,
+    including a set-down unit that retained commitment, flew to its point and reached the
+    no-cell outcome through a failed landing or another stop. Descent or onward flight
+    before a successful retry, hovering at non-positive height, restoration while still
+    hovering, a route-dependent or missing retry at fall-back, self-destruction on lifter
+    release, or applying that safety exemption to the switch-on no-destination exception
+    falsifies the design rule.
 - **J20 Zero-field engine test.** Named importer test data, not an original-game oracle run:
   one type with zero speed, one with zero turn rate, and one with both. Expect a warning for
   each affected type, zero fraction and all zero cruise speeds for zero speed, no middle
@@ -1706,8 +1723,10 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   stop while commitment survives both empty assignments. Expect two effective reroutes,
   not vehicle equality suppression of the second. A suppressed second assignment
   falsifies claim 24; absence of such a stock type does not establish this subcase.
-- **J24 Refresh lifetime (Q-1031).** Common setup, stock jumpjet vehicle, read-only
-  assignment recorder. Record initial placement and idle-behaviour setup, then stop,
+- **J24 Refresh lifetime (Q-1031).** Common setup, an ordinary jumpjet vehicle, read-only
+  assignment recorder. If no shipped type supplies this combination, use an explicitly
+  identified *jumpjet-flight-test* vehicle variant and record it as named test data.
+  Record initial placement and idle-behaviour setup, then stop,
   repeated stop, move, repeated move and deploy where the stock type permits it.
   Expected: a fresh ordinary jumpjet without a destination receives an effective
   empty-to-empty clear during initial idle fallback. It consumes refresh, enables no
