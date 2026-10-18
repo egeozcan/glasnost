@@ -736,9 +736,7 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
             crate::structures::bunker::process_enter(w, id)
         }
         // spec: S-0606 claim 6 (a tank bunker's repair processing: the entry stages of table S1)
-        (Some(Behaviour::Repair), Kind::Building)
-            if crate::structures::bunker::is_bunker(w, id) =>
-        {
+        (Some(Behaviour::Repair), Kind::Building) if crate::structures::bunker::is_bunker(w, id) => {
             crate::structures::bunker::process_repair(w, id)
         }
         // spec: S-0215 claim 29 and S-0507 claim 5 (enter toward a transport: the loading exchange)

@@ -73,7 +73,7 @@ pub struct Exercise {
     /// Vehicles that became bunkered (S-0606 claim 7; both sides build the
     /// bunker BUNK).
     pub bunkered: u32,
-    /// Vehicles that became seized (S-0607 claim 5; only Alpha builds the
+    /// Vehicles that became seized (S-0607 claim 5; both sides build the
     /// lifter MAGN).
     pub seized: u32,
     /// Seized units that became dropped: their grip ended in the air
