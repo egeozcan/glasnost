@@ -172,6 +172,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     let launched = if wr.spawner {
         None
     } else if wr.disk_laser {
+        // Seam: S-0608 is not built yet (M7b). The Floating Disc's draining weapon (S-0615 Summary) is S-0608's; only its disc laser is built here.
         // spec: S-0615 claim 12 (a disc-laser weapon's shot makes a disc laser instead of a projectile, holding D_s)
         crate::disc::shot(w, firer, weapon, shot_target, damage);
         None
