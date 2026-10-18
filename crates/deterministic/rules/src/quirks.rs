@@ -1684,11 +1684,11 @@ pub struct Quirks {
     // spec: S-0616 F5 and Edge cases
     #[serde(default = "on")]
     pub flame_sweep_facing: bool,
-    /// When the first other object under a dropped unit is an infantry unit, every object after it in the cell's list is also removed, whatever its kind, the dropped unit included when it is listed after the infantry; off: only infantry units in the cell are removed, and the dropped unit never is. Not implemented yet (wave 2).
+    /// When the first other object under a dropped unit is an infantry unit, every object after it in the cell's list is also removed, whatever its kind, the dropped unit included when it is listed after the infantry; off: only infantry units in the cell are removed, and the dropped unit never is.
     // spec: S-0607 claim 16 and Edge cases
     #[serde(default = "on")]
     pub lift_drop_erases_cell_tail: bool,
-    /// A dropped unit that ends its fall in *crashed* leaves play after the two impact detonations even when they did not kill it; off: a unit that survives both detonations stays in play, is set down and gets its own locomotor back. Not implemented yet (wave 2).
+    /// A dropped unit that ends its fall in *crashed* leaves play after the two impact detonations even when they did not kill it; off: a unit that survives both detonations stays in play, is set down and gets its own locomotor back.
     // spec: S-0607 claims 18 and 20 and Edge cases
     #[serde(default = "on")]
     pub lift_impact_removes_survivor: bool,
@@ -1696,7 +1696,7 @@ pub struct Quirks {
     // spec: S-0607 claim 18 and Edge cases
     #[serde(default = "on")]
     pub lift_impact_double_credit: bool,
-    /// When a dropped unit's fall ends on a bridge deck, the objects listed in the ground layer under the bridge decide what lies underneath, not those on the deck; off: the layer the unit landed in decides. Not implemented yet (wave 2).
+    /// When a dropped unit's fall ends on a bridge deck, the objects listed in the ground layer under the bridge decide what lies underneath, not those on the deck; off: the layer the unit landed in decides.
     // spec: S-0607 claim 16 and Edge cases
     #[serde(default = "on")]
     pub lift_deck_impact_reads_ground: bool,
