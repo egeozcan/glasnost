@@ -825,6 +825,32 @@ fn claim_8_vehicle_absorber() {
     round_trip(&w);
 }
 
+// spec: S-0605 claim 3 (revision 6: a vehicle ordered in to a vehicle absorber always starts waiting in line for it, even at an empty building: no destination, no contact and no remembered entry object at the order; claim 4's retry then grants contact and it goes in) and scenario A2c's vehicle variant
+#[test]
+fn claim_3_vehicle_always_waits_in_line() {
+    let mut w = game();
+    let v = put(&mut w, Kind::Building, "VBIO", 0, 0, 0);
+    testkit::run(&mut w, 3);
+    let car = put(&mut w, Kind::Vehicle, "CAR", 0, 5, 0);
+    let walker_id = walker(&mut w, -5, -6);
+    let inf = put(&mut w, Kind::Building, "BIO", 0, -8, -8);
+    testkit::run(&mut w, 3);
+    assert!(absorb::contacts(&w, v).is_empty(), "an empty building");
+    issue_enter(&mut w, car, v);
+    issue_enter(&mut w, walker_id, inf);
+    orders::apply_pending(&mut w);
+    let o = w.obj(car).unwrap();
+    assert_eq!(absorb::waiting_for(&w, car), Some(v), "waiting in line");
+    assert_eq!(o.dest, None, "no destination at the order");
+    assert_eq!(o.contact, None, "no contact at the order");
+    assert_eq!(o.depot.entering, None, "no remembered entry object");
+    // The contrast: infantry at an empty infantry absorber gets contact.
+    assert_eq!(w.obj(walker_id).unwrap().contact, Some(inf));
+    assert_eq!(absorb::waiting_for(&w, walker_id), None);
+    assert!(until(&mut w, 800, |w| inside(w, car, v)), "the retry grants contact and it goes in");
+    round_trip(&w);
+}
+
 // ---------------------------------------------------------------------------
 // Claims 9 and 10: inside.
 
