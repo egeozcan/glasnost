@@ -1,6 +1,6 @@
-# M7a step 1j claim ledger (S-0314 revisions 25 and 26, S-0616 revisions 6 and 7, S-0613 revisions 9 and 10, S-0605 revisions 6 and 7)
+# M7a step 1j claim ledger (S-0314 revisions 25 and 26, S-0616 revisions 6 and 7, S-0613 revisions 9 and 10, S-0605 revisions 6 and 7, S-0603 revision 6)
 
-This is part 10 of M7a step 1. It covers the approved revisions that reached main after the step 1i intake: first 650a993 to de9dcf4 (`git diff 650a993 de9dcf4 -- spec/`), then the two that landed during this step, de9dcf4 to 05f671b (S-0613 revision 9 and S-0605 revision 6, merged in at the coordinator's instruction), and last 05f671b to ad7fffd (S-0314 revision 26, S-0613 revision 10, S-0605 revision 7 and S-0616 revision 7, merged in the same way). Every changed claim gets one class, as in [step1i-m7a.md](step1i-m7a.md):
+This is part 10 of M7a step 1. It covers the approved revisions that reached main after the step 1i intake: first 650a993 to de9dcf4 (`git diff 650a993 de9dcf4 -- spec/`), then the two that landed during this step, de9dcf4 to 05f671b (S-0613 revision 9 and S-0605 revision 6, merged in at the coordinator's instruction), and last 05f671b to ad7fffd (S-0314 revision 26, S-0613 revision 10, S-0605 revision 7 and S-0616 revision 7, merged in the same way), and finally ad7fffd to a588b69 (S-0603 revision 6, with main's S-0606 vehicle bunker, merged in the same way). Every changed claim gets one class, as in [step1i-m7a.md](step1i-m7a.md):
 - *satisfied*: already true, with the test that shows it;
 - *changed*: code changed, with the test;
 - *pointer*: the claim only points at another spec's claim;
@@ -19,6 +19,7 @@ No claim was renumbered, so no citation needed re-mapping.
 | S-0613 gas clouds | 10 (from 9) | none (a gas successor also takes the speed) |
 | S-0616 particle systems | 7 (from 6) | none (follows S-0613 claim 7) |
 | S-0605 infantry absorber | 7 (from 6) | none (claim 16's fate for a vehicle victim; the driving case) |
+| S-0603 grinder | 6 (from 4) | Q-1157 |
 | `spec/README.md` | | index rows moved and revised: (c) |
 | `spec/requests/` Q-1153, Q-1155, Q-1156 (answered), Q-1157 (new, open) | | request status: (c) |
 
@@ -26,7 +27,7 @@ No claim was renumbered, so no citation needed re-mapping.
 
 **The S-0605 cross-spec change.** S-0314 revision 25 says that it "needs S-0605 claim 4 revised so that an enter order on a repair depot makes the actor remember it". S-0605 revision 5 said, in general terms, that an enter order on a building makes the actor remember none, so the two disagreed for depots. S-0605 revision 6 landed during this step and settles it. Only an enter order on an *absorbing* building gives no remembered entry object. Setting up a wait clears any, and a damaged vehicle waiting for a depot remembers the depot and makes no approach. No request was needed.
 
-**Q-1157 stays open** (the *guard* queued by a failed recycle approach while *eaten* is current). Its interim is unchanged: S-0215's ordinary start rules, `claim_3_failed_approach_gives_up`.
+**Q-1157 is answered** by S-0603 revision 6, which arrived last: *eaten* does not hold back the *guard* queued by a failed recycle approach, so it starts by S-0215 claim 11's ordinary rules, as the interim had it. The interim is gone from [S-0603.md](S-0603.md) and [development.md](../development.md).
 
 **New requests** (block Q-1158 to Q-1165):
 - Q-1158: S-0314 claim 23 for a docked vehicle's enter order on its own depot (claim 20), and whether the processing that takes a free place gives the destination. Interim: claim 20's queued entry only; the retry gives the destination.
@@ -35,8 +36,8 @@ No claim was renumbered, so no citation needed re-mapping.
 Q-1160 to Q-1165 are unused.
 
 **Formats.**
-- Save format 52 → 53. `DepotState::walked: bool` became `DepotState::entering: Option<ObjectId>`, the remembered depot. `claim_23_queued_state_round_trips` and `depot_state_round_trips` check it. `StructState` gained `fate_tick` (S-0605 revision 7, below) in the same format.
-- AI game format unchanged at 21: the AI makes no new decision.
+- Save format 52 → 53 on this branch, then 54: main took 53 for the S-0606 vehicle bunker, so the merge with main made this step's format 54. `DepotState::walked: bool` became `DepotState::entering: Option<ObjectId>`, the remembered depot. `claim_23_queued_state_round_trips` and `depot_state_round_trips` check it. `StructState` gained `fate_tick` (S-0605 revision 7, below) in the same format.
+- AI game format unchanged by this step: the AI makes no new decision. Main's S-0606 work made it 22.
 - Goldens: regenerated. Before S-0605 revision 7 no golden file changed. After it every golden's hashes change, because `StructState::fate_tick` is new state. A regeneration with that field left out of the state changed no golden, so no gate game plays differently, and the gate figures are the same as at step 1i. The M7a duel still plays all 12 000 ticks at seed 3. Over seeds 1 to 16 every minimum is at least 3, except the sensor orders (2).
 
 ## S-0314 revision 25
@@ -84,7 +85,7 @@ Q-1160 to Q-1165 are unused.
 
 ## Editorial
 
-`spec/README.md` moves the S-0314, S-0616, S-0613 and S-0605 rows to the end with their new revisions: (c). Q-1153, Q-1155 and Q-1156 now read `answered`, and Q-1157 (open) is the request filed at step 1i: (c).
+`spec/README.md` moves the S-0314, S-0616, S-0613 and S-0605 rows to the end with their new revisions: (c). Q-1153, Q-1155 and Q-1156 now read `answered`, and Q-1157 (open) is the request filed at step 1i: (c). The last merge moves the S-0603 row to the end at revision 6, and Q-1157 reads `answered`: (c).
 
 ## S-0314 revision 26
 
@@ -120,3 +121,12 @@ Q-1160 to Q-1165 are unused.
 | Ordering consequences (claim 3's step at the release tick: a contact request for infantry, the waiting-in-line rule for a vehicle) | satisfied | as claim 3 above. |
 | Scenario A2c's vehicle variant (the still-driving case), scenario A13 (g) | changed, Q-1159 | A13 (g): `claim_3_vehicle_fate_waits_in_line`. A2c's driving case: Q-1159. |
 | Header | (c) | |
+
+## S-0603 revision 6
+
+| Claim | Class | Notes |
+|---|---|---|
+| 3: the *guard* queued by a failed approach is not held back by *eaten*; it becomes current at the first per-tick start or late start at which the unit is ready (S-0215 claim 11); a unit idle at the order has *guard* current at the end of the failing tick | satisfied | `process::ready` has no *eaten* case. `claim_3_failed_approach_gives_up` (a vehicle and an infantry unit idle at the order: *guard* current with nothing queued at the end of the failing tick and 10 ticks later). Answers Q-1157. |
+| 3: a unit moving in the failing tick (a turn in place before a step counts) is not ready there, and *guard* starts after its locomotor stops | satisfied | `process::ready` reads `occupancy::in_progress`, which counts a turn in place. No test: the spec gives no scenario for it (`unmeasured`), and a moving vehicle with *eaten* current does not arise in our synthetic set-up, since *eaten* becomes current only when the vehicle is ready. |
+| 3: a vehicle in contact with a vehicle factory, or standing on a factory's exit cell, stays in *eaten* with *guard* queued | satisfied | `econ::release::holds_back` in `process::ready` (S-0215 claim 11, as built). The spec says only that this case can arise. |
+| Terms (*per-tick start, late start, moving*), scenario G9's expectation, Open questions, header (requests), backing and confidence | (c) | |
