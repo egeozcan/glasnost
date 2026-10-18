@@ -26,5 +26,5 @@ The gaps are in `lift::restore_at_rest` and `jump::stop_with` (crates/determinis
 None in the original: the switch-off alternative is a design rule (S-0502 Edge cases; S-0607 claims 9 and 20).
 
 ## Current workaround
-1. S-0502's wider wording is followed. Every seized set-down unit that hovers with no commitment and has no lifter is not restored at a fall-back to rest. It repeats the stop's search instead. With a cell found, it re-orders itself to that cell's centre and flies there. With none, it keeps hovering.
+1. S-0502's wider wording is followed, with the switch off only. Every seized set-down unit that hovers with no commitment and has no lifter is not restored at a fall-back to rest. It repeats the stop's search instead. With a cell found, it re-orders itself to that cell's centre and flies there. With none, it keeps hovering.
 2. In `jump::stop_with`, the flight state decides: only a *grounded* jumpjet stays grounded, and any other state re-enters *hovering*. A seized unit set down by claim 9 at height 0 or less is grounded where it stands either way (`lift::set_down_released`).
