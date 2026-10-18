@@ -32,7 +32,7 @@ No claim was renumbered. S-0607 gains claims 23 and 24, the Terms entry *stand-i
 - Q-1337: claim 12 has no row for the drop-pod stand-in's grip end. Interim: the grip ends and the unit is set down, but the lifter's target is not cleared.
 - Q-1338: whether a ground stand-in holds its cell's vehicle mark from the seize. Interim: claim 5's give-up runs; then the stand-in starts at rest holding its own cell's vehicle-present mark (S-0209 claim 1).
 - Q-1339: a landed aircraft seized with a ground stand-in. Interim: it is seized, but it gets no stand-in movement and stays where it is.
-- Q-1340: the teleporting stand-in's jump removes the destination (S-0207 claim 20). By claim 23 that ends the grip, but scenario L13 part b lists "a grip ended by arrival alone" as a falsifier. Interim: the specs are followed as written; the grip ends on the jump and the unit is set down.
+- Q-1340: the teleporting stand-in's jump removes the destination (S-0207 claim 20). By claim 23 that ends the grip, but scenario L13 part b lists "a grip ended by arrival alone" as a falsifier. The same can happen to a driving stand-in under S-0207 claim 26's guard row, at an exact arrival on the lifter's point (rare; possibly at a docking point). Interim: the specs are followed as written; the grip ends on the jump (or on such an arrival) and the unit is set down.
 - Q-1341: the warning for an empty warhead locomotor value. Under S-0001 claim 8 such a value makes no entry. Interim: an empty value reads as absent and does not warn; a malformed non-empty value warns.
 
 Q-1342 to Q-1345 are unused.
@@ -104,7 +104,7 @@ Q-1342 to Q-1345 are unused.
 
 ## Formats and gate
 
-The save format is 57 (from 56): `LiftState.stand_in` is now the `StandIn` kind and `LiftState.own` is new. The AI game format stays 23, because the brain did not change. All eight goldens were regenerated. The seed sweep and the gate seed are under *Gate* below.
+The save format is 57 (from 56): `LiftState.stand_in` is now the `StandIn` kind and `LiftState.own` is new. The AI game format stays 23, because the brain did not change. All eight goldens were regenerated. Every scenario moved from tick 1 (the new saved state), and `duel-m7a` moved again for the new seed. The seed sweep and the gate seed are under *Gate* below.
 
 ## Gate
 
