@@ -1,6 +1,6 @@
-# M7a step 1j claim ledger (S-0314 revision 25, S-0616 revision 6, S-0613 revision 9, S-0605 revision 6)
+# M7a step 1j claim ledger (S-0314 revisions 25 and 26, S-0616 revisions 6 and 7, S-0613 revisions 9 and 10, S-0605 revisions 6 and 7)
 
-This is part 10 of M7a step 1. It covers the approved revisions that reached main after the step 1i intake: first 650a993 to de9dcf4 (`git diff 650a993 de9dcf4 -- spec/`), then the two that landed during this step, de9dcf4 to 05f671b (S-0613 revision 9 and S-0605 revision 6, merged in at the coordinator's instruction). Every changed claim gets one class, as in [step1i-m7a.md](step1i-m7a.md):
+This is part 10 of M7a step 1. It covers the approved revisions that reached main after the step 1i intake: first 650a993 to de9dcf4 (`git diff 650a993 de9dcf4 -- spec/`), then the two that landed during this step, de9dcf4 to 05f671b (S-0613 revision 9 and S-0605 revision 6, merged in at the coordinator's instruction), and last 05f671b to ad7fffd (S-0314 revision 26, S-0613 revision 10, S-0605 revision 7 and S-0616 revision 7, merged in the same way). Every changed claim gets one class, as in [step1i-m7a.md](step1i-m7a.md):
 - *satisfied*: already true, with the test that shows it;
 - *changed*: code changed, with the test;
 - *pointer*: the claim only points at another spec's claim;
@@ -15,6 +15,10 @@ No claim was renumbered, so no citation needed re-mapping.
 | S-0616 particle systems | 6 (from 5) | Q-1155 (and records Q-1153) |
 | S-0613 gas clouds | 9 (from 8) | none (follows S-0616 claim 3) |
 | S-0605 infantry absorber | 6 (from 5) | none (the cross-spec change S-0314 revision 25 asks for) |
+| S-0314 healing and repair | 26 (from 25) | none (editorial) |
+| S-0613 gas clouds | 10 (from 9) | none (a gas successor also takes the speed) |
+| S-0616 particle systems | 7 (from 6) | none (follows S-0613 claim 7) |
+| S-0605 infantry absorber | 7 (from 6) | none (claim 16's fate for a vehicle victim; the driving case) |
 | `spec/README.md` | | index rows moved and revised: (c) |
 | `spec/requests/` Q-1153, Q-1155, Q-1156 (answered), Q-1157 (new, open) | | request status: (c) |
 
@@ -26,12 +30,12 @@ No claim was renumbered, so no citation needed re-mapping.
 
 **New requests** (block Q-1158 to Q-1165):
 - Q-1158: S-0314 claim 23 for a docked vehicle's enter order on its own depot (claim 20), and whether the processing that takes a free place gives the destination. Interim: claim 20's queued entry only; the retry gives the destination.
-- Q-1159: S-0605 claim 3's "see Flag F1" names no flag. No interim is needed; the behaviour is as built.
+- Q-1159: S-0605 revision 7 claim 3 gives "a vehicle still driving from an earlier order" as not ready to change at its first per-tick start, so it makes no approach step (scenario A2c's driving case). S-0215 claim 11 makes a moving actor ready when its queued behaviour is *enter*, which the order has just queued. Interim: S-0215 claim 11 decides (`process::ready`); a driving vehicle with *enter* queued makes *enter* current and takes the approach step. (The request first asked about revision 6's dangling "see Flag F1"; revision 7 removed it.)
 
 Q-1160 to Q-1165 are unused.
 
 **Formats.**
-- Save format 52 → 53. `DepotState::walked: bool` became `DepotState::entering: Option<ObjectId>`, the remembered depot. `claim_23_queued_state_round_trips` and `depot_state_round_trips` check it.
+- Save format 52 → 53. `DepotState::walked: bool` became `DepotState::entering: Option<ObjectId>`, the remembered depot. `claim_23_queued_state_round_trips` and `depot_state_round_trips` check it. `StructState` gained `fate_tick` (S-0605 revision 7, below) in the same format.
 - AI game format unchanged at 21: the AI makes no new decision.
 - Goldens: regenerated; no golden file changed, so no gate game reaches the changed rows. The gate figures are the same as at step 1i. The M7a duel still plays all 12 000 ticks at seed 3. Over seeds 1 to 16 every minimum is at least 3, except the sensor orders (2).
 
@@ -72,7 +76,7 @@ Q-1160 to Q-1165 are unused.
 
 | Claim | Class | Notes |
 |---|---|---|
-| 3: a vehicle ordered in to a vehicle absorber always waits in line, even at an empty building: no destination, no contact, no remembered entry object at the order; then claim 4's approach and retry | changed | `absorb::order_entered` with `start_waiting`. `claim_3_vehicle_always_waits_in_line` checks the state right after the order (`orders::apply_pending`), contrasts it with infantry at an empty infantry absorber, and the vehicle then goes in. The "see Flag F1" reference names nothing: Q-1159. |
+| 3: a vehicle ordered in to a vehicle absorber always waits in line, even at an empty building: no destination, no contact, no remembered entry object at the order; then claim 4's approach and retry | changed | `absorb::order_entered` with `start_waiting`. `claim_3_vehicle_always_waits_in_line` checks the state right after the order (`orders::apply_pending`), contrasts it with infantry at an empty infantry absorber, and the vehicle then goes in. (Revision 7 replaced the "see Flag F1" reference; see below.) |
 | 4: setting up the wait clears any remembered entry object; a depot waiter (S-0314 claim 23) has no approach | changed | `absorb::set_waiting`. In our engine every path into a wait has no remembered object by then, so it is coded but cannot be tested. The depot side is S-0314 claim 23 above. |
 | 5: an enter order on an absorbing building gives no remembered object; a depot order does | satisfied | `absorb::partner` (wording updated), `depot::order_applied`. |
 | Terms (*remembered entry object*), cross-spec list, table row, scenario A2c's vehicle variant | (c), changed | the table row and A2c are claim 3's new rule. |
@@ -81,3 +85,38 @@ Q-1160 to Q-1165 are unused.
 ## Editorial
 
 `spec/README.md` moves the S-0314, S-0616, S-0613 and S-0605 rows to the end with their new revisions: (c). Q-1153, Q-1155 and Q-1156 now read `answered`, and Q-1157 (open) is the request filed at step 1i: (c).
+
+## S-0314 revision 26
+
+| Claim | Class | Notes |
+|---|---|---|
+| Terms, *Remembered entry object* (new entry: for a damaged vehicle with a queued entry, the depot) | (c) | as built at revision 25 (`DepotState::entering`). |
+| 23: the parenthesis asking for S-0605 claim 4's revision removed | (c) | S-0605 revision 6 made that change. |
+| Header | (c) | |
+
+## S-0613 revision 10
+
+| Claim | Class | Notes |
+|---|---|---|
+| 7: the successor takes exactly two quantities from the dead particle, overwriting its own creation's: the particle speed and the integer velocity; nothing else (deflection, damage countdown, lifetime, stage, translucency, direction) | changed | `gas::second_pass` copies `speed` as well as `vel`. `gas_successor_takes_the_dead_particles_speed` (in `claims_s0616.rs`): a gas parent (speed field 2.0) dying in a gas system with a smoke next type; the smoke successor's speed and velocity are the parent's, and its stage starts at its own. The successor's rise reads that speed by S-0616 claim 7, unchanged. `claim_3_successors_follow_the_system_kind` part (i) also checks the speed. The second G5-speed variant (a gas parent that is itself a smoke particle's successor) follows from the same copy and is not tested separately. |
+| Terms, *Gas particle* (a particle speed in the state) | (c) | `Particle::speed` is shared by every kind. |
+| Scenario G5-speed, backing and confidence | (c) | |
+| Header | (c) | |
+
+## S-0616 revision 7
+
+| Claim | Class | Notes |
+|---|---|---|
+| 3, gas-system line: the successor takes the dead particle's speed and velocity and nothing else | changed | as S-0613 claim 7 above. |
+| 3, backing and confidence | (c) | |
+| Header | (c) | |
+
+## S-0605 revision 7
+
+| Claim | Class | Notes |
+|---|---|---|
+| 3: claim 16's fate assigning a vehicle victim a vehicle absorber applies the waiting-in-line rule at once, whatever the building's contact state: no contact from the fate, no destination, and no contact request in that tick; its first request is claim 4's retry | changed | The vehicle rule moved from `absorb::order_entered` into `absorb::seek_contact`, which the order, the fate and the instruction's repeat share. `StructState::fate_tick` marks the release tick, and `absorb::waiting_turn` sends no request in it, even from a turn later in that tick. Test: `claim_3_vehicle_fate_waits_in_line` (scenario A13 (g)). |
+| 3: the vehicle's first update after an order: ready at its first per-tick start, *enter* current and one approach step; not ready, no step, contact held by the end of the update when the place is free | satisfied, Q-1159 | S-0215 claim 11 and S-0605 claim 4 as built; `claim_3_vehicle_always_waits_in_line` (standing case). The example "a vehicle still driving from an earlier order" for the not-ready case conflicts with S-0215 claim 11's queued-*enter* exception: Q-1159, interim: S-0215 claim 11 decides, so a driving vehicle takes the step. |
+| Ordering consequences (claim 3's step at the release tick: a contact request for infantry, the waiting-in-line rule for a vehicle) | satisfied | as claim 3 above. |
+| Scenario A2c's vehicle variant (the still-driving case), scenario A13 (g) | changed, Q-1159 | A13 (g): `claim_3_vehicle_fate_waits_in_line`. A2c's driving case: Q-1159. |
+| Header | (c) | |
