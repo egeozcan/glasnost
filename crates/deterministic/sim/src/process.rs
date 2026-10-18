@@ -35,9 +35,30 @@ use crate::world::{AttackMoveMemory, Layer, ObjectId, Pos, Target, World};
 const NO_RULE_DELAY: i32 = 450;
 
 /// Whether the actor is moving on this tick (S-0215 claim 11): its
-/// locomotor is moving.
+/// locomotor is moving, and for a vehicle with the driving locomotor also
+/// while its body is still turning towards the facing it has been given.
 fn moving(w: &World, id: ObjectId) -> bool {
-    occupancy::in_progress(w, id)
+    occupancy::in_progress(w, id) || drive_body_turning(w, id)
+}
+
+/// The turning clause of S-0215 claim 11 (revision 63): a vehicle with the
+/// driving locomotor whose body is still turning, for any reason (a turn in
+/// place before a step, or a turn to face a target), is moving for
+/// readiness. It is S-0215's own test: S-0206's term "locomotor moving the
+/// vehicle" (`occupancy::in_progress`) is not widened.
+fn drive_body_turning(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind != Kind::Vehicle {
+        return false;
+    }
+    // spec: S-0215 claim 11 (revision 63: only a vehicle with the driving locomotor; a ship, hovering, jumpjet or other locomotor is not covered) and S-0417 claim 5 (a vehicle that drives temporarily has the driving locomotor)
+    let driving = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Drive)
+        || crate::econ::release::temporary_drive(w, id);
+    // spec: S-0215 claim 11 (revision 63: moving while the body is still turning towards its target facing; ready on the first start or late start after the turn ends) and S-0206 Terms (turning: the facing differs from its target at this tick)
+    driving && o.body.turning(w.tick)
 }
 
 /// Ready to change (S-0215 claim 11).
@@ -464,7 +485,7 @@ pub fn head(w: &mut World, id: ObjectId) {
     if kind == Kind::Vehicle {
         // spec: S-0517 claim 9 (a destination written by any rule while the vehicle is deployed or in transition is replaced by none)
         crate::econ::inplace::enforce(w, id);
-        // Q-1304 (interim: a destination written by any rule while the vehicle is bunkered is replaced by none)
+        // spec: S-0606 claim 18 (while the bunker link holds, a destination written by any rule is refused: it is replaced by none)
         crate::structures::bunker::enforce(w, id);
     }
     if kind == Kind::Building {
@@ -691,11 +712,18 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::depot::entering_depot(w, id) => {
             crate::depot::process_enter(w, id)
         }
+        // spec: S-0606 claim 20 (a type that is both a repair depot and a bunker: each processing carries out at most one row of table S1 and also runs the depot's repair processing; the delay is the depot's); Q-1163 interim (the S1 row first, then the depot's processing)
+        (Some(Behaviour::Repair), Kind::Building)
+            if crate::depot::is_depot(w, id) && crate::structures::bunker::is_bunker(w, id) =>
+        {
+            crate::structures::bunker::process_repair(w, id);
+            crate::depot::process_repair(w, id)
+        }
         // spec: S-0314 claim 6 and S-0504 claim 8 (a repair depot's repair processing)
         (Some(Behaviour::Repair), Kind::Building) if crate::depot::is_depot(w, id) => {
             crate::depot::process_repair(w, id)
         }
-        // spec: S-0606 claims 3 to 5 and S-0215 claim 29 (a vehicle's enter toward a tank bunker; a bunker that is also a depot takes the depot's rules, Q-1308)
+        // spec: S-0606 claims 3 to 5 and S-0215 claim 29 (a vehicle's enter toward a tank bunker; a bunker that is also a depot takes the depot's enter, S-0606 claim 20)
         (Some(Behaviour::Enter), Kind::Vehicle)
             if crate::structures::bunker::entering_bunker(w, id) =>
         {
@@ -723,6 +751,17 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         }
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
             crate::econ::harvest::process_enter(w, id)
+        }
+        // spec: S-0215 claim 29 (the entry request goes to the contact, otherwise to the remembered entry object: a vehicle in enter with neither, and no object destination, gets no accepting reply and falls back to rest) and S-0314 claim 20 (revision 28: the docked vehicle refused for standing on its depot falls back at its next processing)
+        (Some(Behaviour::Enter), Kind::Vehicle)
+            if w.obj(id).is_some_and(|o| {
+                o.contact.is_none()
+                    && o.depot.entering.is_none()
+                    && !matches!(o.dest, Some(Target::Object(_)))
+            }) =>
+        {
+            fall_back(w, id, false);
+            standard_delay(w, id)
         }
         // spec: S-0606 claim 12 and S-0415 claim 1 (a bunkered vehicle's unload is the bunker release, not passenger unloading)
         (Some(Behaviour::Unload), Kind::Vehicle) if crate::structures::bunker::bunkered(w, id) => {

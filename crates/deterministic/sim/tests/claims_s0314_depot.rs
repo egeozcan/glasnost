@@ -682,19 +682,38 @@ fn claim_20_docked_vehicle_keeps_contact() {
     assert_eq!(contact(&w, v), Some(d));
 }
 
-// spec: S-0314 claim 20 (an enter order on the same depot ends the docking: a damaged vehicle queues and the standing-on-depot refusal clears contact and queue next tick; at full health contact is lost at once)
+// spec: S-0314 claim 20 and table (revision 28, Q-1158 answered: a docked damaged vehicle standing on the depot given an enter order on that depot takes claim 23's queued entry in full: enter queued, the depot remembered, no destination, contact and tether kept; enter is current at its next first start and its processing queues nothing; the retry later in that turn is refused for standing on the depot and clears contact, queued entry and destination, queueing no behaviour; enter falls back to rest at its next processing. At full health the contact is lost at once)
 #[test]
 fn claim_20_same_depot_enter_while_docked() {
     let (mut w, d, v) = pad_scene(300);
     assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
+    let dq = w.obj(d).unwrap().beh.queued;
     tick::step(&mut w);
-    tick::step(&mut w);
-    assert_eq!(
-        contact(&w, v),
-        None,
-        "queued, then refused while standing on it"
-    );
-    assert_eq!(w.obj(v).unwrap().depot.queued, None);
+    // The order's tick (orders apply before the turns of that tick).
+    let o = w.obj(v).unwrap();
+    let after_order = (o.beh.current, o.beh.queued, contact(&w, v));
+    // Either the order's tick already made enter current, or it is still
+    // queued with the contact held, the depot remembered and no destination.
+    if after_order.0 != Some(Behaviour::Enter) {
+        assert_eq!(o.beh.queued, Some(Behaviour::Enter));
+        assert_eq!(contact(&w, v), Some(d), "the tether keeps the contact");
+        assert_eq!(o.depot.queued, Some(d));
+        assert_eq!(o.depot.entering, Some(d));
+        assert_eq!(o.dest, None);
+        tick::step(&mut w);
+    }
+    // The first turn with enter current: contact lost in that turn.
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Enter), "enter current");
+    assert_eq!(contact(&w, v), None, "refused while standing on it");
+    assert_eq!(o.depot.queued, None);
+    assert_eq!(o.dest, None, "no destination");
+    assert_ne!(o.beh.queued, Some(Behaviour::Sleep), "no sleep queued");
+    assert_eq!(w.obj(d).unwrap().beh.queued, dq, "the depot queues no new repair");
+    // Enter falls back to rest at its next processing.
+    assert!(run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current
+        != Some(Behaviour::Enter)));
+    assert_ne!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
     let (mut w, d, v) = pad_scene(300);
     w.obj_mut(v).unwrap().health = 600;
     assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
@@ -1596,5 +1615,64 @@ fn claim_17_movement_arrival_sets_the_ready_mark() {
         assert_eq!(o.beh.queued, Some(Behaviour::Sleep), "{name}: sleep queued");
         assert_eq!(o.beh.current, Some(Behaviour::Enter));
         assert!(!docked(&w, v), "{name}: no tether");
+    }
+}
+
+// spec: S-0314 claim 17 (revision 27: a tethered vehicle's sleep is queued from movement arrival before the rotation toward 16384 facing units and does not become current while the body rotates, but at the first start after the rotation ends; an untethered vehicle is not rotated and its sleep starts at the first start after arrival) and S-0215 claim 11 (the turning clause); Q-1162 interim (the rotation begins at the arrival)
+#[test]
+fn claim_17_rotation_gate_on_the_arrival_sleep() {
+    for tethered in [true, false] {
+        let r = rules();
+        let mut w = game(&r);
+        let d = depot_at(&mut w, "DEPOT");
+        let v = truck(&mut w, 0, 1, 1, 300);
+        open(&mut w);
+        assert!(depot::request(&mut w, v, d, false));
+        if tethered {
+            tether(&mut w, v);
+        }
+        w.obj_mut(v).unwrap().beh.current = Some(Behaviour::Enter);
+        arrived(&mut w, v, Target::Object(d));
+        assert_eq!(w.body_facing(v), 0);
+        depot::movement_arrival(&mut w, v);
+        assert_eq!(w.obj(v).unwrap().beh.queued, Some(Behaviour::Sleep));
+        let t0 = w.tick;
+        assert_eq!(
+            w.obj(v).unwrap().body.turning(t0),
+            tethered,
+            "only a tethered vehicle is rotated"
+        );
+        if !tethered {
+            tick::step(&mut w);
+            assert_eq!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
+            assert_eq!(w.body_facing(v), 0, "not rotated");
+            continue;
+        }
+        let mut ended = None;
+        for _ in 0..200 {
+            tick::step(&mut w);
+            let k = w.tick - 1;
+            let o = w.obj(v).unwrap();
+            if o.body.turning(k) {
+                assert_ne!(
+                    o.beh.current,
+                    Some(Behaviour::Sleep),
+                    "tick {k}: still rotating"
+                );
+            } else {
+                ended = Some(k);
+                assert_eq!(o.body.value(k), 16384);
+                assert_eq!(
+                    o.beh.current,
+                    Some(Behaviour::Sleep),
+                    "tick {k}: rotation ended"
+                );
+                break;
+            }
+        }
+        assert!(
+            ended.is_some_and(|k| k > t0 + 1),
+            "the rotation takes several ticks"
+        );
     }
 }

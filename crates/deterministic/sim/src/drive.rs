@@ -1614,6 +1614,13 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         }
     } else {
         if o.dest.is_none() {
+            if dd.turning_in_place
+                && let Some(d2) = w.obj_mut(id).and_then(|ob| ob.drive.as_mut())
+            {
+                // spec: S-0206 Terms (a vehicle standing still with neither a move destination nor a next point is not being moved, even while its body turns) and S-0215 claim 11 (revision 63, scenario B47: with no route left, readiness waits only for the body's turn to end): a turn in place whose destination was removed is no longer a turn in place; the body keeps turning to its target
+                d2.turning_in_place = false;
+                d2.turn = None;
+            }
             return false;
         }
         // spec: S-0207 claim 26 (the first locomotion update without an active track removes a cell goal in the vehicle's cell, and a guard goal at the exact point, in that update's tick; also the assignment tick when assignment precedes the update)
