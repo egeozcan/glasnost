@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 65
+revision: 66
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -2138,8 +2138,16 @@ apply in our engine to the actors of every player house.
     | permission given, not yet in contact | successful entry request | contact takes the first free place before physical arrival; the depot has max(d, 1) places for imported docking-place count d (S-0314 claim 17) |
     | a one-place depot already holds another vehicle's contact | second vehicle makes an ordinary click | permission fails; no second enter order, waiting queue or displacement of the first contact (S-0314 claims 16–17) |
     | approaching with contact | destination guidance | S-0314 claim 18 supplies the building destination and per-vehicle docking point for ordinary land depots and naval yards, and the separate obsolete-unloading exception |
-    | moving into the supplied docking-point cell | movement-arrival exchange | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start; exact horizontal alignment with the docking point and a pre-existing tether are not required (S-0314 claims 17–18) |
-    | completing entry | separate completed-entry confirmation, when supplied | confirmation can establish tether, but an ordinary repair depot without pad or unloading flags does not supply it to an untethered entering vehicle; the vehicle can turn toward 16384 facing units (map east) and reports arrival once no longer moving, already tethered to the contacted building and still in enter (S-0314 claim 17) |
+    | moving into the supplied docking-point cell | movement-arrival exchange | building queues repair and sets its ready mark; vehicle queues sleep, neither with an immediate start; no map-east body turn is requested, even when tethered; exact horizontal alignment with the docking point and a pre-existing tether are not required (S-0314 claims 17–18) |
+    | completing entry | separate completed-entry confirmation, when supplied | confirmation can establish tether and turn the vehicle toward 16384 facing units (map east), with arrival reported once no longer moving, already tethered to the contacted building and still in enter; an ordinary repair depot without resource-unloading or obsolete-unloading flags supplies no such confirmation through repeated entry requests, with or without the pad flag or an existing tether (S-0314 claim 17) |
+
+    Ordinary movement arrival schedules no later map-east turn merely because it queued
+    *sleep*. If ready at that update's late start (claim 11), the vehicle starts *sleep*
+    there without another *enter* processing. An already-turning driving vehicle can instead
+    hold *sleep* queued under claim 11's ordinary readiness rule until the first permitted
+    start after its turn ends. Arrival creates neither that turn nor another readiness gate.
+    Ship and hovering locomotion do not inherit the driving-only body-turn hold; their
+    other readiness conditions still apply (S-0314 claim 17).
 
     **Tank bunker.** The movement-arrival test applies also when the contacted building is a
     tank bunker: it is made when the vehicle's movement brings it into a cell, not by the
@@ -4165,8 +4173,14 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   First let an entry complete without further input. Expected: contact precedes arrival.
   movement arrival in the supplied docking-point cell queues repair/sleep without requiring
   exact horizontal alignment or a pre-existing tether, and without bypassing readiness.
-  Record map-east facing and the separate tethered, stationary completed-entry confirmation
-  independently; no reservation-only paid step. Reuse S-0314 H19's tether and off-centre
+  Arrival itself requests no map-east turn, including when tethered, and schedules none
+  for a later enter processing. If otherwise ready, sleep starts at that update's late
+  start. An existing driving turn can hold it queued under claim 11; ship or hover body
+  rotation alone cannot. Reuse S-0314 H16's three-locomotion-kind and existing-turn
+  controls, including its inconclusive rule for states the fixture cannot reach. A new
+  turn requested solely by movement arrival falsifies the claim. Record any separate
+  completed-entry confirmation independently; no reservation-only paid step.
+  Reuse S-0314 H19's tether and off-centre
   controls and H22's late-retry controls, with their expected results and falsifiers:
   same-turn destination assignment does not repeat movement or due behaviour processing,
   and competing retries use object-turn order. An early unarmed guard transition must meet
@@ -5577,8 +5591,10 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   outcomes should use claim 11 here: without another blocker, a tick-number turn
   expiry permits that tick's first start and same-tick processing, not just a late
   start. This replaces the earlier cross-spec note requesting late-start timing.
-  S-0314 claim 17 already delegates an existing turn's hold to claim 11 and promises
-  no late-start-only delay; no further change is requested there.
+  S-0314 claim 17 agrees with claim 29: ordinary depot arrival queues repair/sleep
+  without requesting a map-east turn, even when tethered. Only an actual existing driving
+  turn can impose claim 11's body-turn readiness hold; ship and hovering body rotation
+  alone cannot. Retain the matching contract; no further change is requested there.
 - S-0603 claim 3 should distinguish the movement state read at the late start from
   a remembered displacement earlier in the update. For a driving vehicle, apply the
   complete current predicate here, even after an update that moved the unit.
