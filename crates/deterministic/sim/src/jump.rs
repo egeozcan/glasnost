@@ -982,7 +982,8 @@ fn neighbour_step(w: &mut World, id: ObjectId) {
 /// Stops the movement of a moving jumpjet (claim 17): the reservation is
 /// released and a nearby cell is searched; found, it re-orders itself to its
 /// centre; not found, it destroys itself with no credit (or, with
-/// `quirks.jumpjet_no_cell_self_destruct` off, hovers again).
+/// `quirks.jumpjet_no_cell_self_destruct` off, clears its point and
+/// commitment and hovers again in the air, or stays grounded).
 pub fn stop(w: &mut World, id: ObjectId) {
     stop_with(w, id, true, false);
 }
@@ -1030,6 +1031,31 @@ pub fn lift_release_stop(w: &mut World, id: ObjectId, lifter_ended: bool) {
     stop_with(w, id, false, lifter_ended);
 }
 
+/// Whether a seized set-down unit hovers with no movement commitment: the
+/// switch-off outcome of S-0502 claim 17 with no cell (S-0607 claims 9 and
+/// 20). Restoration is not tested for it; [`lift_retry_stop`] runs instead.
+pub fn hovering_uncommitted(w: &World, id: ObjectId) -> bool {
+    st(w, id).is_some_and(|j| j.phase == Phase::Hovering && !j.moving)
+}
+
+/// The repeated stop's search of a hovering set-down unit at a fall-back to
+/// rest (S-0607 claim 20, design): S-0502 claim 17's nearby-cell search
+/// around its current cell. Found: it re-orders itself to that cell's
+/// centre through S-0502 claim 16, as claim 13's stop does (a movement
+/// point; the order-level destination stays none). Not found: nothing
+/// changes. Returns whether a cell was found.
+pub fn lift_retry_stop(w: &mut World, id: ObjectId) -> bool {
+    let here = pos(w, id).cell();
+    // spec: S-0607 claim 20 (revision 8, the hovering set-down unit: S-0502 claim 17's nearby-cell search around its current cell, for its type's own locomotion class and movement zone, with no draw)
+    let Some(c) = search(w, id, here, Use::Stop) else {
+        // spec: S-0607 claim 20 (revision 8: no cell found, it keeps hovering, is not restored and is not destroyed)
+        return false;
+    };
+    // spec: S-0607 claim 20 (revision 8: a cell found, it re-orders itself to that cell's centre through S-0502 claim 16, exactly as claim 13's stop does; it is then claim 13's set-down unit that is still moving)
+    give_point(w, id, c);
+    true
+}
+
 fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool) {
     if !moving(w, id) {
         // spec: S-0502 claim 17 (stopping a jumpjet that is not moving does nothing)
@@ -1048,7 +1074,7 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool)
         return;
     }
     if lifter_ended {
-        // spec: S-0502 claim 17 (magnetic-release safety departure, design) and S-0607 claim 13 (no cell found for a grip ended by its lifter: no self-destruction, whatever quirks.jumpjet_no_cell_self_destruct says; the unit keeps no movement point and its jumpjet movement is no longer moving; a dropped unit falls as claim 15 says, a set-down one stays where it is). Whether a dropped unit keeps the seize's point and commitment here is open: Q-1342 (interim: cleared, as for a set-down unit)
+        // spec: S-0502 claim 17 (revision 16, magnetic-release safety departure, design) and S-0607 claim 13 (revision 8: no cell found for a grip ended by its lifter: no self-destruction, whatever quirks.jumpjet_no_cell_self_destruct says; a dropped unit and a set-down unit alike keep no movement point, the one fixed at the seize cleared, and lose their movement commitment; a dropped unit falls as claim 15 says, a set-down one stays where it is)
         upd(w, id, |j| {
             j.dest = None;
             j.order = None;
@@ -1057,7 +1083,16 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool)
         return;
     }
     if !w.rules().quirks.jumpjet_no_cell_self_destruct {
-        // spec: S-0502 Edge cases (quirks.jumpjet_no_cell_self_destruct off: it re-enters hovering over its current cell, so it keeps no movement point elsewhere and no movement commitment)
+        if phase(w, id) == Some(Phase::Grounded) {
+            // spec: S-0502 Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct off: it clears its movement point and commitment; a grounded jumpjet stays grounded, with no hover slot and its state and target height unchanged)
+            upd(w, id, |j| {
+                j.dest = None;
+                j.order = None;
+                j.moving = false;
+            });
+            return;
+        }
+        // spec: S-0502 Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct off: in the air it re-enters hovering over its current cell, with no movement point and no movement commitment, neither descending nor flying on)
         claim_slot(w, id, here);
         let h = fields(w, id).map_or(0, |f| f.height);
         upd(w, id, |j| {

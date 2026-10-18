@@ -1540,7 +1540,7 @@ pub struct Quirks {
     // spec: S-0502 claim 9, F3 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_lookahead_bridge: bool,
-    /// A jumpjet that cannot land and finds no cell nearby destroys itself; off: it re-enters *hovering* over its current cell.
+    /// A jumpjet that cannot land and finds no cell nearby destroys itself; off: it clears its movement point and commitment and, in the air, re-enters *hovering* over its current cell, neither descending nor flying on, while a grounded jumpjet stays grounded (a seized set-down unit then follows S-0607 claims 9 and 20).
     // spec: S-0502 claim 17 and Edge cases
     #[serde(default = "on")]
     pub jumpjet_no_cell_self_destruct: bool,
