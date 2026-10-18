@@ -1957,11 +1957,34 @@ impl Builder<'_> {
             ("tiberium_chain_reaction", "TiberiumChainReaction"),
             ("scorch", "Scorch"),
             ("crater", "Crater"),
+            // spec: S-0615 Import mapping (IsFlamingGuy: the burning-walker flag, a boolean of the art data; absent no)
+            ("is_flaming_guy", "IsFlamingGuy"),
         ] {
             // spec: S-0109 Import mapping (booleans; absent: no)
             if let Some(b) = sec.value(key.as_bytes()).and_then(value::boolean) {
                 rec.put(field, jsonc::boolean(b));
             }
+        }
+        // spec: S-0615 Import mapping (RunningFrames: an integer of the art data; absent 0 frames)
+        let running = sec.value(b"RunningFrames").and_then(value::integer);
+        if let Some(n) = running {
+            rec.put("running_frames", int_node(n));
+        }
+        let flaming = sec
+            .value(b"IsFlamingGuy")
+            .and_then(value::boolean)
+            .unwrap_or(false);
+        if flaming && running.unwrap_or(0) <= 0 {
+            // spec: S-0615 Import mapping and Open questions (a burning-walker type needs a positive running-frame count; an invalid count is outside the verified scope: our engine shows the first frame, the importer warns)
+            let line = t.reads.last().copied().unwrap_or(t.created_in);
+            self.warn(line, 0, format!(
+                "animations {}: a burning walker (IsFlamingGuy) without a positive RunningFrames; our engine shows image frame 0 while it runs (S-0615 Open questions)",
+                show(&t.name)
+            ));
+        }
+        // spec: S-0109 Import mapping (Damage: a decimal, δ of claim 17; absent 0)
+        if let Some(d) = sec.value(b"Damage").and_then(decimal_text) {
+            rec.put("damage", jsonc::string(d));
         }
         if let Some(v) = sec.value(b"SpawnsParticle") {
             // spec: S-0202 Import mapping and S-0004 claim 13 (SpawnsParticle: a particle type name of at most 31 bytes)
@@ -2638,3 +2661,7 @@ mod crate_tests;
 #[cfg(test)]
 #[path = "sim_gas_tests.rs"]
 mod gas_tests;
+
+#[cfg(test)]
+#[path = "sim_special_tests.rs"]
+mod special_tests;

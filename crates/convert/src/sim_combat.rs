@@ -342,7 +342,10 @@ const WEAPON_COMBAT: &[Row] = &[
     ("is_mag_beam", "IsMagBeam", Bool, "S-0301"),
     ("spawner", "Spawner", Bool, "S-0301"),
     ("camera", "Camera", Bool, "S-0501"),
-    ("disk_laser", "DiskLaser", Bool, "S-0301"),
+    ("disk_laser", "DiskLaser", Bool, "S-0301, S-0615"),
+    // spec: S-0615 Import mapping (LaserDuration: integer ticks, absent 10; IsHouseColor: a boolean, absent no)
+    ("laser_duration", "LaserDuration", Int, "S-0615"),
+    ("is_house_color", "IsHouseColor", Bool, "S-0615"),
     ("decloak_to_fire", "DecloakToFire", Bool, "S-0301"),
     (
         "disguise_fake_blink_time",
@@ -846,6 +849,14 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         Ref(Kind::Warheads),
         "S-0302, S-0303",
     ),
+    // spec: S-0109 Import mapping ([CombatDamage] FlameDamage2: the warhead of an animation's damage over time, absent none)
+    (
+        "flame_damage2",
+        COMBAT_DAMAGE,
+        "FlameDamage2",
+        Ref(Kind::Warheads),
+        "S-0109, S-0615",
+    ),
     (
         "crush_warhead",
         COMBAT_DAMAGE,
@@ -1054,7 +1065,43 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         GENERAL,
         "InfantryExplode",
         Ref(Kind::Animations),
-        "S-0302",
+        "S-0302, S-0615",
+    ),
+    // spec: S-0615 Import mapping ([General] FlamingInfantry, InfantryHeadPop, InfantryNuked, InfantryBrute: animation type names, absent none; [AudioVisual] DiskLaserChargeUp: a sound name, absent silent)
+    (
+        "flaming_infantry",
+        GENERAL,
+        "FlamingInfantry",
+        Ref(Kind::Animations),
+        "S-0615",
+    ),
+    (
+        "infantry_head_pop",
+        GENERAL,
+        "InfantryHeadPop",
+        Ref(Kind::Animations),
+        "S-0615",
+    ),
+    (
+        "infantry_nuked",
+        GENERAL,
+        "InfantryNuked",
+        Ref(Kind::Animations),
+        "S-0615",
+    ),
+    (
+        "infantry_brute",
+        GENERAL,
+        "InfantryBrute",
+        Ref(Kind::Animations),
+        "S-0615",
+    ),
+    (
+        "disk_laser_charge_up",
+        AUDIO_VISUAL,
+        "DiskLaserChargeUp",
+        Text,
+        "S-0615",
     ),
     ("missile_rot_var", GENERAL, "MissileROTVar", Dec, "S-0306"),
     (
@@ -1764,6 +1811,14 @@ fn find_in<'o>(outcome: &'o Outcome, kind: Kind, name: &[u8]) -> Option<&'o Type
         .find(|t| value::type_name_eq(&t.name, name))
 }
 
+/// The disc laser's colour keys (S-0615 Import mapping): our field, the
+/// weapon key.
+const LASER_COLOURS: [(&str, &str); 3] = [
+    ("laser_inner_color", "LaserInnerColor"),
+    ("laser_outer_color", "LaserOuterColor"),
+    ("laser_outer_spread", "LaserOuterSpread"),
+];
+
 /// Every (category, key, spec) this module converts, for `coverage.csv`:
 /// rules keys by kind or `global:Section`, art keys under `art`.
 pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
@@ -1975,6 +2030,10 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         ]),
         "S-0301",
     );
+    keyed(&["weapons"], &s(&LASER_COLOURS.map(|(_, k)| k)), "S-0615");
+    // spec: S-0615 Import mapping (IsFlamingGuy and RunningFrames: animation type keys of the art data); S-0109 Import mapping (Damage, δ)
+    keyed(&["art"], &s(&["IsFlamingGuy", "RunningFrames"]), "S-0615");
+    keyed(&["art"], &s(&["Damage"]), "S-0109, S-0615");
     keyed(&["art"], &s(&["TargetCoordOffset", "Height"]), "S-0306");
     keyed(&["art"], &s(&["Trailer", "SpawnDelay"]), "S-0306, S-0007");
     // spec: S-0313 claim 10 (the turret anchor pair: rules keys of the building type)
@@ -2964,6 +3023,34 @@ impl Builder<'_> {
     pub(super) fn weapon_combat(&mut self, rec: &mut Rec, t: &TypeRec) {
         self.cfields(rec, t, Kind::Weapons, WEAPON_COMBAT);
         let name = format!("weapons {}", show(&t.name));
+        for (field, k) in LASER_COLOURS {
+            // spec: S-0615 Import mapping (LaserInnerColor, LaserOuterColor, LaserOuterSpread: three integer colour channels, S-0003; each absent (0, 0, 0); unread components keep the value in force)
+            let mut rgb = [0u8; 3];
+            let mut given = false;
+            for e in key(t, k).into_iter().flat_map(|s| &s.history) {
+                match &e.what {
+                    What::Set(v) => {
+                        let (next, unread) = value::byte_triple(v, rgb);
+                        rgb = next;
+                        given = true;
+                        if unread {
+                            self.warn(e.layer, e.line, format!(
+                                "{name} {k} {:?} has unreadable components; they keep the value in force (S-0003 claim 11, a departure)",
+                                show(v)
+                            ));
+                        }
+                    }
+                    What::Reset => {
+                        rgb = [0; 3];
+                        given = false;
+                    }
+                    _ => {}
+                }
+            }
+            if given {
+                Self::put_tuple(rec, field, rgb.map(i32::from));
+            }
+        }
         let effect = ["UseSparkParticles", "UseFireParticles", "IsRailgun"]
             .iter()
             .any(|k| bool_of(key(t, k)) == Some(true));
