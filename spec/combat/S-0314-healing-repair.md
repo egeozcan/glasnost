@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -659,7 +659,14 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     docking-point cell during movement sets the depot's ready mark and queues *repair* at
     the depot and *sleep* at the vehicle, neither with an immediate start. S-0215 claim 29
     already states this ready-mark effect; starts still follow S-0215 claim 11, rather than
-    a forced or synchronous repair processing. It does not require exact agreement with the docking point's horizontal coordinates or a
+    a forced or synchronous repair processing. For a tethered vehicle, *sleep* is queued from arrival,
+    before the completed-entry exchange rotates the vehicle toward 16384 facing units (map east). It
+    does not become current while the body is still rotating. A body still rotating counts as moving
+    in the readiness sense of S-0215 claim 11. That is not the movement report of this claim, for
+    which a rotation in place is not sufficient. So *sleep* becomes current at the first start
+    opportunity after the rotation ends. The rotation is the only thing that delays it beyond that:
+    an untethered vehicle is not rotated by the exchange, so its *sleep* starts at the first start
+    opportunity after arrival. It does not require exact agreement with the docking point's horizontal coordinates or a
     tether. Claim 6's waiting checks begin when the depot processes repair, not on the click.
     There is also an earlier start opportunity for an unarmed depot in the waiting stage of
     its guard processing, after initial idle-body selection (S-0215 claim 29): a contacted
@@ -690,7 +697,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       among stock types; no observation of them is claimed.
     - Confidence: high (capacity, repeated request, cell test, movement reports, empty-place
       result, ready mark, same-cell destination assignment and absence of initial tether), medium (stock approach observations,
-      early guard start and the uninterrupted one-place approach)
+      early guard start, the uninterrupted one-place approach and the rotation gate on a tethered vehicle's arrival sleep)
 
 18. **Depot docking point and stopping (Q-0641, Q-0680).** For an ordinary repair depot,
     including a naval yard, without obsolete-unloading, resource-unloading or tank-bunker flags,
@@ -1772,6 +1779,13 @@ body facing, contact places, tether, behaviour, building processing and health e
   Repair on the initial click,
   a neighbouring-water or exit-cell destination substituted for the docking point, a point
   changing with approach side, or a different recorded transition falsifies the relevant rule.
+  Map-east arrival facing in the expectation above applies only to a tethered vehicle (claim 17); an
+  untethered vehicle is not rotated by the completed-entry exchange, and its *sleep* starts at
+  the first start opportunity after arrival. For a tethered vehicle, expected: *sleep* becomes
+  current at the first start opportunity after its rotation toward 16384 facing units ends, and not
+  before. *Sleep* current while the rotation continues, or later than that first start opportunity,
+  falsifies claim 17's rotation gate. Map-east facing on an untethered vehicle falsifies the untethered
+  rule.
 - *b, eligibility:* repeat at full health, then with no credits. Expected: entry is still allowed,
   full health leaves without payment at settling, and an injured unaffordable vehicle stays for
   retries. Repeat with a depot switched off and one in selling: no new enter action. Repeat on
