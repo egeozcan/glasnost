@@ -34,7 +34,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0310](combat/S-0310-turrets-facing-for-fire.md) | Turrets and facing for fire (aiming tolerance, which facing aims, omni-fire, firing while moving) | combat | 5 | approved | — |
 | [S-0111](rendering/S-0111-in-game-overlays.md) | In-game overlays (health bars, pips, selection marks, insignia) | rendering | 13 | approved | — |
 | [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 1 | approved | — |
-| [S-0206](movement/S-0206-turn-rates.md) | Turn rates and turning | movement | 14 | approved | — |
 | [S-0410](ui/S-0410-radar-minimap.md) | Radar and minimap (when radar is available, what the radar map shows and how it is coloured) | ui | 20 | approved | — |
 | [S-0507](combat/S-0507-transports.md) | Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers) | combat | 8 | approved | — |
 | [S-0211](movement/S-0211-land-types-passability.md) | Land types and passability | movement | 18 | approved | — |
@@ -82,7 +81,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0409](visibility/S-0409-shroud-sight.md) | Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire) | visibility | 15 | approved | — |
 | [S-0406](structures/S-0406-building-placement.md) | Building placement (foundation cells, the cell test, adjacency, building off allies, shroud, walls and gates, upgrades) | structures | 11 | approved | — |
 | [S-0412](simulation/S-0412-skirmish-setup-rules.md) | Skirmish setup rules (setup values, starting credits, random lobby choices, handicap, alliances at game start, superweapon and crate settings) | simulation | 14 | approved | — |
-| [S-0402](economy/S-0402-harvest-cycle.md) | Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners) | economy | 29 | approved | — |
 | [S-0413](simulation/S-0413-country-bonuses.md) | Country bonuses (what each country field does, which spec owns it, and the fields with no effect) | simulation | 5 | approved | — |
 | [S-0414](simulation/S-0414-victory-and-defeat.md) | Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders) | simulation | 15 | approved | — |
 | [S-0416](ui/S-0416-credit-display.md) | Credit display (the ticking credits counter on the sidebar) | ui | 3 | approved | — |
@@ -102,7 +100,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0525](combat/S-0525-radiation-fields.md) | Radiation fields | combat | 3 | approved | — |
 | [S-0520](economy/S-0520-crates.md) | Crates (placement, replacement, pickup and power-up effects) | economy | 6 | approved | — |
 | [S-0519](combat/S-0519-terror-attack-animals.md) | Terror and attack animals | combat | 5 | approved | — |
-| [S-0606](structures/S-0606-vehicle-bunker.md) | Vehicle bunker | structures | 3 | approved | — |
 | [S-0609](combat/S-0609-gattling-spin-up.md) | Gattling spin-up | combat | 6 | approved | — |
 | [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 2 | approved | — |
 | [S-0610](combat/S-0610-psychic-weapons.md) | Psychic weapons | combat | 10 | approved | — |
@@ -129,9 +126,12 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0522](movement/S-0522-paradrops.md) | Parachutes and drops | movement | 7 | approved | — |
 | [S-0404](production/S-0404-production-queue-payment.md) | Production queue and payment (production lines, price, pay-as-you-go steps, waiting for money, hold, cancel and refunds, queue limit, completion) | production | 21 | approved | — |
 | [S-0212](movement/S-0212-pathfinding.md) | Pathfinding (observable behaviour) | movement | 49 | approved | — |
-| [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 26 | approved | — |
 | [S-0613](combat/S-0613-gas-clouds.md) | Gas clouds | combat | 10 | approved | — |
 | [S-0605](structures/S-0605-infantry-absorber.md) | Infantry absorber (who may enter an absorbing building, entry, holding, release) | structures | 7 | approved | — |
 | [S-0616](combat/S-0616-particle-systems.md) | Particle systems (smoke, fire, spark, railgun) | combat | 7 | approved | — |
-| [S-0603](structures/S-0603-grinder.md) | Grinder (recycling units into credits) | structures | 6 | approved | — |
 | [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 63 | approved | — |
+| [S-0206](movement/S-0206-turn-rates.md) | Turn rates and turning | movement | 15 | approved | — |
+| [S-0603](structures/S-0603-grinder.md) | Grinder (recycling units into credits) | structures | 7 | approved | — |
+| [S-0402](economy/S-0402-harvest-cycle.md) | Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners) | economy | 30 | approved | — |
+| [S-0314](combat/S-0314-healing-repair.md) | Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair) | combat | 27 | approved | — |
+| [S-0606](structures/S-0606-vehicle-bunker.md) | Vehicle bunker | structures | 4 | approved | — |

@@ -1,9 +1,9 @@
 ---
 id: Q-1304
 title: Does a bunkered vehicle refuse a destination?
-status: open
+status: answered
 related: [S-0606, S-0207]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need

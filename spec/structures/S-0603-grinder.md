@@ -2,7 +2,7 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 6
+revision: 7
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -72,7 +72,7 @@ Cross-spec changes required at hand-off:
 - **Link places.** As S-0605 (Terms): the building's imported dock count, at least 1.
 - **Yellow ratio.** The rules-wide health ratio at or below which an object counts as damaged
   for its slot animations (S-0108 F3 and Import mapping).
-- **Per-tick start, late start, moving.** The first per-tick start and the late start of an infantry unit or vehicle, as S-0215 claim 11 defines them. *Locomotor moving the vehicle*, as S-0206 Terms defines it: a turn in place before a step counts as moving, and a body that only turns does not. Claim 3 uses these terms in these senses.
+- **Per-tick start, late start, moving.** The first per-tick start and the late start of an infantry unit or vehicle, as S-0215 claim 11 defines them. A vehicle counts as moving by the readiness test of S-0215 claim 11. For a vehicle with the driving locomotor, a body that is still turning, for any reason (a turn in place before a step, or a turn to face a target), counts as moving; the turning clause does not apply to other vehicles. Claim 3 uses these terms in these senses.
 
 ## Behaviour
 
@@ -138,12 +138,11 @@ Cross-spec changes required at hand-off:
    to any queued behaviour. The unit leaves *eaten* and *guard* becomes current at the first
    per-tick start or late start (S-0215 claim 11) at which the unit is ready. A failed search that leaves the unit more than 1 cell from the building clears
    the unit's destination (S-0212 claim 23, row 2). Readiness counts a unit as moving on a tick in which its locomotor moves
-   it, including movement made earlier in that update (S-0215 claim 11; S-0206 Terms). A cleared
+   it, including movement made earlier in that update (S-0215 claim 11). A cleared
    destination does not by itself stop a vehicle, which may finish the step it had begun (S-0212 claim 23, row 2: the unit stops when its current motion ends).
    So a unit that has not moved earlier in the failing tick, and whose locomotor is not moving it at that tick's late start, is ready there unless another readiness condition holds, and *guard* is current when that tick ends. A unit that moved earlier
-   in the failing tick, or whose locomotor still moves it at that late start (for a vehicle this
-   includes a turn in place before a step of its path, but not a body that only turns towards a
-   target), is not ready there; *guard* then becomes current at the first start or late start after
+   in the failing tick, or whose locomotor still moves it at that late start (for a vehicle with the driving locomotor this
+   includes a body that is still turning, for any reason, S-0215 claim 11), is not ready there; *guard* then becomes current at the first start or late start after
    its locomotor has stopped. A *guard* that becomes current at a first per-tick start is processed
    on that tick, and one that becomes current at a late start is first processed on the unit's next
    update (S-0215 claims 3a, 3b and 11). A vehicle that was idle when the order was given is not
@@ -156,7 +155,7 @@ Cross-spec changes required at hand-off:
    this state is not established (a vehicle just built, standing on the exit cell and given a recycle
    order whose approach fails at once would be one route), so the case is only noted.
    - Backing: `measurable` (scenario G9, approach-failure test; S-0212 scenario P12, run S, sets up
-     the same order). Which shifts fail is not predicted by this claim and is tracked in Open questions. The turn-in-place case named in the Confidence line has no scenario yet and is `unmeasured` (Open questions).
+     the same order). Which shifts fail is not predicted by this claim and is tracked in Open questions. The turning-body case named in the Confidence line, in place or to face a target, has no scenario yet and is `unmeasured` (Open questions).
    - Confidence: high (no contact; the destination is cleared on a failed search; that *eaten* does
      not block the queued *guard*, both readiness tests as S-0215 claim 11 states them); medium
      (that a short line makes the approach fail at once; when *guard* becomes current for a unit
@@ -571,4 +570,4 @@ respective prediction.
   recycle a full harvester and an empty one (scenario G1 variant).
 - Which lengths and alignments of a short line of buildings make the approach fail. Low confidence. Tracked by Q-1280.
 - Whether a recycle order can reach a vehicle standing on a vehicle factory's exit cell whose approach fails at once (claim 3). Not established.
-- Whether a vehicle that is turning in place when its approach fails keeps *guard* queued until the turn ends, as claim 3 predicts from S-0206. No scenario yet fixes its setup, so the case is `unmeasured`, medium confidence.
+- Whether a vehicle whose body is turning, in place or to face a target, when its approach fails keeps *guard* queued until the turn ends, as claim 3 predicts from S-0215 claim 11. No scenario yet fixes its setup, so the case is `unmeasured`, medium confidence.

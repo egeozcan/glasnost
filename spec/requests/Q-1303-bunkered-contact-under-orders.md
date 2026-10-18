@@ -1,9 +1,9 @@
 ---
 id: Q-1303
 title: Does a bunkered vehicle keep its bunker contact when it gets an order?
-status: open
+status: answered
 related: [S-0606, S-0213]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need
