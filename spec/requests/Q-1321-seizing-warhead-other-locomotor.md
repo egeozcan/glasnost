@@ -1,9 +1,9 @@
 ---
 id: Q-1321
 title: A seizing warhead that names another locomotor, or none
-status: open
+status: answered
 related: [S-0607]
-answered-by: []
+answered-by: [S-0607]
 ---
 
 ## Need

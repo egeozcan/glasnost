@@ -2,13 +2,13 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-18
 measurements: []
-requests: [Q-1320, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331]
+requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331]
 supersedes: []
 ---
 
@@ -26,7 +26,8 @@ movement and links it to the firer, which pulls it in. This spec owns:
 - the fall, the impact on what lies underneath, and the falling damage and its credit,
 - the outcomes on water, beach, clear and blocked cells,
 - when the unit gets its own locomotor back,
-- the magnetic wave's lifetime and how it interacts with a second, building-attacking weapon.
+- the magnetic wave's lifetime and how it interacts with a second, building-attacking weapon,
+- what a seizing warhead does when it names a locomotor other than the jumpjet's, or none.
 
 Skirmish only. Network games and campaigns are out of scope.
 
@@ -36,7 +37,8 @@ Rules owned elsewhere and not restated here:
   answer against the firer's own gripped unit is S-0301 claim 9, rank 4. The weapon chosen
   against a building is S-0308 claim 3, table P row 7.
 - **Protection.** Temporary invulnerability refuses a seize: S-0513 claim 27.
-- **Movement of a seized unit as a jumpjet.** S-0502 owns it:
+- **Movement of a seized unit as a jumpjet.** S-0502 owns it (for another stand-in locomotor, claim
+  23 here names the owning specs):
   - claim 10: body facing,
   - claim 12: the arrival row,
   - claim 16: turning a destination into a movement point (claim 7 here),
@@ -71,14 +73,16 @@ New terms:
 - **Seizing warhead.** A warhead with the imported locomotor flag. It names a locomotor that it
   installs on its target as a temporary replacement for the target's own. This spec covers the
   case where that locomotor is the jumpjet locomotor, which is the case that stock data uses.
-  Claim 22 says what a hit does when the warhead names another locomotor; the movement of a unit
-  seized with another locomotor is outside this spec.
+  Claim 22 says what a hit does when the warhead names another locomotor, or none, and how a unit
+  seized with another locomotor moves and whether it is restored.
+- **Stand-in locomotor.** The locomotor a seize installs in place of the unit's own: the
+  jumpjet locomotor with stock data, another one under claim 22.
 - **Movement point:** S-0502 (Terms): the point the jumpjet locomotor flies to, distinct from the
   unit's order-level destination.
 - **Heading point** of a mobile object: the point its own movement is heading for at that moment
   (its next movement point, or its position when it has none), as in S-0212 claim 25, table T5.
-- **Seized.** A unit is *seized* from a successful seize (claim 5) until it gets its own locomotor
-  back (claim 20). The state survives the end of the grip and a drop.
+- **Seized.** A unit is *seized* from a successful seize (claim 5) until a restoration clears it
+  (claim 20; for other stand-ins, claim 24). The state survives the end of the grip and a drop.
   - Other specs say "held by magnetic lift" (S-0502), "held by a magnetic beam" (S-0501, S-0506,
     S-0516), "restrained by a magnetic beam" (S-0506), "magnetic grip" (S-0516) and "carried by
     another object's locomotion" (S-0517). All of these mean *seized*.
@@ -152,9 +156,9 @@ New terms:
    - loses its spawned objects as S-0506 claim 13 says, and its naval parasite as S-0614 claim
      12 says.
 
-   Its jumpjet locomotor is then linked (for a warhead naming another locomotor, claim 22), with
-   the jumpjet fields of the unit's own type. If the
-   link succeeds:
+   Its jumpjet locomotor is then linked, with the jumpjet fields of the unit's own type. For a
+   warhead naming another locomotor, claims 22 and 23 replace this and the destination bullet
+   below. If the link succeeds:
    - the firer's previous grip ends (claim 13) without clearing the firer's target,
    - a grip the unit itself held ends (claim 13), clearing the unit's own target,
    - the grip is made, and the unit is given the lifter as its destination. Its jumpjet movement
@@ -231,7 +235,7 @@ New terms:
    - A rule that gives a gripped unit *no* destination is the exception. That ends its grip
      without a drop, and the unit is set down where it is, at whatever height. It then descends
      and lands under claim 17's clear-cell rule.
-   - Its own locomotor does not return until claim 20 allows it.
+   - With the jumpjet stand-in, its own locomotor does not return until claim 20 allows it; other stand-ins follow claims 23 and 24.
    - Backing: `unmeasured`: the destination refusals and the no-destination exception are traced,
      but deselection prevents a fresh player order, and no ordinary order reaching this state
      has been established. Scenario L9 part a is a conditional protocol, not established backing.
@@ -495,23 +499,85 @@ New terms:
 
 ### Other locomotors
 
-22. **A seizing warhead that names another locomotor.** Claims 1 to 3 decide the seize the same
-    way whatever locomotor the warhead names. What follows depends on that locomotor:
-    - **One that cannot stand in temporarily** (hovering, flying, rocket or tunnelling
-      movement): the hit still has claim 5's other effects on an eligible target (it stops, is
-      put in *guard*, loses its spawned objects and its parasite), and still
-      releases the firer's previous victim (claim 2). But the target is not seized: no
-      locomotor is installed, it keeps moving with its own, and it can be hit again.
+22. **A seizing warhead that names another locomotor, or none.** Claims 1 to 3 decide the seize
+    the same way whatever locomotor the warhead names. What follows depends on that locomotor:
+    - **One that cannot stand in temporarily** (hovering, mechanical walking, flying, rocket or
+      tunnelling movement): the hit still has claim 5's other effects on an eligible target (it
+      stops, is put in *guard*, loses its spawned objects and its parasite), and still releases the
+      firer's previous victim (claim 2). But the target is not seized: no locomotor is installed,
+      it keeps moving with its own, and it can be hit again.
     - **One that can stand in temporarily** (driving, walking, ship, teleporting or drop-pod
-      movement): the target is seized as in claim 5, with that locomotor installed in place of
-      its own. How it then moves, and when it is restored, are outside this spec.
-    - **An unknown identifier (design).** The original stops with a fatal error. Our importer
+      movement): the target is seized as in claim 5, with that locomotor installed as its stand-in
+      in place of its own. Claims 23 and 24 say how it then moves and whether it is restored.
+    - **No locomotor named.** A warhead whose locomotor key is absent names the locomotor in force
+      from an earlier rules layer, else the teleporting locomotor (Import mapping). With no earlier
+      layer, a hit therefore seizes with the teleporting stand-in.
+    - **An empty or malformed value (bad data).** The value is read as S-0207 claim 14 reads a
+      type's locomotor field: leading and trailing blanks are removed, and a value that does not
+      have the form of a class identifier, an empty value included, is ignored as if the key were
+      absent. The original does this silently. Our importer does the same and, on a seizing
+      warhead, gives an importer warning (glossary *importer warning*); on a warhead without the
+      seizing flag the value is unused and does not warn. So with no earlier layer, such a warhead seizes with
+      the teleporting stand-in, as in the previous bullet.
+    - **An unknown identifier (design).** A value of the right form that names no locomotor: the
+      original stops with a fatal error when such a hit reaches an eligible target. Our importer
       warns, and a hit is treated as with a locomotor that cannot stand in temporarily.
-    - An absent key means the teleporting locomotor (Import mapping).
-    - Backing: `measurable` (scenario L13) for the first two bullets; the unknown-identifier
+    - Backing: `measurable` (scenario L13) for the first four bullets; the unknown-identifier
       departure is `unmeasured` because it is a project design choice, not an observation of the
       original.
-    - Confidence: medium (which locomotors can stand in, the effects without a seize)
+    - Confidence: high (which locomotors can stand in, the effects without a seize, the parse of
+      an empty or malformed value); medium (the teleporting result with no locomotor named, which
+      rests on the read rather than an observation)
+
+23. **How a unit seized with another stand-in moves.** At the seize the unit is given the lifter
+    as its order-level destination, exactly as in claim 5, before the seized state begins. The
+    stand-in receives the lifter's point of claim 7 (the heading point or position of a mobile
+    lifter, the foundation centre of a building, or a docking point) as its movement instruction.
+    - **No movement point of its own.** The nearby-cell search and the fixed movement point of
+      claim 7 belong to the jumpjet's movement only. With another stand-in the order-level
+      destination stays the lifter itself, as an object destination, not the cell of a point.
+    - **Which spec moves it.** From then on the unit moves under its stand-in's ordinary rules,
+      with that destination:
+      - driving: S-0207, including claims 25 to 27 for the locomotor destination point, the
+        removal of an object destination and refresh,
+      - teleporting: S-0207 claim 20,
+      - ship: S-0504's ship locomotor.
+    - **Walking (not settled, design).** How a vehicle moves with the walking locomotor is covered
+      by no movement spec. Our engine keeps such a unit where it is: it does not move or turn
+      under that stand-in while it is seized.
+    - **Drop-pod (partly settled, design).** In the original the drop-pod stand-in takes the
+      lifter's point as the target of a drop-pod descent: the unit is moved up into the air near
+      that point and falls to the ground, and the stand-in ends itself at touchdown, with landing
+      effects of its own. No spec owns that descent. Our engine instead ends the drop-pod stand-in
+      at once at the seize: the unit stays where it is, gets its own locomotor back, and the grip
+      ends with the unit set down. Claim 24 says what remains of the seized state.
+    - **Arrival.** Claim 8's arrival drop is part of the jumpjet's movement and does not happen.
+      The grip ends only by an event of claim 12. Its row for a gripped unit given no destination
+      applies when the stand-in's own rules remove the unit's order-level destination through the
+      ordinary destination-setting rule, for example S-0207 claim 25's give-up row: the grip ends
+      and the unit is set down.
+    - Claims 9 and 10 apply unchanged: later destinations are refused and it cannot fire. With a
+      ground stand-in its height above the surface is normally 0, so a grip that ends sets it down
+      (claim 13) rather than dropping it.
+    - Backing: `measurable` (scenario L13 parts b and c) for the lifter destination, the movement
+      towards the lifter and the missing arrival drop. The walking and drop-pod rules are
+      `unmeasured` as design choices.
+    - Confidence: medium (the instruction and destination, read rather than observed); low (the
+      composed course of the drive towards an occupied lifter cell, which those specs decide)
+
+24. **Restoration with another stand-in** (`quirks.lift_standin_stays_seized`, default on).
+    - With the driving, walking, ship or teleporting stand-in, the unit is never restored. Each of
+      these stand-ins refuses to end while its unit is seized, and only the end of the jumpjet
+      stand-in clears *seized*. The unit keeps the stand-in until it leaves play: it ignores every
+      new destination (claim 9), never fires (claim 10) and can never be seized again (claim 3).
+    - With the drop-pod stand-in, the unit gets its own locomotor back when its descent ends
+      (claim 23; at once in our engine). It stays *seized*, though, so claims 9 and 10 go on
+      applying to it indefinitely, and claim 3 keeps it from being seized again.
+    - Fixed behaviour: claim 20 applies to every stand-in, with that stand-in's own moving test in
+      place of the jumpjet's, and the restoration clears *seized*, *set down* and the dropper.
+    - Backing: `measurable` (scenario L13 part c)
+    - Confidence: high (the refusal of the four stand-ins and that only the jumpjet's end clears
+      the state, the drop-pod stand-in ending itself without clearing it)
 
 ## Formulas
 
@@ -595,6 +661,7 @@ Life of a seized unit:
 | dropped | fall ends, blocked on water (claim 17) | sinking | death credited to the dropper |
 | dropped | fall ends, blocked on land or beach | crashed, then removed | claim 18, unless crashable |
 | set down | falls back to rest, jumpjet not moving (claim 20) | ordinary | own locomotor returns |
+| seized with another stand-in | falls back to rest (claim 24) | stays seized | never restored; a drop-pod stand-in ends at its touchdown but the unit stays seized |
 
 **Ordering consequences.**
 - One hit can drop the old gripped unit and seize the new one in the same tick (claim 5).
@@ -628,6 +695,12 @@ Life of a seized unit:
     ground layer under the bridge, not those on the deck. Infantry under the bridge are erased
     and a vehicle under it blocks.
   - Fixed: claim 16 reads the layer the unit landed in.
+- **A non-jumpjet stand-in never lets go** (`quirks.lift_standin_stays_seized`, default on).
+  - A unit seized with the driving, walking, ship or teleporting stand-in is never restored, and
+    one seized with the drop-pod stand-in gets its own locomotor back but stays seized (claim 24).
+    Either way it ignores destinations and cannot fire until it leaves play.
+  - Fixed: claim 20 applies to every stand-in with its own moving test, and restoration clears
+    the seized state.
 - **A harvester driving temporarily is immune** (claim 4). This is not a quirk: it is the only way
   a resource gatherer on a temporary locomotor is treated.
 - **An infantry kill credited to the dropped unit** (claim 16) when there is neither a dropper nor a
@@ -640,7 +713,7 @@ Life of a seized unit:
 |---|---|---|---|---|
 | rules, weapon | `IsMagBeam` | magnetic-beam weapon (claims 11, 21; S-0301 owns the term) | boolean | no |
 | rules, warhead | `IsLocomotor` | seizing warhead (Terms, claim 1) | boolean | no |
-| rules, warhead | `Locomotor` | the locomotor that the seize installs (Terms, claim 22) | locomotor identifier | teleporting locomotor (claim 22); an unknown identifier warns (claim 22) |
+| rules, warhead | `Locomotor` | the stand-in locomotor that the seize installs (Terms, claims 22 to 24) | locomotor identifier, read as S-0207 claim 14 (blanks trimmed; an empty or malformed value is ignored, and warns on a seizing warhead) | the locomotor in force from an earlier rules layer, else the teleporting locomotor (claim 22); an unknown identifier warns (claim 22) |
 | rules, infantry or vehicle or aircraft type | `Size` | *s* (F1) | decimal | 1.0 (S-0507) |
 | rules, object type | `Strength` | *B* when the current-strength switch is off (F2) | integer | as S-0302 |
 | rules, type | the jumpjet type keys of S-0502 (Import mapping) | the lifted unit's jumpjet movement (claim 7) and its crash value, the starting crash rate (claim 15) | as S-0502 | as S-0502 |
@@ -918,15 +991,34 @@ Request any missing recorder capability rather than patching the executable or h
   - Falsified by: a movement point that follows the moving lifter, an arrival over the lifter's
     current position after it moved, or a drop onto an occupied cell when a free neighbour
     cell existed.
-- **L13 Other locomotors (claim 22).**
-  - Named L13 map data: four seizing warheads naming hovering, flying, driving and walking
-    movement, each fired at an eligible vehicle.
-  - Expected: with hovering and flying, the target stops, enters *guard*, loses spawned objects,
-    is not lifted and keeps its own movement, and can be hit again with the same result; with
-    driving and walking, it is seized (it ignores orders and cannot fire). The firer's previous
-    victim is dropped in all four.
-  - Falsified by: a seize with hovering or flying, a missing stop, or no seize with driving or
-    walking.
+- **L13 Other locomotors (claims 22 to 24).**
+  - Part a. Named L13 map data: seizing warheads naming hovering, mechanical walking, flying,
+    driving, walking, ship and teleporting movement, one with the locomotor key absent, one with
+    an empty value and one with a malformed value (a bare name, and separately digits without
+    braces), each fired at an eligible vehicle.
+    - Expected: with hovering, mechanical walking and flying, the target stops, enters *guard*,
+      loses spawned objects, is not lifted and keeps its own movement, and can be hit again with
+      the same result; with driving, walking, ship and teleporting, and with the absent, empty and
+      malformed values (teleporting), it is seized: it ignores orders and cannot fire. The firer's previous
+      victim is dropped in all of them.
+    - Falsified by: a seize with hovering, mechanical walking or flying, a missing stop, or no
+      seize with a stand-in locomotor or with the absent, empty or malformed value.
+  - Part b. With the driving and the teleporting warheads, seize a vehicle at long range from a
+    lifter that stands still, and separately from a building lifter. Record the victim's
+    order-level destination, its path and position per tick, its height, and the tick at which the
+    grip ends (the lifter's target and its refusal state).
+    - Expected: the victim drives (or jumps) towards the lifter under S-0207's rules, is never
+      lifted, gets no arrival drop near the lifter, and is set down, not dropped, when the grip
+      ends. Falsified by: a lift, a drop or impact damage, or a grip ended by arrival alone.
+  - Part c. After part b's grip has ended, leave the victim alone for well over 100 ticks, then
+    give it two move orders a few ticks apart, and let enemies come into its range. Repeat with a
+    drop-pod warhead.
+    - Expected: with driving and teleporting, no order is ever accepted, it never fires and a
+      second seizing hit does not seize it again; with drop-pod, the original's descent near the
+      lifter is recorded (it has no expected result here), its own locomotor returns at touchdown,
+      and it still ignores orders and never fires.
+    - Falsified by: an accepted order or a shot after the grip ends, or a restoration that
+      clears the seized state.
 - **S-0502 carry items.** L2, L3 and L4 together give the held body facing (S-0502 claim 10), the
   hovering, landing and arrival exclusions (claims 12 to 15), the growing crash rate (claim 18),
   the cell-centre detour (claim 15 here), and the sinking-only-after-a-drop case (S-0502 claim 19,
@@ -939,8 +1031,8 @@ Request any missing recorder capability rather than patching the executable or h
 - How the factory-contact protection of claim 3 can be reached in play.
 - Whether a squared sum that wraps negative in F3 is reachable on a playable map. F3 gives its
   result if it is.
-- How an empty or malformed locomotor value on a seizing warhead is parsed (claim 22), and how a
-  unit seized with a stand-in locomotor other than the jumpjet's moves and is restored. Both are
-  outside this revision.
+- How a vehicle moves with the walking locomotor installed as a stand-in, and the details of the
+  original's drop-pod descent (its height, its horizontal displacement, its speed and its landing effects). No movement spec
+  covers them; claim 23 gives our engine's safe results.
 - Deploying, undeploying and unloading while seized (claim 10's last bullet) rest on the absence
   of any seized-state test, not on a traced refusal; low confidence until scenario L9 part g.
