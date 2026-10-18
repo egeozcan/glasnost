@@ -91,6 +91,10 @@ fn docking_point(w: &World, building: ObjectId, v: ObjectId) -> crate::world::Po
     if crate::depot::is_depot(w, building) {
         return crate::depot::docking_point(w, building, v);
     }
+    if super::bunker::is_bunker(w, building) {
+        // spec: S-0606 claim 4 (a bunker's docking point)
+        return super::bunker::docking_point(w, building, v);
+    }
     let place = w.obj(v).and_then(|o| o.econ.exit).map_or(0, |e| e.place);
     crate::econ::release::pad_position_at(w, building, place)
 }
@@ -102,6 +106,8 @@ fn contacts(w: &mut World, b: ObjectId, new: Option<HouseId>) {
         .values()
         .filter(|o| o.contact == Some(b) && o.id != b)
         .map(|o| o.id)
+        // spec: S-0606 claim 15 (the bunker link holds through the bunker's owner change: the bunkered vehicle is not asked to move)
+        .filter(|&v| !super::bunker::holds_through_owner_change(w, b, v))
         .collect();
     if list.is_empty() {
         return;

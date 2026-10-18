@@ -84,6 +84,23 @@ const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
         Outcome::Field,
         "S-0605",
     ),
+    // spec: S-0606 Import mapping (vehicle bunkers)
+    ("buildings", "Bunker", Outcome::Field, "S-0606"),
+    ("vehicles", "Bunkerable", Outcome::Field, "S-0606"),
+    ("infantry", "Bunkerable", Outcome::Field, "S-0606"),
+    ("aircraft", "Bunkerable", Outcome::Field, "S-0606"),
+    (
+        "global:AudioVisual",
+        "BunkerWallsUpSound",
+        Outcome::Field,
+        "S-0606",
+    ),
+    (
+        "global:AudioVisual",
+        "BunkerWallsDownSound",
+        Outcome::Field,
+        "S-0606",
+    ),
     // spec: S-0603 Import mapping (recycling buildings)
     ("buildings", "Grinding", Outcome::Field, "S-0603"),
     (

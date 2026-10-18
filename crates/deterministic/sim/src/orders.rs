@@ -391,9 +391,13 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             }
             // spec: S-0213 claim 10 and S-0502 claim 28 (deploy makes one destination-clear request, while the target is still present, and no retry after the target is cleared: a balloon-hover vehicle can keep a nonempty destination and end with no target)
             let rejected = crate::jump::clear_rejected(w, actor);
+            // Q-1303 (interim: a bunkered vehicle keeps its contact with its bunker under orders, S-0606 claim 7)
+            let bunkered = crate::structures::bunker::bunkered(w, actor);
             if let Some(ob) = w.obj_mut(actor) {
                 // spec: S-0213 claim 10 (contact broken off, target and destination nothing, unload queued)
-                ob.contact = None;
+                if !bunkered {
+                    ob.contact = None;
+                }
                 // spec: S-0215 claim 12 and S-0506 claim 25 (an order's own-target clear obeys the spawner pending-target rule)
                 crate::spawn::explicit_clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
@@ -596,7 +600,9 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
             .and_then(|c| w.obj(c))
             .filter(|c| c.kind == Kind::Building)
             .and_then(|c| w.rules().buildings.get(c.type_index as usize))
-            .is_some_and(|b| b.raw.econ.dock_unload.unwrap_or(false));
+            .is_some_and(|b| b.raw.econ.dock_unload.unwrap_or(false))
+        // Q-1303 (interim: a bunkered vehicle keeps its contact with its bunker under orders, S-0606 claim 7)
+        || crate::structures::bunker::bunkered(w, actor);
     if b != Behaviour::Attack
         && ob.kind == Kind::Vehicle
         && crate::econ::slaves::is_master(w, actor)
@@ -657,6 +663,8 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     crate::infantry::destination_assigned(w, actor, ob.dest);
     // spec: S-0314 claim 23 (an enter order on a depot that holds no contact asks for entry at once)
     crate::depot::order_entered(w, actor, b, dest);
+    // spec: S-0606 claim 3 (an enter order on a bunker: cleared when the bunker holds any contact, else one entry request at once)
+    crate::structures::bunker::order_entered(w, actor, b, dest);
     // spec: S-0605 claim 3 (the destination assignment of an enter order on an absorbing building, after the order's other effects: contact, or waiting in line)
     crate::structures::absorb::order_entered(w, actor, b, dest);
     // spec: S-0213 table T3 (f) (an open-topped transport gives the same target to its passengers when the target is not nothing)

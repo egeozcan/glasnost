@@ -254,6 +254,7 @@ fn claim_5a_track_suppresses_only_with_a_positive_integer_step() {
         cells: vec![pos.cell()],
         crush: false,
         exit: false,
+        bunker: None,
     });
     // ρ above 0 but the tick's step s = 0 (too small for a whole lepton): shown.
     d.rho = F64::from_i64(1, mode).div(F64::from_i64(1000, mode), mode);

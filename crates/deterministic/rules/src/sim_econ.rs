@@ -337,6 +337,24 @@ pub struct EconFields {
     /// Buildings: the art `SpecialAnimDamaged`, an animation type name as written (S-0402 Terms, claim 11); absent: none.
     #[serde(default)]
     pub special_anim_damaged: Option<String>,
+    /// Buildings: the art `SpecialAnimTwo`, an animation type name as written (S-0606 Terms, *special-2*, S-0108); absent: none.
+    #[serde(default)]
+    pub special_anim_two: Option<String>,
+    /// Buildings: the art `SpecialAnimTwoDamaged`, an animation type name as written (S-0606 Terms, the damaged variant); absent: none.
+    #[serde(default)]
+    pub special_anim_two_damaged: Option<String>,
+    /// Buildings: the art `SpecialAnimThree`, an animation type name as written (S-0606 Terms, *special-3*, S-0108); absent: none.
+    #[serde(default)]
+    pub special_anim_three: Option<String>,
+    /// Buildings: the art `SpecialAnimThreeDamaged`, an animation type name as written (S-0606 Terms, the damaged variant); absent: none.
+    #[serde(default)]
+    pub special_anim_three_damaged: Option<String>,
+    /// Buildings: the art `SpecialAnimFour`, an animation type name as written (S-0606 Terms, *special-4*, S-0108); absent: none.
+    #[serde(default)]
+    pub special_anim_four: Option<String>,
+    /// Buildings: the art `SpecialAnimFourDamaged`, an animation type name as written (S-0606 Terms, the damaged variant); absent: none.
+    #[serde(default)]
+    pub special_anim_four_damaged: Option<String>,
     /// Buildings: the art `ProductionAnim`, an animation type name as written (S-0402 Terms, claim 11); absent: none.
     #[serde(default)]
     pub production_anim: Option<String>,

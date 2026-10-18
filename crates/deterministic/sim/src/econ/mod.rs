@@ -56,6 +56,9 @@ pub fn assign_destination(
     // spec: S-0517 claim 9 (a deployed vehicle or one in transition cannot receive a destination: any destination given to it is replaced by none)
     let dest = if inplace::blocks_destination(w, id) {
         None
+    } else if dest.is_some() && crate::structures::bunker::refuses_destination(w, id) {
+        // Q-1304 (interim: a bunkered vehicle refuses a non-empty destination; S-0207 claim 27 names the refusal)
+        return;
     } else {
         dest
     };

@@ -155,6 +155,12 @@ struct Game {
     /// its distinct recycling buildings.
     ground: usize,
     grinders: [usize; PLAYERS],
+    /// Tank bunkers (S-0606): vehicles that became bunkered, vehicles let
+    /// out (link ended with both still standing), and per player house its
+    /// distinct bunkers.
+    bunkered: usize,
+    bunker_releases: usize,
+    bunkers: [usize; PLAYERS],
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -658,6 +664,9 @@ fn play_ai(
     g.passengers_max = tally.passengers_max;
     g.absorbers = tally.absorbers.map(|s| s.len());
     g.grinders = tally.grinders.map(|s| s.len());
+    g.bunkered = tally.bunkered;
+    g.bunker_releases = tally.bunker_releases;
+    g.bunkers = tally.bunkers.map(|s| s.len());
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -804,6 +813,16 @@ pub struct Tally {
     pub absorbers: [BTreeSet<u32>; PLAYERS],
     /// Per player house: its recycling buildings seen so far (S-0603).
     pub grinders: [BTreeSet<u32>; PLAYERS],
+    /// Vehicles that became bunkered (S-0606 claim 7: a (vehicle, bunker)
+    /// link now that was not there after the last tick).
+    pub bunkered: usize,
+    /// Bunker links that ended with the vehicle and the bunker still
+    /// standing (S-0606 claims 12 and 13).
+    pub bunker_releases: usize,
+    /// Per player house: its tank bunkers seen so far (S-0606).
+    pub bunkers: [BTreeSet<u32>; PLAYERS],
+    /// The (vehicle, bunker) links after the last tick.
+    bunkered_before: BTreeSet<(u32, u32)>,
     /// The (passenger, building) pairs after the last tick.
     absorbed_before: BTreeSet<(u32, u32)>,
     /// The gas systems and animations after the last tick.
@@ -983,6 +1002,24 @@ impl Tally {
             })
             .count();
         self.absorbed_before = absorbed;
+        let links: BTreeSet<(u32, u32)> = w
+            .objects
+            .values()
+            .filter_map(|o| Some((o.id.0, o.structure.bunkered_in?.0)))
+            .collect();
+        self.bunkered += links.difference(&self.bunkered_before).count();
+        self.bunker_releases += self
+            .bunkered_before
+            .difference(&links)
+            .filter(|&&(v, b)| {
+                let on = |i| {
+                    w.obj(glasnost_sim::world::ObjectId(i))
+                        .is_some_and(|o| o.on_map && o.health > 0)
+                };
+                on(v) && on(b)
+            })
+            .count();
+        self.bunkered_before = links;
         let mut held = [0usize; PLAYERS];
         for o in w.objects.values() {
             let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
@@ -994,6 +1031,9 @@ impl Tally {
             }
             if glasnost_sim::structures::grinder::is_recycler(w, o.id) {
                 self.grinders[h].insert(o.id.0);
+            }
+            if glasnost_sim::structures::bunker::is_bunker(w, o.id) {
+                self.bunkers[h].insert(o.id.0);
             }
         }
         for h in 0..PLAYERS {
@@ -1877,8 +1917,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits
                     )
                 })
                 .collect();
@@ -1943,6 +1983,11 @@ fn report(
                 s,
                 "  grinders: units ground {}; recycling buildings per house {:?}",
                 g.ground, g.grinders
+            );
+            let _ = writeln!(
+                s,
+                "  bunkers: vehicles bunkered {}, let out with both standing {}; tank bunkers per house {:?}",
+                g.bunkered, g.bunker_releases, g.bunkers
             );
         }
         let f: Vec<String> = g

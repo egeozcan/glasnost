@@ -4,7 +4,8 @@
 //! both have the psychic weapons of S-0610; the Yuri-style side also has a
 //! gattling vehicle and defence (S-0609) whose top-stage weapon leaves gas
 //! clouds (S-0613) and a mind controller (S-0601), and its power plant
-//! absorbs infantry (S-0605); it also builds a grinder (S-0603).
+//! absorbs infantry (S-0605); it also builds a grinder (S-0603); both
+//! sides build tank bunkers and send vehicles in (S-0606).
 //! The run counts, per ability, the
 //! orders the AI gave (`glasnost_ai::special::Uses`) and the events the
 //! simulation then showed ([`Exercise`]), so that the gate cannot go on
@@ -67,11 +68,14 @@ pub struct Exercise {
     /// Units a recycling building consumed (S-0603 claims 5 and 8; only
     /// Alpha builds one, GRND).
     pub ground: u32,
+    /// Vehicles that became bunkered (S-0606 claim 7; both sides build the
+    /// bunker BUNK).
+    pub bunkered: u32,
 }
 
 impl Exercise {
     /// Every counter the full run asserts on, by name.
-    pub fn counters(&self) -> [(&'static str, u32); 18] {
+    pub fn counters(&self) -> [(&'static str, u32); 22] {
         let u = &self.uses;
         [
             ("berserk weapon orders (S-0610)", u.berserks),
@@ -104,6 +108,10 @@ impl Exercise {
             ("infantry absorbed (S-0605 claims 1 and 7)", self.absorbed),
             ("grinder entry orders (S-0603)", u.grinds),
             ("units ground (S-0603 claims 5 and 8)", self.ground),
+            ("tank bunker build orders (S-0606)", u.bunker_builds),
+            ("bunker entry orders (S-0606 claim 3)", u.bunker_entries),
+            ("vehicles bunkered (S-0606 claim 7)", self.bunkered),
+            ("bunker exit orders (S-0606 claim 12)", u.bunker_exits),
         ]
     }
 
@@ -130,6 +138,7 @@ struct Watch {
     stages: BTreeMap<ObjectId, i32>,
     clouds: BTreeSet<ObjectId>,
     absorbed: BTreeSet<ObjectId>,
+    bunkered: BTreeSet<ObjectId>,
     seen: BTreeSet<&'static str>,
 }
 
@@ -281,6 +290,16 @@ impl Exercise {
                 && matches!(o.dest, Some(glasnost_sim::world::Target::Object(b)) if glasnost_sim::structures::grinder::is_recycler(w, b))
         });
         first |= watch.first(bound, "bound for a grinder");
+        // Tank bunkers: vehicles that became bunkered during this tick.
+        let held: BTreeSet<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| glasnost_sim::structures::bunker::bunkered(w, o.id))
+            .map(|o| o.id)
+            .collect();
+        self.bunkered += began(&watch.bunkered, &held);
+        first |= watch.first(!held.is_empty(), "bunkered");
+        watch.bunkered = held;
         first
     }
 }
@@ -290,7 +309,7 @@ impl Exercise {
 /// kind of M7a state appears (a psychic reveal, a berserk unit, a sensed
 /// intent line, a slave-miner building, a slave at work, a gattling at its
 /// top stage, a controlled object, a gas particle, an absorbed passenger, a unit bound for a grinder,
-/// a consumption); the loaded game
+/// a consumption, a bunkered vehicle); the loaded game
 /// must hash alike and goes on from there. Returns the state hash after
 /// every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {

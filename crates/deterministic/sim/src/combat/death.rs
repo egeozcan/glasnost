@@ -290,6 +290,8 @@ pub fn kill(w: &mut World, id: ObjectId, hit: &Hit) {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     mark_killed(w, id);
+    // spec: S-0606 claim 14 (a destroyed bunkered vehicle: walls-down effects, link and contact ended, the bunker back at clearing with guard queued, before its other death effects are resolved)
+    crate::structures::bunker::release_in_place(w, id);
     if !o.on_map && crate::econ::production::is_item_object(w, id) {
         // spec: S-0414 claim 15 (an item in production takes its hit off the map and stays until its line deletes it; it is not hit again)
         // Q-0193 (interim: no other death effect, no draws; it stays on its line with health 0)
@@ -635,9 +637,10 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     // spec: S-0312 claim 17 (contacts within 256 leptons, or any for a helipad, are destroyed by ten times their strength)
     let helipad = rules.buildings[o.type_index as usize].building.helipad;
     let rp = w.reference_point(id);
-    // spec: S-0312 claim 17 (revision 25: the contacts held just before the destroying hit; a
-    // bunkered vehicle is let out first and excluded, S-0606 claim 13. Seam: tank bunkers are
-    // not built, so no contact here can be a bunkered vehicle)
+    // spec: S-0606 claim 13 and S-0312 claim 17 (a destroyed bunker lets its vehicle out within the destroying hit, before the contacts are treated)
+    crate::structures::bunker::let_out(w, id);
+    // spec: S-0312 claim 17 (revision 25: the contacts held just before the destroying hit, less
+    // the bunkered vehicle, which the let-out above has already released, S-0606 claim 13)
     let contacts: Vec<ObjectId> = w
         .objects
         .values()

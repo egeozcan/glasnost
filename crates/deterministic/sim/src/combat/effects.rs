@@ -123,6 +123,28 @@ pub enum Effect {
         /// Whether the building has the grinding flag.
         grinding: bool,
     },
+    /// A building's special animation slots changed (S-0606 Terms, walls
+    /// effects; S-0108's *special-1* to *special-4*): the slots named in
+    /// `slots` start (`start`) or stop, in their damaged variant when
+    /// `damaged`. Only the drawing reads it.
+    SpecialAnims {
+        /// The building.
+        building: ObjectId,
+        /// The slots, 1 to 4.
+        slots: [u8; 2], // spec: S-0606 claim 12 and table S1 (the walls' slots start and stop in pairs)
+        /// Started (else stopped).
+        start: bool,
+        /// The damaged variant.
+        damaged: bool,
+    },
+    /// A vehicle became bunkered (S-0606 claim 7): it leaves any control
+    /// group it belonged to and is removed from the selection.
+    Bunkered {
+        /// The vehicle.
+        vehicle: ObjectId,
+        /// Its bunker.
+        bunker: ObjectId,
+    },
     /// A gattling spin update or a gattling-flagged object leaving the map
     /// (S-0609 claim 13), for the spin sound the audio crate keeps.
     Spin {
@@ -315,6 +337,13 @@ pub enum Sound {
     /// A passenger came out of an infantry absorber (S-0605 claim 13): the
     /// rules-wide exit sound at the building; `of` is the building's type.
     LeaveBioReactor,
+    /// A vehicle became bunkered (S-0606 claim 7): the rules-wide walls-up
+    /// sound at the bunker's position; `of` is the bunker's type.
+    BunkerWallsUp,
+    /// The walls-down effects of a bunker (S-0606 claims 12 and 14): the
+    /// rules-wide walls-down sound at the bunker's position; `of` is the
+    /// bunker's type.
+    BunkerWallsDown,
 }
 
 /// Creates an animation with no loop delay: its creation draws and its

@@ -754,7 +754,10 @@ fn candidate(
         && !crate::targeting::counts_as_vehicle(w, t)
     {
         let weaponless = crate::combat::weapon::current_weapon(w, t).is_none();
-        let threat = ttc.map_or(0, |x| x.threat_posed);
+        // spec: S-0309 Terms (threat value: the threat-posed field of the unit in its tank bunker, if one is there, otherwise its own type's; occupied buildings are the garrison rule's)
+        let threat = crate::structures::bunker::occupant(w, t)
+            .and_then(|v| type_combat(w, v))
+            .map_or_else(|| ttc.map_or(0, |x| x.threat_posed), |v| v.threat_posed);
         if weaponless || threat == 0 {
             return false;
         }
@@ -1222,11 +1225,17 @@ fn set_target_from_search(
     }
 }
 
-/// The redirects of S-0309 claim 24: the object itself gives its own cell;
-/// a dead or sinking object, or an infantry unit in a death sequence, gives
-/// no target. Tank bunkers are not modelled.
+/// The redirects of S-0309 claim 24: a bunkered vehicle gives its bunker
+/// to an object with a temporal weapon, a locomotor-warhead primary or an
+/// airstrike team; the object itself gives its own cell; a dead or sinking
+/// object, or an infantry unit in a death sequence, gives no target.
 pub fn redirect(w: &World, a: ObjectId, t: Target) -> Option<Target> {
     let Target::Object(x) = t else { return Some(t) };
+    // spec: S-0309 claim 24 row 1 (a unit sitting in a tank bunker, when the object has a temporal weapon, its primary weapon's warhead is a locomotor warhead, or its type has an airstrike team: the bunker building; the later rows judge the target as this row leaves it)
+    let (t, x) = match crate::structures::bunker::bunkered_in(w, x) {
+        Some(k) if bunker_redirecting(w, a) => (Target::Object(k), k),
+        _ => (t, x),
+    };
     // spec: S-0309 claim 24 (the object itself: its own cell)
     if x == a {
         return w.obj(a).map(|o| Target::Cell(o.pos.cell()));
@@ -1253,6 +1262,24 @@ pub fn redirect(w: &World, a: ObjectId, t: Target) -> Option<Target> {
         return None;
     }
     Some(t)
+}
+
+/// Whether object `a` is one that S-0309 claim 24's first row redirects:
+/// a temporal weapon, a locomotor warhead on its primary weapon, or an
+/// airstrike team.
+fn bunker_redirecting(w: &World, a: ObjectId) -> bool {
+    let r = w.rules();
+    let tc = type_combat(w, a);
+    // spec: S-0309 claim 24 row 1 (the object has a temporal weapon, S-0514 Terms)
+    let temporal = crate::temporal::has_beam(w, a);
+    // spec: S-0309 claim 24 row 1 (its primary weapon's warhead is a locomotor warhead)
+    let locomotor = tc
+        .and_then(|tc| tc.slots[0])
+        .and_then(|p| r.combat.weapon(p).warhead)
+        .is_some_and(|h| r.combat.warhead(h).is_locomotor);
+    // spec: S-0309 claim 24 row 1 and Import mapping (its type can call airstrikes: an airstrike team above 0, whether or not an airstrike is in progress)
+    let airstrike = tc.is_some_and(|tc| tc.airstrike_team > 0);
+    temporal || locomotor || airstrike
 }
 
 /// Whether an object may search passively (S-0309 claim 2).

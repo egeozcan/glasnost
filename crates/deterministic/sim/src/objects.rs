@@ -429,6 +429,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     crate::structures::garrison::removing(w, id);
     // spec: S-0605 claim 15 (a passenger removed inside leaves the passenger order; a building removed with passengers deletes them; a waiting actor stops waiting)
     crate::structures::absorb::removing(w, id);
+    // spec: S-0606 claim 15 and Edge cases (another removal: no release is prescribed); Q-1307 (interim: the bunker link is cleared silently)
+    crate::structures::bunker::removing(w, id);
     // spec: S-0603 claim 15 (a recycling building that leaves the game: its entrants' destinations are cleared)
     crate::structures::grinder::removing(w, id);
     // spec: S-0402 claim 14 (a lost slave starts its master's regeneration delay) and S-0408 claim 10a (a removed master's slaves are dealt with)

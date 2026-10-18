@@ -130,6 +130,8 @@ pub fn deliver(w: &mut World, firer: Option<ObjectId>, target: Option<Target>) {
         let_go(w, f);
         return;
     };
+    // spec: S-0514 claim 1 and S-0309 claim 24 (a bunkered vehicle is redirected to its bunker, S-0606 claim 9)
+    let x = crate::structures::bunker::bunkered_in(w, x).unwrap_or(x);
     let Some(t) = w.obj(x) else { return };
     if !matches!(
         t.kind,
@@ -143,7 +145,6 @@ pub fn deliver(w: &mut World, firer: Option<ObjectId>, target: Option<Target>) {
     if !ground_layer(w, x) {
         return;
     }
-    // spec: S-0514 claim 1 (a bunkered vehicle is redirected to its bunker: S-0606 is not built, so no vehicle is bunkered; Q-0984)
     // Q-0984 (interim: a firer whose type supplies no beam, and none carried, makes no lock and no side effect)
     if !has_beam(w, f) {
         return;
@@ -410,6 +411,11 @@ fn complete(w: &mut World, x: ObjectId) {
         crate::structures::garrison::erased(w, x);
         // spec: S-0605 claim 14 and S-0514 claim 12 (an erased absorbing building deletes its passengers)
         crate::structures::absorb::erased(w, x);
+        // spec: S-0514 claim 12 and S-0606 claim 13 (an erased bunker lets its vehicle out at the completion of its erasure)
+        crate::structures::bunker::let_out(w, x);
+    } else {
+        // spec: S-0514 claim 12 and S-0606 claim 14 (removing a bunkered vehicle releases its bunker in place)
+        crate::structures::bunker::release_in_place(w, x);
     }
     let hit = Hit {
         amount: 0,

@@ -177,7 +177,9 @@ async fn smoke_async(
                         | Effect::Captured { .. }
                         | Effect::Infiltrated { .. }
                         | Effect::Cloak { .. }
-                        | Effect::GasHit { .. } => {}
+                        | Effect::GasHit { .. }
+                        | Effect::SpecialAnims { .. }
+                        | Effect::Bunkered { .. } => {}
                     }
                 }
                 fight[3] = fight[3].max(w.projectiles.len());

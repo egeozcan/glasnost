@@ -752,6 +752,10 @@ impl Audio {
             Effect::Cloak { .. } => {}
             // A gas hit's own sound is not in S-0613; the hit's damage effects make theirs.
             Effect::GasHit { .. } => {}
+            // The bunker's special animations and the bunkered notice are
+            // drawing and selection only; the walls sounds come through
+            // Effect::Sound (S-0606 claims 7, 12 and 14).
+            Effect::SpecialAnims { .. } | Effect::Bunkered { .. } => {}
             // spec: S-0518 claim 6 (the support beam is drawing only: no sound)
             Effect::SupportBeam { .. } => {}
             Effect::Superweapon { event, sw, pos, .. } => self.superweapon(w, *event, *sw, *pos),
@@ -1032,6 +1036,16 @@ impl Audio {
             // spec: S-0605 claim 13 (the rules-wide exit sound at the building)
             Sound::LeaveBioReactor => {
                 let s = self.names.leave_bio_reactor.clone();
+                self.play_in(w, s.as_deref(), at);
+            }
+            // spec: S-0606 claim 7 (the imported walls-up sound at the bunker's position, if one is set)
+            Sound::BunkerWallsUp => {
+                let s = self.names.bunker_walls_up.clone();
+                self.play_in(w, s.as_deref(), at);
+            }
+            // spec: S-0606 claims 12 and 14 (the imported walls-down sound at the bunker's position, if one is set)
+            Sound::BunkerWallsDown => {
+                let s = self.names.bunker_walls_down.clone();
                 self.play_in(w, s.as_deref(), at);
             }
             // spec: S-0314 claim 6 (the depot's low-funds announcement, the local player's only, with no suppression)
