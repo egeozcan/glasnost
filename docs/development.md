@@ -1454,6 +1454,67 @@ Known limits:
 - The seed of a game comes from the host clock when Start is clicked.
 - Natively, the install is read when the window opens and the game is loaded synchronously after the frame that shows "Loading". The window does not respond while it loads (a few seconds in a debug build).
 
+## Arena mode (M7b)
+
+PLAN.md §5 (M7 exit: "Arena win rates within tolerance of the stock oracle") and §6 layer 2B (unit-arena win rates and time to kill across seeds, two-proportion and KS tests). Code: `crates/tools/src/arena.rs` (runner, record reader, comparison), `crates/tools/src/stats.rs` (the statistics), `crates/tools/tests/arena.rs`. The arena is tooling: it touches no simulation state, so the save format and goldens are unchanged.
+
+**The scenario.** Two groups, A and B, each a list of type IDs and counts (infantry or vehicles), meet on our own flat map (`testkit::empty_map`: clear, flat cells, no objects, no EA bytes). The houses are hostile player houses in a sandbox setup (no start positions, starting units or bases; not AI houses), of the scenario's countries, else both of the rules' first country that is not passive. Each group stands in rows of 5 cells across the map's x axis, one unit per cell; the middle cells of the two front rows are `start-distance` cells apart, centred on the map's middle cell; further rows stand one cell further back; every unit faces the enemy front cell. **Alternation:** in a trial with an odd seed group A is house 0, stands on the lower-x side and is created and ordered first; a trial with an even seed is swapped, group B taking all four (`arena::swapped`). Being created first puts a group first in the update order (S-0203 claim 3), so it takes its turns first; the two sides differ in their geometry (with an odd start distance the fronts are not equally far from the middle, with an even one the middle cell is crossed differently from the two sides). Unalternated, these favoured one group of a mirror matchup by up to 100 % (see the findings below); alternating balances both over an even number of trials, starting unswapped with the default first seed 1. In the first tick in which orders are taken, every unit is ordered to attack-move to the enemy front cell through `orders::issue` (an order a person could give); every 60 ticks after that, each idle unit (guard or area guard with no target and no destination) is ordered to attack-move to the cell of the nearest enemy unit. A unit *of a group* is one of the objects created for it that still exists with health above 0 and is still owned by its house (a unit under mind control counts for no group; a lifted or carried one still counts). A trial ends after the first tick at whose end a group has no units (the other wins; neither: a draw), or as a timeout `tick-cap` ticks after the order tick. **Time to kill** = ticks from the order tick (the first) to the end tick, both included. **Survivors** = units of each group at the end, and their summed health in per-mille of the group's summed health at creation. Seeds are the simulation seed: trial *i* uses seed `first-seed + i`. Row width, the re-order period and the defaults (map 32, distance 10, cap 6000 ticks, 32 seeds, the rules' lobby game speed) are our tool's choices.
+
+**Running it.**
+
+```sh
+# Synthetic ruleset (the default; the synthetic combat types CART, CRUSHER, BUGGY, WALKER):
+cargo run --release -p glasnost-tools --bin glasnost-headless -- arena --seeds 32 --ticks 6000 "A:CART*2" "B:WALKER*4"
+# Options: --first-seed K, --size S, --distance D, --speed G, --countries X,Y, --synthetic (ignore GLASNOST_GAME_DIR),
+#          --watch (shots per group, the firing check's answers per group and slot, and every unit's final state in the first trial), --types (list the type IDs a matchup can name).
+# Reference ruleset of a real install (local only; also writes the git-ignored local-lane/arena.txt):
+GLASNOST_GAME_DIR=<install> cargo run --release -p glasnost-tools --bin glasnost-headless -- arena --types
+GLASNOST_GAME_DIR=<install> cargo run --release -p glasnost-tools --bin glasnost-headless -- arena --seeds 32 "A:<type>*5" "B:<type>*5"
+# Every arena record's matchup, compared with the record (run from the repository root, which holds measurements/):
+GLASNOST_GAME_DIR=<install> cargo run --release -p glasnost-tools --bin glasnost-headless -- arena --records [--seeds N]
+# The local lane's statistical comparison (never in CI):
+GLASNOST_GAME_DIR=<install> cargo test --release -p glasnost-tools --test arena arena_matches_the_oracle -- --nocapture
+```
+
+The reference ruleset is the local lane's import (the game's search order, rules and art, temperate theater, no map layer), resolved; a stock map is never loaded, so no map's rules layer changes the matchup. The import's default game mode is skirmish, so the skirmish game-mode layer is applied: the arena's rules are a skirmish's without the map layer. Each matchup prints N, the wins of A and B in per cent, draws and timeouts, the mean, standard deviation, minimum and maximum of the time to kill over the decided trials, the survivors of each group (mean units and mean health in per-mille, with their standard deviations), and every trial as a record trial line with its seed. 32 trials of a 5-against-5 matchup take about 3 s (release). Which matchups are available: any pair of infantry or vehicle type IDs of the loaded rules (`arena --types` lists them with kind, tech level and owning sides; on the reference ruleset that list is local output only). Matchups run in M7b on the reference ruleset (Yuri infantry and vehicles against Allied and Soviet ones, N = 32) are kept in `local-lane/m7b/arena/`, git-ignored; type IDs of the stock rules are not written in this file.
+
+**Arena measurement records.** The comparison reads every record `measurements/<topic>/M-xxxx-*.md` (see `measurements/TEMPLATE.md`) that holds a fenced block with the info string `arena`. Each block is one matchup, one `key: value` per line (`#` starts a comment):
+
+| Key | Required | Meaning |
+|---|---|---|
+| `group-a`, `group-b` | yes | The groups: `TYPE*n, TYPE*n` (type ID and count; count 1 when `*n` is left out) |
+| `country-a`, `country-b` | no | The houses' countries (default: the rules' first country that is not passive, for both) |
+| `map-size` | no | The map is `map-size` × `map-size` cells (default 32) |
+| `start-distance` | no | Cells between the two front cells (default 10) |
+| `tick-cap` | no | Ticks from the order tick before a trial is a timeout (default 6000) |
+| `game-speed` | no | The lobby game speed, 0 to 6 (default: the rules' lobby speed) |
+| `n` | yes | Number of trials; must equal the number of `trial` lines |
+| `wins-a`, `wins-b`, `draws`, `timeouts` | no | Cross-checks: must match the trial lines when given |
+| `trial` | n lines | `<winner> <ticks> <survivors-a> <survivors-b> [<health-a> <health-b>]`: winner `A`, `B`, `draw` or `timeout`; time to kill in ticks (for a timeout, the cap); units of each group left; optionally their health in per-mille of the group's full health. Integers only. |
+
+Example (synthetic types, invented numbers):
+
+````text
+```arena
+group-a: CART*2
+group-b: WALKER*3
+map-size: 24
+start-distance: 8
+tick-cap: 3000
+game-speed: 4
+n: 3
+trial: A 500 1 0 300 0
+trial: A 640 2 0 700 0
+trial: timeout 3000 1 1
+```
+````
+
+The record's procedure must say how the stock game was set up to match this scenario (the same groups, placement, map and orders), including the game mode (the arena applies the skirmish game-mode layer) and the alternation: the trial lines in order, the 1st, 3rd, … with group A as the first house, on the lower-x side and created first, the 2nd, 4th, … with group B so; an even N. Per-trial lines are needed: the KS test compares the distributions of the times to kill, which a mean and a spread cannot give. When the front matter says `value-visibility: local`, the outcome keys (`n`, the win counts, `trial`) may come instead from the git-ignored `measurements/local/<id>.json`: `{"arena": [ {"n": 32, "wins-a": 20, "trial": ["A 812 3 0", …]}, … ]}`, one object per `arena` block in order, with the same keys (integers or strings; `trial` an array of trial-line strings); a key may be in the record or in the local file, not in both. Win rates under stated settings are not rules data, so arena records will usually be `committed`.
+
+**The comparison.** `arena_matches_the_oracle` (local lane, `crates/tools/tests/arena.rs`) runs each record's matchup on the reference ruleset over the record's N seeds (`GLASNOST_ARENA_N` overrides), and tests, at α = 0.01 per test (`arena::ALPHA`, our test design choice): each group's win rate with a two-proportion z test (pooled variance; equal rates with a pooled variance of 0 give p = 1), and the times to kill of the decided trials with a two-sample Kolmogorov–Smirnov test (ties handled; asymptotic p-value with Stephens' correction, λ = (√nₑ + 0.12 + 0.11/√nₑ)·D; no comparison when neither side has a decided trial, a failure when only one has). It prints, per matchup, both rates, the p-values and pass or fail, and fails if any matchup fails. With no arena record it passes and prints `skipped: no arena measurement record in measurements/`; without `GLASNOST_GAME_DIR` it prints that it is skipped and why. `arena_records_parse` (in CI) checks that every record's scenario parses. The statistics are unit-tested against hand computations in `stats.rs`; `records_are_run_and_compared` runs the whole record path on the synthetic ruleset over invented records in a temporary folder.
+
+**Findings of the first reference runs (M7b step 4c, N = 32).** Outcomes vary with the seed (standard deviations of the time to kill of 9 to 69 ticks), so the KS test has material. The first runs found two engine defects and one arena defect, all fixed in step 4c. (1) **Infantry whose fire frame equals its firing sequence's frame count never fired** (two stock infantry types, even one against one: every trial a timeout). The tick ran the completion follow-up of S-0107 claim 8 before the firing rules of claim 11, so the stage never equalled the fire frame; S-0107 *State and ordering* puts the firing rules before the completion follow-up ("judged against the sequence that is current before that tick's completion follow-up"; "When the fire frame equals *C*, the shot is still released, on the tick the sequence completes"), and the follow-up before the movement rule. The infantry turn is now fear rules (`infantry::fear_turn`), firing (`behave::infantry_step`), then completion and movement (`infantry::sequence_turn`); tests `s0107_fire_frame_equal_to_the_count_still_fires` and `s0107_attack_state_ends_the_tick_after_completion` (`claims_s0301.rs`; both fail with the old order). The determinism goldens did not change. (2) **A weapon whose projectile is named in another letter case had no projectile**, so its shots did no damage (one stock vehicle type: 38 shots, the target group at 1000 ‰), and against a heavy tank it took no target at all (0 shots; with the fix it fires). The importer copied a weapon's `Projectile` and `Warhead` as written; S-0004 claims 2 and 13 make them type references that find the existing type without regard to letter case. They are now references, written as the named type's key (test `weapon_references_ignore_letter_case`, `crates/convert`). A local check of the reference import found no case mismatch in the other name-only fields that the simulation looks up by exact name (`DeploysInto`, `UndeploysInto`). (3) **Mirror matchups were not even** before the alternation (above): synthetic, N = 512, three carts a side, B won 74 %; reference, N = 256, five of one infantry type a side B 55.9 % and three of one tank type a side B 82.4 %. Swapping only the sides and swapping only the creation order gave exactly mirrored counts (226 to 30 out of 256 for the carts), so the house order plays no part; the place and the creation order do, in a direction that depends on the type (one walker a side favoured the lower-x side). With an odd start distance the fronts are not equally far from the middle and the farther side won every trial (carts, distance 9). Being created first means taking turns first (S-0203 claim 3), which is game behaviour; the geometry is the arena's. With the alternation, B's rate at N = 256: carts 50.8 %, five walkers 52.3 %, three crushers 46.1 %, five crushers 51.6 %; reference, five infantry 49.2 %, three tanks 54.3 %, five of a second infantry type 45.7 % (all within 1.4 standard errors of 50 %). The results with the fixes, and the outputs from before them, are in the git-ignored `local-lane/m7b/arena/` (`summary.txt`, `before-fixes/`).
+
 ## M6c step ledger
 
 M6c is the last part of M6 (session of 2026-10-16). Baseline: main 2c92746, spec files unchanged since 732c990 (S-0215 rev 48, S-0105 rev 19). Resume from this table; each row is updated when its step is merged to main.

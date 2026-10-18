@@ -5,12 +5,15 @@
 //! **M1** adds the local-only lane ([`local_lane`], binary
 //! `glasnost-local-lane`); the asset viewer lives in `glasnost-app`. **M3**
 //! adds the headless simulation runner ([`headless`], binary
-//! `glasnost-headless`).
+//! `glasnost-headless`). **M7b** adds its arena mode ([`arena`], with the
+//! statistics of the comparison in [`stats`]).
 
+pub mod arena;
 pub mod headless;
 pub mod local_lane;
 pub mod side_audit;
 pub mod skirmish_lane;
+pub mod stats;
 pub mod trigger_lane;
 
 use std::io;
