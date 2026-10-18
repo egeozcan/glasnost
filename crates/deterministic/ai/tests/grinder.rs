@@ -2,7 +2,8 @@
 //! enemy vehicles are recycled; controlled infantry go to an absorbing
 //! building with room first; badly damaged own units at home are recycled;
 //! surplus infantry are recycled only while money is short; harvesters,
-//! engineers and controllers are kept; the house builds one grinder. The
+//! engineers and controllers are kept; the house builds one grinder once it
+//! has a use for it. The
 //! tests use invented types on the synthetic skirmish.
 
 use std::sync::Arc;
@@ -235,9 +236,9 @@ fn a_switched_off_grinder_gets_no_vehicle() {
     assert_eq!(sent(&orders, foe, Behaviour::Eaten), None, "{orders:?}");
 }
 
-// PLAN §4.7: the house builds a grinder once it can, and only one.
+// PLAN §4.7: the house builds a grinder only once it holds a unit it would send (here a badly damaged own vehicle), queued on its line and paid as it goes, and only one.
 #[test]
-fn the_house_builds_one_grinder() {
+fn the_house_builds_one_grinder_when_it_has_a_use() {
     let mut g = game(1);
     let grnd = g.world.rules().index_of(Kind::Building, "GRND").unwrap();
     let count = |w: &World| {
@@ -246,6 +247,12 @@ fn the_house_builds_one_grinder() {
             .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Building && o.type_index == grnd)
             .count()
     };
+    for _ in 0..3000 {
+        g.step();
+    }
+    assert_eq!(count(&g.world), 0, "no use, no grinder");
+    let hurt = spawn(&mut g.world, Kind::Vehicle, "GUNR", 0, 2, 10);
+    g.world.obj_mut(hurt).unwrap().health /= 5;
     for _ in 0..6000 {
         g.step();
         if count(&g.world) > 0 {

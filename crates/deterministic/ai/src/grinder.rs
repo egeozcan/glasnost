@@ -4,10 +4,15 @@
 //! and pays the building's owner what selling that unit would give its own
 //! owner (S-0603 claims 1, 5 and 8). A person who knows this:
 //!
-//! - **builds one.** Once the house keeps its harvesters and has no
-//!   recycling building, it builds the cheapest recycling building type it
-//!   can build and place now, with a reserve in hand
-//!   ([`crate::brain::Brain`] calls [`build_type`]);
+//! - **builds one when it has a use for it.** Once the house keeps its
+//!   harvesters, has no recycling building (nor one on its line) and holds
+//!   a unit it would send (an idle controlled enemy vehicle or a badly
+//!   damaged own unit), it orders the cheapest recycling building type it
+//!   can build and place now ([`crate::brain::Brain`] calls
+//!   [`build_type`]). It queues it behind a building already on the line
+//!   and pays as it goes (S-0404), as a person does, rather than waiting
+//!   for a free line and money in hand: a house short of money keeps its
+//!   building line busy all game;
 //! - **grinds mind-controlled enemy units.** A controlled unit is consumed
 //!   as an object of the controlling house: the house is paid for it and
 //!   the controller's slot is freed for a new victim (claim 9). Every idle
@@ -70,9 +75,6 @@ const NEAR: i64 = 12; // nocite: tuning of our own opponent
 /// How many cells off the grinder a far unit is first moved to.
 const SIDE: i32 = 4; // nocite: tuning of our own opponent
 
-/// The credits kept in hand beyond the grinder's cost, as a multiple of it.
-const RESERVE: i32 = 2; // nocite: tuning of our own opponent
-
 /// Whether building type `t` recycles (S-0603 Terms: the grinding flag).
 fn grinder_type(w: &World, t: TypeRef) -> bool {
     t.kind == Kind::Building
@@ -94,25 +96,49 @@ pub fn grinders(w: &World, house: HouseId) -> Vec<ObjectId> {
 }
 
 /// The cheapest recycling building type the house can build and place now,
-/// when it has none (nor one on its line) and holds the reserve.
+/// when it has none (nor one on its line) and holds a unit it would send.
 pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
     let house = script.house;
-    if script
-        .own(w)
+    let own = script.own(w);
+    if own
         .iter()
         .any(|&id| w.obj(id).is_some_and(|o| grinder_type(w, tech::type_of(o))))
     {
         return None;
     }
-    let credits = glasnost_sim::seams::available_credits(w, house);
+    let depot = own.iter().any(|&id| glasnost_sim::depot::is_depot(w, id));
+    let useful = own.iter().any(|&id| {
+        free(w, id)
+            && if mind::mind_controlled(w, id) {
+                w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle)
+            } else {
+                wounded(w, id, depot)
+            }
+    });
+    if !useful {
+        return None;
+    }
+    let on_line = |t: TypeRef| {
+        production::line_of(w, house, t)
+            .is_some_and(|l| l.item.as_ref().is_some_and(|i| i.t == t) || l.queue.contains(&t))
+    };
     all_types(w)
         .into_iter()
         .filter(|&t| grinder_type(w, t))
         .filter(|&t| tech::buildable(w, house, t))
-        .filter(|&t| !script.busy(w, t))
-        .filter(|&t| credits >= production::cost_field(w, t).saturating_mul(RESERVE))
+        .filter(|&t| !on_line(t))
         .filter(|&t| script.place_cell(w, t).is_some())
         .min_by_key(|&t| (production::cost_field(w, t), t.index))
+}
+
+/// Whether own unit `id` is badly damaged and goes to a recycling building:
+/// at or below [`WOUNDED_PERCENT`] of its strength, and not a vehicle when
+/// the house has a repair depot (the brain's repair step sends it there).
+fn wounded(w: &World, id: ObjectId, depot: bool) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let strength = i64::from(glasnost_sim::combat::damage::strength(w, id));
+    !(depot && o.kind == Kind::Vehicle)
+        && i64::from(o.health) * 100 <= strength * WOUNDED_PERCENT // nocite: a percentage, tuning of our own opponent
 }
 
 /// Whether unit `id` is bound for a recycling building: *eaten* current or
@@ -193,13 +219,7 @@ impl Special {
         let wounded: Vec<ObjectId> = mine
             .iter()
             .copied()
-            .filter(|&id| {
-                let Some(o) = w.obj(id) else { return false };
-                let strength = i64::from(glasnost_sim::combat::damage::strength(w, id));
-                // A vehicle goes to a repair depot when the house has one (the brain's repair step).
-                !(depot && o.kind == Kind::Vehicle)
-                    && i64::from(o.health) * 100 <= strength * WOUNDED_PERCENT // nocite: a percentage, tuning of our own opponent
-            })
+            .filter(|&id| wounded(w, id, depot))
             .collect();
         let mut surplus: Vec<ObjectId> = Vec::new();
         if !absorber_room && glasnost_sim::seams::available_credits(w, house) < LOW_MONEY
