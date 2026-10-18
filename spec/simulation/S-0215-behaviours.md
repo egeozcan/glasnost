@@ -2,7 +2,7 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 66
+revision: 67
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -131,9 +131,12 @@ This spec states no order of its own in either case. Q-1154 question 1 is answer
 Q-1160 question 1 is answered by claim 11: a completed body turn is already complete at
 that tick's first start, not only at its late start. S-0206 claim 1 already gives the
 turn's tick-based completion; B47 now distinguishes same-tick processing from a late start.
-For question 2, S-0213 claim 21 already gives the attack order's empty order-level destination
-and later approach, and S-0206 claim 9 owns subsequent aiming. The exact cancellation of
-pre-step movement and its next point needs S-0207's confirmation and remains open there.
+Question 2 is answered by S-0207 claim 11, with proposed measurement D11 c:
+attack during the pre-step turn clears both destinations, leaves no heading point and
+cannot complete the cancelled step without a new locomotor destination. Cancellation
+itself neither stops nor retargets the body turn. Subsequent aiming can change its target
+facing independently; B47 retains its separate aiming and readiness qualifications.
+S-0213 claim 21 owns the order boundary and later approach.
 Q-1161 is answered in this spec's entirety by claim 11 and B48: an idle vehicle can start
 an ordered move before arrival despite already having a locomotor destination. A retained
 movement goal alone does not decide readiness. S-0207 claim 25 already owns when that
@@ -5434,7 +5437,8 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   start, has *move* current, *attack* queued, no heading point or locomotor destination,
   no displacement and an unfinished body turn. These are input-state qualifications,
   not permission to discard an unexpectedly early start. Record other initial states
-  separately for Q-1160 question 2 rather than assuming that cancelling the goal erased
+  separately against S-0207 claim 11 and its scenario D11 c, which answer Q-1160
+  question 2's cancellation consequences; do not assume that cancelling the goal erased
   every movement state. An independently caused approach destination, body re-aim or other
   readiness blocker makes the later isolated comparison inconclusive. A change caused by
   an unexpectedly early *attack* start is instead a falsification, not a void run. A target
@@ -5582,11 +5586,11 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   turning: a non-turning driving vehicle additionally needs a present heading point and
   a positive integer movement step to count as moving for readiness. Its claims 9 and 16
   need no widening.
-- Q-1160 question 2: S-0207 must establish the pre-step turn's heading-point and pending
-  path consequences when an ordinary attack order clears its destination. S-0213 claim 21
-  already owns the empty order-level destination at that boundary, and S-0206 claim 9
-  owns later firing-error body re-aim. Do not infer next-point cancellation from
-  order-level destination removal alone.
+- Q-1160 question 2 is now covered by S-0207 claim 11 and its scenario D11 c:
+  cancelling the pre-step destination leaves no heading point, cannot authorize the
+  cancelled step and does not itself stop or retarget the body turn. Retain that
+  matching contract, separately from B47's aiming and readiness qualifications.
+  No further S-0207 change is requested.
 - S-0402 claim 11's turning-body discussion and its later turn-end-late-start
   outcomes should use claim 11 here: without another blocker, a tick-number turn
   expiry permits that tick's first start and same-tick processing, not just a late
