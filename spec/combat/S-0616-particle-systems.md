@@ -2,11 +2,11 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404]
 supersedes: []
@@ -34,6 +34,8 @@ Damage follows the particle's own kind, including gas when kinds are mixed (clai
 - **Particle requests from an animation's middle event:** S-0109 claim 14.
 - **Art lookup** of particles and systems: S-0007 claims 28 and 29.
 - **Special-hit effects:** S-0615.
+- **The railgun shot's hits and terrain effects:** S-0306 claim 27. This spec retains the
+  beam sampling and end-point rule (F14), and the later particle line (claim 17).
 - **When each creator of claim 1 makes its system.** Each is owned by the spec named there.
 
 ## Terms
@@ -176,12 +178,15 @@ stands alone. This spec adds the terms after them.
      nothing is made and nothing is drawn. The system is made at the building's position plus
      the type's destruction-smoke displacement, with no owner house. Its owner object is the
      building, so it is marked when the building is removed (claim 4):
-     - A building that does not explode leaves play at the end of its death effects (S-0312
-       claim 21), in the same tick as the smoke is made and before the system's first turn. Its
-       destruction smoke is marked at once, never emits, and leaves play in its first turn.
-     - A building that explodes stays in play until its own next turn (S-0312 claim 21). Its
-       destruction smoke emits in any turn before then that claim 9 allows, and is then marked. Particles
-       already made carry on until they end.
+     - A building removed immediately under S-0312 claim 21 (its type does not explode and
+       it was not being sold when destroyed) leaves play at the end of its death effects,
+       before the system's first turn. Its destruction smoke is marked at once, never emits,
+       and leaves play in its first turn.
+     - A building awaiting removal under S-0312 claim 21 (its type explodes, or it was being
+       sold when destroyed) stays until its next eligible own turn; erasure or an
+       electromagnetic pulse can postpone that removal. Its destruction smoke emits in any
+       turn before removal that claim 9 allows, and is marked at removal. Particles already
+       made carry on until they end.
      In neither case does it emit after the building has gone.
    - **Natural smoke.** A building whose type names a natural particle system gets one when it is
      placed in play, if it has none, at its position plus the type's natural-smoke displacement.
@@ -211,10 +216,9 @@ stands alone. This spec adds the terms after them.
      So later motion of the target changes nothing: the line (claim 17) is made in the system's
      first turn, to that fixed point. A fire
      emitter is marked and let go when its firer takes a new target that is not within reach (outside the weapon's range, the test of S-0307 claim 12), is given a move order, or dies. A spark or railgun emitter is not let go by any of these; it is marked only by claim 4's owner removal, and otherwise ends by its own counter or line (claim 22).
-     Creating the emitter takes no draw. The railgun's beam is the shot itself (S-0306). The
-     railgun shot's own effect (the objects it hits along the beam, and what happens where the
-     beam meets the terrain) is computed together with F14's end point, and only when the
-     railgun place is empty; no approved spec owns it yet (Open questions).
+     Creating the emitter takes no draw. The railgun shot's hits, terrain effects and their
+     draws are owned by S-0306 claim 27 and occur with F14's end-point computation, before
+     the emitter is created. F14 remains this spec's sampling and end-point rule.
    - **Electric bolt.** Each electric-bolt shot makes one system of the game-wide spark type at
      the bolt's end. When the game-wide spark type is absent, nothing is created. This is a departure for an absent key, with no switch and an importer warning (Import mapping; Open questions).
    - **Trigger actions.** Two actions touch particle systems. The first names a particle system
@@ -1223,15 +1227,20 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   at the undeployed miner.
 - **P21. Destruction smoke.** A test rules file giving a building type a destruction list of one
   smoke, one spark and one fire system, in that order and in other orders. Part a: a building of a
-  type that does not explode, destroyed 30 times. Part b: the same with a type that explodes.
+  type that does not explode and is not being sold, destroyed 30 times. Part b: the same with a type that explodes.
   Part c: a building that holds a damage-smoke system and a natural-smoke system, destroyed.
+  Part d: the non-exploding type destroyed while being sold, before the sale removes it.
+  Repeat with an electromagnetic pulse postponing its removal under S-0312 claim 21.
   Observable: the kind of each destruction system made, the draws in the recorder, and the ticks in
   which each emits and leaves play. Expected: only the smoke entry is ever made, with no pick draw
   (one eligible entry gives the equal-bounds draw R(0, 0), which takes no raw value, S-0202 claim 4,
   a second test type with two smoke entries shows one ranged draw R(0, 1)); in part a it never emits and leaves play in its first turn; in part b it may emit
-  until the building's next turn and is then marked, its particles carrying on; in part c it is made
-  all the same. Falsified by a spark or fire system made, by a missing smoke system in part c, or by
-  an emission after the building has gone.
+  until the building's next eligible removal turn and is then marked, its particles carrying on.
+  In part c it is made all the same. Part d permits the same pre-removal emission as part b,
+  including during the pulse's postponement, and marks the system only at removal. Record the
+  building's removal tick as well as each system's emission and marking ticks. Falsified by a
+  spark or fire system made, by a missing smoke system in part c, by immediate owner-removal
+  marking in part d while the building still awaits removal, or by emission after removal.
 - **P22. Effect weapons with several flags, and the railgun end point.** A test rules file. Part a:
   a weapon with the fire, spark and railgun flags and one named system type, firing at a vehicle. Observable:
   the systems made at the shot, their emitter places and order, and the ticks at which the weapon fires again.
@@ -1273,9 +1282,6 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   here. The importer warns and uses the plain displacement.
 - **Electric-bolt shot** (Terms, claim 1): no approved spec owns the shot itself (its range, damage
   and draw). This spec relies only on the shot having an end point.
-- **Railgun shot's own effect** (claim 1, F14): the objects a railgun shot hits along its beam,
-  and what happens where the beam meets the terrain, are computed with F14's end point but owned by
-  no approved spec. This spec relies only on the end point.
 - **Absent game-wide spark type** (claim 1; Import mapping, game-wide spark type row): the original's result when that key is absent is not established. Our engine creates no spark system and takes no draw there, as a departure. S-0601 claim 16 has the same key and case. No measurement is proposed yet; a test rules file with the key absent, and an electric-bolt shot, would show the original's result.
 - **Shared gas system's position** (claim 1, Constants): the second trigger action of claim 1 makes the system's own position observable (S-0613 claim 1 says so). P1 part b decides the position.
 - **Rounding of a negative radius** (claim 20): the original's rounding is not known. Our engine rounds down, as F3 says. No measurement is proposed yet.
