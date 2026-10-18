@@ -1704,6 +1704,10 @@ pub struct Quirks {
     // spec: S-0607 claim 24 and Edge cases
     #[serde(default = "on")]
     pub lift_standin_stays_seized: bool,
+    /// A unit seized with the driving, walking or ship stand-in locomotor gives up the vehicle-present mark of its cell at the seize and holds none until its stand-in's own movement starts a step into a neighbouring cell, so one that never moves stands unmarked for good; its listed presence still decides vehicle entry outcomes, but rules that read only the occupancy record, such as the nearby-cell search, see its cell as free; off: it keeps the vehicle-present mark of its own cell at the seize, as a vehicle at rest does (the teleporting stand-in is unchanged).
+    // spec: S-0607 claim 23 and Edge cases
+    #[serde(default = "on")]
+    pub lift_standin_unmarked_cell: bool,
     /// A recycling building tests nothing about itself or its owner when an entrant arrives, so a building being sold, switched off or now owned by a house that does not count the entrant's house as allied still consumes the entrant and pays its owner; off: at consumption the building gives claim 2's docking answer to every entrant, infantry included, without the link-place row, and a refused entrant is not consumed, its destination is cleared and it falls back to rest.
     // spec: S-0603 claim 5 and Edge cases
     #[serde(default = "on")]
@@ -2296,6 +2300,7 @@ impl Default for Quirks {
             lift_impact_double_credit: true,
             lift_deck_impact_reads_ground: true,
             lift_standin_stays_seized: true,
+            lift_standin_unmarked_cell: true,
             grinder_no_arrival_recheck: true,
             absorber_contact_no_capacity_recheck: true,
             absorber_release_bridge_ends_search: true,
@@ -3401,6 +3406,10 @@ impl Quirks {
                 self.lift_deck_impact_reads_ground,
             ),
             ("lift_standin_stays_seized", self.lift_standin_stays_seized),
+            (
+                "lift_standin_unmarked_cell",
+                self.lift_standin_unmarked_cell,
+            ),
             (
                 "grinder_no_arrival_recheck",
                 self.grinder_no_arrival_recheck,
