@@ -1,9 +1,9 @@
 ---
 id: Q-1161
 title: S-0215 claim 11's move-destination clause for a driving vehicle, and an ordered move from area guard, sleep or attack
-status: open
+status: answered
 related: [S-0215, S-0206, S-0207, S-0213]
-answered-by: []
+answered-by: [S-0215]
 ---
 
 ## Need
