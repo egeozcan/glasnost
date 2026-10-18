@@ -125,7 +125,7 @@ pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
     all_types(w)
         .into_iter()
         .filter(|&t| grinder_type(w, t))
-        .filter(|&t| tech::buildable(w, house, t))
+        .filter(|&t| crate::startable(w, house, t))
         .filter(|&t| !on_line(t))
         .filter(|&t| script.place_cell(w, t).is_some())
         .min_by_key(|&t| (production::cost_field(w, t), t.index))

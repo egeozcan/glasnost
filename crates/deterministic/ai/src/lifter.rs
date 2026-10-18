@@ -145,7 +145,7 @@ pub(crate) fn build_type(script: &Script, w: &World) -> Option<TypeRef> {
     all_types(w)
         .into_iter()
         .filter(|&t| lifter_type(w, t))
-        .filter(|&t| tech::buildable(w, house, t))
+        .filter(|&t| crate::startable(w, house, t))
         .filter(|&t| first || !script.busy(w, t))
         .filter(|&t| first || credits >= production::cost_field(w, t).saturating_mul(RESERVE))
         .min_by_key(|&t| (production::cost_field(w, t), t.index))

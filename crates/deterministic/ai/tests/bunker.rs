@@ -293,3 +293,43 @@ fn let_out_to_join_after_a_long_sit() {
         "the re-entry pause: {t}"
     );
 }
+
+// S-0404 claim 3 and S-0411 Terms, PLAN §4.7: a type stays buildable while every factory of the house is switched off (a temporal lock on the yard, say), but a build order would be refused, so the brain's build choices (bunker, gattling defence, grinder, lifter, psychic sensor) take it as not startable and give no order; switched on again, it is startable.
+#[test]
+fn a_switched_off_yard_makes_nothing_startable() {
+    let mut g = game(1);
+    let bunk = glasnost_sim::econ::TypeRef {
+        kind: Kind::Building,
+        index: g.world.rules().index_of(Kind::Building, "BUNK").unwrap(),
+    };
+    for _ in 0..8000 {
+        if glasnost_sim::econ::tech::buildable(&g.world, HouseId(0), bunk) {
+            break;
+        }
+        g.step();
+    }
+    let mut w = g.world.clone();
+    assert!(glasnost_ai::startable(&w, HouseId(0), bunk));
+    let ids: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(0)) && o.kind == Kind::Building)
+        .map(|o| o.id)
+        .collect();
+    for &id in &ids {
+        w.obj_mut(id).unwrap().econ.building.switched_off = true;
+    }
+    assert!(glasnost_sim::econ::tech::buildable(&w, HouseId(0), bunk));
+    assert!(!glasnost_ai::startable(&w, HouseId(0), bunk));
+    // The order the brain no longer gives would indeed be refused.
+    glasnost_sim::orders::issue(&mut w, HouseId(0), Order::Build { what: bunk });
+    testkit::run(&mut w, 2);
+    assert!(
+        glasnost_sim::econ::production::line_of(&w, HouseId(0), bunk)
+            .is_none_or(|l| l.item.is_none() && l.queue.is_empty())
+    );
+    for &id in &ids {
+        w.obj_mut(id).unwrap().econ.building.switched_off = false;
+    }
+    assert!(glasnost_ai::startable(&w, HouseId(0), bunk));
+}

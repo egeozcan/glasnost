@@ -49,3 +49,25 @@ pub mod skirmish;
 pub mod special;
 pub mod tech_buildings;
 pub mod terror;
+
+/// Whether a build order for `t` would be applied now: the type is
+/// buildable (S-0411 Terms) and a switched-on factory building of the house
+/// could start it. A person sees a switched-off factory (a building locked
+/// by a temporal beam, say) and does not click a cameo the order would be
+/// refused for, so the M7a build choices ask this rather than
+/// buildability alone.
+pub fn startable(
+    w: &glasnost_sim::world::World,
+    house: glasnost_sim::world::HouseId,
+    t: glasnost_sim::econ::TypeRef,
+) -> bool {
+    use glasnost_sim::econ::tech;
+    // spec: S-0404 claim 3 (a build order is applied only with a switched-on factory that could make the type)
+    tech::buildable(w, house, t)
+        && w.objects.values().any(|b| {
+            b.kind == glasnost_sim::rules::Kind::Building
+                && b.owner == Some(house)
+                && !b.econ.building.switched_off
+                && tech::could_start(w, b, t)
+        })
+}
