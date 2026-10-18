@@ -14,6 +14,7 @@ Records of what the original game does when run and observed: timings, counts, c
 | Path | Contents |
 |---|---|
 | `<topic>/M-xxxx-*.md` | One record per file, same topics as `spec/` |
+| `<topic>/M-xxxx-*.csv` | Per-trial data of a record, when it has many trials (columns described in the record) |
 | `TEMPLATE.md` | The record template |
 | `local/` | Git-ignored local-only values; never committed |
 
@@ -21,4 +22,6 @@ Records of what the original game does when run and observed: timings, counts, c
 
 | ID | Title | Topic | Confirms | Visibility |
 |---|---|---|---|---|
-| — | *No measurements yet* | | | |
+| [M-0001](combat/M-0001-arena-yuri-vehicles.md) | Unit arena: Yuri vehicles against Allied and Soviet units at equal cost | combat | new finding | committed |
+| [M-0002](combat/M-0002-arena-yuri-infantry.md) | Unit arena: Yuri infantry against infantry and main battle tanks at equal cost | combat | new finding | committed |
+| [M-0003](combat/M-0003-arena-allied-soviet-vehicles.md) | Unit arena: Allied against Soviet vehicles at equal cost | combat | new finding | committed |
