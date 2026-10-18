@@ -436,6 +436,7 @@ pub fn arrival(w: &mut World, id: ObjectId) -> bool {
     {
         return false;
     }
+    // spec: S-0215 claim 29 (revision 64: the movement-arrival test also applies at a tank bunker, made by movement into a cell, not by the enter processing)
     // spec: S-0606 claim 5 (in enter, or in patrol, which the same test accepts; contact and destination both the bunker; its cell the docking cell)
     if !matches!(o.beh.current, Some(Behaviour::Enter | Behaviour::Patrol))
         || o.dest != Some(Target::Object(k))
@@ -547,13 +548,13 @@ pub fn chosen_distance(w: &World, p: Pos) -> u64 {
 }
 
 /// The objects examined on foundation cell `c` of bunker `k` for vehicle
-/// `v` (S-0606 claim 6 and Edge cases, `quirks.bunker_clear_nearest_only`):
+/// `v` (S-0606 claim 6 and Edge cases, `quirks.bunker_clear_chosen_only`):
 /// with the switch on, the cell's chosen object (F5), unless it is the
 /// entering vehicle; off, every candidate other than the entering vehicle.
 fn examined(w: &World, k: ObjectId, v: ObjectId, c: CellXY) -> Vec<ObjectId> {
     let listed = candidates(w, k, c);
-    if !w.rules().quirks.bunker_clear_nearest_only {
-        // spec: S-0606 Edge cases (quirks.bunker_clear_nearest_only off: every candidate of claim 6 other than the entering vehicle on the cell)
+    if !w.rules().quirks.bunker_clear_chosen_only {
+        // spec: S-0606 Edge cases (quirks.bunker_clear_chosen_only off: every candidate of claim 6 other than the entering vehicle on the cell)
         return listed.into_iter().filter(|&x| x != v).collect();
     }
     let mut best: Option<(u64, ObjectId)> = None;
@@ -688,7 +689,7 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
             }
         }
         Stage::Waiting => {
-            // spec: S-0606 S1 (waiting: the object nearest each foundation cell's centre is absent or is the entering vehicle)
+            // spec: S-0606 S1 (waiting: each foundation cell's chosen object, F5, is absent or is the entering vehicle)
             let clear = foundation(w, k)
                 .into_iter()
                 .all(|c| examined(w, k, v, c).is_empty());
@@ -891,12 +892,13 @@ pub fn process_unload(w: &mut World, v: ObjectId) -> i32 {
     continue_unload(w, v)
 }
 
-/// The rest of a released vehicle's *unload* processing (S-0606 claim 12):
-/// an ordinary type does nothing more and chooses 450 ticks, no draw; a
-/// type with the harvester or weeder flag, a deploy-into building type or
-/// the simple-deployer flag goes on with that property's *unload* rule, in
-/// that order of precedence. The passenger unloading of S-0507 is never
-/// reached.
+/// The rest of a released vehicle's *unload* processing (S-0606 claim 12,
+/// S-0415 claim 1): an ordinary type does nothing more and chooses 450
+/// ticks, no draw; a type with the harvester or weeder flag, a deploy-into
+/// building type or the simple-deployer flag goes on with that property's
+/// *unload* rule, in that order of precedence. The passenger unloading of
+/// S-0507 is never reached. Whether the deploy-fire rule comes first is
+/// Q-1164 (interim: S-0415 claim 1, it does not apply).
 fn continue_unload(w: &mut World, v: ObjectId) -> i32 {
     let Some(o) = w.obj(v) else {
         return UNLOAD_DELAY;
@@ -904,20 +906,21 @@ fn continue_unload(w: &mut World, v: ObjectId) -> i32 {
     let Some(u) = w.rules().unit(o.kind, o.type_index).cloned() else {
         return UNLOAD_DELAY;
     };
-    // spec: S-0606 claim 12 (first the harvester or weeder flag: S-0402's unload rule)
+    // Q-1164 interim (S-0415 claim 1, revision 18: the deploy-fire rule does not apply to a bunkered vehicle; S-0606 claim 12, revision 5, would put it first)
+    // spec: S-0606 claim 12 and S-0415 claim 1 (the harvester or weeder flag: S-0402's unload rule)
     if u.harvester || u.raw.weeder.unwrap_or(false) {
         return crate::econ::harvest::process_unload(w, v);
     }
-    // spec: S-0606 claim 12 (then a deploy-into building type: S-0415's unload rule, the standard delay of S-0215 claim 6)
+    // spec: S-0606 claim 12 and S-0415 claim 1 (revision 18: then a deploy-into building type makes its deploy attempt whatever its passenger capacity or deploy-fire flag; the standard delay of S-0215 claim 6)
     if let Some(b) = crate::econ::deploy::deploys_into(w, o.kind, o.type_index) {
         let _ = crate::econ::deploy::attempt(w, v, b);
         return crate::process::standard_delay(w, v);
     }
-    // spec: S-0606 claim 12 (then the simple-deployer flag: S-0517's unload rule)
+    // spec: S-0606 claim 12 and S-0415 claim 1 (then the simple-deployer flag: S-0517's unload rule, the in-place cycle; whether a released vehicle reaches it is S-0606 Open questions item 6)
     if u.simple_deployer {
         return crate::econ::inplace::process(w, v);
     }
-    // spec: S-0606 claim 12 (an ordinary type: nothing more, exactly 450 ticks, no draw)
+    // spec: S-0606 claim 12 and S-0415 claim 1 (none of these, a deploy-fire type included under Q-1164's interim: nothing more, exactly 450 ticks, no draw)
     UNLOAD_DELAY
 }
 

@@ -752,6 +752,17 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
         (Some(Behaviour::Enter), Kind::Vehicle) if crate::econ::harvest::is_harvester(w, id) => {
             crate::econ::harvest::process_enter(w, id)
         }
+        // spec: S-0215 claim 29 (the entry request goes to the contact, otherwise to the remembered entry object: a vehicle in enter with neither, and no object destination, gets no accepting reply and falls back to rest) and S-0314 claim 20 (revision 28: the docked vehicle refused for standing on its depot falls back at its next processing)
+        (Some(Behaviour::Enter), Kind::Vehicle)
+            if w.obj(id).is_some_and(|o| {
+                o.contact.is_none()
+                    && o.depot.entering.is_none()
+                    && !matches!(o.dest, Some(Target::Object(_)))
+            }) =>
+        {
+            fall_back(w, id, false);
+            standard_delay(w, id)
+        }
         // spec: S-0606 claim 12 and S-0415 claim 1 (a bunkered vehicle's unload is the bunker release, not passenger unloading)
         (Some(Behaviour::Unload), Kind::Vehicle) if crate::structures::bunker::bunkered(w, id) => {
             crate::structures::bunker::process_unload(w, id)

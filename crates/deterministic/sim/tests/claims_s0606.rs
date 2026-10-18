@@ -507,11 +507,11 @@ fn claim_6_clearing_scatters_a_blocker() {
     assert!(!cells.contains(&w.obj(s).unwrap().pos.cell()), "scattered off the foundation");
 }
 
-// spec: S-0606 Edge cases (quirks.bunker_clear_nearest_only on: the vehicle is the nearest object in its docking cell, a second object there is neither asked to scatter nor waited for; off: it is asked to scatter and waited for)
+// spec: S-0606 Edge cases (quirks.bunker_clear_chosen_only on: the vehicle is the chosen object of its docking cell, a second object there is neither asked to scatter nor waited for; off: it is asked to scatter and waited for)
 #[test]
-fn claim_6_nearest_only_both_positions() {
+fn claim_6_chosen_only_both_positions() {
     for nearest in [true, false] {
-        let r = quirked(|q| q.bunker_clear_nearest_only = nearest);
+        let r = quirked(|q| q.bunker_clear_chosen_only = nearest);
         let mut w = game_on(&r);
         let b = pit(&mut w, "PIT");
         let u = tank(&mut w, 6, 1);
@@ -1098,4 +1098,19 @@ fn claim_20_combined_roles() {
         "the depot's exchange queues sleep"
     );
     round_trip(&w);
+}
+
+// spec: S-0606 claim 12 and S-0415 claim 1 (revision 18: a bunkered deploy-fire type with no other property does nothing more after the release and chooses exactly 450 ticks); Q-1164 interim (S-0415 decides: the deploy-fire rule does not apply to a bunkered vehicle)
+#[test]
+fn claim_12_bunkered_deploy_fire_interim() {
+    let mut r = rules();
+    vehicle(&mut r, "FIRER", |t| t.deploy_fire = Some(true));
+    let mut w = game_on(&r);
+    let b = pit(&mut w, "PIT");
+    let u = put(&mut w, Kind::Vehicle, "FIRER", 0, 1, 1);
+    link(&mut w, b, u);
+    w.obj_mut(u).unwrap().beh.current = Some(Behaviour::Unload);
+    assert_eq!(bunker::process_unload(&mut w, u), 450);
+    assert!(!bunker::bunkered(&w, u));
+    assert_eq!(queued(&w, u), Some(Behaviour::Move));
 }

@@ -682,19 +682,38 @@ fn claim_20_docked_vehicle_keeps_contact() {
     assert_eq!(contact(&w, v), Some(d));
 }
 
-// spec: S-0314 claim 20 (an enter order on the same depot ends the docking: a damaged vehicle queues and the standing-on-depot refusal clears contact and queue next tick; at full health contact is lost at once)
+// spec: S-0314 claim 20 and table (revision 28, Q-1158 answered: a docked damaged vehicle standing on the depot given an enter order on that depot takes claim 23's queued entry in full: enter queued, the depot remembered, no destination, contact and tether kept; enter is current at its next first start and its processing queues nothing; the retry later in that turn is refused for standing on the depot and clears contact, queued entry and destination, queueing no behaviour; enter falls back to rest at its next processing. At full health the contact is lost at once)
 #[test]
 fn claim_20_same_depot_enter_while_docked() {
     let (mut w, d, v) = pad_scene(300);
     assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
+    let dq = w.obj(d).unwrap().beh.queued;
     tick::step(&mut w);
-    tick::step(&mut w);
-    assert_eq!(
-        contact(&w, v),
-        None,
-        "queued, then refused while standing on it"
-    );
-    assert_eq!(w.obj(v).unwrap().depot.queued, None);
+    // The order's tick (orders apply before the turns of that tick).
+    let o = w.obj(v).unwrap();
+    let after_order = (o.beh.current, o.beh.queued, contact(&w, v));
+    // Either the order's tick already made enter current, or it is still
+    // queued with the contact held, the depot remembered and no destination.
+    if after_order.0 != Some(Behaviour::Enter) {
+        assert_eq!(o.beh.queued, Some(Behaviour::Enter));
+        assert_eq!(contact(&w, v), Some(d), "the tether keeps the contact");
+        assert_eq!(o.depot.queued, Some(d));
+        assert_eq!(o.depot.entering, Some(d));
+        assert_eq!(o.dest, None);
+        tick::step(&mut w);
+    }
+    // The first turn with enter current: contact lost in that turn.
+    let o = w.obj(v).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Enter), "enter current");
+    assert_eq!(contact(&w, v), None, "refused while standing on it");
+    assert_eq!(o.depot.queued, None);
+    assert_eq!(o.dest, None, "no destination");
+    assert_ne!(o.beh.queued, Some(Behaviour::Sleep), "no sleep queued");
+    assert_eq!(w.obj(d).unwrap().beh.queued, dq, "the depot queues no new repair");
+    // Enter falls back to rest at its next processing.
+    assert!(run_until(&mut w, 60, |w| w.obj(v).unwrap().beh.current
+        != Some(Behaviour::Enter)));
+    assert_ne!(w.obj(v).unwrap().beh.current, Some(Behaviour::Sleep));
     let (mut w, d, v) = pad_scene(300);
     w.obj_mut(v).unwrap().health = 600;
     assert!(orders::issue(&mut w, ALPHA, enter(v, d)));
