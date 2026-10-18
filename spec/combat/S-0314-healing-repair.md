@@ -2,7 +2,7 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 29
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -391,7 +391,12 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    of the building repair period *P*<sub>b</sub> (Formulas F1), provided its health is not 0 and
    not equal to its strength. This holds for infantry, vehicles, aircraft and buildings while
    they take their ordinary object updates, and uses the same game-wide rate as building repair.
-   It is free. Berserk plays no part: a berserk object heals as any other (S-0610 claim 6). For a berserk unit with
+   It is free. After this gain, an existing damage-smoke system is marked when the resulting
+   floating-point health ratio is strictly above the game-wide yellow ratio, or the object's
+   height above the surface is below −10 leptons (S-0616 claim 1). Marking stops new particles,
+   not existing ones; the system stays attached until it leaves play, so renewed damage before
+   then does not create replacement smoke (S-0616 claim 22).
+   Berserk plays no part: a berserk object heals as any other (S-0610 claim 6). For a berserk unit with
    no overload pulse, the order of this healing against the berserk countdown within an update has no
    observable effect, because self-healing reads no berserk state and the countdown reads no health
    (S-0610 claim 6), so an engine may run them in either order. For an unlimited controller, the place of
@@ -412,7 +417,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    Objects out of play do not ordinarily take these updates (S-0203); warp updates follow
    S-0513 claim 51's separate scheduling rule. Healing inside transports and hospitals
    remains the separate open question below.
-   - Backing: `measurable` for living objects taking updates (H7) and the leaving-stage
+   - Backing: `measurable` for the above-yellow smoke mark (S-0616 claim 1, P23 c).
+     The below-surface smoke mark is `unmeasured`: no setup here isolates a healing gain
+     below −10 leptons. `measurable` for living objects taking updates (H7) and the leaving-stage
      exclusion (S-0513 claim 48, SW23). The engine-design continuation rule is `measurable`
      in our engine (H8 f; S-0513 claim 51, SW23 part f); original continuation at the other
      boundaries remains `unmeasured` for claim 48's incomplete per-kind evidence.
@@ -436,6 +443,13 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
       same way at multiples of the infantry self-heal interval *n*<sub>i</sub>, with the infantry
       total *T*<sub>i</sub>,
     - aircraft and buildings are not healed this way.
+
+    After this healing of a non-organic vehicle, an existing damage-smoke system receives the
+    same mark as in claim 9 when its resulting floating-point health ratio is strictly above
+    the yellow ratio, or its height above the surface is below −10 leptons (S-0616 claim 1).
+    House-wide healing of infantry and organic vehicles does not perform this test; without
+    a later hit or individual self-healing their damage smoke keeps emitting across the
+    yellow threshold. Marked smoke ends as claim 9 describes.
 
     A berserk unit receives this healing like any other. For a berserk unit with no overload pulse, the
     order of this healing against the berserk countdown within an update has no observable effect (S-0610
@@ -462,7 +476,9 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     Both this claim's healing and claim 9's healing precede an attached parasite's delivery
     in the host's same turn (S-0614 claim 18). Health already restored can prevent a lethal
     delivery, but neither kind heals damage from that delivery later in the same turn.
-    - Backing: `measurable` (H8 parts a to e, including the building-kind exclusion and
+    - Backing: `measurable` for the above-yellow smoke mark and its infantry/organic
+      exceptions (S-0616 claim 1, P23 c). The below-surface smoke mark is `unmeasured`
+      for claim 9's setup limitation. `measurable` (H8 parts a to e, including the building-kind exclusion and
       same-turn parasite ordering; S-0614 claim 18; S-0513 claim 48, SW23 for the
       leaving-stage exclusion). The engine-design continuation rule is `measurable`
       in our engine (H8 f; S-0513 claim 51, SW23 part f); original continuation at the
@@ -1525,6 +1541,14 @@ a vehicle with the self-heal ability on its veteran list placed with map veteran
 same way; at veterancy 0 it does not. *Falsified if:* a rise happens on another tick or by another
 amount, a charge occurs, schedules shift with placement, a control heals, the objects keep
 rising at full health, the veteran vehicle at veterancy 0 heals, or the veteran one at 100 does not.
+
+**H7 b: smoke after self-healing (claims 9 and 10).** Use S-0616 claim 1's P23 c
+setup, procedure, three runs per variant and smoke-emission observations. Individual healing
+must mark existing damage smoke on healing above yellow; house-wide healing must do so for
+non-organic vehicles, but not infantry or organic vehicles. Existing particles must survive
+the mark and end normally. Continued emission after a required mark, immediate removal of
+existing particles, or a threshold mark in either house-wide control falsifies the rule.
+The below-surface condition is not exercised by this scenario.
 
 **H8: house-wide healing (claim 10).** *Part a (amounts):* own damaged infantry, a damaged non-organic vehicle, a damaged
 organic vehicle, a damaged aircraft (landed) and a damaged building, none individually
