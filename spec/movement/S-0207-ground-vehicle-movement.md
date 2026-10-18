@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 39
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -645,6 +645,8 @@ The *order-level destination* is the destination that behaviours and factory rep
     - Building types read the field too, but a building never moves with a locomotor, so the field
       has no effect on buildings. Rules that change the locomotor an object moves with for a while
       (for example a weapon that seizes a vehicle) belong to the combat specs.
+      A seizing warhead's locomotor field uses the same class-identifier parsing rule.
+      S-0607 claim 22 owns its defaults, warnings and seize outcomes.
     - The locomotor is independent of the type's kind and of its locomotion class (S-0211) and
       movement zone (S-0212): an infantry type may drive, and a vehicle type may walk. How an
       infantry or aircraft object with the driving locomotor moves is outside this spec (Open
