@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -186,12 +186,14 @@ New terms:
      that tick's physics results. A state change, or a new maximum speed or target height, first
      affects the physics results in the following tick (claims 6 to 10, F1 to F5).
    - In a tick in which the jumpjet is neither moving nor moving now (grounded or hovering
-     without a move order), neither runs:
+     without a move order), neither runs, except during claim 17's no-cell magnetic-release
+     safety fall:
      - its height does not change
      - its wobble phase does not advance
      - its speed fraction keeps its last value
    - **Safety departure (design).** A pending crash start above the surface also makes the
-     unit eligible for its next update, even without a move order. Claim 18 then applies:
+     unit eligible for its next update, even without a move order. Claim 17 separately
+     guarantees every update of its no-cell magnetic-release safety fall. Claim 18 then applies:
      a dead hovering unit cannot remain suspended merely because its order ended.
      A grounded unit cannot start an aerial crash; S-0312 claims 15 and 16 own removal.
    - The original's movement eligibility does not itself include a pending crash start.
@@ -360,7 +362,8 @@ New terms:
      When the cell ahead is not higher, the two clearances are averaged (F3).
    - **Direct ground reference.** In the other cases, the ground reference is the terrain under
      the jumpjet, or the deck when it is over a high-bridge cell and its world height is at least
-     the deck's height less *k* (F3).
+     the deck's height less *k* (F3). Claim 17's no-cell magnetic-release safety fall also
+     uses this direct reference while it has no movement point (design).
    - Backing: `measurable` (scenario J5) for wobble, the object-kind and cell-layer
      clearances, and the bridge reference; J27 b proposes a conditional measurement of the
      retained-point seized-crash combination. Its stock reachability is not established:
@@ -569,8 +572,12 @@ New terms:
     **Magnetic-release safety departure (design).** When the lifter ends a grip by any
     event of S-0607 claim 12 other than its no-destination exception, no-cell failure
     instead follows S-0607 claim 13: do not self-destruct, irrespective of
-    `quirks.jumpjet_no_cell_self_destruct`. A dropped unit follows S-0607 claim 15's fall.
-    A set-down unit clears its movement point and commitment, stays put and becomes
+    `quirks.jumpjet_no_cell_self_destruct`. Both a dropped unit and a set-down unit clear
+    their movement point and commitment. A dropped unit follows S-0607 claim 15's fall:
+    over its cell centre, with no point, it uses claim 9's direct ground reference rather
+    than look-ahead; off-centre, the fall's detour supplies its own cell centre as its point.
+    It takes its jumpjet update every tick until its fall ends, even while *hovering*,
+    despite its cleared commitment (S-0607 claim 13). A set-down unit stays put and becomes
     eligible for restoration under S-0607 claim 20. The original can terminate with a
     fatal error when self-destruction occurs while the lifter is releasing its unit.
     S-0607 claim 9's no-destination exception ends the grip before this stop and keeps
@@ -1200,9 +1207,12 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   invalid-data effects. Claim 25 gives the approved safety replacement, with no quirk switch.
 - **No landing slot.** A jumpjet that cannot land and finds no cell nearby destroys itself
   (claim 17). This is the original's behaviour and stays the default
-  (`quirks.jumpjet_no_cell_self_destruct`, default on, YR behaviour). Off: it re-enters *hovering* over its
-  current cell. Claim 17's magnetic-release safety departure overrides both switch settings
-  for lifter-ended release, but not S-0607 claim 9's no-destination exception.
+  (`quirks.jumpjet_no_cell_self_destruct`, default on, YR behaviour). Off: it clears its
+  movement point and commitment. In the air it re-enters *hovering* over its current cell,
+  neither descending nor flying on; a grounded jumpjet stays grounded instead. For a seized
+  set-down unit, S-0607 claims 9 and 20 apply: while hovering it is not restored and retries
+  the search at each fall-back to rest. Claim 17's magnetic-release safety departure overrides
+  both switch settings for lifter-ended release, but not S-0607 claim 9's no-destination exception.
   Backing and confidence are claim 17's; the off alternative is a design rule.
 - **Ion storms.** An ion storm makes every flying jumpjet of the affected house crash, and stops a
   grounded one taking off. Ion storms do not occur in skirmish, so this is out of scope.
@@ -1622,11 +1632,20 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
     unsettled; the conditional measurement does not assert it.
   - (c) No-cell release is an engine design test, not an original-game oracle run: arrange
     failed stop searches for lifter-ended release at positive and non-positive height.
-    Expected: the dropped unit falls, the set-down unit stops in place with no point or
-    commitment, and neither self-destructs, with either setting of the no-cell quirk.
+    Expected: both units lose their point and commitment. The dropped unit falls with
+    an update every tick until its fall ends, including release while *hovering*. At its
+    cell centre with no point it uses the direct ground reference; off-centre its detour
+    supplies its own cell centre. The set-down unit stops in place. Neither self-destructs,
+    with either setting of the no-cell quirk. Missing fall updates or look-ahead while
+    falling with no point falsifies the design rule.
     Test the no-destination exception separately: claim 17's ordinary quirk outcome still
-    applies. Self-destruction on lifter release, or applying that safety exemption to
-    the no-destination exception, falsifies the design rule.
+    applies. With the switch off, expect no point or commitment: an airborne unit hovers
+    without descent or onward flight, while a grounded one remains grounded. A seized
+    hovering set-down unit is not restored and retries the search at every fall-back to
+    rest under S-0607 claims 9 and 20. Test both failed and successful retries. Descent or
+    onward flight before a successful retry, restoration while still hovering, failure to
+    retry at fall-back, self-destruction on lifter release, or applying that safety
+    exemption to the switch-on no-destination exception falsifies the design rule.
 - **J20 Zero-field engine test.** Named importer test data, not an original-game oracle run:
   one type with zero speed, one with zero turn rate, and one with both. Expect a warning for
   each affected type, zero fraction and all zero cruise speeds for zero speed, no middle
