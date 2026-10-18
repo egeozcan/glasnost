@@ -576,6 +576,100 @@ fn claim_17_no_cell_grounded_stays_grounded() {
     }
 }
 
+/// Claims every cell for a vehicle, so that no nearby cell qualifies for
+/// claim 17's search.
+fn block_every_cell(w: &mut World) {
+    let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+    for c in cells {
+        w.cells.claim_vehicle(c, Layer::Ground, true);
+    }
+}
+
+// spec: S-0502 Edge cases (revision 17, quirks.jumpjet_no_cell_self_destruct off; scenario J27 c, the boundary controls) and claim 17, S-0607 claim 9 (revision 9; answers Q-1344): with no cell for the stop, the integer height above the surface decides: ascending at height 0 (just after its take-off update), hovering at height 0 and ascending at −1 lepton stay put and become grounded, with no movement point, no commitment and no hover slot; ascending at 1 lepton hovers over its current cell instead
+#[test]
+fn claim_17_no_cell_switch_off_height_decides() {
+    for case in ["ascending 0", "hovering 0", "ascending -1", "ascending 1"] {
+        let mut w = game();
+        quirk(&mut w, |q| q.jumpjet_no_cell_self_destruct = false);
+        let u = put(&mut w, "JV", Kind::Vehicle, 0, 4, 0);
+        match case {
+            "ascending 0" => {
+                go(&mut w, u, at(8, 0));
+                step(&mut w);
+                assert_eq!(phase(&w, u), Phase::Ascending, "{case}: took off");
+            }
+            "hovering 0" => {
+                jump::start_in_flight(&mut w, u, Phase::Hovering, 0);
+                js(&mut w, u).dest = Some(Pos::centre(at(8, 0), 0));
+                js(&mut w, u).moving = true;
+            }
+            "ascending -1" => jump::start_in_flight(&mut w, u, Phase::Ascending, -1),
+            _ => jump::start_in_flight(&mut w, u, Phase::Ascending, 1),
+        }
+        let z = height(&w, u);
+        let expected = match case {
+            "ascending -1" => -1,
+            "ascending 1" => 1,
+            _ => 0,
+        };
+        assert_eq!(z, expected, "{case}: the height before the stop");
+        assert!(jump::moving(&w, u), "{case}: committed");
+        block_every_cell(&mut w);
+        jump::stop(&mut w, u);
+        assert!(w.obj(u).unwrap().health > 0, "{case}: not destroyed");
+        assert!(!jump::moving(&w, u), "{case}: no movement commitment");
+        assert_eq!(j(&w, u).dest, None, "{case}: no movement point");
+        let c = pos(&w, u).cell();
+        if z >= 1 {
+            assert_eq!(phase(&w, u), Phase::Hovering, "{case}: hovers");
+            assert_eq!(j(&w, u).slot, Some(c), "{case}: its cell's hover slot");
+        } else {
+            assert_eq!(phase(&w, u), Phase::Grounded, "{case}: becomes grounded");
+            assert_eq!(j(&w, u).slot, None, "{case}: no hover slot");
+        }
+        let p = pos(&w, u);
+        for _ in 0..10 {
+            step(&mut w);
+        }
+        assert_eq!(pos(&w, u), p, "{case}: it stays put");
+        assert_eq!(height(&w, u), z, "{case}: neither climbs nor descends");
+    }
+}
+
+// spec: S-0502 Edge cases (revision 17, switch off: height 0 or less, it becomes grounded, also from ascending) and claim 5 with scenario J2 (a grounded jumpjet's take-off timing): a jumpjet stopped with no cell while ascending at height 0 keeps its ground listing and mark, and a later order takes it off exactly as a freshly placed grounded unit: the same height trace from the order on, no early rise
+#[test]
+fn claim_17_grounded_from_ascending_takes_off_as_a_fresh_unit() {
+    let trace = |stopped: bool| {
+        let mut w = game();
+        quirk(&mut w, |q| q.jumpjet_no_cell_self_destruct = false);
+        let u = put(&mut w, "JV", Kind::Vehicle, 0, 4, 0);
+        if stopped {
+            go(&mut w, u, at(8, 0));
+            step(&mut w);
+            assert_eq!(phase(&w, u), Phase::Ascending);
+            block_every_cell(&mut w);
+            jump::stop(&mut w, u);
+            assert_eq!(phase(&w, u), Phase::Grounded);
+            let c = pos(&w, u).cell();
+            assert_eq!(j(&w, u).listed, Some((c, Layer::Ground)), "still listed");
+            assert!(w.cells.list(c, Layer::Ground).contains(&u));
+            assert!(j(&w, u).mark.is_some(), "still marked");
+            let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+            for c in cells {
+                w.cells.claim_vehicle(c, Layer::Ground, false);
+            }
+        }
+        go(&mut w, u, at(4, 8));
+        let mut v = Vec::new();
+        for _ in 0..12 {
+            step(&mut w);
+            v.push((height(&w, u), phase(&w, u)));
+        }
+        v
+    };
+    assert_eq!(trace(true), trace(false));
+}
+
 // spec: S-0502 claim 17 (stopping a jumpjet that is not moving does nothing)
 #[test]
 fn claim_17_stopping_an_idle_jumpjet_does_nothing() {

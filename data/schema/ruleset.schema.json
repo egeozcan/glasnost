@@ -9004,7 +9004,7 @@
           "default": true
         },
         "jumpjet_no_cell_self_destruct": {
-          "description": "A jumpjet that cannot land and finds no cell nearby destroys itself; off: it clears its movement point and commitment and, in the air, re-enters *hovering* over its current cell, neither descending nor flying on, while a grounded jumpjet stays grounded (a seized set-down unit then follows S-0607 claims 9 and 20).",
+          "description": "A jumpjet that cannot land and finds no cell nearby destroys itself; off: it clears its movement point and commitment and, at a height above the surface of 1 lepton or more, re-enters *hovering* over its current cell, neither descending nor flying on, while at 0 or less it stays put and becomes *grounded*, even from *ascending* (every seized set-down unit hovering in this outcome, by any route, then follows S-0607 claims 9 and 20).",
           "type": "boolean",
           "default": true
         },
@@ -11835,7 +11835,7 @@
           "default": null
         },
         "jumpjet_accel": {
-          "description": "`JumpjetAccel`, the acceleration *a*, a single-precision decimal\n(S-0502 Import mapping, absent 2.0). The stock spelling `JumpJetAccel`\nis another key (S-0001) and is not read.",
+          "description": "`JumpjetAccel`, the acceleration *a*, a single-precision decimal\n(S-0502 Import mapping, absent 2.0). A key written with different\nletter case, such as `JumpJetAccel`, does not set it (S-0001 claim 13).",
           "anyOf": [
             {
               "$ref": "#/$defs/Decimal"
