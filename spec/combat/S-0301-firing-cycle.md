@@ -2,11 +2,11 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0060, Q-0798]
 supersedes: []
@@ -371,7 +371,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, it already holds this very target with a temporal or magnetic-beam weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). Their precedence among each other is not stated |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). The specified precedence within this rank is given below |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | the firer's ammunition *a* is 0 |
@@ -384,6 +384,16 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 14 | still turning | |
    | 15 | not facing | |
    | 16 | a refusal of the vehicle's locomotor | a vehicle whose locomotor adds a refusal of its own gets it only when no reason above holds; which answer it gives is open (Open questions) |
+
+   **Grip refusals within rank 4 (S-0607 claim 11).** Against the firer's own gripped unit,
+   *rearming* applies with any weapon and outranks every other rank-4 answer except the
+   materialising firer's *rearming* and the *illegal* refusal of a firer bound to a slave
+   master. In particular, target-layer and projectile refusals cannot displace it: the lifter
+   keeps its gripped unit as its target even when its weapon cannot hit an airborne unit.
+   By contrast, the magnetic-beam refusal against another non-building target while a grip
+   and live wave coexist follows the target-layer and projectile tests. A failed one of
+   those tests therefore gives its refusal rather than this conditional *rearming*.
+   No other precedence within rank 4 is specified here.
 
    **Falling and the landing turn (S-0511 claim 10).** A falling firer gets *illegal*
    at rank 4. For ordinary infantry and vehicles, the fall and any landing hit precede
@@ -446,8 +456,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    Claim 14 here specifies their priority over animation-delayed firing. An aircraft's full burst likewise has no firing check between
    its shots (S-0501 claim 12).
    - Backing: `measurable` (scenarios F7, F8 and F15; S-0506 scenarios R2 and R6 for spawner
-     handoff and lockouts; S-0607 scenario L9 parts c and d for the gripping lifter's conditional
-     rearming; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
+     handoff and lockouts; S-0607 scenario L9 parts c, d and f for the gripping lifter's conditional
+     rearming and any-weapon refusal against its gripped unit; scenario F7 part f for
+     their precedence against target-layer and projectile refusals; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
      N6 for sinking restrictions; S-0511 scenario B3, turn-order variant, for falling
      refusal and the same-turn surviving-landing boundary; S-0517 scenario P4 for transition and magnetic-beam refusals
      and P5 for the deploy-to-fire cell test; S-0501 scenarios AC7 to AC9 for aircraft bursts, and
@@ -469,7 +480,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      *rearming* cases, so no scenario could tell the orders apart).
      Rank 16 is `unmeasured`: no isolated locomotor refusal and its answer have yet been
      identified, so no scenario here can distinguish it from another refusal.
-   - Confidence: high (the empty-secondary no-op and the upgrade-building paired attempts without a second firing check,
+   - Confidence: high (the two grip-refusal precedence rules within rank 4,
+     the empty-secondary no-op and the upgrade-building paired attempts without a second firing check,
      falling refusal and the same-turn surviving-landing boundary,
      the three drain refusals and no ordinary shot from a drain attempt),
      medium (its missing countdown start and ammunition use, as S-0608 claim 1), high (rearming before ammunition and range, facing and moving after them, and
@@ -1087,6 +1099,19 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   marked carrier, falsifies the corresponding part. A state or range-request combination
   not reached through normal orders is inconclusive, not a passing trial.
 
+- (f) Grip precedence: use S-0607 scenario L9's small skirmish map and named test data,
+  speed index 2, director and mods off except the named test data. Keep a bystander computer
+  outside the test area. Give the lifter a non-magnetic weapon whose projectile cannot hit
+  airborne units. While its gripped unit is airborne, retain that unit as its target as in
+  L9 part f. Record target retention and the firing-check answer with tick-labelled capture
+  and a read-only recorder over three runs. Expect *rearming*, not a projectile or layer
+  refusal, and no shot. Then, while grip and wave still coexist, attempt a magnetic shot at
+  a different airborne non-building target the projectile cannot hit. Expect that target's
+  projectile or layer refusal, not the conditional grip-and-wave *rearming*. A contrary
+  answer falsifies the corresponding precedence rule. Void a trial if the grip, wave or
+  target changes before the recorded check, or another earlier refusal applies. A state
+  not reached through normal orders is inconclusive.
+
 **F8. Facing only when ready.**
 - Setup: S-0206's turret scenario with a target that moves round the vehicle during its rearm period.
 - Observable: the turret facing every tick.
@@ -1356,7 +1381,8 @@ is absent (the control).
 ## Open questions
 
 - Claim 9 lists only the members of *illegal* and *impossible* that matter here; the combat specs
-  named there and the feature specs own the rest. The precedence among those is not stated.
+  named there and the feature specs own the rest. Apart from its stated grip-refusal rules,
+  the precedence within rank 4 is not stated.
 - The amount of ammunition lost to damage (claim 17) is S-0302's.
 - Aircraft ammunition spending and servicing at landing pads are specified by S-0501 claims
   15 and 26 to 28; starting ammunition is answered by claim 10 (Q-0060 question 1).
