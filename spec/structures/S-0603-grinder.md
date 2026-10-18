@@ -2,7 +2,7 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 5
+revision: 6
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -72,6 +72,7 @@ Cross-spec changes required at hand-off:
 - **Link places.** As S-0605 (Terms): the building's imported dock count, at least 1.
 - **Yellow ratio.** The rules-wide health ratio at or below which an object counts as damaged
   for its slot animations (S-0108 F3 and Import mapping).
+- **Per-tick start, late start, moving.** The first per-tick start and the late start of an infantry unit or vehicle, as S-0215 claim 11 defines them. *Locomotor moving the vehicle*, as S-0206 Terms defines it: a turn in place before a step counts as moving, and a body that only turns does not. Claim 3 uses these terms in these senses.
 
 ## Behaviour
 
@@ -125,7 +126,7 @@ Cross-spec changes required at hand-off:
 
    The approach does not always succeed. A unit ordered to a recycling building that stands behind
    a short line of buildings, with open ground round the line, can fail at once: the path
-   computation fails, the unit does not move and its destination is cleared (S-0212 claims 13, 13a
+   computation fails, the unit does not start a move and its destination is cleared (S-0212 claims 13, 13a
    and 23, edge case "short line of buildings", scenario P12 run S). The failure follows from the
    corridor rules of S-0212 as written (claims 13, 13a and 23). Which alignments of the line against
    the level-2 sectors of S-0212 claim 13 fail depends on `quirks.corridor_split_probe` (default on,
@@ -135,22 +136,32 @@ Cross-spec changes required at hand-off:
    human-controlled there). The queued *guard* is not held back by *eaten*: neither the infantry readiness test nor the vehicle
    one of S-0215 claim 11 mentions the *eaten* behaviour, so the ordinary start rule applies to it as
    to any queued behaviour. The unit leaves *eaten* and *guard* becomes current at the first
-   per-tick start or late start (S-0215 claim 11) at which the unit is ready. After the failure the
-   unit has stopped, so it is ready (an infantry unit is not moving on this tick, and a vehicle is not
-   moving) unless one of the other readiness conditions holds. Whether the failure is found while the
-   unit moves or earlier in its update, *guard* is current when that tick ends and is first processed
-   on the unit's next update (S-0215 claims 3b and 11). The queued *guard* is never dropped while
-   *eaten* is current, and, unless the vehicle case below applies, *eaten* is not processed again.
-   Infantry and vehicles behave the same as to *eaten*. The only difference involving *eaten* is a
-   vehicle that is in contact with a vehicle-factory building (S-0215 claim 11): it is not ready while
-   *guard* is the queued behaviour, so it stays in *eaten* with *guard* queued until that contact ends.
-   No recycle order reaches this state in stock play, which is why the case is only noted.
+   per-tick start or late start (S-0215 claim 11) at which the unit is ready. A failed search that leaves the unit more than 1 cell from the building clears
+   the unit's destination (S-0212 claim 23, row 2). Readiness counts a unit as moving on a tick in which its locomotor moves
+   it, including movement made earlier in that update (S-0215 claim 11; S-0206 Terms). A cleared
+   destination does not by itself stop a vehicle, which may finish the step it had begun (S-0212 claim 23, row 2: the unit stops when its current motion ends).
+   So a unit that has not moved earlier in the failing tick, and whose locomotor is not moving it at that tick's late start, is ready there unless another readiness condition holds, and *guard* is current when that tick ends. A unit that moved earlier
+   in the failing tick, or whose locomotor still moves it at that late start (for a vehicle this
+   includes a turn in place before a step of its path, but not a body that only turns towards a
+   target), is not ready there; *guard* then becomes current at the first start or late start after
+   its locomotor has stopped. A *guard* that becomes current at a first per-tick start is processed
+   on that tick, and one that becomes current at a late start is first processed on the unit's next
+   update (S-0215 claims 3a, 3b and 11). A vehicle that was idle when the order was given is not
+   moving after the failure. The queued *guard* is never dropped while *eaten* is current,
+   and, unless a vehicle case here or below applies, *eaten* is not processed again. Infantry and
+   vehicles behave the same as to *eaten*. The only other difference involving *eaten* is a
+   vehicle that is in contact with a vehicle-factory building, or that is in contact with nothing and stands on a vehicle factory's
+   exit cell (S-0215 claim 11): it is not ready while *guard* is the queued behaviour, so it stays in
+   *eaten* with *guard* queued until that contact or position ends. Whether a recycle order can reach
+   this state is not established (a vehicle just built, standing on the exit cell and given a recycle
+   order whose approach fails at once would be one route), so the case is only noted.
    - Backing: `measurable` (scenario G9, approach-failure test; S-0212 scenario P12, run S, sets up
-     the same order). Which shifts fail is not predicted by this claim and is tracked in Open questions.
+     the same order). Which shifts fail is not predicted by this claim and is tracked in Open questions. The turn-in-place case named in the Confidence line has no scenario yet and is `unmeasured` (Open questions).
    - Confidence: high (no contact; the destination is cleared on a failed search; that *eaten* does
-     not block the queued *guard*, both readiness tests read from the program); medium (that a
-     short line makes the approach fail at once; that the failure is found before the late start of
-     the same update); low (which lengths and alignments fail)
+     not block the queued *guard*, both readiness tests as S-0215 claim 11 states them); medium
+     (that a short line makes the approach fail at once; when *guard* becomes current for a unit
+     that moved earlier in the failing tick; the turning-vehicle case); low (which lengths and
+     alignments fail)
 
 4. **Onto the foundation.** The entrant may move onto the building's foundation cells: an infantry
    unit because the building is its mission target (S-0209 claim 4 row WP3), a vehicle by S-0209
@@ -514,11 +525,11 @@ Each order is the recycle order into that building (no target). Each unit is als
 the same cell on the same map, for comparison. Observable, for each order: whether the unit moves in the
 tick of the order or its destination is cleared in that tick, and then, over about 10 processings after
 the failure, its current behaviour, its queued behaviours and its destination on each tick. The
-observable confirms that the queued *guard* of claim 3 becomes current by the end of the failing tick.
+observable confirms when the queued *guard* of claim 3 becomes current: by the end of the failing tick for a unit that is ready at that tick's late start, and otherwise from the first start or late start after its locomotor has stopped.
 *Expected:* a recycle order and a plain
 move pass or fail on the same placements; lengths 3 and 5 are passed; at least one 7-line and one 9-line
 placement fails at once; the vehicle and the infantry agree on each map; the failed unit has *guard*
-current by the end of the failing tick and nothing queued. *Falsified by:* a failed unit whose *guard* is not current at the end of the failing tick, or still in *eaten*
+current by the end of the failing tick and nothing queued when it is ready at that tick's late start (such as a vehicle that was idle at the order); otherwise *guard* is current from the first start or late start after its locomotor has stopped. A vehicle in contact with nothing and standing on the exit cell of a vehicle-factory building, or in contact with one, is excluded from this expectation, since claim 3 predicts it stays in *eaten* with *guard* queued. *Falsified by:* a failed unit that is ready at that tick's late start whose *guard* is not current at the end of that tick, a unit that is not ready there and whose *guard* is not current by the end of the tick on which its first start or late start after its locomotor stopped finds it ready, or a unit that is ready there still in *eaten*
 with *guard* queued two ticks after the failure, any 3- or 5-line placement failing, every 7- and 9-line placement passing, a recycle
 order and a plain move differing on one placement, the vehicle and the infantry differing on one map, or
 nothing queued and nothing current after a failure.
@@ -559,3 +570,5 @@ respective prediction.
 - Whether the harvester load really pays nothing (claim 8) should be confirmed by a measurement:
   recycle a full harvester and an empty one (scenario G1 variant).
 - Which lengths and alignments of a short line of buildings make the approach fail. Low confidence. Tracked by Q-1280.
+- Whether a recycle order can reach a vehicle standing on a vehicle factory's exit cell whose approach fails at once (claim 3). Not established.
+- Whether a vehicle that is turning in place when its approach fails keeps *guard* queued until the turn ends, as claim 3 predicts from S-0206. No scenario yet fixes its setup, so the case is `unmeasured`, medium confidence.
