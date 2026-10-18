@@ -2,7 +2,7 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -17,7 +17,8 @@ supersedes: []
 ## Summary
 
 Recycling buildings consume arriving infantry and vehicles, pay credits, and remove their
-passengers and attached parasites. This spec covers eligibility, arrival, payment,
+first two passenger levels and attached parasites. Deeper passenger nesting has the
+separate, unmeasured outcome in Edge cases. This spec covers eligibility, arrival, payment,
 removal effects and interruptions in skirmish only; network games and campaigns are out of scope.
 
 Consumption is a **removal from the game, not a death**. None of the death effects of S-0312
@@ -44,18 +45,6 @@ Neighbouring specs own the rest, and this spec does not repeat them:
 - a slave master that is consumed: its untransferred slave group ends by S-0312 claim 31,
 - an entrant converted by mutation before it arrives: S-0611 claim 5.
 
-Cross-spec changes required at hand-off:
-- S-0601 claim 12's bullet on victims absorbed by "a grinder or bio reactor" holds for grinders:
-  consumption removes the victim from the game, it leaves the list silently, and the payment
-  treats it as an object of the controlling house (claims 6 and 9 below). The bio-reactor half is
-  S-0605's.
-- S-0414 claim 21's list of events that are not destructions should name consumption by a
-  recycling building.
-- S-0701 claim 20: the death response and death sound are also chosen and played, at the same
-  positions and from the same stream, when a recycling building consumes an entrant (claim 7
-  below). That is a second, non-death occasion for the same choice.
-- S-0108 claim 20: a recycling building does react to *special-1* ending (claim 12 below).
-
 ## Terms
 
 - **Recycling building.** S-0214's term (Terms): a building whose type has the grinding flag
@@ -72,7 +61,7 @@ Cross-spec changes required at hand-off:
 - **Link places.** As S-0605 (Terms): the building's imported dock count, at least 1.
 - **Yellow ratio.** The rules-wide health ratio at or below which an object counts as damaged
   for its slot animations (S-0108 F3 and Import mapping).
-- **Per-tick start, late start, moving.** The first per-tick start and the late start of an infantry unit or vehicle, as S-0215 claim 11 defines them. A vehicle counts as moving by the readiness test of S-0215 claim 11. For a vehicle with the driving locomotor, a body that is still turning, for any reason (a turn in place before a step, or a turn to face a target), counts as moving; the turning clause does not apply to other vehicles. Claim 3 uses these terms in these senses.
+- **Per-tick start, late start, moving.** The first per-tick start and the late start of an infantry unit or vehicle, as S-0215 claim 11 defines them. Moving means the current movement state read by S-0215 claim 11's readiness test, not remembered displacement earlier in the update. For a vehicle with the driving locomotor it means either a body still turning for any reason, or all three of: locomotor movement in S-0206's sense, a present heading point (S-0207 Terms), and a strictly positive integer movement step (S-0207 claim 2). S-0215 claim 11 owns the full readiness predicate, including its exceptions and other blockers. Claim 3 uses these terms in these senses.
 
 ## Behaviour
 
@@ -110,7 +99,10 @@ Cross-spec changes required at hand-off:
    not apply to a building with either absorption flag. Because entrants never
    take a link place (claim 3), the link test refuses only when something else holds every link
    place.
-   - Backing: `measurable` (scenario G2)
+   - Backing: `measurable` (scenario G2) except for occupied-link refusal and a holder's
+     exemption, which are `unmeasured`: no combined recycling/docking fixture is yet
+     established that fills all links while leaving a recycle query possible. G2 proposes
+     that fixture conditionally, not as confirmed backing.
    - Confidence: high
 
 ### Approaching
@@ -137,29 +129,37 @@ Cross-spec changes required at hand-off:
    one of S-0215 claim 11 mentions the *eaten* behaviour, so the ordinary start rule applies to it as
    to any queued behaviour. The unit leaves *eaten* and *guard* becomes current at the first
    per-tick start or late start (S-0215 claim 11) at which the unit is ready. A failed search that leaves the unit more than 1 cell from the building clears
-   the unit's destination (S-0212 claim 23, row 2). Readiness counts a unit as moving on a tick in which its locomotor moves
-   it, including movement made earlier in that update (S-0215 claim 11). A cleared
+   the unit's destination (S-0212 claim 23, row 2). Readiness at the late start uses the movement state that the update has left (S-0215 claim 11), not a record of earlier displacement. A cleared
    destination does not by itself stop a vehicle, which may finish the step it had begun (S-0212 claim 23, row 2: the unit stops when its current motion ends).
-   So a unit that has not moved earlier in the failing tick, and whose locomotor is not moving it at that tick's late start, is ready there unless another readiness condition holds, and *guard* is current when that tick ends. A unit that moved earlier
-   in the failing tick, or whose locomotor still moves it at that late start (for a vehicle with the driving locomotor this
-   includes a body that is still turning, for any reason, S-0215 claim 11), is not ready there; *guard* then becomes current at the first start or late start after
-   its locomotor has stopped. A *guard* that becomes current at a first per-tick start is processed
+   If the unit is ready at that tick's late start under S-0215 claim 11's full predicate,
+   *guard* is current when that tick ends, even if the unit displaced earlier in the update.
+   Otherwise it remains queued until the first eligible start or late start that finds it ready. For a driving
+   vehicle, a continuing body turn blocks this change, as does the conjunction of locomotor
+   movement, a present heading point and a positive integer movement step (Terms).
+   Earlier displacement alone does not block it, and lack of visible displacement alone
+   does not make it ready. When a body turn ends by tick number, the first per-tick start
+   of its completion tick already sees it ended (S-0215 claim 11), subject to every remaining blocker. A *guard* that becomes current at a first per-tick start is processed
    on that tick, and one that becomes current at a late start is first processed on the unit's next
-   update (S-0215 claims 3a, 3b and 11). A vehicle that was idle when the order was given is not
-   moving after the failure. The queued *guard* is never dropped while *eaten* is current,
-   and, unless a vehicle case here or below applies, *eaten* is not processed again. Infantry and
-   vehicles behave the same as to *eaten*. The only other difference involving *eaten* is a
+   update (S-0215 claims 3a, 3b and 11). The queued *guard* is not dropped merely because
+   *eaten* is current. Until a start succeeds, any due processing still uses *eaten*.
+   Clearing the destination does not itself start *guard*. Infantry and vehicles have no
+   *eaten*-specific readiness exception. A further vehicle readiness blocker is a
    vehicle that is in contact with a vehicle-factory building, or that is in contact with nothing and stands on a vehicle factory's
    exit cell (S-0215 claim 11): it is not ready while *guard* is the queued behaviour, so it stays in
    *eaten* with *guard* queued until that contact or position ends. Whether a recycle order can reach
    this state is not established (a vehicle just built, standing on the exit cell and given a recycle
    order whose approach fails at once would be one route), so the case is only noted.
    - Backing: `measurable` (scenario G9, approach-failure test; S-0212 scenario P12, run S, sets up
-     the same order). Which shifts fail is not predicted by this claim and is tracked in Open questions. The turning-body case named in the Confidence line, in place or to face a target, has no scenario yet and is `unmeasured` (Open questions).
+     the same order) for contact, fall-back, failure and queueing, and start timing when G9
+     establishes readiness. The late-start comparisons involving earlier displacement or a
+     retained positive movement step without displacement are `unmeasured`: G9 does not
+     establish a repeatable order sequence producing either contrasting state. The turning-body
+     and factory-exit/contact combinations after a failed recycle approach are also `unmeasured`:
+     no setup establishes those combinations. G9's conditional observations are investigation
+     proposals, not backing for these cases. Which shifts fail is tracked in Open questions.
    - Confidence: high (no contact; the destination is cleared on a failed search; that *eaten* does
      not block the queued *guard*, both readiness tests as S-0215 claim 11 states them); medium
-     (that a short line makes the approach fail at once; when *guard* becomes current for a unit
-     that moved earlier in the failing tick; the turning-vehicle case); low (which lengths and
+     (that a short line makes the approach fail at once; the current-state readiness at the late start after an approach failure; the turning-vehicle case); low (which lengths and
      alignments fail)
 
 4. **Onto the foundation.** The entrant may move onto the building's foundation cells: an infantry
@@ -182,7 +182,9 @@ Cross-spec changes required at hand-off:
    owner, not power or the switch, not a sale or construction in progress, not the building's
    health. A building that is being sold, is switched off or has changed owner since the order
    still consumes the entrant (`quirks.grinder_no_arrival_recheck`, Edge cases).
-   - Backing: `measurable` (scenarios G1, G7 and G8)
+   - Backing: `measurable` (scenarios G1, G7 and G8), except arrival during
+     construction, which is `unmeasured`: no setup establishes an already-bound entrant
+     arriving while the same destination building is under construction.
    - Confidence: high
 
 6. **Order of what an observer sees in that tick.** All of claims 7 to 11 happen in the tick of
@@ -260,8 +262,10 @@ Cross-spec changes required at hand-off:
     A non-naval parasite is removed silently by suppression. A naval parasite proceeds to
     S-0614 claim 13's exit test, but that test also removes it silently because the host's
     cell holds the building. Neither is refunded a second time.
-    - Backing: `measurable` (scenarios G3 and G4)
-    - Confidence: high (passengers, parasite refund), medium (passengers of passengers)
+    - Backing: `measurable` (scenarios G3 and G4). The no-refund removal of nesting deeper
+      than two passenger levels (Edge cases) is `unmeasured`: no legal loading sequence
+      establishing that nesting is known.
+    - Confidence: high (passengers, parasite refund), medium (passengers of passengers and deeper nesting)
 
 11. **Removal, not death.** The entrant leaves the game in the ordinary way for a removed mobile
     object. In particular:
@@ -275,7 +279,9 @@ Cross-spec changes required at hand-off:
     - a consumed slave master ends its untransferred slave group (S-0312 claim 31),
     - every reference to the entrant (targets, destinations, contacts) is cleared, as for any
       removed object.
-    - Backing: `measurable` (scenario G6)
+    - Backing: `measurable` (scenario G6) for the named removal effects and target clearing.
+      Clearing every possible destination or contact reference is `unmeasured` here: G6
+      establishes a targeting observer, not a legal fixture for each other reference kind.
     - Confidence: high
 
 12. **The building's animation.** When a recycling building consumes an entrant while its
@@ -287,14 +293,19 @@ Cross-spec changes required at hand-off:
     consumption, the animation is left unchanged. If the selected *special-1* variant is absent,
     keep *active-1* running instead. These are display effects only; the original instead stops
     *active-1* without replacing it in that absent-animation case.
-    - Backing: `measurable` (scenario G10)
+    - Backing: `measurable` (scenario G10) for consumption, natural completion and the
+      missing-animation display fix. Restart after external removal is `unmeasured`: no
+      data-only fixture is established that removes the slot animation without the building
+      itself stopping or replacing it. The absent-*active-1* restart case is also
+      `unmeasured`: no setup establishes that absence at completion while still allowing
+      *active-1* to run at consumption and start *special-1*.
     - Confidence: high (the swap at consumption), medium (the restart)
 
-13. **A destination that is not a recycling building.** An entrant whose *eaten* destination is a
+13. **A destination that is not a recycling building.** A unit whose *eaten* destination is a
     building without the grinding flag is still consumed and paid for at that building by claims
-    5 to 11, without the enter-grinder sound or the animation change. No order or decision with
-    stock data gives such a destination (claim 1, claim 14), so this case is unreachable in a
-    skirmish.
+    5 to 11, without the enter-grinder sound or the animation change. The order and fate
+    decision described in claims 1 and 14 both require a recycling building, so neither
+    establishes this case.
     - Backing: `unmeasured` (unreachable through orders. Test data cannot create it either,
       because every route to *eaten* checks the grinding flag)
     - Confidence: medium
@@ -303,7 +314,7 @@ Cross-spec changes required at hand-off:
 
 14. **Nearest recycling building (original only).** S-0601 claim 8's fate decision can send a
     controlled unit to the nearest recycling building of its current owner. In our engine this
-    runs only for the neutral and special houses (S-0601 claim 8). The unit considers every
+    runs only for the neutral and special houses (S-0601 claim 8's design rule). The unit considers every
     recycling building its owner holds, whatever its state (power, switch, sale, docking answer),
     and picks the one with the smallest 3-D distance ρ₃ of S-0215 F4 between the two centre
     positions. This is the integer distance in leptons, including F4's floating-point root and
@@ -330,7 +341,7 @@ Cross-spec changes required at hand-off:
     - a change of the building's owner (capture, test data) does not affect entrants: at
       consumption the new owner is paid (claim 8). S-0509 claim 14 concerns contacts only,
     - a blocked route is handled by claim 3's processing, which keeps the destination (S-0215 claim 28); a search that fails and leaves the unit more than 1 cell from the building (S-0212 claim 23, row 2, which includes the immediate failure of S-0212 claim 14) clears it (claim 3).
-    - Backing: `measurable` (scenarios G7 and G8)
+    - Backing: `measurable` (scenarios G7 and G8; G9 for failed-search clearing and queueing)
     - Confidence: high (sale, switch, destruction), medium (owner change)
 
 ## Formulas
@@ -338,7 +349,7 @@ Cross-spec changes required at hand-off:
 All amounts are integers in credits. Rounding, number domains and the floating-point sites are
 S-0408's Formulas, which this spec does not restate.
 
-**F1. Recycle payout** (claim 8). For each valued object *X*—the entrant, either of its two passenger levels, or its attached parasite—determine the refund by applying S-0408 F1 to *X*'s type, using *X*'s own current owner as the seller. Thus *v* is *X*'s type refund override, *C* is its type cost field, and *a*, *b* and the use of *r* are taken from *X*'s owner exactly as S-0408 F1 takes them from the seller. The building's owner *H* at consumption receives the sum of the refunds for all valued objects. Calculate and add each refund separately, truncating each one before summing.
+**F1. Recycle payout** (claim 8). For each valued object *X*—the entrant and, for a vehicle entrant, either of its two passenger levels or its attached parasite—determine the refund by applying S-0408 F1 to *X*'s type, using *X*'s own current owner as the seller. Thus *v* is *X*'s type refund override, *C* is its type cost field, and *a*, *b* and the use of *r* are taken from *X*'s owner exactly as S-0408 F1 takes them from the seller. The building's owner *H* at consumption receives the sum of the refunds for all valued objects. Calculate and add each refund separately, truncating each one before summing.
 
 **F2. Link places** (claim 2): as S-0605 F2, max(*d*, 1) for the building's integer dock count
 *d*. Exact integer comparison, no rounding.
@@ -387,9 +398,11 @@ to S-0203 claim 10's effect on which later objects get turns (claims 5 and 6; G9
 - **Controlled units are not freed first.** Claim 9. The controller's slot is freed silently, and
   this follows from S-0601 claim 12 and is not a quirk.
 - **Nesting beyond two levels.** Should a passenger's passenger itself hold passengers, those
-  would be killed with no attacker and no refund when their transport is removed. Stock data
-  cannot nest transports this deep (no transport accepts a loaded transport that itself holds a
-  loaded transport), so no switch is proposed.
+  would be killed with no attacker and no refund when their transport is removed. The
+  two-level refund limit is the original's payout scope, not an assertion about which
+  transports the imported data permits. No optional alternative is specified here. This case
+  is `unmeasured`, with medium confidence: no legal loading sequence establishing that
+  nesting is known (claim 10).
 - **Leave-grinder sound.** The rules-wide leave-grinder sound does not play during consumption
   (claim 7). Whether it is unused in every other situation is not claimed here.
 - **No *special-1* animation.** Keep *active-1* running when the selected consumption animation
@@ -417,8 +430,8 @@ values under S-0006 claim 3.
 ## Measurement scenarios
 
 Use a small purpose-made skirmish map, game-speed index 2, no engine add-on and no mods (the named test files and named test-map overrides of a scenario excepted). Stock data apply
-except named data-only override sections in the test map. The stock recycling building is the Yuri
-faction's grinder. Keep one bystander computer player outside the test area; void a run if an
+except named data-only override sections in the test map. Keep the director off.
+Keep one bystander computer player outside the test area; void a run if an
 unnamed bystander object affects that area or the bystander is defeated. Use scripted input and a
 read-only recorder for ticks, unit positions, owners, behaviours, destinations, house balances,
 trigger raises and the unsynchronised stream's state. Capture audio and images for sounds and
@@ -480,7 +493,9 @@ effects in the same tick, after A is paid.
 **G6. Raises and counts** (claims 6, 11). Give the building a tag with an entered-by event and
 the entrant a tag with a destroyed-by-anything event whose action records the building owner's
 balance. *Expected:* both raise in the consumption tick, the building's raise names the entrant,
-the recorded balance already includes the payment. The entrant's house's losses and every house's
+the recorded balance already includes the payment. Repeat G5(b) with the recorder logging
+balance and victim ownership: release of a controller's victims must follow all payments.
+The entrant's house's losses and every house's
 kills are unchanged, no unit-lost announcement plays, and no death animation or survivor appears.
 Also record the entry raise's balance and entrant position: it sees the pre-payment balance and
 the entrant still in play. Record the unsynchronised stream at both raises and consumption sound
@@ -502,7 +517,9 @@ and is not paid for.
 building off: it is still consumed. Bind a vehicle, then destroy the building: it stays in
 *eaten* with nothing queued for at least 10 processings. With a named test-map override making the building
 capturable, bind an infantry unit, capture the building with another house's engineer and let the
-unit arrive: the capturing house is paid. Separately lower power without switching off: the
+unit arrive: the capturing house is paid even though it is enemy to the entrant's house.
+Repeat G1 at several positive building health ratios on both sides of the yellow ratio:
+consumption and payout are unchanged. Separately lower power without switching off: the
 pending entrant still enters. Give a new move order before arrival: the entrant follows it and
 is not consumed. Block the route temporarily: the destination is retained until the obstacle is
 removed, after which entry completes. These observations test all interruption rows.
@@ -513,7 +530,10 @@ verify neither entrant holds a link at any point. Where both arrive in one tick,
 raise sees the earlier payment. In a separate test destroy the destination and leave the entrant
 on a different building's cell: verify the scatter request and the infantry/vehicle fall-back of
 claim 3. A held link, intake delay, wrong balance at the later raise, or missing fall-back falsifies
-the corresponding expectation.
+the corresponding expectation. Record the entrant's current and queued behaviour and its
+processing ticks as well: a *guard* started at a first per-tick start can process that tick,
+whereas one started late first processes on the next update. While readiness is blocked,
+any due processing must still use the current behaviour.
 
 In a separate test, the approach failure of claim 3. The setup is that of S-0212 scenario P12 run S:
 open clear ground, a straight north-south line of 1 x 1 buildings of house A, of lengths 3, 5, 7 and 9,
@@ -524,34 +544,46 @@ Each order is the recycle order into that building (no target). Each unit is als
 the same cell on the same map, for comparison. Observable, for each order: whether the unit moves in the
 tick of the order or its destination is cleared in that tick, and then, over about 10 processings after
 the failure, its current behaviour, its queued behaviours and its destination on each tick. The
-observable confirms when the queued *guard* of claim 3 becomes current: by the end of the failing tick for a unit that is ready at that tick's late start, and otherwise from the first start or late start after its locomotor has stopped.
+observable confirms when the queued *guard* of claim 3 becomes current: by the end of the failing tick for a unit that is ready at that tick's late start, and otherwise from the first eligible start or late start that finds it ready under S-0215 claim 11. Record earlier displacement separately from the movement state at the late start. For driving vehicles record the body turn, locomotor movement, heading-point presence and integer movement step. If a run displaced earlier but is ready at the late start, expect *guard* current by update end; if its current movement predicate still blocks readiness despite no displacement, expect *guard* queued. A run that does not establish either contrasting state is inconclusive for that comparison.
 *Expected:* a recycle order and a plain
 move pass or fail on the same placements; lengths 3 and 5 are passed; at least one 7-line and one 9-line
 placement fails at once; the vehicle and the infantry agree on each map; the failed unit has *guard*
-current by the end of the failing tick and nothing queued when it is ready at that tick's late start (such as a vehicle that was idle at the order); otherwise *guard* is current from the first start or late start after its locomotor has stopped. A vehicle in contact with nothing and standing on the exit cell of a vehicle-factory building, or in contact with one, is excluded from this expectation, since claim 3 predicts it stays in *eaten* with *guard* queued. *Falsified by:* a failed unit that is ready at that tick's late start whose *guard* is not current at the end of that tick, a unit that is not ready there and whose *guard* is not current by the end of the tick on which its first start or late start after its locomotor stopped finds it ready, or a unit that is ready there still in *eaten*
+current by the end of the failing tick and nothing queued when it is ready at that tick's late start (verified with the full readiness predicate, not inferred from its being idle before the order); otherwise *guard* is current from the first eligible start or late start that finds it ready under S-0215 claim 11. A vehicle in contact with nothing and standing on the exit cell of a vehicle-factory building, or in contact with one, is excluded from this expectation, since claim 3 predicts it stays in *eaten* with *guard* queued. *Falsified by:* a failed unit that is ready at that tick's late start whose *guard* is not current at the end of that tick, a unit that is not ready there and whose *guard* is not current by the end of the tick on which its first eligible start or late start finds it ready, or a unit that is ready there still in *eaten*
 with *guard* queued two ticks after the failure, any 3- or 5-line placement failing, every 7- and 9-line placement passing, a recycle
 order and a plain move differing on one placement, the vehicle and the infantry differing on one map, or
 nothing queued and nothing current after a failure.
 
 **G10. Sounds and animation** (claims 7, 12). With the building's *active-1* running, send in an
-infantry unit of the local player's house; use G11's fate fixture separately for a non-local
+infantry unit and then a vehicle of the local player's house; use G11's fate fixture separately for a non-local
 entrant with both sound lists non-empty. *Expected:* the local
-player's unit gives a death response and a death sound, the ally's only a death sound, both at the
+player's unit gives a death response and a death sound, the non-local entrant only a death sound, both at the
 entrant's position, plus the enter-grinder sound. *active-1* stops and *special-1* starts (the
 damaged variant with the building at or below the yellow ratio), and *active-1* starts again when
 *special-1* ends. Read the unsynchronised stream around consumption: each eligible non-empty list
 consumes exactly one raw draw, response before death sound, with the variants predicted by claim
 7; empty or ineligible lists consume none. Repeat with *active-1* absent: consumption changes no
-slot. With named test art omitting the selected *special-1* variant, the original stops *active-1*
-and starts nothing; our engine keeps it running as the display-only fix. Record natural completion
-and a test animation removed by an external animation effect separately for the restart rule.
-Removal by the building's own slot replacement is not that case.
+slot. With named test sounds and map overrides give the enter and leave sounds distinct,
+recognisable clips; only the enter clip plays. In a separate variant omit the enter sound:
+neither clip plays. Override a type's enter sound with a third distinct clip while retaining
+the rules-wide clip: consumption still uses the rules-wide clip. With named test art omitting the selected *special-1* variant, the original stops *active-1*
+and starts nothing; our engine keeps it running as the display-only fix. Test normal and
+damaged selections separately. A wrong sound, draw count, variant, position or
+natural-completion outcome falsifies the corresponding expectation. The external-removal
+and absent-*active-1* restart cases remain unmeasured as claim 12 explains; removal by the
+building's own slot replacement would not test external removal.
 
-**G11. Nearest recycling building** (claim 14). In the original, a computer player of the Yuri
-faction with a controller, fate weights set by a named test-map override so that only "go to the nearest grinder"
+**G11. Nearest recycling building** (claim 14). In the original, a computer player
+with a controller, fate weights set by a named test-map override so that only "go to the nearest grinder"
 can be chosen, owns two recycling buildings at equal distance from the victim's spot, placed in a
 known order, and a third nearer one that is switched off. It takes a unit. *Expected:* the unit takes the
-nearest one even when switched off. Remove the nearer building and repeat the takeover to test
+nearest one even when switched off. In separate repeats leave it on but lower power,
+begin selling it before takeover, or give its type an absorption flag that refuses the
+victim's kind: it remains the chosen destination in each case. Record destination selection
+before any sale removal; a run where it has already left play is inconclusive. With named
+test-map terrain heights and positions, choose candidates whose planar and 3-D rankings
+differ, and then candidates whose exact 3-D distances differ but whose truncated integer
+distances tie. Expect the 3-D integer ranking and the latest-gained tie winner respectively.
+Remove the nearer building and repeat the takeover to test
 the tie: expect the one placed last. Reverse placement order and repeat; also test ownership gain
 order with a capturable test type. Compare recorded integer distances rather than apparent screen
 distances, and record that *eaten* is queued, not started immediately. Choosing the farther building,
@@ -562,10 +594,11 @@ respective prediction.
 
 - Which foundation cell a large building consumes in, and whether a vehicle approaching along
   the edge can be consumed in a cell it only touches (claim 4). Medium confidence.
-- An infantry entrant with a parasite attached: none of the stock parasites infects infantry, so
-  whether its parasite should be paid for, as with a vehicle, cannot be seen in stock. Without test
-  data that lets a parasite infect infantry, the infantry consumption pays no parasite refund and
-  the parasite is released by S-0614 claim 15. Low confidence.
+- An infantry entrant with a parasite attached is predicted to pay no parasite refund.
+  Its parasite is released by S-0614 claim 15 rather than claim 10's vehicle-specific
+  release. Backing: `unmeasured`; no data-only fixture has established parasite attachment
+  to infantry followed by consumption. Confidence: low. Whether such a fixture can be
+  established remains open.
 - Whether the harvester load really pays nothing (claim 8) should be confirmed by a measurement:
   recycle a full harvester and an empty one (scenario G1 variant).
 - Which lengths and alignments of a short line of buildings make the approach fail. Low confidence. Tracked by Q-1280.
