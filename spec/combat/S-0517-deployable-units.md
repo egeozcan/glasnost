@@ -2,11 +2,11 @@
 id: S-0517
 title: Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-18
 measurements: []
 requests: [Q-0982]
 supersedes: []
@@ -77,16 +77,29 @@ Skirmish only. Network games and campaigns are out of scope.
 1. **What a vehicle's *unload* does.** S-0415 claim 1 gives the order in which a vehicle's *unload*
    processing chooses its rule. This spec owns two of those rules:
    - the deploy-fire rule, which applies to a deploy-fire vehicle (claim 2),
-   - the in-place cycle (claims 3 to 8), which comes after every rule of S-0415 claim 1. So an
-     in-place deploying vehicle of a type for which any rule listed there applies never deploys in
-     place.
-   - Backing: `measurable` (P1 a and P8 a for overlapping non-bunkered types). The bunkered
-     branch is owned by S-0415 claim 1, including its backing limitation, not newly established here.
+   - the in-place cycle (claims 3 to 8), after the applicable passenger, deploy-fire, harvesting
+     and building-deploy rules of S-0415 claim 1. A higher-priority rule that handles the
+     processing prevents in-place deployment.
+
+   Bunker release is not such a stopping rule. A bunkered in-place deploying vehicle, once
+   released by S-0606 claim 12, reaches claim 3's cycle in that same *unload* processing unless
+   its type has the harvester or weeder flag or deploys into a building. Passenger capacity
+   does not prevent this continuation, and the deploy-fire rule does not apply to a vehicle
+   that began the processing bunkered. The cycle uses claim 3's delays and queued-behaviour
+   effects: with claim 8's default quirk setting, its return to *guard* replaces the release's
+   queued *move*. Release therefore does not guarantee that the queued *move* survives.
+   This settles S-0606 claim 12's in-place continuation question; that claim and its open
+   question on the released in-place vehicle need the corresponding update.
+   - Backing: `measurable` (P1 a and P8 a for overlapping non-bunkered types). Bunker release
+     followed by the in-place cycle is `unmeasured`: no end-to-end ordinary-input route to a
+     bunkered vehicle's *unload* is established (S-0606 claim 11). P8 a's conditional bunker
+     variant is diagnostic until that route is found.
      S-0606 claim 11 establishes ordinary band-box exclusion, not a universal selection
      refusal: the bunker link alone does not exclude ordinary click selection. An end-to-end
      player-input route through selection and deploy to the occupant's *unload* remains
      unestablished; band-box exclusion does not prove that route impossible.
-   - Confidence: high
+   - Confidence: high (rule precedence and same-processing in-place continuation); low
+     (end-to-end player-input reachability)
 
 2. **Deploy-fire vehicle.** At each processing of *unload*, a deploy-fire vehicle uses its own
    cell as the target and submits the weapon in slot 0 to the firing check, including its range
@@ -886,8 +899,15 @@ same map, recorder and five-seed repeats as P1. Each variant is a separate newly
   tested by these overlap variants. S-0606 claim 11 establishes ordinary band-box exclusion,
   but no bunker-link-only click-selection refusal. Its scenario K6 separately tests pointing,
   click selection and deploy to establish whether player input reaches *unload*. Failure of
-  band-box selection alone does not settle that route. The bunkered branch retains S-0415
-  claim 1's backing limitation until an input route is established.
+  band-box selection alone does not settle that route. If that route is established, repeat
+  K6 with an eligible in-place vehicle supplied by *deploy-overlap-test*, without harvester,
+  weeder or building-deploy properties. Test with and without a deploying presentation and
+  record release, the first deploy step, transition state, processing delays and queued
+  behaviours. Expected: release and the first step occur in the same processing; the cycle
+  then follows claim 3, with *guard* replacing the release's queued *move* at its ordinary
+  return to *guard* under the default quirk. No first step in that processing, or a different
+  cycle delay, falsifies claim 1. Without the input route this variant is diagnostic only.
+  No state write may supply *unload*.
 - (b) Disguise: give a grounded in-place vehicle permanent disguise capability as in S-0516
   claim 32, with no disguise-when-still reacquisition. Deploy, verify its disguise persists,
   and order undeploy without moving it or inflicting damage. Record the disguise flag at
