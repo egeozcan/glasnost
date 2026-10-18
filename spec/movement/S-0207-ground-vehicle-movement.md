@@ -2,7 +2,7 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 40
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -63,8 +63,7 @@ is the target cell of a ground vehicle factory's exit track (S-0417 Terms and cl
 
 The *order-level destination* is the destination that behaviours and factory report tests see, as S-0212 takes it from S-0503 claims 15 and 16. *Point suppression* is claim 27's one-application skip of the next otherwise due nonempty point application; a *pending* suppression is one not yet consumed.
 
-- **Drive vehicle.** A vehicle whose locomotor is the driving locomotor (wheeled and tracked ground
-  vehicles in stock data), that is, an object of the vehicle type kind (glossary *vehicle*) that
+- **Drive vehicle.** An object of the vehicle type kind (glossary *vehicle*) that
   moves with the driving locomotor. In this spec "vehicle" means a drive vehicle, with these
   exceptions, which the claims themselves state:
   - claim 14 and its scenario D16 cover the types of every kind (infantry, vehicle and aircraft),
@@ -1170,7 +1169,10 @@ The *order-level destination* is the destination that behaviours and factory rep
       across water, on another island or at any height. Two cases leave *L* unchanged: the
       object has warp-pending immobilization (Terms), or the search gives no
       cell. Then, when *L* is still the object's own position or no *L* was ever fixed, no jump
-      happens and the destination is removed.
+      happens and the destination is removed. When a seize installs teleporting movement
+      and this search finds no cell during the seize's destination assignment, that removal
+      precedes the seized state: it does not end the grip. S-0607 claim 23 owns this
+      case and its grip consequences.
     - (c) **The landing point of an infantry unit.** S-0208 claim 19 owns the standing-position
       choice, entry test, bridge distinctions and nearby search after refusal, which is available
       only for an object destination. Its position choices can take scenario-stream draws.
@@ -1352,8 +1354,10 @@ The *order-level destination* is the destination that behaviours and factory rep
       and no reachable setup preserving a target through this interval is established.
       F9's distinction between different nonpositive delays is `unmeasured`: run 5 tests
       their shared next-tick completion, not the stored delay, and completion timing cannot
-      distinguish those values.
-    - Confidence: part a's vehicle destination restriction inherits S-0517 claim 9's
+      distinguish those values. The seize-time no-cell case in part b inherits
+      S-0607 claim 23's `unmeasured` backing: no setup establishing it is known.
+    - Confidence: the seize-time no-cell case in part b inherits S-0607 claim 23's
+      low confidence. Part a's vehicle destination restriction inherits S-0517 claim 9's
       confidence (high for refusal, low for the carried exception); jumpjet landing cancellation
       inherits S-0502 claim 16's confidence. High for parts d, e and f and F9 (the whole move was read); medium for part b
       (including the entry-test level and the search without a reach restriction), for the
@@ -1567,7 +1571,9 @@ The *order-level destination* is the destination that behaviours and factory rep
     prevents temporary-driving restoration under claim 27 until such clearing.
     Track completion at the apron alone is insufficient (S-0417 claim 5).
     - Backing: `measurable` (D29; D28 for the factory instruction; S-0417 claim 16
-      for the factory lifecycle and its U15 scenario). Retention with all later
+      for the factory lifecycle and its U15 scenario). The strict 208-lepton completion
+      boundary is `unmeasured`: D29 proposes 207/208-lepton docking controls, but no legal
+      routes establishing both completion heights are known here. Retention with all later
       replacements and effective stops excluded inherits that claim's `unmeasured`
       limitation: no finite trace establishes perpetual retention.
     - Confidence: high for assignment, independent presence, stopping and track-completion clearing,
@@ -1817,7 +1823,7 @@ truncates (*v*′ ≥ 0). Unit: progress units per tick.
 > *s*₂ = trunc(*s*₁ × *ν*) when the faster ability applies, otherwise *s*₁.
 > *s* = trunc(*s*₂ × *ρ*).
 > Flag carrier: trunc(*s* / 2) in place of *s*, an integer division truncating toward zero.
-Unit: progress units.
+Unit: progress units per tick.
 
 **F2a Speed estimate for lead** (claim 18). Use F2 with the target's currently held *ρ*,
 including its successive truncations and optional integer halving. The integer result is
@@ -2300,7 +2306,7 @@ its target in the direction of travel, and end with facing equal to the last ste
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, no threat point | destination from the nearby-cell search, behaviours unchanged, no draw (claim 16) |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, threat point | one draw over 0 to 2 (after a draw over 1 to 4 when it has a target and the request is not forced), destination among the eight neighbours, *move* queued (claim 16) |
 | teleporting, idle | destination given, not disabled, not held, not being erased, not phasing in, no suppression pending | landing point *L* fixed at once, kind-specific occupancy reservation moved to *L* (claim 20 a–c) |
-| teleporting, any state | destination given, suppression pending (claim 27) | no landing point fixed, no jump; destination kept; suppression consumed (claim 27, Q-1130 table, second row) |
+| teleporting, any state | effective nonempty destination assignment, suppression pending (claim 27) | no new landing point fixed or jump scheduled by this assignment; any earlier landing point, pending jump and reservation unchanged; destination kept; suppression consumed (claim 27, Q-1130 table, second row) |
 | teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: target-loss and revert subject to claim 20 e's airstrike and restored-target distinctions, projectiles lose it, kind-specific arrival and crate rules apply, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
 | teleporting, *L* fixed, jump pending | empty destination assigned | pending jump and moving state cancelled; remembered *L* and its occupancy reservation retained (claim 20 h) |
 | teleporting, *L* fixed, no pending jump (cancelled by an empty assignment) | its next movement update | no jump; the jump row above does not apply to it; remembered *L* and its reservation kept until the next accepted destination (claim 20 h; claim 21) |
@@ -2438,8 +2444,9 @@ its new destination from that tick.
   (claim 27, Q-1130, answering Q-1131). Original behaviour, with no quirk switch, by lead decision
   on Q-1131. The rule is stated as the claim: the state arises from a pending suppression at an
   assignment to a teleporting vehicle in any state (claim 27, Q-1130 table, second row), so it is not
-  limited to disabled, held, erased or phasing-in vehicles. The destination stays, no landing point
-  is fixed, the suppression is consumed and no jump follows until a later effective assignment. The
+  limited to disabled, held, erased or phasing-in vehicles. The destination stays, no new landing
+  point is fixed and suppression is consumed. No jump towards that new destination follows until
+  a later effective assignment; an earlier pending jump is unchanged. The
   reason there is no switch: no ordinary or scripted play is known to reach the state (claim 27,
   reachability), so a switch would select between two behaviours nobody can observe. Consequently
   the exceptions that S-0215 claim 2 and S-0514 claim 17 make for a vehicle under pending
@@ -4016,9 +4023,10 @@ conditional diagnostic for that combination and assignment-time restoration.
   facing's step direction. That case was not traced far enough to state it, and this spec does
   not describe it; the rule of F8 (top corner, not centre) is the one to reuse if a later
   revision does.
-- How an infantry or aircraft object whose type names the driving locomotor (claim 14) moves. No
-  stock infantry or aircraft type names it, and this spec covers drive vehicles only (Terms). A
-  reading (low confidence, not exercised) points to these differences from claims 2 to 13 and 15:
+- How an infantry or aircraft object whose type names the driving locomotor (claim 14) moves.
+  This spec covers drive vehicles only (Terms). The following possible differences from
+  claims 2 to 13 and 15 are `unmeasured`, with low confidence: no scenario here tests movement
+  for these combinations of object kind and locomotor:
   the country speed factor is the owner's country's factor for the object's own kind (for an
   infantry unit the factor of S-0208 claim 7); the slope factor of claim 9 (c) is 1 for every kind
   but the vehicle kind; the passive flag, the flag carrier's halving and the copying of the speed
