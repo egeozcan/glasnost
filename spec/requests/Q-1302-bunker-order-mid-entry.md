@@ -1,9 +1,9 @@
 ---
 id: Q-1302
 title: What happens when a vehicle being taken into a tank bunker gets a new order mid-entry
-status: open
+status: answered
 related: [S-0606, S-0213]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need

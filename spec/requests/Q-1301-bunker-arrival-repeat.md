@@ -1,9 +1,9 @@
 ---
 id: Q-1301
 title: Is a tank bunker arrival reported once, and is it also detected at the enter processing?
-status: open
+status: answered
 related: [S-0606, S-0215, S-0207]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need

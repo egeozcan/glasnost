@@ -1,9 +1,9 @@
 ---
 id: Q-1306
 title: Is the last point of a tank bunker track driven, and which facing does the vehicle end with?
-status: open
+status: answered
 related: [S-0606, S-0207]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need

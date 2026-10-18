@@ -1,9 +1,9 @@
 ---
 id: Q-1300
 title: Which objects a tank bunker's clearing rows examine, and how "nearest the cell centre" is measured
-status: open
+status: answered
 related: [S-0606, S-0215]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need
