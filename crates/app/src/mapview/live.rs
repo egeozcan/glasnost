@@ -1635,12 +1635,39 @@ impl Live {
             let item = self.cache.marker_item(scene, m, at);
             scene.items.push(item);
         }
-        // S-0613: every gas particle, a green cloud at its position (our placeholder for its picture).
-        for (p, _) in glasnost_sim::gas::particles(&self.world) {
-            // spec: S-0101 F1, F2 (the projected point of the position with its height)
-            let at = project_lifted(p.pos.x, p.pos.y, p.pos.z);
-            let item = self.cache.marker_item(scene, Marker::Gas, at);
-            scene.items.push(item);
+        // S-0613, S-0616: every particle at its position, a placeholder by its system's kind
+        // (our own pictures): a green cloud for gas and kindless systems, a puff, flame or dot otherwise.
+        for s in self.world.gas.systems.values() {
+            use glasnost_sim::gas::Behaviour;
+            let kind = rules
+                .gas
+                .systems
+                .get(s.type_index as usize)
+                .and_then(|t| t.kind);
+            let m = match kind {
+                Some(Behaviour::Smoke) => Marker::Smoke,
+                Some(Behaviour::Fire) => Marker::Fire,
+                Some(Behaviour::Spark) => Marker::Spark,
+                Some(Behaviour::Railgun) => Marker::Rail,
+                Some(Behaviour::Gas) | None => Marker::Gas,
+            };
+            let n = s.particles.len() as i64;
+            for (i, p) in s.particles.iter().enumerate() {
+                let mut q = p.pos;
+                if kind == Some(Behaviour::Railgun) && n > 1 {
+                    // The railgun line's shape is drawing only (S-0616 claim 17): the simulation keeps every
+                    // particle at the system's position, and the view spreads them evenly towards the
+                    // target point (our own presentation).
+                    let at = |a: i32, b: i32| a + ((i64::from(b - a) * i as i64) / (n - 1)) as i32;
+                    q.x = at(s.pos.x, s.target.x);
+                    q.y = at(s.pos.y, s.target.y);
+                    q.z = at(s.pos.z, s.target.z);
+                }
+                // spec: S-0101 F1, F2 (the projected point of the position with its height)
+                let at = project_lifted(q.x, q.y, q.z);
+                let item = self.cache.marker_item(scene, m, at);
+                scene.items.push(item);
+            }
         }
         // S-0525: the reach of every radiation field, as a ring (our placeholder for the field's light).
         for f in &self.world.radiation.fields {
