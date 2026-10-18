@@ -363,14 +363,13 @@ fn removal_pass(w: &mut World, sys: ObjectId) {
     }
 }
 
-/// Claim 8: particle `i` splits into two successors when it is a smoke
-/// particle whose type names a next type, then it is removed. The
-/// successors go at the end of the list.
+/// Claim 8: particle `i` of a smoke system splits into two successors
+/// when its type names a next type, whatever its own kind (claim 3), then
+/// it is removed. The successors go at the end of the list.
 fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
     let Some(p) = crate::gas::particle(w, sys, i) else { return };
-    // spec: S-0616 claim 8 (a dead smoke particle with a next type splits); Q-1155 interim (a dead particle of another kind in a smoke turn has no successor)
+    // spec: S-0616 claims 3 and 8 (successors follow the system's kind, not the particle's: a dead particle of any kind in a smoke system whose type names a next type splits, d taken from the dead particle's type)
     if let Some(t) = ptype(w, &p)
-        && t.kind == Some(Behaviour::Smoke)
         && let Some(next) = t.next
     {
         // spec: S-0616 F3 (d = ⌊ρ / 8⌋, rounding down; q = r rem d; o = q + d when q ≥ 1, else q − d; S-0205 claim 3 for d = 0)

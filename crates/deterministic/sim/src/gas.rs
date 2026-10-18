@@ -1384,14 +1384,11 @@ fn second_pass(w: &mut World, sys: ObjectId) {
     if let Some(s) = w.gas.systems.get_mut(&sys) {
         s.particles = list;
     }
-    // spec: S-0613 claims 6 and 7 (successor creation follows all update effects, newest dead particle first; claim 7 is the gas kind's rule, so only a dead gas particle has one here; Q-1155 interim for the other kinds)
+    // spec: S-0613 claims 6 and 7 (successor creation follows all update effects, newest dead particle first; a dead particle of any kind in a gas system gets one successor) and S-0616 claim 3 (successors follow the system's kind, not the particle's)
     for d in dead.iter().rev() {
         let Some(t) = rules.gas.particles.get(d.type_index as usize) else {
             continue;
         };
-        if t.kind != Some(Behaviour::Gas) {
-            continue;
-        }
         let Some(next) = t.next else { continue };
         let [ox, oy, oz] = t.next_offset;
         // spec: S-0613 claim 7 (at the dead particle's position plus the displacement, by claim 5; then it takes the dead particle's velocity)

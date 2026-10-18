@@ -34,7 +34,13 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 /// - PLUME (smoke, SOOT, interval 2, slow-down 1.0, cut-off 5.0, radius 10,
 ///   cap 1), BLAZE (fire, EMBER), BURST (spark, FLICK, one spark turn, cap
 ///   6), DUD (spark, no held type, two spark turns), RAIL (railgun, BOLT,
-///   0.015625 per lepton) and MIXED (gas, holding SOOT).
+///   0.015625 per lepton) and MIXED (gas, holding SOOT);
+/// - for the successors across kinds (claim 3, scenario P3 part c): VAPOR,
+///   a gas particle (radius 40, next ASH, next-particle displacement
+///   (30, −20, 0)); SOOTX and VAPORX, SOOT and VAPOR without a next type;
+///   systems MIXEDX (gas, SOOTX), PUFF and PUFFX (smoke, VAPOR and VAPORX),
+///   BLAZES and BLAZESX (fire, SOOT and SOOTX), SPARKG and SPARKGX (spark,
+///   VAPOR and VAPORX).
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     let p = |kind: &str| ParticleType {
@@ -79,6 +85,32 @@ fn rules() -> Ruleset {
             },
         ),
         ("BOLT", p("railgun")),
+        (
+            "SOOTX",
+            ParticleType {
+                velocity: dec("4.0"),
+                deacc: dec("0.5"),
+                radius: Some(40),
+                ..p("smoke")
+            },
+        ),
+        (
+            "VAPOR",
+            ParticleType {
+                radius: Some(40),
+                next_particle: Some("ASH".into()),
+                next_particle_offset: Some([30, -20, 0]),
+                ..p("gas")
+            },
+        ),
+        (
+            "VAPORX",
+            ParticleType {
+                radius: Some(40),
+                next_particle_offset: Some([30, -20, 0]),
+                ..p("gas")
+            },
+        ),
     ] {
         register(&mut r, "particles", n);
         r.sim.particles.insert(n.into(), t);
@@ -124,6 +156,13 @@ fn rules() -> Ruleset {
             },
         ),
         ("MIXED", s("gas", Some("SOOT"))),
+        ("MIXEDX", s("gas", Some("SOOTX"))),
+        ("PUFF", s("smoke", Some("VAPOR"))),
+        ("PUFFX", s("smoke", Some("VAPORX"))),
+        ("BLAZES", s("fire", Some("SOOT"))),
+        ("BLAZESX", s("fire", Some("SOOTX"))),
+        ("SPARKG", s("spark", Some("VAPOR"))),
+        ("SPARKGX", s("spark", Some("VAPORX"))),
     ] {
         register(&mut r, "particle_systems", n);
         r.sim.particle_systems.insert(n.into(), t);
@@ -446,4 +485,57 @@ fn claim_19_normalised_stage_advance() {
     // δ_F = −1: the quotient has no integer form and gives 0.
     t.final_stage = -1;
     assert_eq!(particles::own_advance(&w, &t, at, to, u, s), 0);
+}
+
+/// One turn of a fresh warhead system of type `name` whose first particle
+/// has the dead mark, on odd tick 5: the dead particle, the ASH particles
+/// (successors) after the turn, the number of particles after the turn
+/// and the raw values taken.
+fn dying_turn(name: &str) -> (Particle, Vec<Particle>, usize, u64) {
+    let mut w = game(&rules());
+    let s = system(&mut w, name, centre(0, 0), None);
+    w.tick = 5;
+    w.gas.systems.get_mut(&s).unwrap().particles[0].dead = true;
+    let dead = list(&w, s)[0].clone();
+    let taken = w.rng.taken();
+    gas::system_turn(&mut w, s);
+    let drawn = w.rng.taken() - taken;
+    let all = w.gas.systems.get(&s).map(|x| x.particles.clone()).unwrap_or_default();
+    let ash: Vec<Particle> = all.iter().filter(|p| named(&w, p) == "ASH").cloned().collect();
+    (dead, ash, all.len(), drawn)
+}
+
+/// spec: S-0616 claim 3 and scenario P3 part c (successors follow the system's kind, not the particle's: (i) a smoke particle dying in a gas system gets S-0613 claim 7's one successor at its displacement with its creation draws and no claim 8 draw; (ii) a gas particle dying in a smoke system gets claim 8's two mirrored successors with claim 8's draws; (iii) a smoke particle in a fire system and (iv) a gas particle in a spark system get none and no successor draw) and S-0613 claim 7 (revision 9: a dead particle of any kind in a gas system)
+#[test]
+fn claim_3_successors_follow_the_system_kind() {
+    // (i) Gas system, smoke particle: one successor, by S-0613 claim 7.
+    let (dead, l, n, with) = dying_turn("MIXED");
+    let (_, lx, nx, without) = dying_turn("MIXEDX");
+    assert!(lx.is_empty(), "no next type: no successor");
+    assert_eq!(l.len(), 1, "one successor");
+    assert_eq!(n, nx + 1);
+    // SOOT names no displacement: the successor is at the dead particle's position.
+    assert_eq!((l[0].pos.x, l[0].pos.y), (dead.pos.x, dead.pos.y));
+    assert_eq!(l[0].vel, dead.vel, "the dead particle's velocity");
+    let creation = with - without;
+    assert!(creation > 0, "the successor's creation draws");
+    // (ii) Smoke system, gas particle: claim 8's two successors.
+    let (dead, l, n, with) = dying_turn("PUFF");
+    let (_, lx, nx, without) = dying_turn("PUFFX");
+    assert!(lx.is_empty());
+    assert_eq!(l.len(), 2, "two successors");
+    assert_eq!(n, nx + 2);
+    assert_eq!(l[0].pos.x + l[1].pos.x, 2 * dead.pos.x, "mirrored, not the gas displacement");
+    assert_eq!(l[0].pos.y + l[1].pos.y, 2 * dead.pos.y);
+    assert_ne!(l[0].pos.x, dead.pos.x, "d = 5 from the dead particle's type: never 0");
+    // oₓ and o_y, then per successor its creation draws and one translucency draw.
+    assert_eq!(with - without, 2 + 2 * (creation + 1), "claim 8's draws");
+    // (iii) Fire system, smoke particle; (iv) spark system, gas particle: none.
+    for (name, twin) in [("BLAZES", "BLAZESX"), ("SPARKG", "SPARKGX")] {
+        let (_, l, n, with) = dying_turn(name);
+        let (_, _, nx, without) = dying_turn(twin);
+        assert!(l.is_empty(), "{name}: no successor");
+        assert_eq!(n, nx, "{name}");
+        assert_eq!(with, without, "{name}: no successor draw");
+    }
 }
