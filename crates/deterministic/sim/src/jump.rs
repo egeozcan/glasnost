@@ -983,7 +983,8 @@ fn neighbour_step(w: &mut World, id: ObjectId) {
 /// released and a nearby cell is searched; found, it re-orders itself to its
 /// centre; not found, it destroys itself with no credit (or, with
 /// `quirks.jumpjet_no_cell_self_destruct` off, clears its point and
-/// commitment and hovers again in the air, or stays grounded).
+/// commitment and hovers again at a height above the surface of 1 lepton or
+/// more, or stays put and becomes grounded at 0 or less).
 pub fn stop(w: &mut World, id: ObjectId) {
     stop_with(w, id, true, false);
 }
@@ -1031,11 +1032,14 @@ pub fn lift_release_stop(w: &mut World, id: ObjectId, lifter_ended: bool) {
     stop_with(w, id, false, lifter_ended);
 }
 
-/// Whether a jumpjet hovers with no movement commitment; for a seized
-/// set-down unit with the no-cell switch off, the switch-off outcome of S-0502 claim 17 with no cell (S-0607 claims 9 and
-/// 20). Restoration is not tested for it; [`lift_retry_stop`] runs instead.
+/// Whether a jumpjet hovers with no movement point and no movement
+/// commitment: for a seized set-down unit with the no-cell switch off, the
+/// switch-off outcome of S-0502 claim 17 with no cell, whatever route
+/// brought it there (S-0607 claims 9 and 20, revision 9). Restoration is not
+/// tested for it; [`lift_retry_stop`] runs instead.
 pub fn hovering_uncommitted(w: &World, id: ObjectId) -> bool {
-    st(w, id).is_some_and(|j| j.phase == Phase::Hovering && !j.moving)
+    // spec: S-0607 claim 20 (revision 9: hovering with no movement point and no movement commitment)
+    st(w, id).is_some_and(|j| j.phase == Phase::Hovering && !j.moving && j.dest.is_none())
 }
 
 /// The repeated stop's search of a hovering set-down unit at a fall-back to
@@ -1083,16 +1087,19 @@ fn stop_with(w: &mut World, id: ObjectId, order_level: bool, lifter_ended: bool)
         return;
     }
     if !w.rules().quirks.jumpjet_no_cell_self_destruct {
-        if phase(w, id) == Some(Phase::Grounded) {
-            // spec: S-0502 Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct off: it clears its movement point and commitment; a grounded jumpjet stays grounded, with no hover slot and its state and target height unchanged)
+        // spec: S-0502 Edge cases (revision 17, quirks.jumpjet_no_cell_self_destruct off: the integer height above the surface decides, 1 lepton or more hovers, 0 or less stays put grounded) and S-0607 claims 9 and 20 (revision 9; answers Q-1344)
+        if height_above(w, id) < 1 {
+            // spec: S-0502 Edge cases (revision 17, quirks.jumpjet_no_cell_self_destruct off: at height 0 leptons or less it clears its movement point and commitment, stays put and becomes grounded, including from ascending at height 0; as at claim 15's touchdown, entering grounded releases the hover slot) and S-0607 claim 9 (revision 9: its flight state becomes grounded, even if it was ascending at height 0)
+            release_slot(w, id);
             upd(w, id, |j| {
+                j.phase = Phase::Grounded;
                 j.dest = None;
                 j.order = None;
                 j.moving = false;
             });
             return;
         }
-        // spec: S-0502 Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct off: in the air it re-enters hovering over its current cell, with no movement point and no movement commitment, neither descending nor flying on)
+        // spec: S-0502 Edge cases (revision 17, quirks.jumpjet_no_cell_self_destruct off: at height 1 lepton or more it re-enters hovering over its current cell, with no movement point and no movement commitment, neither descending nor flying on)
         claim_slot(w, id, here);
         let h = fields(w, id).map_or(0, |f| f.height);
         upd(w, id, |j| {

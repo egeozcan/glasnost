@@ -1481,8 +1481,8 @@ pub struct UnitType {
     #[serde(default)]
     pub jumpjet_height: Option<i32>,
     /// `JumpjetAccel`, the acceleration *a*, a single-precision decimal
-    /// (S-0502 Import mapping, absent 2.0). The stock spelling `JumpJetAccel`
-    /// is another key (S-0001) and is not read.
+    /// (S-0502 Import mapping, absent 2.0). A key written with different
+    /// letter case, such as `JumpJetAccel`, does not set it (S-0001 claim 13).
     #[serde(default)]
     pub jumpjet_accel: Option<Decimal>,
     /// `JumpjetWobbles`, the wobble rate *W*, a single-precision decimal

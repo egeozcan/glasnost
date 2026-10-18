@@ -889,7 +889,7 @@ fn set_down_released(w: &mut World, x: ObjectId, lifter_ended: bool) {
         // spec: S-0607 claim 13 (a gripped unit is not moving only when the seize's search found no cell, and it is then still grounded); an unmoving unit set down above the surface descends and lands where it is (claim 17's clear-cell rule, as for claim 23's set-down)
         crate::jump::lift_descend(w, x);
     } else {
-        // spec: S-0607 claim 13 (no cell found for a grip ended by its lifter, design: a set-down unit stops where it is, with no movement point, its jumpjet movement no longer moving) and claim 9 (revision 8, switch off, on the ground: it stays grounded where it is with no movement point, no longer moving, and claim 20 restores it as any set-down unit)
+        // spec: S-0607 claim 13 (no cell found for a grip ended by its lifter, design: a set-down unit stops where it is, with no movement point, its jumpjet movement no longer moving) and claim 9 (revision 9, switch off, on the ground, height above the surface 0 or less: it stays where it is and becomes grounded, even from ascending at height 0, with no movement point, no longer moving, and claim 20 restores it as any grounded set-down unit)
         crate::jump::lift_settle(w, x);
     }
 }
@@ -1542,8 +1542,8 @@ pub fn touched_down(w: &mut World, id: ObjectId) {
 /// At a fall-back to rest (S-0215 claim 13 row 1): a seized unit whose
 /// jumpjet movement is not *moving* and that is set down gets its own
 /// locomotor back (S-0607 claim 20). With the no-cell switch off, a
-/// set-down unit hovering with no commitment is not restored: it repeats
-/// the stop's search instead.
+/// set-down unit hovering with no movement point and no commitment, by any
+/// route, is not restored: it repeats the stop's search instead.
 /// Returns whether it was restored.
 pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
     let Some(l) = st(w, id).cloned() else {
@@ -1569,7 +1569,7 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
         && !w.rules().quirks.jumpjet_no_cell_self_destruct
         && crate::jump::hovering_uncommitted(w, id)
     {
-        // spec: S-0607 claim 20 (revision 8, the hovering set-down unit under claim 9's switch-off rule, design: restoration is not tested; the unit repeats the stop's search instead) and S-0502 Edge cases (revision 16, quirks.jumpjet_no_cell_self_destruct off: while hovering a seized set-down unit is not restored and retries the search at each fall-back to rest). With the switch off, every seized set-down unit hovering with no commitment takes this rule, not only claim 9's: Q-1344 (interim)
+        // spec: S-0607 claim 20 (revision 9, the hovering exclusion, design: a seized set-down unit hovering with no movement point and no movement commitment after S-0502 claim 17's no-cell outcome with quirks.jumpjet_no_cell_self_destruct off, whatever route brought it there, is not tested for restoration; it repeats the stop's search instead; answers Q-1344) and S-0502 Edge cases (revision 17)
         crate::jump::lift_retry_stop(w, id);
         return false;
     }

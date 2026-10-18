@@ -387,6 +387,95 @@ fn claim_9_no_cell_on_the_ground_stays_grounded() {
     }
 }
 
+// spec: S-0607 claim 20 (revision 9, the hovering exclusion for every route, design; scenario L14; answers Q-1344) and S-0502 Edge cases (revision 17; scenario J27 c): a set-down unit that kept its movement commitment flies towards its point; a stop there with no cell and the switch off leaves it hovering in the air with no movement point and no commitment; it is not restored at its fall-backs to rest, whose retries find nothing and change nothing; once a cell is free again a retry finds it, it flies there and lands, and is restored only at a later fall-back to rest
+#[test]
+fn claim_20_hovering_exclusion_for_a_committed_set_down() {
+    let (mut w, l, v) = seized(quirk(false));
+    order_lifter(&mut w, l);
+    assert!(w.obj(v).unwrap().lift.set_down, "set down at height 0");
+    assert!(jump::moving(&w, v), "it keeps its commitment");
+    assert!(run_until(&mut w, 400, |w| height(w, v) > 100));
+    assert!(jump::moving(&w, v), "still flying to its point");
+    // The lifter leaves play (it cannot seize the unit again) and no land is left.
+    glasnost_sim::objects::remove(&mut w, l);
+    let land_tile = w.cells.grid.get(at(0, 0)).unwrap().tile;
+    flood(&mut w);
+    water(&mut w, &[at(0, 0)]);
+    // A stop on the way (S-0502 claim 17): its search finds no cell.
+    jump::stop(&mut w, v);
+    assert_eq!(health(&w, v), 100, "not destroyed: the switch is off");
+    assert_eq!(jump::phase(&w, v), Some(Phase::Hovering), "it hovers");
+    assert!(!jump::moving(&w, v), "no movement commitment");
+    assert_eq!(point(&w, v), None, "no movement point");
+    assert!(w.obj(v).unwrap().lift.set_down && lift::seized(&w, v));
+    let (p, z) = (w.obj(v).unwrap().pos, height(&w, v));
+    for _ in 0..3 {
+        order_move(
+            &mut w,
+            v,
+            CellXY {
+                x: p.cell().x + 2,
+                y: p.cell().y,
+            },
+        );
+        run(&mut w, 20);
+        assert!(lift::seized(&w, v), "not restored while it hovers");
+        assert_eq!(jump::phase(&w, v), Some(Phase::Hovering));
+        assert!(!jump::moving(&w, v), "the retry found nothing");
+        assert_eq!((w.obj(v).unwrap().pos, height(&w, v)), (p, z));
+    }
+    // A neighbouring cell becomes land again (its own cell keeps the mark of its low ascent, S-0502 claim 4).
+    let here = p.cell();
+    let c = CellXY {
+        x: here.x + 1,
+        y: here.y,
+    };
+    w.cells.grid.get_mut(c).unwrap().tile = land_tile;
+    glasnost_sim::load::recalc_cells(&mut w, &[c]);
+    order_move(&mut w, v, CellXY { x: c.x + 2, y: c.y });
+    assert!(
+        run_until(&mut w, 40, |w| jump::moving(w, v)),
+        "the next fall-back to rest retried the search"
+    );
+    assert!(lift::seized(&w, v), "not restored by the retry");
+    let d = point(&w, v).expect("the found point");
+    assert_eq!((d.x, d.y), (c.x * 256 + 128, c.y * 256 + 128), "its centre");
+    assert!(run_until(&mut w, 400, |w| height(w, v) == 0 && !jump::moving(w, v)));
+    assert!(lift::seized(&w, v), "landed, not yet at rest");
+    assert!(restored(&mut w, v), "restored at a later fall-back to rest");
+}
+
+// spec: S-0607 claim 9 (revision 9, design: on the ground, height above the surface 0 or less, it stays where it is and its flight state becomes grounded, even if it was ascending at height 0; answers Q-1344) and S-0502 Edge cases (revision 17): a seized unit given no destination in the tick after its take-off update, still at height 0 and ascending, with no cell and the switch off, stays put grounded with no point and no commitment, and claim 20 restores it as any grounded set-down unit
+#[test]
+fn claim_9_no_cell_ascending_at_height_zero_becomes_grounded() {
+    let (mut w, l, v) = seized(quirk(false));
+    flood(&mut w);
+    run(&mut w, 1);
+    assert_eq!(jump::phase(&w, v), Some(Phase::Ascending), "took off");
+    assert_eq!(height(&w, v), 0, "still at height 0");
+    assert!(jump::moving(&w, v));
+    let p = w.obj(v).unwrap().pos;
+    glasnost_sim::econ::assign_destination(&mut w, v, None);
+    run(&mut w, 1);
+    assert!(!lift::grips(&w, l, v), "the grip ends");
+    assert_eq!(health(&w, v), 100);
+    assert_eq!(
+        jump::phase(&w, v),
+        Some(Phase::Grounded),
+        "becomes grounded"
+    );
+    assert!(!jump::moving(&w, v), "no movement commitment");
+    assert_eq!(point(&w, v), None, "no movement point");
+    assert!(w.obj(v).unwrap().lift.set_down);
+    run(&mut w, 5);
+    assert_eq!(w.obj(v).unwrap().pos, p, "it stays where it is");
+    glasnost_sim::objects::remove(&mut w, l);
+    assert!(
+        restored(&mut w, v),
+        "restored as any grounded set-down unit"
+    );
+}
+
 // spec: S-0607 claim 13 (revision 8, design; answers Q-1342) and S-0502 claims 9 and 17 (revision 16; scenario J27 c): a unit dropped over its cell centre by its lifter with no cell for the stop loses the point fixed at the seize and its commitment, and falls with no movement point by the direct ground reference, even with a vehicle listed in its own cell; it takes its jumpjet update every tick of its fall
 #[test]
 fn claim_13_no_cell_drop_over_the_centre_falls_by_the_direct_reference() {
