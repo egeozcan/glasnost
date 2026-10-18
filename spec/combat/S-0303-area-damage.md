@@ -2,11 +2,11 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 17
+revision: 18
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0020, Q-0060, Q-0061, Q-0614]
 supersedes: []
@@ -508,8 +508,14 @@ addition:
 23. **Result of a detonation.** A detonation reports one of three results to whatever produced it:
     *hit* (at least one object received a hit), *missed* (none did, or claim 2 applied) or
     *nullified* (claim 15). The projectile detonation uses it in claim 21; other producers say in
-    their own specs whether they use it.
-    - Backing: `measurable` through claim 21 (scenario A14, variants b and c)
+    their own specs whether they use it. A disc laser's detonation (S-0615 claim 16) applies
+    only the area damage of claims 1 to 20 and ignores its result. It produces none of the
+    projectile-only effects of claims 21 and 22: no explosion animation, warhead debris or
+    nullify animation, and no animation-selection draw of F5. It also produces no light flash.
+    The area damage's own effects, including an exploding overlay's animation and the
+    warhead's particle system, still follow their rules above.
+    - Backing: `measurable` through claim 21 (scenario A14, variants b and c), and S-0615
+      scenario DL7 for disc-laser area effects and absence of projectile-only effects
     - Confidence: high
 
 24. **Defaults of bridge and barrel damage.** At a fresh program start the game-wide bridge
