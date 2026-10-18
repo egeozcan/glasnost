@@ -2226,6 +2226,10 @@ impl Builder<'_> {
         {
             bad.push("a spark particle cap of -1, 0 or 1 makes no spark");
         }
+        // spec: S-0616 claim 20 and Import mapping (SparkSpawnFrames of 0 or less, including the absent value on a spark-kind type, is bad data: the importer warns)
+        if kind.as_deref() == Some("spark") && int_of("SparkSpawnFrames").is_none_or(|k| k <= 0) {
+            bad.push("a spark-turns field (SparkSpawnFrames) of 0 or less, or absent, never ends the system by its counter; our engine marks it in its first turn");
+        }
         for b in bad {
             self.warn(
                 line,

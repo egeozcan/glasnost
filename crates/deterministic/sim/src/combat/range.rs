@@ -644,7 +644,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
 }
 
 /// Whether cell `c` is a destroyable-cliff cell (S-0214 Terms).
-fn destroyable_cliff(w: &World, c: CellXY) -> bool {
+pub(crate) fn destroyable_cliff(w: &World, c: CellXY) -> bool {
     let Some(cell) = w.cells.cell(c) else {
         return false;
     };

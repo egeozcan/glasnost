@@ -389,11 +389,39 @@ fn particle_system_kind_warnings() {
         "particle system Plume: a smoke spawn radius below 0",
         "particle system Burst: a spark particle cap",
         "particle system Blaze: a fire spawn interval of 0",
+        "particle system Burst: a spark-turns field",
         "DamSmkOffScrnRel is on",
     ] {
         assert!(warned(&w, text), "{text}: {w:?}");
     }
     assert!(!warned(&w, "particle Ember: YVelocity"), "{w:?}");
+}
+
+/// spec: S-0616 claim 20 and Import mapping (SparkSpawnFrames of 0 or less, the absent value on a
+/// spark-kind type included, is bad data: the importer warns; a positive value does not warn)
+#[test]
+fn spark_turns_of_zero_or_less_warn() {
+    for (keys, warns) in [
+        ("", true),
+        ("SparkSpawnFrames=0\n", true),
+        ("SparkSpawnFrames=-3\n", true),
+        ("SparkSpawnFrames=1\n", false),
+    ] {
+        let text = format!("[ParticleSystems]\n0=Fizz\n[Fizz]\nBehavesLike=Spark\n{keys}");
+        let (_, w) = sim(&text, "", "");
+        assert_eq!(
+            warned(&w, "particle system Fizz: a spark-turns field"),
+            warns,
+            "{keys}: {w:?}"
+        );
+    }
+    // Another kind with no spark-turns field: no warning.
+    let (_, w) = sim(
+        "[ParticleSystems]\n0=Puff\n[Puff]\nBehavesLike=Smoke\n",
+        "",
+        "",
+    );
+    assert!(!warned(&w, "a spark-turns field"), "{w:?}");
 }
 
 /// spec: S-0601 Import mapping (DefaultSparkSystem absent: no game-wide spark systems and no

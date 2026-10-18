@@ -1494,11 +1494,13 @@ pub fn process_unload(w: &mut World, id: ObjectId) -> i32 {
             // spec: S-0402 claim 11 (counter set to 0; its period is not restarted)
             x.counter.zero(t);
         }
-        pay(w, b, tib, amount);
-        // spec: S-0616 claim 1 (refinery smoke at each unloading step of a delivery; the step is the payment row of S-0402 claim 11, interim Q-1401)
+        // spec: S-0402 claim 11 and S-0616 claim 1 (each payment row makes one smoke event on the building in the neighbouring cell, before the payment of its processing)
         crate::emitters::refinery_smoke(w, b);
+        pay(w, b, tib, amount);
         return 1;
     }
+    // spec: S-0402 claim 11 and S-0616 claim 1 (the empty-load row that makes the harvester finishing also makes one smoke event, so k + 1 events for k tiberiums)
+    crate::emitters::refinery_smoke(w, b);
     // spec: S-0402 claim 11 (load empty and the counter allows: finishing, the counter left as it is)
     if let Some(x) = state(w, id) {
         x.finishing = true;

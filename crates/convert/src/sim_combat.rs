@@ -874,6 +874,22 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         Int,
         "S-0303",
     ),
+    // spec: S-0306 Import mapping (railgundamageradius, spelled so: the railgun hit distance, integer leptons, not a cells-form value)
+    (
+        "railgun_damage_radius",
+        COMBAT_DAMAGE,
+        "railgundamageradius",
+        Int,
+        "S-0306",
+    ),
+    // spec: S-0306 Import mapping (CollapseChance: integer percentage points, compared directly with R(0, 99))
+    (
+        "collapse_chance",
+        COMBAT_DAMAGE,
+        "CollapseChance",
+        Int,
+        "S-0306",
+    ),
     (
         "default_spark_system",
         COMBAT_DAMAGE,

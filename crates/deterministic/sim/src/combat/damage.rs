@@ -593,8 +593,8 @@ fn damage_effect_reaction(
                 crate::particles::damage_smoke(w, id, &name, offset);
             }
         }
-        if o.kind == Kind::Building {
-            // spec: S-0616 claim 1 (when the building becomes yellow its natural smoke's timer T is multiplied by 1.5, once)
+        if o.kind == Kind::Building && result == HitResult::NowYellow {
+            // spec: S-0616 claim 1 (after each hit that reports now yellow, S-0302 claim 12, the natural smoke's T is multiplied by 1.5; a now red hit does not multiply it)
             crate::emitters::natural_smoke_yellow(w, id);
         }
         if o.kind == Kind::Building && warhead.is_some_and(|h| w.rules().combat.warhead(h).sparky) {

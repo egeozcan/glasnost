@@ -9,7 +9,7 @@ use glasnost_num::{F64, Rounding};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{Decimal, ParticleSystemType, ParticleType, WeaponType};
 use glasnost_sim::combat::check::{Answer, check};
-use glasnost_sim::combat::fire;
+use glasnost_sim::combat::{fire, railgun};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::world::{HouseId, ObjectId, Pos, Target, World};
@@ -270,11 +270,12 @@ fn claim_1_fire_emitter_at_the_shot() {
     round_trip(&w);
 }
 
-/// spec: S-0616 claim 1 (spark and railgun emitters: owner object the firer; a spark's target point the target object's position, a railgun's the end of the beam) and Terms (held in the spark and railgun places)
+/// spec: S-0616 claim 1 (spark and railgun emitters: owner object the firer; a spark's target point the target object's position, a railgun's the beam's end point of F14, which is the target's position across flat ground) and Terms (held in the spark and railgun places)
 #[test]
 fn claim_1_spark_and_railgun_emitters() {
     let mut r = rules();
     r.sim.vehicles.get_mut("CART").unwrap().primary = Some("RAILER".into());
+    r.sim.weapons.get_mut("RAILER").unwrap().projectile = Some("Rocket".into());
     let (mut w, a, b) = duel(&r, 4);
     let t = w.obj(a).unwrap().target.unwrap();
     assert!(fire::shot(&mut w, a, 1, t));
@@ -292,6 +293,22 @@ fn claim_1_spark_and_railgun_emitters() {
         .expect("railgun place");
     assert_eq!(sys_name(&w, rg), "RAIL");
     assert_eq!(w.gas.systems[&rg].owner_object, Some(a));
+    let q = w.obj(b).unwrap().pos;
+    let p = w.gas.systems[&rg].pos;
+    assert_eq!(
+        railgun::walk(&w, p, q).end,
+        q,
+        "flat ground: the end point is Q"
+    );
+    assert_eq!(w.gas.systems[&rg].target, q);
+    // The target moves: the target point stays fixed (S-0616 claim 1).
+    w.obj_mut(b).unwrap().pos = Pos::new(q.x + 300, q.y + 300, q.z);
+    let rg_sys = rg;
+    let before = w.gas.systems[&rg_sys].target;
+    gas::system_turn(&mut w, rg_sys);
+    if let Some(s) = w.gas.systems.get(&rg_sys) {
+        assert_eq!(s.target, before, "never recomputed from the target");
+    }
     round_trip(&w);
 }
 
@@ -512,9 +529,11 @@ fn flame_sweep_both_positions() {
                 sweep_point(&w, op, gp, face, on),
                 "f {f} on {on}"
             );
+            let k = w.obj(a).unwrap().combat.burst;
             assert_eq!(
                 sys.pos,
-                glasnost_sim::combat::position::fire_point(&w, a, 0, 0)
+                glasnost_sim::combat::position::fire_point(&w, a, 0, k),
+                "the owner's current burst counter"
             );
             assert_eq!(
                 sys.particles.len(),
@@ -810,7 +829,7 @@ fn tower(w: &mut World) -> ObjectId {
     testkit::spawn(w, Kind::Building, "TOWER", 0, testkit::mid(N, 3, 3), 0)
 }
 
-/// spec: S-0616 claim 1 (natural smoke: made when the building is placed in play, at its position plus the displacement, no owner object, target point its position; T × 1.5 once on turning yellow) and S-0516 claim 18 (full cloaking removes it at once; full uncloaking makes a new one only with a displacement other than (0, 0, 0))
+/// spec: S-0616 claim 1 (natural smoke: made when the building is placed in play, at its position plus the displacement, no owner object, target point its position; T × 1.5 after each now-yellow hit, compounding) and S-0516 claim 18 (full cloaking removes it at once; full uncloaking makes a new one only with a displacement other than (0, 0, 0))
 #[test]
 fn claim_1_natural_smoke() {
     let mut w = testkit::game_with(&rules(), N, 7);
@@ -827,13 +846,15 @@ fn claim_1_natural_smoke() {
     assert_eq!(sys.pos, Pos::new(o.x + 16, o.y + 32, o.z + 48));
     assert_eq!(sys.owner_object, None);
     assert_eq!(sys.target, o);
-    // Yellow: × 1.5 once.
+    // Each now-yellow hit: × 1.5, compounding.
     let t0 = sys.timer;
-    emitters::natural_smoke_yellow(&mut w, b);
     emitters::natural_smoke_yellow(&mut w, b);
     let six = glasnost_sim::rules::nearest_double("6.0").to_f32(m());
     assert_eq!(t0, glasnost_sim::rules::nearest_double("4.0").to_f32(m()));
-    assert_eq!(w.gas.systems[&s].timer, six, "4.0 × 1.5, once");
+    assert_eq!(w.gas.systems[&s].timer, six, "4.0 × 1.5");
+    emitters::natural_smoke_yellow(&mut w, b);
+    let nine = glasnost_sim::rules::nearest_double("9.0").to_f32(m());
+    assert_eq!(w.gas.systems[&s].timer, nine, "6.0 × 1.5: it compounds");
     round_trip(&w);
     // Full cloaking removes it at once; uncloaking makes a new one.
     let n = w.gas.systems.len();
@@ -902,7 +923,7 @@ fn natural_smoke_follows_the_building_cloak() {
     );
 }
 
-/// spec: S-0312 claim 19 f and S-0616 claim 1 (destruction smoke: with no system attached, one draw R(0, m − 1) over the eligible entries counted from the end, at its position plus the destruction displacement, owner object the building; eligible: the smoke kind, interim Q-1400)
+/// spec: S-0312 claim 19 f and S-0616 claim 1 (destruction smoke: one draw R(0, m − 1) over the smoke-kind entries counted from the end, at its position plus the destruction displacement, owner object the building, no owner house; the building's damage smoke and natural smoke do not count as attached)
 #[test]
 fn claim_1_destruction_smoke() {
     let mut r = rules();
@@ -928,12 +949,32 @@ fn claim_1_destruction_smoke() {
     let o = w.obj(b).unwrap().pos;
     assert_eq!(w.gas.systems[&s].pos, Pos::new(o.x + 8, o.y, o.z));
     assert_eq!(w.gas.systems[&s].owner_object, Some(b));
-    // A system attached already: none.
+    assert_eq!(w.gas.systems[&s].owner, None);
+    // A damage smoke and a natural smoke do not stop it (Q-1400).
+    let mut w = testkit::game_with(&rules(), N, 7);
+    let b = tower(&mut w);
+    assert!(w.obj(b).unwrap().combat.natural_smoke.is_some());
+    let other = *w.gas.systems.keys().last().unwrap();
+    w.obj_mut(b).unwrap().combat.damage_smoke = Some(other);
     let n = w.gas.systems.len();
-    w.obj_mut(b).unwrap().combat.damage_smoke = Some(s);
     let before = w.rng.taken();
     emitters::destruction_smoke(&mut w, b);
-    assert_eq!((w.gas.systems.len(), w.rng.taken()), (n, before));
+    assert_eq!((w.gas.systems.len(), w.rng.taken()), (n + 1, before + 1));
+    // One eligible entry: R(0, 0) takes no raw value (S-0202 claim 4).
+    let mut r = rules();
+    r.sim
+        .buildings
+        .get_mut("TOWER")
+        .unwrap()
+        .combat
+        .destroy_particle_systems = Some(vec!["BURST".into(), "PLUME".into(), "BLAZE".into()]);
+    let mut w = testkit::game_with(&r, N, 7);
+    let b = tower(&mut w);
+    let before = w.rng.taken();
+    emitters::destruction_smoke(&mut w, b);
+    let s = *w.gas.systems.keys().last().unwrap();
+    assert_eq!(sys_name(&w, s), "PLUME", "only the smoke entry");
+    assert_eq!(w.rng.taken(), before);
 }
 
 /// spec: S-0616 claim 1 (refinery smoke: one system per set smoke point, (0, 0, 0) and (128, 128, 0) unset, owner object the refinery, lifetime the game-wide refinery-smoke time; no draw)
@@ -966,16 +1007,17 @@ fn claim_1_refinery_smoke() {
     }
 }
 
-/// spec: S-0303 claim 19 and S-0616 claim 1 (the barrel particle system appears at P with its first particle when it has a held type)
+/// spec: S-0303 claim 19 and S-0616 claim 1 (the barrel particle system appears at P with its first particle when it has a held type; owner house none)
 #[test]
 fn claim_1_barrel_particle_system() {
     let mut r = rules();
     r.sim.general.barrel_particle = Some("PLUME".into());
     let mut w = testkit::game_with(&r, N, 7);
     let p = Pos::centre(testkit::mid(N, 0, 0), 0);
-    emitters::barrel_particle_system(&mut w, p, Some(HouseId(1)));
+    emitters::barrel_particle_system(&mut w, p);
     let s = *w.gas.systems.keys().last().unwrap();
     assert_eq!(sys_name(&w, s), "PLUME");
+    assert_eq!(w.gas.systems[&s].owner, None, "owner house: none (Q-1403)");
     assert_eq!(w.gas.systems[&s].particles.len(), 1);
     assert_eq!(w.gas.systems[&s].target, p);
 }
@@ -1027,4 +1069,520 @@ fn absent_creator_defaults() {
             .1
             .eq_num(glasnost_sim::rules::nearest_double("0.01"))
     );
+}
+
+// ---------------------------------------------------------------------------
+// Revision 8: several flags, the railgun shot, the sweep's burst counter,
+// the now-yellow factor, the self-healing marks, the spark-turns fix
+
+/// spec: S-0616 claim 1 (Q-1403: the fire, spark and railgun flags are tested independently at the shot, in that order; one emitter of the weapon's system type per flag whose place is empty) and S-0301 claim 5 (revision 24: the gate refuses the weapon while any place of its flags is held)
+#[test]
+fn claim_1_several_flags_make_several_emitters() {
+    let mut r = rules();
+    r.sim.weapons.insert("TRIPLE".into(), {
+        let mut w = weapon(Some("BURST"));
+        w.use_fire_particles = Some(true);
+        w.use_spark_particles = Some(true);
+        w.is_railgun = Some(true);
+        w.projectile = Some("Rocket".into());
+        w
+    });
+    let cart = r.sim.vehicles.get_mut("CART").unwrap();
+    cart.primary = Some("TRIPLE".into());
+    cart.secondary = Some("PLAIN".into());
+    let (mut w, a, _) = duel(&r, 4);
+    let t = w.obj(a).unwrap().target.unwrap();
+    let n = w.gas.systems.len();
+    assert!(fire::shot(&mut w, a, 0, t));
+    assert_eq!(w.gas.systems.len(), n + 3, "three emitters at one shot");
+    let c = w.obj(a).unwrap().combat.clone();
+    let (f, s, g) = (
+        c.fire_emitter.expect("fire place").system,
+        c.spark_emitter.expect("spark place"),
+        c.railgun_emitter.expect("railgun place"),
+    );
+    assert!(f < s && s < g, "made in the order fire, spark, railgun");
+    for x in [f, s, g] {
+        assert_eq!(sys_name(&w, x), "BURST", "the weapon's one system type");
+    }
+    let ask = |w: &World| check(w, a, w.obj(a).unwrap().target, 0, true);
+    w.obj_mut(a).unwrap().combat.rearm_until = 0;
+    assert_eq!(ask(&w), Answer::Rearming);
+    // Letting the fire emitter go is not enough: the others are still held.
+    emitters::let_go_fire(&mut w, a);
+    assert_eq!(ask(&w), Answer::Rearming, "spark and railgun still held");
+    for x in [s, g] {
+        for _ in 0..200 {
+            if !w.gas.systems.contains_key(&x) {
+                break;
+            }
+            gas::system_turn(&mut w, x);
+        }
+    }
+    assert_eq!(ask(&w), Answer::CanFire, "every place empty again");
+    // A second shot with the spark place held makes no spark emitter.
+    assert!(fire::shot(&mut w, a, 0, t));
+    let held = w.obj(a).unwrap().combat.spark_emitter.unwrap();
+    w.obj_mut(a).unwrap().combat.fire_emitter = None;
+    w.obj_mut(a).unwrap().combat.railgun_emitter = None;
+    let n = w.gas.systems.len();
+    assert!(fire::shot(&mut w, a, 0, t));
+    assert_eq!(w.gas.systems.len(), n + 2, "fire and railgun only");
+    assert_eq!(w.obj(a).unwrap().combat.spark_emitter, Some(held));
+}
+
+/// The railgun rules: CART's primary RAILER (damage 50, the slow Rocket
+/// projectile so that no projectile hit lands at the shot).
+fn rail_rules() -> Ruleset {
+    let mut r = rules();
+    r.sim.vehicles.get_mut("CART").unwrap().primary = Some("RAILER".into());
+    let rw = r.sim.weapons.get_mut("RAILER").unwrap();
+    rw.projectile = Some("Rocket".into());
+    rw.damage = Some(50);
+    r
+}
+
+fn hp(w: &World, id: ObjectId) -> i32 {
+    w.obj(id).unwrap().health
+}
+
+/// spec: S-0306 claim 27 (objects of the cells the samples newly enter qualify when strictly nearer the beam line than the railgun hit distance, with no alliance test, never the firer; the target always; one ordinary hit each when no sample stops in terrain) and Import mapping (absent railgundamageradius 128, CollapseChance 100)
+#[test]
+fn s0306_claim_27_railgun_hits_along_the_beam() {
+    let r = rail_rules();
+    let (mut w, a, b) = duel(&r, 6);
+    assert_eq!(w.rules().combat.general.railgun_radius, 128);
+    assert_eq!(w.rules().combat.general.collapse_chance, 100);
+    // A friendly bystander on the beam, an enemy two cells off it.
+    let friend = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, testkit::mid(N, 0, 0), 0);
+    let off = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, testkit::mid(N, 1, 2), 0);
+    let before: Vec<i32> = [a, b, friend, off].iter().map(|&x| hp(&w, x)).collect();
+    let t = w.obj(a).unwrap().target.unwrap();
+    assert!(fire::shot(&mut w, a, 0, t));
+    assert_eq!(hp(&w, a), before[0], "never the firer");
+    assert!(hp(&w, b) < before[1], "the target");
+    assert!(hp(&w, friend) < before[2], "no alliance test");
+    assert_eq!(hp(&w, off), before[3], "beyond the hit distance");
+    assert_eq!(
+        before[1] - hp(&w, b),
+        before[2] - hp(&w, friend),
+        "the same ordinary hit"
+    );
+    // A second shot while the railgun place is held: no effect at all.
+    let held = w.obj(a).unwrap().combat.railgun_emitter.unwrap();
+    let h = hp(&w, b);
+    w.obj_mut(a).unwrap().combat.rearm_until = 0;
+    assert!(fire::shot(&mut w, a, 0, t));
+    assert_eq!(hp(&w, b), h, "no beam while the place is held");
+    assert_eq!(w.obj(a).unwrap().combat.railgun_emitter, Some(held));
+    // The hit distance 0: only the target.
+    let mut r0 = rail_rules();
+    r0.sim.general.railgun_damage_radius = Some(0);
+    let (mut w, a, b) = duel(&r0, 6);
+    let friend = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, testkit::mid(N, 0, 0), 0);
+    let (hb, hf) = (hp(&w, b), hp(&w, friend));
+    assert!(fire::shot(&mut w, a, 0, Target::Object(b)));
+    assert!(hp(&w, b) < hb);
+    assert_eq!(hp(&w, friend), hf, "distance 0: nothing is strictly nearer");
+}
+
+/// A destroyable-cliff tile in the catalogue of `w`, laid on cell `c` when given.
+fn cliff_tile(w: &mut World, c: Option<glasnost_map::CellXY>) {
+    use glasnost_map::terrain::{TileCell, TileInfo};
+    let mut cat = (*testkit::catalogue()).clone();
+    let n = cat.tiles.len() as i32;
+    cat.tiles.push(TileInfo {
+        width: 1,
+        height: 1,
+        has_image: true,
+        cells: vec![Some(TileCell {
+            terrain_code: 0,
+            slope: 0,
+        })],
+        variants: 0,
+        anim: None,
+        no_burrowing: false,
+    });
+    cat.roles.destroyable_cliff = n;
+    w.catalogue = Some(std::sync::Arc::new(cat));
+    if let Some(c) = c {
+        let cell = w.cells.grid.get_mut(c).unwrap();
+        cell.tile = n;
+        cell.sub_tile = 0;
+    }
+}
+
+/// spec: S-0616 F14 (the first tested sample below the terrain is the end point) and S-0306 claim 27 (a terrain stop cancels every hit, the earlier bystander's too; one draw R(0, 99) only when the stop cell is a destroyable cliff)
+#[test]
+fn s0306_claim_27_terrain_stop() {
+    let mut draws = Vec::new();
+    for cliff in [false, true] {
+        let r = rail_rules();
+        let (mut w, a, b) = duel(&r, 6);
+        let friend = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, testkit::mid(N, -1, 0), 0);
+        let ridge = testkit::mid(N, 1, 0);
+        w.cells.grid.get_mut(ridge).unwrap().level = 8;
+        cliff_tile(&mut w, cliff.then_some(ridge));
+        let (hb, hf) = (hp(&w, b), hp(&w, friend));
+        let t = w.obj(a).unwrap().target.unwrap();
+        let before = w.rng.taken();
+        let mut probe = w.rng.clone();
+        probe.ranged(0, 99, w.rules().quirks.ranged_draw_half_span);
+        assert!(fire::shot(&mut w, a, 0, t));
+        draws.push((w.rng.taken() - before, probe.taken() - before));
+        assert_eq!(
+            (hp(&w, b), hp(&w, friend)),
+            (hb, hf),
+            "cliff {cliff}: no hits"
+        );
+        let g = w.obj(a).unwrap().combat.railgun_emitter.unwrap();
+        let end = w.gas.systems[&g].target;
+        assert_eq!(end.cell(), ridge, "the first sample in the ridge");
+        let p = w.gas.systems[&g].pos;
+        let q = w.obj(b).unwrap().pos;
+        let walk = railgun::walk(&w, p, q);
+        assert_eq!((walk.end, walk.stop), (end, Some(ridge)));
+        assert!((0..50).any(|i| railgun::sample(p, q, i, w.rules().mode) == end));
+    }
+    assert_eq!(draws[0].0, 0, "an ordinary ridge: no draw");
+    assert_eq!(
+        draws[1].0, draws[1].1,
+        "a cliff stop: one ranged draw R(0, 99)"
+    );
+}
+
+/// spec: S-0306 claim 27 (without a terrain stop, one draw R(0, 99) after the hits only when the shot target is a destroyable-cliff cell; an ordinary cell target takes none)
+#[test]
+fn s0306_claim_27_cliff_cell_target() {
+    let mut draws = Vec::new();
+    for cliff in [false, true] {
+        let r = rail_rules();
+        let (mut w, a, _) = duel(&r, 6);
+        let c = testkit::mid(N, 2, 1);
+        cliff_tile(&mut w, cliff.then_some(c));
+        let before = w.rng.taken();
+        let mut probe = w.rng.clone();
+        probe.ranged(0, 99, w.rules().quirks.ranged_draw_half_span);
+        assert!(fire::shot(&mut w, a, 0, Target::Cell(c)));
+        draws.push((w.rng.taken() - before, probe.taken() - before));
+    }
+    assert_eq!(draws[0].0, 0, "an ordinary cell target: no draw");
+    assert_eq!(
+        draws[1].0, draws[1].1,
+        "a cliff cell target: one ranged draw R(0, 99)"
+    );
+}
+
+/// spec: S-0616 claim 11 (Q-1403: the sweep's fire point uses the owner's current burst counter, not the shot's and not 0) and S-0313 claim 2 (the lateral part negated for an odd counter)
+#[test]
+fn claim_11_sweep_uses_the_current_burst() {
+    let mut r = rules();
+    r.sim
+        .vehicles
+        .get_mut("CART")
+        .unwrap()
+        .combat
+        .primary_fire_flh = Some([40, 64, 20]);
+    let (mut w, a, _) = duel(&r, 9);
+    let t = w.obj(a).unwrap().target.unwrap();
+    assert!(fire::shot(&mut w, a, 0, t));
+    let s = w.obj(a).unwrap().combat.fire_emitter.unwrap().system;
+    for k in [1, 0, 3] {
+        w.tick = 33;
+        let tick = w.tick;
+        let o = w.obj_mut(a).unwrap();
+        o.combat.burst = k;
+        o.body = glasnost_sim::turning::Turning::at(0);
+        o.body.turn_to(20000, tick, 1);
+        let even = glasnost_sim::combat::position::fire_point(&w, a, 0, 0);
+        let odd = glasnost_sim::combat::position::fire_point(&w, a, 0, 1);
+        assert_ne!(even, odd, "the fire point alternates");
+        particles::fire_turn(&mut w, s);
+        assert_eq!(
+            w.gas.systems[&s].pos,
+            if k % 2 == 1 { odd } else { even },
+            "burst {k}"
+        );
+    }
+}
+
+/// A TOWER hit for `amount` from `from` health (strength 800), defences ignored.
+fn hit_tower(
+    w: &mut World,
+    b: ObjectId,
+    from: i32,
+    amount: i32,
+) -> glasnost_sim::combat::damage::HitResult {
+    w.obj_mut(b).unwrap().health = from;
+    glasnost_sim::combat::damage::apply(
+        w,
+        b,
+        glasnost_sim::combat::damage::Hit {
+            amount,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: false,
+        },
+    )
+}
+
+/// spec: S-0616 claim 1 (after each hit that reports now yellow, S-0302 claim 12, T × 1.5; a hit from above half straight to red reports now red and leaves T unchanged; repair does not undo it and a later now-yellow hit compounds)
+#[test]
+fn claim_1_natural_smoke_now_yellow_hits_only() {
+    use glasnost_sim::combat::damage::HitResult;
+    let f = |s: &str| glasnost_sim::rules::nearest_double(s).to_f32(m());
+    let mut w = testkit::game_with(&rules(), N, 7);
+    let b = tower(&mut w);
+    let s = w.obj(b).unwrap().combat.natural_smoke.unwrap();
+    assert_eq!(hit_tower(&mut w, b, 800, 401), HitResult::NowYellow);
+    assert_eq!(w.gas.systems[&s].timer, f("6.0"));
+    // Repair above half (health set back), then a second now-yellow hit.
+    assert_eq!(hit_tower(&mut w, b, 800, 401), HitResult::NowYellow);
+    assert_eq!(w.gas.systems[&s].timer, f("9.0"), "it compounds");
+    // A new tower, one hit from full straight below the red ratio.
+    let mut w = testkit::game_with(&rules(), N, 7);
+    let b = tower(&mut w);
+    let s = w.obj(b).unwrap().combat.natural_smoke.unwrap();
+    assert_eq!(hit_tower(&mut w, b, 800, 700), HitResult::NowRed);
+    assert_eq!(w.gas.systems[&s].timer, f("4.0"), "now red: unchanged");
+}
+
+/// Whether a damage smoke of `kind`/`name` (house 0, at `z`) is marked by
+/// one self-healing turn from `health`, with `own` self-healing and the
+/// house's self-heal counts `house` (infantry, vehicles), organic or not.
+fn heal_marks(
+    kind: Kind,
+    name: &str,
+    health: i32,
+    own: bool,
+    house: [i32; 2],
+    organic: bool,
+    z: i32,
+) -> bool {
+    let mut r = rules();
+    {
+        let c = match kind {
+            Kind::Infantry => &mut r.sim.infantry.get_mut(name).unwrap().combat,
+            Kind::Vehicle => &mut r.sim.vehicles.get_mut(name).unwrap().combat,
+            _ => &mut r.sim.buildings.get_mut(name).unwrap().combat,
+        };
+        c.self_healing = Some(own);
+        c.organic = Some(organic);
+    }
+    let g = &mut r.sim.general;
+    g.self_heal_infantry_frames = Some(1);
+    g.self_heal_unit_frames = Some(1);
+    g.self_heal_infantry_amount = Some(1);
+    g.self_heal_unit_amount = Some(1);
+    let mut w = testkit::game_with(&r, N, 7);
+    let id = testkit::spawn(&mut w, kind, name, 0, testkit::mid(N, 4, -4), 0);
+    w.houses[0].combat.self_heal = house;
+    let ti = w.rules().gas.system("HAZE").unwrap() as i32;
+    emitters::trigger_create(&mut w, ti, testkit::mid(N, -5, -5));
+    let sys = *w.gas.systems.keys().last().unwrap();
+    let o = w.obj_mut(id).unwrap();
+    o.health = health;
+    o.combat.damage_smoke = Some(sys);
+    o.pos.z = z;
+    // A multiple of the repair period (14) for the own self-healing.
+    w.tick = 28;
+    let h0 = w.obj(id).unwrap().health;
+    glasnost_sim::combat::heal::turn(&mut w, id);
+    assert!(w.obj(id).unwrap().health > h0, "{name}: a gain");
+    assert_eq!(
+        w.obj(id).unwrap().combat.damage_smoke,
+        Some(sys),
+        "kept in its place"
+    );
+    w.gas.systems[&sys].ending
+}
+
+/// spec: S-0616 claim 1 and S-0314 claims 9 and 10 (after its own self-healing gain, and after a non-organic vehicle's house-wide gain, the damage smoke is marked when the health ratio is strictly above the yellow ratio or the height above the surface is below −10 leptons; house-wide healing of infantry and organic vehicles takes no test)
+#[test]
+fn claim_1_self_healing_marks_damage_smoke() {
+    // Own self-healing, each kind: 50 % + 1 is strictly above.
+    assert!(heal_marks(
+        Kind::Vehicle,
+        "BUGGY",
+        15000,
+        true,
+        [0, 0],
+        false,
+        0
+    ));
+    assert!(heal_marks(
+        Kind::Infantry,
+        "WALKER",
+        50,
+        true,
+        [0, 0],
+        false,
+        0
+    ));
+    assert!(heal_marks(
+        Kind::Building,
+        "TOWER",
+        400,
+        true,
+        [0, 0],
+        false,
+        0
+    ));
+    // Still at or below the yellow ratio: not marked.
+    assert!(!heal_marks(
+        Kind::Vehicle,
+        "BUGGY",
+        14000,
+        true,
+        [0, 0],
+        false,
+        0
+    ));
+    // Below −10 leptons: marked whatever the ratio.
+    assert!(heal_marks(
+        Kind::Vehicle,
+        "BUGGY",
+        100,
+        true,
+        [0, 0],
+        false,
+        -11
+    ));
+    assert!(!heal_marks(
+        Kind::Vehicle,
+        "BUGGY",
+        100,
+        true,
+        [0, 0],
+        false,
+        -10
+    ));
+    // House-wide: a vehicle that is not organic; infantry and organic vehicles take no test.
+    assert!(heal_marks(
+        Kind::Vehicle,
+        "BUGGY",
+        15000,
+        false,
+        [0, 1],
+        false,
+        0
+    ));
+    assert!(!heal_marks(
+        Kind::Infantry,
+        "WALKER",
+        50,
+        false,
+        [1, 0],
+        false,
+        0
+    ));
+    assert!(!heal_marks(
+        Kind::Vehicle,
+        "BUGGY",
+        15000,
+        false,
+        [1, 1],
+        true,
+        0
+    ));
+}
+
+/// spec: S-0616 claim 20 (a spark system whose type's spark-turns field is 0 or less is marked in its first turn with no burst and no draw, and leaves once it holds no particle, freeing the spark place) and Import mapping (SparkSpawnFrames absent: 0)
+#[test]
+fn claim_20_spark_turns_zero_frees_the_place() {
+    for turns in [None, Some(0), Some(-3)] {
+        let mut r = rules();
+        let burst = r.sim.particle_systems.get_mut("BURST").unwrap();
+        burst.spark_spawn_frames = turns;
+        let (mut w, a, _) = duel(&r, 4);
+        let t = w.obj(a).unwrap().target.unwrap();
+        assert!(fire::shot(&mut w, a, 1, t));
+        let sp = w.obj(a).unwrap().combat.spark_emitter.unwrap();
+        let before = w.rng.taken();
+        gas::system_turn(&mut w, sp);
+        assert_eq!(w.rng.taken(), before, "{turns:?}: no burst, no draw");
+        assert!(
+            !w.gas.systems.contains_key(&sp),
+            "{turns:?}: empty, it leaves"
+        );
+        assert_eq!(w.obj(a).unwrap().combat.spark_emitter, None);
+    }
+}
+
+/// spec: S-0616 claim 1 and S-0405 claim 13 (revision 19: only S-0405 claim 13's disabling makes a vehicle deactivated) and S-0616 claim 1 (Q-1404: its spark step comes first in its turn, so its displacements are the turn's first two draws)
+#[test]
+fn claim_1_deactivated_sparks_first_in_the_turn() {
+    let mut r = rules();
+    r.sim.general.default_spark_system = Some("BURST".into());
+    let mut w = testkit::game_with(&r, N, 7);
+    let v = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, testkit::mid(N, 0, 0), 0);
+    let o = w.obj(v).unwrap().pos;
+    let term = |t: i32| (o.x / 10 + (o.y / 10) * 65536 + t + v.0 as i32).rem_euclid(30);
+    // Not disabled: no sparks on any tick of the cadence.
+    let n = w.gas.systems.len();
+    for _ in 0..30 {
+        testkit::run(&mut w, 1);
+    }
+    assert_eq!(w.gas.systems.len(), n, "not deactivated");
+    // Disabled: the turn's first draws are its displacements.
+    w.obj_mut(v).unwrap().econ.building.unit_disabled = true;
+    while term(w.tick) != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut probe = w.rng.clone();
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let dy = probe.ranged(-100, 100, half);
+    let dx = probe.ranged(-100, 100, half);
+    let n = w.gas.systems.len();
+    testkit::run(&mut w, 1);
+    let made: Vec<_> = w
+        .gas
+        .systems
+        .values()
+        .filter(|s| s.owner_object.is_none() && s.pos == Pos::new(o.x + dx, o.y + dy, o.z))
+        .collect();
+    assert!(w.gas.systems.len() > n);
+    assert_eq!(made.len(), 1, "displaced by the turn's first two draws");
+}
+
+/// The destruction smoke made when a TOWER (exploding or not) is killed:
+/// (the system, whether the building is still in play, whether the system
+/// is marked), right after the kill and after the next tick.
+fn destroyed_tower(explodes: bool) -> [(bool, bool); 2] {
+    let mut r = rules();
+    r.sim.buildings.get_mut("TOWER").unwrap().combat.explodes = Some(explodes);
+    let mut w = testkit::game_with(&r, N, 7);
+    let b = tower(&mut w);
+    let n = w.gas.systems.keys().last().copied();
+    hit_tower(&mut w, b, 800, 100_000);
+    let made: Vec<ObjectId> = w
+        .gas
+        .systems
+        .keys()
+        .copied()
+        .filter(|id| Some(*id) > n)
+        .collect();
+    assert_eq!(made.len(), 1, "one destruction smoke");
+    let s = made[0];
+    assert!(["PLUME", "HAZE"].contains(&sys_name(&w, s).as_str()));
+    let now = (w.obj(b).is_some(), w.gas.systems[&s].ending);
+    testkit::run(&mut w, 1);
+    let next = (
+        w.obj(b).is_some(),
+        w.gas.systems.get(&s).is_none_or(|s| s.ending),
+    );
+    [now, next]
+}
+
+/// spec: S-0312 claim 19 f (revision 33) and S-0616 claim 1 (Q-1400: a building that does not explode leaves play at once and its destruction smoke is marked before its first turn; an exploding one stays until its next turn and its smoke is marked only at its removal) and claim 4
+#[test]
+fn claim_1_destruction_smoke_until_removal() {
+    let [now, _] = destroyed_tower(false);
+    assert_eq!(now, (false, true), "gone at once: marked at once");
+    let [now, next] = destroyed_tower(true);
+    assert_eq!(now, (true, false), "awaiting removal: not marked");
+    assert_eq!(next, (false, true), "removed in its next turn: marked");
 }

@@ -190,7 +190,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         crate::lift::shot(w, firer, shot_target, fp, k);
     }
     // spec: S-0616 claim 1 (an effect weapon's emitter is made at the shot, after the projectile) and S-0301 claim 18
-    crate::emitters::effect_weapon_emitter(w, firer, slot, weapon, shot_target, fp, launched);
+    crate::emitters::effect_weapon_emitter(w, firer, slot, weapon, shot_target, fp);
     // spec: S-0409 claim 16 (a shot from a reveal-on-fire weapon reveals the firer to the target's owner)
     crate::econ::shroud::fired(w, firer, &wr.name, target);
     let t = w.tick;
@@ -305,8 +305,9 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
 /// fired; berserk halving does not apply. The first applicable row:
 /// - no second weapon: 1, no draw;
 /// - a sonic weapon, or a spark-particle, fire-particle or railgun weapon
-///   with a live effect of its kind on the walker (its emitter place holds
-///   a system, S-0616 Terms): its rate-of-fire field, no draw;
+///   with a live effect of a kind whose flag it has on the walker (that
+///   emitter place holds a system, S-0616 Terms): its rate-of-fire field,
+///   no draw;
 /// - *k* below the weapon's burst count: one draw R(3, 5);
 /// - otherwise the full delay of S-0301 claim 2 with its draw R(0, 2).
 pub fn arrival_delay(w: &mut World, walker: ObjectId) -> i32 {
@@ -318,8 +319,8 @@ pub fn arrival_delay(w: &mut World, walker: ObjectId) -> i32 {
     let half = rules.quirks.ranged_draw_half_span;
     let k = w.obj(walker).map_or(0, |o| o.combat.burst);
     let wr = rules.combat.weapon(weapon).clone();
-    let live = crate::emitters::place_of(&wr)
-        .is_some_and(|p| crate::emitters::held(w, walker, p).is_some());
+    // spec: S-0301 claim 5 (revision 24: the effect flags are independent; any held effect of a kind whose flag the weapon has counts)
+    let live = crate::emitters::any_held(w, walker, &wr);
     if wr.sonic || live {
         // spec: S-0519 claim 13 (a sonic second weapon, or a spark-particle, fire-particle or railgun one with an effect of its kind alive on the walker: its rate-of-fire field unchanged, no draw)
         wr.rof

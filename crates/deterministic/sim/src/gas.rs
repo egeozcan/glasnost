@@ -694,10 +694,6 @@ pub struct ParticleSystem {
     /// Its target object, if any (S-0616 Terms and claim 4).
     #[serde(default)]
     pub target_object: Option<ObjectId>,
-    /// A natural smoke system's yellow factor has been applied (S-0616
-    /// claim 1: once, repair does not undo it).
-    #[serde(default)]
-    pub yellowed: bool,
 }
 
 impl ParticleSystem {
@@ -720,7 +716,6 @@ impl ParticleSystem {
             timer: F64::from_i64(i64::from(t.spawn_frames), mode).to_f32(mode),
             sparks: t.spark_turns,
             target_object: None,
-            yellowed: false,
         }
     }
 }

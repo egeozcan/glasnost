@@ -698,8 +698,9 @@ pub fn flame_sweep(w: &mut World, sys: ObjectId, o: ObjectId, g: ObjectId) {
     let ty = d(i64::from(op.y), m)
         .sub(sin.mul(dist, m), m)
         .to_i32_common();
-    // spec: S-0616 claim 11 (the system's position becomes the owner's fire point for its first weapon)
-    let fp = crate::combat::position::fire_point(w, o, 0, 0);
+    // spec: S-0616 claim 11 (the system's position becomes the owner's fire point for its first weapon, with no extra displacement; where the fire point alternates between bursts, the burst counter is the owner's current one at the sweep, not the shot's and not 0)
+    let k = w.obj(o).map_or(0, |x| x.combat.burst);
+    let fp = crate::combat::position::fire_point(w, o, 0, k);
     if let Some(s) = w.gas.systems.get_mut(&sys) {
         s.target = Pos::new(tx, ty, op.z);
         s.pos = fp;
@@ -939,7 +940,10 @@ pub fn spark_turn(w: &mut World, sys: ObjectId) {
     let half = w.rules().quirks.ranged_draw_half_span;
     let m = mode(w);
     let k = s.sparks;
-    if k > 0 {
+    if t.spark_turns <= 0 {
+        // spec: S-0616 claims 15 and 20 (a type's spark-turns field of 0 or less is bad data: our engine marks the system in its first turn, with no burst and no draw of claim 15; its particles still update; a fix with no switch, lead decision)
+        mark(w, sys);
+    } else if k > 0 {
         // spec: S-0616 claim 15 (K = 1: no decision draw; K > 1: the decision draw R(0, 2147483646), passing when r × 4.656612877414201 × 10⁻¹⁰ ≤ χ in double precision)
         let burst = if k == 1 {
             true

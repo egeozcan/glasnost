@@ -676,14 +676,18 @@ fn return_step(w: &mut World, id: ObjectId, m: ObjectId) {
 /// A slave delivers to its master and goes inside (S-0402 claims 14 and 23).
 fn deliver(w: &mut World, master: ObjectId, s: ObjectId) {
     let load = slave_state(w, s).map(|x| x.load).unwrap_or_default();
+    let mut paid = false;
     for (tib, &a) in load.iter().enumerate() {
         if a > 0 {
             // spec: S-0402 claim 14 (paid as in claim 12, to the miner's current owner, for each tiberium in turn, lowest index first; claim 23)
             harvest::pay(w, master, tib, a);
+            paid = true;
         }
     }
-    // spec: S-0616 claim 1 (refinery smoke at each delivery of a resource-carrying slave, once per delivery; interim Q-1401)
-    crate::emitters::refinery_smoke(w, master);
+    if paid {
+        // spec: S-0402 claim 14 and S-0616 claim 1 (one smoke event on the master per delivery, after all of its payments, only when at least one paid a positive amount; an undeployed master is a vehicle and makes nothing)
+        crate::emitters::refinery_smoke(w, master);
+    }
     // spec: S-0402 claim 14 (it goes inside the miner)
     crate::objects::take_inside(w, s);
     set_slave(w, s, |x| {

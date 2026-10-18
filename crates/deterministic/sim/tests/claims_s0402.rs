@@ -1599,3 +1599,96 @@ fn claim_3b_loading_starts_after_the_destination_is_removed() {
     }
     assert!(seen >= 4, "the arrivals with a removal observed: {seen}");
 }
+
+/// The harvest ruleset with a refinery smoke type on REFN: the smoke
+/// system PLUME (smoke kind, PUFF, a long emission interval) at one set
+/// smoke point, with a long refinery-smoke time.
+fn smoky() -> glasnost_rules::schema::Ruleset {
+    use glasnost_rules::sim::{ParticleSystemType, ParticleType};
+    let mut r = ruleset();
+    r.registries
+        .entry("particles".into())
+        .or_default()
+        .push("PUFF".into());
+    r.sim.particles.insert(
+        "PUFF".into(),
+        ParticleType {
+            behaves_like: Some("smoke".into()),
+            max_ec: Some(1000),
+            ..Default::default()
+        },
+    );
+    r.registries
+        .entry("particle_systems".into())
+        .or_default()
+        .push("PLUME".into());
+    r.sim.particle_systems.insert(
+        "PLUME".into(),
+        ParticleSystemType {
+            behaves_like: Some("smoke".into()),
+            holds_what: Some("PUFF".into()),
+            spawn_frames: Some(1000),
+            spawn_cutoff: dec("100000.0"),
+            ..Default::default()
+        },
+    );
+    let refn = r.sim.buildings.get_mut("REFN").unwrap();
+    refn.refinery_smoke_particle_system = Some("PLUME".into());
+    refn.refinery_smoke_offsets = Some(vec![[0, 0, 0], [40, 0, 0]]);
+    r.sim.general.refinery_smoke_frames = Some(5000);
+    r
+}
+
+/// The ticks of the smoke events of one unloading of `load` at REFN, each
+/// with whether credits changed and whether finishing began in that tick.
+fn smoke_events(load: Vec<i32>) -> Vec<(i32, bool, bool)> {
+    let r = smoky();
+    let mut w = game(&r);
+    let (refn, h) = docked(&mut w, load, 16384);
+    let mut seen = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for _ in 0..200 {
+        let c0 = w.houses[0].credits;
+        let f0 = harvest::state_of(&w, h).finishing;
+        testkit::run(&mut w, 1);
+        let new: Vec<_> = w
+            .gas
+            .systems
+            .iter()
+            .filter(|(id, s)| s.owner_object == Some(refn) && !seen.contains(*id))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in &new {
+            seen.insert(*id);
+            out.push((
+                w.tick,
+                w.houses[0].credits != c0,
+                !f0 && harvest::state_of(&w, h).finishing,
+            ));
+        }
+        if current(&w, h) == Some(Behaviour::Harvest) {
+            break;
+        }
+    }
+    out
+}
+
+// spec: S-0402 claim 11 (revision 32) and S-0616 claim 1 (Q-1401: each payment row and the empty-load row that starts finishing make one smoke event on the building in the neighbouring cell, before the payment of that processing; k tiberiums make k + 1 events, an empty dock one; one system per set smoke point)
+#[test]
+fn claim_11_refinery_smoke_events() {
+    // Two tiberiums: two payment rows and the finishing row.
+    let e = smoke_events(vec![4, 3]);
+    assert_eq!(e.len(), 3, "{e:?}");
+    assert!(e[0].1 && e[1].1, "made in the tick of each payment: {e:?}");
+    assert!(
+        !e[2].1 && e[2].2,
+        "the last in the tick finishing begins: {e:?}"
+    );
+    assert!(e[0].0 < e[1].0 && e[1].0 < e[2].0);
+    // One tiberium: 2; docking empty: 1.
+    let e = smoke_events(vec![4, 0]);
+    assert_eq!(e.len(), 2, "{e:?}");
+    let e = smoke_events(vec![0, 0]);
+    assert_eq!(e.len(), 1, "{e:?}");
+    assert!(e[0].2, "the empty-load row");
+}
