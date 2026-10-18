@@ -825,6 +825,32 @@ fn claim_8_vehicle_absorber() {
     round_trip(&w);
 }
 
+// spec: S-0605 claim 3 (revision 6: a vehicle ordered in to a vehicle absorber always starts waiting in line for it, even at an empty building: no destination, no contact and no remembered entry object at the order; claim 4's retry then grants contact and it goes in) and scenario A2c's vehicle variant
+#[test]
+fn claim_3_vehicle_always_waits_in_line() {
+    let mut w = game();
+    let v = put(&mut w, Kind::Building, "VBIO", 0, 0, 0);
+    testkit::run(&mut w, 3);
+    let car = put(&mut w, Kind::Vehicle, "CAR", 0, 5, 0);
+    let walker_id = walker(&mut w, -5, -6);
+    let inf = put(&mut w, Kind::Building, "BIO", 0, -8, -8);
+    testkit::run(&mut w, 3);
+    assert!(absorb::contacts(&w, v).is_empty(), "an empty building");
+    issue_enter(&mut w, car, v);
+    issue_enter(&mut w, walker_id, inf);
+    orders::apply_pending(&mut w);
+    let o = w.obj(car).unwrap();
+    assert_eq!(absorb::waiting_for(&w, car), Some(v), "waiting in line");
+    assert_eq!(o.dest, None, "no destination at the order");
+    assert_eq!(o.contact, None, "no contact at the order");
+    assert_eq!(o.depot.entering, None, "no remembered entry object");
+    // The contrast: infantry at an empty infantry absorber gets contact.
+    assert_eq!(w.obj(walker_id).unwrap().contact, Some(inf));
+    assert_eq!(absorb::waiting_for(&w, walker_id), None);
+    assert!(until(&mut w, 800, |w| inside(w, car, v)), "the retry grants contact and it goes in");
+    round_trip(&w);
+}
+
 // ---------------------------------------------------------------------------
 // Claims 9 and 10: inside.
 
@@ -1156,6 +1182,33 @@ fn bio_reactor_fate_sends_the_released_unit_in() {
     assert_eq!(w.obj(n).unwrap().dest, Some(Target::Object(near)));
     assert!(absorb::holds_instruction(&w, n));
     assert!(until(&mut w, 600, |w| inside(w, n, near)), "went in");
+}
+
+// spec: S-0605 claim 3 (revision 7: claim 16's fate assigning a vehicle victim a vehicle absorber applies the waiting-in-line rule at once: no contact, no destination and no contact request in that tick, whatever the building's contact state; its first request is claim 4's retry) and scenario A13 variant (g)
+#[test]
+fn claim_3_vehicle_fate_waits_in_line() {
+    let mut w = neutral_game(&fate_rules(|_| {}));
+    let v = put(&mut w, Kind::Building, "VBIO", 2, 6, 0);
+    let car = put(&mut w, Kind::Vehicle, "CAR", 2, 0, 0);
+    testkit::run(&mut w, 3);
+    assert!(absorb::contacts(&w, v).is_empty(), "an empty building");
+    assert!(absorb::bio_reactor_fate(&mut w, car));
+    let o = w.obj(car).unwrap();
+    assert_eq!(absorb::waiting_for(&w, car), Some(v), "waiting in line");
+    assert_eq!(o.contact, None, "no contact from the fate itself");
+    assert_eq!(o.dest, None);
+    assert_eq!(o.beh.queued, Some(glasnost_sim::rules::Behaviour::Enter));
+    // spec: S-0605 scenario A13 (g) (no contact request in the release tick, even from a turn later in that tick; the first comes in its first update)
+    absorb::waiting_turn(&mut w, car);
+    assert_eq!(w.obj(car).unwrap().contact, None, "no request in the release tick");
+    assert_eq!(absorb::waiting_for(&w, car), Some(v));
+    // Between ticks the tick number is already the next tick's, so this
+    // call counts as made in that tick: its turn pass sends no request.
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(car).unwrap().contact, None, "the rest of the release tick");
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(car).unwrap().contact, Some(v), "its first update's retry");
+    assert!(until(&mut w, 800, |w| inside(w, car, v)), "the retry grants contact and it goes in");
 }
 
 // spec: S-0605 claim 16 (equal ρ₃: the building later in the absorber list wins, the one placed most recently)

@@ -944,33 +944,135 @@ fn s0214_group_click_first_selected_takes_contact() {
     assert_eq!(w.obj(a).unwrap().depot.queued, Some(d));
 }
 
-// spec: S-0314 claim 23 (a queued vehicle with no contact walks once to a free cell near the depot's centre cell, move started at once, and rests there with its queued entry kept); Q-1156 interim (in its first queued-entry turn whose retry finds no place) and S-0605 claim 4 (the nearby search of S-0212 table T5's waiting absorber row)
-#[test]
-fn claim_23_queued_walk() {
-    let r = rules();
-    let mut w = game(&r);
+/// Two damaged trucks sent to DEPOT in one tick, the first at health
+/// `first`, the second (`b`) far from the depot at 300: returns the world,
+/// the depot, the first truck and `b` right after the orders' tick.
+fn queued_scene(r: &Ruleset, first: i32) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut w = game(r);
     let d = depot_at(&mut w, "DEPOT");
-    let a = truck(&mut w, 0, 6, 1, 590);
+    let a = truck(&mut w, 0, 6, 1, first);
     let b = truck(&mut w, 0, 9, 9, 300);
     open(&mut w);
     for o in [enter(a, d), enter(b, d)] {
         assert!(orders::issue(&mut w, ALPHA, o));
     }
-    assert!(run_until(&mut w, 3, |w| w.obj(b).unwrap().dest.is_some()));
+    tick::step(&mut w);
+    assert_eq!(contact(&w, a), Some(d));
+    (w, d, a, b)
+}
+
+// spec: S-0314 claim 23 (revision 25: the order queues enter without an immediate start, records the depot as the remembered entry object and gives a queued entry; enter becomes current at the next ready per-tick start and repeats its request, which a full depot accepts without contact; no destination and no walk; it enters by itself at most one tick after the first leaves) and table row "queued entry, enter queued"; scenario H18 f(ii)
+#[test]
+fn claim_23_queued_enter_current_no_walk() {
+    let r = rules();
+    let (mut w, d, a, b) = queued_scene(&r, 590);
     let o = w.obj(b).unwrap();
     assert_eq!(o.depot.queued, Some(d));
-    assert!(o.depot.walked);
-    let Some(Target::Cell(c)) = o.dest else {
-        panic!("a cell destination: {:?}", o.dest)
-    };
-    assert_eq!(o.beh.current, Some(Behaviour::Move), "started at once");
-    let centre = w.reference_point(d).cell();
-    assert!((c.x - centre.x).abs() <= 3 && (c.y - centre.y).abs() <= 3, "{c:?} near {centre:?}");
-    let start = w.obj(b).unwrap().pos.cell();
-    assert!(run_until(&mut w, 1500, |w| w.obj(b).unwrap().pos.cell() == c && w.obj(b).unwrap().dest.is_none()) || contact(&w, b) == Some(d));
-    assert_ne!(w.obj(b).unwrap().pos.cell(), start, "it walked");
-    // It still enters by itself when the place frees.
+    assert_eq!(o.depot.entering, Some(d), "the depot is remembered");
+    assert_eq!(o.dest, None);
+    assert!(
+        o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter),
+        "enter queued by the order"
+    );
+    assert!(run_until(&mut w, 2, |w| w.obj(b).unwrap().beh.current
+        == Some(Behaviour::Enter)));
+    let start = w.obj(b).unwrap().pos;
+    // Every tick until the first leaves: enter current, no destination, no
+    // contact, the same position, the queued entry and the memory kept.
+    let mut left = None;
+    for _ in 0..3000 {
+        if contact(&w, a).is_none() {
+            left = Some(w.tick);
+            break;
+        }
+        let o = w.obj(b).unwrap();
+        assert_eq!(o.beh.current, Some(Behaviour::Enter), "tick {}", w.tick);
+        assert_eq!(o.dest, None, "tick {}", w.tick);
+        assert_eq!(o.contact, None, "tick {}: not before the first leaves", w.tick);
+        assert_eq!(o.pos, start, "tick {}: no walk", w.tick);
+        assert_eq!(o.depot.queued, Some(d));
+        assert_eq!(o.depot.entering, Some(d));
+        tick::step(&mut w);
+    }
+    let left = left.expect("the first leaves");
+    assert!(run_until(&mut w, 2, |w| contact(w, b) == Some(d)));
+    assert!(w.tick - left <= 1, "enters at most one tick after the first leaves");
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.dest, Some(Target::Object(d)), "the retry assigns the depot");
+    assert_eq!(o.depot.queued, None);
     assert!(run_until(&mut w, 6000, |w| health(w, b) == 600));
+}
+
+// spec: S-0314 claim 23 (a depot refusing the repeated request, here switched off: the vehicle ends contact and falls back to rest, its queued entry stays and the retry still runs; when the place frees, permission is refused and it gives up) and scenario H18 f(ii) with the depot switched off
+#[test]
+fn claim_23_switched_off_queued_vehicle() {
+    // The first truck is in the depot's repair, asleep, so the switch does
+    // not end its contact (claim 22).
+    let (mut w, d, a) = docked_scene(100);
+    let b = truck(&mut w, 0, 9, 9, 300);
+    assert!(orders::issue(&mut w, ALPHA, enter(b, d)));
+    tick::step(&mut w);
+    assert_eq!(w.obj(b).unwrap().depot.queued, Some(d));
+    assert!(run_until(&mut w, 2, |w| w.obj(b).unwrap().beh.current
+        == Some(Behaviour::Enter)));
+    w.obj_mut(d).unwrap().econ.building.switched_off = true;
+    assert!(run_until(&mut w, 30, |w| w.obj(b).unwrap().beh.current
+        != Some(Behaviour::Enter)));
+    assert_eq!(w.obj(b).unwrap().depot.queued, Some(d), "the queued entry stays");
+    assert_eq!(contact(&w, b), None);
+    assert_ne!(contact(&w, a), None, "the first is still serviced");
+    assert!(run_until(&mut w, 3000, |w| contact(w, a).is_none()));
+    assert!(run_until(&mut w, 2, |w| w.obj(b).unwrap().depot.queued.is_none()));
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.contact, None, "gives up");
+    assert_eq!(o.dest, None);
+    testkit::run(&mut w, 300);
+    assert_eq!(health(&w, b), 300, "never enters");
+}
+
+// spec: S-0314 claim 23 (a depot holding any contact, whatever its place count: with a place free when the processing runs, that request takes the contact without a destination; the retry later in the same turn finds the contact held, asks permission and, granted, assigns the depot and clears the queued entry)
+#[test]
+fn claim_23_free_place_taken_by_the_processing() {
+    let r = rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "DEPOT2");
+    let a = truck(&mut w, 0, 6, 1, 300);
+    let b = truck(&mut w, 0, 9, 9, 300);
+    open(&mut w);
+    for o in [enter(a, d), enter(b, d)] {
+        assert!(orders::issue(&mut w, ALPHA, o));
+    }
+    tick::step(&mut w);
+    assert_eq!(contact(&w, a), Some(d));
+    let start = w.obj(b).unwrap().pos;
+    if contact(&w, b).is_none() {
+        assert_eq!(w.obj(b).unwrap().depot.queued, Some(d), "queued though a place is free");
+        assert_eq!(w.obj(b).unwrap().dest, None);
+    }
+    assert!(run_until(&mut w, 2, |w| contact(w, b) == Some(d)));
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Enter));
+    assert_eq!(o.dest, Some(Target::Object(d)));
+    assert_eq!(o.depot.queued, None);
+    assert_eq!(o.pos, start, "no movement before the retry");
+    assert!(run_until(&mut w, 6000, |w| health(w, b) == 600));
+}
+
+// spec: S-0314 claim 23 (the queued entry and the remembered depot are saved: the state hash survives a save and load mid-wait)
+#[test]
+fn claim_23_queued_state_round_trips() {
+    let r = rules();
+    let (mut w, d, _a, b) = queued_scene(&r, 590);
+    testkit::run(&mut w, 5);
+    assert_eq!(w.obj(b).unwrap().depot.entering, Some(d));
+    let bytes = save::save(&w);
+    let mut l = save::load(&bytes, w.rules_arc(), testkit::catalogue()).expect("loads");
+    assert_eq!(save::state_hash(&l), save::state_hash(&w));
+    for _ in 0..300 {
+        tick::step(&mut w);
+        tick::step(&mut l);
+    }
+    assert_eq!(save::state_hash(&l), save::state_hash(&w));
 }
 
 // spec: S-0314 claims 20 and 23 (any later order clears a queued entry)
@@ -990,6 +1092,7 @@ fn claim_23_later_order_clears_queued_entry() {
     assert!(orders::issue(&mut w, ALPHA, mv(b, 9, 9)));
     tick::step(&mut w);
     assert_eq!(w.obj(b).unwrap().depot.queued, None);
+    assert_eq!(w.obj(b).unwrap().depot.entering, None, "the remembered depot is replaced");
 }
 
 // spec: S-0314 claim 24 (no automatic return: a damaged vehicle next to a depot is not sent to it)

@@ -8,7 +8,8 @@
 //! State: the vehicle side is [`DepotState::link`] (the depot place it
 //! holds, valid only while the vehicle's contact is that depot, and the
 //! tether of the completed entry exchange), [`DepotState::queued`] (a
-//! queued entry, claim 23) and [`DepotState::loco_off`] (claim 22). The
+//! queued entry, claim 23), [`DepotState::entering`] (the remembered
+//! depot, claim 23) and [`DepotState::loco_off`] (claim 22). The
 //! depot side is its *repair* behaviour's progress count (the phase) and
 //! [`DepotState::serviced`].
 //!
@@ -52,9 +53,10 @@ pub struct DepotState {
     /// A depot's serviced vehicle at its last repair processing (S-0314
     /// Edge cases, several contact places: a change restarts the phases).
     pub serviced: Option<ObjectId>,
-    /// A queued vehicle has made claim 23's walk to a free cell near the
-    /// depot for its current queued entry (Q-1156 interim).
-    pub walked: bool,
+    /// A vehicle's remembered entry object (S-0215 claim 29; S-0605
+    /// Terms): the depot that claim 23's order on a depot holding a contact
+    /// makes a damaged vehicle remember (S-0314 claim 23).
+    pub entering: Option<ObjectId>,
 }
 
 /// The phases of a depot's repair, kept in its *repair* behaviour's
@@ -174,6 +176,13 @@ fn alliance_and_place(w: &World, k: ObjectId, id: ObjectId) -> Option<u32> {
 /// queued-entry retry ask it; the repeated entry request of an entering
 /// vehicle does not (claim 17).
 pub fn accepts(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bool {
+    // spec: S-0314 claim 16 (no contact place free for this vehicle prevents acceptance)
+    permits_but_place(w, k, id, standing) && free_place(w, k, id).is_some()
+}
+
+/// Claim 16's permission without its free-place test: every other test,
+/// the alliance test included.
+fn permits_but_place(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bool {
     let (Some(b), Some(o)) = (w.obj(k), w.obj(id)) else {
         return false;
     };
@@ -200,8 +209,8 @@ pub fn accepts(w: &World, k: ObjectId, id: ObjectId, standing: bool) -> bool {
     if standing && standing_on(w, k, id) {
         return false;
     }
-    // spec: S-0314 claim 16 (the alliance and contact-place tests; no damage or money gate)
-    alliance_and_place(w, k, id).is_some()
+    // spec: S-0314 claim 16 (the alliance test; no damage or money gate)
+    w.allied(b.owner, o.owner)
 }
 
 /// Takes depot contact in place `place` (S-0314 claim 17): a vehicle holds
@@ -238,15 +247,54 @@ pub fn request(w: &mut World, id: ObjectId, k: ObjectId, standing: bool) -> bool
     true
 }
 
-/// Releases vehicle `id`'s depot contact and queued entry.
+/// The reply to the repeated entry request of a vehicle in *enter*
+/// (S-0215 claim 29; S-0314 claims 17 and 23).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reply {
+    /// Accepted, and the vehicle holds its contact place.
+    Contact,
+    /// Accepted with no place free for this vehicle: no contact taken.
+    NoPlace,
+    /// Not accepted.
+    Refused,
+}
+
+/// The repeated entry request of an entering vehicle (S-0215 claim 29):
+/// claim 16's free-place refusal governs the click and the queued-entry
+/// retry, not this request, so with no free place the depot accepts and
+/// gives no contact (S-0314 claim 23).
+fn repeated_request(w: &mut World, id: ObjectId, k: ObjectId) -> Reply {
+    // spec: S-0314 claim 17 (the repeated request is not a repeat of claim 16's test: standing on the depot does not refuse it)
+    if !permits_but_place(w, k, id, false) {
+        return Reply::Refused;
+    }
+    let Some(place) = free_place(w, k, id) else {
+        // spec: S-0314 claim 23 (with no free place for this vehicle the depot answers accept and takes no contact; claim 16's free-place refusal governs the click and the retry, not this repeated request)
+        return Reply::NoPlace;
+    };
+    // spec: S-0314 claim 23 (if a place is free when a processing runs, that request takes the contact)
+    take(w, id, k, place);
+    Reply::Contact
+}
+
+/// Releases vehicle `id`'s depot contact, its queued entry and its
+/// remembered depot.
 pub(crate) fn release(w: &mut World, id: ObjectId) {
+    end_contact(w, id);
+    if let Some(o) = w.obj_mut(id) {
+        o.depot.queued = None;
+        o.depot.entering = None;
+    }
+}
+
+/// Ends vehicle `id`'s depot contact; its queued entry stays.
+fn end_contact(w: &mut World, id: ObjectId) {
     let strand = w.rules().quirks.depot_loss_strands_hover;
     if let Some(o) = w.obj_mut(id) {
         if o.depot.link.is_some_and(|l| o.contact == Some(l.depot)) {
             o.contact = None;
         }
         o.depot.link = None;
-        o.depot.queued = None;
         if !strand {
             // spec: S-0314 Edge cases (quirks.depot_loss_strands_hover off: losing depot contact switches the locomotor on)
             o.depot.loco_off = false;
@@ -299,6 +347,10 @@ pub fn entering_depot(w: &World, id: ObjectId) -> bool {
     if link(w, id).is_some() {
         return true;
     }
+    // spec: S-0215 claim 29 and S-0314 claim 23 (the request goes to the contact when present, else to the object it remembers entering: the depot of claim 23's order)
+    if o.depot.entering.is_some_and(|k| is_depot(w, k)) {
+        return true;
+    }
     matches!(o.dest, Some(Target::Object(k)) if is_depot(w, k))
 }
 
@@ -316,21 +368,28 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
         return 1;
     };
-    // spec: S-0215 claim 29 (the entry request goes to the contact when present, else to the object it remembers entering)
-    let k = match (link(w, id), o.dest) {
-        (Some(l), _) => l.depot,
-        (None, Some(Target::Object(k))) => k,
+    // spec: S-0215 claim 29 (the entry request goes to the contact when present, else to the object it remembers entering); S-0314 claim 23 (the depot of claim 23's order is the remembered entry object); otherwise the depot the order named as destination
+    let remembered = o.depot.entering.filter(|&k| is_depot(w, k));
+    let (k, from_memory) = match (link(w, id), remembered, o.dest) {
+        (Some(l), _, _) => (l.depot, false),
+        (None, Some(k), _) => (k, true),
+        (None, None, Some(Target::Object(k))) => (k, false),
         _ => {
             crate::process::fall_back(w, id, false);
             return crate::process::standard_delay(w, id);
         }
     };
     if !tethered(w, id) {
-        // spec: S-0215 claim 29 and S-0314 claim 17 (only acceptance or an existing tether permits continued entry; without a tether a non-accepting reply ends contact and the actor falls back to rest)
-        if !request(w, id, k, false) {
-            release(w, id);
-            crate::process::fall_back(w, id, false);
-            return crate::process::standard_delay(w, id);
+        match repeated_request(w, id, k) {
+            Reply::Refused => {
+                // spec: S-0215 claim 29 and S-0314 claim 17 (only acceptance or an existing tether permits continued entry; without a tether a non-accepting reply ends contact and the actor falls back to rest); claim 23 (its queued entry stays and the retry still runs)
+                end_contact(w, id);
+                crate::process::fall_back(w, id, false);
+                return crate::process::standard_delay(w, id);
+            }
+            // spec: S-0314 claim 23 (accepted without contact: the vehicle stays where it is, in enter, with no destination, and chooses the standard delay)
+            Reply::NoPlace => return crate::process::standard_delay(w, id),
+            Reply::Contact => {}
         }
         if pad_exchange(w, k, id)
             && let Some(ob) = w.obj_mut(id)
@@ -341,6 +400,10 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         }
     }
     if !tethered(w, id) {
+        if from_memory && o.dest.is_none() {
+            // spec: S-0314 claim 23 (the request that takes a free place: the retry later in the same turn finds the contact held, asks permission and, granted, assigns the depot as destination); Q-1158 interim (this processing gives no destination of its own)
+            return crate::process::standard_delay(w, id);
+        }
         let arrived = at_dock(w, k, id);
         // spec: S-0314 claim 18 (the depot directs the vehicle toward the building as its destination; the docking point is the destination position); claim 17 (an untethered vehicle that has reached the docking-point cell is not sent off again)
         if !arrived && (o.dest != Some(Target::Object(k)) || o.path.steps.is_empty()) {
@@ -821,14 +884,15 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
         return;
     };
     if w.obj(k).is_none_or(|b| b.health <= 0 || !b.on_map) {
+        // spec: S-0314 claim 23 (an inactive remembered depot clears the queued entry); our engine forgets the remembered depot with it, whose request would be refused anyway
         if let Some(ob) = w.obj_mut(id) {
             ob.depot.queued = None;
+            ob.depot.entering = None;
         }
         return;
     }
-    // spec: S-0314 claim 23 (every tick it asks again for a contact place: the alliance and free-place tests; while none is free it keeps waiting)
+    // spec: S-0314 claim 23 (once per eligible vehicle turn it asks again for a contact place: the alliance and free-place tests; while none is free it keeps waiting; a place its own processing took this turn is already held)
     let Some(place) = alliance_and_place(w, k, id) else {
-        queued_walk(w, id, k);
         return;
     };
     take(w, id, k, place);
@@ -854,48 +918,36 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Claim 23's walk of a vehicle with a queued entry for depot `k`: once
-/// per queued entry, holding no contact, it walks to a free location near
-/// the depot's centre cell and rests there, the queued entry kept.
-///
-/// Q-1156 interim: claim 23 starts the walk at the vehicle's first
-/// processing of *enter*, but in our engine a queued depot vehicle never
-/// has *enter* current (the order ends at once, `order_applied`), and the
-/// order of the walk and the same turn's retry is open (Open questions).
-/// Our engine walks in the vehicle's first queued-entry turn whose retry
-/// finds no free place (option A of the Open questions). Claim 23 leaves
-/// the cell to the implementation and points at S-0605 claim 4, so the
-/// walk uses that claim's search (`absorb::approach`, S-0212 table T5's
-/// waiting absorber row), with *N* the tick of the turn that makes it.
-/// When no cell is found the vehicle stays where it is; claim 23 names no
-/// fall-back to rest for it.
-fn queued_walk(w: &mut World, id: ObjectId, k: ObjectId) {
-    let Some(o) = w.obj(id) else { return };
-    // spec: S-0314 claim 23 (while it holds no contact and remembers no object it is entering, the condition of S-0605 claim 4); Q-1156 interim (once per queued entry)
-    if o.depot.walked || o.contact.is_some() {
-        return;
-    }
-    if let Some(ob) = w.obj_mut(id) {
-        ob.depot.walked = true;
-    }
-    // spec: S-0314 claim 23 (a free location near the depot's centre cell its own locomotion class can stand on, the choice left to the implementation; assigned as destination, move queued and started at once; the queued entry is not cleared) and S-0605 claim 4 (the search of the waiting absorber approach, S-0212 table T5)
-    crate::structures::absorb::approach(w, id, k);
+/// What an order does after [`order_applied`] (S-0314 claims 20 and 23).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OrderEffect {
+    /// The order runs normally.
+    Ordinary,
+    /// The order ends here: no behaviour, no destination, no other effect.
+    Ends,
+    /// The order runs normally but gives no destination (claim 23's
+    /// queued entry: *enter* queued without an immediate start).
+    NoDestination,
 }
 
 /// What applying an order does to a vehicle's depot contact before the
 /// order's ordinary effects (S-0314 claims 20 and 23; S-0504 claim 14).
-/// Returns `true` when the order ends here (claim 23: no destination, no
-/// ordinary effects).
-pub fn order_applied(w: &mut World, id: ObjectId, b: Behaviour, dest: Option<Target>) -> bool {
+pub fn order_applied(
+    w: &mut World,
+    id: ObjectId,
+    b: Behaviour,
+    dest: Option<Target>,
+) -> OrderEffect {
     let Some(o) = w.obj(id).cloned() else {
-        return false;
+        return OrderEffect::Ordinary;
     };
     if o.kind != Kind::Vehicle {
-        return false;
+        return OrderEffect::Ordinary;
     }
-    // spec: S-0314 claim 23 (any later order clears the queued entry)
+    // spec: S-0314 claim 23 (any later order clears the queued entry); the remembered depot is replaced by the order's own entry object (none unless claim 23's order below names one)
     if let Some(ob) = w.obj_mut(id) {
         ob.depot.queued = None;
+        ob.depot.entering = None;
     }
     let l = link(w, id);
     let target_depot = match (b, dest) {
@@ -907,14 +959,13 @@ pub fn order_applied(w: &mut World, id: ObjectId, b: Behaviour, dest: Option<Tar
         && l.tethered
     {
         if target_depot == Some(l.depot) {
-            // spec: S-0314 claim 20 (an enter order on the same depot ends the docking: a damaged vehicle takes the queued entry, a full-health one loses its contact at once)
+            // spec: S-0314 claim 20 (an enter order on the same depot ends the docking: a damaged vehicle takes the queued entry, a full-health one loses its contact at once); Q-1158 interim (no enter queued and no depot remembered here)
             if full {
                 release(w, id);
             } else if let Some(ob) = w.obj_mut(id) {
                 ob.depot.queued = Some(l.depot);
-                ob.depot.walked = false;
             }
-            return true;
+            return OrderEffect::Ends;
         }
         if !w.rules().quirks.depot_remote_repair && matches!(b, Behaviour::Move | Behaviour::Attack)
         {
@@ -922,32 +973,35 @@ pub fn order_applied(w: &mut World, id: ObjectId, b: Behaviour, dest: Option<Tar
             release(w, id);
         }
         // spec: S-0314 claim 20 (otherwise a docked vehicle keeps contact and tether; the order runs normally)
-        return false;
+        return OrderEffect::Ordinary;
     }
     if let Some(l) = l
         && target_depot == Some(l.depot)
         && o.beh.seen() == Some(Behaviour::Enter)
     {
         // spec: S-0314 claim 20 (an enter order on the same depot while approaching in enter is ignored entirely)
-        return true;
+        return OrderEffect::Ends;
     }
     if l.is_some() {
         // spec: S-0314 claim 20 (an approaching vehicle given any other order loses its contact at once; its queued entry is cleared too)
         release(w, id);
     }
     let Some(k) = target_depot else {
-        return false;
+        return OrderEffect::Ordinary;
     };
     if !contacts(w, k).is_empty() {
-        if !full && let Some(ob) = w.obj_mut(id) {
-            // spec: S-0314 claim 23 (a later enter order on a depot that holds any contact: a damaged vehicle gets no destination and no contact and stays with a queued entry)
-            ob.depot.queued = Some(k);
-            ob.depot.walked = false;
+        if full {
+            // spec: S-0314 claim 23 (a full-health vehicle gets no destination and no queued entry: the order ends, and the vehicle stays put)
+            return OrderEffect::Ends;
         }
-        // spec: S-0314 claim 23 (a full-health vehicle gets no destination and no queued entry: the order ends)
-        return true;
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0314 claim 23 (a later enter order on a depot that holds any contact: a damaged vehicle gets no depot destination and no contact; the order queues enter without an immediate start, S-0215 claim 12, records the depot as the object it is entering and gives it a queued entry for that depot)
+            ob.depot.queued = Some(k);
+            ob.depot.entering = Some(k);
+        }
+        return OrderEffect::NoDestination;
     }
-    false
+    OrderEffect::Ordinary
 }
 
 /// A stop order applied to vehicle `id` (S-0314 claims 20 and 23): an
