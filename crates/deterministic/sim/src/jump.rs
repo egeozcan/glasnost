@@ -1376,7 +1376,7 @@ pub fn lift_onto_deck(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     let deck = w.surface_at(o.pos.x, o.pos.y) + BRIDGE_HEIGHT;
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0607 claim 15 (the fall ends when it crosses a bridge deck from at or above to below) and claim 17 (the unit landed on a bridge deck)
+        // spec: S-0607 claim 15 (the fall ends when it crosses a bridge deck from at or above to below) and claim 17 (the unit landed on a bridge deck); Q-1329 interim (it is put on the deck)
         ob.pos.z = deck;
         ob.layer = Layer::Deck;
     }
@@ -1415,7 +1415,7 @@ pub fn lift_settle(w: &mut World, id: ObjectId) {
     if below < 0
         && let Some(ob) = w.obj_mut(id)
     {
-        // spec: S-0607 claim 13 and quirks.lift_impact_removes_survivor (fixed position: a survivor set down at its impact rests on the surface beneath it, not inside it)
+        // spec: S-0607 claim 13 and quirks.lift_impact_removes_survivor; Q-1329 interim (a survivor set down at its impact rests on the surface beneath it, not inside it)
         ob.pos.z -= below;
     }
     release_slot(w, id);

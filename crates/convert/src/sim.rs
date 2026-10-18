@@ -2569,6 +2569,10 @@ mod linked_tests;
 mod terror_tests;
 
 #[cfg(test)]
+#[path = "sim_lift_tests.rs"]
+mod lift_tests;
+
+#[cfg(test)]
 #[path = "sim_crate_tests.rs"]
 mod crate_tests;
 

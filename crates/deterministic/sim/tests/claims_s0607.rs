@@ -487,3 +487,75 @@ fn quirk_lift_deck_impact_reads_ground_both_positions() {
 }
 
 
+
+/// A ruleset whose crushing warhead does no damage (verses 0), falling
+/// damage a quarter of the type's strength, and survivors kept, with a
+/// landed, crashable aircraft type PLANE of strength 100.
+fn plane_rules(r: &mut glasnost_rules::schema::Ruleset) {
+    r.sim.warheads.get_mut("CRUSH").unwrap().verses = Some(vec![d("0"); 11]);
+    r.globals.quirks.lift_impact_removes_survivor = false;
+    r.sim.general.falling_damage_multiplier = Some(d("0.25"));
+    r.sim.general.current_strength_damage = Some(false);
+    let mut t = r.sim.vehicles["VICT"].clone();
+    t.crashable = Some(true);
+    r.registries.entry("aircraft".into()).or_default().push("PLANE".into());
+    r.sim.aircraft.insert("PLANE".into(), t);
+}
+
+// spec: S-0607 claim 19: a dropped aircraft's first impact detonation uses the demolition warhead, and claim 18's crashable exception does not apply to it; a vehicle's first uses the crushing warhead
+#[test]
+fn claim_19_dropped_aircraft() {
+    let mut w = world(plane_rules);
+    let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+    let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(6, 0));
+    beam(&mut w, l, v);
+    drop_on_blocker(&mut w, l, v);
+    // The crushing detonation does nothing: one demolition hit of 25.
+    assert_eq!(health(&w, v), 75, "vehicle");
+    let mut w = world(plane_rules);
+    let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+    let p = spawn(&mut w, Kind::Aircraft, "PLANE", 1, at(6, 0));
+    beam(&mut w, l, p);
+    assert!(lift::seized(&w, p), "a landed aircraft is seized");
+    drop_on_blocker(&mut w, l, p);
+    // Two demolition hits of 25, though its type can crash.
+    assert_eq!(health(&w, p), 50, "aircraft");
+}
+
+/// A resource-gathering vehicle type HARV that drives temporarily
+/// (S-0417 claim 5): `moving` keeps a locomotor destination point.
+fn temporary_harvester(moving: bool) -> (glasnost_sim::world::World, glasnost_sim::world::ObjectId, glasnost_sim::world::ObjectId) {
+    let mut w = world(|r| {
+        vehicle(r, "HARV", |t| t.econ.resource_gatherer = Some(true));
+    });
+    let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+    let h = spawn(&mut w, Kind::Vehicle, "HARV", 1, at(6, 0));
+    // A harvester whose own locomotor is not driving: the temporary
+    // driving locomotor replaces it, as on a factory exit.
+    w.obj_mut(h).unwrap().drive = None;
+    glasnost_sim::econ::release::install_temporary_drive(&mut w, h);
+    if moving {
+        let goal = w.obj(h).unwrap().pos;
+        let goal = Pos::new(goal.x + 512, goal.y, goal.z);
+        w.obj_mut(h).unwrap().drive.as_mut().unwrap().goal = Some(goal);
+    }
+    assert!(glasnost_sim::econ::release::temporary_drive(&w, h));
+    (w, l, h)
+}
+
+// spec: S-0607 claim 4: a resource gatherer driving temporarily whose replacement may end gets its own locomotor back and is not seized; otherwise it stops, its behaviour is cleared, it queues stop and is not seized
+#[test]
+fn claim_4_temporary_harvester() {
+    let (mut w, l, h) = temporary_harvester(false);
+    beam(&mut w, l, h);
+    assert!(!lift::seized(&w, h));
+    assert!(!glasnost_sim::econ::release::temporary_drive(&w, h), "its own locomotor is back");
+    assert_eq!(health(&w, h), 100);
+    let (mut w, l, h) = temporary_harvester(true);
+    beam(&mut w, l, h);
+    assert!(!lift::seized(&w, h));
+    assert!(glasnost_sim::econ::release::temporary_drive(&w, h), "still driving temporarily");
+    let o = w.obj(h).unwrap();
+    assert!(o.beh.current == Some(Behaviour::Stop) || o.beh.queued == Some(Behaviour::Stop), "{:?}", o.beh);
+    assert!(lift::gripped_unit(&w, l).is_none());
+}

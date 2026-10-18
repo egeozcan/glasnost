@@ -161,14 +161,16 @@ pub fn seize_hit(
     if !eligible(w, x, damage) {
         return;
     }
+    // Q-1330 interim (question 1: claim 3's conditions are tested before claim 4's special case)
     if harvester_case(w, x) {
         return;
     }
     seize(w, f, x);
 }
 
-/// Whether a target can be seized (S-0607 claim 3 and F1).
-fn eligible(w: &World, x: ObjectId, damage: i32) -> bool {
+/// Whether a target can be seized by a hit of `damage` (S-0607 claim 3
+/// and F1).
+pub fn eligible(w: &World, x: ObjectId, damage: i32) -> bool {
     let Some(o) = w.obj(x) else { return false };
     // spec: S-0607 claim 3 (a vehicle or an aircraft; infantry and buildings are never seized)
     if !matches!(o.kind, Kind::Vehicle | Kind::Aircraft) || !o.on_map {
