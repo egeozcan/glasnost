@@ -28,10 +28,12 @@ No claim was renumbered and no quirk switch was added (`every_spec_quirk_has_a_s
 - Q-1340 (the teleporting stand-in's jump, or a driving stand-in's arrival): not answered. Interim kept.
 - Q-1341 (no warning for an empty warhead locomotor value): not answered. Interim kept.
 
-**New request** (block Q-1342 to Q-1349), with its interim in the code (`jump::stop_with`) and in the S-0607 and S-0502 ledgers:
+**New requests** (block Q-1342 to Q-1349), each with its interim in the code (`jump::stop_with`, `lift::set_down_released`) and in the S-0607 and S-0502 ledgers:
 - Q-1342: on a lifter-ended drop with no cell for the stop, does the unit keep the seize's movement point and commitment? Claim 13 and S-0502 claim 17 say this only for a set-down unit. The answer decides whether the fall over a cell centre uses the look-ahead. Interim: both are cleared, as for a set-down unit.
 
-Q-1343 to Q-1349 are unused.
+- Q-1343: with `jumpjet_no_cell_self_destruct` off, S-0502's Edge cases make a claim 9 no-destination unit hover again over its cell when the stop finds no cell. The specs do not say whether claim 9's set-down descent still follows. Interim: it does. The hover re-entry clears the point and commitment, then the unit descends and lands over its current cell.
+
+Q-1344 to Q-1349 are unused.
 
 ## S-0607 revisions 5 and 6
 
@@ -44,7 +46,7 @@ Q-1343 to Q-1349 are unused.
 | 7: the docking-place rule (count 0: the centre; 1: the sole displacement; more: the place held through a contact, else the centre) | changed | `lift::docking_point`. Test: `claim_7_docking_place_rule`. |
 | 7: height (the building's height plus the displacement's); with the jumpjet stand-in only the cell matters | satisfied | `jump::lift_point` replaces the point by a cell centre at terrain height, as built at step 1m. Tests: `claim_5_the_seize`, `claim_7_point_fixed_at_the_seize` (`claims_s0607.rs`). |
 | 9: claim 13's stop applies to a no-destination set-down, which flies to the found point before it descends | changed | `lift::steer` calls `set_down_released` (lifter-ended false). Test: `claim_9_no_destination_flies_to_the_found_point`. |
-| 9: with no cell, S-0502 claim 17's self-destruction applies unchanged (quirk and no credit) | changed | `jump::stop_with` without `lifter_ended`. Test: `claim_9_no_cell_keeps_the_ordinary_outcome` (on: destroyed with no credit; off: alive in the air). |
+| 9: with no cell, S-0502 claim 17's self-destruction applies unchanged (quirk and no credit) | changed | `jump::stop_with` without `lifter_ended`. Test: `claim_9_no_cell_keeps_the_ordinary_outcome` (on: destroyed with no credit; off: hovering again with no point elsewhere and no commitment, then claim 9's descent, Q-1343 interim). |
 | 10 and 11: refusal ranks unmeasured | (c) | backing only. |
 | 13: the jumpjet stop in both cases (drop and set-down), in the same update | changed | `lift::drop` and `lift::end_grip` call `jump::lift_release_stop`. Tests: `claim_13_drop_keeps_the_found_point_and_commitment`, `claim_13_committed_set_down_takes_off_then_restores`. |
 | 13: not moving: nothing happens | satisfied | `stop_with` returns early. Test: `claim_17_stopping_an_idle_jumpjet_does_nothing` (`claims_s0502_land.rs`). |
@@ -73,7 +75,7 @@ Q-1343 to Q-1349 are unused.
 | 9: J27 b reachability note | (c) | |
 | 17: the magnetic-release safety departure (design) | changed | `jump::stop_with(.., lifter_ended)` and `jump::lift_release_stop`. Tests: `claim_13_no_cell_lifter_drop_does_not_self_destruct`, `claim_13_no_cell_lifter_set_down_stops`, `claim_9_no_cell_keeps_the_ordinary_outcome`. |
 | 24: the grounded-with-a-commitment row; "move order" now "movement commitment" | satisfied | the commitment and point are kept by the stop's point form; take-off as claim 5. Test: `claim_13_committed_set_down_takes_off_then_restores`. |
-| Edge cases (the quirk switch and the safety departure) | changed | as claim 17. |
+| Edge cases (the quirk switch and the safety departure) | changed | as claim 17. Switch off: the hover re-entry "over its current cell" now also clears the movement point and commitment; before, the unit kept them and flew on to its old point (found while testing claim 9's exception). Tests: `claim_17_no_cell_self_destruct` (`claims_s0502_land.rs`, now checks that the unit stays over its cell), `claim_9_no_cell_keeps_the_ordinary_outcome`. |
 | State table (grounded row) | satisfied | as claim 5. |
 | Scenario J27 (a, b, c); backing; "Changes for other specs" | (c) | J27 c is the design test above. |
 
