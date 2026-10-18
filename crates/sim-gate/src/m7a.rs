@@ -5,7 +5,9 @@
 //! gattling vehicle and defence (S-0609) whose top-stage weapon leaves gas
 //! clouds (S-0613) and a mind controller (S-0601), and its power plant
 //! absorbs infantry (S-0605); it also builds a grinder (S-0603); both
-//! sides build tank bunkers and send vehicles in (S-0606).
+//! sides build tank bunkers and send vehicles in (S-0606); the Yuri-style
+//! side builds magnetic lifters that seize and drop the other side's
+//! vehicles (S-0607).
 //! The run counts, per ability, the
 //! orders the AI gave (`glasnost_ai::special::Uses`) and the events the
 //! simulation then showed ([`Exercise`]), so that the gate cannot go on
@@ -71,11 +73,17 @@ pub struct Exercise {
     /// Vehicles that became bunkered (S-0606 claim 7; both sides build the
     /// bunker BUNK).
     pub bunkered: u32,
+    /// Vehicles that became seized (S-0607 claim 5; both sides build the
+    /// lifter MAGN).
+    pub seized: u32,
+    /// Seized units that became dropped: their grip ended in the air
+    /// (S-0607 claims 8, 12 and 13).
+    pub drops: u32,
 }
 
 impl Exercise {
     /// Every counter the full run asserts on, by name.
-    pub fn counters(&self) -> [(&'static str, u32); 22] {
+    pub fn counters(&self) -> [(&'static str, u32); 26] {
         let u = &self.uses;
         [
             ("berserk weapon orders (S-0610)", u.berserks),
@@ -112,6 +120,10 @@ impl Exercise {
             ("bunker entry orders (S-0606 claim 3)", u.bunker_entries),
             ("vehicles bunkered (S-0606 claim 7)", self.bunkered),
             ("bunker exit orders (S-0606 claim 12)", u.bunker_exits),
+            ("lifter build orders (S-0607)", u.lifter_builds),
+            ("lift orders (S-0607)", u.lift_orders),
+            ("vehicles seized (S-0607 claim 5)", self.seized),
+            ("seized units dropped (S-0607 claim 13)", self.drops),
         ]
     }
 
@@ -139,6 +151,8 @@ struct Watch {
     clouds: BTreeSet<ObjectId>,
     absorbed: BTreeSet<ObjectId>,
     bunkered: BTreeSet<ObjectId>,
+    seized: BTreeSet<ObjectId>,
+    dropped: BTreeSet<ObjectId>,
     seen: BTreeSet<&'static str>,
 }
 
@@ -300,6 +314,26 @@ impl Exercise {
         self.bunkered += began(&watch.bunkered, &held);
         first |= watch.first(!held.is_empty(), "bunkered");
         watch.bunkered = held;
+        // Magnetic lift: units that became seized, and seized units that
+        // became dropped, during this tick.
+        let seized: BTreeSet<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| glasnost_sim::lift::seized(w, o.id))
+            .map(|o| o.id)
+            .collect();
+        self.seized += began(&watch.seized, &seized);
+        first |= watch.first(!seized.is_empty(), "seized");
+        watch.seized = seized;
+        let dropped: BTreeSet<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| glasnost_sim::lift::dropped(w, o.id))
+            .map(|o| o.id)
+            .collect();
+        self.drops += began(&watch.dropped, &dropped);
+        first |= watch.first(!dropped.is_empty(), "dropped");
+        watch.dropped = dropped;
         first
     }
 }
@@ -309,7 +343,7 @@ impl Exercise {
 /// kind of M7a state appears (a psychic reveal, a berserk unit, a sensed
 /// intent line, a slave-miner building, a slave at work, a gattling at its
 /// top stage, a controlled object, a gas particle, an absorbed passenger, a unit bound for a grinder,
-/// a consumption, a bunkered vehicle); the loaded game
+/// a consumption, a bunkered vehicle, a seized unit, a dropped unit); the loaded game
 /// must hash alike and goes on from there. Returns the state hash after
 /// every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {

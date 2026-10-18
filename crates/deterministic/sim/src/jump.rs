@@ -10,9 +10,11 @@
 //! tick (claim 3). A jumpjet that holds no move order and is grounded or
 //! hovering takes no update.
 //!
-//! Seams to specs that are not built: magnetic lift (S-0607: [`seized`] is
-//! never true), crate pickup at touchdown (S-0520 claim 6:
-//! [`crate_pickup`]), ion storms (out of scope in a skirmish). The
+//! Magnetic lift (S-0607) links a seized unit's temporary jumpjet
+//! locomotor here and drives its pull, drop and fall through the helpers at
+//! the end of this module; `crate::lift` owns the rules. Crate pickup at
+//! touchdown is S-0520 claim 6 ([`crate_pickup`]); ion storms are out of
+//! scope in a skirmish. The
 //! deploy-to-land landing request of S-0517 is the field
 //! [`JumpState::landing_request`], set and cleared by the deploy rules.
 
@@ -31,7 +33,7 @@ use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 mod fly;
 
-pub use fly::{start_crash, tick};
+pub use fly::{impact, start_crash, tick};
 
 /// The arrival radius: a cruising jumpjet arrives when ρ is below it.
 // spec: S-0502 claim 11 and Constants (arrival radius 20 leptons)
@@ -233,10 +235,13 @@ pub fn speed_fraction(w: &World, id: ObjectId) -> Option<F64> {
     st(w, id).map(|j| j.fraction)
 }
 
-/// Whether the jumpjet is crashing or crashed (claim 18).
+/// Whether the jumpjet is crashing or crashed (claim 18), or a dropped
+/// unit marked as crashing (S-0607 claim 13).
 pub fn crashing(w: &World, id: ObjectId) -> bool {
+    // spec: S-0607 claim 13 (a dropped unit is marked as crashing, also during its cell-centre detour)
     st(w, id)
         .is_some_and(|j| matches!(j.phase, Phase::Crashing | Phase::Crashed) || j.crash_started)
+        || (is_jumpjet(w, id) && crate::lift::dropped(w, id))
 }
 
 /// Whether a deploy-to-land vehicle holds a landing request (S-0517 claim 5,
@@ -275,10 +280,8 @@ pub fn discard_order_destination(w: &mut World, id: ObjectId) {
 }
 
 /// Whether the unit is held by magnetic lift (*seized*, S-0607 Terms).
-/// Seam: magnetic lift is not built, so no unit is ever seized.
 pub fn seized(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    crate::lift::seized(w, id)
 }
 
 /// A crate in the landing cell is picked up at touchdown (S-0520 claim 6,
@@ -719,6 +722,10 @@ fn search(w: &World, id: ObjectId, centre: CellXY, use_: Use) -> Option<CellXY> 
 /// order-level destination is already stored on the object.
 pub fn take_destination(w: &mut World, id: ObjectId) {
     if !is_jumpjet(w, id) {
+        return;
+    }
+    // spec: S-0607 claim 9 (a seized unit ignores every new destination; its pull and set-down are `crate::lift::steer`'s)
+    if seized(w, id) {
         return;
     }
     let Some(o) = w.obj(id) else { return };
@@ -1234,5 +1241,219 @@ fn move_to(w: &mut World, id: ObjectId, x: i32, y: i32) {
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.x = x;
         ob.pos.y = y;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Magnetic lift (S-0607): the jumpjet side of a seized unit's lift
+
+/// Whether the last crash drop crossed a deck (claim 18).
+pub fn crossed_deck(w: &World, id: ObjectId) -> bool {
+    st(w, id).is_some_and(|j| j.crossed_deck)
+}
+
+/// Links the temporary jumpjet locomotor of a seized unit (S-0607 claim 5):
+/// a unit of another locomotor gets a new jumpjet state, grounded at rest
+/// with the heading east (S-0206 claim 14), listed where it stands; a unit
+/// of a jumpjet type keeps its own state. Its own movement state is kept
+/// for restoration.
+pub fn link_lift(w: &mut World, id: ObjectId, lifter: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let (cell, layer) = (o.pos.cell(), o.layer);
+    if o.jump.is_none() {
+        let mut j = JumpState::new();
+        j.listed = Some((cell, layer));
+        j.on_deck = layer == Layer::Deck;
+        if let Some(ob) = w.obj_mut(id) {
+            // spec: S-0607 claim 5 and S-0206 claim 14 (the jumpjet locomotor is linked; the heading is set at once to map east)
+            ob.jump = Some(j);
+        }
+    } else {
+        // spec: S-0607 claim 5 (it stops and stands still: a jumpjet type's own movement point and landing reservation go)
+        release_reservation(w, id);
+        upd(w, id, |j| {
+            j.dest = None;
+            j.order = None;
+            j.landing_request = false;
+        });
+    }
+    pull(w, id, lifter);
+}
+
+/// The pull of a gripped unit (S-0607 claim 7): its movement point is its
+/// lifter's current position (Q-1320: exactly, refreshed in each update,
+/// with no nearby-cell adjustment) and it holds a move order.
+pub fn pull(w: &mut World, id: ObjectId, lifter: ObjectId) {
+    let Some(p) = w.obj(lifter).map(|o| o.pos) else {
+        return;
+    };
+    let h = fields(w, id).map_or(0, |f| f.height);
+    let phase = st(w, id).map_or(Phase::Grounded, |j| j.phase);
+    upd(w, id, |j| {
+        j.dest = Some(p);
+        j.order = Some(Target::Object(lifter));
+        j.moving = true;
+        if phase == Phase::Descending {
+            // spec: S-0502 claim 16 (a descending jumpjet given a destination goes back to ascending with target height H)
+            j.phase = Phase::Ascending;
+            j.ht = h;
+        }
+    });
+}
+
+/// A seized unit that is not gripped keeps no order-level destination
+/// (S-0607 claim 9): the locomotor's record of it follows.
+pub fn forget_order(w: &mut World, id: ObjectId) {
+    upd(w, id, |j| j.order = None);
+}
+
+/// A dropped unit's orders stop (S-0607 claims 13 and 15): when it is not
+/// exactly over its cell's centre it cruises there first. Returns whether
+/// it does (the detour); otherwise its fall begins at once.
+pub fn lift_dropped(w: &mut World, id: ObjectId) -> bool {
+    let Some(p) = w.obj(id).map(|o| o.pos) else {
+        return false;
+    };
+    upd(w, id, |j| {
+        j.order = None;
+        j.landing_request = false;
+    });
+    let c = p.cell();
+    let centre = point_of(w, Target::Cell(c));
+    // spec: S-0607 claim 15 (exactly over the centre of its current cell, S-0204 claim 3)
+    if (p.x, p.y) == (centre.x, centre.y) {
+        return false;
+    }
+    release_slot(w, id);
+    release_reservation(w, id);
+    // spec: S-0607 claim 15 (its destination becomes that centre and it keeps flying under S-0502's cruising rules)
+    upd(w, id, |j| {
+        j.dest = Some(centre);
+        j.moving = true;
+        j.phase = Phase::Cruising;
+    });
+    true
+}
+
+/// A dropped unit's fall begins (S-0607 claim 15, S-0502 claim 18):
+/// *crashing* with target height −5 leptons, speeds 0, no move order.
+pub fn lift_fall(w: &mut World, id: ObjectId) {
+    release_reservation(w, id);
+    // spec: S-0502 claim 18 (crashing with target height −5 leptons; a seized unit's speeds are 0)
+    upd(w, id, |j| {
+        j.phase = Phase::Crashing;
+        j.ht = CRASH_TARGET;
+        j.vc = F64::ZERO;
+        j.vm = F64::ZERO;
+        j.dest = None;
+        j.order = None;
+        j.moving = false;
+        j.crash_started = false;
+    });
+}
+
+/// A dropped unit's fall ends in *crashed* (S-0607 claim 17): it releases
+/// its hover slot.
+pub fn lift_crashed(w: &mut World, id: ObjectId) {
+    release_slot(w, id);
+    // spec: S-0607 claim 17 and S-0502 claim 18 (it releases its hover slot; maximum speed and target height 0; crashed)
+    upd(w, id, |j| {
+        j.vm = F64::ZERO;
+        j.ht = 0;
+        j.phase = Phase::Crashed;
+        j.moving = false;
+    });
+}
+
+/// A dropped unit is set sinking (S-0607 claim 17): its flight ends.
+pub fn lift_sinking(w: &mut World, id: ObjectId) {
+    lift_crashed(w, id);
+}
+
+/// A dropped unit whose fall crossed a bridge deck lands on it (S-0607
+/// claims 15 and 17): it is put at deck height, on the deck.
+pub fn lift_onto_deck(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let deck = w.surface_at(o.pos.x, o.pos.y) + BRIDGE_HEIGHT;
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0607 claim 15 (the fall ends when it crosses a bridge deck from at or above to below) and claim 17 (the unit landed on a bridge deck); Q-1329 interim (it is put on the deck)
+        ob.pos.z = deck;
+        ob.layer = Layer::Deck;
+    }
+    upd(w, id, |j| j.on_deck = true);
+}
+
+/// A seized unit descends to land where it is (S-0607 claims 9 and 17): it
+/// releases its hover slot and enters *descending*, its movement point the
+/// surface beneath it, with no order-level destination.
+pub fn lift_descend(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let r = height_above(w, id);
+    let below = Pos::new(o.pos.x, o.pos.y, o.pos.z - r);
+    release_slot(w, id);
+    // spec: S-0607 claim 17 (it releases its hover slot and enters descending with no destination) and S-0502 claim 15 (descent: target height 0)
+    upd(w, id, |j| {
+        j.phase = Phase::Descending;
+        j.ht = 0;
+        j.vm = F64::ZERO;
+        j.dest = Some(below);
+        j.order = None;
+        j.moving = false;
+    });
+}
+
+/// A seized unit set down at the surface (S-0607 claim 13): grounded where
+/// it stands.
+pub fn lift_settle(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let layer = if o.layer == Layer::Deck || st(w, id).is_some_and(|j| j.on_deck) {
+        Layer::Deck
+    } else {
+        Layer::Ground
+    };
+    let below = height_above(w, id).min(0);
+    if below < 0
+        && let Some(ob) = w.obj_mut(id)
+    {
+        // spec: S-0607 claim 13 and quirks.lift_impact_removes_survivor; Q-1329 interim (a survivor set down at its impact rests on the surface beneath it, not inside it)
+        ob.pos.z -= below;
+    }
+    release_slot(w, id);
+    release_reservation(w, id);
+    upd(w, id, |j| {
+        j.phase = Phase::Grounded;
+        j.ht = 0;
+        j.vc = F64::ZERO;
+        j.vm = F64::ZERO;
+        j.fraction = F64::ZERO;
+        j.dest = None;
+        j.order = None;
+        j.moving = false;
+    });
+    settle(w, id, layer);
+}
+
+/// A seized unit gets its own locomotor back (S-0607 claim 20): the
+/// temporary jumpjet locomotor's marks, reservation and slot go; a unit of
+/// a jumpjet type keeps its jumpjet state, grounded at rest. Its cell
+/// listing stays.
+pub fn lift_restore(w: &mut World, id: ObjectId, jumpjet_type: bool) {
+    if !is_jumpjet(w, id) {
+        return;
+    }
+    if jumpjet_type {
+        upd(w, id, |j| {
+            j.dest = None;
+            j.order = None;
+            j.moving = false;
+        });
+        return;
+    }
+    lift_mark(w, id);
+    release_reservation(w, id);
+    release_slot(w, id);
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0607 claim 20 (the temporary jumpjet locomotor ends)
+        ob.jump = None;
     }
 }

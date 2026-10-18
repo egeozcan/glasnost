@@ -11,8 +11,8 @@
 //! Not built here: the building's *active-1* / *special-1* slot swap of
 //! claim 12 is display only, and our map view starts the set-up slots
 //! without a runtime slot state (S-0108 claim 11), so it is a client seam.
-//! A consumed magnetic lifter (claim 11, S-0607 claim 12) is S-0607's,
-//! which is not built.
+//! A consumed magnetic lifter (claim 11, S-0607 claim 12) ends its grip
+//! as a lifter that leaves play, through the removal (`lift::removing`).
 
 use crate::combat::effects::Effect;
 use crate::econ::TypeRef;

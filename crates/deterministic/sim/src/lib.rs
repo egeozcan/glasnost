@@ -35,6 +35,7 @@ pub mod gattling;
 pub mod hover;
 pub mod infantry;
 pub mod jump;
+pub mod lift;
 pub mod linked;
 pub mod load;
 pub mod mind;

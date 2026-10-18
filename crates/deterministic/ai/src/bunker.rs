@@ -15,7 +15,8 @@
 //!   cells of it whose *enter* cursor the bunker shows (S-0214; the bunker's
 //!   permission of S-0606 claim 2 decides it, so only bunker-eligible
 //!   vehicles are chosen). Harvesters, slave miners, construction vehicles,
-//!   transports carrying passengers and mind controllers are never sent;
+//!   transports carrying passengers, mind controllers and magnetic lifters
+//!   (S-0607, kept at home by `lifter`) are never sent;
 //! - **lets them out with a deploy click** (the bunkered vehicle's deploy
 //!   cursor, S-0214 table VD row VD5, which gives it *unload*: S-0606
 //!   claim 12) to:
@@ -168,7 +169,7 @@ pub fn taken(w: &World, b: ObjectId) -> bool {
 /// vehicle above [`REPAIR_PERCENT`] of its strength, not berserk, in no
 /// contact, and none of the kept kinds
 /// (harvesters, slave miners, construction vehicles, mind controllers,
-/// transports carrying passengers).
+/// transports carrying passengers, magnetic lifters).
 fn free(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     if o.kind != Kind::Vehicle || !o.on_map || psychic::berserk(w, id) || o.contact.is_some() {
@@ -182,7 +183,8 @@ fn free(w: &World, id: ObjectId) -> bool {
         || scripted::is_slave_miner(w, t)
         || scripted::deploys_into_yard(w, o.kind, o.type_index)
         || mind::controller(w, id).is_some()
-        || transport::count(w, id) > 0;
+        || transport::count(w, id) > 0
+        || crate::lifter::is_lifter(w, id);
     // A vehicle due for repair is not sent: it would be let out again at once.
     !kept
         && percent(w, id) > REPAIR_PERCENT

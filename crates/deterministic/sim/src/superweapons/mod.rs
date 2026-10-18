@@ -19,8 +19,9 @@
 //! - S-0510 (spy infiltration resetting the first superweapon):
 //!   [`charge::spy_reset`];
 //! - S-0601 (mind control refused by protection): [`protected`] is the
-//!   test `crate::mind::can_take` and `crate::mind::dominate` read;
-//! - S-0607 (locomotor seizing) and S-0519 (C4 planting): [`protected`].
+//!   test `crate::mind::can_take` and `crate::mind::dominate` read, and
+//!   so does the locomotor seize (S-0607, `crate::lift::seize_hit`);
+//! - S-0519 (C4 planting): [`protected`].
 
 pub mod charge;
 pub mod launch;

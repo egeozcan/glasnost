@@ -294,6 +294,9 @@ pub struct Object {
     /// occupant's building (S-0508).
     #[serde(default)]
     pub structure: crate::structures::StructState,
+    /// Magnetic-lift state: seized, grip, drop, wave (S-0607).
+    #[serde(default)]
+    pub lift: crate::lift::LiftState,
 }
 
 /// One house in the game setup.

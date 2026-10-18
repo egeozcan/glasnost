@@ -13,7 +13,7 @@ use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 use glasnost_sim::combat::effects::{Effect, Sound};
 use glasnost_sim::structures::bunker;
-use glasnost_sim::{gattling, mind, orders, save, testkit, tick, transport};
+use glasnost_sim::{gattling, lift, mind, orders, save, testkit, tick, transport};
 
 const SIZE: i32 = 24;
 const ALPHA: u8 = 0;
@@ -41,7 +41,8 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 /// GRND (a 2 × 2 recycling building), GRUNT's cost 400, a refund percentage
 /// of 0.5 and Betaland's infantry cost factor 0.5, and for the bunker pairs
 /// BUNK (a 2 × 2 tank bunker) and GATT (GAT with the turret flag set,
-/// which bunker eligibility reads).
+/// which bunker eligibility reads), and for the magnetic-lift pairs MAGL
+/// (a lifter vehicle) and DRONE (a parasite drone).
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     r.sim.warheads.insert(
@@ -145,6 +146,67 @@ fn rules() -> Ruleset {
     gatt.turret = Some(true);
     register(&mut r, "vehicles", "GATT");
     r.sim.vehicles.insert("GATT".into(), gatt);
+    // The magnetic-lift pairs (S-0607): MAGL, a vehicle whose weapon MagRay
+    // (damage 50, a magnetic beam) has the seizing warhead LIFTWH (the
+    // jumpjet locomotor), and the drone DRONE whose weapon Latch has the
+    // parasite warhead Grip (S-0614).
+    r.sim.warheads.insert(
+        "LIFTWH".into(),
+        WarheadType {
+            verses: Some(vec![dec("1"); 11]),
+            is_locomotor: Some(true),
+            locomotor: Some("jumpjet".into()),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.insert(
+        "MagRay".into(),
+        WeaponType {
+            damage: Some(50),
+            rof: Some(20),
+            range: Some(dec("10")),
+            speed: Some(100),
+            projectile: Some("Bullet".into()),
+            warhead: Some("LIFTWH".into()),
+            is_mag_beam: Some(true),
+            ..Default::default()
+        },
+    );
+    let mut magl: UnitType = r.sim.vehicles["BUGGY"].clone();
+    magl.strength = Some(1000);
+    magl.primary = Some("MagRay".into());
+    register(&mut r, "vehicles", "MAGL");
+    r.sim.vehicles.insert("MAGL".into(), magl);
+    r.sim
+        .projectiles
+        .insert("Hop".into(), glasnost_rules::sim::ProjectileType::default());
+    r.sim.weapons.insert(
+        "Latch".into(),
+        WeaponType {
+            damage: Some(10),
+            rof: Some(15),
+            range: Some(dec("6")),
+            speed: Some(60),
+            projectile: Some("Hop".into()),
+            warhead: Some("Grip".into()),
+            limbo_launch: Some(true),
+            ..Default::default()
+        },
+    );
+    r.sim.warheads.insert(
+        "Grip".into(),
+        WarheadType {
+            verses: Some(vec![dec("1"); 11]),
+            parasite: Some(true),
+            paralyzes: Some(20),
+            ..Default::default()
+        },
+    );
+    let mut drone: UnitType = r.sim.vehicles["BUGGY"].clone();
+    drone.strength = Some(100);
+    drone.primary = Some("Latch".into());
+    register(&mut r, "vehicles", "DRONE");
+    r.sim.vehicles.insert("DRONE".into(), drone);
     r.sim.infantry.get_mut("GRUNT").unwrap().cost = Some(400);
     r.sim.general.economy.refund_percent = Some(dec("0.5"));
     r.sim.countries.get_mut("Betaland").unwrap().econ.cost_infantry_mult = Some(dec("0.5"));
@@ -756,4 +818,138 @@ fn a_berserk_weapon_is_refused_at_a_bunkered_vehicle_and_its_bunker() {
     bunker_in(&mut w, g, b);
     assert!(refused(&w, g) && refused(&w, b));
     round_trip(&w);
+}
+
+// Pairs with a magnetic lifter (S-0607).
+
+/// Attack-orders lifter `l` at `v` and runs until `v` is seized.
+fn lift_up(w: &mut World, l: ObjectId, v: ObjectId) {
+    let house = owner(w, l).unwrap();
+    attack(w, house, l, v);
+    assert!(run_until(w, 600, |w| lift::seized(w, v)), "seized");
+    assert!(lift::grips(w, l, v));
+}
+
+// Pair: a lifter and a mind-controlled vehicle.
+// spec: S-0607 claims 3, 5, 8 and 18 (a controlled vehicle is not immune; arrival drops it on its lifter and the impact removes it)
+// spec: S-0601 claim 12 (a victim leaving the game leaves its controller's list silently; the slot takes a new victim)
+#[test]
+fn a_lifted_controlled_vehicle_dies_and_frees_its_controllers_slot() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let v = put(&mut w, Kind::Vehicle, "TGT", BETA, 6, 0);
+    let clone = put(&mut w, Kind::Infantry, "CLONE", ALPHA, 6, 4);
+    let l = put(&mut w, Kind::Vehicle, "MAGL", BETA, -2, 0);
+    testkit::run(&mut w, 5);
+    assert!(mind::take(&mut w, clone, v));
+    tick::step(&mut w);
+    assert_eq!(owner(&w, v), Some(ALPHA));
+    lift_up(&mut w, l, v);
+    assert!(mind::mind_controlled(&w, v), "still controlled while gripped");
+    round_trip(&w);
+    assert!(run_until(&mut w, 900, |w| w.obj(v).is_none()), "dropped on its lifter");
+    assert!(mind::controller(&w, clone).is_none_or(|r| r.victims.is_empty()));
+    let next = put(&mut w, Kind::Infantry, "GRUNT", BETA, 6, 7);
+    testkit::run(&mut w, 2);
+    attack(&mut w, ALPHA, clone, next);
+    assert!(run_until(&mut w, 900, |w| mind::mind_controlled(w, next)), "takes again");
+    round_trip(&w);
+}
+
+// Pair: a lifter and a bunkered vehicle.
+// spec: S-0606 claim 9 and S-0309 claim 24 row 1 (a locomotor-warhead attack on a bunkered vehicle is redirected to its bunker: the hit seizes nothing)
+// spec: S-0607 claims 1 and 3 (a building is never seized and the hit does no damage)
+#[test]
+fn a_lift_attack_on_a_bunkered_vehicle_goes_to_its_bunker() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let b = put(&mut w, Kind::Building, "BUNK", ALPHA, 0, 0);
+    let g = put(&mut w, Kind::Vehicle, "GATT", ALPHA, 6, 1);
+    bunker_in(&mut w, g, b);
+    let l = put(&mut w, Kind::Vehicle, "MAGL", BETA, -6, 6);
+    testkit::run(&mut w, 2);
+    let (hb, hg) = (w.obj(b).unwrap().health, w.obj(g).unwrap().health);
+    attack(&mut w, BETA, l, g);
+    testkit::run(&mut w, 2);
+    round_trip(&w);
+    let mut fired = false;
+    for _ in 0..200 {
+        tick::step(&mut w);
+        fired |= lift::wave_alive(&w, l);
+    }
+    assert!(fired, "the lifter fired");
+    assert!(!lift::seized(&w, g) && !lift::seized(&w, b));
+    assert_eq!(bunker::bunkered_in(&w, g), Some(b), "still bunkered");
+    assert_eq!((w.obj(b).unwrap().health, w.obj(g).unwrap().health), (hb, hg), "no damage");
+}
+
+// Pair: a gattling vehicle seized while spun up.
+// spec: S-0607 claims 5 and 10 (the seized unit starts guard with no target; it gets illegal for every weapon)
+// spec: S-0609 claim 5 (no target, or an answer of illegal: one spin-down update in each firing step)
+#[test]
+fn a_seized_gattling_spins_down() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let gat = put(&mut w, Kind::Vehicle, "GAT", ALPHA, 0, 0);
+    let tgt = put(&mut w, Kind::Vehicle, "TGT", BETA, 6, 0);
+    testkit::run(&mut w, 5);
+    attack(&mut w, ALPHA, gat, tgt);
+    climb(&mut w, gat);
+    let l = put(&mut w, Kind::Vehicle, "MAGL", BETA, 0, 6);
+    lift_up(&mut w, l, gat);
+    round_trip(&w);
+    let mut last = gattling::spin(&w, gat).value;
+    let mut steps = Vec::new();
+    for _ in 0..30 {
+        tick::step(&mut w);
+        if !lift::seized(&w, gat) {
+            break;
+        }
+        let s = gattling::spin(&w, gat).value;
+        steps.push(s - last);
+        last = s;
+    }
+    assert!(steps.len() >= 10 && steps.iter().all(|&d| d == -1), "{steps:?}");
+}
+
+// Pair: a seized vehicle and its owner's recycling building.
+// spec: S-0607 claim 9 (a seized unit ignores every new destination, from orders too)
+// spec: S-0603 claim 1 and S-0214 table I row I26 (the recycle click gives an enter order with the grinder as destination)
+#[test]
+fn a_seized_vehicle_ignores_its_owners_recycle_click() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let grnd = put(&mut w, Kind::Building, "GRND", ALPHA, -5, -5);
+    let v = put(&mut w, Kind::Vehicle, "TGT", ALPHA, 6, 0);
+    let l = put(&mut w, Kind::Vehicle, "MAGL", BETA, 6, 8);
+    testkit::run(&mut w, 5);
+    lift_up(&mut w, l, v);
+    click(&mut w, ALPHA, &[v], grnd);
+    testkit::run(&mut w, 2);
+    assert_eq!(w.obj(v).unwrap().dest, Some(Target::Object(l)), "still bound for its lifter");
+    round_trip(&w);
+    let credits0 = credits(&w, ALPHA);
+    testkit::run(&mut w, 60);
+    assert!(lift::grips(&w, l, v) || w.obj(v).is_none_or(|o| o.dest != Some(Target::Object(grnd))));
+    assert_eq!(credits(&w, ALPHA), credits0, "not ground");
+}
+
+// Pair: a lifter and a host carrying a parasite drone.
+// spec: S-0614 claim 12 (an effect that replaces the host's locomotor: a drone stays attached)
+// spec: S-0607 claim 5 (the seize releases a naval parasite only)
+#[test]
+fn a_drone_stays_on_a_seized_host() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let host = put(&mut w, Kind::Vehicle, "TGT", BETA, 2, 0);
+    let drone = put(&mut w, Kind::Vehicle, "DRONE", ALPHA, 0, 0);
+    let l = put(&mut w, Kind::Vehicle, "MAGL", ALPHA, 2, 7);
+    testkit::run(&mut w, 2);
+    attack(&mut w, ALPHA, drone, host);
+    assert!(
+        run_until(&mut w, 300, |w| glasnost_sim::parasite::host_of(w, drone) == Some(host)),
+        "latched"
+    );
+    lift_up(&mut w, l, host);
+    assert_eq!(glasnost_sim::parasite::host_of(&w, drone), Some(host), "stays attached");
+    round_trip(&w);
+    testkit::run(&mut w, 10);
+    if lift::seized(&w, host) {
+        assert_eq!(glasnost_sim::parasite::host_of(&w, drone), Some(host));
+    }
 }

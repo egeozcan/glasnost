@@ -114,6 +114,16 @@ pub struct Uses {
     /// claim 12).
     #[serde(default)]
     pub bunker_exits: u32,
+    /// Magnetic lifters ordered (S-0607, `lifter`).
+    #[serde(default)]
+    pub lifter_builds: u32,
+    /// Lifters sent at an enemy vehicle (S-0607, `lifter`).
+    #[serde(default)]
+    pub lift_orders: u32,
+    /// Move orders given to a holding lifter over a killing cell, which
+    /// drop the held vehicle there (S-0607 claims 12 and 17).
+    #[serde(default)]
+    pub lift_drops: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -171,6 +181,7 @@ impl Special {
         self.absorbers(script, &own, w, out);
         self.grinders(script, &own, w, out);
         self.bunkers(script, &own, w, out);
+        self.lifters(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -235,6 +246,21 @@ impl Special {
     /// Counts one bunkered vehicle let out (S-0606, `bunker`).
     pub(crate) fn count_bunker_exit(&mut self) {
         self.uses.bunker_exits += 1;
+    }
+
+    /// Counts one lifter ordered (S-0607, `lifter`).
+    pub(crate) fn count_lifter_build(&mut self) {
+        self.uses.lifter_builds += 1;
+    }
+
+    /// Counts one lifter sent at an enemy vehicle (S-0607, `lifter`).
+    pub(crate) fn count_lift_order(&mut self) {
+        self.uses.lift_orders += 1;
+    }
+
+    /// Counts one drop order given to a holding lifter (S-0607, `lifter`).
+    pub(crate) fn count_lift_drop(&mut self) {
+        self.uses.lift_drops += 1;
     }
 
     /// Counts one gattling defence building ordered (S-0609, `gattling`).

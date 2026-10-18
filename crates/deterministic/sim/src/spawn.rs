@@ -452,10 +452,9 @@ pub fn track_held(w: &World, spawner: ObjectId) -> bool {
 
 /// A mobile spawner that is seized (S-0506 claims 6 and 13, revision 8):
 /// the magnetic-lift state of S-0607 claims 5 and 20, which lasts past the
-/// grip until the unit's own locomotor returns. Seam: no magnetic lift
-/// exists in our engine yet.
-pub fn magnet_held(_w: &World, _spawner: ObjectId) -> bool {
-    false
+/// grip until the unit's own locomotor returns.
+pub fn magnet_held(w: &World, spawner: ObjectId) -> bool {
+    crate::lift::seized(w, spawner)
 }
 
 /// The launcher of a spawned object, if it still exists (S-0311 claim 8).

@@ -755,7 +755,7 @@ impl Audio {
             // The bunker's special animations and the bunkered notice are
             // drawing and selection only; the walls sounds come through
             // Effect::Sound (S-0606 claims 7, 12 and 14).
-            Effect::SpecialAnims { .. } | Effect::Bunkered { .. } => {}
+            Effect::SpecialAnims { .. } | Effect::Bunkered { .. } | Effect::Seized { .. } => {}
             // spec: S-0518 claim 6 (the support beam is drawing only: no sound)
             Effect::SupportBeam { .. } => {}
             Effect::Superweapon { event, sw, pos, .. } => self.superweapon(w, *event, *sw, *pos),

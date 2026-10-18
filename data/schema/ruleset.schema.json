@@ -5013,6 +5013,14 @@
           ],
           "default": null
         },
+        "current_strength_damage": {
+          "description": "`[CombatDamage] CurrentStrengthDamage` (S-0607 F2; absent: yes).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "d_misl_acceleration": {
           "description": "`DMislAcceleration`, the acceleration of set B, leptons per tick per tick, a single (S-0506 Import mapping).",
           "anyOf": [
@@ -5284,6 +5292,17 @@
             "null"
           ],
           "default": null
+        },
+        "falling_damage_multiplier": {
+          "description": "`[CombatDamage] FallingDamageMultiplier`, a single (S-0607 F2;\nabsent: 1.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "fire_supress": {
           "description": "`FireSupress`, cells (S-0309 F6; lepton form).",
@@ -12634,6 +12653,14 @@
           "description": "`IvanBomb`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "locomotor": {
+          "description": "`Locomotor`, the locomotor a seizing warhead installs (S-0607\nImport mapping): the name of S-0207 table T3's class identifier\n(absent: the teleporting locomotor).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null

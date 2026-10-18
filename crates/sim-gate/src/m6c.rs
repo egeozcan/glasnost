@@ -80,6 +80,9 @@ pub fn total(uses: &[(glasnost_sim::world::HouseId, Uses)]) -> Uses {
         t.bunker_builds += u.bunker_builds;
         t.bunker_entries += u.bunker_entries;
         t.bunker_exits += u.bunker_exits;
+        t.lifter_builds += u.lifter_builds;
+        t.lift_orders += u.lift_orders;
+        t.lift_drops += u.lift_drops;
     }
     t
 }

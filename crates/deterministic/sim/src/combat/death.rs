@@ -639,6 +639,8 @@ fn building_death(w: &mut World, id: ObjectId, hit: &Hit) {
     let rp = w.reference_point(id);
     // spec: S-0606 claim 13 and S-0312 claim 17 (a destroyed bunker lets its vehicle out within the destroying hit, before the contacts are treated)
     crate::structures::bunker::let_out(w, id);
+    // spec: S-0607 claim 12 (row 5: a building lifter that is destroyed lets go, its target cleared)
+    crate::lift::building_destroyed(w, id);
     // spec: S-0312 claim 17 (revision 25: the contacts held just before the destroying hit, less
     // the bunkered vehicle, which the let-out above has already released, S-0606 claim 13)
     let contacts: Vec<ObjectId> = w

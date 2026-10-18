@@ -178,6 +178,15 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     if launched.is_none() && wr.projectile.is_some() && !wr.spawner {
         return false;
     }
+    if wr.mag_beam && let Some(pid) = launched {
+        // spec: S-0607 claim 21 and F3 (a magnetic-beam weapon's shot may create a magnetic wave, from the firing point to the impact point; Q-1327: the impact point is the projectile's stored target point)
+        let k = w
+            .projectiles
+            .get(&pid)
+            .map(|p| p.stored)
+            .unwrap_or_else(|| crate::process::target_pos(w, shot_target));
+        crate::lift::shot(w, firer, shot_target, fp, k);
+    }
     // spec: S-0409 claim 16 (a shot from a reveal-on-fire weapon reveals the firer to the target's owner)
     crate::econ::shroud::fired(w, firer, &wr.name, target);
     let t = w.tick;

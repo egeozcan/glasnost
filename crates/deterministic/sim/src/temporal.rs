@@ -106,15 +106,13 @@ pub fn ground_layer(w: &World, id: ObjectId) -> bool {
     if o.rocket.is_some() {
         return false;
     }
-    let locomotor = w.rules().unit(o.kind, o.type_index).map(|u| u.locomotor);
+    let fly = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Fly);
     let in_air = w.height_above_surface(id) > 0;
-    // spec: S-0102 State and ordering (flying and jumpjet movement are in the ground layer on the ground, and in another above it; every other kind is in the ground layer when not in the air)
-    !(in_air
-        && (o.kind == Kind::Aircraft
-            || matches!(
-                locomotor,
-                Some(crate::rules::Locomotor::Fly | crate::rules::Locomotor::Jump)
-            )))
+    // spec: S-0102 State and ordering (flying and jumpjet movement are in the ground layer on the ground, and in another above it; every other kind is in the ground layer when not in the air) and S-0607 claim 5 (a seized unit moves with the jumpjet locomotor)
+    !(in_air && (o.kind == Kind::Aircraft || fly || crate::jump::is_jumpjet(w, id)))
 }
 
 /// A temporal detonation (S-0514 claims 1 to 4): the firer and the shot's

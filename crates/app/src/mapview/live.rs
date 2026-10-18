@@ -1213,7 +1213,8 @@ impl Live {
                 | Effect::Infiltrated { .. }
                 | Effect::Cloak { .. }
                 | Effect::SpecialAnims { .. }
-                | Effect::Bunkered { .. } => continue,
+                | Effect::Bunkered { .. }
+                | Effect::Seized { .. } => continue,
             };
             self.transients.push(Transient {
                 kind,

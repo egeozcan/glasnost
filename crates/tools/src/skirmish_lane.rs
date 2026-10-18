@@ -161,6 +161,10 @@ struct Game {
     bunkered: usize,
     bunker_releases: usize,
     bunkers: [usize; PLAYERS],
+    /// Magnetic lift (S-0607): units that became seized and seized units
+    /// that became dropped.
+    seized: usize,
+    dropped: usize,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -667,6 +671,8 @@ fn play_ai(
     g.bunkered = tally.bunkered;
     g.bunker_releases = tally.bunker_releases;
     g.bunkers = tally.bunkers.map(|s| s.len());
+    g.seized = tally.seized;
+    g.dropped = tally.dropped;
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -821,6 +827,14 @@ pub struct Tally {
     pub bunker_releases: usize,
     /// Per player house: its tank bunkers seen so far (S-0606).
     pub bunkers: [BTreeSet<u32>; PLAYERS],
+    /// Units that became seized (S-0607 claim 5).
+    pub seized: usize,
+    /// Seized units that became dropped (S-0607 claim 13).
+    pub dropped: usize,
+    /// The seized units after the last tick.
+    seized_before: BTreeSet<u32>,
+    /// The dropped units after the last tick.
+    dropped_before: BTreeSet<u32>,
     /// The (vehicle, bunker) links after the last tick.
     bunkered_before: BTreeSet<(u32, u32)>,
     /// The (passenger, building) pairs after the last tick.
@@ -1020,6 +1034,22 @@ impl Tally {
             })
             .count();
         self.bunkered_before = links;
+        let seized: BTreeSet<u32> = w
+            .objects
+            .values()
+            .filter(|o| glasnost_sim::lift::seized(w, o.id))
+            .map(|o| o.id.0)
+            .collect();
+        self.seized += seized.difference(&self.seized_before).count();
+        self.seized_before = seized;
+        let dropped: BTreeSet<u32> = w
+            .objects
+            .values()
+            .filter(|o| glasnost_sim::lift::dropped(w, o.id))
+            .map(|o| o.id.0)
+            .collect();
+        self.dropped += dropped.difference(&self.dropped_before).count();
+        self.dropped_before = dropped;
         let mut held = [0usize; PLAYERS];
         for o in w.objects.values() {
             let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
@@ -1917,8 +1947,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops
                     )
                 })
                 .collect();
@@ -1988,6 +2018,11 @@ fn report(
                 s,
                 "  bunkers: vehicles bunkered {}, let out with both standing {}; tank bunkers per house {:?}",
                 g.bunkered, g.bunker_releases, g.bunkers
+            );
+            let _ = writeln!(
+                s,
+                "  magnetic lift: units seized {}, dropped {}",
+                g.seized, g.dropped
             );
         }
         let f: Vec<String> = g

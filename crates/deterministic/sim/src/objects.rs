@@ -153,6 +153,7 @@ pub fn create_converted(
         cloak: Default::default(),
         sw: Default::default(),
         structure: Default::default(),
+        lift: Default::default(),
     };
     w.objects.insert(id, obj);
     veteran_at_creation(w, id);
@@ -421,6 +422,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     crate::temporal::leaving(w, id);
     // spec: S-0614 claim 15 (a host removed while a parasite is attached releases it at once)
     crate::parasite::leaving(w, id);
+    // spec: S-0607 claims 12 and 14 (a lifter leaving play drops its gripped unit just before; a gripped unit leaving play ends the grip and clears its lifter's target; a dropper leaving play leaves its dropped units their dropper house)
+    crate::lift::removing(w, id);
     // spec: S-0502 claims 4, 7, 13, 14 and 18 (a jumpjet leaving the map releases its marks, its landing reservation and its hover slot)
     crate::jump::leaving(w, id);
     // spec: S-0507 claim 16 (a transport removed with passengers inside: they die without attacker credit; a removed passenger leaves its transport's passenger order)

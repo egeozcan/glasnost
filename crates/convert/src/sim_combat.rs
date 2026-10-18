@@ -1281,6 +1281,21 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         "S-0519",
     ),
     ("c4_delay", COMBAT_DAMAGE, "C4Delay", Dec, "S-0519"),
+    // spec: S-0607 Import mapping (FallingDamageMultiplier a decimal held as a single; CurrentStrengthDamage a boolean)
+    (
+        "falling_damage_multiplier",
+        COMBAT_DAMAGE,
+        "FallingDamageMultiplier",
+        Dec,
+        "S-0607",
+    ),
+    (
+        "current_strength_damage",
+        COMBAT_DAMAGE,
+        "CurrentStrengthDamage",
+        Bool,
+        "S-0607",
+    ),
     // spec: S-0518 Import mapping (PrismType a building type name; the other prism keys integers; the modifier is read apart, F4)
     (
         "prism_type",
@@ -1779,6 +1794,8 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         "S-0309",
     );
     keyed(&["global:General"], &s(&["HarvesterUnit"]), "S-0303");
+    // spec: S-0607 Import mapping (the locomotor a seizing warhead installs)
+    keyed(&["warheads"], &s(&["Locomotor"]), "S-0607");
     // spec: S-0613 Import mapping (the gas-cloud keys of particle and particle-system types)
     keyed(
         &["particles"],
@@ -2979,6 +2996,14 @@ impl Builder<'_> {
         self.cfields(rec, t, Kind::Warheads, WARHEAD_COMBAT);
         if let Some(v) = self.verses(t) {
             rec.put("verses", v);
+        }
+        // spec: S-0607 Import mapping (warhead Locomotor: a locomotor identifier, S-0207 claim 14's class identifier of table T3; a value of another form or an unknown identifier keeps the value in force)
+        let loco = fold(key(t, "Locomotor"), None, |v, _| {
+            let id = class_identifier(v)?;
+            LOCOMOTORS.iter().find(|l| l.0 == id).map(|l| l.1)
+        });
+        if let Some(name) = loco {
+            rec.put("locomotor", jsonc::string(name));
         }
         let name = format!("warheads {}", show(&t.name));
         // spec: S-0303 Edge cases (a spread outside 0 to 11: clamped by our engine, the importer warns)

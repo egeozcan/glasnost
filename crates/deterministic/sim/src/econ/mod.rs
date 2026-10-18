@@ -53,6 +53,10 @@ pub fn assign_destination(
     id: ObjectId,
     dest: Option<crate::world::Target>,
 ) {
+    // spec: S-0607 claim 9 and S-0517 claim 9 (a seized unit ignores every new destination, before the deployed-state rule; no destination is let through and sets a gripped unit down)
+    if crate::lift::refuses_destination(w, id, dest) {
+        return;
+    }
     // spec: S-0517 claim 9 (a deployed vehicle or one in transition cannot receive a destination: any destination given to it is replaced by none)
     let dest = if inplace::blocks_destination(w, id) {
         None
@@ -65,6 +69,10 @@ pub fn assign_destination(
     let Some(o) = w.obj_mut(id) else { return };
     let before = o.dest;
     o.dest = dest;
+    // spec: S-0607 claim 12 (row 2: a mobile lifter that accepts a non-empty destination lets go, its target cleared)
+    if dest.is_some() {
+        crate::lift::lifter_accepts(w, id);
+    }
     // spec: S-0207 claim 20 (a) (the locomotor takes the destination at once) and S-0107 claim 15
     crate::infantry::destination_assigned(w, id, before);
 }
