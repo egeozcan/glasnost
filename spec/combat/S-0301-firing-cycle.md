@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -262,10 +262,18 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
    | The firer has a live effect of | Answer for the asked weapon |
    |---|---|
-   | the asked weapon's own kind | *rearming* (rank 5) |
-   | the kind of the asked weapon's other weapon, whatever the asked weapon's own kind | *impossible* (rank 4) |
+   | any kind whose effect flag the asked weapon has | *rearming* (rank 5) |
+   | any kind whose effect flag the asked weapon's other weapon has, whatever the asked weapon's own flags | *impossible* (rank 4) |
 
-   So an effect weapon fires again at the first attempt that is both at least *R*′ ticks after the
+   These flags are independent, not mutually exclusive: the gate tests fire, railgun, spark
+   and sonic effects, and any one held effect of an enabled kind suffices to refuse the
+   weapon. If both rows apply, rank 4 wins. A permitted particle-effect shot makes an emitter
+   for every enabled particle-effect flag whose place is empty, in the order fire, spark,
+   railgun. Thus one shot can make three emitters; their creation order determines their
+   subsequent turn order (S-0616 claim 1). The next checked shot must wait for every effect
+   selected by its flags to be let go, as well as for the other firing restrictions to pass.
+
+   With just one effect flag, an effect weapon fires again at the first attempt that is both at least *R*′ ticks after the
    shot and after the effect has ended, where *R*′ is *R*
    (trunc(*R* / 2) for a berserk firer, claim 8), and no draw is taken for its delay. For a sonic
    weapon the effect ends when the wave does, so the interval is max(*R*′, the wave's lifetime). For
@@ -287,10 +295,11 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    refusal. There is no general own-wave firing block for a magnetic-beam weapon, including
    when the shared wave is sonic. A magnetic shot made while a wave is alive creates no new
    wave (S-0607 claim 21). Grip and wave lifetimes are independent.
-   - Backing: `measurable` (scenario F4, with its burst and building parts; S-0607 scenarios
+   - Backing: `measurable` (scenario F4, with its multi-flag, burst and building parts; S-0607 scenarios
      L9 and L10 for magnetic firing, grip independence and wave creation)
    - Confidence: high (the bare rate, the missing draw, *rearming* for an effect weapon's own
-     kind, and the magnetic conditional gate and absence of a general own-wave block),
+     kind, the any-flag gate and particle-emitter creation order, and the magnetic conditional
+     gate and absence of a general own-wave block),
      medium (*impossible* for the other weapon, that the effect's lifetime can lengthen the
      interval, which depends on the effect specs, and the fire emitter's let-go events, including
      what counts as within reach, which this spec leaves to S-0616 claim 1: scenario F4, particle
@@ -983,6 +992,18 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   not earlier; the fire firer shoots once and not again while it keeps the target and stays put.
   Falsified if a spark or railgun firer shoots before its emitter has left play or never shoots a
   second time, or if the fire firer shoots a second time with its target kept.
+- Multi-flag part: use S-0616 scenario P22 part a's named test rules with all three
+  particle-effect flags on one weapon, one named system type and a durable enemy vehicle
+  in range. Keep the firer stationary and all other gates satisfied, at speed index 2,
+  with no engine add-on and no mods except the named test data. In three runs, order sustained
+  attack and record shot ticks, emitter creation order, held places and firing-check answers
+  with tick-labelled capture and a read-only recorder. Expected: the first shot makes three
+  emitters of that same system type in fire, spark, railgun order; no further checked shot
+  occurs while any of those places is held, even after the rearm countdown expires. Repeat
+  with each two-flag combination and a single-flag control. A missing emitter, different
+  creation order or checked shot with any selected place held falsifies the corresponding
+  rule. If ordinary play never frees all selected places, report the later-shot boundary
+  inconclusive rather than treating permanent refusal as evidence for that boundary.
 - Fire let-go part: as the fire firer above, then, in separate runs, (a) retarget it to a
   target outside its weapon's range, (b) give it a move order, (c) kill it, (d) retarget it to a
   second target that is within range. Expected: in (a) and (b), a shot at the first attempt after
