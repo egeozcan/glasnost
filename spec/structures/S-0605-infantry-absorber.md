@@ -2,13 +2,13 @@
 id: S-0605
 title: Infantry absorber (who may enter an absorbing building, entry, holding, release)
 topic: structures
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-18
 measurements: []
-requests: [Q-1260, Q-1261, Q-1262, Q-1263, Q-1264, Q-1265, Q-1266, Q-1267, Q-1152]
+requests: [Q-1260, Q-1261, Q-1262, Q-1263, Q-1264, Q-1265, Q-1266, Q-1267, Q-1152, Q-1159]
 supersedes: []
 ---
 
@@ -181,12 +181,15 @@ S-0312 and S-0408 are made in the current drafts of those specs):
      the vehicle's turn on the next tick (S-0215 claim 12), so the vehicle's first update is the
      first in which the retry can run. What the vehicle does in that update depends on whether it
      is ready to change at its first per-tick start (S-0215 claim 11):
-     - Ready there (for example a vehicle standing still): *enter* becomes current at that start.
-       In that update the vehicle takes one movement step toward a free cell next to the building
-       (the approach of claim 4). If the place is free, it then holds contact and goes on to the
-       building as any actor with contact does (below); it never rests next to an empty building.
-       If the place is held by another contact, it rests next to the building (claim 4).
-     - Not ready there (for example a vehicle still driving from an earlier order): *enter* is not
+     - Ready there (the usual case, a standing vehicle and also a vehicle still driving from an
+       earlier order, because a queued *enter* lifts the "moving" condition of S-0215 claim 11):
+       *enter* becomes current at that start. In that update the vehicle takes one movement step
+       toward a free cell next to the building (the approach of claim 4). If the place is free, it
+       then holds contact and goes on to the building as any actor with contact does (below); it
+       never rests next to an empty building. If the place is held by another contact, it rests
+       next to the building (claim 4).
+     - Not ready there (for example a vehicle that is deploying, undeploying or in the middle of its
+       own unload processing, or whose current behaviour is *sticky* or *rescue*): *enter* is not
        current at that start, and no approach step is made. If the place is free, the vehicle holds
        contact by the end of that update, with *enter* queued and the building as its destination.
        It rests next to the building only while the place is held by another contact (claim 4).
@@ -782,15 +785,17 @@ block every cell within the search radius: the unit stays where it is, rests, an
 the place is free (walking, or an end of the wait, falsifies the no-result outcome). Repeat with a vehicle and a vehicle absorber: the vehicle, even for the
 first entrant, gets no destination and no contact at the order (claim 3). With a free place, its
 retry grants contact in its first update, after at most one movement step toward the found cell
-(none if the vehicle was not ready at that update's first start), and it goes in without resting at a cell
+(none if the vehicle was not ready at that update's first start, for example in a deploy transition), and it goes in without resting at a cell
 next to the building: a vehicle that rests next to an empty building with a free place falsifies
-this part. Set up the still-driving case by ordering the vehicle first to a point far enough away that it
-is still moving at the next tick, then giving the *enter* order. In both cases, record the
-vehicle's position, destination, contact and behaviours in the first update after the order.
-Expected: a first step toward a cell next to the building in the standing case, and none in the
-driving case; in both, contact is held at the end of that update when the place is free.
-Falsified by no step in the standing case, by a step in the driving case, or by no contact at the
-end of that update when the place is free.
+this part. Run the standing case and the still-driving case (order the vehicle first to a point far enough away
+that it is still moving at the next tick, then give the *enter* order); both are ready at the first start,
+so both should step. Add a not-ready case (a vehicle ordered in during its deploy or undeploy
+transition). In each case, record the vehicle's position, destination, contact and behaviours in the first
+update after the order. Expected: a first step toward a cell next to the building in the standing and
+still-driving cases, and none in the not-ready case; in all, contact is held at the end of that update
+when the place is free. Falsified by no step in the standing or driving case (the queued *enter* would
+then not lift the moving condition), by a step in the not-ready case, or by no contact at the end of
+that update when the place is free.
 With the place held by another contact, it walks to a cell next to the building and rests there
 (claim 4). A vehicle onto a repair depot is S-0314's scenario, not this one: it remembers the depot
 and does not walk (S-0314 claim 23).
