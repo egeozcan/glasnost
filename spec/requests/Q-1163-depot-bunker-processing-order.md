@@ -1,9 +1,9 @@
 ---
 id: Q-1163
 title: S-0606 claim 20, the order of the S1 row and the depot's repair processing within one processing of a type that is both
-status: open
+status: answered
 related: [S-0606, S-0314]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need

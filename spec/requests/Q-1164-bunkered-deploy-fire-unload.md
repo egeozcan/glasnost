@@ -1,9 +1,9 @@
 ---
 id: Q-1164
 title: S-0606 claim 12 (revision 5) against S-0415 claim 1 (revision 18), whether the deploy-fire rule applies to a bunkered vehicle's unload
-status: open
+status: answered
 related: [S-0606, S-0415, S-0517]
-answered-by: []
+answered-by: [S-0606]
 ---
 
 ## Need
