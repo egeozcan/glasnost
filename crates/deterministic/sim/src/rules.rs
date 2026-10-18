@@ -564,6 +564,13 @@ pub struct AnimRules {
     pub crater: bool,
     /// The resource-chain-reaction flag (S-0109 claim 13, S-0401 claim 20).
     pub chain_reaction: bool,
+    /// The burning-walker flag (S-0615 Terms and Import mapping).
+    pub flaming: bool,
+    /// The running frames *R* of a burning walker (S-0615 Terms).
+    pub running_frames: i32,
+    /// The damage value δ of S-0109 claim 17, a single held exactly in a
+    /// double (S-0109 F5).
+    pub damage: glasnost_num::F64,
 }
 
 /// A particle type's creation-draw fields (S-0202 claim 15 and Import
@@ -1408,6 +1415,14 @@ impl SimRules {
                     scorch: a.scorch.unwrap_or(false),
                     crater: a.crater.unwrap_or(false),
                     chain_reaction: a.tiberium_chain_reaction.unwrap_or(false),
+                    // spec: S-0615 Import mapping (IsFlamingGuy absent: no; RunningFrames absent: 0 frames)
+                    flaming: a.is_flaming_guy.unwrap_or(false),
+                    running_frames: a.running_frames.unwrap_or(0),
+                    // spec: S-0109 Import mapping and F5 (Damage absent: 0; δ in the S-0003 decimal form, a single held exactly in binary64)
+                    damage: a
+                        .damage
+                        .as_ref()
+                        .map_or(glasnost_num::F64::ZERO, |d| d.single_value(mode)),
                 }
             })
             .collect();

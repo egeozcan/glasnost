@@ -763,6 +763,25 @@ impl Audio {
             | Effect::Dropped { .. } => {}
             // spec: S-0518 claim 6 (the support beam is drawing only: no sound)
             Effect::SupportBeam { .. } => {}
+            // spec: S-0615 Terms (a beam is drawing only: no sound)
+            Effect::Beam { .. } => {}
+            // spec: S-0615 claim 2 and S-0701 claim 22 (a burning walker's creation: its type's start sound, positional)
+            Effect::Walker {
+                name,
+                pos,
+                made: true,
+                ..
+            } => {
+                let s = self.names.anim_report(name).map(str::to_owned);
+                self.play_in(w, s.as_deref(), Where::Fixed(*pos));
+            }
+            Effect::Walker { .. } => {}
+            Effect::Disc {
+                firer,
+                weapon,
+                event,
+                pos,
+            } => self.disc(w, *firer, *weapon, event, *pos),
             Effect::Superweapon { event, sw, pos, .. } => self.superweapon(w, *event, *sw, *pos),
             Effect::OverlayCrushed { overlay, pos } => {
                 let s = self
@@ -771,6 +790,40 @@ impl Audio {
                     .map(str::to_owned);
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
+        }
+    }
+
+    /// A disc laser's sounds (S-0615 claims 15 and 16): the charge-up sound
+    /// at its first arc step, the weapon's report with its damage, at the
+    /// firer (S-0701 claim 21's entry from the firer's report value).
+    fn disc(
+        &mut self,
+        w: &World,
+        firer: glasnost_sim::world::ObjectId,
+        weapon: glasnost_sim::combat::data::WeaponId,
+        event: &glasnost_sim::combat::effects::DiscEvent,
+        pos: glasnost_sim::world::Pos,
+    ) {
+        use glasnost_sim::combat::effects::DiscEvent;
+        let at = w.obj(firer).map_or(pos, |o| o.pos);
+        match event {
+            // spec: S-0615 claim 15 (the charge-up sound at k = 0, if given; S-0701 owns its placement: positional at the ring)
+            DiscEvent::ChargeUp { sound } => {
+                self.play_in(w, sound.as_deref(), Where::Fixed(pos));
+            }
+            // spec: S-0615 claim 16 and S-0701 claim 21 (the report with the damage: entry r mod n of the weapon's list, at the firer)
+            DiscEvent::Hit { report } => {
+                let name = w.rules().combat.weapon(weapon).name.clone();
+                let list = self.names.report(&name);
+                let entry = (!list.is_empty())
+                    .then(|| &list[usize::from(*report) % list.len()])
+                    .and_then(|n| self.catalog.resolve(n));
+                if let Some(id) = entry {
+                    self.request(Some(w), id, Where::Fixed(at), FULL);
+                }
+            }
+            // spec: S-0615 claim 12 (no report at the shot); claim 14 (a cancellation is silent)
+            DiscEvent::Shot | DiscEvent::Cancelled => {}
         }
     }
 

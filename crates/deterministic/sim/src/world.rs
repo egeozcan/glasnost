@@ -424,6 +424,13 @@ pub struct World {
     /// claim 21).
     #[serde(default)]
     pub waves: BTreeMap<ObjectId, crate::lift::Wave>,
+    /// Disc lasers in play, the most recently fired first (S-0615 claim 12,
+    /// S-0203 row 12).
+    #[serde(default)]
+    pub discs: Vec<crate::disc::Disc>,
+    /// Burning walkers in play, by object number (S-0615 claims 4 to 11).
+    #[serde(default)]
+    pub walkers: BTreeMap<ObjectId, crate::walker::Walker>,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.

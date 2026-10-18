@@ -1,7 +1,7 @@
 //! The tick pipeline (S-0203): the parts of a tick in their fixed places.
 //!
 //! The parts that are not built yet (the
-//! weather storm, chrono flashes, diving aircraft, teams, disc lasers,
+//! weather storm, chrono flashes, diving aircraft, teams,
 //! pulses, blast rings and crates) are empty seams in their places
 //! of S-0203 claim 1, so that their draws land where the original takes them
 //! once they are written. Resource growth (row 9), the production lines (row
@@ -32,7 +32,9 @@ pub fn step(w: &mut World) {
     // S-0519 claim 4), not here.
     // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted-bomb maintenance (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
     crate::spawn::kamikaze_orders(w);
-    // Rows 10, 11 and 12 have no topic yet: empty seams.
+    // Rows 10 and 11 have no topic yet: empty seams.
+    // spec: S-0203 claim 1 row 12 and S-0615 claim 13 (disc lasers, the most recently fired first, after rows 10 and 11 and before row 3 and the turn pass)
+    crate::disc::update(w);
     // spec: S-0203 claim 1 row 3 (the weather storm's own update and bolt strikes, after rows 10 to 12 and before row 14 and the turn pass; S-0513 claims 14 to 19)
     crate::superweapons::storm::update(w);
     // spec: S-0203 claim 1 row 13 and S-0525 claims 5, 6 and 11 (radiation maintenance: after the storm, before the turn pass; the most recently created field first; no draws)
@@ -97,6 +99,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.gas.anims.contains_key(&id) {
         // spec: S-0109 claim 5 (an animation updates in its own turn)
         crate::gas::anim_turn(w, id);
+        return;
+    }
+    if w.walkers.contains_key(&id) {
+        // spec: S-0615 claim 4 and S-0109 claim 5 (a burning walker updates in its own turn)
+        crate::walker::turn(w, id);
         return;
     }
     if w.waves.contains_key(&id) {

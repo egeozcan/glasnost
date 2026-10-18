@@ -114,9 +114,9 @@ open request.
 
 All (e). Recorded only. Existing code they will change:
 
-- S-0615 claims 1 to 3 (infantry death animations for death kinds 3 to 7 and 10): `combat::death::infantry_death`, which today leaves play with no animation for those kinds.
+- S-0615 claims 1 to 3 (infantry death animations for death kinds 3 to 7 and 10): `combat::death::infantry_death`, which today leaves play with no animation for those kinds. Built at M7b step 3.2 (`docs/m7-claims/S-0615.md`).
 - S-0611 (mutation, death kind 9): the same function, which plays Die2 for kind 9.
-- S-0615 claim 16 (disc laser has no house): the disc-laser shot path in `combat::fire` and `combat::projectile` (`disk_laser`).
+- S-0615 claim 16 (disc laser has no house): the disc-laser shot path in `combat::fire` and `combat::projectile` (`disk_laser`). Built at M7b step 3.2: the disc laser is `glasnost_sim::disc`, with the quirk `disc_laser_no_house`.
 - S-0609 claim 5 (no bunker exclusion for spin-up): gattling is not built.
 
 ## Glossary (rev 36 to 38), spec/README.md

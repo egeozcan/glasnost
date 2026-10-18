@@ -453,6 +453,8 @@ pub fn new_game(
         radiation: Default::default(),
         gas: Default::default(),
         waves: Default::default(),
+        discs: Vec::new(),
+        walkers: Default::default(),
         temporal: Default::default(),
         mind: Default::default(),
         acquisitions: 0,

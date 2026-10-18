@@ -397,6 +397,18 @@ pub struct AnimationType {
     /// `Shadow`, the shadow-type flag (S-0109 Import mapping); absent: no.
     #[serde(default)]
     pub shadow: Option<bool>,
+    /// `IsFlamingGuy`, the burning-walker flag (S-0615 Import mapping, art
+    /// data); absent: no.
+    #[serde(default)]
+    pub is_flaming_guy: Option<bool>,
+    /// `RunningFrames`, the running frames *R* of a burning walker (S-0615
+    /// Import mapping, art data); absent: 0.
+    #[serde(default)]
+    pub running_frames: Option<i32>,
+    /// `Damage`, the damage value δ of S-0109 claim 17 (art data, a
+    /// decimal); absent: 0.
+    #[serde(default)]
+    pub damage: Option<Decimal>,
 }
 
 /// A particle type's fields that its creation draws read (S-0202 claim 15
@@ -764,6 +776,10 @@ pub struct General {
     /// `C4Warhead`, the demolition warhead (S-0302 claims 1 and 20).
     #[serde(default)]
     pub c4_warhead: Option<String>,
+    /// `[CombatDamage] FlameDamage2`, the warhead of an animation's damage
+    /// over time (S-0109 claim 17 and Import mapping); absent: none.
+    #[serde(default)]
+    pub flame_damage2: Option<String>,
     /// `CrushWarhead` (S-0303 claim 9).
     #[serde(default)]
     pub crush_warhead: Option<String>,
@@ -818,9 +834,30 @@ pub struct General {
     /// `[General] DamageFireTypes`, animation names (S-0302 claim 13).
     #[serde(default)]
     pub damage_fire_types: Option<Vec<String>>,
-    /// `[General] InfantryExplode`, an animation name (S-0302 claim 15).
+    /// `[General] InfantryExplode`, an animation name (S-0302 claim 15;
+    /// death kind 3 of S-0615 claim 1).
     #[serde(default)]
     pub infantry_explode: Option<String>,
+    /// `[General] FlamingInfantry`, the death-kind 4 animation (S-0615
+    /// claim 1); absent: none.
+    #[serde(default)]
+    pub flaming_infantry: Option<String>,
+    /// `[General] InfantryHeadPop`, the death-kind 6 animation (S-0615
+    /// claim 1); absent: none.
+    #[serde(default)]
+    pub infantry_head_pop: Option<String>,
+    /// `[General] InfantryNuked`, the death-kind 7 animation (S-0615 claim
+    /// 1); absent: none.
+    #[serde(default)]
+    pub infantry_nuked: Option<String>,
+    /// `[General] InfantryBrute`, the death-kind 10 animation (S-0615
+    /// claim 1); absent: none.
+    #[serde(default)]
+    pub infantry_brute: Option<String>,
+    /// `[AudioVisual] DiskLaserChargeUp`, the disc laser's charge-up sound
+    /// (S-0615 claim 15); absent: silent.
+    #[serde(default)]
+    pub disk_laser_charge_up: Option<String>,
     /// `[General] MissileROTVar` m (S-0306 claim 13), a double.
     #[serde(default)]
     pub missile_rot_var: Option<Decimal>,
@@ -2692,9 +2729,29 @@ pub struct WeaponType {
     /// aircraft*); absent: no.
     #[serde(default)]
     pub camera: Option<bool>,
-    /// `DiskLaser` (S-0301 claim 8).
+    /// `DiskLaser` (S-0301 claim 8; S-0615 claim 12).
     #[serde(default)]
     pub disk_laser: Option<bool>,
+    /// `LaserDuration`, the disc laser's final beam duration in ticks
+    /// (S-0615 claim 16); absent: 10.
+    #[serde(default)]
+    pub laser_duration: Option<i32>,
+    /// `LaserInnerColor`, three colour channels (S-0615 claim 15); absent:
+    /// (0, 0, 0).
+    #[serde(default)]
+    pub laser_inner_color: Option<[i32; 3]>, // spec: S-0615 Import mapping (three integer colour channels, S-0003)
+    /// `LaserOuterColor`, three colour channels (S-0615 claim 15); absent:
+    /// (0, 0, 0).
+    #[serde(default)]
+    pub laser_outer_color: Option<[i32; 3]>, // spec: S-0615 Import mapping (three integer colour channels, S-0003)
+    /// `LaserOuterSpread`, three colour channels (S-0615 claim 15);
+    /// absent: (0, 0, 0).
+    #[serde(default)]
+    pub laser_outer_spread: Option<[i32; 3]>, // spec: S-0615 Import mapping (three integer colour channels, S-0003)
+    /// `IsHouseColor`, the house-colour flag (S-0615 claim 15); absent:
+    /// no.
+    #[serde(default)]
+    pub is_house_color: Option<bool>,
     /// `DecloakToFire` (S-0301 claim 12).
     #[serde(default)]
     pub decloak_to_fire: Option<bool>,

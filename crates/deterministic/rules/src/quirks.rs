@@ -1776,10 +1776,14 @@ pub struct Quirks {
     // spec: S-0611 claim 8 and Edge cases
     #[serde(default = "on")]
     pub infantry_animation_occupancy: bool,
-    /// A disc laser's detonation names the firer as attacker but no attacking house; off: the attacking house is the firer's owner, as for a projectile's detonation. Not implemented yet (wave 2).
+    /// A disc laser's detonation names the firer as attacker but no attacking house; off: the attacking house is the firer's owner, as for a projectile's detonation.
     // spec: S-0615 claim 16 and Edge cases
     #[serde(default = "on")]
     pub disc_laser_no_house: bool,
+    /// A damaging animation's damage accumulator starts at 1.0, so its first advance already delivers 1 when δ < 1; off: it starts at 0.0. Implemented for the burning walker's expiring advances (S-0615 claim 11), the only animation the simulation plays with damage.
+    // spec: S-0109 claim 17, F5 and Edge cases
+    #[serde(default = "on")]
+    pub anim_damage_starts_at_one: bool,
     /// A dominator strike's area damage names the current storm owner as attacking house, sampled before the storm's own update; off: the dominating house. Not implemented yet (M7).
     // spec: S-0612 claim 9 and Edge cases; S-0302 claim 1
     #[serde(default = "on")]
@@ -2319,6 +2323,7 @@ impl Default for Quirks {
             refused_mutation_frees_position: true,
             infantry_animation_occupancy: true,
             disc_laser_no_house: true,
+            anim_damage_starts_at_one: true,
             dominator_damage_storm_house: true,
             dominator_marks_own_objects: true,
             superweapon_upgrade_second_removal_waits: true,
@@ -3473,6 +3478,7 @@ impl Quirks {
                 self.infantry_animation_occupancy,
             ),
             ("disc_laser_no_house", self.disc_laser_no_house),
+            ("anim_damage_starts_at_one", self.anim_damage_starts_at_one),
             (
                 "dominator_damage_storm_house",
                 self.dominator_damage_storm_house,

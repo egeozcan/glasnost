@@ -249,6 +249,48 @@ pub enum Effect {
         /// The supporter's house.
         house: Option<crate::world::HouseId>,
     },
+    /// A disc laser event (S-0615 claims 12 to 16): its shot, its
+    /// charge-up sound, its hit with the report sound, or its cancellation.
+    Disc {
+        /// The firer.
+        firer: ObjectId,
+        /// The weapon fired (its report sounds, S-0701 claim 21).
+        weapon: crate::combat::data::WeaponId,
+        /// What happened.
+        event: DiscEvent,
+        /// Where: the firer at the shot and cancellation, the ring centre at
+        /// the charge-up, the target point at the hit.
+        pos: Pos,
+    },
+    /// A beam of laser light is drawn (S-0615 Terms, *beam*): drawing only.
+    Beam {
+        /// One end.
+        from: Pos,
+        /// The other end.
+        to: Pos,
+        /// How long it lasts, ticks.
+        duration: i32,
+        /// It fades to no intensity (the disc laser's final beam); otherwise
+        /// to half intensity (its arc beams).
+        fade_out: bool,
+        /// The inner, outer and spread colours.
+        colours: [[i32; 3]; 3], // spec: S-0615 Import mapping (three integer colour channels, S-0003)
+        /// With the house-colour flag, the house whose laser colour the
+        /// drawing uses for the inner and outer colours
+        /// (`crate::disc::house_colours`).
+        house: Option<crate::world::HouseId>,
+    },
+    /// A burning walker was made (S-0615 claim 1, death kind 4), or ended.
+    Walker {
+        /// The walker.
+        id: ObjectId,
+        /// Its animation type's name (its start sound, S-0701 claim 22).
+        name: String,
+        /// Where.
+        pos: Pos,
+        /// It was made (otherwise it was removed).
+        made: bool,
+    },
     /// A superweapon presentation event (S-0512 claim 5, S-0513 claim 5).
     Superweapon {
         /// What happened.
@@ -260,6 +302,25 @@ pub enum Effect {
         /// Where, if positional.
         pos: Option<Pos>,
     },
+}
+
+/// What a disc laser did (S-0615 claims 12 to 16).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DiscEvent {
+    /// The shot made it (no report sound, claim 12).
+    Shot,
+    /// Its charge-up sound, when the rules data names one (claim 15).
+    ChargeUp {
+        /// The sound's name.
+        sound: Option<String>,
+    },
+    /// Its final step: the detonation and the report sound (claim 16).
+    Hit {
+        /// The firer's creation-derived report value *r* (S-0701 claim 21).
+        report: u16,
+    },
+    /// It was cancelled with no damage (claim 14).
+    Cancelled,
 }
 
 /// The effect rows of S-0510 claim 3 that an infiltration applied.

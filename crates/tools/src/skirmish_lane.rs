@@ -178,6 +178,12 @@ struct Game {
     /// that became dropped.
     seized: usize,
     dropped: usize,
+    /// Special-hit effects (S-0615): burning walkers made, and disc-laser
+    /// shots, hits (final steps that detonated) and cancellations.
+    walkers: usize,
+    disc_shots: usize,
+    disc_hits: usize,
+    disc_cancelled: usize,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -594,6 +600,7 @@ fn play_ai(
                 Effect::Consumed { .. } => g.ground += 1,
                 _ => {}
             }
+            tally.effect(e);
         }
         drained = w.effects.len();
         tally.observe(w);
@@ -689,6 +696,10 @@ fn play_ai(
     g.bunkers = tally.bunkers.map(|s| s.len());
     g.seized = tally.seized;
     g.dropped = tally.dropped;
+    g.walkers = tally.walkers;
+    g.disc_shots = tally.disc_shots;
+    g.disc_hits = tally.disc_hits;
+    g.disc_cancelled = tally.disc_cancelled;
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -847,6 +858,17 @@ pub struct Tally {
     pub seized: usize,
     /// Seized units that became dropped (S-0607 claim 13).
     pub dropped: usize,
+    /// Burning walkers that appeared (S-0615 claim 4).
+    pub walkers: usize,
+    /// Disc-laser shots (S-0615 claim 12).
+    pub disc_shots: usize,
+    /// Disc lasers that reached their final step and detonated (S-0615
+    /// claim 16).
+    pub disc_hits: usize,
+    /// Disc lasers cancelled by the re-check (S-0615 claim 14).
+    pub disc_cancelled: usize,
+    /// The burning walkers after the last tick.
+    walkers_before: BTreeSet<u32>,
     /// The seized units after the last tick.
     seized_before: BTreeSet<u32>,
     /// The dropped units after the last tick.
@@ -879,8 +901,25 @@ pub struct Tally {
 }
 
 impl Tally {
+    /// Counts one new effect of the world's last tick (the disc-laser
+    /// events, S-0615 claims 12, 14 and 16).
+    pub fn effect(&mut self, e: &Effect) {
+        use glasnost_sim::combat::effects::DiscEvent;
+        if let Effect::Disc { event, .. } = e {
+            match event {
+                DiscEvent::Shot => self.disc_shots += 1,
+                DiscEvent::Hit { .. } => self.disc_hits += 1,
+                DiscEvent::Cancelled => self.disc_cancelled += 1,
+                DiscEvent::ChargeUp { .. } => {}
+            }
+        }
+    }
+
     /// Counts what changed in the world's last tick.
     pub fn observe(&mut self, w: &World) {
+        let walkers: BTreeSet<u32> = w.walkers.keys().map(|id| id.0).collect();
+        self.walkers += walkers.difference(&self.walkers_before).count();
+        self.walkers_before = walkers;
         let now: BTreeSet<(u32, u32)> = w
             .objects
             .keys()
@@ -2083,6 +2122,11 @@ fn report(
                 s,
                 "  magnetic lift: units seized {}, dropped {}",
                 g.seized, g.dropped
+            );
+            let _ = writeln!(
+                s,
+                "  special hits: burning walkers {}; disc lasers shot {}, hit {}, cancelled {}",
+                g.walkers, g.disc_shots, g.disc_hits, g.disc_cancelled
             );
         }
         let f: Vec<String> = g

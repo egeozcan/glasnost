@@ -171,11 +171,16 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     }
     let launched = if wr.spawner {
         None
+    } else if wr.disk_laser {
+        // Seam: S-0608 is not built yet (M7b). The Floating Disc's draining weapon (S-0615 Summary) is S-0608's; only its disc laser is built here.
+        // spec: S-0615 claim 12 (a disc-laser weapon's shot makes a disc laser instead of a projectile, holding D_s)
+        crate::disc::shot(w, firer, weapon, shot_target, damage);
+        None
     } else {
         crate::combat::projectile::launch(w, firer, weapon, shot_target, fp, damage)
     };
     // spec: S-0301 claim 15 (a void shot: the countdown, burst counter and ammunition stay as they were; a drop shot, S-0522 claim 11, returned above and is never void)
-    if launched.is_none() && wr.projectile.is_some() && !wr.spawner {
+    if launched.is_none() && wr.projectile.is_some() && !wr.spawner && !wr.disk_laser {
         return false;
     }
     if wr.mag_beam
@@ -273,7 +278,10 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         ob.combat.firing_frame = Some(2 * firing_frames - 1);
     }
     let _ = mode;
-    crate::combat::projectile::shot_effect(w, firer, weapon, fp);
+    // spec: S-0615 claim 12 (a disc laser shot plays no report at the shot; claim 16: the report comes with the damage)
+    if !wr.disk_laser {
+        crate::combat::projectile::shot_effect(w, firer, weapon, fp);
+    }
     // spec: S-0309 claim 15 and S-0302 claim 18 (a shot lowers the target's expected remaining health)
     if let Some((x, e)) = expected
         && let Some(tob) = w.obj_mut(x)
