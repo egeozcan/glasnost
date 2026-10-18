@@ -35,9 +35,30 @@ use crate::world::{AttackMoveMemory, Layer, ObjectId, Pos, Target, World};
 const NO_RULE_DELAY: i32 = 450;
 
 /// Whether the actor is moving on this tick (S-0215 claim 11): its
-/// locomotor is moving.
+/// locomotor is moving, and for a vehicle with the driving locomotor also
+/// while its body is still turning towards the facing it has been given.
 fn moving(w: &World, id: ObjectId) -> bool {
-    occupancy::in_progress(w, id)
+    occupancy::in_progress(w, id) || drive_body_turning(w, id)
+}
+
+/// The turning clause of S-0215 claim 11 (revision 63): a vehicle with the
+/// driving locomotor whose body is still turning, for any reason (a turn in
+/// place before a step, or a turn to face a target), is moving for
+/// readiness. It is S-0215's own test: S-0206's term "locomotor moving the
+/// vehicle" (`occupancy::in_progress`) is not widened.
+fn drive_body_turning(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.kind != Kind::Vehicle {
+        return false;
+    }
+    // spec: S-0215 claim 11 (revision 63: only a vehicle with the driving locomotor; a ship, hovering, jumpjet or other locomotor is not covered) and S-0417 claim 5 (a vehicle that drives temporarily has the driving locomotor)
+    let driving = w
+        .rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Drive)
+        || crate::econ::release::temporary_drive(w, id);
+    // spec: S-0215 claim 11 (revision 63: moving while the body is still turning towards its target facing; ready on the first start or late start after the turn ends) and S-0206 Terms (turning: the facing differs from its target at this tick)
+    driving && o.body.turning(w.tick)
 }
 
 /// Ready to change (S-0215 claim 11).
