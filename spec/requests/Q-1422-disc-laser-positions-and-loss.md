@@ -1,9 +1,9 @@
 ---
 id: Q-1422
 title: Which points a disc laser's range re-check measures, and whether a killed target counts as lost
-status: open
+status: answered
 related: [S-0615, S-0204]
-answered-by: []
+answered-by: [S-0615]
 ---
 
 ## Need

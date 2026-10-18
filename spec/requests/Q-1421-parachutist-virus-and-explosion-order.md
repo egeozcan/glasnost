@@ -1,9 +1,9 @@
 ---
 id: Q-1421
 title: Order of the extra virus effect and the explosion death of a parachutist
-status: open
+status: answered
 related: [S-0615, S-0613, S-0107]
-answered-by: []
+answered-by: [S-0615]
 ---
 
 ## Need

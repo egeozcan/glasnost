@@ -1,9 +1,9 @@
 ---
 id: Q-1420
 title: Does a disc laser's final detonation show an explosion animation or throw debris
-status: open
+status: answered
 related: [S-0615, S-0303]
-answered-by: []
+answered-by: [S-0615]
 ---
 
 ## Need

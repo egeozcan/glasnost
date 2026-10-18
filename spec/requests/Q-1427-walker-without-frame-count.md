@@ -1,9 +1,9 @@
 ---
 id: Q-1427
 title: Removal of a burning walker whose sprite frame count is unknown or too small
-status: open
+status: answered
 related: [S-0615, S-0109]
-answered-by: []
+answered-by: [S-0615]
 ---
 
 ## Need

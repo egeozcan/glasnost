@@ -1,9 +1,9 @@
 ---
 id: Q-1426
 title: A disc-laser weapon with unlimited range
-status: open
+status: answered
 related: [S-0615, S-0307]
-answered-by: []
+answered-by: [S-0615]
 ---
 
 ## Need

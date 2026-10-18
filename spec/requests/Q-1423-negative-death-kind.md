@@ -1,9 +1,9 @@
 ---
 id: Q-1423
 title: What a negative infantry-death kind creates
-status: open
+status: answered
 related: [S-0615, S-0107]
-answered-by: []
+answered-by: [S-0615]
 ---
 
 ## Need

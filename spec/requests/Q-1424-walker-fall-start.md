@@ -1,9 +1,9 @@
 ---
 id: Q-1424
 title: In which update a burning walker that leaves a deck starts to descend
-status: open
+status: answered
 related: [S-0615, S-0511]
-answered-by: []
+answered-by: [S-0615]
 ---
 
 ## Need
