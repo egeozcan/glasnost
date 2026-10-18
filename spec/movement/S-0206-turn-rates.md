@@ -2,11 +2,11 @@
 id: S-0206
 title: Turn rates and turning
 topic: movement
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-18
 measurements: []
 requests: []
 supersedes: []
@@ -68,7 +68,10 @@ number*. From S-0207: *move destination*. From S-0211: *locomotion class* (one o
   vehicle standing still with neither, even while its body turns, is not being moved. Exactly when
   those points are set and cleared along a path is S-0207's. S-0207's *move destination* is the
   driving locomotor's own point; it is not the same as the vehicle's *movement destination* above,
-  and the two need not be present at the same time. Claims 9 and 16 depend on this state.
+  and the two need not be present at the same time. Claims 9 and 16 depend on this state. The
+  readiness test of S-0215 claim 11 is a different query. Its "moving" condition is also true while
+  the body facing is still rotating for any reason, so a vehicle that is not being moved here can
+  still be not ready there.
 - **Numbered weapons.** A type whose imported turret-count field is above 0 and whose imported
   weapon-count field *N* is above 0 has its weapons numbered 1 to *N*, each with an ordinary and an
   elite version (Import mapping), instead of a primary and a secondary weapon. Such a type has
