@@ -373,11 +373,20 @@ pub fn request(w: &mut World, id: ObjectId, q: Seq, forced: bool) -> bool {
 }
 
 /// The per-tick sequence rules of one infantry unit, after its movement for
-/// the tick (S-0107 claims 8 to 10 and 15). `moving_now`: physically moving
-/// on this tick; `in_progress`: has movement in progress.
+/// the tick (S-0107 claims 8 to 10 and 15), with no firing between them:
+/// [`fear_turn`], then [`sequence_turn`]. The tick runs the firing rules
+/// (S-0107 claim 11) between the two. `moving_now`: physically moving on
+/// this tick; `in_progress`: has movement in progress.
 pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, has_dest: bool) {
-    let tick = w.tick;
-    let keeps = w.rules().quirks.set_facing_keeps_target;
+    fear_turn(w, id, in_progress, has_dest);
+    sequence_turn(w, id, moving_now, in_progress);
+}
+
+/// The fear rules of a tick (S-0107 claim 15) and the parachute landing
+/// request (State and ordering): the part of the sequence rules that comes
+/// before the firing rules of the same tick (S-0107 State and ordering: a
+/// sequence the fear rules start already holds for the firing rules).
+pub fn fear_turn(w: &mut World, id: ObjectId, in_progress: bool, has_dest: bool) {
     let Some(o) = w.obj(id) else { return };
     let Some(u) = w.rules().unit(o.kind, o.type_index).cloned() else {
         return;
@@ -411,6 +420,20 @@ pub fn update(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool, 
         !o.fall.falling && o.infantry.as_ref().and_then(|s| s.seq) == Some(Seq::Parachute)
     }) {
         request(w, id, Seq::Stand, true);
+    }
+}
+
+/// The completion follow-up (S-0107 claim 8) and the movement rule (claim
+/// 10) of a tick: the part of the sequence rules that comes after the
+/// firing rules of the same tick (S-0107 State and ordering: the fear and
+/// firing rules are judged against the sequence current before that tick's
+/// completion follow-up; a follow-up already holds for the movement rule).
+pub fn sequence_turn(w: &mut World, id: ObjectId, moving_now: bool, in_progress: bool) {
+    let tick = w.tick;
+    let keeps = w.rules().quirks.set_facing_keeps_target;
+    let Some(o) = w.obj(id) else { return };
+    if w.rules().unit(o.kind, o.type_index).is_none() || o.infantry.is_none() {
+        return;
     }
     // Completion follow-up (S-0107 claim 8 and State and ordering).
     let s = w

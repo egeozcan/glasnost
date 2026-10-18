@@ -2006,6 +2006,73 @@ fn s0107_claim_11_shot_at_the_fire_frame() {
     assert!(shot.is_some(), "the rifleman fired");
 }
 
+/// A WALKER with fire frame `f` (its firing kind has 6 image frames) at
+/// range of a BUGGY; runs until it fires, giving the shot tick and the
+/// unit's sequence state before that tick.
+fn first_shot(f: i32) -> Option<(World, ObjectId, i32, glasnost_sim::infantry::InfantryState)> {
+    let r = rifleman([f, 0, 0, 0]);
+    let mut w = testkit::game_with(&r, N, 7);
+    let a = testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        0,
+        testkit::mid(N, -2, 0),
+        EAST,
+    );
+    testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "BUGGY",
+        1,
+        testkit::mid(N, 2, 0),
+        WEST,
+    );
+    for _ in 0..200 {
+        let t = w.tick;
+        let before = w.obj(a).unwrap().infantry.clone().unwrap();
+        testkit::run(&mut w, 1);
+        if w.obj(a).unwrap().last_fired == t {
+            return Some((w, a, t, before));
+        }
+    }
+    None
+}
+
+// spec: S-0107 State and ordering (the firing rules are judged against the sequence current before the tick's completion follow-up: when the fire frame equals C, the shot is still released, on the tick the sequence completes)
+#[test]
+fn s0107_fire_frame_equal_to_the_count_still_fires() {
+    let (w, a, t, before) = first_shot(6).expect("a fire frame equal to C releases the shot");
+    assert_eq!(before.seq, Some(Seq::FireStanding));
+    assert_eq!(before.stage(t), 6, "the shot leaves on the completion tick");
+    // The completion follow-up came after the shot on the same tick.
+    let st = w.obj(a).unwrap().infantry.clone().unwrap();
+    assert_eq!(st.seq, Some(Seq::Stand));
+}
+
+// spec: S-0107 State and ordering (a unit whose firing kind completed on tick t with stand as its follow-up leaves the attack state on tick t + 1, not on t)
+#[test]
+fn s0107_attack_state_ends_the_tick_after_completion() {
+    let (mut w, a, _, _) = first_shot(2).expect("the rifleman fired");
+    let mut completed = None;
+    for _ in 0..50 {
+        let t = w.tick;
+        testkit::run(&mut w, 1);
+        let st = w.obj(a).unwrap().infantry.clone().unwrap();
+        if st.seq == Some(Seq::Stand) {
+            completed = Some(t);
+            assert!(
+                st.attack,
+                "still in the attack state on the completion tick"
+            );
+            break;
+        }
+    }
+    assert!(completed.is_some(), "the firing kind completed");
+    testkit::run(&mut w, 1);
+    assert!(!w.obj(a).unwrap().infantry.as_ref().unwrap().attack);
+}
+
 // spec: S-0215 claim 32 (SAM attack, aimed stage, can fire: fires both weapons in this processing although the primary shot starts the countdown; back to aiming)
 #[test]
 fn s0215_claim_32_sam_fires_both_weapons() {
