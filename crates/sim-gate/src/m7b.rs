@@ -2,12 +2,15 @@
 //! itself on the synthetic M7b map of `glasnost_ai::fixture_m7b`, which is
 //! the M7a duel ([`crate::m7a`]) with a drain (S-0608): the Yuri-style side
 //! starts with hovering discs whose draining weapon links them with the
-//! other side's power plants and refineries, and builds more.
+//! other side's power plants and refineries, and builds more; and with a
+//! genetic mutator (S-0611, M7b step 3.4) that the Yuri-style side builds
+//! and fires at the other side's infantry.
 //!
-//! The run counts the drain orders the AI gave and the drain events the
-//! simulation then showed ([`Exercise`]), besides everything the M7a duel
-//! counts. The counters are not part of the golden hashes; the full run
-//! asserts that none of the drain counters is below [`MARGIN`] (the M7a
+//! The run counts the drain orders the AI gave, the drain events the
+//! simulation then showed, the mutator launches and the infantry they
+//! mutated ([`Exercise`]), besides everything the M7a duel counts. The
+//! counters are not part of the golden hashes; the full run asserts that
+//! none of the drain and mutation counters is below [`MARGIN`] (the M7a
 //! counters are reported, not asserted: `duel-m7a` asserts them).
 //!
 //! To add a counter: a field in [`Exercise`], its line in
@@ -18,6 +21,8 @@ use glasnost_ai::fixture_m7b as kit;
 use glasnost_ai::game::Game;
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::drain::DrainEvent;
+use glasnost_sim::mutation::MakerEvent;
+use glasnost_sim::superweapons::SwEvent;
 use glasnost_sim::world::World;
 
 use crate::m7a;
@@ -42,11 +47,19 @@ pub struct Exercise {
     pub ends: u32,
     /// The first tick at whose end a drain link existed.
     pub first_link: Option<i32>,
+    /// Genetic mutator launches (S-0611 claim 2: the activation sound of
+    /// each launch).
+    pub mutator_launches: u32,
+    /// Infantry made by a conversion animation's end (S-0611 claims 9 to
+    /// 12: an infantry unit mutated to the launching house).
+    pub infantry_mutated: u32,
+    /// The first tick at whose end an infantry-making animation existed.
+    pub first_maker: Option<i32>,
 }
 
 impl Exercise {
     /// Every drain counter the full run asserts on, by name.
-    pub fn counters(&self) -> [(&'static str, u32); 4] {
+    pub fn counters(&self) -> [(&'static str, u32); 6] {
         [
             ("drain orders (S-0608)", self.m7a.uses.drain_orders),
             ("drain links formed (S-0608 claims 2 and 5)", self.links),
@@ -57,6 +70,11 @@ impl Exercise {
             (
                 "drained-building ticks (S-0608 claim 1)",
                 self.drained_ticks,
+            ),
+            ("mutator launches (S-0611 claim 2)", self.mutator_launches),
+            (
+                "infantry mutated (S-0611 claims 9 to 12)",
+                self.infantry_mutated,
             ),
         ]
     }
@@ -76,6 +94,21 @@ impl Exercise {
     fn observe(&mut self, w: &World, watch: &mut m7a::Watch) -> bool {
         let mut first = self.m7a.observe(w, watch);
         for e in &w.effects {
+            match e {
+                Effect::Superweapon {
+                    event: SwEvent::GeneticSound,
+                    ..
+                } => self.mutator_launches += 1,
+                Effect::Maker {
+                    event:
+                        MakerEvent::Ended {
+                            unit: Some(_),
+                            conversion: true,
+                        },
+                    ..
+                } => self.infantry_mutated += 1,
+                _ => {}
+            }
             if let Effect::Drain { event, .. } = e {
                 match event {
                     DrainEvent::Formed { .. } => self.links += 1,
@@ -96,13 +129,18 @@ impl Exercise {
             self.first_link = Some(w.tick);
         }
         first |= watch.first(drained > 0, "drain link");
+        let making = !w.mutation.makers.is_empty();
+        if making && self.first_maker.is_none() {
+            self.first_maker = Some(w.tick);
+        }
+        first |= watch.first(making, "mutation animation");
         first
     }
 }
 
 /// Plays the M7b duel for `ticks` ticks (it ends earlier when the game is
 /// over). The game is saved and loaded halfway, at the first tick a drain
-/// link exists and at the first tick each kind of M7a state appears; the
+/// link exists, at the first tick a mutation animation exists and at the first tick each kind of M7a state appears; the
 /// loaded game must hash alike and goes on from there. Returns the state
 /// hash after every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {

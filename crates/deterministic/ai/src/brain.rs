@@ -454,9 +454,9 @@ impl Brain {
     /// The kind of superweapon type `i` when the brain fires it: every kind
     /// of the Allied and Soviet sides (the nuclear strike, the weather
     /// storm, the iron curtain, the teleport's two stages, the paradrops, the
-    /// spy plane and the force shield) and the psychic reveal (S-0610). The
-    /// psychic dominator and the genetic mutator are not built (S-0611,
-    /// S-0612; M7b) and give none.
+    /// spy plane and the force shield), the psychic reveal (S-0610) and the
+    /// genetic mutator (S-0611, `mutator`). The psychic dominator is not
+    /// built (S-0612; M7b) and gives none.
     fn fired_kind(w: &World, i: u32) -> Option<glasnost_sim::superweapons::SwKind> {
         use glasnost_sim::superweapons::SwKind;
         let k = w.rules().superweapons.types.get(i as usize)?.kind?;
@@ -472,6 +472,7 @@ impl Brain {
                 | SwKind::SpyPlane
                 | SwKind::ForceShield
                 | SwKind::PsychicReveal
+                | SwKind::Genetic
         )
         .then_some(k)
     }
@@ -574,12 +575,16 @@ impl Brain {
                 Some(SwKind::Chrono) if !Self::has_source(w, h) => self.group_cell(w),
                 Some(SwKind::ChronoWarp) if Self::has_source(w, h) => self.landing_cell(w),
                 Some(SwKind::PsychicReveal) => crate::psychic::reveal_cell(&self.script, w),
+                Some(SwKind::Genetic) => crate::mutator::mutate_cell(&self.script, w),
                 _ => None,
             };
             if let Some(cell) = cell {
                 out.push(Order::FireSuperweapon { sw: i, cell });
                 if t.kind == Some(SwKind::PsychicReveal) {
                     self.special.count_reveal();
+                }
+                if t.kind == Some(SwKind::Genetic) {
+                    self.special.count_mutator_launch();
                 }
             }
         }

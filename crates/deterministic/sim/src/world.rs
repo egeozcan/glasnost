@@ -431,6 +431,9 @@ pub struct World {
     /// Burning walkers in play, by object number (S-0615 claims 4 to 11).
     #[serde(default)]
     pub walkers: BTreeMap<ObjectId, crate::walker::Walker>,
+    /// Infantry-making animations and refused mutation victims (S-0611).
+    #[serde(default)]
+    pub mutation: crate::mutation::MutationWorld,
     /// Drain links (S-0608): the drained buildings and each drainer's
     /// partner.
     #[serde(default)]

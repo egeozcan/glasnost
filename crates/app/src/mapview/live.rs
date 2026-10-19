@@ -343,6 +343,10 @@ struct LiveAnim {
     /// animation: it follows the drainer and is removed when the drainer's
     /// link ends (claim 14).
     drainer: Option<ObjectId>,
+    /// The infantry-making animation it shows (S-0611 claims 8 to 12), if
+    /// any: the simulation plays it, so its type, image frame and owner
+    /// colour are the simulation's.
+    maker: Option<ObjectId>,
     /// The image frame a burning walker shows (S-0615 F1, or its expiring
     /// stage), in place of the playback's.
     frame: Option<i32>,
@@ -371,7 +375,7 @@ impl AnimEnv<'_> {
             .rules
             .animation(&glasnost_convert::names::encode(name))
             .map_or((0, 0), |a| a.random_delay);
-        let play = Playback::of(&e.t, e.n, delay, random, &AnimQuirks::default());
+        let play = anims::playback_of(&e.t, e.n, delay, random, &AnimQuirks::default());
         (Some(e.clone()), play)
     }
 }
@@ -1005,6 +1009,7 @@ impl Live {
             carrier: None,
             walker: None,
             drainer: None,
+            maker: None,
             frame: None,
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
@@ -1135,6 +1140,42 @@ impl Live {
         });
     }
 
+    /// The infantry-making animations (S-0611 claims 8 to 12): each drawn
+    /// animation shows its simulated animation's type and image frame, in
+    /// its owner's colour (claim 8, also after claim 9's change of owner);
+    /// one whose animation has ended disappears.
+    fn follow_makers(&mut self) {
+        let world = &self.world;
+        let table = &self.anim_table;
+        let mut colours = Vec::new();
+        self.anims.retain_mut(|a| {
+            let Some(id) = a.maker else { return true };
+            let Some(m) = world.mutation.makers.get(&id) else {
+                return false;
+            };
+            if a.player.name != m.player.name {
+                a.player = m.player.clone();
+                a.entry = table.get(&m.player.name.to_ascii_uppercase()).cloned();
+            }
+            a.frame = Some(m.player.frame());
+            let house = m
+                .owner
+                .and_then(|h| world.houses.get(usize::from(h.0)))
+                .map(|h| h.name.as_bytes().to_vec());
+            if a.carrier.as_ref().map(|c| &c.0) != house.as_ref() {
+                colours.push((a.serial, house, m.pos.cell()));
+            }
+            true
+        });
+        for (serial, house, cell) in colours {
+            let light = self.painter.ground_light(cell);
+            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                // spec: S-0611 claim 8 (drawn in its owner's colour, including after claim 9's fallback; without an owner its ordinary palette)
+                a.carrier = house.map(|h| (h, light));
+            }
+        }
+    }
+
     fn follow_walkers(&mut self) {
         let world = &self.world;
         let rules = &self.rules;
@@ -1166,7 +1207,7 @@ impl Live {
         let q = AnimQuirks::default();
         self.anims.retain_mut(|a| {
             // spec: S-0615 claim 4 (a burning walker replaces S-0109's playback)
-            if now < a.first_update || a.walker.is_some() {
+            if now < a.first_update || a.walker.is_some() || a.maker.is_some() {
                 return true;
             }
             let before = a.player.name.clone();
@@ -1242,6 +1283,23 @@ impl Live {
             }
         }
         for e in &effects {
+            if let Effect::Maker {
+                id,
+                name,
+                pos,
+                event: glasnost_sim::mutation::MakerEvent::Made,
+                ..
+            } = e
+            {
+                self.counts.anims += 1;
+                let serial = self.anim_serial;
+                self.create_anim(&name_bytes(name), *pos, now, None, false);
+                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    a.maker = Some(*id);
+                }
+            }
+        }
+        for e in &effects {
             if let Effect::Drain {
                 drainer,
                 event:
@@ -1265,6 +1323,7 @@ impl Live {
         }
         self.follow_owners();
         self.follow_walkers();
+        self.follow_makers();
         self.follow_drainers();
         self.update_anims(now);
         for e in effects {
@@ -1339,6 +1398,7 @@ impl Live {
                 | Effect::Disc { .. }
                 | Effect::Beam { .. }
                 | Effect::Drain { .. }
+                | Effect::Maker { .. }
                 | Effect::Walker { .. } => continue,
             };
             self.transients.push(Transient {

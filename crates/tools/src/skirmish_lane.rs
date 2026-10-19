@@ -190,6 +190,11 @@ struct Game {
     drain_ends: usize,
     credits_drained: i64,
     drained_ticks: usize,
+    /// Genetic mutation (S-0611): launches, infantry-making animations
+    /// started and infantry the conversion animations made.
+    mutator_launches: usize,
+    conversions: usize,
+    infantry_mutated: usize,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -710,6 +715,9 @@ fn play_ai(
     g.drain_ends = tally.drain_ends;
     g.credits_drained = tally.credits_drained;
     g.drained_ticks = tally.drained_ticks;
+    g.mutator_launches = tally.mutator_launches;
+    g.conversions = tally.conversions;
+    g.infantry_mutated = tally.infantry_mutated;
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -886,6 +894,14 @@ pub struct Tally {
     /// The sum over ticks of the buildings drained at the tick's end
     /// (S-0608 claim 1).
     pub drained_ticks: usize,
+    /// Genetic mutator launches (S-0611 claim 2: the activation sound).
+    pub mutator_launches: usize,
+    /// Infantry-making animations started (S-0611 claims 8 and 9: the
+    /// conversion animations and any other).
+    pub conversions: usize,
+    /// Infantry made by a conversion animation's end (S-0611 claims 9 to
+    /// 12).
+    pub infantry_mutated: usize,
     /// The burning walkers after the last tick.
     walkers_before: BTreeSet<u32>,
     /// The seized units after the last tick.
@@ -925,6 +941,26 @@ impl Tally {
     pub fn effect(&mut self, e: &Effect) {
         use glasnost_sim::combat::effects::DiscEvent;
         use glasnost_sim::drain::DrainEvent;
+        use glasnost_sim::mutation::MakerEvent;
+        match e {
+            Effect::Superweapon {
+                event: glasnost_sim::superweapons::SwEvent::GeneticSound,
+                ..
+            } => self.mutator_launches += 1,
+            Effect::Maker {
+                event: MakerEvent::Made,
+                ..
+            } => self.conversions += 1,
+            Effect::Maker {
+                event:
+                    MakerEvent::Ended {
+                        unit: Some(_),
+                        conversion: true,
+                    },
+                ..
+            } => self.infantry_mutated += 1,
+            _ => {}
+        }
         if let Effect::Drain { event, .. } = e {
             match event {
                 DrainEvent::Formed { .. } => self.drain_links += 1,
@@ -2069,8 +2105,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches
                     )
                 })
                 .collect();
@@ -2160,6 +2196,11 @@ fn report(
                 s,
                 "  drain: links formed {}, ended {}; credits drained {}; drained-building ticks {}",
                 g.drain_links, g.drain_ends, g.credits_drained, g.drained_ticks
+            );
+            let _ = writeln!(
+                s,
+                "  mutation: mutator launches {}, infantry-making animations {}, infantry mutated {}",
+                g.mutator_launches, g.conversions, g.infantry_mutated
             );
         }
         let f: Vec<String> = g

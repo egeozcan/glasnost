@@ -1287,13 +1287,13 @@ fn seq_of(w: &World, id: ObjectId) -> Option<Seq> {
         .and_then(|s| s.seq)
 }
 
-// spec: S-0107 claim 17 (rows 5 to 8: death kind w = 1 gives die-1, w = 2 or 9 die-2, any other w no sequence and removal at once)
+// spec: S-0107 claim 17 (rows 5 to 8: death kind w = 1 gives die-1, w = 2 die-2, any other w no sequence and removal at once); S-0611 claims 6 and 7 (w = 9 on open ground converts: the victim leaves play at once; a refused conversion's die-2 is claims_s0611's)
 #[test]
 fn s0107_claim_17_death_kinds() {
     for (wh, expect) in [
         ("W1", Some(Seq::Die1)),
         ("W2", Some(Seq::Die2)),
-        ("W9", Some(Seq::Die2)),
+        ("W9", None),
         ("W4", None),
     ] {
         let (w, id) = soldier_death(|_| {}, wh, |_, _| {});

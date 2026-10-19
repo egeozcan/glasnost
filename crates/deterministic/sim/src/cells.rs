@@ -80,6 +80,9 @@ pub enum Marker {
     Infantry(ObjectId, HouseId),
     /// A terrain object (S-0209 claim 1).
     Terrain(ObjectId),
+    /// An infantry-making animation and its owner, if any (S-0611 claim
+    /// 8).
+    Anim(ObjectId, Option<HouseId>),
 }
 
 /// A mark with the order in which it was made.
@@ -216,8 +219,8 @@ fn most_recent_house(o: &Occupancy) -> Option<HouseId> {
         .iter()
         .flatten()
         .filter_map(|m| match m.by {
-            Marker::Infantry(_, h) => Some((m.seq, h)),
-            Marker::Terrain(_) => None,
+            Marker::Infantry(_, h) | Marker::Anim(_, Some(h)) => Some((m.seq, h)),
+            Marker::Terrain(_) | Marker::Anim(_, None) => None,
         })
         .max()
         .map(|(_, h)| h)
@@ -469,6 +472,53 @@ impl Cells {
         }
     }
 
+    /// An infantry-making animation marks standing position `p` taken for
+    /// its owner `house` in one of its updates (S-0611 claim 8). With
+    /// `quirks.infantry_animation_occupancy` (`seize`) on, the mark replaces
+    /// whatever holds the position and the cell's infantry house becomes the
+    /// owner. Off: it marks only a position that is free or already its own,
+    /// and sets the infantry house only while no other infantry mark is in
+    /// the record.
+    pub fn mark_anim(
+        &mut self,
+        c: CellXY,
+        l: Layer,
+        p: u8,
+        id: ObjectId,
+        house: Option<HouseId>,
+        seize: bool,
+    ) {
+        let Some(o) = self.occ(c, l) else { return };
+        let own = |m: &Option<Mark>| matches!(m, Some(Mark { by: Marker::Anim(who, _), .. }) if *who == id);
+        let free_or_own = o.marks[usize::from(p)].is_none() || own(&o.marks[usize::from(p)]);
+        let others = o.marks.iter().any(|m| {
+            matches!(
+                m,
+                Some(Mark {
+                    by: Marker::Infantry(..),
+                    ..
+                })
+            )
+        });
+        if !seize && !free_or_own {
+            // spec: S-0611 Edge cases (quirks.infantry_animation_occupancy off: it holds the position only while no other unit holds it)
+            return;
+        }
+        self.mark_seq += 1;
+        let seq = self.mark_seq;
+        if let Some(o) = self.occ_mut(c, l) {
+            // spec: S-0611 claim 8 (in each of its updates its position is marked taken in the occupancy record of its surface)
+            o.marks[usize::from(p)] = Some(Mark {
+                by: Marker::Anim(id, house),
+                seq,
+            });
+            if seize || !others {
+                // spec: S-0611 claim 8 (the cell's infantry house becomes the animation's owner); Edge cases (off: never while other infantry stands in the cell)
+                o.house = house;
+            }
+        }
+    }
+
     /// An infantry unit's mark is cleared (S-0209 claim 1 and Edge cases).
     pub fn clear_infantry(&mut self, c: CellXY, l: Layer, id: ObjectId, q: OccupancyQuirks) {
         let Some(o) = self.occ_mut(c, l) else {
@@ -476,7 +526,8 @@ impl Cells {
         };
         let mut cleared = false;
         for m in o.marks.iter_mut() {
-            if matches!(m, Some(Mark { by: Marker::Infantry(who, _), .. }) if *who == id) {
+            if matches!(m, Some(Mark { by: Marker::Infantry(who, _) | Marker::Anim(who, _), .. }) if *who == id)
+            {
                 *m = None;
                 cleared = true;
             }

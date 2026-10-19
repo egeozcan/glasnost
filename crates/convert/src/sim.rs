@@ -1987,6 +1987,43 @@ impl Builder<'_> {
         if let Some(d) = sec.value(b"Damage").and_then(decimal_text) {
             rec.put("damage", jsonc::string(d));
         }
+        // spec: S-0109 Import mapping (MakeInfantry, LoopStart, LoopEnd, LoopCount: integers; absent −1, 0, the sprite end and 0, applied in the simulation) and S-0611 Import mapping (MakeInfantry, the make-infantry index of F4)
+        for (field, key) in [
+            ("make_infantry", "MakeInfantry"),
+            ("loop_start", "LoopStart"),
+            ("loop_end", "LoopEnd"),
+            ("loop_count", "LoopCount"),
+        ] {
+            if let Some(v) = sec.value(key.as_bytes()).and_then(value::integer) {
+                rec.put(field, int_node(v));
+            }
+        }
+        // spec: S-0109 Import mapping (Reverse, PingPong: booleans, absent no)
+        for (field, key) in [("reverse", "Reverse"), ("ping_pong", "PingPong")] {
+            if let Some(b) = sec.value(key.as_bytes()).and_then(value::boolean) {
+                rec.put(field, jsonc::boolean(b));
+            }
+        }
+        // spec: S-0109 Import mapping (RandomLoopDelay: two integers of updates, absent 0,0)
+        if let Some(v) = sec.value(b"RandomLoopDelay") {
+            let ([d1, d2], _) = value::int_tuple_or::<2>(v, [0, 0]);
+            rec.put(
+                "random_loop_delay",
+                jsonc::array(vec![int_node(d1), int_node(d2)]),
+            );
+        }
+        // spec: S-0109 Import mapping (Next: a type name, absent none; none and <none> name no type)
+        if let Some(v) = sec.value(b"Next") {
+            let name = value::text(v, usize::MAX);
+            if !name.is_empty() && !value::is_no_type(name) {
+                rec.put("next", jsonc::string(show(name)));
+            }
+        }
+        // spec: S-0109 Terms (a new-theater type: the new-theater flag without the theater flag)
+        let flag = |k: &[u8]| sec.value(k).and_then(value::boolean).unwrap_or(false);
+        if flag(b"NewTheater") && !flag(b"Theater") {
+            rec.put("new_theater", jsonc::boolean(true));
+        }
         if let Some(v) = sec.value(b"SpawnsParticle") {
             // spec: S-0202 Import mapping and S-0004 claim 13 (SpawnsParticle: a particle type name of at most 31 bytes)
             let name = value::text(v, crate::refs::NEXT_PARTICLE_LIMIT);
@@ -2674,3 +2711,7 @@ mod gas_tests;
 #[cfg(test)]
 #[path = "sim_special_tests.rs"]
 mod special_tests;
+
+#[cfg(test)]
+#[path = "sim_mutation_tests.rs"]
+mod mutation_tests;

@@ -776,6 +776,19 @@ impl Audio {
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
             Effect::Walker { .. } => {}
+            // spec: S-0611 claim 8 and S-0109 claim 13 (an infantry-making animation plays as any animation, its start sound included, positional; a follow-up type's start event too)
+            Effect::Maker {
+                name,
+                pos,
+                event:
+                    glasnost_sim::mutation::MakerEvent::Made
+                    | glasnost_sim::mutation::MakerEvent::Switched,
+                ..
+            } => {
+                let s = self.names.anim_report(name).map(str::to_owned);
+                self.play_in(w, s.as_deref(), Where::Fixed(*pos));
+            }
+            Effect::Maker { .. } => {}
             // spec: S-0608 claim 5 and S-0109 claim 13 (the drain animation's creation: its type's start sound, at the drainer)
             Effect::Drain {
                 drainer,
@@ -984,6 +997,8 @@ impl Audio {
             SwEvent::Camera => s.camera_sound.clone(),
             // spec: S-0610 claim 13 (the psychic reveal's activation sound at the target cell's centre, positionally, for every player)
             SwEvent::RevealSound => s.reveal_sound.clone(),
+            // spec: S-0611 claim 2 (the genetic mutation's activation sound, positional at the mutation point)
+            SwEvent::GeneticSound => s.mutation.sound.clone(),
             // Announcements, messages, markers and radar events are the
             // interface's (S-0701 claim 28; S-0410).
             _ => None,

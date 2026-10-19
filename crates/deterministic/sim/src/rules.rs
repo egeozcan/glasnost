@@ -528,7 +528,7 @@ pub struct CountryRules {
 
 /// An animation type's resolved creation-draw fields (S-0109; S-0202
 /// claim 10).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct AnimRules {
     /// Type name.
     pub name: String,
@@ -571,6 +571,65 @@ pub struct AnimRules {
     /// The damage value δ of S-0109 claim 17, a single held exactly in a
     /// double (S-0109 F5).
     pub damage: glasnost_num::F64,
+    /// The make-infantry index *i* (S-0611 F4); −1 for none.
+    pub make_infantry: i32,
+    /// Loop start λₛ (S-0109 Import mapping, absent 0).
+    pub loop_start: i32,
+    /// Loop end λₑ as written; `None` when absent (S-0109 F2).
+    pub loop_end: Option<i32>,
+    /// Loop count *L* (S-0109 claim 7, absent 0).
+    pub loop_count: i32,
+    /// The reverse flag (S-0109 claim 8).
+    pub reverse: bool,
+    /// The ping-pong flag (S-0109 claim 9).
+    pub ping_pong: bool,
+    /// The loop-delay pair in updates (S-0109 claim 11; (0, 0) none).
+    pub random_loop_delay: (i32, i32),
+    /// The follow-up type's name as given (S-0109 claim 15); `None` for
+    /// none.
+    pub next: Option<String>,
+    /// The follow-up type by registration index; `None` for none, or for a
+    /// name no type is registered under (it plays with absent-key defaults
+    /// and no sprite, S-0109 Edge cases).
+    pub next_index: Option<u32>,
+    /// A new-theater type (S-0109 Terms).
+    pub new_theater: bool,
+}
+
+impl Default for AnimRules {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            random_delay: (0, 0),
+            bouncing: false,
+            mu: None,
+            frames: None,
+            canvas_height: None,
+            rate: None,
+            normalized: false,
+            start: 0,
+            end: None,
+            shadow: false,
+            particles: None,
+            scorch: false,
+            crater: false,
+            chain_reaction: false,
+            flaming: false,
+            running_frames: 0,
+            damage: glasnost_num::F64::ZERO,
+            // spec: S-0611 Terms and S-0109 Import mapping (MakeInfantry absent: −1, none)
+            make_infantry: -1,
+            loop_start: 0,
+            loop_end: None,
+            loop_count: 0,
+            reverse: false,
+            ping_pong: false,
+            random_loop_delay: (0, 0),
+            next: None,
+            next_index: None,
+            new_theater: false,
+        }
+    }
 }
 
 /// A particle type's creation-draw fields (S-0202 claim 15 and Import
@@ -1378,7 +1437,8 @@ impl SimRules {
             tower: index(Kind::Building, &g.wall_tower),
         };
         let particle_names = registry("particles");
-        let animations = registry("animations")
+        let anim_names = registry("animations");
+        let animations = anim_names
             .iter()
             .map(|n| {
                 let a = s.animations.get(n).cloned().unwrap_or_default();
@@ -1423,6 +1483,24 @@ impl SimRules {
                         .damage
                         .as_ref()
                         .map_or(glasnost_num::F64::ZERO, |d| d.single_value(mode)),
+                    // spec: S-0611 Import mapping and S-0109 Import mapping (MakeInfantry absent: −1, none)
+                    make_infantry: a.make_infantry.unwrap_or(-1),
+                    // spec: S-0109 Import mapping (LoopStart and LoopCount absent 0; LoopEnd absent: the sprite end, F2; Reverse and PingPong absent no; RandomLoopDelay absent 0,0; Next absent none)
+                    loop_start: a.loop_start.unwrap_or(0),
+                    loop_end: a.loop_end,
+                    loop_count: a.loop_count.unwrap_or(0),
+                    reverse: a.reverse.unwrap_or(false),
+                    ping_pong: a.ping_pong.unwrap_or(false),
+                    random_loop_delay: a.random_loop_delay.map_or((0, 0), |[x, y]| (x, y)),
+                    // spec: S-0004 claim 13 (a type name compared without regard to letter case)
+                    next: a.next.clone(),
+                    next_index: a.next.as_ref().and_then(|x| {
+                        anim_names
+                            .iter()
+                            .position(|n| n.eq_ignore_ascii_case(x))
+                            .and_then(|i| u32::try_from(i).ok())
+                    }),
+                    new_theater: a.new_theater.unwrap_or(false),
                 }
             })
             .collect();

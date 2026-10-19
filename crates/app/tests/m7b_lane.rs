@@ -32,6 +32,12 @@
 //! it moves); an enemy drainer clicked onto a local power plant, and the
 //! local house's blackout.
 //!
+//! S-0611 (mutation): the building that gives the genetic mutation
+//! superweapon placed for the local house, its record charged (the charge
+//! time cut short in the lane's own copy of the rules), and a launch by a
+//! fire order at a group of enemy human infantry: the launch, the
+//! conversion animations and the new infantry of the local house.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -75,6 +81,7 @@ const SCENES: &[Scene] = &[
     ("drain-power", |l| drain(l, Drained::Power)),
     ("drain-refinery", |l| drain(l, Drained::Refinery)),
     ("drain-blackout", |l| drain(l, Drained::Blackout)),
+    ("mutator", mutator),
 ];
 
 #[test]
@@ -1004,6 +1011,129 @@ fn drain(lane: &mut Lane, which: Drained) {
     if which == Drained::Blackout {
         lane.save("drain-blackout-later");
     }
+}
+
+/// The genetic mutation superweapon type and a building type that gives
+/// it, by the rules' kind and the buildings' superweapon fields.
+fn mutator_types(w: &World) -> Option<(u32, String)> {
+    use glasnost_sim::superweapons::SwKind;
+    let r = w.rules();
+    let sw = r
+        .superweapons
+        .types
+        .iter()
+        .position(|t| t.kind == Some(SwKind::Genetic))? as u32;
+    let b = r
+        .superweapons
+        .building_sw
+        .iter()
+        .position(|f| f.iter().flatten().any(|&i| i == sw))?;
+    Some((sw, r.buildings.get(b)?.name.clone()))
+}
+
+/// S-0611 claims 2 to 12: the local house's mutator, charged, fired at a
+/// group of enemy human infantry; the screens show the launch, the
+/// conversion animations and the new units.
+fn mutator(lane: &mut Lane) {
+    let w = lane.world();
+    let types = mutator_types(w);
+    let inf = human_infantry(w);
+    println!(
+        "mutator type and giving building found: {}, human infantry found: {}, explosion mode: {}",
+        types.is_some(),
+        inf.is_some(),
+        w.rules().superweapons.mutation.explosion
+    );
+    let (Some((sw, building)), Some(name), Some(enemy)) = (types, inf, lane.enemy()) else {
+        return;
+    };
+    let local = lane.local();
+    // The lane's own copy: a short charge, and a building that needs and
+    // draws no power (the lane's house has no power plant).
+    let bi = w.rules().index_of(Kind::Building, &building);
+    patch_rules(lane, |r| {
+        let t = &mut r.superweapons.types[sw as usize];
+        t.charge = 30;
+        t.powered = false;
+        if let Some(b) = bi.and_then(|i| r.econ.power.buildings.get_mut(i as usize)) {
+            b.needs_power = false;
+            b.drain = 0;
+        }
+    });
+    let home = lane.home();
+    let Some(top) = lane.area(CellXY::new(home.x - 8, home.y + 4), (4, 4), 1, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("no free area for the building");
+        return;
+    };
+    lane.spawn(Kind::Building, &building, local, top);
+    let ready = until(lane, 600, move |w| {
+        glasnost_sim::superweapons::charge::get(w, local, sw).is_some_and(|r| r.ready)
+    });
+    println!("the record is ready after {ready:?} ticks");
+    if ready.is_none() {
+        let w = lane.world();
+        let b = w.objects.values().find(|o| {
+            o.kind == Kind::Building
+                && o.owner == Some(local)
+                && w.rules().buildings[o.type_index as usize].name == building
+        });
+        println!(
+            "record: {:?}; building on the map {}, health {:?}",
+            glasnost_sim::superweapons::charge::get(w, local, sw),
+            b.is_some_and(|o| o.on_map),
+            b.map(|o| o.health)
+        );
+    }
+    let Some(_) = ready else { return };
+    // The group, well away from the local base.
+    let at = lane.open_land(CellXY::new(home.x + 12, home.y + 12));
+    let mut group = Vec::new();
+    for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1), (-1, 0)] {
+        let c = CellXY::new(at.x + dx, at.y + dy);
+        group.push(lane.spawn(Kind::Infantry, &name, enemy, c));
+    }
+    lane.look_at(at);
+    lane.ticks(3);
+    let mine = |l: &Lane| {
+        l.world()
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.kind == Kind::Infantry && o.owner == Some(local))
+            .count()
+    };
+    let before = mine(lane);
+    let ok = glasnost_sim::orders::issue(
+        lane.world_mut(),
+        local,
+        glasnost_sim::orders::Order::FireSuperweapon { sw, cell: at },
+    );
+    println!("fire order taken: {ok}");
+    lane.ticks(2);
+    let gone = group
+        .iter()
+        .filter(|&&id| lane.world().obj(id).is_none())
+        .count();
+    println!(
+        "launch: {gone} of {} converted at once, infantry-making animations {}",
+        group.len(),
+        lane.world().mutation.makers.len()
+    );
+    lane.save("mutator-launch");
+    lane.ticks(6);
+    println!(
+        "conversion animations playing: {}",
+        lane.world().mutation.makers.len()
+    );
+    lane.save("mutator-conversion");
+    let done = until(lane, 600, |w| w.mutation.makers.is_empty());
+    lane.ticks(2);
+    println!(
+        "animations ended after {done:?} more ticks; the local house's infantry rose by {}",
+        mine(lane) as i64 - before as i64
+    );
+    lane.save("mutator-new-infantry");
 }
 
 /// The screenshot key of a drain scene.

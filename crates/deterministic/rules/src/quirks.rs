@@ -1564,7 +1564,7 @@ pub struct Quirks {
     // spec: S-0517 claim 7 and Edge cases; S-0109 Edge cases
     #[serde(default = "on")]
     pub deploy_stall_zero_delay: bool,
-    /// A rate above 900 converts to a stage delay of ⌊900 / ρ⌋ = 0, so the animation never advances or ends through playback; off: a positive rate gives max(1, ⌊900 / ρ⌋). Rates of 0 or below give 0 in both settings. Built for the random-rate conversion of an animation's creation draw (S-0109 claim 3); animation playback and the S-0517 claim 7 deploy delay are not implemented yet.
+    /// A rate above 900 converts to a stage delay of ⌊900 / ρ⌋ = 0, so the animation never advances or ends through playback; off: a positive rate gives max(1, ⌊900 / ρ⌋). Rates of 0 or below give 0 in both settings. Built for the random-rate conversion of an animation's creation draw (S-0109 claim 3) and the playback of infantry-making animations in the simulation (S-0611 claim 8); the S-0517 claim 7 deploy delay is not implemented yet.
     // spec: S-0109 claim 2, F1 and Edge cases
     #[serde(default = "on")]
     pub anim_fast_rate_freezes: bool,
@@ -1764,15 +1764,15 @@ pub struct Quirks {
     // spec: S-0513 State and ordering and Edge cases; S-0611 claim 4
     #[serde(default = "on")]
     pub superweapon_list_cut_by_removal: bool,
-    /// The conversion test's position choice reads the cell's ground record even for a victim on a high-bridge deck; off: a victim on a deck is tested against the deck record. Not implemented yet (wave 2).
+    /// The conversion test's position choice reads the cell's ground record even for a victim on a high-bridge deck; off: a victim on a deck is tested against the deck record.
     // spec: S-0611 claim 6 and Edge cases
     #[serde(default = "on")]
     pub mutation_test_ground_record: bool,
-    /// A refused mutation victim's standing position is free from its death tick while it plays die-2, and its removal frees that position again even if a walker took it; off: the position stays taken until removal, which frees only the victim's own mark. Not implemented yet (wave 2).
+    /// A refused mutation victim's standing position is free from its death tick while it plays die-2, and its removal frees that position again even if a walker took it; off: the position stays taken until removal, which frees only the victim's own mark.
     // spec: S-0611 claim 7 and Edge cases
     #[serde(default = "on")]
     pub refused_mutation_frees_position: bool,
-    /// An infantry-making animation marks its position taken and sets the cell's infantry house in every update, and frees the position at its end whatever holds it; off: it holds the position only while no other unit does, leaves the infantry house alone while other infantry stands there and frees only its own mark. Not implemented yet (wave 2).
+    /// An infantry-making animation marks its position taken and sets the cell's infantry house in every update, and frees the position at its end whatever holds it; off: it holds the position only while no other unit does, leaves the infantry house alone while other infantry stands there and frees only its own mark.
     // spec: S-0611 claim 8 and Edge cases
     #[serde(default = "on")]
     pub infantry_animation_occupancy: bool,
