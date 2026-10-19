@@ -688,12 +688,10 @@ pub fn may_unload(w: &World, t: ObjectId) -> bool {
     if deck_near {
         return false;
     }
-    // spec: S-0507 claim 7 (water: refused for every player house; neutral and special houses keep the exemption)
-    let player = o.owner.is_some_and(|h| {
-        w.houses
-            .get(usize::from(h.0))
-            .is_some_and(|x| x.role == crate::world::HouseRole::Player)
-    });
+    // spec: S-0507 claim 7 (water: refused for every player house; neutral and special houses keep the exemption, as does a test-only computer-controlled player house, glossary)
+    let player = o
+        .owner
+        .is_some_and(|h| w.houses.get(usize::from(h.0)).is_some_and(|x| x.human));
     if cell.land == land::WATER && player {
         return false;
     }
@@ -1547,13 +1545,12 @@ pub fn escape(w: &mut World, t: ObjectId, hit: &crate::combat::damage::Hit) {
                 anywhere: false,
             },
         );
-        let player = w.obj(p).and_then(|o| o.owner).is_some_and(|h| {
-            w.houses
-                .get(usize::from(h.0))
-                .is_some_and(|x| x.role == crate::world::HouseRole::Player)
-        });
+        let player = w
+            .obj(p)
+            .and_then(|o| o.owner)
+            .is_some_and(|h| w.houses.get(usize::from(h.0)).is_some_and(|x| x.human));
         if !player && let Some(ob) = w.obj_mut(p) {
-            // spec: S-0312 claims 12 and 25 (a neutral or special house's passenger is put on hunt; a player house's gets no further order)
+            // spec: S-0312 claims 12 and 25 (a neutral or special house's passenger, or a test-only computer-controlled player house's (glossary), is put on hunt; a player house's gets no further order)
             ob.beh.queue(Some(Behaviour::Hunt));
         }
     }

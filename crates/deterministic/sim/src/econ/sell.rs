@@ -84,10 +84,11 @@ fn refund_at(w: &World, house: HouseId, t: TypeRef, whole: bool) -> i32 {
         .mul(b, mode)
         .mul(a, mode)
         .to_i32_common();
+    // spec: S-0408 claim 1 (a computer-controlled house receives P in full: the neutral and special houses, and a test-only computer-controlled player house, glossary; every other player house, AI houses included, the refund)
     let player = w
         .houses
         .get(usize::from(house.0))
-        .is_some_and(|h| h.role == HouseRole::Player);
+        .is_some_and(|h| h.role == HouseRole::Player && h.human);
     if !player || whole {
         // spec: S-0408 F1 and claim 1 (the neutral and special houses receive P) and S-0402 claim 18 (the percentage taken as 1)
         return p;
@@ -412,7 +413,7 @@ fn automatic(w: &mut World, id: ObjectId) {
     if !repairable(w, id) {
         return;
     }
-    let (human, held, role) = (h.human, h.combat.repair_hold, h.role);
+    let (human, held) = (h.human, h.combat.repair_hold);
     let (repairing, captured, flagged, hostile) = (
         o.econ.building.repairing,
         o.combat.captured,
@@ -437,8 +438,8 @@ fn automatic(w: &mut World, id: ObjectId) {
             // spec: S-0314 claim 13 (the start sets the house's hold)
             hh.combat.repair_hold = true;
         }
-        if !human && role != HouseRole::Player {
-            // spec: S-0314 claim 15 and F4 (a neutral or special house's delay: R(0, 0) for d = 0, no raw value; the hold is released in this tick's house update)
+        if !human {
+            // spec: S-0314 claim 15 and F4 (a neutral or special house's delay, or a test-only computer-controlled player house's, glossary: R(0, 0) for d = 0, no raw value; the hold is released in this tick's house update)
             let half = w.rules().quirks.ranged_draw_half_span;
             let _ = w.rng.ranged(0, 0, half);
         }

@@ -123,7 +123,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     }
     if rules.combat.weapon(weapon).drain {
         // spec: S-0608 claim 1 (a shot with a draining weapon is a drain attempt: no projectile, no shot damage, no warhead effect, no ordinary-shot draws; no rearm countdown, no burst advance, no ammunition; the attempt is not counted as a shot made, so an aircraft spends no round on it)
-        // Q-1442 (interim: the drain test comes after the suicide test; the attempt neither sets the last-shot tick nor reveals the firer)
+        // Q-1442 (answered by S-0608 revision 5, not yet taken in; the earlier rule kept: the drain test comes after the suicide test; the attempt neither sets the last-shot tick nor reveals the firer)
         crate::drain::attempt(w, firer, target);
         return false;
     }

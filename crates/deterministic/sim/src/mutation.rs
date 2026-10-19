@@ -512,7 +512,7 @@ pub fn convert(w: &mut World, id: ObjectId, hit: &Hit) -> bool {
     }
     let u = rules.unit(o.kind, o.type_index);
     if u.is_some_and(|u| u.vehicle.crashable) {
-        // The crash exception keeps the victim's marks; whether its conversion animation still starts is Q-1461's question (interim: none).
+        // The crash exception keeps the victim's marks; whether its conversion animation still starts was Q-1461's question; S-0611 revision 2 answers it (the animation still starts, and a crash needs height above the surface), not yet taken in, so the earlier rule is kept: none.
         for (cc, l, r) in records.clone() {
             if let Some(x) = w.cells.occ_mut(cc, l) {
                 *x = r;

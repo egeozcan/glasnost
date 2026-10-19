@@ -18,7 +18,7 @@ use glasnost_num::geom::root_floor;
 
 use crate::infantry::{self, Seq};
 use crate::rules::{Behaviour, Kind};
-use crate::world::{HouseRole, ObjectId, Pos, Target, World};
+use crate::world::{ObjectId, Pos, Target, World};
 
 /// The reference point of a target or destination (S-0215 F10): an
 /// object's reference point, or a cell's centre at its height.
@@ -188,10 +188,8 @@ fn crushing_approach(w: &World, id: ObjectId) -> bool {
     if !crate::occupancy::crushable_by(w, id, x) {
         return false;
     }
-    // spec: S-0210 claim 11 (our engine: the rules of a player house, human-controlled or AI; the neutral and special houses keep the original's computer-controlled rules)
-    let player = o
-        .owner
-        .is_none_or(|h| w.houses[usize::from(h.0)].role == HouseRole::Player);
+    // spec: S-0210 claim 11 (our engine: the rules of a player house, human-controlled or AI; the neutral and special houses keep the original's computer-controlled rules, as a test-only computer-controlled player house does, glossary)
+    let player = o.owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
     // spec: S-0210 claim 11 (omni-crusher variant: at any distance, also with a move destination; not for an opportunity target of a player house)
     if u.omni_crusher && !(player && o.combat.opportunity) {
         return true;

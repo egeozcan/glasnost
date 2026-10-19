@@ -369,7 +369,7 @@ fn missing_death_type_still_removes() {
     }
 }
 
-// spec: S-0615 claim 3 (kinds 0 and 11 and above: no animation, removed at once, no dispatch draw; a negative kind likewise, interim Q-1423)
+// spec: S-0615 claim 3 (kinds 0 and 11 and above: no animation, removed at once, no dispatch draw; a negative kind likewise, S-0615 r3)
 #[test]
 fn kinds_without_animation() {
     let r = rules();
@@ -752,10 +752,23 @@ fn lost_deck_fall_and_splash() {
         }
     }
     let dest = w.walkers[&wid].dest;
+    let z0 = w.walkers[&wid].pos.z;
     testkit::run(&mut w, 1);
     let wk = w.walkers[&wid].clone();
     assert!(wk.falling, "falls after the step");
-    assert_eq!(wk.rate, 0);
+    // spec: S-0615 claim 10 (revision 3, First descent and Starting rate: the descent runs in the update that starts the fall, from rate 0, so the height keeps the deck height and only the rate follows S-0511 F3; the first drop is in the next update)
+    assert_eq!(wk.pos.z, z0, "no drop in the start update");
+    let v1 = glasnost_sim::fall::next_rate(&w, 0);
+    assert_eq!(wk.rate, v1, "the rate already updated");
+    let x = w.walkers[&wid].pos.z;
+    testkit::run(&mut w, 1);
+    if w.walkers[&wid].falling {
+        assert_eq!(
+            w.walkers[&wid].pos.z,
+            x + v1,
+            "the first drop by the updated rate"
+        );
+    }
     let mut landed = false;
     for _ in 0..200 {
         w.effects.clear();
@@ -1080,7 +1093,7 @@ fn range_recheck_cancels() {
     assert_eq!(range, 1536);
 }
 
-// spec: S-0615 claim 14 (the three-dimensional table-root distance; the vertical difference is 0 for a firer in the air; a building target less 64 (W + H), clamped at 0)
+// spec: S-0615 claim 14 (revision 3, Points measured: the three-dimensional table-root distance from the firer's position to the target's position; the vertical difference is 0 for a firer airborne in S-0308's sense; a building target less 64 (W + H), clamped at 0)
 #[test]
 fn recheck_distance_forms() {
     let r = rules();
@@ -1092,14 +1105,24 @@ fn recheck_distance_forms() {
     w.obj_mut(t).unwrap().pos.z = 300;
     let up = disc::recheck_distance(&w, f, tt);
     assert!(up > flat);
-    // An airborne firer (208 or more above its surface) ignores the vertical difference.
+    // A firer 600 up that is not in the air in S-0308's sense (an ordinary vehicle) counts the vertical difference.
     w.obj_mut(f).unwrap().pos.z = 600;
-    assert_eq!(disc::recheck_distance(&w, f, tt), flat);
-    // A 2 × 3 building: 64 × 5 = 320 less.
+    w.obj_mut(t).unwrap().pos.z = 0;
+    assert!(disc::recheck_distance(&w, f, tt) > flat);
+    // A jumpjet firer 600 up is in the air (S-0502 claim 30): the vertical difference is 0.
+    let mut rj = r.clone();
+    rj.sim.vehicles.get_mut("SAUCER").unwrap().locomotor =
+        Some(glasnost_rules::sim::Locomotor::Jumpjet);
+    let (mut w, f, t) = duel(&rj, Kind::Vehicle, "CART", 3);
+    assert!(glasnost_sim::jump::is_jumpjet(&w, f));
+    w.obj_mut(f).unwrap().pos.z = 600;
+    assert_eq!(disc::recheck_distance(&w, f, Target::Object(t)), flat);
+    // A 2 × 3 building, measured at its position (not its reference point): 64 × 5 = 320 less.
     let (w, f, b) = duel(&r, Kind::Building, "BIG", 4);
+    assert_ne!(w.reference_point(b), w.obj(b).unwrap().pos);
     let raw = {
-        let s = w.reference_point(f);
-        let m = w.reference_point(b);
+        let s = w.obj(f).unwrap().pos;
+        let m = w.obj(b).unwrap().pos;
         let n = (i64::from(s.x - m.x).pow(2)
             + i64::from(s.y - m.y).pow(2)
             + i64::from(s.z - m.z).pow(2)) as u64;
@@ -1109,7 +1132,7 @@ fn recheck_distance_forms() {
     assert_eq!(disc::recheck_distance(&w, f, Target::Object(b)), raw - 320);
     // Clamped at 0 next to it.
     let (mut w, f, b) = duel(&r, Kind::Building, "BIG", 1);
-    let m = w.reference_point(b);
+    let m = w.obj(b).unwrap().pos;
     w.obj_mut(f).unwrap().pos = Pos::new(m.x + 100, m.y, w.obj(f).unwrap().pos.z);
     assert_eq!(disc::recheck_distance(&w, f, Target::Object(b)), 0);
 }
@@ -1371,15 +1394,100 @@ fn edge_start_fixed_ring_follows_long_duration() {
     );
 }
 
-// spec: S-0615 claim 14 and Q-1426 (interim: an unlimited range field, −512, is compared as it is, so the disc is cancelled at its first step)
-#[test]
-fn unlimited_range_cancels_interim() {
-    let mut r = rules();
-    r.sim.weapons.get_mut("DISC").unwrap().range = Some(Decimal("-2".into()));
+/// A disc shot at an adjacent CART with the weapon range field `range`,
+/// run for the whole schedule: whether the target took damage and the disc
+/// events seen in its first update.
+fn disc_with_range(r: &Ruleset, range: &str) -> (bool, Vec<DiscEvent>) {
+    let mut r = r.clone();
+    r.sim.weapons.get_mut("DISC").unwrap().range = Some(Decimal(range.into()));
     let (mut w, f, t) = duel(&r, Kind::Vehicle, "CART", 3);
+    let h0 = w.obj(t).unwrap().health;
     shoot(&mut w, f, t);
     w.effects.clear();
     testkit::run(&mut w, 1);
-    assert_eq!(discs(&w), [&DiscEvent::Cancelled]);
+    let first = discs(&w).into_iter().cloned().collect();
+    testkit::run(&mut w, 18);
+    (w.obj(t).is_none_or(|o| o.health < h0), first)
+}
+
+// spec: S-0615 claim 14 and Edge cases (revision 3, Q-1426 answered: with quirks.disc_laser_unlimited_range on, the unlimited range −512 is compared as it is, so the disc laser is cancelled at its first step and never deals damage; off, unlimited range never cancels on distance)
+#[test]
+fn unlimited_range_both_positions() {
+    let r = rules();
+    let (hit, first) = disc_with_range(&r, "-2");
+    assert!(!hit);
+    assert_eq!(first, [DiscEvent::Cancelled]);
+    let mut off = r.clone();
+    off.globals.quirks.disc_laser_unlimited_range = false;
+    let (hit, first) = disc_with_range(&off, "-2");
+    assert!(
+        hit,
+        "never cancelled on distance: the final detonation hits"
+    );
+    assert!(!first.contains(&DiscEvent::Cancelled));
+}
+
+// spec: S-0615 claim 14 (Other negative ranges: every distance exceeds them, so the disc laser is cancelled at its first step with no damage; with quirks.negative_range_fields off the range is 0, and a distance above 0 still cancels)
+#[test]
+fn other_negative_ranges_cancel() {
+    let r = rules();
+    let (hit, first) = disc_with_range(&r, "-1.5");
+    assert!(!hit);
+    assert_eq!(first, [DiscEvent::Cancelled]);
+    let mut off = r.clone();
+    off.globals.quirks.negative_range_fields = false;
+    let (hit, first) = disc_with_range(&off, "-1.5");
+    assert!(!hit);
+    assert_eq!(first, [DiscEvent::Cancelled]);
+}
+
+// spec: S-0615 claim 14 (revision 3, Q-1422 answered: When the loss applies: at the moment it happens, also between two steps, and for good; a target that leaves the map and comes back before the next step has still cancelled the disc laser)
+#[test]
+fn loss_between_steps_is_permanent() {
+    let r = rules();
+    let (mut w, f, t) = duel(&r, Kind::Vehicle, "CART", 3);
+    let h0 = w.obj(t).unwrap().health;
+    shoot(&mut w, f, t);
+    // Updates 1 (step 0) and 2 (no step): the next step is in update 3.
+    testkit::run(&mut w, 2);
+    let pos = w.obj(t).unwrap().pos;
+    let facing = w.body_facing(t);
+    glasnost_sim::objects::take_inside(&mut w, t);
+    assert!(w.discs[0].lost, "lost at the moment it leaves the map");
+    glasnost_sim::objects::place(&mut w, t, pos, facing);
+    assert!(w.obj(t).unwrap().on_map, "back before the next step");
+    w.effects.clear();
+    testkit::run(&mut w, 1);
     assert!(w.discs.is_empty());
+    assert_eq!(discs(&w), [&DiscEvent::Cancelled]);
+    testkit::run(&mut w, 16);
+    assert_eq!(w.obj(t).unwrap().health, h0);
+}
+
+// spec: S-0615 claim 14 (a cell target is measured at its centre at the terrain height, a bridge deck not counted) and claim 16 (revision 3, Q-1420 and Q-1422 answered: the final beam and detonation of a cell target are at its centre at the terrain height, raised by 416 when the cell carries a bridge deck)
+#[test]
+fn cell_target_over_a_bridge_deck() {
+    let r = rules();
+    let mut w = game(&r);
+    let f = testkit::spawn(&mut w, Kind::Vehicle, "SAUCER", 0, c(0, 0), 0);
+    let cell = c(3, 0);
+    set_deck(&mut w, cell, true);
+    let ground = glasnost_sim::combat::range::target_point(&w, Target::Cell(cell));
+    let flat = {
+        let s = w.obj(f).unwrap().pos;
+        let n = (i64::from(s.x - ground.x).pow(2)
+            + i64::from(s.y - ground.y).pow(2)
+            + i64::from(s.z - ground.z).pow(2)) as u64;
+        glasnost_num::geom::root_floor(n, w.rules().quirks.table_root_distance, w.rules().mode)
+            as i32
+    };
+    assert_eq!(
+        disc::recheck_distance(&w, f, Target::Cell(cell)),
+        flat,
+        "no deck in the re-check"
+    );
+    let raised = disc::final_point(&w, Target::Cell(cell));
+    assert_eq!(raised, Pos::new(ground.x, ground.y, ground.z + 416));
+    set_deck(&mut w, cell, false);
+    assert_eq!(disc::final_point(&w, Target::Cell(cell)), ground);
 }

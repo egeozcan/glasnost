@@ -377,6 +377,8 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             cands.push(Candidate { id, d });
         }
     }
+    // The objects that took a flying entry above.
+    let flying_found: std::collections::BTreeSet<ObjectId> = cands.iter().map(|c| c.id).collect();
     let mut building_first: std::collections::BTreeMap<ObjectId, usize> = Default::default();
     for &c in &cells {
         if w.cells.cell(c).is_none() {
@@ -385,6 +387,10 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         let list: Vec<ObjectId> = w.cells.list(c, layer).to_vec();
         for id in list {
             let Some(o) = w.obj(id) else { continue };
+            // spec: S-0303 claim 6 and Edge cases (quirks.flying_listed_double_hit on: an object found by both searches keeps both entries, unmerged; off: only its flying entry)
+            if !q.flying_listed_double_hit && flying_found.contains(&id) {
+                continue;
+            }
             // spec: S-0303 claim 9 (the source object, unless its type has the self-damage flag or the warhead is the crushing warhead)
             if Some(id) == det.source {
                 let self_damage =

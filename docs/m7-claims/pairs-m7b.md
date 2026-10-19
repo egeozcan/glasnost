@@ -23,8 +23,9 @@ the claims of both sides, and checks that the state hash survives a save/load ro
 | Psychic Dominator × tank bunker: the vehicle in a two by two bunker is its cell's start object and is taken over; the bunker is not; the bunker link stays | `dominator_pairs::a_domination_takes_a_bunkered_vehicle_and_leaves_the_link` | S-0612, S-0606 |
 | Psychic Dominator × absorber: the absorbed passenger is not listed and keeps its owner; infantry on the map beside the building is taken over; the building is not | `dominator_pairs::a_domination_spares_an_absorbed_passenger` | S-0612, S-0605 |
 
-The parachutist's order of the virus animation and the explosion is request Q-1421 (interim: the virus
-animation first); the test checks only what both orders share.
+The parachutist's order of the virus animation and the explosion was request Q-1421; S-0615 revision 3
+answers it (the virus effect first, then the kind 3 or 5 animation), and the test now checks the order
+(M7b step 1c).
 
 What a drained bunker, absorber or grinder does with its occupants and entrants (a bunkered
 vehicle's fire, entries, releases and recycling during a link) is request Q-1444. Interim: only

@@ -314,6 +314,8 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
     }
     // spec: S-0502 claim 1 (a jumpjet is placed grounded with its mark)
     crate::jump::placed(w, id);
+    // spec: S-0502 claim 29 (a unit placed on the map in the air is registered only when it is then airborne and its type has the counts-as-aircraft flag)
+    crate::jump::placed_registration(w, id);
     // spec: S-0501 claim 1 (an aircraft's placement height, speed fraction and marks)
     crate::air::placed(w, id);
     // spec: S-0203 claim 2 (a terrain object takes turns exactly when its type has the spawns-resources flag)
@@ -355,6 +357,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     if !o.on_map {
         return;
     }
+    // spec: S-0615 claim 14 (taken off the map: lost to its disc lasers at once)
+    crate::disc::object_lost(w, id);
     // spec: S-0614 claim 15 (a host taken off the map releases its parasite at once)
     crate::parasite::leaving(w, id);
     // spec: S-0502 claims 4, 13 and 14 (a jumpjet going inside releases its marks, its landing reservation and its hover slot)
@@ -410,6 +414,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
+    // spec: S-0615 claim 14 (removed or taken off the map, a transport or building entered included: lost to its disc lasers at once)
+    crate::disc::object_lost(w, id);
     // spec: S-0519 claims 7 and 8 (a removed carrier loses its bomb silently; a bomb whose planter leaves forgets it)
     crate::bomb::removed(w, id);
     // spec: S-0601 claims 10 and 12 (a removed controller releases its victims; a removed victim leaves its controller's list silently)

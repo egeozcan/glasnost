@@ -466,6 +466,8 @@ fn depart(w: &mut World, id: ObjectId, m: Member) {
 /// without releasing a parasite (claim 39).
 fn lift_off(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else { return };
+    // spec: S-0615 claim 14 (taken off the map in any other way: lost to its disc lasers at once)
+    crate::disc::object_lost(w, id);
     // spec: S-0516 claim 22 (superweapon teleport: the member's removal and appearance are not ordinary leaving-play and entering-play sensor changes; its sensor disc stays at the old recorded cell through departure, landing retries and appearance, and moves at the arrival-effects update)
     let disc = w.obj_mut(id).and_then(|ob| ob.cloak.disc.take());
     crate::econ::events::leaving_map(w, id, false);

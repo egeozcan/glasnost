@@ -12,7 +12,6 @@
 
 use std::collections::BTreeMap;
 
-use glasnost_map::CellXY;
 use glasnost_num::{F64, Rounding};
 use glasnost_rules::schema::Ruleset;
 use serde::{Deserialize, Serialize};
@@ -237,8 +236,6 @@ pub struct BuildingSwitches {
     pub income_restart: Option<i32>,
     /// A vehicle disabled by the loss of its control centre (claim 13).
     pub unit_disabled: bool,
-    /// A vehicle's cell at its previous turn (claim 13, the cell-entry rule).
-    pub last_cell: Option<CellXY>,
 }
 
 // ---------------------------------------------------------------------------
@@ -877,28 +874,86 @@ fn lose_centre(w: &mut World, id: ObjectId, owner: Option<HouseId>) {
     }
 }
 
-/// Disables or enables every vehicle of a house of one type (claim 13);
-/// disabling skips vehicles that are off the map.
+/// Disables or enables every vehicle of a house of one type (claim 13) and
+/// gives each the one-off effects of claim 20. Vehicles off the map are
+/// passed over at both transitions; at disabling, so is a vehicle tethered
+/// to the building standing in its own cell.
 fn set_disabled(w: &mut World, h: HouseId, unit: u32, disabled: bool) {
     let ids: Vec<ObjectId> = w
         .objects
         .values()
         .filter(|o| {
-            o.kind == Kind::Vehicle
-                && o.owner == Some(h)
-                && o.type_index == unit
-                && (o.on_map || !disabled)
+            // spec: S-0405 claim 13 (revision 20, Q-1503 answered: a vehicle off the map at either transition is passed over and keeps its state)
+            o.kind == Kind::Vehicle && o.owner == Some(h) && o.type_index == unit && o.on_map
         })
         .map(|o| o.id)
         .collect();
     for id in ids {
-        let was = unit_disabled(w, id);
-        apply_disabled(w, id, disabled);
-        if was != disabled {
-            // spec: S-0215 claim 9 (the guard reset applies to an actor that is deactivated or reactivated; B45 f: owner unchanged, guard current at once, queue empty, target, destination and guard spot clear, timer expired now, the suspended slot kept)
-            guard_reset(w, id);
+        if disabled && tethered_in_own_cell(w, id) {
+            // spec: S-0405 claim 13 (at the 1-to-0 transition a vehicle tethered to the building standing in its own cell is passed over and stays enabled, for example a new vehicle still in its factory; interim Q-1505: a vehicle docked on a repair depot is passed over when our depot exchange tethers it)
+            continue;
+        }
+        if disabled {
+            disable(w, id);
+        } else {
+            enable(w, id);
         }
     }
+}
+
+/// Whether a unit is tethered to a building that stands on its own cell
+/// (glossary *tether link*; S-0214 claim 19, S-0405 claim 13).
+pub fn tethered_in_own_cell(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    super::tethered(w, id)
+        && o.contact.and_then(|k| w.obj(k)).is_some_and(|b| {
+            b.kind == Kind::Building
+                && crate::objects::foundation_cells(b.pos.cell(), b.foundation)
+                    .contains(&o.pos.cell())
+        })
+}
+
+/// Disables a vehicle (claims 13 and 20): the guard reset, deselection and
+/// the locomotor switched off, also for one that is already disabled; the
+/// deactivation sound only for one that was enabled.
+fn disable(w: &mut World, id: ObjectId) {
+    let was = unit_disabled(w, id);
+    apply_disabled(w, id, true);
+    // spec: S-0405 claim 20 (revision 20, Q-1503 answered: at disabling, the guard reset of S-0215 claim 9, removal from the selection, the locomotor switched off; the 1-to-0 transition does this also to a vehicle already disabled)
+    guard_reset(w, id);
+    w.effects
+        .push(crate::combat::effects::Effect::Deactivated { unit: id });
+    if !was {
+        // spec: S-0405 claim 20 (a vehicle that becomes disabled plays its type's deactivation sound at its position; one already disabled plays nothing)
+        activation_sound(w, id, crate::combat::effects::Sound::Deactivate);
+    }
+}
+
+/// Enables a vehicle (claims 13 and 20): the guard reset and the
+/// locomotor switched on, whether or not it was disabled; the activation
+/// sound only for one that was disabled.
+fn enable(w: &mut World, id: ObjectId) {
+    let was = unit_disabled(w, id);
+    apply_disabled(w, id, false);
+    // spec: S-0405 claim 20 (at enabling, each vehicle claim 13 enables gets the guard reset and its locomotor switched on again, whether or not it was disabled)
+    guard_reset(w, id);
+    if was {
+        // spec: S-0405 claim 20 (a disabled vehicle that becomes enabled plays its type's activation sound)
+        activation_sound(w, id, crate::combat::effects::Sound::Activate);
+    }
+}
+
+/// The deactivation or activation sound of a vehicle at its position
+/// (claim 20, Import mapping; playback is S-0701's).
+fn activation_sound(w: &mut World, id: ObjectId, sound: crate::combat::effects::Sound) {
+    let Some(o) = w.obj(id) else { return };
+    let (of, pos) = (crate::econ::tech::type_of(o), o.pos);
+    w.effects.push(crate::combat::effects::Effect::Sound {
+        sound,
+        of: Some(of),
+        house: None,
+        pos: Some(pos),
+    });
 }
 
 /// The guard reset (S-0215 claim 9, Terms): *guard* is forced, and the
@@ -930,8 +985,8 @@ pub fn apply_disabled(w: &mut World, id: ObjectId, disabled: bool) {
 }
 
 /// Whether a vehicle is disabled by the loss of its control centre
-/// (claim 13). What a disabled vehicle cannot do belongs to the
-/// special-abilities specs (a seam: nothing reads it yet).
+/// (claim 13), the *deactivated* state of S-0616 claim 1; claim 20 gives
+/// what it cannot do.
 pub fn unit_disabled(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.econ.building.unit_disabled)
 }
@@ -948,26 +1003,19 @@ pub(crate) fn has_centre(w: &World, h: HouseId, unit: u32) -> bool {
     }
 }
 
-/// A vehicle's own turn (claim 13, the cell-entry rule): a vehicle whose
-/// type has the powered-unit flag that enters a cell while its house has no
-/// active control centre is disabled, unless the cell holds a building.
-pub fn vehicle_turn(w: &mut World, id: ObjectId) {
+/// A completed arrival in a cell (claim 13, the cell-entry rule): an
+/// enabled vehicle whose type has the powered-unit flag, completing an
+/// arrival in a cell while its house has no active control centre, is
+/// disabled, unless the cell holds a building. An arrival is the end of a
+/// step of its own movement into the cell; placement and creation are not
+/// arrivals. Called by the locomotors at their cell-arrival updates
+/// (`cloak::machine::cell_movement_completed`).
+pub fn arrival(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    if o.kind != Kind::Vehicle || !o.on_map {
+    if o.kind != Kind::Vehicle || !o.on_map || o.econ.building.unit_disabled {
         return;
     }
-    let cell = o.pos.cell();
-    let (prev, owner, ti, layer) = (o.econ.building.last_cell, o.owner, o.type_index, o.layer);
-    if prev == Some(cell) {
-        return;
-    }
-    if let Some(ob) = w.obj_mut(id) {
-        ob.econ.building.last_cell = Some(cell);
-    }
-    // The cell a vehicle is put on when it enters the map is not an entry into a cell (it is the first one seen).
-    if prev.is_none() {
-        return;
-    }
+    let (cell, owner, ti) = (o.pos.cell(), o.owner, o.type_index);
     let flag = w
         .rules()
         .econ
@@ -985,8 +1033,8 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
         .cells
         .occ(cell, Layer::Ground)
         .is_some_and(|r| r.buildings > 0);
-    let _ = layer;
     if !building {
-        apply_disabled(w, id, true);
+        // spec: S-0405 claims 13 and 20 (revision 20, Q-1503 answered: disabled on a completed arrival, not on placement or creation: guard reset, deselected, locomotor off)
+        disable(w, id);
     }
 }

@@ -461,18 +461,22 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
         leave_play(w, id);
         return;
     }
-    // Row 3 (the type's own death animations) needs a field no spec maps yet.
+    // Seam `death_anims_row`: row 3 (the type's own death animation list, `DeathAnims`, which
+    // takes precedence over row 4 and over the extra virus effect of a ground "not human" type,
+    // S-0615 claim 1) is not built; the importer does not carry the list into the ruleset yet.
     let not_human = u.raw.not_human.unwrap_or(false);
     let virus = |k: i32| k == 8; // spec: S-0107 claim 17 (death kind 8: the virus death of S-0613)
     let warhead_kind = hit.warhead.map_or(0, |h| rules.combat.warhead(h).inf_death);
-    // spec: S-0107 claim 17 (row 4 with w = 8, and a parachutist killed by a kind-8 warhead when rows 1 and 2 do not apply: the extra virus-death animation and particle of S-0613 claim 3)
-    let extra = (not_human && virus(kind)) || (seq == Some(Seq::Parachute) && virus(warhead_kind));
+    // spec: S-0107 claim 17 (a parachutist killed by a kind-8 warhead when rows 1 and 2 do not apply: the extra virus-death animation and particle of S-0613 claim 3, whatever w then is)
+    let extra = seq == Some(Seq::Parachute) && virus(warhead_kind);
+    // spec: S-0107 claim 17 row 4 (a "not human" type with w = 8, so not parachuting: the extra virus effect follows its die-1 request)
+    let extra_after = not_human && virus(kind);
     // spec: S-0613 claim 2 (the animation's owner: the attacker's house, else the hit's attacking house)
     let owner = hit
         .attacker
         .and_then(|a| w.obj(a))
         .map_or(hit.house, |a| a.owner);
-    // The extra virus effect comes before the kind-3 explosion of a parachutist (interim, Q-1421).
+    // spec: S-0615 claim 1 (Order with the extra virus effect: a parachutist's virus effect is created first, before its row 8 kind 3 or 5 animation or its row 4 die-1 request; a "not human" parachutist gets this one only)
     if extra {
         crate::gas::virus_death(w, o.pos, owner, true);
     }
@@ -510,6 +514,10 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
         return;
     };
     let started = crate::infantry::request(w, id, q, true);
+    if extra_after {
+        // spec: S-0615 claim 1 (a "not human" type killed on the ground with death kind 8 makes its forced die-1 request first, and the extra virus effect comes after it)
+        crate::gas::virus_death(w, o.pos, owner, true);
+    }
     // spec: S-0107 claim 17 (a cyborg killed by damage that ignores defences is removed at once on a death request)
     if u.cyborg && hit.ignore_defences {
         leave_play(w, id);
@@ -531,7 +539,7 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
 pub fn death_kind_effect(w: &mut World, kind: i32, pos: Pos) {
     let rules = w.rules_arc();
     let g = &rules.combat.general;
-    // spec: S-0615 claim 1 (the death-kind table); a negative kind makes none, as kind 0 (interim, Q-1423)
+    // spec: S-0615 claims 1 and 3 (the death-kind table; kind 0, any negative kind and 11 and above: none)
     let name = match kind {
         3 => g.infantry_explode.clone(),
         4 => g.flaming_infantry.clone(),
