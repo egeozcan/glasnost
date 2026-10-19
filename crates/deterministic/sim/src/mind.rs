@@ -15,8 +15,8 @@
 //! [`trigger_owner_change`] and [`boarding`].
 //!
 //! Seams:
-//! - S-0608 (drain links, M7b): [`drain_link_formed`] releases every victim
-//!   of a drained controlling building; nothing calls it yet.
+//! - S-0608 (drain links): [`drain_link_formed`] releases every victim of
+//!   a drained controlling building, called by `drain` when a link forms.
 //! - S-0612 (psychic domination, M7b): [`dominate`] sets the permanent state
 //!   of claim 13; no superweapon calls it yet. Its own-house switch
 //!   `quirks.dominator_marks_own_objects` is S-0612's and is wired there.
@@ -748,8 +748,8 @@ pub fn erasing_hit(w: &mut World, x: ObjectId) {
     release_all(w, x);
 }
 
-/// Seam: S-0608 (drain links) is not built (M7b). A drain link that forms
-/// on a controlling building releases all its victims (claim 10); a failed
+/// A drain link that forms on a controlling building releases all its
+/// victims (claim 10; S-0608 claim 5, called by `crate::drain`); a failed
 /// attempt releases nothing.
 pub fn drain_link_formed(w: &mut World, building: ObjectId) {
     // spec: S-0601 claim 10 (a drain link forms on a controlling building, S-0608 claim 5)
@@ -812,7 +812,9 @@ pub fn converted(w: &mut World, old: ObjectId, new: ObjectId) {
 /// Psychic domination by house `h` reaches object `id` (claim 13, S-0612
 /// claims 13 and 14). Returns whether it became permanently controlled.
 /// Seam: S-0612 (M7b) is not built, so no superweapon calls this yet; its
-/// own-house switch belongs to it.
+/// own-house switch belongs to it. A dominated drainer's link then ends by
+/// S-0608 claim 11's alliance test, which reads the owners in the drainer's
+/// turn (`crate::drain`), so the drain needs nothing more from S-0612.
 pub fn dominate(w: &mut World, id: ObjectId, h: HouseId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0601 claim 13 (not a building)

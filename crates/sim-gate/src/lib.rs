@@ -38,9 +38,15 @@
 //! psychic weapons of S-0610 (module [`m7a`]); the same checks as M6c's.
 //! M7a step 3.3 gives the Yuri-style side a gattling vehicle and defence
 //! (S-0609) and a mind controller (S-0601), with their counters.
+//!
+//! M7b step 3.3: a sixth duel (`golden/duel-m7b.txt`) plays the M7a duel
+//! with a drain (S-0608): the Yuri-style side's hovering discs drain the
+//! other side's power plants and refineries (module [`m7b`]); the full run
+//! asserts that each drain counter is at least [`m7b::MARGIN`].
 
 pub mod m6c;
 pub mod m7a;
+pub mod m7b;
 
 use glasnost_ai::{fixture, game::Game, skirmish};
 use glasnost_sim::{save, testkit};
@@ -99,6 +105,19 @@ pub const M7A_SEED: u32 = 2;
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;
 
+/// Seed of the M7b duel. Chosen at M7b step 3.3 (S-0608) from the sweep of
+/// seeds 1 to 16 (`m7b_seed_sweep`): every seed plays all [`M7B_TICKS`]
+/// ticks with every drain counter at least [`m7b::MARGIN`]; seed 11 has the
+/// largest smallest drain counter (8 links formed). See
+/// `docs/development.md`, *Determinism gate*.
+pub const M7B_SEED: u32 = 11;
+
+/// Ticks of the full run of the M7b duel: shorter than the M7a duel's,
+/// because the Yuri-style side, draining from tick 650 or so, wins every
+/// seed of 1 to 16 between ticks 8 896 and 10 314, and the full run must
+/// play all its ticks.
+pub const M7B_TICKS: i32 = 8_000;
+
 /// Ticks of the full gate run.
 pub const TICKS: i32 = 3000;
 
@@ -131,11 +150,13 @@ pub enum Scenario {
     DuelM6c,
     /// Our own AI against itself on the synthetic M7a map (M7a).
     DuelM7a,
+    /// Our own AI against itself on the synthetic M7b map (M7b).
+    DuelM7b,
 }
 
 impl Scenario {
     /// Every scenario, in gate order.
-    pub const ALL: [Scenario; 8] = [
+    pub const ALL: [Scenario; 9] = [
         Scenario::Scripted,
         Scenario::Combat,
         Scenario::Skirmish,
@@ -144,6 +165,7 @@ impl Scenario {
         Scenario::DuelNaval,
         Scenario::DuelM6c,
         Scenario::DuelM7a,
+        Scenario::DuelM7b,
     ];
 
     /// The scenario's name, also its golden file's stem.
@@ -157,6 +179,7 @@ impl Scenario {
             Scenario::DuelNaval => "duel-naval",
             Scenario::DuelM6c => "duel-m6c",
             Scenario::DuelM7a => "duel-m7a",
+            Scenario::DuelM7b => "duel-m7b",
         }
     }
 
@@ -173,6 +196,7 @@ impl Scenario {
             }
             Scenario::DuelM6c => M6C_TICKS,
             Scenario::DuelM7a => M7A_TICKS,
+            Scenario::DuelM7b => M7B_TICKS,
             _ => TICKS,
         }
     }
@@ -185,7 +209,8 @@ impl Scenario {
             | Scenario::DuelDiagonal
             | Scenario::DuelNaval
             | Scenario::DuelM6c
-            | Scenario::DuelM7a => SKIRMISH_STRIDE,
+            | Scenario::DuelM7a
+            | Scenario::DuelM7b => SKIRMISH_STRIDE,
             _ => 1,
         }
     }
@@ -384,6 +409,17 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
             }
             return out;
         }
+        Scenario::DuelM7b => {
+            let (out, _, ex) = m7b::play(M7B_SEED, ticks);
+            if ticks >= M7B_TICKS {
+                assert!(
+                    ex.missing().is_empty(),
+                    "duel-m7b: the full run did not exercise {:?} enough ({ex:?})",
+                    ex.missing()
+                );
+            }
+            return out;
+        }
         Scenario::DuelNaval => {
             return duel(
                 &fixture::map_naval(),
@@ -427,7 +463,8 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
         | Scenario::DuelDiagonal
         | Scenario::DuelNaval
         | Scenario::DuelM6c
-        | Scenario::DuelM7a => {
+        | Scenario::DuelM7a
+        | Scenario::DuelM7b => {
             unreachable!("handled above")
         }
     };
@@ -455,6 +492,7 @@ pub fn golden_text(scenario: Scenario, ticks: i32) -> String {
         Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => DUEL_SEED,
         Scenario::DuelM6c => M6C_SEED,
         Scenario::DuelM7a => M7A_SEED,
+        Scenario::DuelM7b => M7B_SEED,
         _ => SEED,
     };
     let mut s = format!(

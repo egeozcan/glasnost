@@ -719,3 +719,38 @@ fn counts_burning_walkers_and_disc_lasers() {
         (2, 1, 1)
     );
 }
+
+// spec: S-0608 claims 1, 5, 7 and 14 (the lane counts drain links as they form and end, the credits payouts move, and the drained buildings per tick)
+#[test]
+fn counts_drain_links_and_credits_drained() {
+    use glasnost_ai::fixture_m7b as kit;
+    let mut g = Game::new(
+        kit::rules(),
+        &kit::map(),
+        kit::MAP_NAME,
+        fixture::catalogue(),
+        kit::setup(11),
+    )
+    .expect("the M7b skirmish loads");
+    let mut tally = Tally::default();
+    let mut paid = 0;
+    while g.world.tick < 3000 && paid < 3 {
+        g.step();
+        for e in &g.world.effects {
+            tally.effect(e);
+            if let glasnost_sim::combat::effects::Effect::Drain {
+                event: glasnost_sim::drain::DrainEvent::Paid { .. },
+                ..
+            } = e
+            {
+                paid += 1;
+            }
+        }
+        g.world.effects.clear();
+        tally.observe(&g.world);
+    }
+    assert!(tally.drain_links >= 1, "a disc linked");
+    assert!(tally.drained_ticks >= 1);
+    assert_eq!(paid, 3, "three payouts within the run");
+    assert!(tally.credits_drained > 0, "the payouts moved credits");
+}

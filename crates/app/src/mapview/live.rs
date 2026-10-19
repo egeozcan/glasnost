@@ -339,6 +339,10 @@ struct LiveAnim {
     /// The burning walker it shows (S-0615 claims 4 to 11), if any: its
     /// position and image frame are the simulation's walker's.
     walker: Option<ObjectId>,
+    /// The drainer it is attached to (S-0608 claim 5), if it is a drain
+    /// animation: it follows the drainer and is removed when the drainer's
+    /// link ends (claim 14).
+    drainer: Option<ObjectId>,
     /// The image frame a burning walker shows (S-0615 F1, or its expiring
     /// stage), in place of the playback's.
     frame: Option<i32>,
@@ -1000,6 +1004,7 @@ impl Live {
             owner: None,
             carrier: None,
             walker: None,
+            drainer: None,
             frame: None,
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
@@ -1102,6 +1107,34 @@ impl Live {
     /// The burning walkers (S-0615 claims 4 to 11): each drawn animation
     /// takes its walker's position and image frame; one whose walker has
     /// been removed disappears.
+    /// Drain animations follow their drainers (S-0608 claim 5) and go when
+    /// the drainer is no longer draining (claim 14): a relinked drainer
+    /// keeps no old animation (Edge cases, a display defect fixed).
+    fn follow_drainers(&mut self) {
+        let world = &self.world;
+        let mut seen = std::collections::BTreeSet::new();
+        // The newest animation of a drainer is the one of its newest link.
+        for a in self.anims.iter_mut().rev() {
+            if let Some(d) = a.drainer
+                && !seen.insert(d)
+            {
+                a.drainer = Some(ObjectId(u32::MAX));
+            }
+        }
+        self.anims.retain_mut(|a| {
+            let Some(id) = a.drainer else { return true };
+            // spec: S-0608 claim 14 (the drain animation is removed when the link ends)
+            let Some(o) = world
+                .obj(id)
+                .filter(|_| glasnost_sim::drain::draining(world, id))
+            else {
+                return false;
+            };
+            a.pos = o.pos;
+            true
+        });
+    }
+
     fn follow_walkers(&mut self) {
         let world = &self.world;
         let rules = &self.rules;
@@ -1208,8 +1241,31 @@ impl Live {
                 }
             }
         }
+        for e in &effects {
+            if let Effect::Drain {
+                drainer,
+                event:
+                    glasnost_sim::drain::DrainEvent::Formed {
+                        anim: Some(name),
+                        delay,
+                    },
+                ..
+            } = e
+                && let Some(o) = self.world.obj(*drainer)
+            {
+                // spec: S-0608 claim 5 (the drain animation starts attached to the drainer and follows it while it remains alive)
+                self.counts.anims += 1;
+                let serial = self.anim_serial;
+                let pos = o.pos;
+                self.create_anim(&name_bytes(name), pos, now, *delay, false);
+                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    a.drainer = Some(*drainer);
+                }
+            }
+        }
         self.follow_owners();
         self.follow_walkers();
+        self.follow_drainers();
         self.update_anims(now);
         for e in effects {
             if let Effect::SupportBeam {
@@ -1282,6 +1338,7 @@ impl Live {
                 | Effect::Dropped { .. }
                 | Effect::Disc { .. }
                 | Effect::Beam { .. }
+                | Effect::Drain { .. }
                 | Effect::Walker { .. } => continue,
             };
             self.transients.push(Transient {

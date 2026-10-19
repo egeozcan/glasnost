@@ -258,10 +258,11 @@ pub fn being_erased(w: &World, id: ObjectId) -> bool {
     crate::superweapons::being_erased(w, id)
 }
 
-/// Being drained (S-0405 Terms; special-abilities specs). Seam.
+/// Being drained (S-0405 Terms): attached to a drainer by a drain link
+/// (S-0608, `crate::drain`).
 pub fn being_drained(w: &World, id: ObjectId) -> bool {
-    let _ = (w, id);
-    false
+    // spec: S-0405 Terms and S-0608 Terms (being drained: the building of a drain link)
+    crate::drain::being_drained(w, id)
 }
 
 /// *n*<sub>c</sub>, the chargers a building has (S-0405 Terms): the

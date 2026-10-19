@@ -382,10 +382,9 @@ pub fn per_tick(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Whether the actor is draining another object (S-0215 claim 37 (d)).
-/// Seam: S-0608 is not built (M7b). S-0606 claim 9 leaves the drain of a
-/// bunker building to S-0608, and claim 37 (d)'s draining exclusion needs
-/// it; no object drains yet.
-fn draining(_w: &World, _id: ObjectId) -> bool {
-    false
+/// Whether the actor is draining another object (S-0215 claim 37 (d);
+/// S-0608 claim 6: a draining drainer takes no ordinary approach step).
+fn draining(w: &World, id: ObjectId) -> bool {
+    // spec: S-0215 claim 37 (d) and S-0608 claim 6 (draining: the drainer of a drain link)
+    crate::drain::draining(w, id)
 }

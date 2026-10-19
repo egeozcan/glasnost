@@ -1030,6 +1030,18 @@ pub struct General {
     /// mapping).
     #[serde(default)]
     pub open_topped_warp_distance: Option<i32>,
+    /// `[CombatDamage] DrainMoneyFrameDelay`, the payout period *P* in
+    /// ticks (S-0608 Import mapping, F1); absent: 100.
+    #[serde(default)]
+    pub drain_money_frame_delay: Option<i32>,
+    /// `[CombatDamage] DrainMoneyAmount`, the payout amount *A* in credits
+    /// (S-0608 Import mapping, F2); absent: 0.
+    #[serde(default)]
+    pub drain_money_amount: Option<i32>,
+    /// `[CombatDamage] DrainAnimationType`, the drain animation (S-0608
+    /// claim 5); absent: none.
+    #[serde(default)]
+    pub drain_animation_type: Option<String>,
     /// `[Radiation] RadDurationMultiple`, the duration multiple *M*
     /// (S-0525 Import mapping, F2).
     #[serde(default)]

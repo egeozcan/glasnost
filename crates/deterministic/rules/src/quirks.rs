@@ -1748,11 +1748,11 @@ pub struct Quirks {
     // spec: S-0517 claim 5 and Edge cases
     #[serde(default = "on")]
     pub airborne_deploy_order_dropped: bool,
-    /// A drain attempt that forms a link while the drainer is still linked to another building does not end the first link, which stays drained (blackout, refused firing, sale refusal, payouts) until the drainer is removed; off: forming a new link first ends the old one with all of claim 14's effects. Not implemented yet (wave 2).
+    /// A drain attempt that forms a link while the drainer is still linked to another building does not end the first link, which stays drained (blackout, refused firing, sale refusal, payouts) until the drainer is removed; off: forming a new link first ends the old one with all of claim 14's effects.
     // spec: S-0608 claim 4 and Edge cases
     #[serde(default = "on")]
     pub drain_relink_strands_previous: bool,
-    /// Only a drainer that is a vehicle performs the position check, so an infantry or aircraft drainer keeps its link after it moves away until claim 11 or 13 ends it; off: every drainer performs it. Not implemented yet (wave 2).
+    /// Only a drainer that is a vehicle performs the position check, so an infantry or aircraft drainer keeps its link after it moves away until claim 11 or 13 ends it; off: every drainer performs it.
     // spec: S-0608 claim 12 and Edge cases
     #[serde(default = "on")]
     pub drain_position_check_vehicles_only: bool,

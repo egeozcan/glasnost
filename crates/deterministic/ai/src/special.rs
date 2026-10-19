@@ -124,6 +124,12 @@ pub struct Uses {
     /// drop the held vehicle there (S-0607 claims 12 and 17).
     #[serde(default)]
     pub lift_drops: u32,
+    /// Drainers ordered (S-0608, `drain`).
+    #[serde(default)]
+    pub drainer_builds: u32,
+    /// Drainers sent at an enemy building to drain it (S-0608, `drain`).
+    #[serde(default)]
+    pub drain_orders: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -182,6 +188,7 @@ impl Special {
         self.grinders(script, &own, w, out);
         self.bunkers(script, &own, w, out);
         self.lifters(script, &own, w, out);
+        self.drainers(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -261,6 +268,16 @@ impl Special {
     /// Counts one drop order given to a holding lifter (S-0607, `lifter`).
     pub(crate) fn count_lift_drop(&mut self) {
         self.uses.lift_drops += 1;
+    }
+
+    /// Counts one drainer ordered (S-0608, `drain`).
+    pub(crate) fn count_drainer_build(&mut self) {
+        self.uses.drainer_builds += 1;
+    }
+
+    /// Counts one drainer sent at an enemy building (S-0608, `drain`).
+    pub(crate) fn count_drain_order(&mut self) {
+        self.uses.drain_orders += 1;
     }
 
     /// Counts one gattling defence building ordered (S-0609, `gattling`).

@@ -414,6 +414,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     crate::bomb::removed(w, id);
     // spec: S-0601 claims 10 and 12 (a removed controller releases its victims; a removed victim leaves its controller's list silently)
     crate::mind::removing(w, id);
+    // spec: S-0608 claim 13 (a drainer or a drained building removed from the game in any other way ends its links at once)
+    crate::drain::removing(w, id);
     // spec: S-0519 claims 19 and 20 (a strike aircraft leaving play is unlinked, a designator ends its strike, a marked building cancels)
     crate::strike::leaving(w, id);
     // spec: S-0518 claim 12 (a charger that leaves play leaves every charger list at once)

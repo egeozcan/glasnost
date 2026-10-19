@@ -455,6 +455,7 @@ pub fn new_game(
         waves: Default::default(),
         discs: Vec::new(),
         walkers: Default::default(),
+        drain: Default::default(),
         temporal: Default::default(),
         mind: Default::default(),
         acquisitions: 0,

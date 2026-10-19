@@ -258,6 +258,21 @@ fn full_health(w: &World, x: ObjectId) -> bool {
     o.health >= strength
 }
 
+/// The drain refusals of S-0608 claim 3 against object `x`: (a) the
+/// building the firer drains (its newest link; a stranded first link is
+/// Q-1441's, interim: not this part), whatever the weapon; (b) a draining
+/// weapon against an object already being drained, by any drainer; (c) a
+/// draining weapon against an object whose type is not drainable. No
+/// alliance or ownership test.
+fn drain_refused(w: &World, firer: ObjectId, drain: bool, x: ObjectId) -> bool {
+    // spec: S-0608 claim 3 (a) (the target is the building that the firer itself drains, whatever the weapon)
+    if crate::drain::partner(w, firer) == Some(x) {
+        return true;
+    }
+    // spec: S-0608 claim 3 (b) and (c) (a draining weapon against an object already being drained, or whose type is not drainable)
+    drain && (crate::drain::being_drained(w, x) || !crate::drain::drainable(w, x))
+}
+
 /// The firing check for the weapon in `slot` against `target`, with or
 /// without the range test (S-0301 claim 9; S-0310 for the aiming answers).
 pub fn check(
@@ -312,6 +327,12 @@ pub fn check(
         && projectile_illegal(w, weapon, t)
     {
         // spec: S-0301 claim 9 rank 4 (most target tests give illegal)
+        return Answer::Illegal;
+    }
+    if let Some(Target::Object(x)) = target
+        && drain_refused(w, firer, wr.drain, x)
+    {
+        // spec: S-0608 claim 3 and S-0301 claim 9 rank 4 (illegal: the building the firer drains, whatever the weapon; a draining weapon against an object already being drained or of a type that is not drainable). Q-1441 (interim: after the projectile tests, before the other rank-4 tests)
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0610 claims 3 and 6 (a berserk-causing warhead against a psionics-immune type or a bunkered vehicle; a berserk firer against a berserk-friendly type: illegal)

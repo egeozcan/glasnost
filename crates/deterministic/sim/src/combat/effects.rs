@@ -280,6 +280,17 @@ pub enum Effect {
         /// (`crate::disc::house_colours`).
         house: Option<crate::world::HouseId>,
     },
+    /// A drain link formed, ended or paid (S-0608 claims 5, 7 and 14).
+    /// Presentation and counting only: a payout has no message and no
+    /// sound (claim 7).
+    Drain {
+        /// The drainer.
+        drainer: ObjectId,
+        /// The drained building.
+        building: ObjectId,
+        /// What happened.
+        event: crate::drain::DrainEvent,
+    },
     /// A burning walker was made (S-0615 claim 1, death kind 4), or ended.
     Walker {
         /// The walker.

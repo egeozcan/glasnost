@@ -83,6 +83,8 @@ pub fn total(uses: &[(glasnost_sim::world::HouseId, Uses)]) -> Uses {
         t.lifter_builds += u.lifter_builds;
         t.lift_orders += u.lift_orders;
         t.lift_drops += u.lift_drops;
+        t.drainer_builds += u.drainer_builds;
+        t.drain_orders += u.drain_orders;
     }
     t
 }

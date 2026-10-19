@@ -28,6 +28,7 @@ pub mod crates;
 pub mod crush;
 pub mod depot;
 pub mod disc;
+pub mod drain;
 pub mod drive;
 pub mod econ;
 pub mod emitters;

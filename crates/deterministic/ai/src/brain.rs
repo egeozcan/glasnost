@@ -276,6 +276,7 @@ impl Brain {
                 }
             }
             self.build_lifter(w, &mut out);
+            self.build_drainer(w, &mut out);
         }
         if w.tick % THINK_PERIOD == 0 {
             self.special.think(&self.script, w, &mut out);
@@ -309,6 +310,8 @@ impl Brain {
         }
         // S-0607 claims 9 and 12: a lifter takes only the lifter part's orders, and a holding lifter only its drop (`lifter`)
         out.retain(|o| crate::lifter::keeps_order(w, o));
+        // S-0608 claims 3 b and 12: a draining drainer takes no order (a move off the foundation ends the link), one on its way to drain only drain orders, and no second drainer goes for a building (`drain`)
+        crate::drain::filter_orders(w, &mut out);
         // S-0601 claim 16: no attack order (from any part of the brain) to an unlimited controller one more victim would overload harmfully
         out.retain(|o| match o {
             Order::Behaviour {
@@ -408,6 +411,19 @@ impl Brain {
         if let Some(t) = crate::lifter::build_type(&self.script, w) {
             out.push(Order::Build { what: t });
             self.special.count_lifter_build();
+        }
+    }
+
+    /// Builds a drainer (S-0608, [`crate::drain::build_type`]) the way it
+    /// builds lifters: not while selling out, and only when the plan keeps
+    /// its harvesters.
+    fn build_drainer(&mut self, w: &World, out: &mut Vec<Order>) {
+        if self.script.selling() || !self.script.harvesters_kept(w) {
+            return;
+        }
+        if let Some(t) = crate::drain::build_type(&self.script, w) {
+            out.push(Order::Build { what: t });
+            self.special.count_drainer_build();
         }
     }
 

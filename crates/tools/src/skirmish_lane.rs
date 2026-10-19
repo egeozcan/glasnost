@@ -184,6 +184,12 @@ struct Game {
     disc_shots: usize,
     disc_hits: usize,
     disc_cancelled: usize,
+    /// Drain (S-0608): links formed, links ended, credits moved by
+    /// payouts, and the sum over ticks of the buildings drained.
+    drain_links: usize,
+    drain_ends: usize,
+    credits_drained: i64,
+    drained_ticks: usize,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -700,6 +706,10 @@ fn play_ai(
     g.disc_shots = tally.disc_shots;
     g.disc_hits = tally.disc_hits;
     g.disc_cancelled = tally.disc_cancelled;
+    g.drain_links = tally.drain_links;
+    g.drain_ends = tally.drain_ends;
+    g.credits_drained = tally.credits_drained;
+    g.drained_ticks = tally.drained_ticks;
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -867,6 +877,15 @@ pub struct Tally {
     pub disc_hits: usize,
     /// Disc lasers cancelled by the re-check (S-0615 claim 14).
     pub disc_cancelled: usize,
+    /// Drain links that formed (S-0608 claim 5).
+    pub drain_links: usize,
+    /// Drain links that ended (S-0608 claim 14).
+    pub drain_ends: usize,
+    /// Credits that drain payouts moved (S-0608 claims 7 to 10).
+    pub credits_drained: i64,
+    /// The sum over ticks of the buildings drained at the tick's end
+    /// (S-0608 claim 1).
+    pub drained_ticks: usize,
     /// The burning walkers after the last tick.
     walkers_before: BTreeSet<u32>,
     /// The seized units after the last tick.
@@ -905,6 +924,14 @@ impl Tally {
     /// events, S-0615 claims 12, 14 and 16).
     pub fn effect(&mut self, e: &Effect) {
         use glasnost_sim::combat::effects::DiscEvent;
+        use glasnost_sim::drain::DrainEvent;
+        if let Effect::Drain { event, .. } = e {
+            match event {
+                DrainEvent::Formed { .. } => self.drain_links += 1,
+                DrainEvent::Ended => self.drain_ends += 1,
+                DrainEvent::Paid { amount, .. } => self.credits_drained += i64::from(*amount),
+            }
+        }
         if let Effect::Disc { event, .. } = e {
             match event {
                 DiscEvent::Shot => self.disc_shots += 1,
@@ -917,6 +944,7 @@ impl Tally {
 
     /// Counts what changed in the world's last tick.
     pub fn observe(&mut self, w: &World) {
+        self.drained_ticks += w.drain.links.len();
         let walkers: BTreeSet<u32> = w.walkers.keys().map(|id| id.0).collect();
         self.walkers += walkers.difference(&self.walkers_before).count();
         self.walkers_before = walkers;
@@ -2041,8 +2069,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders
                     )
                 })
                 .collect();
@@ -2127,6 +2155,11 @@ fn report(
                 s,
                 "  special hits: burning walkers {}; disc lasers shot {}, hit {}, cancelled {}",
                 g.walkers, g.disc_shots, g.disc_hits, g.disc_cancelled
+            );
+            let _ = writeln!(
+                s,
+                "  drain: links formed {}, ended {}; credits drained {}; drained-building ticks {}",
+                g.drain_links, g.drain_ends, g.credits_drained, g.drained_ticks
             );
         }
         let f: Vec<String> = g

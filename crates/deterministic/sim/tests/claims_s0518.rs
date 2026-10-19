@@ -154,6 +154,18 @@ fn only_eligible_buildings_support() {
     assert_eq!(100_000 - health(&w, v), 150, "8 cells is within the reach");
 }
 
+// spec: S-0518 claim 2 (PS2: a building being drained, S-0608, does not support; only the other counts)
+#[test]
+fn a_drained_building_does_not_support() {
+    let (mut w, m, v, sup) = scene(|_| {}, 2);
+    // The first supporter is drained (the drain state is S-0608's; the drainer here is the target).
+    w.drain.links.insert(sup[0], v);
+    w.drain.partner.insert(v, sup[0]);
+    fire(&mut w, m, v);
+    assert_eq!(100_000 - health(&w, v), 150, "one recruitment only");
+    assert!(w.obj(sup[0]).unwrap().combat.rearm_until <= 0);
+}
+
 // spec: S-0518 claim 2 and Edge cases (a switched-off supporter still supports a working master; quirks.prism_support_ignores_operation off asks for a building in operation)
 #[test]
 fn an_unpowered_supporter_supports_unless_the_quirk_is_off() {

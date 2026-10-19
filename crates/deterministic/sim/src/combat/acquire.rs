@@ -252,7 +252,10 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
             return;
         }
     }
-    // The draining condition of claim 25 part h needs a draining state, which no object has in our engine.
+    // spec: S-0309 claim 25 part h (an object of the neutral or special house does not retaliate while it is draining an object with a draining weapon, S-0608)
+    if !player && crate::drain::draining(w, actor) {
+        return;
+    }
     override_attack(w, actor, attacker);
 }
 

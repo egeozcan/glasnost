@@ -27,6 +27,11 @@
 //! from a kind-4 death and expiring; a disc-laser carrier clicked onto an
 //! enemy vehicle, its ring of beams closing and the final beam with the hit.
 //!
+//! S-0608 (drain): a drainer of the local house clicked onto an enemy
+//! drainable power plant, and onto an enemy drainable refinery (the credits
+//! it moves); an enemy drainer clicked onto a local power plant, and the
+//! local house's blackout.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -67,6 +72,9 @@ const SCENES: &[Scene] = &[
     ("deaths", death_kinds),
     ("walker", burning_walker),
     ("disc", disc_laser),
+    ("drain-power", |l| drain(l, Drained::Power)),
+    ("drain-refinery", |l| drain(l, Drained::Refinery)),
+    ("drain-blackout", |l| drain(l, Drained::Blackout)),
 ];
 
 #[test]
@@ -846,6 +854,165 @@ fn disc_laser(lane: &mut Lane) {
     lane.save("disc-hit");
     lane.ticks(2);
     lane.save("disc-after");
+}
+
+/// What a drain scene drains.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Drained {
+    /// An enemy power plant, drained by a local drainer.
+    Power,
+    /// An enemy refinery (a resource destination), drained by a local
+    /// drainer.
+    Refinery,
+    /// A local power plant, drained by an enemy drainer.
+    Blackout,
+}
+
+/// A stock unit type with a draining weapon in some slot, and its kind.
+fn drainer(w: &World) -> Option<(Kind, String)> {
+    let r = w.rules();
+    for (kind, names) in [
+        (Kind::Vehicle, &r.vehicles),
+        (Kind::Aircraft, &r.aircraft),
+        (Kind::Infantry, &r.infantry),
+    ] {
+        for (i, t) in names.iter().enumerate() {
+            let drains = r.unit(kind, i as u32).is_some_and(|u| {
+                u.strength > 0
+                    && u.combat
+                        .slots
+                        .iter()
+                        .flatten()
+                        .any(|&x| r.combat.weapon(x).drain)
+            });
+            if drains {
+                return Some((kind, t.name.clone()));
+            }
+        }
+    }
+    None
+}
+
+/// A stock drainable building type of at most 4 × 4 cells: one with
+/// output (a power plant) or a resource destination (a refinery).
+fn drainable_building(w: &World, refinery: bool) -> Option<(String, (i32, i32))> {
+    let r = w.rules();
+    r.buildings
+        .iter()
+        .find(|b| {
+            b.strength > 0
+                && b.combat.drainable
+                && b.foundation.0 <= 4
+                && b.foundation.1 <= 4
+                && if refinery {
+                    b.raw.econ.resource_destination.unwrap_or(false)
+                } else {
+                    b.raw.econ.power.unwrap_or(0) > 0
+                }
+        })
+        .map(|b| (b.name.clone(), b.foundation))
+}
+
+/// S-0608 claims 2, 5, 7 and S-0405 claim 5: a drainer clicked onto a
+/// drainable building flies over it and links; a refinery's house pays the
+/// drainer's house; a drained power plant blacks its house out.
+fn drain(lane: &mut Lane, which: Drained) {
+    let w = lane.world();
+    let d = drainer(w);
+    let b = drainable_building(w, which == Drained::Refinery);
+    println!(
+        "drainer type found: {}, drainable building type found: {}",
+        d.is_some(),
+        b.is_some()
+    );
+    let (Some((kind, dname)), Some((bname, size)), Some(enemy)) = (d, b, lane.enemy()) else {
+        return;
+    };
+    let local = lane.local();
+    let (owner, attacker) = match which {
+        Drained::Blackout => (local, enemy),
+        _ => (enemy, local),
+    };
+    let home = lane.home();
+    let Some(top) = lane.area(CellXY::new(home.x + 10, home.y + 4), size, 2, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("no free area for the building");
+        return;
+    };
+    let b = lane.spawn(Kind::Building, &bname, owner, top);
+    let at = lane.open_land(CellXY::new(top.x - 6, top.y));
+    let d = lane.spawn(kind, &dname, attacker, at);
+    lane.ticks(3);
+    let output = |l: &Lane| l.world().houses[usize::from(owner.0)].econ.power.output;
+    let credits = |l: &Lane, h: HouseId| l.world().houses[usize::from(h.0)].credits;
+    let out0 = output(lane);
+    lane.look_at(CellXY::new(top.x + size.0 / 2, top.y + size.1 / 2));
+    let cursor = targeting::cursor(
+        lane.world(),
+        attacker,
+        &[d],
+        ClickOn::Object(b),
+        Modifiers::default(),
+    );
+    let n = lane.order(attacker, d, ClickOn::Object(b));
+    println!("{which:?}: click on the building shows {cursor:?}; {n} orders");
+    lane.save(&format!("drain-{}-before", key(which)));
+    let mut linked = until(lane, 2000, |w| glasnost_sim::drain::being_drained(w, b));
+    if linked.is_none() && lane.world().obj(d).is_some_and(|o| o.target.is_none()) {
+        // The attempt came from outside the foundation (claim 2): the
+        // drainer lost its target; a person clicks again.
+        lane.save(&format!("drain-{}-first-attempt", key(which)));
+        let n = lane.order(attacker, d, ClickOn::Object(b));
+        println!("no link from the first click; a second click: {n} orders");
+        linked = until(lane, 2000, |w| glasnost_sim::drain::being_drained(w, b));
+    }
+    let Some(t) = linked else {
+        let w = lane.world();
+        let o = w.obj(d);
+        let over = o.is_some_and(|o| {
+            let bo = w.obj(b).unwrap();
+            glasnost_sim::econ::placement::foundation_cells(w, bo.type_index, bo.pos.cell())
+                .contains(&o.pos.cell())
+        });
+        println!(
+            "no link within 2 000 ticks: drainer alive {}, over the foundation {over}, \
+             has a target {}, has a destination {}",
+            o.is_some(),
+            o.is_some_and(|o| o.target.is_some()),
+            o.is_some_and(|o| o.dest.is_some())
+        );
+        lane.save(&format!("drain-{}-no-link", key(which)));
+        return;
+    };
+    println!("linked after {t} ticks");
+    let c0 = (credits(lane, owner), credits(lane, attacker));
+    lane.ticks(30);
+    lane.save(&format!("drain-{}", key(which)));
+    lane.ticks(270);
+    let c1 = (credits(lane, owner), credits(lane, attacker));
+    let out1 = output(lane);
+    println!(
+        "after 300 ticks: still linked {}; the building's house's credits fell {}, \
+         the drainer's house's rose {}; the building's house's output was above 0 {}, is 0 now {}",
+        glasnost_sim::drain::being_drained(lane.world(), b),
+        c1.0 < c0.0,
+        c1.1 > c0.1,
+        out0 > 0,
+        out1 == 0
+    );
+    if which == Drained::Blackout {
+        lane.save("drain-blackout-later");
+    }
+}
+
+/// The screenshot key of a drain scene.
+fn key(which: Drained) -> &'static str {
+    match which {
+        Drained::Power => "power",
+        Drained::Refinery => "refinery",
+        Drained::Blackout => "blackout",
+    }
 }
 
 // ---------------------------------------------------------------------------

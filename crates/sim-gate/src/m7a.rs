@@ -140,7 +140,7 @@ impl Exercise {
 /// have been seen (a save and a load happens at the first tick each one
 /// appears).
 #[derive(Default)]
-struct Watch {
+pub(crate) struct Watch {
     berserk: BTreeSet<ObjectId>,
     slave_bases: BTreeSet<ObjectId>,
     victims: BTreeSet<(ObjectId, ObjectId)>,
@@ -155,13 +155,13 @@ struct Watch {
 
 impl Watch {
     /// Notes that a kind of state is present; returns whether it is new.
-    fn first(&mut self, present: bool, kind: &'static str) -> bool {
+    pub(crate) fn first(&mut self, present: bool, kind: &'static str) -> bool {
         present && self.seen.insert(kind)
     }
 }
 
 /// The objects that newly meet `now` compared with `before`.
-fn began(before: &BTreeSet<ObjectId>, now: &BTreeSet<ObjectId>) -> u32 {
+pub(crate) fn began(before: &BTreeSet<ObjectId>, now: &BTreeSet<ObjectId>) -> u32 {
     u32::try_from(now.difference(before).count()).unwrap_or(u32::MAX)
 }
 
@@ -169,7 +169,7 @@ impl Exercise {
     /// Notes what the tick just run showed (the effects of the tick are
     /// still in the world) and returns whether a kind of state appeared for
     /// the first time.
-    fn observe(&mut self, w: &World, watch: &mut Watch) -> bool {
+    pub(crate) fn observe(&mut self, w: &World, watch: &mut Watch) -> bool {
         let mut first = false;
         // Psychic reveals: the activation sound of each launch.
         let fired = w

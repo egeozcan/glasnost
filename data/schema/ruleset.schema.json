@@ -5351,6 +5351,32 @@
           ],
           "default": null
         },
+        "drain_animation_type": {
+          "description": "`[CombatDamage] DrainAnimationType`, the drain animation (S-0608\nclaim 5); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "drain_money_amount": {
+          "description": "`[CombatDamage] DrainMoneyAmount`, the payout amount *A* in credits\n(S-0608 Import mapping, F2); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "drain_money_frame_delay": {
+          "description": "`[CombatDamage] DrainMoneyFrameDelay`, the payout period *P* in\nticks (S-0608 Import mapping, F1); absent: 100.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "economy": {
           "description": "Game-wide economy values (M5, S-0401 to S-0416).",
           "$ref": "#/$defs/EconGeneral"
@@ -8796,12 +8822,12 @@
           "default": true
         },
         "drain_position_check_vehicles_only": {
-          "description": "Only a drainer that is a vehicle performs the position check, so an infantry or aircraft drainer keeps its link after it moves away until claim 11 or 13 ends it; off: every drainer performs it. Not implemented yet (wave 2).",
+          "description": "Only a drainer that is a vehicle performs the position check, so an infantry or aircraft drainer keeps its link after it moves away until claim 11 or 13 ends it; off: every drainer performs it.",
           "type": "boolean",
           "default": true
         },
         "drain_relink_strands_previous": {
-          "description": "A drain attempt that forms a link while the drainer is still linked to another building does not end the first link, which stays drained (blackout, refused firing, sale refusal, payouts) until the drainer is removed; off: forming a new link first ends the old one with all of claim 14's effects. Not implemented yet (wave 2).",
+          "description": "A drain attempt that forms a link while the drainer is still linked to another building does not end the first link, which stays drained (blackout, refused firing, sale refusal, payouts) until the drainer is removed; off: forming a new link first ends the old one with all of claim 14's effects.",
           "type": "boolean",
           "default": true
         },

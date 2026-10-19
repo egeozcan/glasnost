@@ -88,8 +88,8 @@ fn eligible(w: &World, master: ObjectId, b: ObjectId, reach: i32) -> bool {
     if o.combat.support_beam.is_some() && (delay_field(w) > 0 || !q.prism_zero_delay_double_count) {
         return false;
     }
-    // spec: S-0518 claim 2 (not being drained: S-0608 is not built, nothing drains a building) and (current behaviour not attack)
-    if o.beh.current == Some(Behaviour::Attack) {
+    // spec: S-0518 claim 2 (not being drained, S-0608) and (current behaviour not attack)
+    if crate::drain::being_drained(w, b) || o.beh.current == Some(Behaviour::Attack) {
         return false;
     }
     // spec: S-0518 claim 2 and Edge cases (quirks.prism_support_ignores_operation off: a building not in operation is not eligible)
