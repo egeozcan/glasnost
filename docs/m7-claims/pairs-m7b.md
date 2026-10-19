@@ -88,23 +88,16 @@ GLASNOST_GAME_DIR=<your install> cargo test --release -p glasnost-tools --test r
 ```
 
 The first run on the user's install failed 12 tests. Every failure was in the test's scene, not
-in the simulation:
-- the plain infantry chosen was a "not human" type, which never converts (S-0107 claim 17);
-- the mutation was read before its deaths, which come a tick after the launch;
-- the controller and the cloning building are psionics-immune;
-- the reference sweep's damage destroys the absorber, the bunker and the cloning building before
-  the takeover can be seen;
-- the lifter's beam makes no projectile, and the bunkered vehicle shot the lifter dead;
-- the pull reached its lifter (claim 8) before it crossed the fixed blocker, and the vehicle
-  landed on a clear cell (claim 17's survivor);
-- a seized gattling stops at the bottom of its spin.
+in the simulation: the type it chose, when it read the result, or a precondition that the
+installed data does not give. Each was checked against the spec before the scene was changed. For
+example, S-0612 claim 10 puts the sweep's damage before the takeover, and S-0607 claims 17 and 20
+let a unit dropped on a clear cell survive, still seized. Where the installed sweep destroys the
+building of a pair, the test runs again with the domination's damage set to 0 and says so.
 
-The scenes now handle these cases. Where the reference sweep destroys the building, the test runs
-again with the domination's damage set to 0 and says so. The second run (2.4 s once built): 42
-tests, 36 pass, 6 skip, none fail. The six skips are ruleset facts. No drainable tank bunker or
-drainable grinder exists (four drain rows), and the cloning building cannot be mind-controlled
-(one cloning row). The shield × vat row and the dominator × controller row also pass only in part
-for that reason.
+The second run took 2.6 s once built and ran 42 tests: 37 pass and 5 skip, none fail. Six of the
+passes are partial (`PASS (...)`), and the reason is given in the table. The five skips are facts
+of the installed data, not results: four drain rows have no drainable building of their kind, and
+one cloning row has a cloning building that cannot be mind-controlled.
 
 | Pair | Relation test | Result on the user's install |
 |---|---|---|
