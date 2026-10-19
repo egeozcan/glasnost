@@ -580,11 +580,16 @@ impl Special {
         let house = script.house;
         let mut taken: Vec<ObjectId> = Vec::new();
         let mut any = false;
+        // An engineer the gunner step loads into a gunner vehicle stays.
+        let kept = self.gunner_reserved(script, own, w);
         for &id in own {
             if !engineer::is_engineer(w, id) {
                 continue;
             }
             any = true;
+            if kept.contains(&id) {
+                continue;
+            }
             if !scripted::idle(w, id) || !targeting::selectable(w, id) {
                 continue;
             }

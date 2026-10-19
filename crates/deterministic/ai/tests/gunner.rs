@@ -150,3 +150,43 @@ fn no_load_without_a_healing_mode() {
     assert_eq!(sent_into(&orders, medi), None);
     assert_eq!(loads, 0);
 }
+
+// S-0308 claims 5 and 6, S-0509, PLAN §4.7: when the healer is an engineer and a capturable enemy building is in sight, the engineer still goes into the gunner vehicle (a person who has picked it for the vehicle does not send it to capture); the M7b lane found every such engineer sent to capture.
+#[test]
+fn keeps_an_engineer_healer_from_capturing() {
+    let mut r = ruleset(1);
+    r.sim
+        .infantry
+        .get_mut("MEDI")
+        .expect("MEDI")
+        .engineer = Some(true);
+    r.registries
+        .get_mut("buildings")
+        .expect("buildings registry")
+        .push("CAPT".into());
+    r.sim.buildings.insert(
+        "CAPT".into(),
+        glasnost_rules::sim::BuildingType {
+            strength: Some(400),
+            foundation: Some([2, 2]),
+            capturable: Some(true),
+            tech_level: Some(99),
+            ..Default::default()
+        },
+    );
+    let (mut w, medi, guns) = scene(&r, PER_HEALER);
+    let at = fixture::at(-fixture::START_DX + 7, 7);
+    testkit::spawn(&mut w, Kind::Building, "CAPT", 1, at, 0);
+    let p = glasnost_sim::world::Pos::centre(at, 0);
+    glasnost_sim::econ::shroud::area_reveal(&mut w, HouseId(0), p, 4);
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut b = Brain::with_plan(&w, &fixture::map(), HouseId(0), fixture::plan());
+    let orders = b.think(&w);
+    let v = sent_into(&orders, medi).expect("the engineer is sent into a gunner vehicle");
+    assert!(guns.contains(&v));
+    assert_eq!(b.special_uses().gunner_loads, 1);
+    assert_eq!(b.special_uses().engineers, 0);
+}

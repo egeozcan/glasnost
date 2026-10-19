@@ -116,20 +116,30 @@ fn free_infantry(w: &World, id: ObjectId) -> bool {
         && targeting::selectable(w, id)
 }
 
+/// What the gunner step would do now: the (infantry, vehicle) pairs to
+/// send in, and the infantry type to build when a vehicle waits and the
+/// house has no such infantry.
+struct GunnerPlan {
+    loads: Vec<(ObjectId, ObjectId)>,
+    build: Option<glasnost_sim::econ::TypeRef>,
+}
+
 impl Special {
-    /// Gunner vehicles: a healer into each idle empty gunner vehicle at
-    /// home while the house keeps fewer healers than its armed vehicles
-    /// call for, by the *enter* click; the passenger's type is built when
-    /// the house has none.
-    pub(crate) fn gunners(
-        &mut self,
+    fn gunner_plan(
+        &self,
         script: &Script,
         own: &[ObjectId],
         w: &World,
-        out: &mut Vec<Order>,
-    ) {
+        out: &[Order],
+    ) -> GunnerPlan {
+        let mut plan = GunnerPlan {
+            loads: Vec::new(),
+            build: None,
+        };
         let house: HouseId = script.house;
-        let Some(home) = script.home(w) else { return };
+        let Some(home) = script.home(w) else {
+            return plan;
+        };
         let at_home = |id: ObjectId| {
             w.obj(id)
                 .is_some_and(|o| dist2(o.pos.cell(), home) <= HOME_REACH * HOME_REACH)
@@ -152,7 +162,7 @@ impl Special {
         // A person stops at one healer for every PER_HEALER armed vehicles.
         let mut wanted = (armed / PER_HEALER).saturating_sub(healers);
         if wanted == 0 {
-            return;
+            return plan;
         }
         let empty: Vec<ObjectId> = vehicles
             .iter()
@@ -167,7 +177,6 @@ impl Special {
                     && !mind::mind_controlled(w, id)
             })
             .collect();
-        let mut taken: Vec<ObjectId> = Vec::new();
         for v in empty {
             if wanted == 0 {
                 break;
@@ -180,7 +189,7 @@ impl Special {
                 .iter()
                 .copied()
                 .filter(|&id| {
-                    !taken.contains(&id)
+                    !plan.loads.iter().any(|&(p, _)| p == id)
                         && free_infantry(w, id)
                         && at_home(id)
                         && !ordered(out, id)
@@ -191,26 +200,117 @@ impl Special {
                 .min_by_key(|&id| (w.obj(id).map_or(i64::MAX, |o| dist2(o.pos.cell(), at)), id));
             match pick {
                 Some(id) => {
-                    if let Some(orders) = click_if(w, house, id, v, &[Action::Enter]) {
-                        out.extend(orders);
-                        taken.push(id);
-                        wanted -= 1;
-                        self.count_gunner_load();
-                    }
+                    plan.loads.push((id, v));
+                    wanted -= 1;
                 }
                 None => {
                     let has = own.iter().any(|&id| {
                         w.obj(id).is_some_and(|o| o.kind == Kind::Infantry)
                             && unit(id).is_some_and(|p| heals_in(w, vr, p))
                     });
-                    if !has
-                        && let Some(t) = Self::buildable_infantry(w, house, |p| heals_in(w, vr, p))
-                    {
-                        self.order_unit(script, w, t, out);
+                    if !has {
+                        plan.build = Self::buildable_infantry(w, house, |p| heals_in(w, vr, p));
                     }
                     break;
                 }
             }
         }
+        plan
     }
+
+    /// The infantry units the gunner step keeps for its vehicles in this
+    /// think: an ability that runs before it (the engineers' captures)
+    /// leaves them be, as a person who has picked a unit for a gunner
+    /// vehicle does not send it elsewhere.
+    pub(crate) fn gunner_reserved(
+        &self,
+        script: &Script,
+        own: &[ObjectId],
+        w: &World,
+    ) -> Vec<ObjectId> {
+        self.gunner_plan(script, own, w, &[])
+            .loads
+            .into_iter()
+            .map(|(p, _)| p)
+            .collect()
+    }
+
+    /// Gunner vehicles: a healer into each idle empty gunner vehicle at
+    /// home while the house keeps fewer healers than its armed vehicles
+    /// call for, by the *enter* click; the passenger's type is built when
+    /// the house has none.
+    pub(crate) fn gunners(
+        &mut self,
+        script: &Script,
+        own: &[ObjectId],
+        w: &World,
+        out: &mut Vec<Order>,
+    ) {
+        let plan = self.gunner_plan(script, own, w, out);
+        for (id, v) in plan.loads {
+            if let Some(orders) = click_if(w, script.house, id, v, &[Action::Enter]) {
+                out.extend(orders);
+                self.count_gunner_load();
+            }
+        }
+        if let Some(t) = plan.build {
+            self.order_unit(script, w, t, out);
+        }
+    }
+}
+
+/// What [`Special::gunners`] sees for `house` now, for the lane's
+/// `GLASNOST_AI_GUNPROBE` lines (a diagnostic, outside the brain): its
+/// armed vehicles, its switching gunner vehicles, those carrying anyone,
+/// those empty and idle at home, its infantry that would heal in one of
+/// them, and those free at home.
+pub fn probe(w: &World, house: HouseId) -> [usize; 6] {
+    let script = Script::new(house, crate::brain::default_plan());
+    let home = script.home(w);
+    let at_home = |o: &glasnost_sim::world::Object| {
+        home.is_some_and(|h| dist2(o.pos.cell(), h) <= HOME_REACH * HOME_REACH)
+    };
+    let own: Vec<&glasnost_sim::world::Object> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(house) && o.on_map && o.health > 0)
+        .collect();
+    let unit = |o: &glasnost_sim::world::Object| w.rules().unit(o.kind, o.type_index);
+    let armed = own
+        .iter()
+        .filter(|o| o.kind == Kind::Vehicle && weapon::armed(w, o.id) && !healer(w, o.id))
+        .count();
+    let gunners: Vec<_> = own
+        .iter()
+        .filter(|o| o.kind == Kind::Vehicle && unit(o).is_some_and(switching_gunner))
+        .collect();
+    let carrying = gunners
+        .iter()
+        .filter(|o| transport::count(w, o.id) > 0)
+        .count();
+    let empty_home = gunners
+        .iter()
+        .filter(|o| transport::count(w, o.id) == 0 && at_home(o) && scripted::idle(w, o.id))
+        .count();
+    let heals = |p: &glasnost_sim::world::Object| {
+        gunners
+            .iter()
+            .any(|v| unit(v).is_some_and(|vr| unit(p).is_some_and(|pr| heals_in(w, vr, pr))))
+    };
+    let healers: Vec<_> = own
+        .iter()
+        .filter(|o| o.kind == Kind::Infantry && heals(o))
+        .collect();
+    let free = healers
+        .iter()
+        .filter(|o| free_infantry(w, o.id) && at_home(o))
+        .count();
+    [
+        armed,
+        gunners.len(),
+        carrying,
+        empty_home,
+        healers.len(),
+        free,
+    ]
 }
