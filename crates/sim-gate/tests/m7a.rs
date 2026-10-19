@@ -63,7 +63,9 @@ fn try_seeds() {
 /// The margins of the M7a duel over a range of seeds
 /// (`GLASNOST_SWEEP=1-16 cargo test --release -p glasnost-sim-gate --test m7a m7a_seed_sweep -- --ignored --nocapture`):
 /// per counter of `Exercise::counters` the minimum, median and maximum over
-/// the seeds, and per seed the counters below 3. Runs eight seeds at a time.
+/// the seeds, and per seed whether the game ended before its last tick (a
+/// side won early), every counter and the counters below 3. Runs eight
+/// seeds at a time.
 #[test]
 #[ignore = "a sweep of whole games; set GLASNOST_SWEEP=<from>-<to>"]
 #[allow(clippy::disallowed_methods, clippy::disallowed_macros)] // a local diagnostic: reads the host environment and prints, no simulation
@@ -94,8 +96,26 @@ fn m7a_seed_sweep() {
             .map(|&(name, v)| format!("{name} = {v}"))
             .collect();
         let least = ex.counters().iter().map(|&(_, v)| v).min().unwrap_or(0);
-        println!("seed {s}: {n} ticks, results {won}, smallest counter {least}, below 3: {low:?}");
+        let early = if *n < usize::try_from(M7A_TICKS).unwrap_or(usize::MAX) {
+            "yes"
+        } else {
+            "no"
+        };
+        println!(
+            "seed {s}: {n} ticks, ended early {early}, results {won}, smallest counter {least}, below 3: {low:?}"
+        );
+        println!("seed {s} counters: {:?}", ex.counters().map(|(_, v)| v));
     }
+    let early = runs
+        .iter()
+        .filter(|(_, n, _, _)| *n < usize::try_from(M7A_TICKS).unwrap_or(usize::MAX))
+        .map(|(s, n, _, _)| format!("{s} (tick {n})"))
+        .collect::<Vec<_>>();
+    println!(
+        "ended early: {} of {} seeds {early:?}",
+        early.len(),
+        runs.len()
+    );
     let names = runs[0].2.counters().map(|(name, _)| name);
     let mut worst = u32::MAX;
     for (i, name) in names.iter().enumerate() {

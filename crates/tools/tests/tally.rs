@@ -513,14 +513,15 @@ fn counts_bunkered_vehicles_and_releases() {
 }
 
 // A unit that becomes seized is counted once, and once more when it is
-// dropped (S-0607 claims 5 and 13), on the synthetic M7a skirmish's lifter.
+// dropped (S-0607 claims 5 and 13), on the synthetic M7a skirmish's lifter
+// (the base scenario: the gate's start lifter and prey would seize too).
 #[test]
 fn counts_seized_and_dropped_units() {
     use glasnost_ai::fixture_m7a as kit;
     use glasnost_sim::world::Target;
     let mut g = Game::new(
-        kit::rules(),
-        &kit::map(),
+        kit::base_rules(),
+        &kit::base_map(),
         kit::MAP_NAME,
         fixture::catalogue(),
         kit::setup(5),

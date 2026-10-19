@@ -44,9 +44,20 @@
 //!   Both sides have it because an Alpha-only lifter tipped the duel:
 //!   Alpha won the gate seed before its last tick.
 //!
-//! To add a type, insert it in [`ruleset`] (with `register`) and, for a
-//! start unit, add its name to [`INFANTRY`] or [`VEHICLES`]; the gate's
-//! module (`crates/sim-gate/src/m7a.rs`) has the counters.
+//! - The gate's margin setup (M7b step 2a; [`ruleset`] and [`map`] over
+//!   [`base_ruleset`] and [`base_map`], which the M7b scenario uses
+//!   unchanged): the ore does not spread, so each house keeps the plan's
+//!   two harvesters; PREY, an unarmed sturdy vehicle that only the
+//!   lifter's and the controller's warheads affect, three of each house
+//!   near the other's start; start vehicles ([`START_VEHICLES`]): GATV and
+//!   MAGN for Alpha, a second MINR for Beta; Alpha's HULKs behind its
+//!   start; a frail EYE, which a raid can destroy and its house builds
+//!   again.
+//!
+//! To add a type, insert it in [`base_ruleset`] (with `register`) and, for
+//! a start unit, add its name to [`INFANTRY`] or [`VEHICLES`] (or, for the
+//! gate's duel only, to [`START_VEHICLES`]); the gate's module
+//! (`crates/sim-gate/src/m7a.rs`) has the counters.
 
 use std::sync::Arc;
 
@@ -93,8 +104,55 @@ fn only(country: &str) -> Option<Vec<String>> {
     Some(vec![country.into()])
 }
 
-/// The scenario's ruleset.
+/// The scenario's ruleset: [`base_ruleset`] with the gate's margin setup
+/// ([`margins`]).
 pub fn ruleset() -> Ruleset {
+    let mut r = base_ruleset();
+    margins(&mut r);
+    r
+}
+
+/// The gate's margin setup (M7b step 2a), on top of [`base_ruleset`].
+fn margins(r: &mut Ruleset) {
+    // The resource does not spread: the fields stay at their 25 cells
+    // each, so that a house keeps the plan's harvesters (the AI wants one
+    // per 20 resource cells near its refineries) and spends on its army.
+    if let Some(t) = r.sim.tiberiums.get_mut("ORE") {
+        t.spread = Some(0);
+    }
+    // A frail psychic sensor, which raids destroy and the house builds
+    // again.
+    if let Some(b) = r.sim.buildings.get_mut("EYE") {
+        b.strength = Some(EYE_STRENGTH);
+    }
+    // PREY: an unarmed, sturdy vehicle nobody can build, of the last
+    // armour class, which only the lifter's beam and the mind
+    // controller's warhead affect: every other warhead has a versus value
+    // of zero there, so no other weapon may fire at it (S-0304 claim 1)
+    // and the armies leave it to the lifters and the controllers. No
+    // other type of the scenario has that class.
+    let mut prey = r.sim.vehicles["GUNR"].clone();
+    prey.primary = None;
+    prey.secondary = None;
+    prey.strength = Some(2000);
+    prey.tech_level = Some(-1);
+    prey.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special2);
+    register(r, "vehicles", "PREY");
+    r.sim.vehicles.insert("PREY".into(), prey);
+    for (n, h) in r.sim.warheads.iter_mut() {
+        if n == "MAGWH" || n == "MIND" {
+            continue;
+        }
+        let v = h.verses.get_or_insert_with(|| vec![d("1"); 11]);
+        if let Some(last) = v.get_mut(10) {
+            *last = d("0");
+        }
+    }
+}
+
+/// The M7a types on the fixture's ruleset, without the gate's margin
+/// setup; the M7b scenario (`fixture_m7b`) builds on this.
+pub fn base_ruleset() -> Ruleset {
     let mut r = fixture::ruleset();
 
     // Beta's economy: the fixture's refinery and harvester.
@@ -429,6 +487,11 @@ pub fn rules() -> Arc<SimRules> {
     Arc::new(SimRules::new(&ruleset(), MAP_NAME))
 }
 
+/// The rules of [`base_ruleset`], without the gate's margin setup.
+pub fn base_rules() -> Arc<SimRules> {
+    Arc::new(SimRules::new(&base_ruleset(), MAP_NAME))
+}
+
 /// The cell (dx, dy) from the middle.
 fn at(dx: i32, dy: i32) -> CellXY {
     fixture::at(dx, dy)
@@ -456,9 +519,66 @@ pub const VEHICLES: [&str; 0] = [];
 pub const HULKS: usize = 4;
 const HULK_HEALTH: i32 = 51;
 
-/// The scenario's map: the fixture's flat ground and resource fields with
-/// the starts at ±[`START_DX`] and each house's start objects.
+/// The scenario's map: [`base_map`] with the gate's margin setup: each
+/// house's extra start vehicles ([`START_VEHICLES`]) in a row north of
+/// its start.
 pub fn map() -> Map {
+    let mut m = base_map();
+    // Alpha's HULKs stand behind its start, away from the middle, out of
+    // the way of the first raids.
+    let mut hulk = 0;
+    for u in &mut m.objects.units {
+        if u.placed.type_name == b"HULK" {
+            u.placed.cell = at(-START_DX - HULK_BEHIND, 2 * hulk - 3);
+            hulk += 1;
+        }
+    }
+    let mut key = m.objects.infantry.len() + m.objects.units.len();
+    for (name, dx, list) in START_VEHICLES {
+        for (i, ty) in list.iter().enumerate() {
+            let c = at(dx + 2 * i as i32 - 4, START_VEHICLE_ROW);
+            m.objects.units.push(Unit {
+                placed: placed(name, ty, c, key),
+            });
+            key += 1;
+        }
+    }
+    // The other house's prey on each start's side toward the middle.
+    for (other, dx) in [("Beta", -START_DX), ("Alpha", START_DX)] {
+        for (ox, oy) in PREY_AT {
+            m.objects.units.push(Unit {
+                placed: placed(other, "PREY", at(dx - dx.signum() * ox, oy), key),
+            });
+            key += 1;
+        }
+    }
+    m
+}
+
+/// The psychic sensor's strength in the gate's scenario.
+const EYE_STRENGTH: i32 = 10;
+
+/// Cells behind Alpha's start (away from the middle) where its HULKs
+/// stand in the gate's scenario, in a column.
+const HULK_BEHIND: i32 = 7;
+
+/// Where the other house's PREY stand near each start: cells toward the
+/// middle and rows.
+const PREY_AT: [(i32, i32); 3] = [(6, -3), (6, 0), (10, -6)];
+
+/// The extra vehicles each house starts with in the gate's scenario (by
+/// house name and start offset).
+pub const START_VEHICLES: [(&str, i32, &[&str]); 2] = [
+    ("Alpha", -START_DX, &["GATV", "MAGN"]),
+    ("Beta", START_DX, &["MINR"]),
+];
+/// The row (dy from the middle) of the extra start vehicles.
+const START_VEHICLE_ROW: i32 = -3;
+
+/// The fixture's flat ground and resource fields with the starts at
+/// ±[`START_DX`] and each house's start objects, without the gate's margin
+/// setup; the M7b scenario (`fixture_m7b`) builds on this.
+pub fn base_map() -> Map {
     let mut m = glasnost_sim::testkit::empty_map(fixture::SIZE);
     let mut waypoints = std::collections::BTreeMap::new();
     for (k, dx) in [(0u16, -START_DX), (1u16, START_DX)] {
