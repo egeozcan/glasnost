@@ -43,6 +43,7 @@ pub mod fixture_m7b;
 pub mod game;
 pub mod gattling;
 pub mod grinder;
+pub mod gunner;
 pub mod jumpjets;
 pub mod lifter;
 pub mod linked;

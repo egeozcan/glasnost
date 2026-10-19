@@ -143,6 +143,10 @@ pub struct Uses {
     /// Build orders that resumed a held line (S-0404 claims 3 and 5).
     #[serde(default)]
     pub resumes: u32,
+    /// Infantry sent into an empty gunner vehicle to give it a healing
+    /// weapon (S-0308 claims 5 and 6, `gunner`).
+    #[serde(default)]
+    pub gunner_loads: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -202,6 +206,7 @@ impl Special {
         self.bunkers(script, &own, w, out);
         self.lifters(script, &own, w, out);
         self.drainers(script, &own, w, out);
+        self.gunners(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -211,16 +216,25 @@ impl Special {
         self.memory.blocked()
     }
 
-    /// Counts one deploy order given to a deployable unit (S-0517,
-    /// `deployers`).
+    /// Counts one hold order given while the house pays for its economy
+    /// (S-0404 claim 5, `Brain::economy_first`).
     pub(crate) fn count_economy_hold(&mut self) {
         self.uses.economy_holds += 1;
     }
 
+    /// Counts one build order that resumed a held line (S-0404 claims 3
+    /// and 5, `Brain::economy_first`).
     pub(crate) fn count_resume(&mut self) {
         self.uses.resumes += 1;
     }
 
+    /// Counts one infantry unit sent into a gunner vehicle (`gunner`).
+    pub(crate) fn count_gunner_load(&mut self) {
+        self.uses.gunner_loads += 1;
+    }
+
+    /// Counts one deploy order given to a deployable unit (S-0517,
+    /// `deployers`).
     pub(crate) fn count_deploy(&mut self) {
         self.uses.deploys += 1;
     }
@@ -496,7 +510,7 @@ impl Special {
 
     /// The cheapest type of infantry the house can build now that
     /// satisfies `f`.
-    fn buildable_infantry(
+    pub(crate) fn buildable_infantry(
         w: &World,
         house: HouseId,
         f: impl Fn(&glasnost_sim::rules::UnitRules) -> bool,
@@ -526,7 +540,7 @@ impl Special {
 
     /// Orders one unit of `t` from the sidebar when the house keeps enough
     /// credits in hand and the type is not already in its line.
-    fn order_unit(&self, script: &Script, w: &World, t: TypeRef, out: &mut Vec<Order>) {
+    pub(crate) fn order_unit(&self, script: &Script, w: &World, t: TypeRef, out: &mut Vec<Order>) {
         let price = production::cost_field(w, t);
         if script.selling()
             || Self::queued(w, script.house, t)
