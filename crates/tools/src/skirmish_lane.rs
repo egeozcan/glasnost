@@ -2098,10 +2098,25 @@ fn line_changes(
     let mut s = String::new();
     let what = |t: glasnost_sim::econ::TypeRef| {
         if t.kind == Kind::Building {
-            format!(
-                "building {:?}",
-                role_of(w, t).map_or("other".into(), role_name)
-            )
+            let gives: Vec<String> = w
+                .rules()
+                .superweapons
+                .building_sw
+                .get(t.index as usize)
+                .map(|f| {
+                    f.iter()
+                        .flatten()
+                        .filter_map(|&i| w.rules().superweapons.types.get(i as usize))
+                        .filter_map(|x| x.kind.map(|k| format!("{k:?}")))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let other = if gives.is_empty() {
+                format!("other #{}", t.index)
+            } else {
+                format!("superweapon {}", gives.join("+"))
+            };
+            format!("building {:?}", role_of(w, t).map_or(other, role_name))
         } else {
             format!("{:?} {}", t.kind, unit_class(w, t.kind, t.index))
         }
@@ -2561,8 +2576,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {} economy holds {} resumes {} gunner loads {} plants first {} economy defence {} curtained buildings {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches, u.economy_holds, u.resumes, u.gunner_loads, u.plants_first, u.economy_defence, u.curtained_buildings
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {} economy holds {} resumes {} gunner loads {} plants first {} economy defence {} curtained buildings {} superweapon holds {} expansion builds {} expansion moves {} anti-air builds {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches, u.economy_holds, u.resumes, u.gunner_loads, u.plants_first, u.economy_defence, u.curtained_buildings, u.superweapon_holds, u.expansion_builds, u.expansion_moves, u.anti_air_builds
                     )
                 })
                 .collect();
@@ -2758,16 +2773,29 @@ fn sw_probe_line(w: &World) -> String {
             let p = &w.houses[h].econ.power;
             match t.kind {
                 Some(SwKind::Genetic) => {
-                    let (seen, any, clear) = glasnost_ai::mutator::probe(w, house);
+                    let (seen, any, best) = glasnost_ai::mutator::probe(w, house);
+                    let best = best.map_or("none".into(), |(g, l, n)| {
+                        format!("gain {g} loss {l} infantry {n}")
+                    });
                     s += &format!(
-                        "swprobe tick {} house {h} Genetic ready {} suspended {} power {}/{}: seen infantry {seen} best {any} clear {clear}\n",
+                        "swprobe tick {} house {h} Genetic ready {} suspended {} power {}/{}: seen infantry {seen} most in a reach {any} best {best}\n",
                         w.tick, r.ready, r.suspended, p.output, p.drain
                     );
                 }
                 Some(SwKind::Dominator) => {
-                    let (all, units, seen, best, refused) = glasnost_ai::dominator::probe(w, house);
+                    let glasnost_ai::dominator::Probe {
+                        seen,
+                        units,
+                        dominable,
+                        refused,
+                        not_examined,
+                        best,
+                    } = glasnost_ai::dominator::probe(w, house);
+                    let best = best.map_or("none".into(), |(g, l, n)| {
+                        format!("gain {g} loss {l} units {n}")
+                    });
                     s += &format!(
-                        "swprobe tick {} house {h} Dominator ready {} suspended {} power {}/{}: seen dominable {seen} best {best} seen objects {all} units {units} refused {refused:?}\n",
+                        "swprobe tick {} house {h} Dominator ready {} suspended {} power {}/{}: seen objects {seen} units {units} dominable {dominable} not examined {not_examined} best {best} refused {refused:?}\n",
                         w.tick, r.ready, r.suspended, p.output, p.drain
                     );
                 }

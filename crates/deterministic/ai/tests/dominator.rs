@@ -1,8 +1,11 @@
 //! The own AI and the psychic dominator (S-0612, PLAN §4.7): a ready
-//! dominator is fired at a group of seen enemy units, never where the own
-//! and allied value in the reach is at least the enemy value, not at a
-//! group smaller than `dominator::MIN_UNITS`, and not while a domination is
-//! in force; a launch takes the group over for the house; the house builds
+//! dominator is fired at the best target it sees by value: the seen enemy
+//! units it would take and the seen enemy objects its area damage would
+//! destroy, against the allied units it would take and the own objects its
+//! damage would destroy (the house's own units change no owner, claim 14);
+//! a group smaller than `dominator::MIN_UNITS` is fired at too, and so are
+//! enemy buildings with no unit in sight (M7b AI round 3); never while a
+//! domination is in force; a launch takes the group over for the house; the house builds
 //! the giving building once its tech tree allows. The tests use the
 //! invented types of the synthetic M7b skirmish (DOMB giving DOM, Alpha
 //! only; CROWD, an unarmed walker, as the target units). Alpha's start
@@ -157,21 +160,29 @@ fn fires_at_a_group_of_seen_enemy_units() {
     assert_eq!(br.special_uses().dominator_launches, 1);
 }
 
+// S-0612 claim 14 (the house's own objects change no owner) and claim 9 (the area damage hurts them): own units in the reach that the damage spares do not stop the launch.
 #[test]
-fn holds_fire_where_it_takes_more_own_value_than_enemy_value() {
+fn own_units_the_damage_spares_do_not_stop_it() {
     let mut w = armed();
     group(&mut w, 1, &GROUP);
-    // Four own walkers of the same type in every reach that holds the group.
     let own = [(6, 5), (7, 7), (5, 6), (7, 5)];
     group(&mut w, 0, &own);
-    let h = home(&w);
-    for (dx, dy) in GROUP {
-        assert!(in_reach(&w, CellXY::new(h.x + dx, h.y + dy), &own));
+    let mut br = brain(&w);
+    assert_eq!(fired(&br.think(&w), &w).len(), 1);
+}
+
+// S-0612 claim 9 (the area damage hurts every object in its radius, the house's own too): where the damage would destroy more own value than the launch takes, it holds fire.
+#[test]
+fn holds_fire_where_the_damage_destroys_more_own_value_than_it_takes() {
+    let mut w = armed();
+    group(&mut w, 1, &GROUP);
+    let own = group(&mut w, 0, &[(6, 5), (7, 7), (5, 6), (7, 5)]);
+    // Wounded below the launch's damage, the own walkers would die.
+    for id in own {
+        w.objects.get_mut(&id).unwrap().health = 1;
     }
     let mut br = brain(&w);
-    let out = br.think(&w);
-    // spec: S-0612 claim 13 (own objects are taken over too, no owner test) and claim 9 (the area damage hurts them)
-    assert!(fired(&out, &w).is_empty());
+    assert!(fired(&br.think(&w), &w).is_empty());
     assert_eq!(br.special_uses().dominator_launches, 0);
 }
 
@@ -179,18 +190,53 @@ fn holds_fire_where_it_takes_more_own_value_than_enemy_value() {
 fn fires_when_the_enemy_value_outweighs_the_own() {
     let mut w = armed();
     group(&mut w, 1, &[(6, 6), (7, 6), (6, 7), (7, 7)]);
-    group(&mut w, 0, &[(5, 5)]);
+    let own = group(&mut w, 0, &[(5, 5)]);
+    w.objects.get_mut(&own[0]).unwrap().health = 1;
     let mut br = brain(&w);
     assert_eq!(fired(&br.think(&w), &w).len(), 1);
 }
 
+// PLAN §4.7 (M7b AI round 3): a person fires a ready dominator at the best target it sees, a group smaller than `MIN_UNITS` included.
 #[test]
-fn holds_fire_at_a_small_group() {
+fn fires_at_a_small_group() {
     let mut w = armed();
     group(&mut w, 1, &GROUP[..glasnost_ai::dominator::MIN_UNITS - 1]);
     let mut br = brain(&w);
     let out = br.think(&w);
-    assert!(fired(&out, &w).is_empty());
+    let cells = fired(&out, &w);
+    assert_eq!(cells.len(), 1);
+    assert!(in_reach(&w, cells[0], &GROUP[..2]));
+}
+
+// S-0612 claims 9 and 13 (buildings are never taken, but the area damage hurts them): with no enemy unit in sight a ready dominator is fired at a seen enemy building.
+#[test]
+fn fires_at_a_seen_enemy_building_with_no_unit_in_sight() {
+    let mut w = armed();
+    let b = spawn(&mut w, Kind::Building, "POWR", 1, 12, 12);
+    let at = w.obj(b).unwrap().pos.cell();
+    // Alpha has scouted it.
+    glasnost_sim::econ::shroud::area_reveal(
+        &mut w,
+        HouseId(0),
+        glasnost_sim::world::Pos::centre(at, 0),
+        4,
+    );
+    let mut br = brain(&w);
+    let cells = fired(&br.think(&w), &w);
+    assert_eq!(
+        cells.len(),
+        1,
+        "{:?}",
+        glasnost_ai::dominator::probe(&w, HouseId(0))
+    );
+    let (r, _) =
+        glasnost_sim::combat::area::radii(&w, w.rules().superweapons.domination.warhead.unwrap());
+    let c = cells[0];
+    let d2 = i64::from(c.x - at.x).pow(2) + i64::from(c.y - at.y).pow(2);
+    assert!(
+        d2 * 256 * 256 <= i64::from(r) * i64::from(r) * 4,
+        "aimed at the building"
+    );
 }
 
 #[test]

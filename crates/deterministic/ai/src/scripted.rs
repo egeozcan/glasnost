@@ -120,7 +120,11 @@ const CELLS_PER_HARVESTER: usize = 20; // nocite: tuning of our own opponent
 
 /// Cells around a refinery, slave miner or home within which resource
 /// counts for [`Script::harvesters_wanted`].
-const FIELD_REACH: i32 = 14; // nocite: tuning of our own opponent
+pub(crate) const FIELD_REACH: i32 = 14; // nocite: tuning of our own opponent
+
+/// Empty cells between two resource cells of one field
+/// ([`Script::far_field`]).
+const FIELD_GAP: i32 = 2; // nocite: tuning of our own opponent
 
 /// Spacing of the search grid that waves sweep once every enemy start
 /// position has been visited.
@@ -804,8 +808,8 @@ impl Script {
     }
 
     /// The harvesters the house keeps: the plan's count, and more while
-    /// the explored resource around its refineries, slave miners and home
-    /// would keep them at work, one for every [`CELLS_PER_HARVESTER`]
+    /// the explored resource around its refineries, slave miners,
+    /// construction yards and home would keep them at work, one for every [`CELLS_PER_HARVESTER`]
     /// resource cells within [`FIELD_REACH`] cells, as a person adds
     /// harvesters to a large field. A person stops at twice the plan's
     /// count: more harvesters than that crowd the same fields and docks
@@ -813,17 +817,7 @@ impl Script {
     /// harvesters of the other sides earned on the same stock maps, and the
     /// house starved).
     pub(crate) fn harvesters_wanted(&self, w: &World) -> usize {
-        let mut centres: Vec<CellXY> = self
-            .own(w)
-            .into_iter()
-            .filter_map(|id| w.obj(id))
-            .filter(|o| {
-                slaves::is_master(w, o.id)
-                    || (o.kind == Kind::Building
-                        && self.allowed(w, tech::type_of(o), Role::Refinery))
-            })
-            .map(|o| o.pos.cell())
-            .collect();
+        let mut centres = self.field_centres(w);
         centres.extend(self.home(w));
         let mut cells = std::collections::BTreeSet::new();
         for c in centres {
@@ -855,6 +849,73 @@ impl Script {
         // A person stops at twice the plan's harvesters: more queue at the
         // refineries.
         want.min(2 * n) // nocite: tuning of our own opponent
+    }
+
+    /// The cells of the house's construction yards, refineries and slave
+    /// miners: the centres of the fields it works.
+    fn field_centres(&self, w: &World) -> Vec<CellXY> {
+        self.own(w)
+            .into_iter()
+            .filter_map(|id| w.obj(id))
+            .filter(|o| {
+                slaves::is_master(w, o.id)
+                    || is_yard(w, o)
+                    || (o.kind == Kind::Building
+                        && self.allowed(w, tech::type_of(o), Role::Refinery))
+            })
+            .map(|o| o.pos.cell())
+            .collect()
+    }
+
+    /// The explored resource cell nearest home of a field the house does
+    /// not work, nearer home than every enemy start cell, the first in
+    /// cell order on equal distance: the far field a person sends a second
+    /// yard to (a field in the enemy's half of the map is not one). A field
+    /// is the explored resource cells joined by gaps of at most
+    /// [`FIELD_GAP`] cells; the house works it when one of its cells lies
+    /// within [`FIELD_REACH`] cells of one of the house's construction
+    /// yards, refineries or slave miners (the field's edge grows away from
+    /// them as the resource spreads).
+    pub(crate) fn far_field(&self, w: &World) -> Option<CellXY> {
+        let home = self.home(w)?;
+        let centres = self.field_centres(w);
+        let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
+        let ore: std::collections::BTreeSet<(i32, i32)> = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && resource::resource_at(w, c).is_some()
+                    && shroud::explored(w, self.house, c)
+            })
+            .map(|c| (c.y, c.x))
+            .collect();
+        let mut worked: std::collections::BTreeSet<(i32, i32)> = ore
+            .iter()
+            .copied()
+            .filter(|&(y, x)| {
+                centres
+                    .iter()
+                    .any(|&m| dist2(m, CellXY::new(x, y)) <= reach)
+            })
+            .collect();
+        let mut todo: Vec<(i32, i32)> = worked.iter().copied().collect();
+        while let Some((y, x)) = todo.pop() {
+            for dy in -FIELD_GAP - 1..=FIELD_GAP + 1 {
+                for dx in -FIELD_GAP - 1..=FIELD_GAP + 1 {
+                    let n = (y + dy, x + dx);
+                    if ore.contains(&n) && worked.insert(n) {
+                        todo.push(n);
+                    }
+                }
+            }
+        }
+        ore.difference(&worked)
+            .map(|&(y, x)| CellXY::new(x, y))
+            .filter(|&c| self.targets.iter().all(|&t| dist2(c, home) < dist2(c, t)))
+            .min_by_key(|&c| (dist2(c, home), c.y, c.x))
     }
 
     /// Whether an explored cell of the map holds a resource for the house.

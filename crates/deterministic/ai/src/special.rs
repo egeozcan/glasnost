@@ -161,6 +161,21 @@ pub struct Uses {
     /// rather than on a group of vehicles (`Brain::curtain_cell`).
     #[serde(default)]
     pub curtained_buildings: u32,
+    /// Hold orders given to army units while the house saves for a
+    /// superweapon building (S-0404 claim 5, `Brain::economy_first`).
+    #[serde(default)]
+    pub superweapon_holds: u32,
+    /// Construction-yard vehicles built to expand the base toward a far
+    /// resource field (S-0415, S-0406 claim 4, `expand`).
+    #[serde(default)]
+    pub expansion_builds: u32,
+    /// Such vehicles sent to the field to deploy there (`expand`).
+    #[serde(default)]
+    pub expansion_moves: u32,
+    /// Units or defences built because nothing of the house could hit a
+    /// seen airborne drainer (S-0306 claim 23, `antiair`).
+    #[serde(default)]
+    pub anti_air_builds: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -234,6 +249,27 @@ impl Special {
     /// (S-0404 claim 5, `Brain::economy_first`).
     pub(crate) fn count_economy_hold(&mut self) {
         self.uses.economy_holds += 1;
+    }
+
+    /// Counts one hold order given while the house saves for a
+    /// superweapon building (`Brain::economy_first`).
+    pub(crate) fn count_superweapon_hold(&mut self) {
+        self.uses.superweapon_holds += 1;
+    }
+
+    /// Counts one construction-yard vehicle ordered to expand the base.
+    pub(crate) fn count_expansion_build(&mut self) {
+        self.uses.expansion_builds += 1;
+    }
+
+    /// Counts one move of a construction-yard vehicle toward a far field.
+    pub(crate) fn count_expansion_move(&mut self) {
+        self.uses.expansion_moves += 1;
+    }
+
+    /// Counts one anti-air unit or defence ordered against drainers.
+    pub(crate) fn count_anti_air_build(&mut self) {
+        self.uses.anti_air_builds += 1;
     }
 
     /// Counts one build order that resumed a held line (S-0404 claims 3

@@ -82,6 +82,14 @@ const REPAIR_BELOW: i64 = 50; // nocite: tuning of our own opponent
 /// The scale of [`REPAIR_BELOW`].
 const PERCENT: i64 = 100; // nocite: percent scale
 
+/// Construction yards, and units that deploy into one, beyond which the
+/// house builds no yard vehicle to expand (`Brain::expand`).
+const EXPANSION_YARDS: usize = 2; // nocite: tuning of our own opponent
+
+/// Multiples of a yard vehicle's cost the house has in hand before it
+/// builds one to expand.
+const EXPANSION_RICH: i64 = 2; // nocite: tuning of our own opponent
+
 /// Cells from home within which a ferry counts as at home, and idle
 /// infantry is sent aboard it.
 const FERRY_HOME: i64 = 10; // nocite: tuning of our own opponent
@@ -278,6 +286,9 @@ impl Brain {
             }
             self.build_lifter(w, &mut out);
             self.build_drainer(w, &mut out);
+            if !paying {
+                self.expand(w, &mut out);
+            }
         }
         if w.tick % THINK_PERIOD == 0 {
             self.special.think(&self.script, w, &mut out);
@@ -371,6 +382,33 @@ impl Brain {
                     })
             });
         let low_power = crate::power::short(w, h);
+        // Saving for a superweapon (M7b AI round 3): while a building that
+        // gives a superweapon the house fires waits on its line for money
+        // and no enemy is seen near the base, the army's unit lines are put
+        // on hold, as a person stops training units to finish the
+        // superweapon. In the stock lane the second superweapon building of
+        // the Yuri side stood on its line for 9 000 to more than 28 000
+        // ticks with the house's credits near 0 while every army line drew
+        // on them, and was granted in only 2 of 6 full games. A person saves
+        // only while his army is not outnumbered by the enemy units he sees:
+        // with the army held whatever the field, the Yuri house won 7 of 12
+        // quick games against the Soviet side, against 11 of 12 without.
+        let army =
+            |t: TypeRef| t.kind != Kind::Building && scripted::role_of(w, t) == Some(Role::Army);
+        let saving = !paying
+            && !self.script.selling()
+            && self.intruders(w).is_empty()
+            && !self.outnumbered(w)
+            && w.econ.lines.lines.iter().any(|l| {
+                l.house == h
+                    && l.item.as_ref().is_some_and(|i| {
+                        i.t.kind == Kind::Building
+                            && !Self::giving_kinds(w, i.t.index).is_empty()
+                            && i.hold == Hold::None
+                            && !i.done()
+                            && credits < i.owed
+                    })
+            });
         for l in w.econ.lines.lines.iter().filter(|l| l.house == h) {
             let Some(i) = &l.item else { continue };
             if i.done() || economy(i.t) {
@@ -381,6 +419,12 @@ impl Brain {
                 if i.hold == Hold::None && !(power && low_power) {
                     out.push(Order::Hold { what: i.t });
                     self.special.count_economy_hold();
+                }
+            } else if saving && army(i.t) {
+                if i.hold == Hold::None {
+                    // spec: S-0404 claim 5 (the hold order)
+                    out.push(Order::Hold { what: i.t });
+                    self.special.count_superweapon_hold();
                 }
             } else if i.hold == Hold::Player && tech::buildable(w, h, i.t) {
                 out.push(Order::Build { what: i.t });
@@ -1045,6 +1089,109 @@ impl Brain {
         }
     }
 
+    /// Expands the base toward a far resource field with a second
+    /// construction yard (M7b AI round 3). Deploying a yard vehicle gives a
+    /// construction yard wherever the deploy's cell test passes, with no
+    /// adjacency to the base (S-0415 claim 3, S-0406 claim 4); a second
+    /// yard makes every building and defence faster when the game-wide
+    /// multiple-factory factor is above zero (S-0403 claim 6), keeps the
+    /// base building when one yard falls, and puts the far field within
+    /// the reach the house counts harvesters for. A person builds one when
+    /// rich, with the economy kept, no enemy at the base and an explored
+    /// field beyond the reach of every yard on his half of the map
+    /// ([`Script::far_field`]); he drives it to the free cell nearest that
+    /// field where the deploy cursor shows it fits and deploys it there.
+    /// Before the round the Yuri side's yard vehicle was built only to
+    /// replace a lost yard.
+    fn expand(&mut self, w: &World, out: &mut Vec<Order>) {
+        let own = self.script.own(w);
+        let yards = own
+            .iter()
+            .filter(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
+            .count();
+        // With no yard, `rebuild_yard` and the plan's deploy act instead.
+        if yards == 0 || self.script.selling() {
+            return;
+        }
+        let field = self.script.far_field(w);
+        let units: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| {
+                w.obj(id).is_some_and(|o| {
+                    o.kind == Kind::Vehicle && deploys_into_yard(w, o.kind, o.type_index)
+                })
+            })
+            .collect();
+        for &id in &units {
+            let Some(o) = w.obj(id) else { continue };
+            let Some(b) = deploy::deploys_into(w, o.kind, o.type_index) else {
+                continue;
+            };
+            if !idle(w, id) {
+                continue;
+            }
+            let here = o.pos.cell();
+            let reach = i64::from(scripted::FIELD_REACH) * i64::from(scripted::FIELD_REACH);
+            // With no far field left (another yard took it), the unit deploys
+            // where it is, as a spare yard.
+            let near = field.is_none_or(|f| dist2(here, f) <= reach);
+            let fits = |c: CellXY| {
+                w.cells.usable(c)
+                    && glasnost_sim::econ::resource::resource_at(w, c).is_none()
+                    && self.deploys_at(w, id, b, c)
+            };
+            if near && fits(here) {
+                // spec: S-0415 claims 1 to 3 (the deploy order)
+                out.push(Order::Deploy { actor: id });
+                continue;
+            }
+            let centre = field.unwrap_or(here);
+            let spot = (1..=SPIRAL_RINGS).find_map(|ring| {
+                (-ring..=ring)
+                    .flat_map(|dy| (-ring..=ring).map(move |dx| (dx, dy)))
+                    .filter(|&(dx, dy)| dx.abs() == ring || dy.abs() == ring)
+                    .map(|(dx, dy)| CellXY::new(centre.x + dx, centre.y + dy))
+                    .filter(|&c| c != here)
+                    .find(|&c| fits(c))
+            });
+            if let Some(c) = spot {
+                out.push(Order::Behaviour {
+                    actor: id,
+                    behaviour: Behaviour::Move,
+                    attack_move: false,
+                    target: None,
+                    dest: Some(Target::Cell(c)),
+                });
+                self.special.count_expansion_move();
+            }
+        }
+        let Some(&t) = self.yard_units(w).first() else {
+            return;
+        };
+        let h = self.house();
+        let lined = w.econ.lines.lines.iter().any(|l| {
+            l.house == h && (l.item.as_ref().is_some_and(|i| i.t == t) || l.queue.contains(&t))
+        });
+        let credits = i64::from(w.houses[usize::from(h.0)].credits);
+        let cost = i64::from(production::cost_field(w, t));
+        // A person keeps at most one yard beyond the first: a third adds
+        // little speed for its price and leaves the army short.
+        if yards + units.len() + usize::from(lined) >= EXPANSION_YARDS
+            || credits < EXPANSION_RICH * cost
+            || field.is_none()
+            || !self.script.harvesters_kept(w)
+            || !self.intruders(w).is_empty()
+            || out
+                .iter()
+                .any(|o| matches!(o, Order::Build { what } if *what == t))
+        {
+            return;
+        }
+        out.push(Order::Build { what: t });
+        self.special.count_expansion_build();
+    }
+
     /// Whether a unit `id` that deploys into building type `b` could deploy
     /// standing in cell `c`: the deploy's cell test (S-0415 claim 3, the
     /// answer a person's deploy cursor gives) and the gap the plan keeps to
@@ -1424,6 +1571,36 @@ impl Brain {
                 }
             }
         }
+    }
+
+    /// Whether the house's army units are fewer than the enemy units it
+    /// sees (buildings and workers not counted on either side).
+    fn outnumbered(&self, w: &World) -> bool {
+        let unit = |o: &glasnost_sim::world::Object| {
+            o.kind != Kind::Building
+                && scripted::role_of(
+                    w,
+                    TypeRef {
+                        kind: o.kind,
+                        index: o.type_index,
+                    },
+                ) == Some(Role::Army)
+        };
+        let own = self
+            .script
+            .own(w)
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .filter(|o| unit(o))
+            .count();
+        let seen = self
+            .script
+            .seen_enemies(w)
+            .iter()
+            .filter_map(|&(id, _)| w.obj(id))
+            .filter(|o| unit(o))
+            .count();
+        own < seen
     }
 
     /// Seen enemies near the house's buildings.

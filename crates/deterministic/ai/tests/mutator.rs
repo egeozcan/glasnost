@@ -1,8 +1,10 @@
 //! The own AI and the genetic mutator (S-0611, PLAN §4.7): a ready mutator
-//! is fired at a dense group of seen enemy infantry, never when the house's
-//! own infantry stands in the reach, and not at a group smaller than
-//! `mutator::MIN_GROUP`; a launch turns the group into the house's
-//! infantry; the house builds the giving building once its tech tree
+//! is fired at the best group of seen enemy infantry by value: the enemy
+//! gain must be at least `mutator::OUTWEIGH` times the own loss, where an
+//! own infantry unit in the reach costs its value less the made unit's
+//! (S-0611 claims 4, 8 and 9), and a group smaller than
+//! `mutator::MIN_GROUP` is fired at too (M7b AI round 3); a launch turns the
+//! group into the house's infantry; the house builds the giving building once its tech tree
 //! allows. The tests use the invented types of the synthetic M7b skirmish
 //! (GENEB giving GENE, Alpha only; MADMAN, the made type, as the target
 //! infantry). Alpha's start discs are taken off the map first.
@@ -150,25 +152,62 @@ fn fires_at_a_dense_group_of_seen_enemy_infantry() {
     assert_eq!(br.special_uses().mutator_launches, 1);
 }
 
+/// `w` with a conversion animation that makes no unit (S-0611 F4: an
+/// index of −1), so that an own victim is a whole loss.
+fn making_nothing(w: &mut World) {
+    let mut r = (*w.rules_arc()).clone();
+    let anim = r
+        .superweapons
+        .mutation
+        .anim
+        .expect("the fixture's conversion animation");
+    r.animations[anim as usize].make_infantry = -1;
+    w.rules = Some(std::sync::Arc::new(r));
+}
+
+// S-0611 claim 4 (every listed infantry of any house in the block is hit) and PLAN §4.7 (M7b AI round 3): with no unit made, three enemy infantry outweigh one own unit of the same value at least twice over; the launch goes ahead.
 #[test]
-fn holds_fire_with_own_infantry_in_the_reach() {
+fn fires_when_the_enemy_gain_outweighs_the_own_loss() {
     let mut w = armed();
+    making_nothing(&mut w);
     group(&mut w, 1, &GROUP);
     group(&mut w, 0, &[(7, 7)]);
     let mut br = brain(&w);
-    let out = br.think(&w);
-    // spec: S-0611 claim 4 (every listed infantry of any house in the block is hit): no launch would spare it
-    assert!(fired(&out, &w).is_empty());
+    assert_eq!(fired(&br.think(&w), &w).len(), 1);
+    assert_eq!(br.special_uses().mutator_launches, 1);
+}
+
+// S-0611 claim 4 and PLAN §4.7 (M7b AI round 3): with no unit made, three enemy infantry against two own of the same value is no clear gain; it holds fire.
+#[test]
+fn holds_fire_when_the_own_loss_is_not_clearly_outweighed() {
+    let mut w = armed();
+    making_nothing(&mut w);
+    group(&mut w, 1, &GROUP);
+    // Two own units on the one free cell that every reach holding an enemy
+    // unit also holds.
+    group(&mut w, 0, &[(7, 7), (7, 7)]);
+    let mut br = brain(&w);
+    assert!(fired(&br.think(&w), &w).is_empty());
     assert_eq!(br.special_uses().mutator_launches, 0);
 }
 
+// S-0611 claims 8 and 9 (the conversion animation's owner is the launching house, which gets the made unit): an own victim of the made type costs nothing, so own infantry of that type does not stop the launch.
 #[test]
-fn holds_fire_at_a_small_group() {
+fn own_infantry_of_the_made_type_costs_nothing() {
+    let mut w = armed();
+    group(&mut w, 1, &GROUP);
+    group(&mut w, 0, &[(7, 7), (5, 5)]);
+    let mut br = brain(&w);
+    assert_eq!(fired(&br.think(&w), &w).len(), 1);
+}
+
+// PLAN §4.7 (M7b AI round 3): a person fires a ready mutator at the best group it sees, a group smaller than `MIN_GROUP` included.
+#[test]
+fn fires_at_a_small_group() {
     let mut w = armed();
     group(&mut w, 1, &GROUP[..glasnost_ai::mutator::MIN_GROUP - 1]);
     let mut br = brain(&w);
-    let out = br.think(&w);
-    assert!(fired(&out, &w).is_empty());
+    assert_eq!(fired(&br.think(&w), &w).len(), 1);
 }
 
 #[test]
